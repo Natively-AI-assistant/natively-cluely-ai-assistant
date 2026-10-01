@@ -3,5 +3,6 @@ export function decideScrollInterrupt(input: {
   distanceFromBottom: number;
   alreadySuppressed: boolean;
   transitionInFlight: boolean;
+  viewportResized?: boolean;
   rearmDistanceThresholdPx?: number;
 }): 'arm' | 're-arm' | 'none';

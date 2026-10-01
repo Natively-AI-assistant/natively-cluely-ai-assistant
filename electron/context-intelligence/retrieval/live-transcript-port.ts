@@ -22,6 +22,7 @@ import type { EvidenceScope, SourceType } from '../contracts/types';
 import type { RetrievalPort } from '../orchestration/orchestrator';
 import { createLegacyRetrievalPort } from './legacy-retrieval-port';
 import { Bm25Index } from './bm25';
+import { looksLikeQuestion } from '../question/question-resolver';
 
 export interface LiveTranscriptSegment {
   speaker: string;
@@ -99,6 +100,32 @@ export function chunkLiveTranscript(
   return chunks;
 }
 
+const normalizeSpeech = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/**
+ * True when a window holds nothing but the question being answered (2026-09-29).
+ *
+ * The first question of a meeting is also the whole transcript, so it came
+ * back as its own evidence: `THEM: Why should we hire you?` packed as a
+ * MEETING_TRANSCRIPT fact under "# Evidence". That one block switched on the
+ * evidence-shaped sections ("the evidence below IS the subject at hand",
+ * "the exact value could not be retrieved") and was measured to drive the
+ * opener "I don't have the release scope in front of me" (DeepSeek, 3/3 → 0/3
+ * without the block) on questions nothing had been said about. A question is
+ * not evidence for its own answer. Any window with another line survives, and
+ * a query that does not match the line exactly (a rewritten retrieval query)
+ * keeps today's behaviour. A statement is not a question: "we've decided to
+ * drop the CSV export" is the very thing a team-meet capture records, and
+ * dropping it told DeepSeek nothing had been said (capture lines 5/5 → 0/5).
+ * EXPORTED for tests.
+ */
+export function windowOnlyRestatesQuery(window: string, query: string): boolean {
+  const q = normalizeSpeech(query);
+  if (!q || !looksLikeQuestion(query)) return false;
+  const lines = window.split('\n').map((l) => normalizeSpeech(l.replace(/^[^:\n]{1,40}:\s*/, ''))).filter(Boolean);
+  return lines.length > 0 && lines.every((l) => l === q);
+}
+
 export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput): RetrievalPort | null {
   const chunks = chunkLiveTranscript(input.segments, input.roleOf ?? defaultRoleOf);
   if (!chunks.length) return null;
@@ -117,6 +144,7 @@ export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput
     retrieve: async (query: string, opts: { topK: number }) =>
       index.scoreNormalized(query)
         .filter((s) => s.score >= LIVE_TRANSCRIPT_MIN_NORMALIZED_SCORE)
+        .filter((s) => !windowOnlyRestatesQuery(chunks[Number(s.id)], query))
         .slice(0, Math.max(1, opts.topK))
         .map((s) => {
           const chunkIndex = Number(s.id);

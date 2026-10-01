@@ -27,10 +27,13 @@ export class AnswerLLM {
      */
     async generate(question: string, context?: string, answerPlan?: AnswerPlan, systemPromptOverride?: string): Promise<string> {
         try {
+            // One resolution for both the system contract and the planner
+            // template below, so they ask for the same coding shape.
+            const codingSignals = resolveCodingPromptSignals({ answerType: answerPlan?.answerType, question: answerPlan?.question || question });
             const promptOverride = systemPromptOverride
-                ?? resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()), ...resolveCodingPromptSignals({ answerType: answerPlan?.answerType, question: answerPlan?.question || question }) })
+                ?? resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()), ...codingSignals })
                 ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_ANSWER_PROMPT : UNIVERSAL_ANSWER_PROMPT);
-            const answerContract = answerPlan ? `\n\n${formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled())}` : '';
+            const answerContract = answerPlan ? `\n\n${formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled(), codingSignals.codingShape)}` : '';
             const fittedContext = context ? this.llmHelper.fitContextForCurrentModel(`${context}${answerContract}`) : answerContract.trim() || context;
             // A V3-composed turn (systemPromptOverride supplied) owns its prompt
             // end-to-end: the knowledge intercept, mode injection, and the

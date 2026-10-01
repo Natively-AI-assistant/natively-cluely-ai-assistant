@@ -45,7 +45,9 @@ test('phone-mirror chat captures a mode id at t0 and passes it', () => {
 
 test('the phone pin is captured before the provider stream starts', () => {
   const capture = src.indexOf('phonePinnedModeId: string | null = null');
-  const stream = src.indexOf('llmHelper.streamChat(message, undefined, context');
+  // The phone question's stream call (its image argument carries the phone's
+  // photos and the overlay's attached screenshots since 2026-09-27).
+  const stream = src.indexOf('llmHelper.streamChat(message, phoneImagePaths.length ? phoneImagePaths : undefined, context');
   assert.notEqual(capture, -1);
   assert.notEqual(stream, -1);
   assert.ok(capture < stream, 'the pin must be taken before the awaits it protects');

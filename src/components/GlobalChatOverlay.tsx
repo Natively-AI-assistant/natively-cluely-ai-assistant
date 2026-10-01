@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { stripGistTrailer } from '../lib/displayMarkup';
 
 // ============================================
 // Types
@@ -69,7 +70,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
 
     const handleCopy = async () => {
         try {
-            await navigator.clipboard.writeText(content);
+            await navigator.clipboard.writeText(stripGistTrailer(content));
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {

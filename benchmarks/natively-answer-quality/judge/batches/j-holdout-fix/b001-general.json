@@ -1,0 +1,305 @@
+{
+ "batch": "b001-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HGEN-CTX-C1": {
+   "title": "Family lake trip planning notes",
+   "text": "Lake trip planning - shared notes (Okafor family)\n\nDates: we fly out Friday 16 October and come back Sunday 25 October. Cabin is Pine Hollow, unit 4, at Lake Averill.\n\nFlights\nOutbound is flight NW 318 which departs 9:40 am from Terminal 2. We should be at the airport two hours before. Return is Sunday 25 October at 4:05 pm.\n\nCabin\nTotal for the cabin is $2,400 for the whole stay. We paid the $600 deposit on 3 August, so the balance of $1,800 is due by October 1. Check-in is Friday 16 October from 3 pm, so we can drive straight there from the airport. Checkout is 10 am on the last day. The cabin sleeps six.\n\nWho is coming\nMom, Dad, Chidi, Ada, Uncle Femi and Grace. Six people, so we need one mid-size car.\n\nCar\nMid-size SUV booked with the rental desk at the airport, pick-up Friday afternoon. Grace is the second driver.\n\nLogistics and packing (added later by Chidi)\nBecause of our 7:15 am flight on the Friday, we need to leave the house by 4:45 am. Dad will do the drive and leave the car in long-term parking. The cabin owner emailed to say the remaining $1,600 is due by October 9, not the first, and that it can be paid by bank transfer. Also note check-in is Saturday, so we might need a hotel near the airport on Friday night, or we just drive slowly and have a long lunch. Ada says her friend Lina may come too, which would make seven of us.\n\nPacking: warm layers, rain jackets, board games, the good coffee, swimsuits for the hot tub.\n\nTo do\n- Pay cabin balance (Mom)\n- Confirm car seat not needed (Ada)\n- Book hotel for Friday night? (depends on check-in)\n- Print boarding passes the night before"
+  },
+  "HGEN-CTX-G1": {
+   "title": "Community garden plot holder handbook",
+   "text": "Maple Street Community Garden - Plot Holder Handbook\n\nWelcome to Maple Street Community Garden. This handbook covers what every plot holder agrees to when they accept a plot. Please keep it somewhere you can find it; most questions we get during the season are answered here.\n\nFees\nThe annual plot fee is $45 for a standard 10 x 12 foot bed. Households that qualify for the city's utility assistance program pay a reduced fee of $20. Fees are due before you receive the shed code. Fees are not refunded after June 1, but if you give up your plot before then we refund half.\n\nGetting started\nNew plot holders must attend one orientation. This season there are two: Saturday, May 16 at 10 am and Wednesday, May 20 at 6:30 pm, both at the tool shed by the north gate. Orientation takes about 45 minutes and covers the water system, compost bins, and the shed.\n\nYour plot must be cleared of weeds and planted within 21 days of the date you are assigned it. If a plot is still bare after 21 days, the garden coordinator will send one reminder email. If nothing has changed seven days after the reminder, the plot is offered to the next household on the waiting list. We do this because the waiting list is currently 38 households long.\n\nWorkdays\nEvery plot holder contributes six hours of shared work per season. The easiest way is to come to our monthly workdays, held on the first Saturday of each month from 9 am to noon. Hours can also be earned by turning the compost, mowing the paths, or helping at the fall harvest swap. Log your hours on the clipboard inside the shed door. Plot holders who have logged fewer than three hours by August 1 will get a friendly check-in; we would rather help you find hours than lose you.\n\nWatering\nWater only before 9 am or after 6 pm. Midday watering wastes water and scorches leaves, and the city meter reads us as a single household. Hoses must be coiled back on their reels after use. Please do not leave sprinklers running unattended.\n\nBeing away\nIf you will be away for more than a week during the growing season, arrange a plot buddy to water and harvest for you, and let the coordinator know who it is. Absences longer than three weeks require written notice to the coordinator in advance, so we do not mistake your plot for an abandoned one. You can find a plot buddy through the garden group chat or ask the coordinator to match you with someone.\n\nGrowing rules\nNo synthetic pesticides or herbicides anywhere in the garden. Plants may not grow taller than six feet or shade a neighboring plot. Invasive plants such as mint must be grown in a container sunk into the bed. Diseased plant material goes in the black bin by the gate, never in the compost.\n\nThe shed\nThe shed code changes on the first of every month and is sent by text to all paid plot holders. Tools are shared; please clean them and hang them back where you found them. Personal tools can be stored in the labeled cubbies but the garden is not responsible for them.\n\nContact\nGarden coordinator: Dana Whitfield, coordinator@maplestreetgarden.org. Dana checks email on weekday evenings. For anything urgent at the garden, such as a burst pipe, call the city parks line posted on the shed door."
+  },
+  "HGEN-CTX-G2": {
+   "title": "Office move staff FAQ",
+   "text": "Brightwater Studio - Move to the Harlow Building: Staff FAQ\n\nWe are moving from our current office on Fenwick Road to floors 3 and 4 of the Harlow Building, 220 Quay Street. This FAQ collects the answers to what people have asked so far. It will be updated as details are confirmed; the version date is at the bottom.\n\nWhen is the move?\nThe last working day at Fenwick Road is Friday 13 November. The movers come over that weekend. The Harlow Building opens for us on Monday 16 November. Please work from home on Friday 13 November if you can; the office will be open but noisy and partly packed.\n\nWhat do I need to pack, and by when?\nEveryone gets two labelled crates. Put anything you want moved to your new desk into your crates and leave them at your desk by Thursday 12 November at 4 pm. Crates are collected after 4 pm that day. Anything left loose on or under a desk after that will be treated as unwanted and cleared. Plants are welcome but must travel in a crate or go home with you.\n\nWhat about my monitor, dock and chair?\nCompany monitors, docks and keyboards stay where they are. Do not unplug them; IT will label and move all company equipment and set it up at the new desks before Monday. Personal equipment, including personal second monitors, footrests and chairs you bought yourself, must be taken home by Friday 13 November. The movers are not insured to carry personal items.\n\nDo I have an assigned desk at Harlow?\nFor the first two weeks, desks are assigned by team and there is a seating plan on the wiki, so no booking needed. From Monday 30 November we switch to booked desks using the Deskly app. Each team keeps a home zone, but individual desks are booked daily.\n\nIs there parking?\nThere is no free staff parking at the Harlow Building. The studio will subsidise monthly permits at the Canal Street garage, which works out to $60/month for staff after the subsidy. Permits are limited to 25 spaces and are allocated first come, first served. Apply through the People team form by Friday 6 November. There is a covered, secure bike cage on the ground floor with 40 spaces and showers on floor 3.\n\nWhat happens to the kitchen and fridge?\nThe Fenwick Road fridge will be emptied and cleaned on Wednesday 11 November. Anything left inside at 5 pm that day will be thrown away. The new kitchen on floor 4 has two fridges, a dishwasher and a coffee machine.\n\nWhat about post and deliveries?\nFrom Monday 16 November, use 220 Quay Street as the delivery address. Post sent to Fenwick Road will be forwarded for three months. Personal online orders should not be delivered to the office during move week.\n\nWho do I ask?\nQuestions about desks and equipment go to IT at the helpdesk channel. Questions about parking, access cards and the seating plan go to Tomasz Lindgren in the People team. Access cards for Harlow will be handed out at the front desk on Monday 16 November from 8:30 am; bring your current card to exchange.\n\nVersion date: 2 November."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "HGEN-CTX-I1": {
+   "title": "Sourdough starter notes",
+   "text": "Sourdough starter notes (from Grandma Ruth's recipe card, typed up)\n\nFeed the starter once a day if it lives on the counter, once a week if it lives in the fridge. Equal weights of flour and water, about 50 grams each, and keep roughly 50 grams of the old starter. Rye flour makes it lively; plain white flour makes it milder.\n\nIt is ready to use when it has doubled within six to eight hours and a spoonful floats in water. If it smells like nail polish remover it is hungry, not dead. Pour off any grey liquid on top and feed it.\n\nFor a basic loaf: 100 grams active starter, 375 grams water, 500 grams bread flour, 10 grams salt. Mix everything but the salt, rest an hour, add salt, then do four sets of stretch and folds thirty minutes apart. Let it rise until it has grown by about half, shape it, and put it in the fridge overnight. Bake in a covered pot at 250 C for 20 minutes, then uncovered at 230 C for about 25 more.\n\nRuth's note in the margin: do not open the oven to peek, and do not cut it warm, no matter who is asking."
+  }
+ },
+ "items": [
+  {
+   "jid": "1c4cdbc1847f",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Be honest, do you think the premium gym membership is worth it just for the sauna? It's like thirty more a month.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, it depends on how often you'd actually use it. If you're in the sauna three or four times a week, thirty a month is easy to justify. If it's once in a while, that's a lot for something you can get elsewhere. What's your routine like?"
+  },
+  {
+   "jid": "c8a4c1e43267",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Another, less generic.",
+   "conversation": [
+    "USER (typed to Natively): Give me five ideas for a leaving gift for a coworker who's really into climbing. Budget is about 40 bucks from the team.",
+    "NATIVELY: Five ideas around 40 bucks for a climber:\n\n1. A chalk bag with the team's names or a short message printed on it.\n2. A set of climbing-specific hand balm and a small finger-care kit.\n3. A guidebook to a crag or gym they've been wanting to visit.\n4. A carabiner keyring set, one per teammate, so they keep a piece of the team.\n5. A gift card to their local climbing gym, which covers a day pass or two."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Five climbing gift ideas around 40 bucks from the team:\n\n1. A chalk bag with the team's names printed on it.\n2. A hand balm and finger-care kit for post-climb recovery.\n3. A guidebook to a crag they've been wanting to visit.\n4. A carabiner keyring for each teammate, so they keep a piece of the team.\n5. A gift card to their local climbing gym."
+  },
+  {
+   "jid": "bcd68f2c2655",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Yeah so I can come out Thursday between eight and twelve, or Monday afternoon, whichever works better for you?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Thursday morning works better for me. Let's say **Thursday at nine**, if that suits you. If something shifts on your end, Monday afternoon is a fine backup."
+  },
+  {
+   "jid": "87cd465672cc",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Which one would you actually go with?",
+   "conversation": [
+    "USER (typed to Natively): Give me five ideas for a leaving gift for a coworker who's really into climbing. Budget is about 40 bucks from the team.",
+    "NATIVELY: Five ideas around 40 bucks for a climber:\n\n1. A chalk bag with the team's names or a short message printed on it.\n2. A set of climbing-specific hand balm and a small finger-care kit.\n3. A guidebook to a crag or gym they've been wanting to visit.\n4. A carabiner keyring set, one per teammate, so they keep a piece of the team.\n5. A gift card to their local climbing gym, which covers a day pass or two.",
+    "USER (typed to Natively): Another, less generic.",
+    "NATIVELY: Five climbing gift ideas around 40 bucks from the team:\n\n1. A chalk bag with the team's names printed on it.\n2. A hand balm and finger-care kit for post-climb recovery.\n3. A guidebook to a crag they've been wanting to visit.\n4. A carabiner keyring for each teammate, so they keep a piece of the team.\n5. A gift card to their local climbing gym."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The chalk bag with the team's names printed on it. It's personal, it's something they'll actually use every session, and it lands inside the 40 bucks."
+  },
+  {
+   "jid": "86cc8db693a2",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Cabin balance due when?",
+   "conversation": [],
+   "evidence_ids": [
+    "HGEN-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes have two different dates for the cabin balance. The original entry says the $1,800 balance is due by **October 1**, but a later note from Chidi says the owner emailed to change it: the remaining **$1,600** is due by **October 9**, payable by bank transfer. So the current due date is October 9."
+  },
+  {
+   "jid": "b8a0893c1f1e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Shorter.",
+   "conversation": [
+    "USER (typed to Natively): I just got assigned a plot at the community garden. What do I actually have to do in the first month so I don't lose it?",
+    "NATIVELY: The main deadline is the 21-day rule: your plot has to be cleared of weeds and planted within 21 days of the day it was assigned, or the coordinator sends one reminder and then offers it to the next household. You also need to attend one orientation, and the fee is due before you get the shed code.",
+    "USER (typed to Natively): What if I'm away for two weeks in June?",
+    "NATIVELY: Two weeks is fine, but it's over a week, so you need a plot buddy to water and harvest for you, and you tell the coordinator who it is. Written notice only kicks in past three weeks, so June doesn't need that."
+   ],
+   "evidence_ids": [
+    "HGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two weeks is fine, but it's over a week, so you'd need a plot buddy to water and harvest, and you'd tell the coordinator who it is. Written notice only kicks in past three weeks, so June doesn't need that."
+  },
+  {
+   "jid": "6d96ea1fbc88",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "I don't know, I've just been feeling really stuck lately. Like I'm going through the motions at work and at home and nothing feels like it's moving. Sorry, that's a lot.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's not too much at all. Feeling stuck like that usually means something needs to change, and it's worth taking seriously rather than pushing through. What does \"moving\" look like for you right now, at work or at home? Sometimes naming the one thing that feels most off makes the rest clearer."
+  },
+  {
+   "jid": "9591bfe44848",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "So what do you think, Saturday or Sunday?",
+   "conversation": [
+    "OTHER PERSON: Okay so I got the van from my cousin, but only for one day this weekend.",
+    "USER (spoken): Which day?",
+    "OTHER PERSON: Either Saturday, but I have to have it back by 2, or Sunday, the whole day, but then Mike can't help because he's got his kid's tournament.",
+    "USER (spoken): And the new place, when can you get the keys?",
+    "OTHER PERSON: Keys are Saturday at 9 at the earliest. And the old place is a third floor walk-up, no elevator.",
+    "OTHER PERSON: There's not that much stuff though, maybe a couch, a bed, a dresser and like twenty boxes."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Saturday, I think. The keys are the thing that decides it, and you can't get them until 9, so Sunday would just be waiting around with the van. Saturday you'd have from 9 until 2, which is tight for a third-floor walk-up, but with only a couch, a bed, a dresser and twenty boxes, and Mike helping, that's doable. Sunday you'd have all day but no Mike, and honestly the stairs are the hard part."
+  },
+  {
+   "jid": "1c5bc073a716",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Random question, how long do you boil an egg if you want the yolk kind of jammy?",
+   "conversation": [
+    "OTHER PERSON: Dude, I benched my kicker and he scored fourteen points. Fourteen.",
+    "USER (spoken): That's rough. Who'd you start instead?",
+    "OTHER PERSON: Some guy off waivers, he got two. I'm three and four now, I'm basically done.",
+    "USER (spoken): Nah, there's still like nine weeks left.",
+    "OTHER PERSON: Yeah yeah. Anyway, I'm making breakfast while we talk."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Six to seven minutes for a jammy yolk, straight into boiling water. Then straight into cold water or an ice bath so it stops cooking. If the egg's fridge cold, add maybe thirty seconds."
+  },
+  {
+   "jid": "fc0e0df048d4",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Why not the other day though?",
+   "conversation": [
+    "OTHER PERSON: Okay so I got the van from my cousin, but only for one day this weekend.",
+    "USER (spoken): Which day?",
+    "OTHER PERSON: Either Saturday, but I have to have it back by 2, or Sunday, the whole day, but then Mike can't help because he's got his kid's tournament.",
+    "USER (spoken): And the new place, when can you get the keys?",
+    "OTHER PERSON: Keys are Saturday at 9 at the earliest. And the old place is a third floor walk-up, no elevator.",
+    "OTHER PERSON: There's not that much stuff though, maybe a couch, a bed, a dresser and like twenty boxes.",
+    "OTHER PERSON (heard): So what do you think, Saturday or Sunday?",
+    "NATIVELY: Saturday, I think. The keys are the thing that decides it, and you can't get them until 9, so Sunday would just be waiting around with the van. Saturday you'd have from 9 until 2, which is tight for a third-floor walk-up, but with only a couch, a bed, a dresser and twenty boxes, and Mike helping, that's doable. Sunday you'd have all day but no Mike, and honestly the stairs are the hard part."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sunday's the problem, not Saturday. The keys aren't ready until 9 Saturday, so if you take the van Sunday you're just sitting on it all morning waiting to get in. And Sunday you'd be doing the stairs alone, since Mike's at his kid's tournament. Saturday's tight, but you've got Mike and only a couch, a bed, a dresser and twenty boxes, so the walk-up is manageable."
+  },
+  {
+   "jid": "a2d61d2cbb09",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Do you know if we still get free parking at the new building or is it all permits now? I drive in most days.",
+   "conversation": [],
+   "evidence_ids": [
+    "HGEN-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "There's no free staff parking at Harlow. The studio subsidises monthly permits at the Canal Street garage, which comes to $60 a month for staff after the subsidy. Permits are limited to 25 spaces and go first come, first served, so apply through the People team form by Friday 6 November."
+  },
+  {
+   "jid": "564276bbc317",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "I just got assigned a plot at the community garden. What do I actually have to do in the first month so I don't lose it?",
+   "conversation": [],
+   "evidence_ids": [
+    "HGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The main deadline is the 21-day rule: your plot has to be cleared of weeds and planted within 21 days of the day it was assigned, or the coordinator sends one reminder and then offers it to the next household. You also need to attend one orientation, and the fee is due before you get the shed code."
+  },
+  {
+   "jid": "dd22f4607a46",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "So what's your story, how'd you end up doing what you do?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I got into this the way most people do, by following the problems that kept my attention. I like work where I have to understand a messy situation, figure out what actually matters, and then make it simpler for everyone else. That's what's kept me here, and it's why this conversation interested me."
+  },
+  {
+   "jid": "a6fc5a8de09c",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Explain compound interest like I'm twelve.",
+   "conversation": [],
+   "evidence_ids": [
+    "HGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Compound interest is when your money earns money, and then that new money earns money too. Say you save a dollar and it grows by ten percent, you have a dollar ten. Next time, the ten percent is on the whole dollar ten, not just the dollar. So it snowballs, slowly at first, then faster and faster."
+  },
+  {
+   "jid": "46926d99c6dc",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Okay three things about the office move. What's the last moment I can leave my stuff at my old desk, what am I supposed to do with my second monitor that I bought myself, and do I need to book a desk at the new place for the first week?",
+   "conversation": [],
+   "evidence_ids": [
+    "HGEN-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Three answers from the FAQ. Crates need to be at your desk by **Thursday 12 November at 4 pm**, and anything loose after that gets cleared. Your personal second monitor has to go home by **Friday 13 November**, since the movers aren't insured for personal items. And no, you don't need to book for the first week, desks are assigned by team for the first two weeks."
+  },
+  {
+   "jid": "6d972dc0117f",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Give me five ideas for a leaving gift for a coworker who's really into climbing. Budget is about 40 bucks from the team.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Five ideas around 40 bucks for a climber:\n\n1. A chalk bag with the team's names or a short message printed on it.\n2. A set of climbing-specific hand balm and a small finger-care kit.\n3. A guidebook to a crag or gym they've been wanting to visit.\n4. A carabiner keyring set, one per teammate, so they keep a piece of the team.\n5. A gift card to their local climbing gym, which covers a day pass or two."
+  },
+  {
+   "jid": "a7c53cb64676",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "My new neighbor asked what I do for work. Give me a quick, friendly way to describe my background.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I work in tech, mostly on the software side, and I've been doing it long enough that I still enjoy the problem-solving part of it. The short version is I help build and improve things, and I like the people side of it as much as the technical side. What about you, what do you do?"
+  },
+  {
+   "jid": "77480abc144b",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hey! Did you end up doing anything fun this weekend?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nothing too exciting, honestly. I kept it pretty low-key, caught up on some rest and got a few things done around the house. How about you, did you get up to anything good?"
+  },
+  {
+   "jid": "ecd0aae68f35",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Why does my phone battery die so much faster when it's cold outside?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Cold slows the chemical reactions inside a lithium-ion battery, so it can't release charge as quickly and the voltage sags. Your phone reads that lower voltage as an empty battery and shuts down early, even though charge is still there. Warming it back up usually restores most of that capacity."
+  },
+  {
+   "jid": "ced4423f629b",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "I have two job offers. One pays 12k more but it's a 50 minute commute each way. The other is 15 minutes from home, has a better title, and is close to my son's daycare. He's two. Lay out the real tradeoffs, tell me what I should still ask each company before deciding, and give me your honest lean.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The 12k is roughly a thousand a month before tax, and a 50 minute commute each way eats about an hour and a half a day, so the real question is what that time costs you with a two year old. The closer job wins on the title and on being near daycare, which matters a lot when a kid gets sick or pickup runs late.\n\nBefore deciding, ask each one about flexibility: core hours, how often you can work from home, and what happens on a daycare-closes-early day. Ask the higher paying one whether the commute is actually required daily. Ask the closer one how the better title maps to the next role.\n\nMy honest lean is the closer job, unless the 12k changes something real in your budget."
+  }
+ ]
+}

@@ -136,9 +136,19 @@ describe('the fluxion/ prefix survives the capability layer (EXECUTED, all 36)',
     // the prefix reaches it unstripped every Fluxion model resolves text-only —
     // the Code Hint refusal class. Comparing against the bare id proves the
     // prefix is transparent rather than merely "not crashing".
+    // One deliberate exception since 2026-10-01: DeepSeek Flash is KNOWN to read
+    // images directly and through AgentRouter (both measured). Through Fluxion
+    // it is unmeasured, so the name list does not claim it there; the one-time
+    // image test settles it when a Fluxion DeepSeek model is selected.
+    const MEASURED_DIRECT_ONLY = /^deepseek-(?:v\d+-)?flash(?:$|-)/;
     for (const id of FLUXION_CATALOGUE) {
       const bare = getModelCapabilities(id, false);
       const prefixed = getModelCapabilities(`fluxion/${id}`, false);
+      if (MEASURED_DIRECT_ONLY.test(id)) {
+        assert.equal(bare.supportsImages, true, `${id} reads images directly`);
+        assert.equal(prefixed.supportsImages, false, `fluxion/${id} is not assumed to`);
+        continue;
+      }
       assert.equal(
         prefixed.supportsImages, bare.supportsImages,
         `fluxion/${id} image support diverged from ${id}`,
@@ -468,7 +478,14 @@ describe('review fixes 2026-09-18 — found by adversarial review, all CONFIRMED
 
   test('Fluxion gets the user-endpoint deadline, not a first-party budget', () => {
     // It queues behind the upstream it fronts, exactly like the other gateways.
-    const fn = llm.slice(llm.indexOf('public isUsingUserEndpoint()'), llm.indexOf('public isUsingUserEndpoint()') + 900);
+    // The Active-Model classification; public isUsingUserEndpoint() delegates to
+    // it unless a Fast Response Background Model pick answers the turn.
+    // Sliced to the method's own closing brace, not a fixed 900 characters: a
+    // comment added above the return line for the next gateway (AgentRouter,
+    // 2026-09-30) pushed it past the window and failed this on correct code.
+    const start = llm.indexOf('private activeModelIsUserEndpoint()');
+    const fn = llm.slice(start, llm.indexOf('\n  }\n', start));
+    assert.ok(start > 0 && fn.length < 3000, 'the method must be found and the slice bounded');
     assert.match(fn, /isFluxionModel\(this\.currentModelId\)/);
   });
 

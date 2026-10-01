@@ -1,0 +1,361 @@
+[
+  {
+    "text": "Thanks Raj. Alex, how is the payout migration going?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Morning everyone. Let's do a quick standup and then talk about the payout migration."
+      },
+      {
+        "role": "interviewer",
+        "text": "I'll go first. Yesterday I finished the retry dashboard, and today I'm pairing with support on the refund backlog. No blockers."
+      }
+    ],
+    "expect": "ask",
+    "note": "team live M03: status ask addressed to the user by name"
+  },
+  {
+    "text": "Okay. And what's the rollback plan if Thursday goes badly?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Thanks Raj. Alex, how is the payout migration going?"
+      },
+      {
+        "role": "user",
+        "text": "It's going well. Half of the merchants are on the new service, the rest move on Thursday."
+      }
+    ],
+    "lastAnswered": "Thanks Raj. Alex, how is the payout migration going?",
+    "expect": "ask",
+    "note": "team live M04: follow-up to the user's own update"
+  },
+  {
+    "text": "Sam here. From the data side, the reconciliation report is ready, so we can compare old and new payouts daily.",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay. And what's the rollback plan if Thursday goes badly?"
+      },
+      {
+        "role": "user",
+        "text": "We keep the old service warm behind a feature flag, so we can flip merchants back in minutes."
+      }
+    ],
+    "lastAnswered": "Okay. And what's the rollback plan if Thursday goes badly?",
+    "expect": "none",
+    "note": "team live M05: a teammate's status update"
+  },
+  {
+    "text": "Raj, can you make sure support knows about the Thursday cutover?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Thanks Raj. Alex, how is the payout migration going?"
+      },
+      {
+        "role": "user",
+        "text": "It's going well. Half of the merchants are on the new service, the rest move on Thursday."
+      },
+      {
+        "role": "interviewer",
+        "text": "Sam here. From the data side, the reconciliation report is ready, so we can compare old and new payouts daily."
+      }
+    ],
+    "lastAnswered": "Okay. And what's the rollback plan if Thursday goes badly?",
+    "expect": "none",
+    "note": "team live M06: a request addressed by name to ANOTHER teammate (Raj). The user is Alex, as the context shows (Alex answered the migration question)."
+  },
+  {
+    "text": "Yes, I'll post in their channel today.",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Raj, can you make sure support knows about the Thursday cutover?"
+      }
+    ],
+    "lastAnswered": "Okay. And what's the rollback plan if Thursday goes badly?",
+    "expect": "none",
+    "note": "team live M07: the other teammate replying"
+  },
+  {
+    "text": "Alex, do you need anything from the data team before Thursday?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Raj, can you make sure support knows about the Thursday cutover?"
+      },
+      {
+        "role": "interviewer",
+        "text": "Yes, I'll post in their channel today."
+      }
+    ],
+    "lastAnswered": "Okay. And what's the rollback plan if Thursday goes badly?",
+    "expect": "ask",
+    "note": "team live M08: named ask to the user"
+  },
+  {
+    "text": "Great. So the decision is: we cut over the remaining merchants on Thursday at ten, and Alex owns the rollback.",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Alex, do you need anything from the data team before Thursday?"
+      },
+      {
+        "role": "user",
+        "text": "Just the reconciliation report every morning, thanks."
+      }
+    ],
+    "lastAnswered": "Alex, do you need anything from the data team before Thursday?",
+    "expect": "none",
+    "note": "team live M09: a decision that names the user, no ask"
+  },
+  {
+    "text": "One more thing. Alex, can you estimate how long a full rollback would take end to end?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Does anyone have concerns about that plan?"
+      },
+      {
+        "role": "interviewer",
+        "text": "No concerns from me."
+      }
+    ],
+    "lastAnswered": "Alex, do you need anything from the data team before Thursday?",
+    "expect": "ask",
+    "note": "team live M12: named estimate ask"
+  },
+  {
+    "text": "Priya, what's the status on the fraud rules?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Morning everyone, quick round of updates."
+      },
+      {
+        "role": "interviewer",
+        "text": "Alex, you're up first."
+      },
+      {
+        "role": "user",
+        "text": "I shipped the webhook retries yesterday and I'm on the ledger export today. No blockers."
+      }
+    ],
+    "lastAnswered": "Alex, you're up first.",
+    "expect": "none",
+    "note": "status ask addressed by name to another teammate after the user already gave theirs"
+  },
+  {
+    "text": "Mark, could you walk us through the latency numbers from last night?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Let's look at the incident from last night."
+      },
+      {
+        "role": "interviewer",
+        "text": "Alex, thanks for jumping on it so quickly."
+      },
+      {
+        "role": "user",
+        "text": "No problem, happy to help."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "none",
+    "note": "a walk-through request to another named participant"
+  },
+  {
+    "text": "Alex, you had your hand up earlier. Why do you think databases prefer B trees over binary search trees when the data lives on disk?",
+    "userName": "Alex Rivera",
+    "modeName": "Lecture",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Now, what happens when we insert? The leaf might be full. When that happens, the node splits in two and pushes the middle key up to its parent."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "ask",
+    "note": "lecture live C07: the lecturer calls on the user by name"
+  },
+  {
+    "text": "Maria, why do you think databases prefer B trees over binary search trees when the data lives on disk?",
+    "userName": "Alex Rivera",
+    "modeName": "Lecture",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Now, what happens when we insert? The leaf might be full. When that happens, the node splits in two and pushes the middle key up to its parent."
+      },
+      {
+        "role": "interviewer",
+        "text": "Alex, you answered the last one, so let's hear from someone else."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "none",
+    "note": "the lecturer calls on ANOTHER student by name, having just said the user (Alex) answered the last one"
+  },
+  {
+    "text": "So why can't we just scan the table? Because a full scan is linear in the number of rows, and a table with a hundred million rows would take seconds for every query.",
+    "userName": "Alex Rivera",
+    "modeName": "Lecture",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay everyone, let's get started. Today we're covering database indexing, and specifically how B trees make lookups fast."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "none",
+    "note": "lecture live C02: rhetorical question answered by the lecturer"
+  },
+  {
+    "text": "For next week, read chapter seven on hash indexes, and the problem set is due on Friday.",
+    "userName": "Alex Rivera",
+    "modeName": "Lecture",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Exactly. Every level is one disk read, so a shallow tree means fewer reads. That's the whole trick."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "none",
+    "note": "lecture live C09: homework logistics. KNOWN FALSE FIRE on the Natively rung in this context (statement, answer 0.9); quiet in the live lecture pass (2026-09-27) and on DeepSeek/OpenRouter. The name rule does not ride here (no one is addressed), by design."
+  },
+  {
+    "text": "Before we finish, Alex, can you explain the difference between a clustered and a non clustered index?",
+    "userName": "Alex Rivera",
+    "modeName": "Lecture",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "For next week, read chapter seven on hash indexes, and the problem set is due on Friday."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "ask",
+    "note": "lecture live C10: named ask to the user"
+  },
+  {
+    "text": "Alec, can you share where the ledger export stands?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay, next topic is the ledger export."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "ask",
+    "note": "STT misheard the user name (Alex → Alec): must still fire"
+  },
+  {
+    "text": "Does anyone know why the nightly reconciliation job failed?",
+    "userName": "Alex Rivera",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Morning everyone. Quick one before standup."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "ask",
+    "note": "an ask to the whole room, no name: judged as usual"
+  },
+  {
+    "text": "Evan, can you share where the ledger export stands?",
+    "userName": "Evin",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay, next topic is the ledger export."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "ask",
+    "note": "STT slip for the user name Evin: code marks it as the user"
+  },
+  {
+    "text": "Kevin, can you share where the ledger export stands?",
+    "userName": "Evin",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay, next topic is the ledger export."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "ask",
+    "note": "STT slip for the user name Evin: code marks it as the user"
+  },
+  {
+    "text": "Evin, can you share where the ledger export stands?",
+    "userName": "Evin",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay, next topic is the ledger export."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "ask",
+    "note": "the user named by their exact, uncommon first name: flash-lite silenced it until the rule said so outright"
+  },
+  {
+    "text": "Raj, can you share where the ledger export stands?",
+    "userName": "Evin",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay, next topic is the ledger export."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "none",
+    "note": "a different person, same ask"
+  },
+  {
+    "text": "Maria, can you share where the ledger export stands?",
+    "userName": "Evin",
+    "modeName": "Team Meet",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay, next topic is the ledger export."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "none",
+    "note": "a different person, same ask"
+  }
+]

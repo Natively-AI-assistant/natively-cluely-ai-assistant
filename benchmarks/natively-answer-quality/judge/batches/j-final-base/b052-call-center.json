@@ -1,0 +1,315 @@
+{
+ "batch": "b052-call-center",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "CALLCENTER-CTX-G1": {
+   "title": "Halden Home support knowledge base excerpt",
+   "text": "HALDEN HOME SUPPORT KNOWLEDGE BASE - AGENT REFERENCE\nRevision 3.2, effective 1 September 2026. Halden Home sells fiber internet, mobile plans, and the Halden Box subscription.\n\n1. VERIFICATION\nStandard verification is required before discussing any account detail. Collect all of the following: the full name on the account, the 6-digit account PIN, and either the last 4 digits of the payment card or the billing ZIP code. If the customer cannot recall the PIN, the agent may send a one-time code, valid for 10 minutes, to the mobile number or email registered on the account. Agents must never read out, hint at, or confirm a PIN. Agents must never ask a customer to read out a password and must never ask for a full card number.\nChanges to email, phone number, password, or shipping address need enhanced verification: the customer must read back the one-time code sent to the contact on file. If the customer has lost access to the registered email, the code goes to the registered mobile number. If neither is available, the customer submits the Identity Review form (photo ID plus a bill from the last 60 days), which is reviewed within 3 business days.\nAgents never disclose details of any account other than the verified one, even to a spouse or relative, unless that person is a listed Authorized User.\n\n2. REFUNDS AND RETURNS\nHalden Box charges: refundable within 14 days of the charge date if the box has not shipped. Once shipped, the refund is issued after the items are returned.\nDevices: 30-day return window from the delivery date. Opened devices carry a 10 percent restocking fee. Defective devices carry no fee.\nDuplicate charges: refunded in full with no fee when reported within 90 days of the charge. The refund posts to the original payment method within 5 business days; the customer's bank may take 2 to 3 further business days.\nAny refund over $75 needs Tier 2 approval before it is submitted.\n\n3. CANCELLATION\nMonth-to-month plans can be cancelled at any time. The cancellation takes effect at the end of the current billing period with no fee. There are no partial-month refunds except for duplicate charges.\nRetention: one offer per customer every 12 months, 2 months at 30 percent off. Offer it once, and only after the customer says they want to cancel.\n\n4. SHIPPING\nStandard delivery is 3 to 5 business days after dispatch. If an order has not arrived 7 business days after dispatch, offer a free reship or a refund.\nPackage marked delivered but missing: ask the customer to check with neighbors and the building office for 24 hours, then open a carrier trace, which takes 3 business days. After the trace, reship or refund.\nWrong item: send a prepaid return label and ship the replacement within 2 business days. Items valued under $20 do not need to be returned.\n\n5. CONNECTIVITY TROUBLESHOOTING\nRouter light: solid white means online, blinking amber means no line detected, solid red means a hardware fault.\nSteps: (1) power cycle for 30 seconds and wait 2 minutes; (2) check cables and test with a wired connection; (3) run the remote line test, about 90 seconds. If the line test fails, book a technician visit within 3 to 5 days. The visit is free when the fault is on the Halden side and $49 when the fault is in the customer's own wiring or equipment.\nConfiguration of third-party routers, VLANs, and port forwarding is not supported. Agents may share the public setup guide only.\n\n6. OUTAGE STATUS (as of 09:15 today)\nIncident INC-4471: fiber outage in the Ridgemont zone, ZIP codes 30411 and 30412. Started 08:40. Estimated restoration 15:30. Estimates are not guarantees and agents must never promise a time. The automatic outage credit of $1.50 per day applies only when an outage lasts longer than 24 hours.\n\n7. ESCALATION LADDER AND CREDIT AUTHORITY\nTier 1 agent: goodwill credit up to $25.\nTier 2 specialist: credits up to $75, billing exceptions, and any customer contacting for the third time about the same issue.\nTeam lead: credits up to $250. Handles customers who ask for a manager, after the agent has attempted resolution. Callback within 4 business hours.\nDuty manager: legal threats, regulatory complaints, suspected account takeover, and credits above $250.\nFor suspected account takeover, lock the account first, then notify the duty manager.\n\n8. PRIVACY REQUESTS\nData export and deletion requests are handled only through the Privacy Portal. Agents cannot perform them by phone and cannot confirm what data is held. Response takes up to 30 days.\n\n9. CLOSING A CALL\nRecap the resolution and next steps, give the reference number, and note that a follow-up email arrives within 1 hour."
+  },
+  "FCC-CTX-G2": {
+   "title": "Veltro Mobile billing reference: roaming and adjustments",
+   "text": "Veltro Mobile Billing Reference: International Roaming and Adjustments (revision 9)\n\nR1. TravelPass\nTravelPass costs $8 per day and lets postpaid customers use their domestic plan in Zone 1 destinations (138 countries; agents look up individual countries in the destination tool). The daily charge applies only on days the line makes a call, sends a text or uses data while connected to a Zone 1 network. Background data counts as use, so a phone left on with apps refreshing can trigger the daily charge. TravelPass charges are capped at 10 per bill cycle, so a customer never pays more than $80 in TravelPass charges in one cycle. TravelPass must be on the line before the usage happens; it is not applied retroactively.\n\nR2. Zone 2 (not covered by TravelPass)\nCruise ships, ferries with onboard networks and in-flight networks are maritime and aviation networks. They are billed at Zone 2 rates even when TravelPass is active: data $2.05 per MB, calls $3.49 per minute, outgoing texts $0.50 each. Customers can avoid these charges by switching on \"Block Zone 2\" in the app before they travel.\n\nR3. Roaming dispute adjustments\nIf a customer disputes roaming charges and TravelPass was active on the line at the time, the agent may credit up to $150 per bill cycle without approval, using reason code RMA. Disputes above $150 go to Billing Review as case type BRV. Billing Review decides within 10 business days and notifies the customer by text. Agents must not promise the outcome of a Billing Review.\n\nR4. Courtesy adjustment for customers without TravelPass\nIf the customer had no TravelPass, the agent may offer a one-time courtesy adjustment of 50% of the disputed roaming charges, up to $200, once per 24 months per account. Check the \"Courtesy used\" flag on the account first. If the flag is set, no courtesy adjustment is available by phone.\n\nR5. How adjustments appear\nAll adjustments appear as a credit on the next bill. Postpaid customers do not receive card refunds for adjustments. Prepaid customers receive adjustments as account balance.\n\nR6. Late fees and autopay\nThe late fee is $7. Agents may waive one late fee per account per 12 months. The autopay discount is $5 per line per month and applies only when autopay uses a debit card or bank account; since 1 June, autopay by credit card no longer earns the discount.\n\nR7. Network problems\nCredits for network problems, such as a local tower outage, are handled by the Network Credits team (case type NWC). Agents cannot set up recurring monthly credits of any kind."
+  },
+  "FCC-CTX-G1": {
+   "title": "Veltro Mobile agent handbook section 4: account security and SIM services",
+   "text": "Veltro Mobile Agent Handbook, Section 4: Account Security and SIM Services (revision 12, internal)\n\n4.1 Verification levels\nStandard verification: the 6-digit account PIN, OR the account holder's date of birth plus the billing ZIP code. Standard verification is enough to discuss plan details, balances and usage, and to suspend a line reported lost or stolen.\nHigh-risk verification is required for SIM swaps (physical SIM replacement), eSIM transfers to a new device, generating a Number Transfer PIN, changing the account email or billing address, and adding a line. High-risk verification means the account PIN AND a one-time passcode (OTP) texted to a different line on the account, or to the account holder's registered backup number. If the caller cannot receive an OTP on another line (for example, the customer has a single line and that phone is lost or broken), the agent must direct them to a Veltro store with photo ID. There is no agent override for high-risk verification, including for supervisors.\n\n4.2 Fraud Hold\nThree failed PIN attempts within 24 hours place the account on Fraud Hold automatically. A Fraud Hold lasts 72 hours. During a Fraud Hold no high-risk action can be completed by phone or in store. Only the Fraud Team can lift a hold early; agents open a case type FRH and the Fraud Team contacts the account holder. Agents cannot lift a hold.\n\n4.3 Unauthorised SIM swap or port-out\nIf a customer suddenly loses service and suspects a SIM swap or a number port they did not request: (1) complete Standard verification, (2) suspend any active SIM that is not in the customer's hands, (3) open a case type SSW and warm-transfer to the Fraud Team, which is available 24/7. Do not read out or discuss account notes about who made the change, which store or channel was used, or the other device. Advise the customer to contact their bank directly about any activity they did not make. Veltro does not reimburse losses at banks or other third parties; do not promise compensation.\n\n4.4 Lost or stolen devices\nSuspending a line stops calls, texts and data but does not pause billing. To blocklist the device itself the customer must provide the IMEI (from the box, the original receipt or the device page in the account). Without the IMEI the device can still be used with another carrier's SIM. Replacement SIM cards ship in 2 business days, free for postpaid accounts and $10 for prepaid accounts. An eSIM can be reissued in store at no charge after high-risk verification. Device insurance claims (VeltroCare) are filed online by the customer, not by agents.\n\n4.5 Number Transfer PIN (leaving Veltro)\nCustomers moving their number to another carrier need a Number Transfer PIN. It can be generated in the Veltro app or by an agent after high-risk verification, and it is valid for 5 days. Port-outs are blocked while the account is on Fraud Hold. The final bill includes any remaining device installments; agents cannot waive device balances.\n\n4.6 Account PIN resets\nCustomers can reset the account PIN in the Veltro app using the phone's biometric login, or in store with photo ID. Agents can send a reset link to the account email on file only. Agents must never set a PIN for the customer or read a PIN back.\n\n4.7 Things agents do not do\nAgents do not give out other customers' details, confirm whether a number belongs to a Veltro customer, provide call or text logs over the phone (those requests go to legal.requests@veltro.example), or promise timelines owned by other teams."
+  },
+  "FCC-CTX-C1": {
+   "title": "Veltro roaming FAQ for store staff (handout)",
+   "text": "Veltro Roaming FAQ for Store Staff (printed handout)\n\nHow much is TravelPass?\nTravelPass is $10 a day in covered countries. The customer is only charged on days they use the phone abroad.\n\nIs there a cap?\nNo cap. The customer pays for every day they use it, however long the trip is.\n\nDoes TravelPass work on cruise ships?\nYes. TravelPass works on most cruise lines once the ship leaves port, so customers do not need to buy the cruise line's own package.\n\nCan TravelPass be added after the trip?\nYes. If the customer adds TravelPass within 3 days of returning, the call center can re-rate the trip at the TravelPass price.\n\nA customer without TravelPass got a big roaming bill. What can we do?\nStore staff cannot adjust bills. Send the customer to the call center, which can credit 100% of the roaming charges once every 12 months as a courtesy.\n\nQuick tips for the counter\n- Remind customers that TravelPass tops out at $80 a cycle, so a long trip is never more than that.\n- Maritime and in-flight networks are excluded from all roaming packages, including TravelPass. Tell cruise passengers to switch on Block Zone 2.\n- Courtesy adjustments are half of the roaming charges, and the account can only get one every two years.\n- TravelPass has to be on the line before the customer uses the phone abroad. It never applies backwards.\n- The daily price is $8 in every covered country.\n- For anything not on this sheet, ask the store manager to call the agent support line before promising the customer anything."
+  }
+ },
+ "items": [
+  {
+   "jid": "d9ad62874848",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "I got charged twice for the same box this month.",
+   "conversation": [],
+   "evidence_ids": [
+    "CALLCENTER-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm sorry about that, let's get it sorted. First I need to verify the account: can you give me the full name on the account, your 6-digit account PIN, and either the last 4 digits of the payment card or the billing ZIP code?"
+  },
+  {
+   "jid": "29ee74de2f29",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "What should I say to them?",
+   "conversation": [
+    "CUSTOMER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "CUSTOMER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Thanks for flagging that early. Since the vendor changed their API without notice, let's confirm what actually broke on our side and whether we can adapt to the new version or need to wait on them. Can you walk me through which part of the integration stopped working?"
+  },
+  {
+   "jid": "7c154f9d7d10",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Get me someone who actually knows what they're doing.",
+   "conversation": [
+    "CUSTOMER (heard): It still doesn't work.",
+    "NATIVELY: I'm sorry it's still not working. Let's take it one step at a time so I can pin down where it's breaking. Can you tell me exactly what you're seeing now, the error message or the screen, and what you were doing right before it happened?",
+    "CUSTOMER (heard): I already tried that. Twice.",
+    "NATIVELY: I hear you, and I don't want you to repeat anything. Let's skip the retry and go straight to what I can see on my side. Can you read me the exact error text on your screen right now, word for word, so I can match it to a known cause?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I understand, and I'm not going to keep you going in circles. I'm the person handling this, so let me get you to the right place. I'll bring in a senior technician now and stay on the line with you until they're with us. Can you hold for just a moment while I connect them?"
+  },
+  {
+   "jid": "22e129b384bb",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "customer wants to change the email on the account, what do I need from them",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can help with that. To change the email on the account, I'll need to verify your identity first, so could you confirm the **current email** on the account and the **full name** on it? Once that checks out, I'll take the new email address and send a confirmation link to it before the change goes through."
+  },
+  {
+   "jid": "abc932544a21",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Fine. Cancel it.",
+   "conversation": [
+    "CUSTOMER (heard): I want a refund for this month.",
+    "NATIVELY: I understand, and I want to get this sorted for you. Before I can look at a refund for this month, can you confirm the account or invoice number and the email on the account, so I can pull up the charges and see what's eligible?",
+    "CUSTOMER (heard): I didn't ask for a credit, I asked for a refund.",
+    "NATIVELY: You're right, and I'm sorry if that came across as offering a credit. I'm looking at a refund, not a credit. To pull up the charges and see what's eligible, can you confirm the account or invoice number and the email on the account?",
+    "CUSTOMER (heard): Then I'm cancelling everything.",
+    "NATIVELY: I hear you, and I don't want to lose you over this. Before you cancel anything, let me pull up the account and look at the refund properly. Can you give me the account or invoice number and the email on the account so I can see what's eligible?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can cancel that for you, and I'll do it on this call. Before I process it, can you confirm the account or invoice number and the email on the account, so I cancel the right one and check what's refundable on this month's charge?"
+  },
+  {
+   "jid": "410482d678eb",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "The lady I spoke to promised me a twenty dollar credit every month until the tower's fixed. It's not on my bill. Where is it?",
+   "conversation": [
+    "USER (spoken): Thanks, you're verified. What can I help you with today?",
+    "CUSTOMER: The tower by my house was down most of last month. I called about it back then."
+   ],
+   "evidence_ids": [
+    "FCC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm sorry about the tower outage, and I understand why you're expecting that credit. I have to be straight with you: I can't set up a recurring monthly credit, and I don't see one on the account. Network outage credits are handled by our Network Credits team, so let me get the details of that call and open a case with them for you. Can you tell me roughly what date you called about the tower?"
+  },
+  {
+   "jid": "80ee8d7d4012",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Okay, whatever. So you're sending me a new SIM for free, right? And the thief can't use my phone now that it's suspended?",
+   "conversation": [
+    "USER (spoken): I've suspended the line so nobody can use it. Just to confirm, is this a monthly postpaid plan or a prepaid account?",
+    "CUSTOMER: It's prepaid. I top it up every month at the gas station.",
+    "USER (spoken): Thanks. And do you have the IMEI from the phone box by any chance?",
+    "CUSTOMER: No, the box is long gone."
+   ],
+   "evidence_ids": [
+    "FCC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two things there. The suspension stops calls, texts and data on that line, but it doesn't blocklist the phone itself, so without the IMEI it could still work with another carrier's SIM. And on the SIM, replacements are free for postpaid but $10 for prepaid, and since you're prepaid that's the one that applies."
+  },
+  {
+   "jid": "43c3cc81bbd2",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "I tried resetting it but the email never comes.",
+   "conversation": [
+    "CUSTOMER: Sorry, is it okay if I eat lunch while we talk? I've got about ten minutes.",
+    "USER (spoken): Of course, no problem.",
+    "CUSTOMER: Thanks. It's a busy day, the whole office is running around because of a fire drill.",
+    "CUSTOMER (heard): It says my account is locked.",
+    "NATIVELY: I'm sorry you're locked out. Let's get you back in. First, can you tell me exactly what the screen says, and whether it's asking for a password reset or just showing a lock message? That tells me whether it's a failed sign-in lock or something on our side, and I'll walk you through the fix from there."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Thanks for trying that. If the reset email never arrives, it's usually one of three things: it's landing in spam or junk, the address on the account isn't the one you're checking, or our mail is being blocked on your side. Can you check your spam folder and confirm the exact email address on the account? If it's not there, I'll trigger the reset from our end and confirm it goes out."
+  },
+  {
+   "jid": "61bbe711ad4b",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "write me a polite way to say I can't proceed",
+   "conversation": [
+    "USER (typed to Natively): customer wants to change the email on the account, what do I need from them",
+    "NATIVELY: I can help with that. To change the email on the account, I'll need to verify your identity first, so could you confirm the **current email** on the account and the **full name** on it? Once that checks out, I'll take the new email address and send a confirmation link to it before the change goes through.",
+    "USER (typed to Natively): they can't get the code, now what",
+    "NATIVELY: If the confirmation link isn't arriving, first check the spam or junk folder and make sure the new address was typed correctly. If it's still not there after a few minutes, I can resend it, and if that doesn't work I'll verify the address another way and escalate so the change can be completed on our end."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm sorry, but I'm not able to make this change on the call today. What I can do is log the request with the details you've given me and pass it to the team that handles account changes, so they can follow up with you directly. Before I do that, can I confirm the best number or email to reach you on?"
+  },
+  {
+   "jid": "aed11e204d04",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "What's this proration thing?",
+   "conversation": [
+    "CUSTOMER (heard): I don't understand my bill.",
+    "NATIVELY: I'm sorry about that, let's get it sorted out. Can you tell me which charge on the bill looks wrong, or read me the line that's confusing you? Once I know which item it is, I can pull up the account and walk you through exactly what it's for."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Proration is when a charge is adjusted for a partial period, so you only pay for the days you actually had the service. It usually shows up when you start, change, or cancel a plan mid-cycle. Can you read me that line so I can tell you exactly which change it's tied to?"
+  },
+  {
+   "jid": "15884858abd9",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Did they see my card details?",
+   "conversation": [
+    "CUSTOMER (heard): Someone logged into my account from another country.",
+    "NATIVELY: I'm sorry, that's alarming, and we'll treat it as a possible compromise. First, let's secure the account: change your password now from a device you trust, and turn on two-factor authentication if it isn't already on. Then check your recent activity and sign out of all other sessions. Can you tell me whether you still have access to the account right now?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't tell you for certain whether they saw your card details, so let's check. Open your payment methods and recent orders, and tell me if there's any charge or saved card you don't recognize."
+  },
+  {
+   "jid": "cdecb39e22a4",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Can you guarantee that?",
+   "conversation": [
+    "CUSTOMER: Hi, my internet is completely down.",
+    "USER (spoken): I'm sorry about that. Can I get your full name and ZIP code to verify the account?",
+    "CUSTOMER: Sam Okafor, three zero four one one.",
+    "USER (spoken): Thanks Sam, you're verified. I can see a known fiber outage in your area, and the status board lists an estimated restoration of three thirty this afternoon.",
+    "CUSTOMER (heard): So it's not just my house?",
+    "NATIVELY: It's not just your house, Sam. This is a known fiber outage affecting your area, so other customers are down too. The status board shows an estimated restoration of three thirty this afternoon. I'll stay on the line with you until it's back up.",
+    "CUSTOMER (heard): When will it be fixed?",
+    "NATIVELY: The status board shows an estimated restoration of **three thirty this afternoon**, Sam. That's the current estimate from the fiber team, and it can shift if the repair runs into trouble. I'll keep watching it and let you know right away if that time changes."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't guarantee the exact time, Sam. It's an estimate from the fiber team, and repairs can run into trouble. What I can promise is I'll keep watching it and tell you the moment it changes."
+  },
+  {
+   "jid": "d47a30e041a5",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "What should we do next?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let's start by confirming what's actually happening on your end. Can you tell me what you're seeing right now, and when it started? That'll tell me whether this is something we can fix on this call or whether I need to get it to the right team."
+  },
+  {
+   "jid": "f923c852538a",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "What are the next steps?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let me pull up your case and check where it stands right now. While I do that, can you confirm the reference number or the email on the account, so I'm looking at the right one? Once I see the current status and any open items, I'll tell you exactly what happens next and when."
+  },
+  {
+   "jid": "dcce100bf4fb",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "My phone has had no service since I got back from Spain last Tuesday. I've turned it off and on, I took the SIM out and put it back, my husband's phone is fine, and I'm still being billed for the roaming pass, so what's going on and what are you going to do?",
+   "conversation": [
+    "CUSTOMER: Before we start, did you catch the match last night?",
+    "USER (spoken): Ha, I did not, but I hear it was a good one.",
+    "CUSTOMER: Best game of the season. Okay, sorry."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm sorry, that's frustrating, especially with the roaming pass still billing. Since your husband's phone works fine, this is most likely your line or SIM rather than the network. Can you check whether your phone shows the network name at all, or says no SIM or searching? That tells me whether it's the SIM or the line, and I'll get the roaming pass looked at on the same call."
+  },
+  {
+   "jid": "a9e189d0c255",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Hi, I dropped my phone in the lake, it's completely dead. I bought a new one and I need my number moved onto the eSIM. I've got my PIN. It's my only line though, so I can't get a text on anything else.",
+   "conversation": [],
+   "evidence_ids": [
+    "FCC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm sorry about the phone, but I can get this sorted. Because moving your number to a new eSIM is a high-risk change, I need your account PIN plus a one-time passcode sent to a different line on the account or your registered backup number. Since this is your only line and the phone's gone, I can't send that code, and there's no override I can apply here. What I can do is note the account and have you come into a Veltro store with photo ID, where they can verify you and reissue the eSIM at no charge. Can you get to a store today or tomorrow?"
+  },
+  {
+   "jid": "84ba52ba25ba",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "No TravelPass, 300 in roaming from Mexico, first time he's ever asked. What courtesy credit can I give him?",
+   "conversation": [],
+   "evidence_ids": [
+    "FCC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can help with that. Since he's never had a courtesy credit before, he's eligible for the once-every-12-months full credit, so I can take the whole $300 in roaming charges off this bill as a one-time courtesy. Let me pull up the account and apply that now."
+  },
+  {
+   "jid": "6e9193f5740f",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "It says delivered but there's nothing on my porch.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm sorry, that's frustrating. Let's get this sorted. Can you check the delivery photo or the drop-off location in the tracking first, and tell me whether it shows a specific spot like a side door, a neighbor's address, or a mailroom? That tells me whether it was misdelivered or taken, and I'll start the claim from there."
+  },
+  {
+   "jid": "79d4fb5c5a6a",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "When will it be fixed?",
+   "conversation": [
+    "CUSTOMER: Hi, my internet is completely down.",
+    "USER (spoken): I'm sorry about that. Can I get your full name and ZIP code to verify the account?",
+    "CUSTOMER: Sam Okafor, three zero four one one.",
+    "USER (spoken): Thanks Sam, you're verified. I can see a known fiber outage in your area, and the status board lists an estimated restoration of three thirty this afternoon.",
+    "CUSTOMER (heard): So it's not just my house?",
+    "NATIVELY: It's not just your house, Sam. This is a known fiber outage affecting your area, so other customers are down too. The status board shows an estimated restoration of three thirty this afternoon. I'll stay on the line with you until it's back up."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The status board shows an estimated restoration of **three thirty this afternoon**, Sam. That's the current estimate from the fiber team, and it can shift if the repair runs into trouble. I'll keep watching it and let you know right away if that time changes."
+  },
+  {
+   "jid": "652493569df9",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "So I've got my own mesh system with three nodes, and I want to run a separate VLAN for my kids' devices, and I need you to set up port forwarding for my game server, and while you're at it tell me why your router is so bad at all of this.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can help with the VLAN and the port forwarding, but I want to be straight with you: I don't have your router model or your mesh system in front of me, so I can't tell you why it's bad at this yet. Can you tell me the make and model of the main router and the nodes?"
+  }
+ ]
+}

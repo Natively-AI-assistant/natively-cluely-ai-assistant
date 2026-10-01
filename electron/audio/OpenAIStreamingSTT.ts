@@ -23,10 +23,11 @@ import { streamingStttWsOptions } from './dnsHelpers';
 import { OpenAITranscriptTurnCoalescer } from './openaiTranscriptTurnCoalescer';
 import { OpenAILiveTranscriptItems } from './openaiLiveTranscriptItems';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
+import { resolveSttModel } from './sttModelCatalog';
+import { isDefaultOpenAiSttBase } from './openaiSttBaseUrl';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_OPENAI_BASE = 'https://api.openai.com';
 const REALTIME_WS_URL = 'wss://api.openai.com/v1/realtime?intent=transcription';
 const REST_ENDPOINT   = 'https://api.openai.com/v1/audio/transcriptions';
 
@@ -176,6 +177,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
     // was more than the native keepalive's all-zero frames.
     private appendedSinceCommitSamples = 0;
     private speechSinceCommit = false;
+    /** This meeting hit insufficient_quota: stopped for good until the next start(). */
+    private outOfCredits = false;
     /** Process-wide: this account rejected the live model once; don't pay that per meeting. */
     private static liveModelRejected = false;
     private readonly silenceTail = new RealtimeSilenceTail({
@@ -191,11 +194,16 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
-    constructor(apiKey: string, baseUrl?: string) {
+    /** Where the WS_MODELS ladder starts: the model picked in Settings
+     *  (sttModelCatalog.ts), whose own fallbacks are the models after it. */
+    private readonly preferredModelIndex: number;
+
+    constructor(apiKey: string, baseUrl?: string, preferredModel?: string) {
         super();
         this.apiKey = apiKey;
+        this.preferredModelIndex = Math.max(0, WS_MODELS.indexOf(resolveSttModel('openai', preferredModel) as WsModel));
         const effectiveBase = (baseUrl || '').trim();
-        if (effectiveBase && effectiveBase !== DEFAULT_OPENAI_BASE) {
+        if (!isDefaultOpenAiSttBase(effectiveBase)) {
             this.restEndpoint = deriveRestEndpoint(effectiveBase);
             this.isCustomEndpoint = true;
             console.log(`[OpenAIStreaming] Initialized — custom endpoint (REST only): ${this.restEndpoint}`);
@@ -255,7 +263,12 @@ export class OpenAIStreamingSTT extends EventEmitter {
         console.log('[OpenAIStreaming] Starting...');
         this.isActive       = true;
         this.shouldReconnect = true;
-        this.wsModelIndex   = OpenAIStreamingSTT.liveModelRejected ? WS_MODELS.indexOf('gpt-4o-transcribe') : 0;
+        this.outOfCredits   = false;
+        // The picked model first. A live pick on an account that refused the
+        // live model once already starts on the step it fell back to.
+        this.wsModelIndex   = this.preferredModelIndex === 0 && OpenAIStreamingSTT.liveModelRejected
+            ? WS_MODELS.indexOf('gpt-4o-transcribe')
+            : this.preferredModelIndex;
         this.wsFailures     = 0;
         this.reconnectAttempts = 0;
         this.ringEvictedThisSession = false;
@@ -358,11 +371,19 @@ export class OpenAIStreamingSTT extends EventEmitter {
         if (!this.isActive) return;
 
         if (this.mode === 'ws') {
+            // Out of credits: no socket will open this meeting, so nothing
+            // would ever flush a pre-buffer — don't fill one.
+            if (this.outOfCredits) return;
             // Always push to ring-buffer while not yet connected (pre-buffer)
             if (!this.isSessionReady) {
                 this._ringBufferPush(chunk);
-                // Trigger lazy connect if not already in progress
-                if (!this.isConnecting && this.shouldReconnect && !this.reconnectTimer) {
+                // Lazy connect only when there is no socket at all. Between a
+                // socket's 'open' and its session.created, isConnecting is
+                // already false: without `!this.ws` a chunk landing in that
+                // window opened a SECOND socket, and the first one's
+                // session.created then flushed the ring buffer into the new,
+                // still-connecting socket, where it was dropped.
+                if (!this.ws && !this.isConnecting && this.shouldReconnect && !this.reconnectTimer) {
                     this._connectWs();
                 }
                 return;
@@ -489,11 +510,14 @@ export class OpenAIStreamingSTT extends EventEmitter {
         console.log(`[OpenAIStreaming] Connecting WebSocket (model=${model}, attempt=${this.reconnectAttempts + 1})...`);
 
         // streamingStttWsOptions: IPv4-only DNS + 15s handshake cap (dnsHelpers.ts).
-        this.ws = new WebSocket(REALTIME_WS_URL, streamingStttWsOptions({
+        // Bound to a local so every handler below can check it still owns
+        // this.ws before touching shared state (F-203, as in Soniox/Deepgram).
+        const ws = new WebSocket(REALTIME_WS_URL, streamingStttWsOptions({
             headers: {
                 Authorization: `Bearer ${this.apiKey}`,
             },
         }) as WebSocket.ClientOptions);
+        this.ws = ws;
 
         // 10-second connection timeout to prevent hanging on dropped networks
         this.connectionTimeoutTimer = setTimeout(() => {
@@ -510,7 +534,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
             }
         }, 10_000);
 
-        this.ws.on('open', () => {
+        ws.on('open', () => {
+            if (ws !== this.ws) return;
             if (this.connectionTimeoutTimer) {
                 clearTimeout(this.connectionTimeoutTimer);
                 this.connectionTimeoutTimer = null;
@@ -537,10 +562,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 }
             }, 5_000);
 
-            this.ws!.send(JSON.stringify(this._buildSessionUpdate(model)));
+            ws.send(JSON.stringify(this._buildSessionUpdate(model)));
         });
 
-        this.ws.on('message', (raw: WebSocket.Data) => {
+        ws.on('message', (raw: WebSocket.Data) => {
+            if (ws !== this.ws) return;
             try {
                 // WebSocket.Data is `Buffer | ArrayBuffer | Buffer[]`. On fragmented
                 // frames `ws` delivers an array of Buffers — calling `.toString()`
@@ -560,12 +586,14 @@ export class OpenAIStreamingSTT extends EventEmitter {
             }
         });
 
-        this.ws.on('error', (err: Error) => {
+        ws.on('error', (err: Error) => {
             console.error(`[OpenAIStreaming] WS error: ${err.message}`);
             // The 'close' event will follow, so we handle reconnect there.
         });
 
-        this.ws.on('close', (code: number, reason: Buffer) => {
+        ws.on('close', (code: number, reason: Buffer) => {
+            if (ws !== this.ws) return;
+            this.ws = null;
             this._handleWsClose(code, reason);
         });
     }
@@ -809,6 +837,24 @@ export class OpenAIStreamingSTT extends EventEmitter {
                     this.liveItems.reset();
                     this._closeWs(false);
                     this._connectWs();
+                    break;
+                }
+                if (msg.error?.type === 'insufficient_quota') {
+                    // The account is out of credits (live, 2026-09-26: type
+                    // insufficient_quota, code credit_balance_exhausted, sent
+                    // right after session.created). Every new session gets the
+                    // same error, and session.created resets the failure count,
+                    // so reconnecting looped for the whole meeting while main.ts
+                    // showed "reconnecting". Stop, and lead with the type:
+                    // main.ts fails the channel on "quota" and sttErrorMapper
+                    // names it. A new meeting tries again (start() re-arms).
+                    console.error(`[OpenAIStreaming] Account out of credits: ${errMsg}`);
+                    this.outOfCredits = true;
+                    this.shouldReconnect = false;
+                    this._closeWs(false);
+                    const quotaErr = new Error(`insufficient_quota: ${errMsg}`);
+                    (quotaErr as Error & { code?: string }).code = 'insufficient_quota';
+                    this.emit('error', quotaErr);
                     break;
                 }
                 console.error(`[OpenAIStreaming] Server error: ${errMsg}`);
@@ -1258,11 +1304,22 @@ export class OpenAIStreamingSTT extends EventEmitter {
             return Buffer.from(monoS16.buffer);
         }
 
+        // Linear interpolation, as audioResampler.ts does for local Whisper.
+        // The native capture delivers 16 kHz, so for the 24 kHz socket this
+        // UPSAMPLES: taking the nearest sample repeated every third one, which
+        // left distortion only 10-13 dB below speech at 2-3 kHz (22-29 dB now).
+        // Whole-number ratios (48 → 24 kHz, 48 → 16 kHz) land on frac 0 and
+        // come out exactly as before. Output length is unchanged.
         const factor       = this.inputSampleRate / targetRate;
         const outputLength = Math.floor(monoS16.length / factor);
         const outputS16    = new Int16Array(outputLength);
+        const lastIndex    = monoS16.length - 1;
         for (let i = 0; i < outputLength; i++) {
-            outputS16[i] = monoS16[Math.floor(i * factor)];
+            const pos  = i * factor;
+            const k    = Math.floor(pos);
+            const a    = monoS16[k];
+            const b    = monoS16[Math.min(k + 1, lastIndex)];
+            outputS16[i] = Math.round(a + (b - a) * (pos - k));
         }
         return Buffer.from(outputS16.buffer);
     }

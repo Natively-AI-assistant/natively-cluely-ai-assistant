@@ -55,8 +55,19 @@ export function useMotionReadyAfter(loaded: boolean): boolean {
   return ready;
 }
 
-/** Height + opacity, the shared Disclosure's move, but silent before hydration. */
-export const Collapse: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => {
+/**
+ * Height + opacity, the shared Disclosure's move, but silent before hydration.
+ * In a `space-y-*` stack, pass `className="!mt-0"` and put the gap INSIDE as
+ * top padding: the stack's margin sits outside the animated height, so it would
+ * jump in whole before the fold. `skipStagger` for a direct child of a
+ * `data-settings-stagger` container, whose entrance would otherwise replay.
+ */
+export const Collapse: React.FC<{ open: boolean; className?: string; skipStagger?: boolean; children: React.ReactNode }> = ({
+  open,
+  className,
+  skipStagger,
+  children,
+}) => {
   const ready = React.useContext(SettingsMotionReady);
   const reduce = useReducedMotion();
   return (
@@ -64,6 +75,8 @@ export const Collapse: React.FC<{ open: boolean; children: React.ReactNode }> = 
       {open ? (
         <motion.div
           key="collapse"
+          className={className}
+          data-stagger-skip={skipStagger ? '' : undefined}
           initial={ready ? (reduce ? { opacity: 0 } : { height: 0, opacity: 0 }) : false}
           animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
           exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
@@ -111,14 +124,19 @@ export const SettingsMenu: React.FC<{
   /** The corner that touches the trigger, e.g. 'top right' for a right-0 menu. */
   origin?: string;
   className?: string;
+  /** For a menu that is a listbox (AI Providers' model and language pickers). */
+  role?: string;
+  ariaLabel?: string;
   children: React.ReactNode;
-}> = ({ open, origin = 'top', className = '', children }) => {
+}> = ({ open, origin = 'top', className = '', role, ariaLabel, children }) => {
   const reduce = useReducedMotion();
   return (
     <AnimatePresence>
       {open ? (
         <motion.div
           key="menu"
+          role={role}
+          aria-label={ariaLabel}
           className={className}
           style={{ transformOrigin: origin }}
           initial={{ opacity: 0, scale: reduce ? 1 : 0.97 }}
@@ -195,10 +213,16 @@ export const Presence: React.FC<{
   id: string | null;
   /** Text only: a block-level swap (a whole description) rather than inline. */
   block?: boolean;
+  /** Icon only: the fixed slot the glyphs cross-fade in. 14px suits a button
+      glyph; a row's 40px tile holds a 20px one (`w-5 h-5`). */
+  slotClassName?: string;
+  /** Readiness for a pane that tracks its own load, in place of a provider. */
+  ready?: boolean;
   className?: string;
   children?: React.ReactNode;
-}> = ({ kind, id, block, className = '', children }) => {
-  const ready = React.useContext(SettingsMotionReady);
+}> = ({ kind, id, block, slotClassName = 'w-3.5 h-3.5', ready: readyProp, className = '', children }) => {
+  const readyCtx = React.useContext(SettingsMotionReady);
+  const ready = readyProp ?? readyCtx;
   const m = presenceMotion(kind, !!useReducedMotion());
   const cls = `${block ? 'block' : m.className} ${className}`;
   // Before hydration: plain markup, no AnimatePresence at all. Gating only the
@@ -211,7 +235,7 @@ export const Presence: React.FC<{
     const Plain = kind === 'control' ? 'div' : 'span';
     const body = id !== null ? <Plain className={cls}>{children}</Plain> : null;
     return kind === 'icon' ? (
-      <span className="relative inline-block w-3.5 h-3.5 shrink-0" aria-hidden="true">
+      <span className={`relative inline-block ${slotClassName} shrink-0`} aria-hidden="true">
         {body}
       </span>
     ) : (
@@ -232,13 +256,45 @@ export const Presence: React.FC<{
     </AnimatePresence>
   );
   return kind === 'icon' ? (
-    <span className="relative inline-block w-3.5 h-3.5 shrink-0" aria-hidden="true">
+    <span className={`relative inline-block ${slotClassName} shrink-0`} aria-hidden="true">
       {presence}
     </span>
   ) : (
     presence
   );
 };
+
+/**
+ * A control's label changing state without resizing the control. Every label
+ * it can show sits invisibly in ONE grid cell, so the control keeps the widest
+ * one's width in whatever font the platform renders (SF Pro and Segoe UI
+ * measure differently, so a fixed min-width is a guess), and the visible label
+ * swaps (Presence "text"). A label that grew on "Testing…" shoved every control
+ * beside it sideways. `sizers` are the labels as they render, with any spinner
+ * swapped for a same-size blank: a hidden `.animate-spin` would still read as
+ * "loading" to GenieModal's snapshot check. Always ready — labels only change
+ * in answer to a click or its result.
+ */
+export const SwapLabel: React.FC<{ id: string; sizers: React.ReactNode[]; children: React.ReactNode }> = ({
+  id,
+  sizers,
+  children,
+}) => (
+  <span className="grid place-items-center">
+    {sizers.map((node, i) => (
+      <span key={i} aria-hidden="true" className="invisible col-start-1 row-start-1">
+        {node}
+      </span>
+    ))}
+    <span className="col-start-1 row-start-1">
+      <SettingsMotionReady.Provider value={true}>
+        <Presence kind="text" id={id}>
+          {children}
+        </Presence>
+      </SettingsMotionReady.Provider>
+    </span>
+  </span>
+);
 
 /**
  * A busy flag that only shows once the work has run long enough to be worth a
@@ -286,6 +342,28 @@ export const SETTINGS_INPUT =
 
 // Sync's field label ("PAIRING LINK").
 export const SETTINGS_FIELD_LABEL = 'text-xs font-medium text-text-secondary uppercase tracking-wide block';
+
+/* A dropdown on the right of a settings row grows with its label, up to
+   PICKER_LABEL_MAX_CHARS characters ("Gemini 3.8 Flash"); capPickerLabel cuts
+   anything longer. Its menu sizes to its options, so a short label like "Auto"
+   still opens a menu wide enough to read the choices in it. */
+export const PICKER_LABEL_MAX_CHARS = 16;
+export const PICKER_MENU_WIDTH = 'min-w-full w-max max-w-[18rem]';
+
+/* The Active Embedding Model and Active Reranker picker boxes carry this
+   attribute and this min-width; the Retrieval page sets the variable to the
+   wider of the two so they match (useMatchedHeroPickers). Anywhere else the
+   variable is unset and each box fits its own label. */
+export const RETRIEVAL_HERO_PICKER_ATTR = 'data-retrieval-hero-picker';
+export const RETRIEVAL_HERO_PICKER_MIN_WIDTH = 'var(--retrieval-hero-picker-w, 0px)';
+
+/** A label longer than `max` characters (spaces included) keeps its first
+ *  max-1 and ends in an ellipsis, so what shows is never more than `max`. */
+export const capPickerLabel = (label: string, max: number = PICKER_LABEL_MAX_CHARS): string => {
+    const chars = Array.from(label);
+    if (chars.length <= max) return label;
+    return `${chars.slice(0, max - 1).join('').trimEnd()}…`;
+};
 
 // Audio's section heading.
 export const SettingsSectionHeading: React.FC<{ title: string; subtitle?: React.ReactNode }> = ({ title, subtitle }) => (

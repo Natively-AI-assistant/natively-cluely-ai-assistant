@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
-import { Check, ChevronRight, Copy } from 'lucide-react';
+import { Check, ChevronRight, Copy, Pause, Play } from 'lucide-react';
+import { useResolvedTheme } from '../../../hooks/useResolvedTheme';
 import { DisclosureChevron } from '../../ui/AccordionSection';
 import {
   Collapse,
@@ -22,6 +22,12 @@ import {
 // for anything a person reads — it measures 3.25:1 on the light canvas.
 
 /**
+ * Whether the guide around a part is open. A recording reads it so it plays
+ * only while its guide is open; outside any guide it is always true.
+ */
+const HelpGuideOpen = React.createContext(true);
+
+/**
  * A row whose body opens beneath it. The whole row header toggles, not just the
  * chevron: the chevron button is the keyboard and screen-reader control, and a
  * pointer click anywhere on the header reaches it by bubbling. Clicks inside the
@@ -30,10 +36,12 @@ import {
 export const HelpGuideRow: React.FC<{
   icon: React.ReactNode;
   title: string;
+  /** Beside the title — Setup & Help uses it for a recording's running time. */
+  badge?: React.ReactNode;
   description: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
-}> = ({ icon, title, description, children, defaultOpen = false }) => {
+}> = ({ icon, title, badge, description, children, defaultOpen = false }) => {
   const [open, setOpen] = useState(defaultOpen);
   const bodyRef = useRef<HTMLDivElement>(null);
   const bodyId = useId();
@@ -48,6 +56,7 @@ export const HelpGuideRow: React.FC<{
       <SettingsRow
         icon={icon}
         title={title}
+        badge={badge}
         description={description}
         control={
           <button
@@ -62,9 +71,11 @@ export const HelpGuideRow: React.FC<{
         }
       >
         <div ref={bodyRef} id={bodyId}>
-          <Collapse open={open}>
-            <div className="pb-4 pt-0.5 space-y-3 text-xs text-text-secondary leading-relaxed select-text">{children}</div>
-          </Collapse>
+          <HelpGuideOpen.Provider value={open}>
+            <Collapse open={open}>
+              <div className="pb-4 pt-0.5 space-y-3 text-xs text-text-secondary leading-relaxed select-text">{children}</div>
+            </Collapse>
+          </HelpGuideOpen.Provider>
         </div>
       </SettingsRow>
     </div>
@@ -216,38 +227,258 @@ export const HelpFigure: React.FC<{ caption?: string; children: React.ReactNode 
   </figure>
 );
 
+/** One theme's file of a recording, as the clip manifest (helpClips.ts) describes it. */
+export interface HelpClipVariant {
+  src: string;
+  /** Pixel size, read by ffprobe when the clip was encoded. */
+  size: readonly [number, number];
+  /** Seconds, also from ffprobe. */
+  duration: number;
+  /** Step times come from the take's log, so each theme's file carries its own. */
+  chapters: HelpClipChapter[];
+}
+
+/** A recording: its dark file, and a light one when it is of Settings UI. */
+export interface HelpClipSource {
+  dark: HelpClipVariant;
+  light?: HelpClipVariant;
+}
+
+/** One step of a clip: where it starts, in seconds, and what happens in it. */
+export interface HelpClipChapter {
+  at: number;
+  label: React.ReactNode;
+}
+
+const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
+
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
 /**
- * A screen recording of the real app, looping without sound. Recordings are
- * bundled assets, so they play offline and under the app's CSP (media falls to
- * default-src 'self'). Under reduced motion nothing plays by itself: the first
- * frame shows with controls, and the viewer starts it if they want it.
+ * The OS reduced-motion setting, right from the first render. framer-motion's
+ * useReducedMotion answers false until an effect has run, which was long
+ * enough for a recording to start playing and then stop (0.3 s, measured).
  */
-// `size` is the recording's pixel size. A <video> has no intrinsic size until
-// its metadata loads, so without it the element lays out at the 300x150
-// default inside a guide that is mid-open: the Collapse measures that, then the
-// body jumps ~170px when the real height arrives.
-export const HelpVideo: React.FC<{ src: string; label: string; caption?: string; size: readonly [number, number] }> = ({
-  src,
-  label,
-  caption,
-  size,
-}) => {
-  const reduce = useReducedMotion();
+function usePrefersReducedMotion(): boolean {
+  const [reduce, setReduce] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(REDUCED_MOTION_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia?.(REDUCED_MOTION_QUERY);
+    if (!query) return;
+    const onChange = () => setReduce(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+  return reduce;
+}
+
+/**
+ * A screen recording of the real app, with its steps underneath. The steps are
+ * the guide's text: each is a short label with its own progress track, the one
+ * playing is lit, and pressing one jumps the clip there.
+ *
+ * A clip plays only while it can be seen — its guide open, the clip on screen
+ * and the window visible — so a long page of recordings costs nothing until
+ * one is looked at. Under reduced motion nothing plays by itself: the first
+ * frame shows, the steps still jump to theirs, and Play is one press away.
+ *
+ * Recordings are bundled assets, so they play offline and under the app's CSP
+ * (media falls to default-src 'self').
+ */
+// `size` is set as the aspect ratio: a <video> has no intrinsic size until its
+// metadata loads, so without it the element lays out at the 300x150 default
+// inside a guide that is mid-open, and the body jumps when the real height
+// arrives. `duration` sizes the last step's track before metadata too.
+export const HelpClip: React.FC<{
+  clip: HelpClipSource;
+  /** What the recording shows, for screen readers. */
+  label: string;
+  caption?: string;
+}> = ({ clip, label, caption }) => {
+  const reduce = usePrefersReducedMotion();
+  const isLight = useResolvedTheme() === 'light';
+  const guideOpen = React.useContext(HelpGuideOpen);
+  const variant = isLight && clip.light ? clip.light : clip.dark;
+  const { src, chapters } = variant;
+
+  const frameRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fillRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const [inView, setInView] = useState(false);
+  const [pageVisible, setPageVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible');
+  // null = follow the default (play unless reduced motion); otherwise the viewer's choice.
+  const [choice, setChoice] = useState<'play' | 'pause' | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [active, setActive] = useState(0);
+
+  const wantsPlay = choice ? choice === 'play' : !reduce;
+  const shouldPlay = guideOpen && inView && pageVisible && wantsPlay;
+
+  // A guide's step boundaries: [start, end) per chapter, the last ending at the clip's end.
+  const bounds = chapters.map((c, i) => [c.at, i + 1 < chapters.length ? chapters[i + 1].at : variant.duration] as const);
+
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return;
+    }
+    const io = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.35 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const onVisibility = () => setPageVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (shouldPlay) {
+      // play() rejects when a pause interrupts it (the guide closed mid-load);
+      // that is expected, not an error.
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [shouldPlay, src]);
+
+  // Paints the step tracks from the clip's current time. Written straight to
+  // the DOM: a React state per frame would re-render the guide 60 times a second.
+  const paint = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || bounds.length === 0) return;
+    const t = video.currentTime;
+    let current = 0;
+    bounds.forEach(([start, end], i) => {
+      if (t >= start) current = i;
+      const fill = fillRefs.current[i];
+      if (fill) fill.style.transform = `scaleX(${clamp01((t - start) / Math.max(0.001, end - start))})`;
+    });
+    setActive((prev) => (prev === current ? prev : current));
+    // bounds is rebuilt each render from chapters + duration; its content is what matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(bounds)]);
+
+  useEffect(() => {
+    if (!playing) {
+      paint();
+      return;
+    }
+    let frame = requestAnimationFrame(function tick() {
+      paint();
+      frame = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [playing, paint]);
+
+  const seek = (i: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    // A hair past the boundary, so the frame shown belongs to this step and
+    // not the last frame of the one before.
+    video.currentTime = Math.min(bounds[i][0] + 0.05, variant.duration);
+    setActive(i);
+    paint();
+  };
+
+  const toggle = () => setChoice(shouldPlay || (wantsPlay && !pageVisible) ? 'pause' : 'play');
+
   return (
-    <HelpFigure caption={caption}>
-      <video
-        src={src}
-        aria-label={label}
-        className="block w-full h-auto bg-bg-main"
-        style={{ aspectRatio: `${size[0]} / ${size[1]}` }}
-        muted
-        loop
-        playsInline
-        preload="auto"
-        autoPlay={!reduce}
-        controls={!!reduce}
-      />
-    </HelpFigure>
+    <figure className="space-y-2.5">
+      <div
+        ref={frameRef}
+        className={`${SETTINGS_CARD} group/clip relative overflow-hidden`}
+        style={{ aspectRatio: `${variant.size[0]} / ${variant.size[1]}` }}
+      >
+        <video
+          ref={videoRef}
+          key={src}
+          src={src}
+          aria-label={label}
+          className="block w-full h-full object-cover bg-bg-main"
+          // Fades in on its first frame rather than flashing the empty frame black.
+          style={{ opacity: ready ? 1 : 0, transition: reduce ? 'none' : 'opacity 250ms ease-out' }}
+          muted
+          loop
+          playsInline
+          preload={guideOpen ? 'auto' : 'metadata'}
+          onLoadedData={() => setReady(true)}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onSeeked={paint}
+          onClick={toggle}
+        />
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={playing ? 'Pause recording' : 'Play recording'}
+          className={`absolute right-2.5 bottom-2.5 w-8 h-8 rounded-full flex items-center justify-center text-white bg-black/55 backdrop-blur-md ring-1 ring-white/15 shadow-sm transition-opacity duration-200 focus-visible:opacity-100 focus-visible:outline-none ${
+            playing ? 'opacity-0 group-hover/clip:opacity-100' : 'opacity-100'
+          }`}
+        >
+          <Presence kind="icon" id={playing ? 'pause' : 'play'}>
+            {playing ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" className="translate-x-px" />}
+          </Presence>
+        </button>
+      </div>
+      {chapters.length > 0 && (
+        <ol
+          className="grid gap-3"
+          style={{ gridTemplateColumns: `repeat(${chapters.length}, minmax(0, 1fr))` }}
+          aria-label="Steps in this recording"
+        >
+          {chapters.map((chapter, i) => {
+            const isActive = i === active;
+            return (
+              <li key={i} className="min-w-0">
+                <button
+                  type="button"
+                  onClick={() => seek(i)}
+                  aria-current={isActive ? 'step' : undefined}
+                  title={typeof chapter.label === 'string' ? chapter.label : undefined}
+                  // Not ring-accent-primary/60: a bare var() colour takes no alpha
+                  // suffix (tailwind.config.js), so that emitted nothing and the ring
+                  // fell back to Tailwind's default blue.
+                  className="group/step w-full text-left rounded-md focus-visible:outline-none"
+                >
+                  {/* The track is drawn in the text colour at low strength: --border-subtle
+                      is transparent in dark, and a bare var() takes no alpha suffix. */}
+                  <span
+                    aria-hidden
+                    className="block h-[3px] rounded-full overflow-hidden"
+                    style={{ background: 'color-mix(in srgb, var(--text-primary) 14%, transparent)' }}
+                  >
+                    <span
+                      ref={(el) => { fillRefs.current[i] = el; }}
+                      className="block h-full w-full rounded-full bg-text-primary origin-left"
+                      style={{ transform: 'scaleX(0)' }}
+                    />
+                  </span>
+                  {/* One line, always: a step that wraps under its neighbours reads as
+                      two steps. Labels are written to fit (gen-manifest checks
+                      their length); the ellipsis only guards a translation. */}
+                  <span className="mt-2 flex items-baseline gap-1.5 text-[11.5px] leading-snug whitespace-nowrap">
+                    <span className={`shrink-0 tabular-nums font-semibold transition-colors duration-200 ${isActive ? 'text-text-primary' : 'text-text-secondary'}`}>{i + 1}</span>
+                    <span
+                      className={`min-w-0 overflow-hidden text-ellipsis transition-colors duration-200 ${
+                        isActive ? 'text-text-primary font-medium' : 'text-text-secondary group-hover/step:text-text-primary'
+                      }`}
+                    >
+                      {chapter.label}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {caption && <figcaption className="text-[11px] text-text-secondary">{caption}</figcaption>}
+    </figure>
   );
 };
 
@@ -256,7 +487,8 @@ export const HelpLink: React.FC<{ href: string; children: React.ReactNode }> = (
   <button
     type="button"
     onClick={() => window.electronAPI?.openExternal?.(href)}
-    className="text-accent-primary hover:underline"
+    // The underline fades in with the hover, as General's "Supported apps here" does.
+    className="text-accent-primary underline decoration-transparent hover:decoration-current transition-colors duration-150 ease-out"
   >
     {children}
   </button>

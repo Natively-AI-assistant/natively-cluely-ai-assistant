@@ -58,6 +58,19 @@ export interface PlannerInput {
      * question (answer it). Absent ⇒ the cooldown behaves exactly as before.
      */
     lastTriggerQuestion?: string;
+    /**
+     * The trigger came from Auto Answer, whose judge has ALREADY ruled this an
+     * ask worth answering and applied its own floor (SimpleAutoAnswer
+     * ANSWER_FLOOR). The routes below that read keywords — brainstorm, clarify,
+     * recap, follow-up questions — were built for the USER's own requests; on
+     * this path the text is the INTERVIEWER's words, so they must not re-route
+     * it, and the 0.5 confidence gate must not veto a verdict the judge passed.
+     * Live 2026-09-26: once a coding problem was detected, EVERY later automatic
+     * answer ("what's the time complexity of your remove?", "walk me through
+     * what happens when you type a URL") came out as "Brainstorming Approaches".
+     * The cooldown / same-utterance gate still applies.
+     */
+    automatic?: boolean;
 }
 
 export interface PlannerDecision {
@@ -156,6 +169,10 @@ export function planNextAssistantAction(input: PlannerInput): PlannerDecision {
         if (sameUtterance) {
             return { kind: 'silent', reason: 'cooldown', confidence };
         }
+    }
+
+    if (input.automatic) {
+        return { kind: 'answer', reason: 'automatic_judged_ask', confidence };
     }
 
     if (confidence < 0.5 && !input.hasImages) {

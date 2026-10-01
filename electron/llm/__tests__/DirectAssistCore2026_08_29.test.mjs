@@ -866,7 +866,10 @@ test('Direct vision preflight preserves images for LiteLLM and NVIDIA gateways',
   assert.ok(start >= 0 && end > start);
   assert.match(
     capabilityBoundary,
-    /case 'litellm':\s*case 'nvidia_nim':[\s\S]*?return true;/,
+    // Since 2026-10-01 the gateways ask the resolver with unknown → forward:
+    // an untested model still keeps its image; only one tested or catalogued
+    // as text-only is refused (executed in VisionProbeWiring2026_10_01).
+    /case 'litellm':\s*case 'nvidia_nim':[\s\S]*?return readsImages\(this\.visionVerdict\(selection, custom, curl\), true\);/,
   );
   assert.doesNotMatch(
     capabilityBoundary,

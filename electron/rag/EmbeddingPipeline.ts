@@ -28,6 +28,42 @@ const QUERY_EMBED_TIMEOUT_MS = 3_000;
 /** How long an identical query's vector is reused (see queryEmbedMemo). */
 const QUERY_EMBED_MEMO_TTL_MS = 5_000;
 const QUERY_EMBED_MEMO_MAX = 64;
+/**
+ * Warmed query vectors (2026-09-27). Auto Answer embeds the interviewer's
+ * would-be question the moment the voice detector hears them stop, while the
+ * final transcript is still ~0.7 s away; the answer's own query embed then
+ * reuses that vector when its text is the same utterance. Live, the hosted
+ * query embed was ~450-650 ms of every answer's assembly. See warmQueryEmbedding.
+ */
+const WARM_QUERY_TTL_MS = 20_000;
+const WARM_QUERY_MAX = 4;
+/** A warm call's own retry budget: it is speculative, so it never retries long. */
+const WARM_QUERY_BUDGET_MS = 1_500;
+
+function queryWords(text: string): string[] {
+    return text.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, ' ').split(/\s+/).filter(Boolean);
+}
+
+/**
+ * Whether `query` is the utterance `warm` was taken from: the interim lags the
+ * final by about a word (and its last word may be clipped), and the question
+ * loses its filler words ("um", "uh") before retrieval. Near-identical text
+ * embeds to a near-identical vector; anything more than a few words apart
+ * must be embedded on its own.
+ */
+export function isNearQueryText(warm: string, query: string): boolean {
+    const w = queryWords(warm);
+    const q = queryWords(query);
+    if (w.length < 4 || q.length < 4) return false;
+    if (Math.abs(q.length - w.length) > 3) return false;
+    const contained = (needle: string[], hay: string[]) => {
+        const have = new Set(hay);
+        return needle.filter((t) => have.has(t)).length / needle.length;
+    };
+    // The warm text's last word is where an interim is clipped ("…with Z").
+    const head = w.length > 1 ? w.slice(0, -1) : w;
+    return contained(head, q) >= 0.9 && contained(q, w) >= 0.8;
+}
 
 // ── T13 / RC12: query-path hysteresis (2026-08-28) ──────────────────────────
 //
@@ -50,6 +86,62 @@ const QUERY_RETRY_ATTEMPTS = 2;
 const QUERY_RETRY_BACKOFF_MS = [1_000, 3_000];
 /** Jitter so N concurrent turns do not retry in lockstep against a rate limit. */
 const QUERY_RETRY_JITTER_MS = 250;
+
+// ── Budgeted (live-turn) retry (2026-09-30) ─────────────────────────────────
+//
+// The budget guard used to be `elapsed + backoff + QUERY_EMBED_TIMEOUT_MS >
+// budget`. The V3 plan's budget is 1200 ms and the fixed attempt timeout 3000 ms,
+// so the guard could never pass: a live query embed was NEVER retried, and one
+// transient 429/5xx/reset sent the turn to lexical-only retrieval. Now:
+//   • a retry whose normal backoff plus full timeout fits is taken exactly as
+//     before (a generous budget keeps the whole ladder; unbudgeted is unchanged);
+//   • otherwise the FIRST failure may still get one SHORT retry: a short backoff
+//     (a live turn cannot wait 1 s) — a provider's own Retry-After is honoured,
+//     never shortened — and a timeout of `budget − elapsed − backoff`, attempted
+//     only if that leaves at least BUDGETED_RETRY_MIN_ATTEMPT_MS (a hosted query
+//     embed measured ~450–650 ms live), so the embed never outruns the plan.
+// This rescues FAST failures only: a first attempt that timed out at 3 s has
+// already spent more than a 1.2 s budget and is not retried.
+const BUDGETED_RETRY_MAX = 1;
+const BUDGETED_RETRY_BACKOFF_MAX_MS = 150;
+const BUDGETED_RETRY_JITTER_MS = 100;
+const BUDGETED_RETRY_MIN_ATTEMPT_MS = 500;
+
+export type QueryRetryPlan = { retry: true; waitMs: number; timeoutMs: number } | { retry: false; reason: string };
+
+/**
+ * Whether (and how) to retry a failed query embed. Pure, so the arithmetic is
+ * testable without a provider. `attempt` is the 0-based index of the attempt
+ * that just failed; `jitter` is a value in [0, 1).
+ */
+export function planQueryEmbedRetry(input: {
+    attempt: number;
+    elapsedMs: number;
+    budgetMs?: number;
+    retryAfterMs?: number | null;
+    backoffBaseMs: number;
+    jitter: number;
+}): QueryRetryPlan {
+    if (input.attempt >= QUERY_RETRY_ATTEMPTS) return { retry: false, reason: 'attempts exhausted' };
+    const budget = input.budgetMs;
+    if (typeof budget !== 'number' || !Number.isFinite(budget)) {
+        const waitMs = (input.retryAfterMs ?? input.backoffBaseMs) + Math.floor(input.jitter * QUERY_RETRY_JITTER_MS);
+        return { retry: true, waitMs, timeoutMs: QUERY_EMBED_TIMEOUT_MS };
+    }
+    const normalWait = (input.retryAfterMs ?? input.backoffBaseMs) + Math.floor(input.jitter * QUERY_RETRY_JITTER_MS);
+    if (input.elapsedMs + normalWait + QUERY_EMBED_TIMEOUT_MS <= budget) {
+        return { retry: true, waitMs: normalWait, timeoutMs: QUERY_EMBED_TIMEOUT_MS };
+    }
+    if (input.attempt >= BUDGETED_RETRY_MAX) return { retry: false, reason: `a short in-budget retry is taken at most ${BUDGETED_RETRY_MAX} time` };
+    const waitMs = typeof input.retryAfterMs === 'number'
+        ? input.retryAfterMs
+        : Math.min(input.backoffBaseMs, BUDGETED_RETRY_BACKOFF_MAX_MS) + Math.floor(input.jitter * BUDGETED_RETRY_JITTER_MS);
+    const timeoutMs = Math.min(QUERY_EMBED_TIMEOUT_MS, budget - input.elapsedMs - waitMs);
+    if (timeoutMs < BUDGETED_RETRY_MIN_ATTEMPT_MS) {
+        return { retry: false, reason: `${Math.max(0, Math.round(timeoutMs))}ms would remain of the ${budget}ms budget after ${input.elapsedMs}ms + ${waitMs}ms backoff (< ${BUDGETED_RETRY_MIN_ATTEMPT_MS}ms)` };
+    }
+    return { retry: true, waitMs, timeoutMs };
+}
 /**
  * Consecutive HARD failures (primary exhausted its retries) before a mid-session
  * promotion is allowed.
@@ -1059,6 +1151,78 @@ export class EmbeddingPipeline {
     // Object.create(prototype) — every hysteresis test does — has no fields, and
     // an optimisation must not be able to throw on the query path.
     private queryEmbedMemo?: Map<string, { at: number; promise: Promise<number[]> }>;
+    /** Resolved warm vectors, newest last. Only RESOLVED ones are ever reused (see warmQueryEmbedding). */
+    /** Warm query embeds, newest last: settled or still in flight (see warmQueryEmbedding). */
+    private warmQueries?: Array<{ space: string; text: string; at: number; promise: Promise<number[]> }>;
+    private lastWarmAt = 0;
+
+    /**
+     * Embed a query that is about to be asked, in the background. Fire and
+     * forget: never throws, never blocks, and a failure only means the real
+     * query embeds on its own as before. Skipped for an on-device embedder,
+     * which answers in ~10 ms and has nothing to hide.
+     */
+    warmQueryEmbedding(text: string): void {
+        try {
+            const provider = this.provider;
+            if (!provider || provider.name === 'local' || provider.name === 'ollama') return;
+            const t = String(text ?? '').trim();
+            if (queryWords(t).length < 4) return;
+            const now = Date.now();
+            // One per utterance is the intent; this bounds a noisy caller.
+            if (now - this.lastWarmAt < 500) return;
+            this.lastWarmAt = now;
+            const space = provider.space ?? provider.name;
+            const promise = this.getEmbeddingForQueryUncached(t, { retryBudgetMs: WARM_QUERY_BUDGET_MS });
+            promise.catch(() => { /* speculative: the real query embeds on its own */ });
+            const list = (this.warmQueries ??= []);
+            list.push({ space, text: t, at: now, promise });
+            while (list.length > WARM_QUERY_MAX) list.shift();
+            console.log(`[EmbeddingPipeline] warming a query embed (${queryWords(t).length}w)`);
+        } catch { /* never on the caller's path */ }
+    }
+
+    /**
+     * The warm embed for this query, if one is the same utterance, as a promise
+     * the caller can await INSTEAD of its own request.
+     *
+     * Joined even while in flight (2026-09-27): live, the warm started at the
+     * voice stop and the answer's query arrived ~1 s later with it still out,
+     * so reusing only settled vectors hit 3 of 11 turns. Joining is bounded so
+     * it can never cost the caller: if the warm has not answered within the
+     * caller's own budget, or fails, or its space is no longer active, the
+     * caller runs its own request exactly as before.
+     */
+    private warmEmbeddingFor(space: string, text: string, budgetMs: number, own: () => Promise<number[]>): Promise<number[]> | null {
+        const list = this.warmQueries;
+        if (!list?.length) return null;
+        const now = Date.now();
+        for (let i = list.length - 1; i >= 0; i--) {
+            const w = list[i];
+            if (now - w.at > WARM_QUERY_TTL_MS) { list.splice(i, 1); continue; }
+            if (w.space !== space || !isNearQueryText(w.text, text)) continue;
+            console.log(`[EmbeddingPipeline] query embed joined a warm one (${queryWords(text).length}w, warmed ${now - w.at}ms ago)`);
+            return new Promise<number[]>((resolve, reject) => {
+                let settled = false;
+                const fallback = () => {
+                    if (settled) return;
+                    settled = true;
+                    own().then(resolve, reject);
+                };
+                const timer = setTimeout(fallback, Math.max(0, budgetMs));
+                w.promise.then((v) => {
+                    if (settled) return;
+                    // The active space may have changed while it was out: a vector
+                    // from another space must never meet this corpus.
+                    if ((this.provider?.space ?? this.provider?.name) !== space) { clearTimeout(timer); fallback(); return; }
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(v.slice());
+                }, () => { clearTimeout(timer); fallback(); });
+            });
+        }
+        return null;
+    }
 
     async getEmbeddingForQuery(
         text: string,
@@ -1083,7 +1247,8 @@ export class EmbeddingPipeline {
         // A copy per caller: the array used to be shared, so one caller
         // normalising in place would have corrupted the other's vector.
         if (hit) return hit.promise.then((v: number[]) => v.slice());
-        const promise = this.getEmbeddingForQueryUncached(text, opts);
+        const own = () => this.getEmbeddingForQueryUncached(text, opts);
+        const promise = this.warmEmbeddingFor(space, text, opts?.retryBudgetMs ?? QUERY_EMBED_TIMEOUT_MS, own) ?? own();
         memo.set(key, { at: now, promise });
         promise.catch(() => { if (memo.get(key)?.promise === promise) memo.delete(key); });
         return promise.then((v: number[]) => v.slice());
@@ -1118,12 +1283,16 @@ export class EmbeddingPipeline {
         // active at the start of the query and matches its space.
         // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
         // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
+        // The current attempt's timeout: the full QUERY_EMBED_TIMEOUT_MS, except a
+        // budgeted retry, which gets only what the caller's budget has left.
+        let attemptTimeoutMs = QUERY_EMBED_TIMEOUT_MS;
         const runQuery = (p: IEmbeddingProvider, label: string) => new Promise<number[]>((resolve, reject) => {
+            const timeoutMs = attemptTimeoutMs;
             const timer = setTimeout(() => {
                 reject(new Error(
-                    `[EmbeddingPipeline] embedQuery() timed out after ${QUERY_EMBED_TIMEOUT_MS}ms for ${label} via ${p.name}`
+                    `[EmbeddingPipeline] embedQuery() timed out after ${timeoutMs}ms for ${label} via ${p.name}`
                 ));
-            }, QUERY_EMBED_TIMEOUT_MS);
+            }, timeoutMs);
             p.embedQuery(text).then(
                 (result) => { clearTimeout(timer); resolve(result); },
                 (err)    => { clearTimeout(timer); reject(err); }
@@ -1147,19 +1316,26 @@ export class EmbeddingPipeline {
             } catch (err) {
                 primaryError = err;
                 if (attempt === QUERY_RETRY_ATTEMPTS) break;
-                const base = retryAfterMs(err) ?? this.queryRetryBackoffMs[attempt] ?? 3_000;
-                const wait = base + Math.floor(Math.random() * QUERY_RETRY_JITTER_MS);
                 const budget = opts?.retryBudgetMs;
-                if (typeof budget === 'number' && Number.isFinite(budget)
-                    && (Date.now() - queryStartedAt) + wait + QUERY_EMBED_TIMEOUT_MS > budget) {
+                const plan = planQueryEmbedRetry({
+                    attempt,
+                    elapsedMs: Date.now() - queryStartedAt,
+                    budgetMs: budget,
+                    retryAfterMs: retryAfterMs(err),
+                    backoffBaseMs: this.queryRetryBackoffMs[attempt] ?? 3_000,
+                    jitter: Math.random(),
+                });
+                if (!plan.retry) {
                     console.warn(
                         `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
-                        + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); no retry — the next attempt `
-                        + `(${wait}ms backoff + ${QUERY_EMBED_TIMEOUT_MS}ms) would not fit the caller's ${budget}ms budget:`,
+                        + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); no retry within the caller's `
+                        + `${budget}ms budget — ${plan.reason}:`,
                         err instanceof Error ? err.message : err,
                     );
                     break;
                 }
+                const wait = plan.waitMs;
+                attemptTimeoutMs = plan.timeoutMs;
                 console.warn(
                     `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
                     + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); retrying in ${wait}ms:`,

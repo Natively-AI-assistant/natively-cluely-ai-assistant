@@ -69,6 +69,23 @@ export class ReviewService {
     private writeTimer: NodeJS.Timeout | null = null
     private sessionStartTime: number | null = null
 
+    /** Wait before the one automatic retry of a request that never reached the server. */
+    static NETWORK_RETRY_MS = 1500
+
+    /**
+     * One quiet retry when the request never got a reply (offline blip, DNS,
+     * connection reset). A timeout is not retried: the user already waited.
+     */
+    private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+        try {
+            return await fetch(url, init)
+        } catch (err: any) {
+            if (err?.name === "TimeoutError" || err?.name === "AbortError") throw err
+            await new Promise((resolve) => setTimeout(resolve, ReviewService.NETWORK_RETRY_MS))
+            return fetch(url, init)
+        }
+    }
+
     private constructor() {
         this.statePath = path.join(app.getPath("userData"), REVIEW_STATE_FILE)
         this.loadFromDisk()
@@ -309,7 +326,7 @@ export class ReviewService {
             const headers: Record<string, string> = { "Content-Type": "application/json" }
             if (apiKey) headers["x-natively-key"] = apiKey
             const body = JSON.stringify({ ...payload, hardware_id: hardwareId })
-            const res = await fetch(`${NATIVELY_API_URL}/api/reviews`, {
+            const res = await this.fetchWithRetry(`${NATIVELY_API_URL}/api/reviews`, {
                 method: "POST",
                 headers,
                 body,
@@ -321,7 +338,8 @@ export class ReviewService {
             }
             return { ok: true, id: data.id }
         } catch (err: any) {
-            return { ok: false, error: err?.message || "network_error" }
+            // Never the raw fetch text: the modal knows this code ("No connection").
+            return { ok: false, error: "network_error" }
         }
     }
 
@@ -336,7 +354,7 @@ export class ReviewService {
             const headers: Record<string, string> = { "Content-Type": "application/json" }
             if (apiKey) headers["x-natively-key"] = apiKey
             const body = JSON.stringify({ ...payload, hardware_id: hardwareId })
-            const res = await fetch(`${NATIVELY_API_URL}/api/reviews/${reviewId}/testimonial-details`, {
+            const res = await this.fetchWithRetry(`${NATIVELY_API_URL}/api/reviews/${reviewId}/testimonial-details`, {
                 method: "PATCH",
                 headers,
                 body,
@@ -348,7 +366,8 @@ export class ReviewService {
             }
             return { ok: true }
         } catch (err: any) {
-            return { ok: false, error: err?.message || "network_error" }
+            // Never the raw fetch text: the modal knows this code ("No connection").
+            return { ok: false, error: "network_error" }
         }
     }
 

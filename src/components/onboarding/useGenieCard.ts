@@ -27,9 +27,11 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react
 import { animate, cubicBezier, useMotionValue, useReducedMotion } from 'framer-motion';
 import {
   genieFrame, genieBands, genieBandRows, genieOpacity, genieShadowOpacity, genieEdges,
-  genieTrack, SLOT_INSET, BAND_OVERLAP, type GenieGeometry,
+  genieTrack, SLOT_INSET, BAND_OVERLAP, playLift, liftMs, LIFT,
+  type GenieGeometry,
 } from './genieMotion.mjs';
 import type { GenieSnapshot } from './genieSnapshots';
+import { useGenieAnimationEnabled } from '../../lib/genieAnimationSetting';
 
 const EASE_FM = [0.23, 1, 0.32, 1] as const;
 
@@ -80,6 +82,21 @@ const REDUCED_FADE  = { duration: 0.15, ease: 'linear' as const };
 const SCRIM_OPEN_S  = 0.25;
 const SCRIM_CLOSE_S = 0.3;
 
+/**
+ * How a run moves: the genie; the lift, with the genie turned off in Settings
+ * (genieMotion.mjs LIFT); or, when the OS asks for reduced motion, the plain
+ * fade.
+ */
+type CardMotion = 'genie' | 'lift' | 'fade';
+
+// The lift draws itself (playLift, on the compositor). Framer's value is only
+// its clock here: linear, as long as the lift's slowest property, so the open
+// reports once the card has landed and the close once it has gone.
+const LIFT_OPEN_CLOCK  = { duration: liftMs('open') / 1000, ease: 'linear' as const };
+const LIFT_CLOSE_CLOCK = { duration: liftMs('close') / 1000, ease: 'linear' as const };
+const LIFT_DIM_OPEN    = { duration: LIFT.open.dim / 1000, ease: EASE_FM as any };
+const LIFT_DIM_CLOSE   = { duration: LIFT.close.dim / 1000, ease: EASE_FM as any };
+
 // Backstop: Chromium stops animation frames in a hidden window, and a close
 // that never completes must still release the onboarding slot.
 const CLOSE_FALLBACK_MS = 900;
@@ -123,6 +140,7 @@ export interface GenieCard {
   cardRef:   React.RefObject<HTMLDivElement | null>;
   bandsRef:  React.RefObject<HTMLDivElement | null>;
   shadowRef: React.RefObject<HTMLDivElement | null>;
+  /** No genie right now (the OS asks for reduced motion, or it is off in Settings): no picture is wanted. */
   reduced: boolean;
 }
 
@@ -149,7 +167,19 @@ export interface GenieSnapshotSource {
 }
 
 export function useGenieCard(isOpen: boolean, label: string, options: GenieCardOptions = {}): GenieCard {
-  const reduced = useReducedMotion() ?? false;
+  // Turned off in Settings → Advanced, the genie gives way to a surface
+  // transition (and no pictures are taken); the OS asking for reduced motion
+  // gets the plain fade whatever the setting says.
+  const genieEnabled = useGenieAnimationEnabled();
+  const osReduced = useReducedMotion() ?? false;
+  const motionNow: CardMotion = osReduced ? 'fade' : genieEnabled ? 'genie' : 'lift';
+  const reducedNow = motionNow !== 'genie';
+  const motionNowRef = useRef(motionNow);
+  motionNowRef.current = motionNow;
+  // The motion of the run on screen, fixed when it starts. Read from a ref,
+  // not a dependency: flipping the switch inside an open Settings card re-ran
+  // the open effect and poured the card out again under the user.
+  const runMotionRef = useRef<CardMotion>(motionNow);
   const bandCount = options.bands ?? GENIE_BANDS;
   const onOpenedRef = useRef(options.onOpened);
   onOpenedRef.current = options.onOpened;
@@ -400,10 +430,13 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     if (!card || !layer || !shadow) return;
     const geom = geomRef.current;
 
-    if (reduced) {
+    const motion = runMotionRef.current;
+    if (motion === 'fade') {
       card.style.opacity = String(1 - p);
       return;
     }
+    // The lift draws itself (playLift); nothing to do per frame.
+    if (motion === 'lift') return;
 
     // At rest only when the run is heading there (an open, or nothing
     // running). A close starts from rest too, and its eased progress stays
@@ -458,7 +491,7 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     shadow.style.display = 'block';
     shadow.style.transform = `translateY(${(top - geom.top).toFixed(2)}px) scaleY(${sy.toFixed(4)})`;
     shadow.style.opacity = String(genieShadowOpacity(p, geom));
-  }, [reduced, bandCount]);
+  }, [bandCount]);
 
   useEffect(() => genie.on('change', renderGenie), [genie, renderGenie]);
 
@@ -468,6 +501,8 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
   // dim used to hide that frame, back when the card sat inside it.)
   useLayoutEffect(() => {
     if (!shown) return;
+    const motion = runMotionRef.current = motionNowRef.current;
+    const reduced = motion !== 'genie';
     measure();
     bandsFailedRef.current = false;
     endLanding();
@@ -486,12 +521,15 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     genie.set(1);
     renderGenie(1);
     scrim.set(0);
-    const a = animate(genie, 0, reduced ? REDUCED_FADE : GENIE_OPEN);
-    const b = animate(scrim, 1, { duration: SCRIM_OPEN_S, ease: EASE_FM as any });
+    const card = cardRef.current;
+    if (motion === 'lift' && card) playLift(card, 'open');
+    const a = animate(genie, 0, motion === 'genie' ? GENIE_OPEN : motion === 'fade' ? REDUCED_FADE : LIFT_OPEN_CLOCK);
+    const b = animate(scrim, 1, motion === 'lift' ? LIFT_DIM_OPEN : { duration: SCRIM_OPEN_S, ease: EASE_FM as any });
     let live = true;
     a.then(() => { if (live) onOpenedRef.current?.(); });
+    // The lift is not stopped here: a close's lift takes over from wherever it has got to.
     return () => { live = false; a.stop(); b.stop(); clearBands(); endLanding(); runRef.current = null; };
-  }, [shown, reduced, genie, scrim, renderGenie]);
+  }, [shown, genie, scrim, renderGenie]);
 
   // Every way out goes through here: run the genie now, report once it has
   // played. The first request wins; a second click during it is ignored.
@@ -509,6 +547,10 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
 
   useEffect(() => {
     if (!closing) return;
+    // A card at rest closes the way the switch says now; one closed mid-open
+    // carries on in the mode its open started in.
+    const motion = runMotionRef.current = genie.get() <= 0.001 ? motionNowRef.current : runMotionRef.current;
+    const reduced = motion !== 'genie';
     let cancelled = false;
     let cleanup: (() => void) | null = null;
 
@@ -537,10 +579,13 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
       // later, and for that frame the card's own shadow and the stand-in's
       // were drawn together, twice as dark.
       if (!reduced && rowsRef.current) renderGenie(from);
-      const a = animate(genie, 1, reduced ? REDUCED_FADE : GENIE_CLOSE);
-      const b = animate(scrim, 0, reduced
-        ? REDUCED_FADE
-        : { duration: SCRIM_CLOSE_S, delay: GENIE_CLOSE.duration - SCRIM_CLOSE_S, ease: EASE_FM as any });
+      const card = cardRef.current;
+      if (motion === 'lift' && card) playLift(card, 'close');
+      const a = animate(genie, 1, motion === 'genie' ? GENIE_CLOSE : motion === 'fade' ? REDUCED_FADE : LIFT_CLOSE_CLOCK);
+      // The lift's dim leaves with the card, not after it.
+      const b = animate(scrim, 0, motion === 'genie'
+        ? { duration: SCRIM_CLOSE_S, delay: GENIE_CLOSE.duration - SCRIM_CLOSE_S, ease: EASE_FM as any }
+        : motion === 'fade' ? REDUCED_FADE : LIFT_DIM_CLOSE);
       // `live`: when the backstop has already released the card (frames were
       // stopped in a hidden window) and the host has moved on, the animation
       // can still resolve later. Setting done then would leave a host that
@@ -574,14 +619,14 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
       run(false);
     }
     return () => { cancelled = true; cleanup?.(); };
-  }, [closing, reduced, genie, scrim, finishClose, renderGenie]);
+  }, [closing, genie, scrim, finishClose, renderGenie]);
 
   // A host that keeps this mounted and opens it again gets a fresh card.
   useEffect(() => {
     if (!isOpen) { setClosing(false); setDone(false); afterCloseRef.current = null; endLanding(); releaseImage(); }
   }, [isOpen]);
 
-  return { shown, closing, closeThen, scrim, wrapRef, cardRef, bandsRef, shadowRef, reduced };
+  return { shown, closing, closeThen, scrim, wrapRef, cardRef, bandsRef, shadowRef, reduced: reducedNow };
 }
 
 /**

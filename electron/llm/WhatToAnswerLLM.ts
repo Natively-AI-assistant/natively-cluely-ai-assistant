@@ -16,7 +16,7 @@ import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import { providerRejectionUserMessage } from "./providerErrorClassifier";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
-import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn } from "./codingPromptSignals";
+import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn, screenPromotedCodingSignals } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
 import { isLayerAllowed } from "./contextRoute";
 import { deriveRetrievalQuery } from "./retrievalQueryPolicy";
@@ -280,7 +280,8 @@ export class WhatToAnswerLLM {
                     screenText: capturedScreenText || undefined,
                 })) {
                     promotedScreenCodingTurn = true;
-                    return { codingTask: true, codingTaskKind: 'dsa' as const };
+                    // The screen grounds the problem; the words decide the shape.
+                    return screenPromotedCodingSignals(answerPlan?.question);
                 }
                 return resolved;
             })();
@@ -319,7 +320,7 @@ ${promptInstruction.trim()}
             // the signature for callers; it is not read here.
             void intentResult;
             if (answerPlan) {
-                intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled()));
+                intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled(), codingSignals.codingShape));
             }
             if (instructionContext) {
                 intentContextParts.push(instructionContext);
@@ -340,9 +341,15 @@ ${promptInstruction.trim()}
             // boundary lets a "discussion turn" skip the sections. A blind
             // trigger on a problem IS a request for the full solution, every
             // time — there is no question text that could mean anything else.
-            if (promotedScreenCodingTurn) {
+            // Only a press that asks for nothing specific (shape 'solve') is a
+            // request to solve what is on screen — the same gate as the
+            // engine's V3 twin (IntelligenceEngine repeat_press_directive).
+            // "Explain this" / "what's the complexity" over a screenshot is
+            // promoted too, and this directive used to override their shape
+            // with the full solution.
+            if (promotedScreenCodingTurn && codingSignals.codingShape === 'solve') {
                 intentContextParts.push(`<repeat_press_directive>
-The user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, following the coding contract's full section shape — even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the full answer as if asked for the first time.
+The user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, in the shape the coding contract asks for, even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the answer as if asked for the first time.
 </repeat_press_directive>`);
             }
             const intentContext = intentContextParts.length > 0
@@ -786,6 +793,7 @@ The user triggered this action with a coding problem on screen and NO new questi
             // Flag off → legacy constants + suffix, byte-for-byte unchanged.
             const v2BasePrompt = resolveV2SystemPrompt({
                 action: 'what_to_say',
+                surface: 'live',
                 tier: v2TierForPromptTier(this.llmHelper.getPromptTier()),
                 customInstructions: pinnedModeInstructions || undefined,
                 ...codingSignals,
@@ -1153,6 +1161,15 @@ The user triggered this action with a coding problem on screen and NO new questi
             // turn (V3's system prompt + Context OS's user pack, V3's user
             // prompt discarded). Only set when _v3p actually rides this stream.
             const _wtaRoute = _v3p ? { ...wtaRouteOptions, v3Owned: true } : wtaRouteOptions;
+            require('./promptDebug').notePromptComposition({
+                surface: 'what_to_answer',
+                promptSource: _v3p ? 'v3' : (_v2TurnUser ? 'v2_turn' : (v2BasePrompt ? 'v2_base_v1_packet' : 'legacy_v1_packet')),
+                tier: String(this.llmHelper.getPromptTier?.() ?? ''),
+                mode: requestSnapshot?.modeUniqueId ?? null,
+                system: _wtaSystemPrompt,
+                user: _wtaUserMessage,
+                extra: { v3Sections: _v3p?.sections ?? null, activeSkill: activeSkill?.id ?? null, hasImages: hasAttachedImages },
+            });
             // Prefer the outcome-bearing API so a truncated answer can be kept
             // out of session history. Fourteen existing suites inject a test
             // double that implements only `streamChat`; those double s degrade

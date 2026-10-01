@@ -1,0 +1,148 @@
+{
+ "batch": "b012-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HLEC-CTX-G2": {
+   "title": "CS 3410 Lecture 12 notes: Page Replacement and Thrashing",
+   "text": "CS 3410 - Operating Systems\nLecture 12: Page Replacement, Working Sets, and Thrashing\nProf. Emeka Lindqvist. Lecture notes posted by the course staff.\n\n1. The problem\n- When memory is full, a page fault forces the kernel to pick a victim frame. How it picks is the page replacement policy.\n- Cost model for this course: a hit costs 100 ns; a fault serviced from the SSD costs 80 microseconds.\n- Prof: \"One fault in a thousand references nearly doubles your effective access time. Faults are not a rounding error.\"\n\n2. The policies we compare\n- OPT (Belady's MIN): evict the page whose next use is furthest in the future. Not implementable; used only as a yardstick.\n- FIFO: evict the page that was loaded earliest. Simple, and it suffers from Belady's anomaly.\n- LRU: evict the page unused for the longest time. LRU is a stack algorithm, so it never shows Belady's anomaly. Exact LRU needs a timestamp or a list update on every memory reference, which no real MMU provides.\n- Clock (second chance): frames sit in a circle with one use bit per frame, set by the hardware whenever the page is referenced. On a fault the hand sweeps: if the use bit is 1, clear it and advance; if it is 0, evict that page. A newly loaded page starts with its use bit set to 1.\n\n3. Slide 9 - Belady's anomaly (FIFO)\n- Reference string: 1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5\n- With 3 frames: 9 faults. With 4 frames: 10 faults.\n- \"More memory, more faults\" can only happen for policies that are not stack algorithms.\n\n4. Slide 11 - in-class trace (3 frames, all empty at the start)\n- Reference string: 7, 0, 1, 2, 0, 3, 0, 4, 2, 3\n- Results: FIFO: 9 faults. LRU: 8 faults. Clock: 7 faults.\n- Yes, Clock beat LRU on this string. Prof: \"Clock approximates LRU on average, not on every string. Don't write that Clock is always worse than LRU.\"\n- Clock trace convention for this course: empty frames are filled in order starting at frame 0; the hand starts at frame 0; after any replacement the hand points to the frame after the one just filled.\n\n5. Working sets and thrashing\n- Working set W(t, Delta): the set of distinct pages referenced in the last Delta references. In this course Delta = 10,000 references unless a problem says otherwise.\n- Thrashing: the sum of the working set sizes exceeds the number of physical frames, so processes spend more time faulting than running. CPU utilization drops, a naive scheduler admits more processes to use the idle CPU, and things get worse.\n- Page fault frequency (PFF): give a process more frames when its fault rate is above an upper bound, take frames away when it is below a lower bound.\n- Tern (our teaching kernel, used in Lab 5): the thrash monitor suspends the process with the largest resident set when the system-wide fault rate exceeds 1 fault per 500 references for 3 consecutive sampling windows.\n\n6. Exam notes\n- Final exam: you will trace Clock by hand on a new string. Show the use bits and the hand position after every fault.\n- Enhanced second chance (use bit plus dirty bit, four classes) was mentioned for context only and is NOT on the final.\n- Know why LRU has no Belady's anomaly (the stack property). You do not need the proof.\n- Lab 5 is due Friday at 11:59 pm. The autograder checks your thrash monitor against the Tern rule above."
+  },
+  "HLEC-CTX-I1": {
+   "title": "Riverside Hall residents newsletter (October)",
+   "text": "Riverside Hall Residents' Newsletter - October\n\nLaundry room update: The basement laundry room will be closed Monday through Wednesday next week while facilities replaces two dryers and the lint vent. The machines in Harbor Hall across the courtyard are open to Riverside residents with your ID card during the closure.\n\nQuiet hours: Starting this month, weeknight quiet hours begin at 10 pm instead of 11 pm on floors two through four, after a vote at the September floor meeting. Weekend quiet hours are unchanged.\n\nBike storage: The covered bike cage behind the east entrance has new locks. Registered bikes need a new orange tag from the front desk by October 20; untagged bikes will be moved to the overflow rack by the parking lot.\n\nPumpkin night: The Hall Council is hosting pumpkin carving in the ground floor lounge on the last Friday of the month from 7 to 9 pm. Pumpkins, cider and carving kits are provided while supplies last. Sign up on the sheet by the mailboxes.\n\nLost and found: A blue umbrella, a set of keys on a green lanyard and a graphing calculator are waiting at the front desk. Items not claimed by November 1 will be donated."
+  },
+  "HLEC-CTX-G1": {
+   "title": "ECON 214 Lecture 9 slides: Price Discrimination",
+   "text": "ECON 214 - Intermediate Microeconomics\nLecture 9: Price Discrimination\nInstructor: Prof. Dalia Ferreira-Stone. Slides v2, posted after class.\n\n1. Why firms price discriminate\n- A single-price monopolist leaves consumer surplus on the table and creates deadweight loss (DWL).\n- Three conditions must all hold: market power, a way to sort buyers (or let them sort themselves), and no resale (arbitrage blocked).\n- Prof's phrase for the third condition: \"the resale wall.\" If the resale wall comes down, every scheme collapses back to a single price, because low-price buyers resell to high-price buyers until the prices meet.\n\n2. The three degrees (course convention - use these labels on exams)\n- First degree (perfect): each unit is sold at that buyer's reservation price. Consumer surplus = 0, output equals the competitive quantity, DWL = 0.\n- Second degree: the price depends on the quantity or version bought (block pricing, bundles, \"good / better / best\" tiers). Buyers self-select from one menu that is offered to everyone.\n- Third degree: different prices to observably different groups (students, seniors, regions). Rule: set MR in each market equal to the common MC. The group with less elastic demand pays the higher price.\n\n3. Worked example (Slide 14) - the Lakeview Ferry\n- Tourist demand: P = 120 - 2Q. Commuter demand: P = 60 - Q.\n- MC = 20 for both groups; no fixed cost in this example.\n- Tourists: MR = 120 - 4Q = 20, so Q = 25 and P = 70.\n- Commuters: MR = 60 - 2Q = 20, so Q = 20 and P = 40.\n- Total profit = (70 - 20)(25) + (40 - 20)(20) = 1250 + 400 = 1650.\n- The ferry enforces the split by checking commuter passes at the gate.\n- Compare with the single-price case in Problem Set 4, Q3. You compute the uniform price yourself. Do not assume it is the average of 70 and 40, and remember that the aggregate demand curve has a kink.\n\n4. The inverse elasticity check (Slide 16)\n- Lerner index: (P - MC)/P = -1/Ed, where Ed is the price elasticity of demand at the chosen point.\n- Tourists: (70 - 20)/70 = 0.714, so |Ed| = 1.4.\n- Commuters: (40 - 20)/40 = 0.5, so |Ed| = 2.\n- Prof: \"If your Lerner numbers don't match the elasticities you computed from the demand curves, you made an algebra error, not a conceptual one.\"\n\n5. Welfare - what is on the exam\n- Third-degree discrimination can raise or lower total welfare compared with a single price.\n- A necessary condition for a welfare gain is that total output rises. The prof calls this \"the output test.\" If output stays the same or falls, welfare cannot have gone up.\n- Do NOT write that price discrimination is always inefficient; that answer loses points.\n- Second degree: menus are designed so high-value buyers don't pick the low tier. This is the incentive-compatibility constraint. We cover it intuitively only; the formal screening model is taught in ECON 315 and is not on this course's exams.\n\n6. Admin\n- Midterm 2: Thursday, Oct 22, in class, 75 minutes. Covers Lectures 6-10.\n- Allowed: one handwritten double-sided formula sheet and a non-graphing calculator.\n- Office hours moved to Wednesday 3-5 pm, Room HB 211, this week only.\n- Problem Set 4 is due Monday before class.\n- Next lecture (10): two-part tariffs and the \"Disneyland dilemma.\""
+  }
+ },
+ "items": [
+  {
+   "jid": "d750ad33ee64",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "do we need enhanced second chance for the final",
+   "conversation": [],
+   "evidence_ids": [
+    "HLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, enhanced second chance isn't on the final. The notes say it was mentioned for context only and is not on the exam. What you do need to trace by hand is **Clock**, showing the use bits and the hand position after every fault."
+  },
+  {
+   "jid": "69594c9f2311",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So the reason the sky looks blue and not violet, even though violet light scatters more, comes down to two separate things. Think about what they are before Thursday.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The two things are the spectrum of sunlight and the response of our eyes. Sunlight isn't equally bright at every wavelength, and violet sits at the dim edge of the visible spectrum, so there's simply less violet coming in to scatter. On top of that, our cone cells are far more sensitive to blue than to violet, so even the violet that does reach us gets read as blue. Put together, the sky lands on blue rather than violet."
+  },
+  {
+   "jid": "a63ec018ac87",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "If the marginal propensity to consume is point eight, then the spending multiplier follows immediately. Write that down.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The spending multiplier is **1 / (1 − MPC)**. With an MPC of 0.8, that's 1 / 0.2, so the multiplier is **5**. It means each dollar of new spending raises total output by five dollars."
+  },
+  {
+   "jid": "8a0719a2208a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "wait what",
+   "conversation": [
+    "PROFESSOR: An eigenvector of a matrix is a direction that the matrix only stretches or shrinks. It doesn't change direction.",
+    "PROFESSOR: The eigenvalue is just the stretch factor. If it's negative, the vector flips around, but it stays on the same line.",
+    "PROFESSOR: So when I say the matrix has eigenvalue three along this axis, I mean everything on that axis gets three times longer."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "An eigenvector is a direction the matrix doesn't rotate, only scales. So if **A v = λ v**, then v is the eigenvector and λ is the eigenvalue, the factor it gets stretched or shrunk by. Negative λ means it flips to the opposite direction but stays on the same line, and λ = 3 means it triples in length."
+  },
+  {
+   "jid": "94770d97a53b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why almost never?",
+   "conversation": [
+    "PROFESSOR (heard): The Coase theorem says it doesn't matter who holds the property right, you'll get the efficient outcome either way. Lovely result. Almost never applies.",
+    "NATIVELY: The theorem holds only when transaction costs are zero and property rights are clearly defined and enforceable. In the real world, bargaining is costly: many parties, asymmetric information, holdouts, and legal fees all get in the way. So the efficient outcome often depends on who holds the right, which is exactly why the theorem is a benchmark rather than a description."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because the conditions it needs are close to impossible in practice. Zero transaction costs means no bargaining costs, no legal fees, no holdouts, and no asymmetric information, and you also need property rights that are clearly defined and fully enforceable. Real disputes usually fail on several of those at once, especially when many parties are involved, so the theorem is a benchmark for what perfect bargaining would give, not a description of what actually happens."
+  },
+  {
+   "jid": "5221e886c904",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "You, in the back with the laptop. What's the difference between big O and big Theta? Go.",
+   "conversation": [],
+   "evidence_ids": [
+    "HLEC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Big O is an upper bound: it says the running time grows no faster than some function. Big Theta is a tight bound, both upper and lower, so it says the growth rate is exactly that order. For example, insertion sort is O(n²) and also Theta(n²) in the worst case, but it's only O(n²), not Theta, in the best case, since that's linear."
+  },
+  {
+   "jid": "1eecb8afe289",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "A p-value is not the probability that the null hypothesis is true. I cannot stress this enough. Something like half of all published papers get this wrong.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A p-value is the probability of seeing data at least as extreme as yours, assuming the null hypothesis is true. So it's a statement about the data given the null, not about the null given the data. The common mistake is flipping that conditional around, which is why a small p-value doesn't mean the null is probably false."
+  },
+  {
+   "jid": "4f945bb1bcfa",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "what's a monopsony",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A monopsony is a market with **one buyer** facing many sellers. That single buyer has the market power, so it can push the price it pays below what a competitive market would give, and sellers have little choice but to accept.\n\nThe classic example is a company town where one employer is the only place to work, so it sets wages. It's the mirror image of a monopoly, which is one seller facing many buyers."
+  },
+  {
+   "jid": "21f54825619d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And this is the exact same trick we used back in lecture four, so if you remember that, today should feel easy.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a callback, not a question, so there's nothing to work out yet. The useful move is to have lecture four's trick ready: if you can say in one line what that method was and why it worked, today's version will just be the same steps on new material. If it's not coming back, flag it now rather than halfway through the derivation."
+  },
+  {
+   "jid": "8c587825833c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So remember, once the resale wall comes down, all of this is moot.",
+   "conversation": [
+    "PROFESSOR: The commuter fare only works because they check your commuter pass at the gate.",
+    "PROFESSOR: If a commuter could buy ten tickets at forty and sell them to tourists on the dock, what happens to the tourist price?",
+    "USER (spoken): it goes down?",
+    "PROFESSOR: It goes down until it hits the commuter price. Exactly."
+   ],
+   "evidence_ids": [
+    "HLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Right, that's the third condition doing all the work. The resale wall is what keeps the two groups separate. Once commuters can resell to tourists, the low price leaks into the high-price market, tourists stop paying 70, and the price falls until it meets the commuter price of 40. At that point there's one price for everyone, so the discrimination scheme collapses back to a single-price outcome."
+  }
+ ]
+}

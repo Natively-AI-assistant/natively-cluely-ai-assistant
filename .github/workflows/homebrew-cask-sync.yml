@@ -1,0 +1,81 @@
+name: Homebrew cask sync
+
+# Re-renders packaging/homebrew/Casks/natively.rb from a published release and
+# pushes it to Natively-AI-assistant/homebrew-tap, so `brew install --cask
+# natively` tracks the latest DMGs. The cask pins a sha256 per architecture, so
+# it MUST be regenerated per release — a stale hash is a checksum failure for
+# every user. See docs/homebrew-cask.md.
+#
+# Runs on `release: published`, NOT on tag push: the release build attaches its
+# DMGs by hand today, and the assets have to exist before they can be hashed.
+#
+# REQUIRED SECRET (optional — the job degrades instead of failing without it):
+#   HOMEBREW_TAP_TOKEN  fine-grained PAT, Contents:read+write on homebrew-tap.
+# Without it the cask is still rendered and uploaded as an artifact.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to sync (defaults to the latest release)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45 # two ~1 GB streamed downloads
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Render the cask from the release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "${TAG:-}" ]; then
+            node scripts/render-homebrew-cask.mjs --tag "$TAG"
+          else
+            node scripts/render-homebrew-cask.mjs
+          fi
+          cat packaging/homebrew/Casks/natively.rb
+
+      - name: Push to the tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "::notice::HOMEBREW_TAP_TOKEN is not set — cask rendered but not published. See docs/homebrew-cask.md."
+            exit 0
+          fi
+          VERSION=$(sed -n 's/^  version "\(.*\)"$/\1/p' packaging/homebrew/Casks/natively.rb)
+          git clone --depth 1 \
+            "https://x-access-token:${TAP_TOKEN}@github.com/Natively-AI-assistant/homebrew-tap.git" tap
+          mkdir -p tap/Casks
+          cp packaging/homebrew/Casks/natively.rb tap/Casks/natively.rb
+          cd tap
+          if git diff --quiet -- Casks/natively.rb; then
+            echo "::notice::Tap already carries natively ${VERSION} — nothing to push."
+            exit 0
+          fi
+          git -c user.name='natively-release-bot' -c user.email='noreply@natively.software' \
+              commit -am "natively ${VERSION}"
+          git push
+
+      - name: Upload the rendered cask
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-cask
+          path: packaging/homebrew/Casks/natively.rb
+          if-no-files-found: warn

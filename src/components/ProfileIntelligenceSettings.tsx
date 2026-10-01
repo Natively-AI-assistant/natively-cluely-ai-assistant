@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
-    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
+    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
     User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
@@ -9,9 +9,10 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
 import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { useLensTracking } from '../ui-components/LiquidGlassButton';
+import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
+import { useConfirmDialog } from './ui/ConfirmDialog';
 
 const openExternal = (url: string) => {
     if ((window as any).electronAPI?.openExternal) {
@@ -879,18 +880,23 @@ const PI_CSS = `
     /*
       The trial pill keeps its own body, and needs its own hover tint: the
       neutral rule above is (0,3,0) and .pi-cta--trial is (0,1,0), so without
-      this the purple would cross-fade to grey under the pointer. The tint gains
-      saturation and a little luminance while HOLDING its hue (262), so it reads
-      as the same colour lit better rather than as a different colour.
+      this the blue would cross-fade to grey under the pointer. The tint gains
+      a little luminance while HOLDING its hue, so it reads as the same colour
+      lit better rather than as a different colour.
+
+      2026-09: violet (#8455ef / #9468ff) moved to the toggle blue's hue with the
+      app accent, by owner request. Each value keeps the violet's OKLCH
+      lightness, hue 268.5, chroma x0.873, then goes a hair darker so white text
+      holds the violet's contrast: body 4.68:1 (was 4.64), hover 3.71 (was 3.70).
     */
     .pi-cta--trial {
-        --pi-cta-bg: #8455ef;
-        --pi-cta-hover: #9468ff;
+        --pi-cta-bg: #496ae6;
+        --pi-cta-hover: #5a7cf7;
         color: #fff;
-        --pi-cta-rim: rgba(240,235,255,0.24);
-        --pi-cta-lens-tint: rgba(240,235,255,0.06);
-        --pi-cta-lens-rim: rgba(245,240,255,0.30);
-        --pi-cta-lens-rim-soft: rgba(245,240,255,0.13);
+        --pi-cta-rim: rgba(232,238,255,0.24);
+        --pi-cta-lens-tint: rgba(232,238,255,0.06);
+        --pi-cta-lens-rim: rgba(238,243,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(238,243,255,0.13);
         /* A mid-dark body, so unlike either neutral pill it takes the measured
            symmetric rim — and it keeps it in both themes, because the body is
            its own colour rather than the theme's. */
@@ -899,10 +905,26 @@ const PI_CSS = `
             rgba(255,255,255,0.090) 0%, rgba(255,255,255,0) 11%,
             rgba(255,255,255,0) 89%, rgba(255,255,255,0.090) 100%);
         --pi-cta-cap-opacity: 0.5;
-        --pi-cta-shadow: 0 1px 2px rgba(124,58,237,0.26), 0 4px 10px rgba(124,58,237,0.20);
-        --pi-cta-shadow-hover: 0 2px 4px rgba(124,58,237,0.28), 0 8px 18px rgba(124,58,237,0.30);
+        --pi-cta-shadow: 0 1px 2px rgba(61,92,234,0.26), 0 4px 10px rgba(61,92,234,0.20);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(61,92,234,0.28), 0 8px 18px rgba(61,92,234,0.30);
     }
     .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
+    /*
+      The trial "Upgrade" button is now the shared LiquidGlassButton
+      (src/ui-components, variant="action" + .lg-sm .lg-wide) rather than this
+      pill, so the .pi-cta--trial rules above no longer paint anything live.
+      This sizes it to the box it replaced (36px tall, full width, 13px label)
+      and feeds .lg-action the same blue in both themes: white on #496ae6 is
+      4.68:1. (0,3,0) so it beats .lg-button.lg-sm's own 30px.
+    */
+    .lg-button.lg-sm.pi-upgrade-lg {
+        width: 100%;
+        --lg-pill-h: 36px;
+        --lg-label-size: 13px;
+        --legacy-action-bg: #496ae6;
+        --legacy-action-hover: #5a7cf7;
+        --legacy-action-fg: #ffffff;
+    }
 
     /*
       prefers-contrast: more — the whole premise of this material is a rim so
@@ -1930,6 +1952,8 @@ export function ProfileIntelligenceSettings({
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
+    // In-window confirms only: see ConfirmDialog.tsx for why never confirm().
+    const { confirm: askConfirm, dialog: confirmDialog } = useConfirmDialog();
     // Safe as a panel-level call ONLY because this panel renders exactly one
     // switch. Add a second and it must move into a per-switch component.
     const piToggleInit = useToggleInit();
@@ -2276,7 +2300,7 @@ export function ProfileIntelligenceSettings({
     }, [profileData?.aotStatus?.companyResearch]);
 
     const handleRemoveTavilyKey = async () => {
-        if (!confirm('Remove your Tavily API key?')) return;
+        if (!(await askConfirm({ title: 'Remove your Tavily API key?' }))) return;
         try {
             const res = await window.electronAPI?.setTavilyApiKey?.('');
             if (res?.success) { setHasStoredTavilyKey(false); setTavilyApiKey(''); }
@@ -2511,7 +2535,7 @@ export function ProfileIntelligenceSettings({
                                 // no profile while the resume was in fact saved and live.
                                 // The button is disabled mid-ingest rather than lying.
                                 if (profileUploading) return;
-                                if (!confirm('Delete your resume and its extracted data?')) return;
+                                if (!(await askConfirm({ title: 'Delete your resume and its extracted data?', confirmLabel: 'Delete' }))) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
                                     setProfileStatus({ hasProfile: false, profileMode: false });
@@ -3723,10 +3747,11 @@ export function ProfileIntelligenceSettings({
     };
 
     // ── CTA class ─────────────────────────────────────────────────────────────
+    // The trial state renders LiquidGlassButton instead (see the CTA footer),
+    // so this pill is only ever Manage Pro or Unlock Pro.
     const ctaClass = [
         'pi-cta',
-        isTrialActive && !isPremium  ? 'pi-cta--trial'   : '',
-        !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
+        !isPremium ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
 
     // ── Non-pro users see the gate (wait for license verification) ────────────
@@ -3754,6 +3779,7 @@ export function ProfileIntelligenceSettings({
             } as React.CSSProperties}
         >
             <style>{PI_CSS}</style>
+            {confirmDialog}
 
             {/* ── Sidebar ── */}
             <div style={{
@@ -3803,6 +3829,18 @@ export function ProfileIntelligenceSettings({
 
                 {/* CTA footer */}
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
+                    {isTrialActive && !isPremium ? (
+                        /* During a free trial: the shared Liquid Glass button
+                           (src/ui-components), label only. Colour and size come
+                           from .pi-upgrade-lg in the style block above. */
+                        <LiquidGlassButton
+                            variant="action"
+                            className="lg-sm lg-wide pi-upgrade-lg"
+                            onClick={() => openPlans()}
+                        >
+                            Upgrade
+                        </LiquidGlassButton>
+                    ) : (
                     <button
                         ref={ctaLens.ref}
                         onClick={() => openPlans()}
@@ -3815,20 +3853,19 @@ export function ProfileIntelligenceSettings({
                         {/* Painted above the flat fill and the rim, below the
                             content. Both pseudos are the material's already. */}
                         <span className="pi-cta-lens" aria-hidden="true" />
-                        {!isPremium && !isTrialActive
+                        {!isPremium
                             ? <span className="pi-cta-shimmer" aria-hidden="true" />
                             : null}
                         <span className="pi-cta-label">
-                            {isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}
+                            {isPremium ? 'Manage Pro' : 'Unlock Pro'}
                         </span>
                         <div className="pi-cta-ring">
                             {isPremium
                                 ? <CheckCircle size={13} strokeWidth={2.5} />
-                                : isTrialActive
-                                    ? <Sparkles size={13} strokeWidth={2.5} />
-                                    : <ArrowUpRight size={13} strokeWidth={2.5} />}
+                                : <ArrowUpRight size={13} strokeWidth={2.5} />}
                         </div>
                     </button>
+                    )}
                 </div>
             </div>
 

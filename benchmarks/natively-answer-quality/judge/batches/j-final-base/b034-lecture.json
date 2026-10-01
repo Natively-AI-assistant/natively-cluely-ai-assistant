@@ -1,0 +1,296 @@
+{
+ "batch": "b034-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FLEC-CTX-G1": {
+   "title": "BIO 220 Lecture 15 slide notes: Kinase cascades and scaffolds",
+   "text": "BIO 220 - Cell Biology\nLecture 15: Signal amplification, kinase cascades, and scaffolds\nProf. Ingrid Achterberg. Slide notes.\n\n1. Why cascades?\n- Each active kinase can phosphorylate many copies of the next kinase, so a small input becomes a large output: amplification. Three tiers (MAPKKK to MAPKK to MAPK) is the textbook arrangement.\n- Cascades can also produce switch-like (ultrasensitive) responses, where the output goes from low to high over a narrow range of input.\n- Hill coefficient nH: nH = 1 is a graded response; nH > 1 is steeper. Course convention: call a response \"switch-like\" only if nH >= 2.\n\n2. Scaffold proteins\n- A scaffold binds several kinases of one cascade and holds them together.\n- Three jobs we care about: speed (high local concentration), insulation (preventing cross-talk with other cascades that share a kinase), and regulation (the scaffold itself can be a control point).\n\n3. Case study (slides 12-17): the Moravec lab handout\nThe numbers below come from the Moravec lab handout distributed in class, not from the textbook.\n- Organism: budding yeast, pheromone response pathway. Scaffold protein: Pbr4 (course name).\n- Strains: WT (wild type) and KY-17 (pbr4 deletion).\n- Readout: fluorescent reporter, as % of maximum WT response, measured 60 minutes after pheromone is added.\n- Dose-response: WT EC50 = 12 nM, Hill coefficient 2.6. KY-17 EC50 = 41 nM, Hill coefficient 1.1.\n- Time to half-maximal response at saturating pheromone (100 nM): WT 9 min, KY-17 27 min.\n- Maximum response at 100 nM: WT 100%, KY-17 88%.\n- Cross-talk test: osmotic stress (0.4 M NaCl, no pheromone) activates the reporter to 3% in WT and 31% in KY-17.\n- Replicates: n = 4 biological replicates per strain. The handout reports means only; no error bars or statistical tests were included.\n\n4. How the prof wants you to read it\n- \"The knockout still signals. It is slower, less sensitive, graded instead of switch-like, and leaky to the wrong input. That is four phenotypes from one deletion.\"\n- Lower sensitivity means a higher EC50. Every year students write that KY-17 is \"more sensitive\" because 41 is the bigger number. It is not.\n- Loss of ultrasensitivity: nH falls from 2.6 to 1.1, so by the course convention KY-17 is no longer switch-like.\n- Insulation: the jump from 3% to 31% under osmotic stress is the insulation phenotype.\n- The handout does NOT establish mechanism for the slowdown. Two hypotheses were left open for discussion section: (a) reduced local concentration of the kinases, and (b) loss of an allosteric activation step that Pbr4 performs on the middle kinase.\n\n5. Exam and assignment notes\n- Problem Set 6, Q2: sketch both dose-response curves from the EC50 and Hill values. Put pheromone concentration in nM on a log-scale x-axis.\n- Exam 3 will include one \"read the data\" question in this style, with a new table, not this one.\n- Discussion section this week: come ready to argue for one of the two mechanism hypotheses using only the handout data."
+  },
+  "LECTURE-CTX-G3": {
+   "title": "HIST 214 Lecture 4 notes: the first Industrial Revolution",
+   "text": "HIST 214 - Modern Britain\nLecture 4 notes: Why Britain? The first Industrial Revolution\nLecturer: Prof. Ifeoma Castellanos, Eastbrook University\n\nBackground: the farm economy\nThe enclosure movement consolidated open fields into private farms. Yields rose and fewer farm workers were needed, so displaced rural labour drifted into towns and later into factories. Prof. Castellanos called enclosure \"the front door of the story\".\n\nResources and markets\nBritain had abundant coal, navigable rivers and, later, canals. Overseas trade supplied capital, raw cotton and export markets for finished cloth.\n\nTextile mechanization\nFlying shuttle, 1733 (John Kay). Spinning jenny, 1764 (James Hargreaves): one worker could spin several threads at once, but it was small and hand-powered, so it suited cottage workshops. Water frame, 1769 (Richard Arkwright): it produced stronger thread but needed water power, so production moved into mills beside rivers, and that is the start of the factory system. Power loom, 1785 (Edmund Cartwright).\n\nTransport\nCanals built in the late 1700s made moving coal and raw cotton much cheaper, and railways followed in the 1830s, which tied the growing industrial towns to ports and to each other. Prof. Castellanos noted that cheaper transport also widened the market, so a mill could sell far beyond its own town.\n\nSteam\nThe Newcomen engine, early 1700s, pumped water out of mines and burned huge amounts of coal. James Watt's separate condenser, patented in 1769, made engines far more efficient. Steam freed factories from riverbanks and let them move to cities near coal and labour.\n\nSocial consequences\nManchester grew from a market town into a city of several hundred thousand people by the mid-1800s. Working conditions were harsh, including child labour. The Factory Act of 1833 limited working hours for children in textile mills.\n\nThe lecturer's own view\nProf. Castellanos said there is no single cause, and that historians disagree. Some stress institutions and property rights, including the settlement after the Glorious Revolution of 1688, and others stress culture and ideas. If forced to pick, she gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She described institutions and markets as \"necessary but not sufficient\".\n\nEssay note: the essay is due in Week 7, at 1,500 words, on the question \"Was the Industrial Revolution inevitable?\" Use at least three primary sources. Reading for this week: chapters 3 and 4 of the course reader."
+  },
+  "LECTURE-CTX-G2": {
+   "title": "BIO 110 Lecture 11 notes: cellular respiration",
+   "text": "BIO 110 - Introductory Biology\nLecture 11 notes: Cellular respiration\nLecturer: Dr. Tomasz Reidel, Eastbrook University\n\nOverall reaction\nC6H12O6 + 6 O2 -> 6 CO2 + 6 H2O + energy (some captured as ATP, the rest released as heat). This is a redox process: glucose is oxidized (it loses electrons, in practice hydrogen atoms) and oxygen is reduced. Memory aid: OIL RIG, oxidation is loss, reduction is gain.\n\nStage 1: Glycolysis\nLocation: cytosol. One glucose (6 carbons) is split into two pyruvate (3 carbons each). Four ATP are made but two are spent to start the process, so the net gain is 2 ATP, plus 2 NADH. No oxygen is needed.\n\nStage 2: Pyruvate oxidation\nLocation: mitochondrial matrix. Each pyruvate becomes acetyl-CoA, releasing one CO2 and making one NADH. Per glucose that is 2 CO2 and 2 NADH.\n\nStage 3: Krebs cycle (citric acid cycle)\nLocation: mitochondrial matrix. The cycle turns twice per glucose. Per glucose it produces 4 CO2, 6 NADH, 2 FADH2 and 2 ATP.\n\nStage 4: Oxidative phosphorylation\nLocation: inner mitochondrial membrane. NADH and FADH2 hand their electrons to the electron transport chain. As electrons move along the chain, protons are pumped into the intermembrane space, building a proton gradient. ATP synthase lets the protons flow back into the matrix and uses that flow to make ATP (chemiosmosis). Oxygen is the final electron acceptor and ends up as water. Without oxygen the chain backs up and the earlier stages stall.\n\nATP yield\nAbout 2.5 ATP per NADH and about 1.5 ATP per FADH2, giving roughly 30 to 32 ATP per glucose. Older textbooks quote 36 to 38 because they assumed 3 ATP per NADH and 2 per FADH2 and ignored the cost of moving ATP, ADP and NADH across the mitochondrial membranes. Proton leak also lowers the real yield, so the modern figure is lower.\n\nFermentation\nWithout oxygen, pyruvate is converted to lactate (animal muscle) or to ethanol and CO2 (yeast). The purpose is to regenerate NAD+ so glycolysis can keep running. The yield is only the 2 ATP from glycolysis.\n\nPoisons and heat\nCyanide blocks the last complex of the electron transport chain, so the chain stops. Brown fat contains an uncoupling protein that lets protons leak back across the membrane, so the energy is released as heat instead of ATP.\n\nExam note: know the location, inputs and outputs of each stage, and be able to explain why oxygen matters. There is a short quiz on Friday."
+  },
+  "LECTURE-CTX-I1": {
+   "title": "Campus parking closure notice",
+   "text": "EASTBROOK UNIVERSITY - TRANSPORTATION AND PARKING SERVICES\nNotice to the campus community\n\nEffective Monday, Lot C (behind the Fenwick Athletic Center) will be closed for resurfacing. The closure is expected to last approximately three weeks, weather permitting.\n\nWhat this means for you:\n- Permit holders assigned to Lot C may park in Lot F or Lot H at no extra charge for the duration of the closure. Please display your existing permit.\n- Lot F is a ten-minute walk from the main quad. The free campus shuttle will run every fifteen minutes between Lot F and the Student Union from 7:30 a.m. to 6:30 p.m.\n- Visitor parking has been relocated to the lower level of the Ashworth Garage. Visitors should collect a temporary pass from the kiosk at the garage entrance.\n- Accessible parking spaces displaced by the closure have been reassigned to the first row of Lot F, nearest the shuttle stop.\n- Vehicles left in Lot C after 6:00 a.m. on Monday will be towed at the owner's expense.\n\nQuestions about permits can be sent to the Parking Services office in the Ashworth Building, room 104, or answered at the front desk between 9:00 a.m. and 4:00 p.m. on weekdays. Bicycle racks near the Fenwick Center remain open and are not affected. We appreciate your patience while we improve campus facilities."
+  }
+ },
+ "items": [
+  {
+   "jid": "7ab3f9e80e54",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Okay, so Popper's problem with Freud and Marx wasn't that they were wrong, it was that no observation could ever count against them. A theory that explains everything, whether the patient says yes or no, explains nothing. Einstein, by contrast, predicted that starlight would bend around the sun by a specific amount, and if the eclipse measurements had come out differently the theory would have been dead. So the mark of a scientific theory, he said, is that it forbids something. It sticks its neck out.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the **falsifiability** criterion, and the way to state it precisely is that a theory is scientific only if it rules out some possible observation. Popper's point about Freud and Marx is that their frameworks could absorb any result, so no test could ever count against them, whereas Einstein's prediction of a specific deflection of starlight was a genuine risk: a different eclipse measurement would have refuted general relativity. The key nuance is that falsifiability is a criterion of demarcation, not of truth or meaning. A theory can be scientific and still be false, and an unfalsifiable claim isn't nonsense, it just isn't the kind of thing empirical evidence can settle."
+  },
+  {
+   "jid": "7ef87cd341d3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So the knockout still signals, just slower. What does that tell you about what the scaffold is actually doing?",
+   "conversation": [
+    "PROFESSOR: Look at the time course on slide fifteen before you look at anything else.",
+    "PROFESSOR: Nine minutes versus twenty-seven. Keep those two numbers in your head.",
+    "PROFESSOR: And notice the knockout still gets to almost the same ceiling."
+   ],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "It tells me the scaffold is mainly a **speed and fidelity** device, not an on/off switch. The pathway still works without Pbr4, so the scaffold isn't what makes the signal happen. What it does is hold the kinases together so they find each other fast, which is why WT hits half-max in 9 minutes and the knockout takes 27. And the fact that the knockout also loses its sharpness, with the Hill coefficient dropping from 2.6 to 1.1, says the scaffold is part of what makes the response switch-like rather than graded. The handout doesn't settle the mechanism for the slowdown, so that part is still open."
+  },
+  {
+   "jid": "06d3d73fde55",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Both players defect, and that's a Nash equilibrium even though they'd both be better off cooperating, which is kind of the whole tragedy.",
+   "conversation": [
+    "PROFESSOR (heard): Consider the prisoner's dilemma.",
+    "NATIVELY: The prisoner's dilemma is a setup where two people each choose to cooperate or defect, and the payoffs are arranged so that defecting is always better for you no matter what the other person does, yet if you both defect you both end up worse off than if you'd both cooperated. The classic story is two suspects interrogated separately: each is tempted to confess for a lighter sentence, but if both confess they both get a longer sentence than if both stayed quiet. The tension is that the individually rational choice leads to a collectively worse outcome, which is why it's the standard model for why cooperation is hard without trust or repeated interaction."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Exactly. Mutual defection is a Nash equilibrium because neither player can improve by unilaterally switching: if the other is defecting, defecting is your best response, so neither has an incentive to move. The tragedy is that it's not Pareto efficient, since mutual cooperation would leave both better off, yet it isn't stable on its own. That gap between individual and collective rationality is what makes it the baseline model for arms races, price wars, and overfishing."
+  },
+  {
+   "jid": "645173caf765",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "How does the crash thing connect to what they said earlier about frames?",
+   "conversation": [
+    "PROFESSOR: Remember from last lecture, every function call gets its own frame on the call stack, with its own copy of the local variables.",
+    "PROFESSOR: Now let's trace factorial of four. Factorial of four calls factorial of three, which calls factorial of two, which calls factorial of one.",
+    "PROFESSOR: Factorial of one hits the base case and returns one, and then each frame unwinds, multiplying as it goes.",
+    "PROFESSOR: If you forget the base case, the stack just keeps growing until the program crashes."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The crash is the direct consequence of what they said about frames. Each recursive call pushes a new frame onto the call stack, and frames only come off when a call returns. Without a base case, no call ever returns, so frames keep piling up until the stack runs out of room and the program crashes. The base case is what stops the growth by giving the recursion a point where it returns instead of calling again."
+  },
+  {
+   "jid": "ab3a0d39f8f4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So the punchline is that the market didn't fail, it did exactly what the incentives told it to do.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, that's the key reframe. A market isn't a moral system, it's a clearing mechanism. If the rules reward a certain behavior, you get more of it, even when the aggregate outcome is bad. So the interesting question stops being \"who failed\" and becomes \"which incentive produced this, and who set it.\""
+  },
+  {
+   "jid": "5e35b4127948",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Explain that more simply.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the earlier explanation in front of me, so tell me which part you want simpler and I'll put it in plain words."
+  },
+  {
+   "jid": "5b20b8ceb7f3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And that is why the spinning jenny alone doesn't explain the factory, you also need the water frame.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The spinning jenny and the water frame solved different problems, which is why you need both to get to the factory. The jenny, from Hargreaves, multiplied the number of threads a single spinner could draw, so it sped up spinning but still ran on human power and stayed in the home or small workshop. The water frame, from Arkwright, used rollers to spin stronger thread and was driven by water power, so it forced production out of the cottage and into a building next to a river. Put them together and you get the two ingredients the factory system needs: a machine that outproduces hand spinning, and a power source that can't fit in a cottage. That's the combination that makes the factory, not either invention alone."
+  },
+  {
+   "jid": "ac2f9b20c67d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "The Treaty of Versailles left Germany with the bill but not the means to pay it.",
+   "conversation": [
+    "PROFESSOR: Sorry, my slides are frozen, give me a second.",
+    "PROFESSOR: Okay, back. IT says the projector will need a restart at the break."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the core of the argument: the treaty set reparations at a level Germany couldn't realistically pay, and the way it was enforced, occupation of the Ruhr and hyperinflation in 1923, made the burden worse rather than settling it. The political fallout fed straight into the instability of the Weimar years."
+  },
+  {
+   "jid": "5927386f3b0e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "What do you think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I think it's worth taking seriously, but I'd want to know what's actually driving it before I commit to a view. What problem is it solving, and what happens if we do nothing? If it holds up against those two questions, I'm in."
+  },
+  {
+   "jid": "9c562e1a351f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "If you differentiate x squared, the two comes down and the exponent drops by one, so you get two x.",
+   "conversation": [
+    "PROFESSOR: One more thing, the campus shuttle schedule changes next week, so leave earlier for the ten o clock class."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's right. The power rule says the derivative of x to the n is n times x to the n minus one, so for x squared you bring the 2 down and drop the exponent to 1, giving 2x. The intuition is that the exponent tells you how many copies of x you're multiplying, and the derivative counts how fast that product grows, which scales with the exponent."
+  },
+  {
+   "jid": "75777e9b9c8d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Who makes the wheat?",
+   "conversation": [
+    "PROFESSOR: Two countries, Aldria and Brevin, each with one day of labor to spend on wheat or cloth.",
+    "PROFESSOR: In a day Aldria can make ten units of wheat or ten of cloth.",
+    "PROFESSOR: Brevin can make six units of wheat or three of cloth.",
+    "PROFESSOR: So Aldria is better at both, in absolute terms, that is absolute advantage.",
+    "PROFESSOR: But what matters for trade is opportunity cost: what each country gives up to make one more unit."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "In this example, both countries make wheat. Aldria can produce ten units of wheat in a day, and Brevin can produce six, so each country makes its own wheat rather than one making it for both."
+  },
+  {
+   "jid": "e22327b4fe5f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Exam question on this?",
+   "conversation": [
+    "USER (typed to Natively): I didn't understand the multiplier thing at all.",
+    "NATIVELY: A multiplier is just a number you multiply by to scale something up or down. If a base value is 200 and the multiplier is 1.5, the result is 300. If it's 0.5, the result is 100.\n\nIn most lectures it shows up in one of two ways: as a scaling factor in a formula, like output equals input times the multiplier, or as a feedback effect, where a small change gets amplified because it feeds back into itself. The key intuition is that a multiplier above 1 grows the thing, below 1 shrinks it, and exactly 1 leaves it unchanged.",
+    "USER (typed to Natively): Use an analogy.",
+    "NATIVELY: Think of a multiplier like a volume knob on a speaker. The music is the base value, and the knob is the multiplier. Turn it past the middle and the sound gets louder, that's a multiplier above 1. Turn it below the middle and it gets quieter, that's below 1. Leave it dead center and nothing changes, that's exactly 1.\n\nThe same idea works for money, growth, or feedback: the multiplier just decides how much bigger or smaller the original thing becomes.",
+    "USER (typed to Natively): So if the marginal propensity to consume is point eight, what is the multiplier?",
+    "NATIVELY: The multiplier is 1 divided by 1 minus the marginal propensity to consume. With an MPC of 0.8, that's 1 divided by 0.2, which gives a multiplier of **5**.\n\nThe intuition: each round of spending becomes income for someone else, who then spends 80% of it, and so on. That chain of spending adds up to five times the original change."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "An exam question on this would most likely give you an MPC and ask for the multiplier, or give the multiplier and ask you to work back to the MPC. So with an MPC of 0.8, the multiplier is 1 divided by 1 minus 0.8, which is **5**. A common twist is asking what happens to the multiplier when the MPC rises, and the answer is it gets bigger, because the denominator shrinks."
+  },
+  {
+   "jid": "1ce9bc5d8676",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What if it's expected?",
+   "conversation": [
+    "USER (typed to Natively): Why does inflation hurt people who keep their money in savings?",
+    "NATIVELY: Inflation means prices rise over time, so the same amount of cash buys less later than it does now. If your savings sit in an account earning less than the inflation rate, your money loses purchasing power even though the balance looks the same. Say inflation runs at 5% and your account pays 1%, you're effectively going backwards by about 4% a year in real terms. That's why people try to move savings into assets that grow faster than inflation."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If it's expected, people can plan around it. The damage is smaller because wages, contracts, and interest rates tend to adjust to anticipated inflation, so the real value of your savings erodes more slowly and predictably. The real harm comes from **unexpected inflation**, which catches everyone off guard and redistributes wealth from savers to borrowers."
+  },
+  {
+   "jid": "1ec3f8f3b94a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And the reason you can't skip breathing is that oxygen is the final electron acceptor, that's its whole job.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's right, and the notes back it up: oxygen is the final electron acceptor and ends up as water. Without it the chain backs up and the earlier stages stall. The reason you can't just skip it is that nothing else can take those electrons at the end, so NADH and FADH2 have nowhere to drop them and the whole process jams. The payoff is roughly 2.5 ATP per NADH and about 1.5 ATP per FADH2, so around 30 to 32 ATP per glucose."
+  },
+  {
+   "jid": "51c08d390cf2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Give me an example.",
+   "conversation": [
+    "USER (typed to Natively): What is entropy?",
+    "NATIVELY: Entropy is a measure of how many ways a system's microscopic parts can be arranged to produce the same overall state. The more arrangements that look the same from the outside, the higher the entropy.\n\nIn thermodynamics it's often described as disorder, but the cleaner idea is missing information: entropy counts the configurations you can't distinguish. The formula is **S = k log W**, where S is entropy, k is Boltzmann's constant, and W is the number of microstates matching the observed macrostate.\n\nA simple example: a shuffled deck of cards has high entropy because almost every arrangement looks equally random, while a sorted deck has low entropy because only a few arrangements count as \"sorted.\"",
+    "USER (typed to Natively): Can you say that in plainer words?",
+    "NATIVELY: Entropy is basically a count of how many ways you can rearrange the small parts of something without changing how it looks from the outside. A messy room has high entropy because there are tons of arrangements that all look messy. A tidy room has low entropy because only a few arrangements count as tidy. So more hidden arrangements means more entropy."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Think of a pair of dice. If you only see the total, a 7 has high entropy because lots of rolls give 7, while a 2 has low entropy because only one roll gives it. You can't tell which roll happened, so more hidden possibilities means more entropy."
+  },
+  {
+   "jid": "dee3aa34443f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So this connects back to what we saw last week, same structure, completely different setting.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a useful thread to pull on. If the structure is the same, the interesting question is which parts are actually structural and which parts were just features of last week's setting. So I'd want to name the shared skeleton out loud, then go through what changes when the setting changes: what stays fixed, what has to be re-derived, and where the analogy breaks down. That last part is usually where the real insight is, because the places the pattern doesn't carry over tell you what the structure was really depending on."
+  },
+  {
+   "jid": "dd4102ffb798",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Derive the kinetic energy formula from the definition of work.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Work is force times displacement, so for a constant force along the direction of motion, \\(W = F\\,d\\). Using Newton's second law, \\(F = ma\\), and the kinematic relation \\(v^2 = v_0^2 + 2ad\\), we get \\(d = \\frac{v^2 - v_0^2}{2a}\\). Substituting both into the work expression gives \\(W = ma \\cdot \\frac{v^2 - v_0^2}{2a} = \\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\). That difference is the change in kinetic energy, so \\(KE = \\frac{1}{2}mv^2\\), where \\(m\\) is mass and \\(v\\) is speed. The intuition is that the work you do on an object shows up as a change in this quantity."
+  },
+  {
+   "jid": "0eae7f213ce6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Compare those two views for me, tell me which one the professor seems to favor, and give me a one-line way to remember each.",
+   "conversation": [
+    "PROFESSOR: Here is the standard case. A runaway trolley will kill five people unless you pull a lever that sends it to a side track where it will kill one.",
+    "PROFESSOR: A utilitarian says pull it, because the right action is the one that produces the best overall outcome, and five lives beat one.",
+    "PROFESSOR: Now the footbridge version: you can stop the trolley by pushing a large stranger onto the tracks.",
+    "PROFESSOR: A deontologist says there are rules about what you may do to a person, and using someone merely as a means is off the table, even for a good outcome.",
+    "PROFESSOR: Most people say pull the lever but do not push the man, and philosophers have argued about why for fifty years."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The two views split on what makes an action right. The utilitarian looks only at outcomes, so pulling the lever is right because five lives beat one. The deontologist looks at what you're doing to a person, so using the stranger merely as a means is off the table even for a good result.\n\nThe professor doesn't come down on either side. He just lays out both and notes that most people pull the lever but won't push the man, and that philosophers have argued about why for fifty years. So he's presenting the puzzle, not picking a winner.\n\nTo remember them: utilitarian, best total outcome wins. Deontologist, some things you just may not do to a person."
+  },
+  {
+   "jid": "aa804fee30bc",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What is a limiting reagent, how do I spot one in a problem, and can you walk me through a quick example?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A limiting reagent is the reactant that runs out first and so caps how much product you can make. To spot it, convert every reactant's amount to moles, divide each by its coefficient in the balanced equation, and the smallest result is your limiting reagent. For example, in 2H₂ + O₂ → 2H₂O, if you have 3 mol H₂ and 2 mol O₂, then H₂ gives 3/2 = 1.5 and O₂ gives 2/1 = 2, so H₂ limits and you get 3 mol H₂O."
+  },
+  {
+   "jid": "9cb31507f863",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "That doesn't sound right to me.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's fair to push back on. Which part doesn't sit right with you? If it's the reasoning, I can walk through how I got there. If it's a number or a fact, tell me what you have and we'll compare."
+  }
+ ]
+}

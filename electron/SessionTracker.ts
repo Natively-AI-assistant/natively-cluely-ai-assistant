@@ -5,6 +5,7 @@
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
 import type { AttemptId, TurnIdentity } from './llm/turnIdentity';
+import { stripGistTrailer } from '../src/lib/displayMarkup';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -160,6 +161,10 @@ export class SessionTracker {
     private currentMeetingMetadata: {
         title?: string;
         calendarEventId?: string;
+        /** Filled in at start by SessionCalendarLinker when the session matches an event. */
+        calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot;
+        /** The call it is in (a meeting tab's key), for who spoke when (meetingDetection/callRoster). */
+        callKey?: string;
         source?: 'manual' | 'calendar';
     } | null = null;
 
@@ -444,7 +449,11 @@ export class SessionTracker {
             }
         } catch { /* non-fatal — fall through to normal filtering */ }
 
-        const cleanText = text.trim();
+        // The trailing [[GIST]] line is display metadata (the overlay/phone
+        // chip), never answer text: history, the meeting transcript, the
+        // usage log and every follow-up that re-reads the last answer get the
+        // answer without it. One chokepoint for all ~30 callers.
+        const cleanText = stripGistTrailer(text).trim();
         if (cleanText.length < 10) {
             console.warn(`[SessionTracker] Ignored short message (<10 chars)`);
             return false;
@@ -781,14 +790,19 @@ export class SessionTracker {
             type,
             timestamp: Date.now(),
             question,
-            answer,
+            answer: typeof answer === 'string' ? stripGistTrailer(answer) : answer,
             source: type === 'chat' ? 'manual_chat' : 'external',
         });
         this.capUsageArray();
     }
 
     pushUsage(entry: any): void {
-        this.fullUsage.push(entry);
+        // Same rule as logUsage: the usage log (ai_interactions) stores the
+        // answer without its [[GIST]] display line.
+        const stored = entry && typeof entry.answer === 'string'
+            ? { ...entry, answer: stripGistTrailer(entry.answer) }
+            : entry;
+        this.fullUsage.push(stored);
         this.capUsageArray();
     }
 

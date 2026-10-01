@@ -533,6 +533,11 @@ docs/*
 # an ignored path at all. Same reasoning as the autopilot entries above.
 !docs/retrieval-handoff/
 !docs/retrieval-handoff/**
+# Homebrew cask — the distribution runbook for the tap (issue #577). It carries
+# the two steps that cannot be automated from this repo (creating the tap repo,
+# adding HOMEBREW_TAP_TOKEN) and the tag-case constraint the cask URL depends
+# on. Untracked, a fresh clone ships a cask nobody knows how to publish.
+!docs/homebrew-cask.md
 benchmark-results/
 
 
@@ -641,6 +646,15 @@ resources/models/Xenova/multilingual-e5-small/*
 # that is not recoverable from the vendor's docs, plus the reasoning behind the
 # `ninerouter` internal id. A later session changing this provider needs it.
 !docs/ninerouter-provider-design-2026-09-20.md
+# Vision-capability design (2026-10-01). Only this plan is un-ignored; other
+# local docs/plans files stay ignored.
+!docs/plans/
+docs/plans/*
+!docs/plans/2026-10-01-vision-capability-design.md
+!docs/plans/2026-10-01-vision-capability-phase1-plan.md
+!docs/plans/2026-10-01-vision-capability-phase2-plan.md
+!docs/plans/2026-10-01-vision-capability-phase3a-plan.md
+!docs/plans/2026-10-01-vision-capability-phase3b-plan.md
 
 # Live RAG probe scratch userdata — the probes mkdir these and the app fills
 # them with a multi-MB natively.db. Generated output, not a fixture.

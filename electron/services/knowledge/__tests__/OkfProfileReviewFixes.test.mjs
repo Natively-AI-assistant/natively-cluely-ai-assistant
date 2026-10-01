@@ -61,9 +61,14 @@ test('WIRING: manual path prepends the OKF block and gates on coding/forbidden',
 
 test('WIRING: both trial-wipe paths carry the profile OKF PII backstop', () => {
   const src = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
-  const backstops = src.match(/ProfilePackBuilder.*getInstance\(\)\.deleteAllProfilePacks\(\)/g) || [];
-  // trial:end-byok + trial:wipe-profile-data both have a backstop (2 occurrences).
-  assert.ok(backstops.length >= 2, `both trial-wipe paths call deleteAllProfilePacks (found ${backstops.length})`);
+  // Both paths (the expiry settle and trial:end-byok) run ONE shared wipe since
+  // toaster policy Phase 3; the backstop lives in it.
+  const wipe = src.slice(src.indexOf('const wipeTrialProfileData = ('), src.indexOf('const expiryWipeAttempted'));
+  assert.match(wipe, /ProfilePackBuilder.*getInstance\(\)\.deleteAllProfilePacks\(\)/, 'the shared wipe carries the backstop');
+  const byok = src.slice(src.indexOf("safeHandle('trial:end-byok'"), src.indexOf("safeHandle('trial:end-byok'") + 2000);
+  assert.ok(byok.includes('const wiped = wipeTrialProfileData();'), 'BYOK runs the shared wipe');
+  const settle = src.slice(src.indexOf('const settleExpiredTrial = ('), src.indexOf('const settleExpiredTrial = (') + 4000);
+  assert.ok(settle.includes('const wiped = wipeTrialProfileData();'), 'the expiry settle runs the shared wipe');
 });
 
 test('MEDIUM: reserved profile mode cannot be activated via ModesManager.setActiveMode', guard, async () => {

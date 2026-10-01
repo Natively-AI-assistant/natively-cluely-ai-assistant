@@ -41,7 +41,13 @@ export class ReleaseNotesManager {
         console.log(`[ReleaseNotesManager] Fetching release notes for ${version}...`);
 
         try {
-            const response = await this.makeRequest(this.buildReleaseUrl(version));
+            // Tags are published as both "v2.8.8" and "V2.8.8", and the tags
+            // endpoint is case-sensitive: try each spelling until one exists.
+            let response: string | null = null;
+            for (const url of this.buildReleaseUrls(version)) {
+                response = await this.makeRequest(url);
+                if (response) break;
+            }
 
             if (!response) {
                 console.warn("[ReleaseNotesManager] Failed to fetch release notes from API.");
@@ -63,13 +69,12 @@ export class ReleaseNotesManager {
         }
     }
 
-    private buildReleaseUrl(version: string): string {
-        if (version === 'latest') {
-            return `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/latest`;
-        }
+    private buildReleaseUrls(version: string): string[] {
+        const base = `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases`;
+        if (version === 'latest') return [`${base}/latest`];
 
-        const tag = version.startsWith('v') ? version : `v${version}`;
-        return `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/tags/${tag}`;
+        const bare = version.trim().replace(/^v/i, '');
+        return [`${base}/tags/v${bare}`, `${base}/tags/V${bare}`];
     }
 
     private parseReleaseNotes(body: string, version: string, url: string): ParsedReleaseNotes {
@@ -78,7 +83,9 @@ export class ReleaseNotesManager {
         const sections: ReleaseNoteSection[] = [];
         let summary = "";
 
-        const normalizedBody = body.replace(/\r\n/g, "\n");
+        // Authoring notes in the release template are HTML comments: GitHub hides
+        // them, and so must the card (a "- " line inside one is not a bullet).
+        const normalizedBody = body.replace(/\r\n/g, "\n").replace(/<!--[\s\S]*?-->/g, "");
         const headingMatches = [...normalizedBody.matchAll(/^#{2,3}\s+(.+)$/gm)];
 
         for (let i = 0; i < headingMatches.length; i++) {

@@ -12,19 +12,17 @@
 //   downloading  three steps with live size, speed and time left; wave rises
 //   ready        steps complete, "Restart and update"
 //   error        what went wrong, a way to the release page
-//   instructions manual install steps (unsigned macOS builds, or a browser
-//                download on Windows)
 //
 // Both the card and the corner toast pour out of, and back into, the bottom
 // of the window like every other popup (GenieModal).
 import React, { useEffect, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
-import { X, ArrowRight, Check } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { X, ArrowRight, ArrowUpRight, Check } from 'lucide-react';
 import { GenieModal } from './ui/GenieModal';
-import { isMac } from '../utils/platformUtils';
 import { APP_VERSION } from '../utils/appVersion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useT } from '../i18n';
+import { bareVersion as stripVersionPrefix, digestReleaseNotes } from '../lib/releaseNotesDigest.mjs';
 
 export const LATEST_RELEASE_URL = 'https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest';
 
@@ -56,9 +54,8 @@ interface UpdateModalProps {
     onInstall: () => void;
     downloadProgress: number;
     downloadDetail?: DownloadDetail | null;
-    status: 'idle' | 'downloading' | 'ready' | 'error' | 'instructions';
+    status: 'idle' | 'downloading' | 'ready' | 'error';
     errorMessage?: string | null;
-    instructionsArch?: 'arm64' | 'x64' | null;
     canAutoUpdate?: boolean;
     /** Skip the close genie: the corner toast is taking the card's place. */
     closeInstantly?: boolean;
@@ -66,7 +63,6 @@ interface UpdateModalProps {
 
 // ─── Tokens ────────────────────────────────────────────────────
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
-const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 // The family's measured ink sets (the contrast table is in SupportToaster.tsx).
 const INK_DARK = {
@@ -157,6 +153,33 @@ const Wave: React.FC<{ progress: number; moving: boolean; reduced: boolean; cres
 
 // ─── Pieces ────────────────────────────────────────────────────
 
+/**
+ * A handover between related states, in place: the old content leaves as the
+ * new arrives. Text swap by default (150ms, 4px, 2px blur, ease-in-out, the
+ * same both ways); icon swap with `icon` (250ms, no travel). Keyed by state,
+ * never by content, so live figures (bytes, speed) don't re-animate each tick.
+ */
+const Swap: React.FC<{
+    id: string; reduced: boolean; icon?: boolean;
+    style?: React.CSSProperties; children: React.ReactNode;
+}> = ({ id, reduced, icon = false, style, children }) => {
+    const y = icon ? 0 : 4;
+    return (
+        <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+                key={id}
+                style={style}
+                initial={reduced ? false : { opacity: 0, y, filter: 'blur(2px)' }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
+                exit={reduced ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -y, filter: 'blur(2px)' }}
+                transition={{ duration: icon ? 0.25 : 0.15, ease: 'easeInOut' }}
+            >
+                {children}
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
 const CtaButton: React.FC<{ ink: Ink; isLight: boolean; reduced: boolean; onClick: () => void; children: React.ReactNode }> = ({
     ink, isLight, reduced, onClick, children,
 }) => {
@@ -225,43 +248,6 @@ const QuietButton: React.FC<{ ink: Ink; onClick: () => void; children: React.Rea
     </button>
 );
 
-const CopyBlock: React.FC<{ command: string; ink: Ink }> = ({ command, ink }) => {
-    const t = useT();
-    const [copied, setCopied] = useState(false);
-    const copy = () => {
-        navigator.clipboard.writeText(command);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
-    return (
-        <div style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            margin: '6px 0 0', padding: '6px 6px 6px 10px', borderRadius: '8px',
-            background: ink.well, boxShadow: `inset 0 0 0 1px ${ink.rule}`,
-        }}>
-            <code style={{
-                flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                fontFamily: MONO, fontSize: '11px', color: ink.body, userSelect: 'all',
-            }}>
-                {command}
-            </code>
-            <button
-                type="button"
-                onClick={copy}
-                title={t('Copy to clipboard')}
-                style={{
-                    flex: 'none', padding: '4px 8px', borderRadius: '6px', border: 0, cursor: 'pointer',
-                    background: 'none', boxShadow: `inset 0 0 0 1px ${ink.rule}`,
-                    fontFamily: FONT, fontSize: '11px', fontWeight: 500,
-                    color: copied ? ink.strong : ink.quiet,
-                }}
-            >
-                {copied ? t('Copied') : t('Copy')}
-            </button>
-        </div>
-    );
-};
-
 const Steps: React.FC<{
     ink: Ink; reduced: boolean;
     steps: { label: string; sub: string; state: StepState; progress?: number }[];
@@ -277,35 +263,44 @@ const Steps: React.FC<{
                     background: s.state === 'done' ? ink.strong : 'none',
                     transition: `background-color 300ms ${EASE_CSS}, box-shadow 300ms ${EASE_CSS}`,
                 }}>
-                    {s.state === 'done' && <Check size={11} strokeWidth={3} color={ink === INK_DARK ? '#1C1C1E' : '#F7F8FC'} />}
-                    {s.state === 'on' && (
-                        <span style={{
-                            width: '6px', height: '6px', borderRadius: '6px', background: ink.strong,
-                            animation: reduced ? undefined : 'upd-pulse 1.2s ease-in-out infinite',
-                        }} />
-                    )}
+                    <Swap id={s.state} reduced={reduced} icon style={{ display: 'flex' }}>
+                        {s.state === 'done' && <Check size={11} strokeWidth={3} color={ink === INK_DARK ? '#1C1C1E' : '#F7F8FC'} />}
+                        {s.state === 'on' && (
+                            <span style={{
+                                width: '6px', height: '6px', borderRadius: '6px', background: ink.strong,
+                                animation: reduced ? undefined : 'upd-pulse 1.2s ease-in-out infinite',
+                            }} />
+                        )}
+                    </Swap>
                 </span>
                 <div style={{ minWidth: 0 }}>
                     <div style={{
                         fontSize: '13.5px', fontWeight: 600, letterSpacing: '-0.01em',
                         color: s.state === 'wait' ? ink.faint : ink.strong,
                     }}>{s.label}</div>
-                    <div style={{
+                    <Swap id={s.state} reduced={reduced} style={{
                         marginTop: '3px', fontSize: '12px', fontWeight: 500, lineHeight: 1.35,
                         color: ink.quiet, fontVariantNumeric: 'tabular-nums',
-                    }}>{s.sub}</div>
-                    {s.progress !== undefined && (
-                        <div
-                            role="progressbar"
-                            aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(s.progress)}
-                            style={{ marginTop: '8px', maxWidth: '220px', height: '2px', borderRadius: '2px', background: ink.rule, overflow: 'hidden' }}
-                        >
-                            <div style={{
-                                width: `${s.progress}%`, height: '100%', background: ink.strong,
-                                transition: reduced ? undefined : 'width 200ms linear',
-                            }} />
-                        </div>
-                    )}
+                    }}>{s.sub}</Swap>
+                    {/* The bar folds away when its step is done, instead of the
+                        rows below jumping up by its height. */}
+                    <AnimatePresence initial={false}>
+                        {s.progress !== undefined && (
+                            <motion.div
+                                key="bar"
+                                exit={reduced ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, height: 0, marginTop: 0 }}
+                                transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                                role="progressbar"
+                                aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(s.progress)}
+                                style={{ marginTop: '8px', maxWidth: '220px', height: '2px', borderRadius: '2px', background: ink.rule, overflow: 'hidden' }}
+                            >
+                                <div style={{
+                                    width: `${s.progress}%`, height: '100%', background: ink.strong,
+                                    transition: reduced ? undefined : 'width 200ms linear',
+                                }} />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
             </li>
         ))}
@@ -324,26 +319,31 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     downloadDetail,
     status,
     errorMessage,
-    instructionsArch,
     closeInstantly = false,
 }) => {
     const t = useT();
     const reduced = useReducedMotion() ?? false;
     const isLight = useResolvedTheme() === 'light';
     const ink = isLight ? INK_LIGHT : INK_DARK;
-    const [showMacHelp, setShowMacHelp] = useState(false);
 
     const formatVersion = (v: string) => {
         if (!v) return t('Unknown');
         if (v === 'latest' || v === 'vlatest') return t('Latest');
-        return v.startsWith('v') ? v : `v${v}`;
+        // GitHub tags come as "v2.8.8" or "V2.8.8"; show one form.
+        return `v${stripVersionPrefix(v)}`;
     };
     const displayVersion = formatVersion(updateInfo?.version);
-    const genieView = `${displayVersion}|${status}|${instructionsArch ?? ''}`;
-    const bareVersion = displayVersion.replace(/^v/, '');
-    const installedVersion = APP_VERSION !== 'unknown' ? APP_VERSION.replace(/^v/, '') : null;
+    const genieView = `${displayVersion}|${status}`;
+    const bareVersion = stripVersionPrefix(displayVersion);
+    const installedVersion = APP_VERSION !== 'unknown' ? stripVersionPrefix(APP_VERSION) : null;
 
-    const hasNotes = !!parsedNotes?.sections?.some(s => s.title !== 'Summary' && s.items.length > 0);
+    const digest = digestReleaseNotes(parsedNotes);
+    const countLabel = (key: 'more' | 'new' | 'improvements' | 'fixes', n: number) => {
+        if (key === 'more') return fill(t('{n} more'), { n });
+        if (key === 'new') return fill(t('{n} new'), { n });
+        if (key === 'improvements') return n === 1 ? t('1 improvement') : fill(t('{n} improvements'), { n });
+        return n === 1 ? t('1 fix') : fill(t('{n} fixes'), { n });
+    };
     const releaseUrl = parsedNotes?.url || LATEST_RELEASE_URL;
 
     const progress = status === 'ready' ? 100 : Math.max(0, Math.min(100, downloadProgress || 0));
@@ -352,7 +352,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     const downloadSub = describeDownload(downloadDetail, progress, t);
 
     useEffect(() => {
-        if (!isOpen) { setShowMacHelp(false); return; }
+        if (!isOpen) return;
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onDismiss(); };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
@@ -397,102 +397,71 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                 <QuietButton ink={ink} onClick={onDismiss}>{t('Close')}</QuietButton>
             </>)}
         </>;
-    } else if (status === 'instructions') {
-        const dmg = `~/Downloads/Natively-${bareVersion}-${instructionsArch || 'arm64'}.dmg`;
-        left = <>
-            {eyebrow(`${t('Update')} · ${displayVersion}`)}
-            {headline(t('Finish the\ninstall yourself.'))}
-            <p id="update-toast-desc" style={{ margin: '14px 0 0', fontSize: '13.5px', lineHeight: 1.55, color: ink.body, maxWidth: '300px' }}>
-                {t('The download has started in your browser. Follow these steps to install the update:')}
-            </p>
-            {isMac ? (
-                <ol style={{ listStyle: 'none', margin: '18px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <li style={{ fontSize: '12.5px', fontWeight: 500, color: ink.body }}>
-                        {t('1. Clear quarantine on the downloaded file:')}
-                        <CopyBlock ink={ink} command={`xattr -cr ${dmg}`} />
-                    </li>
-                    <li style={{ fontSize: '12.5px', fontWeight: 500, color: ink.body }}>{t('2. Open the file and install Natively.')}</li>
-                    <li style={{ fontSize: '12.5px', fontWeight: 500, color: ink.body }}>
-                        {t('3. Clear quarantine on the installed app:')}
-                        <CopyBlock ink={ink} command="xattr -cr /Applications/Natively.app" />
-                    </li>
-                </ol>
-            ) : (
-                <p style={{ margin: '18px 0 0', fontSize: '12.5px', fontWeight: 500, lineHeight: 1.5, color: ink.body }}>
-                    {t('Run the downloaded installer (.exe) and follow the prompts. Natively will restart when finished.')}
-                </p>
-            )}
-            {actions(<CtaButton ink={ink} isLight={isLight} reduced={reduced} onClick={onDismiss}>{t('Done')}</CtaButton>)}
-        </>;
     } else if (busy) {
         const ready = status === 'ready';
         left = <>
             {eyebrow(fill(t('Updating to {version}'), { version: displayVersion }))}
-            {headline(ready ? t('Ready to restart.') : t('Almost there.'))}
+            <Swap id={ready ? 'ready' : 'downloading'} reduced={reduced}>
+                {headline(ready ? t('Ready to restart.') : t('Almost there.'))}
+            </Swap>
             <Steps ink={ink} reduced={reduced} steps={[
                 { label: t('Downloading'), sub: ready ? t('Done') : downloadSub, state: ready ? 'done' : 'on', progress: ready ? undefined : progress },
                 { label: t('Ready to install'), sub: t('Everything is on this device'), state: ready ? 'done' : 'wait' },
                 { label: t('Restart and update'), sub: t('Takes a few seconds'), state: ready ? 'on' : 'wait' },
             ]} />
-            {/* macOS only: the quarantine fix for "App is damaged". Meaningless on
-                Windows, where the NSIS installer has no Gatekeeper equivalent. */}
-            {isMac && !ready && (
-                <div style={{ marginTop: '18px' }}>
-                    <button
-                        type="button"
-                        aria-expanded={showMacHelp}
-                        onClick={() => setShowMacHelp(v => !v)}
-                        style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: FONT, fontSize: '12px', fontWeight: 500, color: ink.faint }}
-                    >
-                        {t('If macOS says "App is damaged"')}
-                    </button>
-                    {showMacHelp && <>
-                        <p style={{ margin: '6px 0 0', fontSize: '12px', color: ink.quiet }}>{t('Move app to Applications folder, then run:')}</p>
-                        <CopyBlock ink={ink} command="xattr -cr /Applications/Natively.app" />
-                    </>}
-                </div>
+            {actions(
+                <Swap id={ready ? 'ready' : 'downloading'} reduced={reduced} style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
+                    {ready ? <>
+                        <CtaButton ink={ink} isLight={isLight} reduced={reduced} onClick={() => window.electronAPI?.restartAndInstall?.()}>
+                            {t('Restart and update')}
+                        </CtaButton>
+                        <QuietButton ink={ink} onClick={onDismiss}>{t('Later')}</QuietButton>
+                    </> : (
+                        <QuietButton ink={ink} onClick={onDismiss}>{t('Hide, keep downloading')}</QuietButton>
+                    )}
+                </Swap>
             )}
-            {actions(ready ? <>
-                <CtaButton ink={ink} isLight={isLight} reduced={reduced} onClick={() => window.electronAPI?.restartAndInstall?.()}>
-                    {t('Restart and update')}
-                </CtaButton>
-                <QuietButton ink={ink} onClick={onDismiss}>{t('Later')}</QuietButton>
-            </> : (
-                <QuietButton ink={ink} onClick={onDismiss}>{t('Hide, keep downloading')}</QuietButton>
-            ))}
         </>;
     } else {
         left = <>
             {eyebrow(`${t('Update available')} · ${displayVersion}`)}
             {headline(t('New in Natively.\nReady when you are.'))}
-            <div
-                id="update-toast-desc"
-                tabIndex={hasNotes ? 0 : undefined}
-                style={{
-                    margin: '22px 0 0', maxHeight: '176px', overflowY: 'auto', paddingRight: '6px',
-                    WebkitMaskImage: 'linear-gradient(180deg, #000 82%, transparent)',
-                    maskImage: 'linear-gradient(180deg, #000 82%, transparent)',
-                } as React.CSSProperties}
-            >
-                {hasNotes ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingBottom: '18px' }}>
-                        {parsedNotes!.sections.filter(s => s.title !== 'Summary' && s.items.length > 0).map((s, i) => (
-                            <div key={i}>
-                                <div style={{ fontSize: '12px', fontWeight: 500, color: ink.quiet, marginBottom: '6px' }}>{s.title}</div>
-                                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                    {s.items.map((item, j) => (
-                                        <li key={j} style={{ display: 'grid', gridTemplateColumns: '12px minmax(0, 1fr)', fontSize: '13px', lineHeight: 1.45, color: ink.body }}>
-                                            <span aria-hidden style={{ color: ink.faint }}>–</span><span>{item}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
+            {/* A release can run to thirty paragraphs of markdown; the card
+                shows its summary (or, without one, a few headlines), counts
+                the rest and links to the full notes. See releaseNotesDigest. */}
+            <div id="update-toast-desc" style={{ margin: '22px 0 0' }}>
+                {digest?.summary ? (
+                    <p style={{
+                        margin: 0, fontSize: '13.5px', lineHeight: 1.5, color: ink.body,
+                        display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                    } as React.CSSProperties}>
+                        {digest.summary}
+                    </p>
+                ) : digest?.highlights.length ? (
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        {digest.highlights.map((line, i) => (
+                            <li key={i} style={{ display: 'grid', gridTemplateColumns: '12px minmax(0, 1fr)', fontSize: '13px', lineHeight: 1.45, color: ink.body }}>
+                                <span aria-hidden style={{ color: ink.faint }}>–</span>
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line}</span>
+                            </li>
                         ))}
-                    </div>
+                    </ul>
                 ) : (
                     <p style={{ margin: 0, fontSize: '13.5px', lineHeight: 1.55, color: ink.body }}>
-                        {parsedNotes?.summary || t('Includes performance improvements and bug fixes.')}
+                        {t('Includes performance improvements and bug fixes.')}
                     </p>
+                )}
+                {digest && (
+                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px', fontSize: '12px', color: ink.quiet }}>
+                        {digest.counts.length > 0 && <span>{digest.counts.map(c => countLabel(c.key, c.count)).join(' · ')}</span>}
+                        <button
+                            type="button"
+                            onClick={openReleasePage}
+                            style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: FONT, fontSize: '12px', fontWeight: 500, color: ink.body, display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                        >
+                            {t('Full release notes')}<ArrowUpRight size={12} strokeWidth={2} aria-hidden />
+                        </button>
+                    </div>
                 )}
             </div>
             {actions(<>
@@ -512,7 +481,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
             open={isOpen}
             label="UpdateModal"
             openingView={genieView}
-            keepPictures={status === 'idle' || status === 'ready' || status === 'instructions'}
+            keepPictures={status === 'idle' || status === 'ready'}
             cardProps={{ 'data-genie-view': genieView }}
             closeInstantly={closeInstantly}
             zIndex={9999}
@@ -545,7 +514,16 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                 padding: '40px 28px 34px 40px',
                                 display: 'flex', flexDirection: 'column',
                             }}>
-                                {left}
+                                {/* Available, updating (downloading and ready share it) and
+                                    error hand over in place; inside "updating" only the parts
+                                    that change swap. */}
+                                <Swap
+                                    id={status === 'error' ? 'error' : busy ? 'updating' : 'available'}
+                                    reduced={reduced}
+                                    style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+                                >
+                                    {left}
+                                </Swap>
                             </div>
 
                             <div style={{ flex: '0 0 40%', padding: '8px 8px 8px 0', display: 'flex' }}>
@@ -608,7 +586,8 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
 //
 // What the card shrinks to when the download is hidden. A notice, not a
 // modal: no scrim, so the app stays usable; a thumbnail of the version panel
-// keeps the wave going. The body brings the full card back; × closes it.
+// keeps the wave going. While downloading the body brings the full card
+// back and × closes it; once ready it offers "Restart and update" / "Not now".
 
 interface UpdateCornerToastProps {
     isOpen: boolean;
@@ -632,8 +611,36 @@ export const UpdateCornerToast: React.FC<UpdateCornerToastProps> = ({
 
     const ready = status === 'ready';
     const progress = ready ? 100 : Math.max(0, Math.min(100, downloadProgress || 0));
-    const raw = updateInfo?.version ? String(updateInfo.version).replace(/^v/, '') : '';
+    const raw = updateInfo?.version ? stripVersionPrefix(String(updateInfo.version)) : '';
     const version = raw && raw !== 'latest' ? raw : '';
+
+    const rowStyle: React.CSSProperties = {
+        display: 'grid', gridTemplateColumns: '52px minmax(0, 1fr)', columnGap: '14px', alignItems: 'center',
+        width: '100%', padding: '14px 44px 14px 14px', textAlign: 'left',
+        background: 'none', border: 0, cursor: 'pointer', fontFamily: FONT, outline: 'none',
+    };
+    const tile = (
+        <span aria-hidden style={{
+            position: 'relative', width: '52px', height: '52px', borderRadius: '11px', overflow: 'hidden',
+            background: PANEL, boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
+        }}>
+            <Wave progress={progress} moving={!ready} reduced={reduced} crest={8} />
+            <span style={{
+                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '15px', fontWeight: 300, letterSpacing: '-0.03em', color: PANEL_INK.strong,
+                fontVariantNumeric: 'tabular-nums',
+            }}>
+                <Swap id={ready ? 'done' : 'progress'} reduced={reduced} icon style={{ display: 'flex' }}>
+                    {ready ? <Check size={18} strokeWidth={2.2} /> : `${Math.floor(progress)}%`}
+                </Swap>
+            </span>
+        </span>
+    );
+    const eyebrowLine = (
+        <span style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: ink.quiet }}>
+            {version ? fill(t('Updating to {version}'), { version: `v${version}` }) : t('Updating Natively')}
+        </span>
+    );
 
     // Its numbers are new every tick, so no picture of it is kept.
     return (
@@ -660,79 +667,79 @@ export const UpdateCornerToast: React.FC<UpdateCornerToastProps> = ({
             radius={16}
         >
                     <style>{KEYFRAMES}</style>
-                    <button
-                        type="button"
-                        onClick={onExpand}
-                        aria-label={t('Show update details')}
+                    {/* One row, one size, in both states, and the row stays put
+                        when the download finishes: the tile's percentage turns into
+                        a check, the words hand over, the × fades. While downloading
+                        the row brings the card back; once ready it holds the choice
+                        itself: restart now, or not now (which replaces the ×). No
+                        separate progress bar: the wave rising in the tile is it. */}
+                    <div
+                        onClick={ready ? undefined : onExpand}
                         style={{
-                            display: 'grid', gridTemplateColumns: '52px minmax(0, 1fr)', columnGap: '14px', alignItems: 'center',
-                            width: '100%', padding: '14px 44px 14px 14px', textAlign: 'left',
-                            background: 'none', border: 0, cursor: 'pointer', fontFamily: FONT, outline: 'none',
+                            ...rowStyle, boxSizing: 'border-box', minHeight: '93px',
+                            cursor: ready ? 'default' : 'pointer',
+                            paddingRight: ready ? '14px' : '44px',
                         }}
                     >
-                        <span aria-hidden style={{
-                            position: 'relative', width: '52px', height: '52px', borderRadius: '11px', overflow: 'hidden',
-                            background: PANEL, boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
-                        }}>
-                            <Wave progress={progress} moving={!ready} reduced={reduced} crest={8} />
-                            <span style={{
-                                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '15px', fontWeight: 300, letterSpacing: '-0.03em', color: PANEL_INK.strong,
-                                fontVariantNumeric: 'tabular-nums',
-                            }}>
-                                {ready ? <Check size={18} strokeWidth={2.2} /> : `${Math.floor(progress)}%`}
-                            </span>
-                        </span>
-                        <span style={{ minWidth: 0 }}>
-                            <span style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: ink.quiet }}>
-                                {version ? fill(t('Updating to {version}'), { version: `v${version}` }) : t('Updating Natively')}
-                            </span>
-                            <span style={{ display: 'block', marginTop: '3px', fontSize: '15px', fontWeight: 500, letterSpacing: '-0.015em', color: ink.strong }}>
-                                {ready ? t('Ready to restart.') : t('Downloading…')}
-                            </span>
-                            {!ready && (
-                                <span style={{ display: 'block', marginTop: '4px', fontSize: '11.5px', fontWeight: 500, color: ink.faint, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {describeDownload(downloadDetail, progress, t)}
-                                </span>
+                        {tile}
+                        <Swap id={ready ? 'ready' : 'downloading'} reduced={reduced} style={{ minWidth: 0 }}>
+                            {ready ? <>
+                                {eyebrowLine}
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '3px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => window.electronAPI?.restartAndInstall?.()}
+                                        style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '6px', padding: 0, background: 'none', border: 0,
+                                            cursor: 'pointer', fontFamily: FONT, fontSize: '15px', fontWeight: 500, letterSpacing: '-0.015em',
+                                            color: ink.strong, whiteSpace: 'nowrap', outline: 'none',
+                                        }}
+                                    >
+                                        {t('Restart and update')}<ArrowRight size={15} strokeWidth={2} aria-hidden />
+                                    </button>
+                                    <QuietButton ink={ink} onClick={onClose}>{t('Not now')}</QuietButton>
+                                </div>
+                            </> : (
+                                // The row's click (on the div) brings the card back; this
+                                // button is the same thing for the keyboard.
+                                <button
+                                    type="button"
+                                    aria-label={t('Show update details')}
+                                    style={{ display: 'block', width: '100%', padding: 0, background: 'none', border: 0, textAlign: 'left', cursor: 'pointer', fontFamily: FONT, outline: 'none' }}
+                                >
+                                    {eyebrowLine}
+                                    <span style={{ display: 'block', marginTop: '3px', fontSize: '15px', fontWeight: 500, letterSpacing: '-0.015em', color: ink.strong }}>
+                                        {t('Downloading…')}
+                                    </span>
+                                    <span style={{ display: 'block', marginTop: '4px', fontSize: '11.5px', fontWeight: 500, color: ink.faint, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {describeDownload(downloadDetail, progress, t)}
+                                    </span>
+                                </button>
                             )}
-                        </span>
-                    </button>
-
-                    {!ready && (
-                        <div
-                            role="progressbar"
-                            aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}
-                            aria-label={t('Download progress')}
-                            style={{ height: '2px', background: ink.rule }}
-                        >
-                            <div style={{ width: `${progress}%`, height: '100%', background: ink.strong, transition: reduced ? undefined : 'width 200ms linear' }} />
-                        </div>
-                    )}
-
-                    {ready && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '0 14px 14px 80px' }}>
-                            <CtaButton ink={ink} isLight={isLight} reduced={reduced} onClick={() => window.electronAPI?.restartAndInstall?.()}>
-                                {t('Restart and update')}
-                            </CtaButton>
-                            <QuietButton ink={ink} onClick={onClose}>{t('Later')}</QuietButton>
-                        </div>
-                    )}
-
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label={t('Close')}
-                        style={{
-                            position: 'absolute', top: '8px', right: '8px',
-                            width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            padding: 0, cursor: 'pointer', background: 'none', border: 0, borderRadius: '8px',
-                            color: ink.faint, transition: `color 180ms ${EASE_CSS}`,
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.color = ink.strong; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = ink.faint; }}
-                    >
-                        <X size={14} strokeWidth={2} color="currentColor" />
-                    </button>
+                        </Swap>
+                    </div>
+                    <AnimatePresence initial={false}>
+                        {!ready && (
+                            <motion.button
+                                key="close"
+                                type="button"
+                                onClick={onClose}
+                                aria-label={t('Close')}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: reduced ? 0 : 0.15, ease: 'easeInOut' }}
+                                style={{
+                                    position: 'absolute', top: '8px', right: '8px',
+                                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    padding: 0, cursor: 'pointer', background: 'none', border: 0, borderRadius: '8px',
+                                    color: ink.faint, transition: `color 180ms ${EASE_CSS}`,
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.color = ink.strong; }}
+                                onMouseLeave={e => { e.currentTarget.style.color = ink.faint; }}
+                            >
+                                <X size={14} strokeWidth={2} color="currentColor" />
+                            </motion.button>
+                        )}
+                    </AnimatePresence>
         </GenieModal>
     );
 };

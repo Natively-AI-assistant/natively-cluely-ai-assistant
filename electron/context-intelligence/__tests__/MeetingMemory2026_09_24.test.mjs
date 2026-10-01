@@ -197,7 +197,9 @@ describe('grounding policy (owner decision 2026-09-24)', () => {
   });
   test('a figure nobody stated is still refused (the 2026-09-07 ACV case)', () => {
     assert.match(all, /unless the evidence states it or the user told you it/);
-    assert.match(all, /say plainly that it is not in the notes/);
+    assert.match(all, /If no evidence states such a fact, do not supply one\./);
+    // A question ABOUT the notes still gets the honest "they do not state it".
+    assert.match(all, /When the question asks what a document, the notes or the meeting said, say plainly that they do not state it/);
   });
 });
 

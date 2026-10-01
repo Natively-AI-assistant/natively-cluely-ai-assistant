@@ -127,7 +127,7 @@ function helper() {
     onModelError: async () => {},
   };
   h.isCodexAvailable = () => false;
-  h.codexCliConfig = { path: '/nonexistent/codex', model: 'm', fastModel: 'fm', timeoutMs: 1000 };
+  h.codexCliConfig = { path: '/nonexistent/codex', model: 'm', timeoutMs: 1000 };
   h.customProvider = null;
   h.activeCurlProvider = null;
 

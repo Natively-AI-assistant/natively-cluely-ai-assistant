@@ -15,7 +15,7 @@ export type { ActiveSkillLike } from "./wtaSystemPrompt";
 export { shouldThrottleTrigger } from "./triggerGate";
 export type { TriggerGateInput } from "./triggerGate";
 export { clampResponse, validateResponse, reduceDashes, reduceDashesInChunk, StreamingDashReducer } from "./postProcessor";
-export { speculativeQuestionSimilarity } from "./speculativeSimilarity";
+export { speculativeQuestionSimilarity, speculationCoversQuestion } from "./speculativeSimilarity";
 export { acceptRepairedAnswer } from "./repairAcceptance";
 export type { RepairAcceptanceInput, RepairAcceptanceVerdict, RepairRejectionReason } from "./repairAcceptance";
 export {
@@ -38,11 +38,11 @@ export { checkAnswerRelevance } from "./AnswerRelevanceChecker";
 export type { AnswerRelevanceResult } from "./AnswerRelevanceChecker";
 export { planNextAssistantAction } from "./PlannerDecision";
 export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./PlannerDecision";
-export { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
+export { planAnswer, formatAnswerPlanForPrompt, shapedCodingTemplate, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
 export { detectAnswerStyle, styleSuppressesScaffold } from "./answerStyle";
 export type { AnswerStyle, AnswerStyleResult } from "./answerStyle";
 export { detectExplicitCodingContract, isCodingContinuation, isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode } from "./codingFollowup";
-export { resolveCodingPromptSignals, detectSuppliedCodeTemplate, codingTaskKindFor, isBuildTask, isDeicticAsk, type CodingPromptSignals, type CodingTaskKind } from "./codingPromptSignals";
+export { resolveCodingPromptSignals, screenPromotedCodingSignals, detectSuppliedCodeTemplate, codingTaskKindFor, isBuildTask, isDeicticAsk, type CodingPromptSignals, type CodingTaskKind } from "./codingPromptSignals";
 export type { ExplicitCodingContract, PriorCodingTurn } from "./codingFollowup";
 export { shouldHumanize, shouldHumanizeOutput, detectCorporateFiller, humanizeDirectiveFor, HUMANIZE_DIRECTIVE, humanizeSpokenAnswer, humanizeForAnswerType } from "./humanLikeness";
 export type { CorporateFillerVerdict } from "./humanLikeness";
@@ -131,6 +131,8 @@ export { validateProfileEvidence } from "./profileEvidenceValidator";
 export type { EvidenceValidationResult, EvidenceViolation, EvidenceViolationCode, EvidenceValidationInput } from "./profileEvidenceValidator";
 export { decideProfileIntelligence } from "./ProfileIntelligenceRouter";
 export type { ProfileIntelligenceDecision, ProfileContextType, AnswerPerspective, DecideProfileInput } from "./ProfileIntelligenceRouter";
+export { detectCodingShape, NARROW_CODING_SHAPES } from "./codingShape";
+export { CODING_SHAPES, CODING_SHAPE_CONTRACTS, CODE_PRODUCING_SHAPES, type CodingShape } from "./codingContract";
 export { CODING_CONTRACT, CODING_CONTRACT_TINY, CODING_SECTIONS, CODING_SECTION_HEADINGS, CODING_VERIFICATION_INSTRUCTION, VERIFICATION_SPEC_RE, stripVerificationSpec, StreamingSpecStripper } from "./codingContract";
 export { verifyCodingAnswer } from "./codeVerification/verifyCodingAnswer";
 export type { VerifyCodingOptions, CorrectionFn } from "./codeVerification/verifyCodingAnswer";
@@ -195,7 +197,8 @@ export {
     truncateTranscriptToFit,
     parseOllamaSize,
     getOpenAiMaxOutput,
-    getOpenAiReasoningEffort
+    getOpenAiReasoningEffort,
+    claudeAcceptsSamplingParams
 } from "./modelCapabilities";
 export type { ModelCapabilities, ModelTier, PromptTier, OpenAiReasoningEffort } from "./modelCapabilities";
 export { resolveSourceOwnership, isExplicitProfileAsk, buildSourceSwitchClarification } from "./sourceOwnership";

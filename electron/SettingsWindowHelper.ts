@@ -28,14 +28,21 @@ export class SettingsWindowHelper {
         return this.settingsWindow
     }
 
+    // The popup reports its panel size (update-content-dimensions) and the
+    // window hugs it. Applied while hidden too: the window is pre-warmed
+    // offscreen and only shown later, so ignoring hidden reports left the
+    // first open at the createWindow size until something inside happened to
+    // resize. Only a visible window is pulled back onto the screen; the
+    // offscreen pre-warm position must stay offscreen.
     public setWindowDimensions(win: BrowserWindow, width: number, height: number): void {
-        if (!win || win.isDestroyed() || !win.isVisible()) return
+        if (!win || win.isDestroyed()) return
 
         const currentBounds = win.getBounds()
         // Only update if dimensions actually change (avoid infinite loops)
         if (currentBounds.width === width && currentBounds.height === height) return
 
         win.setSize(width, height)
+        if (win.isVisible()) this.ensureVisibleOnScreen()
     }
 
     // Store offsets relative to main window
@@ -212,7 +219,7 @@ export class SettingsWindowHelper {
         const isMac = process.platform === 'darwin';
         const windowSettings: Electron.BrowserWindowConstructorOptions = {
             width: 180, // Match React component width (SettingsPopup.tsx)
-            height: 200, // Trimmed; ResizeObserver in renderer pins exact height
+            height: 232, // Starting size only; the renderer reports the panel's real size
             frame: false,
             transparent: true,
             resizable: false,

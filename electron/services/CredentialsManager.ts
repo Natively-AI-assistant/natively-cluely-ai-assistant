@@ -15,6 +15,7 @@ import { deriveFallbackKey, encryptCredentialBlob, decryptCredentialBlob } from 
 import { customProviderSupportsVision, customProviderIsLocal } from '../llm/visionCapability';
 import { readActiveCustomProvider } from '../llm/activeCustomProvider';
 import { normalizeSttLanguageKey } from '../config/languages';
+import { resolveSttModel, type SttModelProvider } from '../audio/sttModelCatalog';
 
 const CREDENTIALS_PATH = path.join(app.getPath('userData'), 'credentials.enc');
 // App-managed AES fallback, used ONLY when the OS keyring (safeStorage) is
@@ -96,7 +97,7 @@ export interface CurlProvider {
  * and setter build the key by concatenation, so adding a name here without the
  * field would silently read and write `undefined`.
  */
-export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter';
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter';
 
 export interface StoredCredentials {
     geminiApiKey?: string;
@@ -182,12 +183,22 @@ export interface StoredCredentials {
      * narrow escape hatch — not, as the docs imply, a per-group requirement.
      */
     fluxionProtocol?: 'openai' | 'anthropic';
+    /**
+     * AgentRouter gateway key. CHAT ONLY, like fluxionApiKey — AgentRouter has
+     * no embeddings or rerank endpoint — so no activateHostedRetrieval
+     * coupling. No protocol field either: AgentRouter's protocol is chosen per
+     * MODEL (llm/agentRouter.ts agentRouterProtocolFor), not per key.
+     */
+    agentrouterApiKey?: string;
     jinaApiKey?: string;
     /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
     voyageApiKey?: string;
     // STT Provider settings
     sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech';
     nvidiaNimSttModel?: string;
+    /** Model per provider where the model is only a value on the app's own
+        endpoint (sttModelCatalog.ts). Absent = the provider's default. */
+    sttModels?: Partial<Record<SttModelProvider, string>>;
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -214,6 +225,8 @@ export interface StoredCredentials {
     nvidia_nimPreferredModel?: string;
     openrouterPreferredModel?: string;
     fluxionPreferredModel?: string;
+    /** Stored PREFIXED (`agentrouter/<model>`), the form modelAvailable() classifies. */
+    agentrouterPreferredModel?: string;
     /**
      * The LiteLLM model the user promoted to this provider's default, stored
      * PREFIXED (`litellm/<model>`) so it is the same id the picker, the
@@ -1057,6 +1070,16 @@ export class CredentialsManager {
         return this.saveCredentials();
     }
 
+    /** The stored model for a catalogued provider, or its default. */
+    public getSttModel(provider: SttModelProvider): string {
+        return resolveSttModel(provider, this.credentials.sttModels?.[provider]);
+    }
+    public setSttModel(provider: SttModelProvider, model: string): boolean {
+        if (this.refuseWriteWhileDegraded(`set ${provider} STT model`)) return false;
+        this.credentials.sttModels = { ...(this.credentials.sttModels || {}), [provider]: resolveSttModel(provider, model) };
+        return this.saveCredentials();
+    }
+
     public getDeepgramApiKey(): string | undefined {
         return this.credentials.deepgramApiKey;
     }
@@ -1253,6 +1276,18 @@ export class CredentialsManager {
     public setFluxionProtocol(protocol: 'openai' | 'anthropic'): boolean {
         if (this.refuseWriteWhileDegraded('set fluxion protocol')) return false;
         this.credentials.fluxionProtocol = protocol === 'anthropic' ? 'anthropic' : 'openai';
+        this.saveCredentials();
+        return true;
+    }
+
+    public getAgentRouterApiKey(): string | undefined {
+        return this.credentials.agentrouterApiKey;
+    }
+
+    /** No activateHostedRetrieval call, for the reason setFluxionApiKey gives: chat-only. */
+    public setAgentRouterApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set agentrouter api key')) return false;
+        this.credentials.agentrouterApiKey = key.trim() || undefined;
         this.saveCredentials();
         return true;
     }
@@ -2108,6 +2143,35 @@ export class CredentialsManager {
         // trialClaimed intentionally NOT cleared — keeps start card hidden after token wipe
         this.saveCredentials();
         console.log('[CredentialsManager] Trial token cleared');
+    }
+
+    /**
+     * Forget that this device ever took a free trial: token, expiry, start AND the
+     * claimed flag that clearTrialToken deliberately keeps. Only the one-time trial
+     * campaign (src/lib/trialCampaign.mjs) calls this; every other path must keep
+     * the flag so the start card stays hidden.
+     *
+     * `persisted` is false while the credential store is degraded or the write
+     * failed, so the caller can retry next launch instead of recording a reset that
+     * did not happen. Nothing to clear counts as persisted, but ONLY on a healthy
+     * store: a degraded one decrypted nothing, so an empty memory says nothing
+     * about what the file still holds.
+     */
+    public resetTrialClaim(): { persisted: boolean } {
+        if (this.refuseWriteWhileDegraded('reset trial claim')) return { persisted: false };
+        const c = this.credentials;
+        const hadAny = c.trialToken !== undefined || c.trialExpiresAt !== undefined
+            || c.trialStartedAt !== undefined || c.trialClaimed !== undefined;
+        if (!hadAny) return { persisted: true };
+        delete c.trialToken;
+        delete c.trialExpiresAt;
+        delete c.trialStartedAt;
+        delete c.trialClaimed;
+        const persisted = this.saveCredentials();
+        console.log(persisted
+            ? '[CredentialsManager] Trial claim reset (trial campaign)'
+            : '[CredentialsManager] Trial claim reset in memory but NOT written to disk; will retry next launch');
+        return { persisted };
     }
 
     public clearAll(): void {

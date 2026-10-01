@@ -139,6 +139,7 @@ function createHarness({
     setLatestVisionModelUsed: () => {},
     setLatestVisionFailureReason: () => {},
     setPageContext: () => {},
+    scrollToLatest: () => {},
     genMessageId: () => `message-${++messageId}`,
     QUICK_ACTION_LABELS: { what_to_say: 'What should I say?' },
     analytics: { trackCommandExecuted: () => {} },
@@ -226,11 +227,11 @@ function createBarHarness(onAcceptAction) {
   let actions = [action];
   const acknowledged = [];
   const acceptingRef = { current: false };
-  const handlers = new Function('useCallback', 'onAcceptAction', 'acceptingRef', 'acceptedIdsRef', 'setActions', 'window', 'maxVisible', 'staleAfterMs',
+  const handlers = new Function('useCallback', 'onAcceptAction', 'acceptingRef', 'acceptedIdsRef', 'setActions', 'window', 'QUEUE_MAX', 'staleAfterMs', 'markExit', 'setAcceptingId', 'pressingRef', 'setPressingId',
     ts.transpileModule(Object.entries(barHandlers).map(([name, body]) => `const ${name} = ${body};`).join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '\nreturn { accept, handleIncoming };'
   )((fn) => fn, onAcceptAction, acceptingRef, { current: new Set() },
     (update) => { actions = update(actions); },
-    { electronAPI: { acceptDynamicAction: async (id) => acknowledged.push(id) } }, 3, 60_000);
+    { electronAPI: { acceptDynamicAction: async (id) => acknowledged.push(id) }, setTimeout: (fn) => fn() }, 4, 60_000, () => {}, () => {}, { current: null }, () => {});
   return { ...handlers, action, acknowledged, get actions() { return actions; } };
 }
 
@@ -261,7 +262,7 @@ for (const failure of ['empty', 'throw', 'busy']) {
   });
 }
 
-test('bar rejects repeated click and Tab acceptance during and after capture', async () => {
+test('bar rejects repeated click and shortcut acceptance during and after capture', async () => {
   const capture = deferred();
   const harness = createHarness({ takeScreenshot: () => capture.promise });
   const bar = createBarHarness(harness.handlers.handleDynamicActionAccept);

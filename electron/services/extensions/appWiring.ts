@@ -22,6 +22,7 @@ import { ModelStore } from './ModelStore';
 import { HuggingFaceModelDownloader } from './HuggingFaceModelDownloader';
 import { peekProcessSingleton, processSingleton, resetProcessSingleton } from './singleton';
 import { lookupKnownModelSupport, type ModelSupportLookup } from '../reranking/knownModelSupport';
+import { declineWhileUndetectable } from '../stealthPromptGate';
 
 const SINGLETON_KEY = 'ExtensionManagerApp';
 
@@ -113,6 +114,12 @@ function describePermission(permission: string): string {
 export interface WireExtensionsOptions {
   /** Injected by tests. Production uses Electron's dialog. */
   confirmInstall?: (prompt: InstallPrompt) => Promise<boolean>;
+  /**
+   * Undetectable mode's state. While it is on, the default trust prompt never
+   * opens and every install is declined: the prompt is a system dialog, which
+   * would show in a screen share (see stealthPromptGate.ts).
+   */
+  isUndetectable?: () => boolean;
   rootOverride?: string;
   appVersion?: string;
 }
@@ -141,7 +148,11 @@ export function wireExtensions(options: WireExtensionsOptions = {}): ExtensionMa
       modelStore,
       appVersion,
       rootOverride: options.rootOverride,
-      confirmInstall: options.confirmInstall ?? defaultConfirmInstall,
+      confirmInstall: options.confirmInstall ?? declineWhileUndetectable(
+        options.isUndetectable,
+        defaultConfirmInstall,
+        (prompt) => console.warn(`[extensions] install of "${prompt.name}" declined: Undetectable is on and the trust prompt is a system dialog`),
+      ),
       logger: consoleExtensionLogger(),
       // Lets the trust prompt say so when Core ships this same model and has
       // already found it unrunnable. Advisory only — the extension brings its

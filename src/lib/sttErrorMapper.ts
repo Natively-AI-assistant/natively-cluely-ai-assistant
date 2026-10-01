@@ -71,6 +71,16 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
+    // 3b. Out of credits: the provider account itself (OpenAI's
+    // insufficient_quota). Before 4, whose "for this period" would be wrong.
+    if (lower.includes('insufficient_quota') || lower.includes('credit_balance_exhausted')) {
+        return {
+            title: 'Out of Credits',
+            body: 'Your provider account has no credits left. Add credits, then start a new meeting.',
+            category: 'quota',
+        };
+    }
+
     // 4. Quota exceeded
     if (
         lower.includes('transcription_quota_exceeded')

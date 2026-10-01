@@ -1,0 +1,259 @@
+{
+ "batch": "b020-team-meet",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "TEAM-CTX-G2": {
+   "title": "Quillfeather mobile checkout - RACI and decision log",
+   "text": "QUILLFEATHER - MOBILE CHECKOUT REDESIGN\nRACI and decision log, Halden Freight Systems (document owner: Anita Rossi, revised September 28)\n\nGoal: replace the five-step mobile checkout with a two-step flow in the iOS and Android apps. Success target: cart-to-purchase conversion up 3 points within 30 days of general availability.\n\nRACI (R = responsible, A = accountable, C = consulted, I = informed)\n- Flow design and prototypes: R Elise Brandt (design); A Anita Rossi; C Marcus Feld, Hugo Sandvik; I Leila Haddad\n- Mobile build, iOS and Android: R Marcus Feld (mobile lead); A Anita Rossi; C Elise Brandt, Owen Baptiste; I Hugo Sandvik\n- Payment tokenization changes: R Payments Platform team; A Leila Haddad; C Marcus Feld; I Anita Rossi\n- Test plan and beta readiness checklist: R Owen Baptiste (QA); A Marcus Feld; C Anita Rossi; I Elise Brandt\n- Analytics events and dashboards: R Hugo Sandvik; A Anita Rossi; C Marcus Feld; I Elise Brandt\n- Beta go/no-go decision: A Anita Rossi; R Marcus Feld (presents the readiness checklist); C Owen Baptiste, Leila Haddad; I Bram Novak (executive sponsor)\n\nKEY DATES\n- Tue Oct 6: design freeze. It gates the start of the Android build and the analytics event spec.\n- Mon Oct 12: staging build available to QA\n- Tue Oct 20: beta to 5 percent of users\n- Tue Nov 10: general availability\n- Fri Nov 20: holiday code freeze\n\nDECISION LOG\n- D-1 (Sept 15): Apple Pay ships first; Google Pay follows after general availability.\n- D-2 (Sept 17): guest checkout is out of scope for the first release. Revisit after general availability.\n- D-3 (Sept 24): keep the current address-autocomplete vendor for release one. No vendor switch.\n- D-4 (Sept 28): rollback trigger during beta is crash-free sessions below 99.3 percent, measured over 24 hours.\n\nCONSTRAINTS\n- Payments Platform has two engineers on tokenization work. Requests go through their intake form and get a response within five working days.\n- Contractor budget: 60 hours for an accessibility audit, which must be used before Nov 3.\n- Elise Brandt is out Oct 8 and Oct 9.\n- Owen Baptiste is the only QA engineer on this project.\n\nRISKS\n- The tokenization request has not been submitted yet. To fit the five-day intake window and the Oct 12 staging date, it needs to go in by Thu Oct 1.\n- Only one QA engineer means beta readiness depends on a single person staying healthy.\n- Analytics event names are still in draft, so dashboards may not be ready on the beta date.\n\nOPEN ITEMS\n- Submit the payment tokenization change request (Marcus Feld)\n- Decide whether the accessibility audit happens before or after beta (Anita Rossi)\n- Finalize analytics event names (Hugo Sandvik)"
+  },
+  "TEAM-CTX-C1": {
+   "title": "Marlow warehouse cutover - two versions of the meeting notes",
+   "text": "MARLOW WAREHOUSE CUTOVER - MEETING NOTES\n(Two versions pasted together from different sources. Neither has been reconciled.)\n\nVERSION A - Slack recap posted Thursday Oct 1 by Tomas Alvarez\n- Cutover: Saturday Nov 7, starting 06:00\n- Cutover owner: Ravi Menon runs the cutover; Tomas writes the runbook\n- Data volume to migrate: about 400k order rows\n- Change freeze starts next Friday\n- Finance sign-off: Karen Whitlock\n- Rollback window: within 2 hours\n\nVERSION B - Email from Dana Okafor, Friday Oct 2, subject line \"corrected notes\"\n- Cutover: moved to Friday Nov 13 in the evening, to avoid the month-end close weekend\n- Cutover owner: Data Platform team (no named person); Ravi to review the runbook\n- Data volume to migrate: about 4M order rows, including archived orders\n- Change freeze starts next Friday\n- Finance sign-off: \"Finance\" (no name given)\n- Rollback window: within 90 minutes\n\nHANDWRITTEN MARGIN NOTES (added later, author unknown)\n- \"Dana's version is newer but Tomas was actually in the room.\"\n- \"Ravi said he could do either weekend if asked.\"\n- \"Karen is on leave Nov 9 to 13.\"\n- \"Someone from Support wants 5 days of customer notice, so the date matters.\"\n\nACTION ITEMS AS WRITTEN\n- Runbook draft: Tomas / Ravi / Data Platform (all three names appear next to this item)\n- Confirm the date with stakeholders: \"the team\"\n- Row-count validation script: nobody listed\n- Staging rehearsal: \"before the freeze\" (no date)\n\nBACKGROUND\nMarlow replaces the old order-history warehouse. The archived-order backfill was discussed in the meeting but the notes do not say whether it counts toward the cutover window. Both versions were shared with the same stakeholder group."
+  },
+  "FTEAM-CTX-G1": {
+   "title": "Quillmark mobile Release 4.12 decision log",
+   "text": "Quillmark mobile - Release 4.12 decision log\nMaintained by: Nadia Petrov (release captain)\nTeam: Olu Bankole (engineering manager), Kwame Asante (iOS), Selin Aydin (Android), Mireille Laurent (QA lead), Farid Haddad (product manager)\n\n2 Sept - Rollout plan\nDecided: staged rollout at 1 percent, 10 percent, 50 percent, then 100 percent. Each step requires crash-free sessions at or above 99.6 percent over the previous 48 hours before moving on. Nadia makes the call at each step; no weekend promotions.\nDecided: halt the rollout and consider a rollback if crash-free sessions drop below 99.3 percent or the sync error rate goes above 0.5 percent.\n\n2 Sept - Platform order\nDecided: iOS ships first. Android follows one week later, because the WorkManager migration (Selin) needs an extra week of soak on low-memory devices. Farid asked to revisit if Android is ready early; Olu said no, one week gap regardless.\n\n4 Sept - Offline sync conflict UI\nDecided: the conflict-resolution UI for offline edits is deferred to 4.13. Reason: in the usability test, 5 of 8 participants misread the merge banner and thought their edits had been deleted. Design to rework the banner. 4.12 keeps the current last-write-wins behaviour.\n\n4 Sept - Home screen widget\nDecided: the dark-mode home screen widget is descoped entirely (not moved to 4.13). Usage of the existing light widget is under 2 percent of weekly actives, which did not justify the work.\n\n9 Sept - Push notifications\nDecided: migrate push delivery from Relaypost to the in-house Beacon service in 4.12. Owner: Kwame Asante. Target code-complete: 23 September. The Relaypost contract stays live until 31 December as a fallback.\n\n9 Sept - Consent screen\nLegal review of the new analytics consent screen copy was requested by Farid. Outcome: pending. Do not ship copy changes to the consent screen until Legal responds.\n\n11 Sept - Code freeze\nDecided: the 4.12 code freeze is Wednesday 16 September at 18:00 UTC. After freeze, only release-blocker fixes approved by Nadia.\n\n11 Sept - Accessibility audit\nDiscussed commissioning an external accessibility audit before 4.13. Shortlist: Brightline Access and Northfold. No vendor chosen. Budget: TBD, Olu to raise with finance. Nothing is to be promised to either vendor yet.\n\n14 Sept - Go/no-go\nThe go/no-go meeting for 4.12 is Friday 18 September. Approvers: Nadia Petrov, Olu Bankole, Mireille Laurent. Farid attends but is not an approver.\n\nOpen items\n- Legal response on consent copy (Farid chasing).\n- Android date depends on WorkManager soak results.\n- Accessibility audit budget (Olu)."
+  }
+ },
+ "items": [
+  {
+   "jid": "3d7546675399",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Is this the same thing we talked about last week, or is it different?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have last week's conversation in front of me, so I can't say for sure. Tell me which piece you're comparing it to and I'll confirm whether it's the same or a new item."
+  },
+  {
+   "jid": "697d971ec19f",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Dana wants to cut QA time to hit the date and I think that's a mistake. How do I disagree without starting a fight?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd frame it as a risk, not a disagreement. Something like: \"I think we can hit the date, but cutting QA here means we ship with less coverage, and if something breaks after launch that costs us more than the days we save. Can we look at what we'd be skipping and decide together?\" That keeps it about the tradeoff, not about Dana being wrong."
+  },
+  {
+   "jid": "79927a8502d8",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "when is the design freeze and what does it gate?",
+   "conversation": [],
+   "evidence_ids": [
+    "TEAM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The design freeze is **Tuesday, October 6**. It gates two things: the start of the **Android build** and the **analytics event spec**."
+  },
+  {
+   "jid": "c514e4a64586",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "what have we decided so far?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a record of any decisions from this meeting yet, so I can't list them. Let me check my notes on what's been agreed and what's still open, and I'll share that right after this."
+  },
+  {
+   "jid": "66e92860d584",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Look, I need a straight answer. Will the checkout redesign be ready before the holiday code freeze, yes or no?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't give you a straight yes or no on that yet. What I can tell you is where it actually stands and what would have to be true for it to land before the freeze. Let me pull the current status and confirm the freeze date, then I'll come back with a real answer instead of a guess."
+  },
+  {
+   "jid": "84d9c8473fea",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Are we still on track?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, we're still on track. Let me pull up where each piece stands and flag anything that's slipped, then I'll send a short update right after this."
+  },
+  {
+   "jid": "bc6972f87593",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "If you could only do one of those before Friday, which one and why?",
+   "conversation": [
+    "COLLEAGUE: The login timeout bug is hitting about 3 percent of sessions.",
+    "COLLEAGUE: And Finance wants the invoice export CSV fixed before month-end on the 30th."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The login timeout bug, because it's live and hitting about 3 percent of sessions right now, so every day it stays open it keeps costing users. The invoice export has a hard date, month-end on the 30th, which gives it more runway than Friday. So I'd fix the login issue first, then turn to the CSV with the time left before the 30th."
+  },
+  {
+   "jid": "c7a3aae18221",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "When's the Marlow cutover?",
+   "conversation": [],
+   "evidence_ids": [
+    "TEAM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes have two conflicting dates, so I'd say it this way: the latest version says **Friday Nov 13** in the evening, but an earlier recap had Saturday Nov 7, and those two haven't been reconciled yet. I'll confirm which one is locked before we commit to anything."
+  },
+  {
+   "jid": "4641ca254380",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Marcus said guest checkout made it into the first release. Is that right? Design keeps mocking it up.",
+   "conversation": [],
+   "evidence_ids": [
+    "TEAM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, that's not right. The decision log has guest checkout out of scope for the first release, with a revisit after general availability. So design shouldn't be mocking it up for release one. Worth flagging to Elise so the prototypes don't drift from what's actually shipping."
+  },
+  {
+   "jid": "debd197161f3",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Write a follow-up message to the group recapping today: we chose Postgres over DynamoDB, Maya owns the migration script by Oct 14, and QA needs the staging environment by Oct 12. Keep it short, and add a line asking anyone who disagrees to reply by tomorrow.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Quick recap from today: we're going with **Postgres over DynamoDB**. **Maya** owns the migration script, due **Oct 14**, and QA needs the staging environment by **Oct 12**. If anyone disagrees with any of this, reply by tomorrow so we can sort it out."
+  },
+  {
+   "jid": "d34addcdb669",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Can you give me an example?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sure, here's one. When I'm working through a problem, I like to start with the simplest version that could work, get it in front of someone, and let their reaction tell me what to fix. That's usually faster than trying to get it perfect first. If you want, I can walk through a specific case from what we're working on right now."
+  },
+  {
+   "jid": "947308a3946b",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Why did that happen?",
+   "conversation": [
+    "COLLEAGUE: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "COLLEAGUE: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The vendor changed their API without telling us, so the integration slipped by about two weeks. That's the whole of it as far as I know. The original date was already tight, so there wasn't much slack to absorb it."
+  },
+  {
+   "jid": "018635b1eb50",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "What questions should I ask when someone says we'll circle back on it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "When someone says they'll circle back, I'd ask three things: who owns it, by when, and what has to happen first. Then I'd confirm it in writing so it doesn't quietly disappear. If no date comes back, I'd offer one myself and ask them to confirm."
+  },
+  {
+   "jid": "5b8bf0fb4853",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Is it okay to say I don't know yet?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, saying \"I don't know yet\" is fine, as long as you add what you'll do next. Something like \"I don't have that yet, I'll confirm and follow up\" keeps it honest and useful."
+  },
+  {
+   "jid": "7b80979e6e93",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "what should I say about the delay?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "On the delay, I'd keep it short and own it: say what slipped, what's still on track, and when you'll have the next update. If you don't have the new date yet, say you're confirming it and will follow up. No long explanation unless they ask."
+  },
+  {
+   "jid": "e49b8f960748",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Who owns the push provider migration and when's it supposed to be code-complete? Give me the one line to say.",
+   "conversation": [],
+   "evidence_ids": [
+    "FTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Kwame Asante owns the push provider migration, and it's targeted code-complete on 23 September."
+  },
+  {
+   "jid": "9ea7cc476e9e",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Why?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I need the previous question or topic to answer that — what was just asked?"
+  },
+  {
+   "jid": "48af9b53ffcf",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Let me think about it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sounds good. Take your time with it. I'm happy to walk through any part again or send over the details so you have them in front of you. Just let me know what would help, and I'll follow up from there."
+  },
+  {
+   "jid": "12d94abb2fce",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Who should own this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The person closest to the work should own it, with one clear name rather than a group. I'd pick whoever has the context and the authority to make the call, then confirm they're willing to take it on. If it spans teams, one owner plus a named backup keeps it from stalling."
+  },
+  {
+   "jid": "dc898ea2c1f1",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "So what's the plan?",
+   "conversation": [
+    "COLLEAGUE: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "COLLEAGUE: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'll take the two-week slip and rework the schedule around it, then come back with a revised date and what we can pull in to protect the launch. Can we get the vendor on a call this week?"
+  }
+ ]
+}

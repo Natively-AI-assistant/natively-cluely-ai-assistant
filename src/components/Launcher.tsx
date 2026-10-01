@@ -6,6 +6,7 @@ import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
 import UpcomingCalendarCard from './ui/UpcomingCalendarCard';
 import { useToggleInit } from './settings/useToggleInit';
+import { noteUpcomingEvents, warmCalendarSnapshot } from '../lib/calendarSnapshot.mjs';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
@@ -20,6 +21,7 @@ import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import WindowControls from './WindowControls';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { emitOrchestratorEvent, setUserState as setOrchestratorUserState } from './onboarding/OrchestratedToasterHost';
+import { plainMeetingTitle } from '../lib/codingAnswer.mjs';
 
 interface Meeting {
     id: string;
@@ -93,6 +95,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     // panel's z-index below.
     const [meetingChatOpen, setMeetingChatOpen] = useState(false);
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+    // The first calendar fetch has answered. Until then the calendar card shows
+    // skeletons, not "No upcoming events", which would flash on every launch.
+    const [eventsLoaded, setEventsLoaded] = useState(false);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showNotification, setShowNotification] = useState(false);
@@ -116,7 +121,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
     const fetchEvents = () => {
         if (window.electronAPI && window.electronAPI.getUpcomingEvents) {
-            window.electronAPI.getUpcomingEvents().then(setUpcomingEvents).catch(err => console.error("Failed to fetch events:", err));
+            window.electronAPI.getUpcomingEvents()
+                .then((list) => { setUpcomingEvents(list); noteUpcomingEvents(list); })
+                .catch(err => console.error("Failed to fetch events:", err))
+                .finally(() => setEventsLoaded(true));
         }
     }
 
@@ -272,6 +280,24 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Mount-only: stable setup that must run exactly once
+
+    // The card follows the connection wherever it changes: a disconnect in
+    // Settings › Calendar puts "Link your calendar" back, a connect there shows
+    // the linked card. Its meetings go with a disconnect at once.
+    useEffect(() => window.electronAPI?.onCalendarConnectionChanged?.((connected) => {
+        setIsCalendarConnected(connected);
+        if (connected) fetchEvents(); else setUpcomingEvents([]);
+        void warmCalendarSnapshot(window.electronAPI);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), []);
+
+    // Settings › Calendar opens from calendarSnapshot instead of fetching: fill
+    // it in the background once startup has settled (the minute poll above then
+    // keeps its meetings current).
+    useEffect(() => {
+        const timer = window.setTimeout(() => { void warmCalendarSnapshot(window.electronAPI); }, 2000);
+        return () => window.clearTimeout(timer);
+    }, []);
 
     // Separate effect for keyboard listener — re-registers when isShortcutPressed changes
     useEffect(() => {
@@ -1142,9 +1168,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         <UpcomingCalendarCard
                                             className="md:col-span-1"
                                             isConnected={isCalendarConnected}
-                                            onConnect={() => setIsCalendarConnected(true)}
+                                            // Re-fetch: the events loaded at mount were fetched before the
+                                            // connection existed, so the card would stay empty until a Refresh.
+                                            onConnect={(info) => { setIsCalendarConnected(true); if (info.fresh) setEventsLoaded(false); fetchEvents(); void warmCalendarSnapshot(window.electronAPI); }}
                                             meetings={visibleMeetings}
                                             totalCount={upcomingMeetings.length}
+                                            loading={!eventsLoaded}
                                         />
                                     </div>
                                 </div>
@@ -1168,7 +1197,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             onClick={() => handleOpenMeeting(m)}
                                                         >
                                                             <div className={`font-medium text-[14px] max-w-[60%] truncate ${m.title === 'Processing...' ? 'text-blue-400 italic animate-pulse' : 'text-text-primary'}`}>
-                                                                {m.title}
+                                                                {plainMeetingTitle(m.title)}
                                                             </div>
 
                                                             {/* Time & Duration Section */}

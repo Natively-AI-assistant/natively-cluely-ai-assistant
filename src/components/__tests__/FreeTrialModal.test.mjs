@@ -33,8 +33,8 @@ test('every plan opens its checkout and records the conversion', () => {
 
 test('BYOK wipes, then shows done; a failure returns to the choice with an error', () => {
   const byok = source.slice(source.indexOf('const handleByok'), source.indexOf('const sttMin'));
-  assert.ok(byok.indexOf("setStep('wiping')") < byok.indexOf('await onByok()'));
-  assert.ok(byok.indexOf('await onByok()') < byok.indexOf("setStep('done')"));
+  assert.ok(byok.indexOf("setStep('wiping')") < byok.indexOf('await onByok(opts)'));
+  assert.ok(byok.indexOf('await onByok(opts)') < byok.indexOf("setStep('done')"));
   assert.ok(byok.includes('setError(') && byok.includes("setStep('choose')"));
   assert.ok(rendered.includes('role="alert"'));
 });

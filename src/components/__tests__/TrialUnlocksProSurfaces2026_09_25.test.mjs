@@ -140,7 +140,8 @@ describe('A trial claimed mid-session reaches App without a relaunch', () => {
   test('the status poll starts for a mid-session trial, and only once', () => {
     const handler = handlerBody('onTrialStarted?.(');
     assert.ok(
-      /if\s*\(!trialPollId\)/.test(handler),
+      // (`ownsTrialClock &&`: only the launcher keeps the trial clock, toaster policy §7.5.)
+      /if\s*\((?:ownsTrialClock && )?!trialPollId\)/.test(handler),
       'the poll must be guarded — a second interval would be the only thing watching for expiry, twice',
     );
     assert.ok(handler.includes('setInterval(checkTrial'), 'a trial started mid-session must poll for its own expiry');

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Search, Sparkles, FileText, Brain } from 'lucide-react';
 import { motion, AnimatePresence, useIsPresent } from 'framer-motion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { plainMeetingTitle } from '../lib/codingAnswer.mjs';
 
 // ============================================
 // Types
@@ -420,6 +421,25 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                 document.body
             )}
 
+            {/* The bar's share of the backdrop. The page backdrop stops at the bar and
+                can't go over it (the bar would cover it, and the pill lives inside the
+                bar), so the bar dims itself here, under the pill (z-40), in the same
+                colour and clock. It then reads like Settings or the Modes Manager: the
+                whole window recedes and only the pill stays lit. -bottom-px covers the
+                bar's border, which would otherwise stay a bright line. Pointer events
+                pass through, so the bar still drags and its buttons still work. */}
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className={`absolute inset-x-0 top-0 -bottom-px z-30 pointer-events-none ${isLight ? 'bg-black/[0.05]' : 'bg-black/30'}`}
+                    />
+                )}
+            </AnimatePresence>
+
             {/* Search Pill Container. will-change-transform gives the pill its own
                 compositor layer. Without it the open dropdown, which hangs below the
                 header, was painted into the header's layer and stretched it: on the first
@@ -579,7 +599,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                         </div>
                                                                         <div className="flex-1 min-w-0">
                                                                             <div className="text-[13px] text-text-primary truncate">
-                                                                                {result.title}
+                                                                                {plainMeetingTitle(result.title)}
                                                                             </div>
                                                                             {result.subtitle && (
                                                                                 <div className="text-[11px] text-text-tertiary">
@@ -604,7 +624,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                     const itemIndex = linkedIndex >= 0 ? 2 + sessionResults.length + linkedIndex : -1;
                                                                     const when = shortDate(memory.date);
                                                                     const subtitle = memory.meetingId
-                                                                        ? [memory.meetingTitle || t('Meeting'), when].filter(Boolean).join(' · ')
+                                                                        ? [plainMeetingTitle(memory.meetingTitle) || t('Meeting'), when].filter(Boolean).join(' · ')
                                                                         : [t('Long-term memory'), when].filter(Boolean).join(' · ');
                                                                     const body = (
                                                                         <>

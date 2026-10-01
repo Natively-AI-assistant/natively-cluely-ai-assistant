@@ -1,0 +1,295 @@
+{
+ "batch": "b003-sales",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HSALES-CTX-C1": {
+   "title": "Brightloom Relay rep quick reference (merged draft)",
+   "text": "Brightloom Relay - Rep Quick Reference (DRAFT - merged from Q3 2025 and Q1 2026 versions)\nPlease check with RevOps before quoting anything from this page.\n\nPLANS AT A GLANCE\n- Starter: $29 per tech per month (annual). Up to 15 techs.\n- Growth: $54 per tech per month (annual). Includes route optimization, custom checklists, CRM sync and single sign-on (SSO) with Okta or Google.\n- Enterprise: custom, from $40,000 per year. Adds NetSuite, sandbox, data residency, named CSM.\n\nCURRENT PROMO\nGrowth at $49 per tech per month for new logos who sign before quarter end. (Promo code GROW49.)\n\nIMPLEMENTATION\nGrowth guided implementation is a flat $1,500. Enterprise is scoped.\n\nINTEGRATIONS\nQuickBooks Online, Xero, Salesforce, HubSpot, Google and Microsoft calendars. NetSuite on Enterprise.\n\nSECURITY FAQ (copy-paste for prospects)\nQ: Do you support SSO?\nA: Yes. SAML SSO is available on the Enterprise plan.\nQ: Are you SOC 2?\nA: Yes, SOC 2 Type II. Report available under NDA.\nQ: What is your uptime guarantee?\nA: 99.95% on all paid plans, backed by service credits.\n\nSUPPORT FAQ\nQ: What uptime do you commit to contractually?\nA: Enterprise customers get a 99.9% SLA. Starter and Growth have no contractual SLA; see the status page.\nQ: Which accounting tools do you sync with?\nA: QuickBooks Online on all plans, NetSuite on Enterprise. Xero is not currently supported.\n\nDEMO TIPS\nShow the Dispatch Board first, then a technician's day in the Field app, then the invoice. Keep the demo under 25 minutes and leave time for questions.\n\nOBJECTION NOTES\nIf a prospect says they were told SSO is included on Growth, confirm the plan and escalate to your manager before agreeing to anything."
+  },
+  "HSALES-CTX-I1": {
+   "title": "Kestrel Forge spring offsite logistics",
+   "text": "Kestrel Forge - Spring Offsite Logistics (internal)\nFrom: People Operations\n\nDates: Wednesday 22 April to Friday 24 April.\nVenue: Pinecrest Lodge, about two hours north of the office. Check-in from 3pm on Wednesday; check-out by 11am Friday.\n\nTravel\n- A coach leaves the office car park at 12:30pm Wednesday. Please be there by 12:15.\n- If you are driving, parking at the lodge is free but limited to 40 spaces. Carpool sign-up sheet is on the kitchen noticeboard.\n- Mileage is reimbursed at the standard rate if you drive more than one colleague.\n\nSchedule\n- Wednesday evening: welcome dinner and quiz night (teams are pre-assigned, no swapping).\n- Thursday: morning hike or yoga, afternoon workshops on planning for next year, evening bonfire.\n- Friday: brunch, then the coach back at 11:30am.\n\nFood\nTell People Operations about dietary needs by 3 April. The lodge can do vegetarian, vegan, gluten-free and nut-free meals. Anything else, let us know early.\n\nWhat to bring\nWalking shoes, a warm layer for the bonfire, a refillable water bottle. Rooms are shared by two; room lists go out one week before.\n\nQuestions to the People Operations channel."
+  },
+  "HSALES-CTX-G1": {
+   "title": "Brightloom Relay product and pricing sheet",
+   "text": "Brightloom Relay - Product and Pricing Sheet (FY2026, rep-facing)\nKestrel Forge Software, Inc. | Effective 1 March 2026 | Owner: Revenue Operations\n\nWHAT IT IS\nBrightloom Relay is field-service scheduling and dispatch software for trades businesses with 5 to 500 field technicians (HVAC, plumbing, electrical, pest control, appliance repair). It replaces whiteboards, shared calendars and phone tag between the office and the field.\n\nCORE MODULES\n- Dispatch Board: a drag-and-drop dispatch board with every technician as a row and every job as a colour-coded block by status (Unassigned, Scheduled, En Route, On Site, Done). Dispatchers see live technician location, updated every 60 seconds while a tech is clocked in, plus skill tags and overtime warnings before they assign a job.\n- Relay Field app (iOS and Android): job details, customer history, photos, checklists, signature capture and on-site quoting. The app works offline; jobs, notes and photos queue on the phone and sync when signal returns. Offline mode keeps up to 7 days of assigned jobs on the device.\n- Customer notifications: automatic \"on my way\" text with a live arrival window. Each account includes 1,000 SMS messages per month; extra messages are $0.02 each.\n- Route optimization: re-sequences a technician's day to cut drive time. Growth and Enterprise only.\n- Invoicing and payments: invoice straight from the job, card-on-file, and sync to QuickBooks Online on all plans. NetSuite connector (Enterprise only).\n- Reporting: first-time-fix rate, jobs per tech per day, revenue per job, on-time arrival percentage.\n\nINTEGRATIONS\nNative: QuickBooks Online, NetSuite (Enterprise only), Salesforce, HubSpot, Google Calendar, Microsoft 365 Calendar.\nNot currently supported: SAP (any edition), Sage Intacct, Xero. Customers on these systems can use the open REST API (limit 600 requests per minute per account) or a nightly scheduled CSV export. There is no committed date for new accounting connectors; do not promise one.\n\nPLANS AND LIST PRICING (per field technician seat)\n- Starter: $29 per technician per month billed annually, or $34 billed monthly. Up to 15 technicians. Dispatch Board, Field app, notifications, QuickBooks Online sync. No route optimization.\n- Growth: $54 per technician per month, billed annually only. 10-seat minimum. Everything in Starter plus route optimization, custom checklists, and Salesforce and HubSpot sync.\n- Enterprise: custom pricing, minimum annual contract value $40,000. Everything in Growth plus the NetSuite connector, a sandbox environment, data residency choice and a named Customer Success Manager.\nOffice seats (dispatchers, office admins) are free up to 5 per account; each additional office seat is $15 per month.\n\nONE-TIME IMPLEMENTATION FEE\n- Starter: self-serve onboarding, no fee.\n- Growth: guided implementation, $2,500 one-time. Covers data import, 2 remote training sessions and 30 days of go-live support.\n- Enterprise: scoped per project, starting at $7,500.\n\nDISCOUNTING GUIDELINES (internal - do not read out)\n- Multi-year prepay: 2-year term 8% off list, 3-year term 12% off list (Growth and Enterprise).\n- Reps may approve up to 10% additional discount on their own. Above 10% needs Sales Director approval; above 20% needs CRO approval.\n- Implementation fee waivers need Sales Director approval.\n- Nonprofit pricing: 15% off Starter or Growth with documentation.\n- No free trials. A 30-day paid pilot on Growth is available for up to 10 technicians at $64 per technician for the pilot month, credited against year one if the customer signs within 45 days of pilot end.\n\nPOSITIONING NOTES\nLead with dispatcher time saved and on-time arrivals, not features. Typical reference customers are 20 to 80 technician shops moving off a whiteboard or a shared calendar. Do not quote customer results by name without a signed reference agreement."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "HSALES-CTX-G2": {
+   "title": "Brightloom Relay security, support and terms summary",
+   "text": "Brightloom Relay - Security, Support and Commercial Terms Summary\nKestrel Forge Software, Inc. | Version 2026.2 | Owner: Legal and Security\n\nSECURITY AND COMPLIANCE\n- SOC 2 Type II: the current report covers 1 January to 31 December 2025. It is shared under a mutual NDA through the customer trust portal, usually within 2 business days of the NDA being signed.\n- ISO 27001: not certified. Kestrel Forge has not committed to a certification date; do not state one.\n- Penetration testing: annual test by an independent firm. An executive summary letter is available under NDA; the full report is not shared.\n- Encryption: AES-256 at rest, TLS 1.2 or higher in transit.\n- Hosting: AWS. Default region is US (Ohio). EU data residency (Frankfurt) is available on Enterprise only.\n- Single sign-on: SAML 2.0 SSO (Okta, Microsoft Entra ID, Google Workspace) is Enterprise only, as is SCIM user provisioning. Starter and Growth use email and password with optional authenticator-app two-factor.\n- Health data: Brightloom Relay is not designed to store protected health information, and Kestrel Forge does not sign Business Associate Agreements.\n- Subprocessors are listed on the trust portal; customers get 30 days notice of changes.\n\nSUPPORT\n- Starter: email and in-app chat, 8am to 6pm US Central, Monday to Friday. Target first response: 1 business day.\n- Growth: adds phone support in the same hours. Priority 1 (system down) first response within 4 business hours.\n- Enterprise: 24/7 phone line for Priority 1, first response within 1 hour, plus a named Customer Success Manager.\n\nUPTIME\n- Enterprise SLA: 99.9% monthly uptime for the Dispatch Board and the API. Service credits: 10% of the monthly fee if uptime falls below 99.9%, 25% if it falls below 99.0%. Credits are the sole remedy and must be requested within 30 days of the end of the affected month. The mobile app's offline mode is not covered by the SLA.\n- Starter and Growth: no contractual SLA. A public status page shows live and historical uptime.\n\nCONTRACT TERMS\n- Subscriptions are annual and auto-renew for 12 months unless either party gives 60 days written notice before the renewal date.\n- Renewal price increases are capped at 5% per year for Growth and Enterprise.\n- No termination for convenience during a term. Seats can be added at any time (prorated) but reduced only at renewal.\n- Payment terms: Net 30 standard. Net 45 with Finance approval. Longer terms are not offered.\n- Refunds: annual fees are non-refundable except for SLA service credits. Monthly Starter customers can cancel at any time, effective at the end of the billing month.\n- Customer data can be exported at any time via CSV or the API. After termination, data is retained for 90 days and then deleted within a further 30 days.\n\nWHO TO LOOP IN\nSecurity questionnaires: security-review team via the deal desk, 5 business day turnaround. Redlines: Legal, 7 business day turnaround. Reps must not agree to non-standard terms on a call."
+  }
+ },
+ "items": [
+  {
+   "jid": "e560f900fadb",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Great, then just put that in writing in the order form and we can sign this week.",
+   "conversation": [
+    "PROSPECT (heard): Your quick reference sheet that got forwarded to us says single sign-on comes with Growth. So we're good on Okta at the Growth price, yes?",
+    "NATIVELY: I want to make sure we get this right, because that sheet is a draft and it's got a conflict in it. The plan list does say SSO with Okta or Google on Growth, but the security FAQ on the same page says SAML SSO is Enterprise. So I can't confirm Okta at the Growth price off that sheet. Let me check with RevOps and my manager and come back to you today with it in writing."
+   ],
+   "evidence_ids": [
+    "HSALES-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Absolutely, I'll get that in writing today. To be straight with you, I'm not going to put Okta on the Growth line until RevOps confirms which of the two the sheet is right about, because I don't want you signing something we'd have to unwind. What I'll send you is the order form with the SSO line stated exactly as it's confirmed, plus a note on what changes if it lands on Enterprise. If it comes back as Growth, you're signing at the price you're expecting this week. Can I send it to you by end of day so you have it before you sign?"
+  },
+  {
+   "jid": "9e481343ee71",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Look, FieldPine quoted us almost half of what you're asking. Why would I pay double?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "FieldPine's number is real, and I'm not going to pretend it isn't. What I'd want to understand is what's inside it, because half the price usually means half the scope, and I'd rather compare the two line by line than the two totals. Can you walk me through what they've included so I can show you exactly where we differ?"
+  },
+  {
+   "jid": "81181883e80b",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Does it work offline?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, it works offline. The core features keep running without a connection, and anything you do syncs back up once I'm online again. How often are you working somewhere without reliable internet?"
+  },
+  {
+   "jid": "614e5aea0b88",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "Read on this deal: 12 techs, no budget until April, the ops director loves it but the owner has skipped both calls. Is this real? What do I ask on the next call, and should I offer them a pilot?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Twelve techs with no budget until April and an owner who's skipped both calls, that's a real problem but not a dead one. The ops director's enthusiasm is your champion, but without the owner you don't have a deal. On the next call, ask the ops director directly: what does the owner need to see to say yes, and can we get fifteen minutes with them before April. Yes, offer a pilot, but scope it small and time-boxed so it doesn't need budget approval, and use it to build the case for the owner."
+  },
+  {
+   "jid": "1010611af8cd",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They're wrapping up. Give me a clean next-steps line to end the call.",
+   "conversation": [],
+   "evidence_ids": [
+    "HSALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Sounds good. I'll send over a short recap today with the two options we talked through, and I'll follow up early next week to lock in the next step. If anything else comes up on your side before then, just reply to that email and I'll jump on it."
+  },
+  {
+   "jid": "e6e37eaa5012",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Does that include getting us set up, or is that extra?",
+   "conversation": [
+    "PROSPECT (heard): Okay so we've got about forty field techs and six people in the office doing dispatch. What would Growth actually run us for a year?",
+    "NATIVELY: Growth runs **$54 per tech per month**, billed annually, so forty techs is **$25,920 a year**. Office seats are free up to five, and you've got six, so that sixth dispatcher seat adds $15 a month, which is $180 for the year. That puts you at **$26,100** all in, plus a one-time $2,500 guided implementation for data import, two training sessions and thirty days of go-live support.\n\nWant me to put that in writing with the route optimization and dispatch board walkthrough so your six dispatchers can see it?",
+    "PROSPECT (heard): And for three years?",
+    "NATIVELY: On a three-year prepay, Growth comes down 12%, so the tech seats run about **$22,800 a year** instead of $25,920, and the sixth dispatcher seat lands around $158 a year. That's roughly **$22,960 a year**, or about $68,900 across the three years, with the $2,500 implementation still one-time up front. Want me to put the three-year and one-year side by side so your dispatchers can see the difference?"
+   ],
+   "evidence_ids": [
+    "HSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, that's separate. Growth has a one-time **$2,500** guided implementation that covers data import, two remote training sessions and thirty days of go-live support. Want me to fold that into the written quote so you see the full first-year number?"
+  },
+  {
+   "jid": "47ab6f80b02a",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They just asked why they should trust me to run their rollout. Tell them a bit about my background.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I've run rollouts like this before, and what I bring is a clear plan, close communication through the transition, and staying on it until your team is live and comfortable. I'd rather show you than tell you, so let's start with a short pilot and you can judge the work directly. What would a successful rollout look like on your side?"
+  },
+  {
+   "jid": "78d3f68f2fe8",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "We actually bought a scheduling tool back in 2023 and nobody used it. Why would this be any different?",
+   "conversation": [
+    "PROSPECT (heard): Honestly, we've run on a whiteboard and a group text for eleven years and it's fine.",
+    "NATIVELY: That's a real advantage, honestly. Eleven years on a whiteboard means the process works and people trust it, and I'm not here to replace that. What I'd want to know is where it costs you: what slips through when someone's out, or when you need to look back at why a call got made. If that's never happened, you don't need me. If it has, that's the piece worth fixing."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair question, and that's the one that matters. Most tools like that get bought and then handed to people as one more thing to log into. What made the whiteboard work is that it's where the work already happens. So the question I'd ask is what that 2023 tool asked people to change, and whether anyone owned it. What happened when it rolled out?"
+  },
+  {
+   "jid": "2827ba39280c",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "And for three years?",
+   "conversation": [
+    "PROSPECT (heard): Okay so we've got about forty field techs and six people in the office doing dispatch. What would Growth actually run us for a year?",
+    "NATIVELY: Growth runs **$54 per tech per month**, billed annually, so forty techs is **$25,920 a year**. Office seats are free up to five, and you've got six, so that sixth dispatcher seat adds $15 a month, which is $180 for the year. That puts you at **$26,100** all in, plus a one-time $2,500 guided implementation for data import, two training sessions and thirty days of go-live support.\n\nWant me to put that in writing with the route optimization and dispatch board walkthrough so your six dispatchers can see it?"
+   ],
+   "evidence_ids": [
+    "HSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "On a three-year prepay, Growth comes down 12%, so the tech seats run about **$22,800 a year** instead of $25,920, and the sixth dispatcher seat lands around $158 a year. That's roughly **$22,960 a year**, or about $68,900 across the three years, with the $2,500 implementation still one-time up front. Want me to put the three-year and one-year side by side so your dispatchers can see the difference?"
+  },
+  {
+   "jid": "3497c1f90fa1",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Why wouldn't we just go with Dispatchly? Every HVAC shop around here uses it and it's cheaper than you.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Dispatchly's a solid tool, and I get why it's everywhere. What you're paying for there is the same thing every other shop has, so it won't be what sets you apart. Where I'd want to dig in is what it's costing you in the gaps: scheduling, follow-up, the jobs that slip. What's the one thing Dispatchly doesn't do well for you today?"
+  },
+  {
+   "jid": "066a3feecc46",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "Softer.",
+   "conversation": [
+    "USER (typed to Natively): They said they love it but need to run it by their CFO before anything moves. Give me what to say to lock in a next step before we hang up.",
+    "NATIVELY: That's great to hear. Let's get the CFO what they need so this doesn't stall. Can we put thirty minutes on the calendar for early next week, and I'll bring a one-page summary of the value and the numbers for them? What's the best way to get that in front of your CFO?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's great to hear. Let's make it easy for your CFO to say yes. Can we grab thirty minutes early next week so I can walk them through the value and the numbers directly? What works best for getting that on their calendar?"
+  },
+  {
+   "jid": "da113b0db25e",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Your quick reference sheet that got forwarded to us says single sign-on comes with Growth. So we're good on Okta at the Growth price, yes?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSALES-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I want to make sure we get this right, because that sheet is a draft and it's got a conflict in it. The plan list does say SSO with Okta or Google on Growth, but the security FAQ on the same page says SAML SSO is Enterprise. So I can't confirm Okta at the Growth price off that sheet. Let me check with RevOps and my manager and come back to you today with it in writing."
+  },
+  {
+   "jid": "20e14669169f",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They said they love it but need to run it by their CFO before anything moves. Give me what to say to lock in a next step before we hang up.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's great to hear. Let's get the CFO what they need so this doesn't stall. Can we put thirty minutes on the calendar for early next week, and I'll bring a one-page summary of the value and the numbers for them? What's the best way to get that in front of your CFO?"
+  },
+  {
+   "jid": "17448c76ae29",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Before we go further, what's your own background? How long have you been doing this and what did you do before?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I've spent most of my career on the customer-facing side of this kind of work, and what I keep coming back to is the same thing: understanding what someone actually needs before I talk about what we offer. I'd rather ask the right questions early than pitch something that misses. What matters most to you as you're evaluating this?"
+  },
+  {
+   "jid": "a4af62d2300b",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Honestly, we've run on a whiteboard and a group text for eleven years and it's fine.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a real advantage, honestly. Eleven years on a whiteboard means the process works and people trust it, and I'm not here to replace that. What I'd want to know is where it costs you: what slips through when someone's out, or when you need to look back at why a call got made. If that's never happened, you don't need me. If it has, that's the piece worth fixing."
+  },
+  {
+   "jid": "ffaea38285ea",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Okay, our IT guy sent me a list. Do you do SSO with Okta on the Growth plan, where exactly is our data stored, are you ISO 27001 certified, and will you sign a BAA? We do service calls at a few medical clinics.",
+   "conversation": [],
+   "evidence_ids": [
+    "HSALES-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Straight answers: SSO with Okta is Enterprise only, so on Growth you'd have email and password with optional authenticator-app 2FA. Data sits in AWS US Ohio by default, with EU residency in Frankfurt on Enterprise. We're not ISO 27001 certified, and we don't sign BAAs, since Relay isn't built to store protected health information. If the clinics need those, Enterprise plus a look at your workflow is the next step."
+  },
+  {
+   "jid": "9cb0ce243e6a",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "To be straight with you, there's no budget for this right now. Maybe next fiscal year. And I'm not really the one who signs anyway.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's fair, and I'd rather know that now than chase it. Two things I'd ask: when next fiscal year's planning starts, so I can bring something sized to it, and who else weighs in on a decision like this. Even without budget today, would it help to walk through what this would look like so it's ready when the timing opens up?"
+  },
+  {
+   "jid": "af31b2ebbfff",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They want to hear how a job goes from the customer's call to a paid invoice in our product. Give me a 20 second walkthrough I can say.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Here's how it runs end to end. The customer's call comes in and we log it as a job with their details and what needs doing. From there it moves through scheduling and the work itself, with updates captured as it goes. Once it's marked complete, we generate the invoice straight from the job, so the customer gets billed and we get paid without re-entering anything. Want me to walk you through any one of those steps in more detail?"
+  },
+  {
+   "jid": "de322fb2be78",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "So yeah, that's kind of where we are. Does that make sense?",
+   "conversation": [
+    "USER (spoken): Walk me through a normal Monday for your team.",
+    "PROSPECT: Monday's the worst. Weekend calls pile up, and Maria spends the whole morning on the phone rebooking. We probably miss three appointments a week just because a tech got sent to the wrong side of town.",
+    "PROSPECT: And then Friday payroll is a mess because nobody trusts the hours on the timesheets. My office manager rebuilds them by hand from texts.",
+    "USER (spoken): How long does that take her?",
+    "PROSPECT: Most of Friday afternoon, honestly. Four or five hours."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yeah, that makes sense. So the two things I'm hearing are appointments slipping through the cracks and Friday afternoons disappearing into timesheets. If we could cut the missed appointments and give your office manager those hours back, what would that be worth to you?"
+  },
+  {
+   "jid": "d3d88ccdee64",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Yeah so right now dispatch is basically Maria, a shared Google calendar and a lot of phone calls. It kind of works.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a pretty common setup, and honestly it says a lot that it still works with Maria holding it together. The question I'd want to understand is where it starts to strain, like when Maria's out or when the volume spikes. What tends to break first?"
+  }
+ ]
+}

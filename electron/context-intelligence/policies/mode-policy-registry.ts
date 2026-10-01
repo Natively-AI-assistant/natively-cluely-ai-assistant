@@ -132,6 +132,24 @@ export interface ModePolicy {
   };
 
   citations: 'HIDDEN' | 'OPTIONAL' | 'VISIBLE';
+
+  /**
+   * The mode's ATTACHED MATERIAL is what the conversation is about (2026-09-30).
+   *
+   * Seminar's attached paper/thesis is the primary authority for everything the
+   * examiner says, and Lecture's slides/notes are the material being taught. An
+   * examiner's challenge ("Five runs is not many — how do you know the gains are
+   * not just noise?") or a lecturer's statement is phrased as general knowledge,
+   * so the classifier sends it down the FAST path; measured 13/128 file-dependent
+   * turns reached the model with none of the file, 6 of them Seminar.
+   *
+   * When true and the turn has files attached to the mode, a non-META turn the
+   * classifier would answer from general knowledge still consults the reference
+   * files. It does NOT add a document claim: the turn stays FAST (no absence
+   * notice, answerability unchanged), and the evidence gate still decides what
+   * is admitted. Consumed once, in orchestrator.decide().
+   */
+  attachedMaterialIsPrimary: boolean;
 }
 
 // ── capability presets ──────────────────────────────────────────────────────
@@ -209,6 +227,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1500, 2400, 800, 400),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'call-center': {
@@ -229,6 +248,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 300),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   sales: {
@@ -245,6 +265,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 300),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   recruiting: {
@@ -262,6 +283,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 200),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   'team-meet': {
@@ -276,6 +298,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1200, 2400, 1400, 400),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'looking-for-work': {
@@ -298,6 +321,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 600, 200),
     autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'technical-interview': {
@@ -330,10 +354,11 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1600, 2400, 700, 800),
     autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   lecture: {
-    id: 'lecture', version: '1.0.0', name: 'Lecture',
+    id: 'lecture', version: '1.1.0', name: 'Lecture',
     purpose: 'Capture key concepts and content from lectures.',
     allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
@@ -344,10 +369,11 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(24, 8), contextBudget: budget(2000, 2400, 1000, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: true,
   },
 
   seminar: {
-    id: 'seminar', version: '1.0.0', name: 'Seminar',
+    id: 'seminar', version: '1.1.0', name: 'Seminar',
     purpose: 'Strict file-grounded Q&A for presentations, thesis defences and paper walkthroughs.',
     allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
@@ -370,6 +396,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 1000, 800, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'VISIBLE',
+    attachedMaterialIsPrimary: true,
   },
 };
 
@@ -443,4 +470,56 @@ export function modeAllowsSource(policy: ModePolicy, source: SourceType): boolea
 export function generalKnowledgeAllowed(policy: ModePolicy): boolean {
   if (policy.groundingPolicy === 'STRICT_SOURCE_ONLY') return false;
   return policy.capabilityPolicy.useGeneralTechnicalKnowledge;
+}
+
+// ── Profile Intelligence eligibility ────────────────────────────────────────
+//
+// THE one answer to "may this turn see the user's résumé / target JD?"
+// (2026-09-30). V3 has always answered it from `profileSources` above: only
+// looking-for-work and technical-interview opt in. The legacy and fallback
+// paths answered it with their own rules — a premium-intercept BLOCKLIST that
+// allowed general/sales/recruiting and treated "no active mode" as allowed,
+// source-contract heuristics that grant the profile to a General mode once it
+// has a prompt or a file, and a knowledge-mode flag with no mode check at all.
+// So the same question in the same mode got the résumé or not depending on
+// which transport answered it (phone chat, follow-up email, a V3 error
+// fallthrough, the legacy WTA path).
+//
+// Derived from the registry, not listed beside it: a mode gains or loses
+// Profile Intelligence by changing its `profileSources`, and every path follows.
+//
+// Keyed by TEMPLATE type, so a custom mode built from the Looking-for-work or
+// Technical Interview template inherits it and one built from General does not.
+// Fails CLOSED: no active mode and an unrecognised template both mean no — the
+// opposite of `resolveModeIdOrWarn`'s fallback, which lands on `general` for
+// the same reason (the one outcome that carries no profile).
+
+export type ProfileIntelligenceIneligibleReason =
+  | 'no_active_mode'
+  | 'unknown_mode'
+  | 'mode_excludes_profile';
+
+export type ProfileIntelligenceEligibility =
+  | { allowed: true; modeId: ModeId; reason: 'mode_hydrates_profile' }
+  | { allowed: false; modeId: ModeId | null; reason: ProfileIntelligenceIneligibleReason };
+
+/**
+ * Eligibility for a mode TEMPLATE type (`mode.templateType`), with the reason.
+ * `null` / `undefined` / `''` mean "no active mode".
+ */
+export function profileIntelligenceEligibility(templateType: unknown): ProfileIntelligenceEligibility {
+  if (templateType === null || templateType === undefined || templateType === '') {
+    return { allowed: false, modeId: null, reason: 'no_active_mode' };
+  }
+  if (!isModeId(templateType)) {
+    return { allowed: false, modeId: null, reason: 'unknown_mode' };
+  }
+  return MODE_POLICIES[templateType].profileSources.length > 0
+    ? { allowed: true, modeId: templateType, reason: 'mode_hydrates_profile' }
+    : { allowed: false, modeId: templateType, reason: 'mode_excludes_profile' };
+}
+
+/** True only for a mode whose template opts into profile hydration. */
+export function isProfileIntelligenceAllowed(templateType: unknown): boolean {
+  return profileIntelligenceEligibility(templateType).allowed;
 }

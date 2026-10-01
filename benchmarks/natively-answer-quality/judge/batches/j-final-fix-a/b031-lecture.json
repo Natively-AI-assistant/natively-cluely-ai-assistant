@@ -1,0 +1,299 @@
+{
+ "batch": "b031-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-I1": {
+   "title": "Campus parking closure notice",
+   "text": "EASTBROOK UNIVERSITY - TRANSPORTATION AND PARKING SERVICES\nNotice to the campus community\n\nEffective Monday, Lot C (behind the Fenwick Athletic Center) will be closed for resurfacing. The closure is expected to last approximately three weeks, weather permitting.\n\nWhat this means for you:\n- Permit holders assigned to Lot C may park in Lot F or Lot H at no extra charge for the duration of the closure. Please display your existing permit.\n- Lot F is a ten-minute walk from the main quad. The free campus shuttle will run every fifteen minutes between Lot F and the Student Union from 7:30 a.m. to 6:30 p.m.\n- Visitor parking has been relocated to the lower level of the Ashworth Garage. Visitors should collect a temporary pass from the kiosk at the garage entrance.\n- Accessible parking spaces displaced by the closure have been reassigned to the first row of Lot F, nearest the shuttle stop.\n- Vehicles left in Lot C after 6:00 a.m. on Monday will be towed at the owner's expense.\n\nQuestions about permits can be sent to the Parking Services office in the Ashworth Building, room 104, or answered at the front desk between 9:00 a.m. and 4:00 p.m. on weekdays. Bicycle racks near the Fenwick Center remain open and are not affected. We appreciate your patience while we improve campus facilities."
+  },
+  "LECTURE-CTX-G2": {
+   "title": "BIO 110 Lecture 11 notes: cellular respiration",
+   "text": "BIO 110 - Introductory Biology\nLecture 11 notes: Cellular respiration\nLecturer: Dr. Tomasz Reidel, Eastbrook University\n\nOverall reaction\nC6H12O6 + 6 O2 -> 6 CO2 + 6 H2O + energy (some captured as ATP, the rest released as heat). This is a redox process: glucose is oxidized (it loses electrons, in practice hydrogen atoms) and oxygen is reduced. Memory aid: OIL RIG, oxidation is loss, reduction is gain.\n\nStage 1: Glycolysis\nLocation: cytosol. One glucose (6 carbons) is split into two pyruvate (3 carbons each). Four ATP are made but two are spent to start the process, so the net gain is 2 ATP, plus 2 NADH. No oxygen is needed.\n\nStage 2: Pyruvate oxidation\nLocation: mitochondrial matrix. Each pyruvate becomes acetyl-CoA, releasing one CO2 and making one NADH. Per glucose that is 2 CO2 and 2 NADH.\n\nStage 3: Krebs cycle (citric acid cycle)\nLocation: mitochondrial matrix. The cycle turns twice per glucose. Per glucose it produces 4 CO2, 6 NADH, 2 FADH2 and 2 ATP.\n\nStage 4: Oxidative phosphorylation\nLocation: inner mitochondrial membrane. NADH and FADH2 hand their electrons to the electron transport chain. As electrons move along the chain, protons are pumped into the intermembrane space, building a proton gradient. ATP synthase lets the protons flow back into the matrix and uses that flow to make ATP (chemiosmosis). Oxygen is the final electron acceptor and ends up as water. Without oxygen the chain backs up and the earlier stages stall.\n\nATP yield\nAbout 2.5 ATP per NADH and about 1.5 ATP per FADH2, giving roughly 30 to 32 ATP per glucose. Older textbooks quote 36 to 38 because they assumed 3 ATP per NADH and 2 per FADH2 and ignored the cost of moving ATP, ADP and NADH across the mitochondrial membranes. Proton leak also lowers the real yield, so the modern figure is lower.\n\nFermentation\nWithout oxygen, pyruvate is converted to lactate (animal muscle) or to ethanol and CO2 (yeast). The purpose is to regenerate NAD+ so glycolysis can keep running. The yield is only the 2 ATP from glycolysis.\n\nPoisons and heat\nCyanide blocks the last complex of the electron transport chain, so the chain stops. Brown fat contains an uncoupling protein that lets protons leak back across the membrane, so the energy is released as heat instead of ATP.\n\nExam note: know the location, inputs and outputs of each stage, and be able to explain why oxygen matters. There is a short quiz on Friday."
+  },
+  "LECTURE-CTX-C1": {
+   "title": "STAT 101 Week 4 handout: p-values and confidence intervals",
+   "text": "STAT 101 - Week 4 handout: p-values and confidence intervals\nInstructor: Dr. Priyanka Vashti, Eastbrook University\n\nSection 1. What a p-value is\nA p-value is the probability of seeing data at least as extreme as ours, assuming the null hypothesis is true. It is not the probability that the null hypothesis is true.\n\nSection 2. Worked example: the cafe\nA cafe claims its average wait is 70 seconds. We sample n = 25 customers and find a mean wait of 74 seconds with a sample standard deviation s = 10. Standard error = s / sqrt(n) = 10 / 5 = 2 seconds. The test statistic is (74 - 70) / 2 = 2.0.\n\nSection 3. The 95 percent confidence interval\nCritical value for 95 percent confidence: z = 1.96. Margin of error = critical value x standard error. Using z = 1.65 for 95 percent confidence, the margin of error is 1.65 x 2 = 3.3 seconds, so the interval is 70.7 to 77.3 seconds. Since our sample mean of 72 seconds sits inside this interval, we cannot distinguish it from the claim.\n\nSection 4. Decision rule\nChoose a significance level alpha in advance, usually 0.05. Reject the null hypothesis when the p-value is smaller than alpha. For a larger check, with n = 36 the standard error would shrink to 10 / 6 = 1.67 seconds and the same 4-second gap would be even more convincing.\n\nQuick summary box (read this before the quiz)\n- The p-value tells you the chance that the null hypothesis is true.\n- If p > 0.05, reject the null hypothesis.\n- A 95 percent confidence interval uses z = 1.96.\n- Bigger samples give smaller standard errors.\n\nNote: a \"large sample\" means the sample is big enough for the normal approximation to work. Roughly 30 or more is the usual rule of thumb, but this handout does not say exactly where the line is."
+  },
+  "LECTURE-CTX-G1": {
+   "title": "ECON 201 Week 6 notes: money, inflation, Phillips curve",
+   "text": "ECON 201 - Principles of Macroeconomics\nLecture notes, Week 6: Money, Inflation and the Phillips Curve\nLecturer: Prof. Marguerite Halvorsen, Eastbrook University\n\n1. What inflation is\nInflation is a sustained rise in the general price level, measured as the percentage change in a price index. The consumer price index (CPI) compares the cost of a fixed basket of goods today with the cost of the same basket in a base year: CPI = (cost of basket today / cost of basket in base year) x 100. Example: the basket cost 400 dollars in the base year and costs 432 dollars today, so CPI = 108, meaning prices are 8 percent higher than in the base year.\n\n2. Quantity theory of money\nThe identity is MV = PY, where M is the money supply, V is velocity (how often a unit of money changes hands), P is the price level and Y is real output. If V and Y are roughly stable, growth in M shows up as growth in P. Worked example for the fictional economy of Norvale: M = 500 billion, V = 4, so nominal spending PY = 2,000 billion. Real output Y = 1,000 billion, so P = 2.0. If the central bank raises M by 10 percent to 550 billion while V and Y stay put, PY = 2,200 billion and P = 2.2, a 10 percent rise in prices. Prof. Halvorsen stressed that the \"V and Y stable\" assumption is the whole argument, and it fails in the short run.\n\n3. Real versus nominal interest rates\nFisher equation: i is approximately r + expected inflation (pi-e), where i is the nominal rate and r is the real rate. Example: a nominal rate of 7 percent with expected inflation of 4 percent gives an expected real rate of about 3 percent. The exact form is (1 + i) = (1 + r)(1 + pi-e). When inflation is unexpected it redistributes wealth: borrowers with fixed-rate loans gain, while lenders and savers holding fixed nominal assets lose.\n\n4. Costs of inflation\nShoe-leather costs (extra trips to the bank to hold less cash), menu costs (the cost of repricing), tax distortions, and uncertainty that makes long-term contracts risky. Extreme case: hyperinflation in Weimar Germany in 1923, when at the peak prices were doubling roughly every four days and workers were paid twice a day so they could spend wages before they lost value.\n\n5. The Phillips curve\nThe original observation was a short-run inverse relationship between unemployment and inflation. The stagflation of the 1970s (high inflation and high unemployment together) showed that this is not a stable menu that policymakers can choose from. The expectations-augmented version is pi = pi-e - b(u - u*), where u* is the natural rate of unemployment and b measures how strongly inflation responds to the unemployment gap. The curve shifts up when expected inflation rises. In the long run, the curve is vertical at u*, so there is no lasting trade-off.\n\n6. Disinflation case study\nBetween 1979 and 1982 the US central bank, under Paul Volcker, pushed its policy rate to about 20 percent in 1981. Unemployment rose to about 10.8 percent in 1982, and inflation fell from double digits to roughly 4 percent by 1983. The lost output during a disinflation is often summarized by the \"sacrifice ratio\".\n\n7. Rule of 72\nYears to double is approximately 72 divided by the growth rate in percent. At 3 percent inflation the price level doubles in about 24 years (72 / 3 = 24).\n\nMidterm note: the midterm covers Weeks 1 to 6. Expect one Fisher equation calculation and one short essay on why the Phillips curve shifts. Calculators are allowed. The formula sheet will include only MV = PY."
+  },
+  "FLEC-CTX-G2": {
+   "title": "STAT 301 Lecture 11 notes: Comparing two groups",
+   "text": "STAT 301 - Applied Statistics\nLecture 11: Comparing two groups\nProf. Renata Szabo. Lecture notes, course site copy.\n\n1. Course conventions (apply to every test this term)\n- Significance level: alpha = 0.01 for all in-class examples, problem sets and mini-projects, unless a question states otherwise. The prof's reason: \"We run a lot of tests in this course, and I would rather you miss a small effect than chase noise.\"\n- Two independent samples: use Welch's t-test by default. Do not assume equal variances unless a problem explicitly says the population variances are equal.\n- Always report the test statistic, the degrees of freedom and the p-value, and state the conclusion in the context of the data, not as \"reject H0\" alone.\n- Choose the test before looking at results. Switching tests after seeing a p-value is marked as an error on problem sets.\n\n2. Paired vs independent designs\n- Paired: the same unit measured twice (before and after, or two seasons on the same tree). Analyze the differences d = x1 - x2 with a one-sample t-test.\n- Independent: two unrelated groups. Welch's t-test.\n- Pairing helps most when the variation between units is large compared with the change within a unit, because taking differences cancels the unit-to-unit spread.\n- Analyzing independent groups as if they were paired is invalid, not just less efficient.\n\n3. Worked example: the Brennock Orchard data (slides 8-13)\n- Question: do trees in the North plot yield more apples than trees in the South plot? Yield = kg of apples per tree, one harvest season.\n- North plot: n = 14, mean 38.2 kg, SD 6.1 kg.\n- South plot: n = 11, mean 31.5 kg, SD 9.8 kg.\n- Welch's t-test: t = 1.99, df = 15.9, p = 0.065.\n- For comparison only: a pooled-variance t-test on the same data gives t = 2.10, df = 23, p = 0.047. The prof showed this to make a point: \"If you had picked pooled because the p-value looked nicer, you would be under 0.05 and you would have fooled yourself. Our rule is Welch, decided in advance.\"\n- Frost week: three South trees were damaged in a late frost. With those three removed, South is n = 8, mean 35.9 kg, SD 5.4 kg, and Welch gives t = 0.92, df = 16.3, p = 0.37.\n- Removing data points after seeing results has to be justified independently of the results. Here the justification is the orchard manager's frost log, dated before harvest.\n\n4. Common mistakes flagged in lecture\n- Reading p = 0.065 as \"a 6.5% chance the plots are the same.\" It is not.\n- Concluding \"no difference\" from a non-significant result. The correct wording is that the data do not provide convincing evidence of a difference at the chosen alpha.\n- Reporting a confidence level that does not match alpha. With alpha = 0.01, report a 99% confidence interval.\n\n5. Admin\n- Problem Set 7 (two-sample tests) is due next Tuesday before lecture.\n- Office hours this week: Thursday 1-3 pm, Math Annex 104.\n- Mini-project 2 details were announced verbally in lecture; see the lecture recording."
+  }
+ },
+ "items": [
+  {
+   "jid": "7f962e9705c2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "But that only works if the temperature and the amount of gas stay fixed.",
+   "conversation": [
+    "PROFESSOR (heard): So what happens to the pressure if I squeeze this syringe down to half its volume?",
+    "NATIVELY: If you halve the volume at constant temperature, the pressure doubles. That's Boyle's law: pressure times volume stays constant, so P₁V₁ = P₂V₂. Squeeze the plunger to half the volume and the gas molecules hit the walls twice as often per unit area, so the pressure reads twice as high.",
+    "PROFESSOR (heard): It doubles. Boyle's law.",
+    "NATIVELY: Right, and the reason it's exactly double comes from the inverse relationship: pressure and volume move in opposite directions by the same factor. Halve the volume and the pressure has to double to keep the product constant. The catch is the constant temperature part. If you squeeze fast enough that heat can't escape, the gas warms up and the pressure climbs by more than double, so Boyle's law only holds when you let it stay at the same temperature."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Exactly right, and that's what makes it Boyle's law specifically rather than the general gas law. Boyle's law is the special case where temperature and the number of moles are held constant, so the only two things moving are pressure and volume, and they trade off inversely. Let temperature or the amount of gas change and you're no longer on that one curve, you need the combined gas law, P₁V₁/T₁ = P₂V₂/T₂, or the ideal gas law, PV = nRT, to account for it."
+  },
+  {
+   "jid": "46cd9cea2ac4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So the workhorse here is stochastic gradient descent, and I'm not going to derive it today, just take it on faith.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Stochastic gradient descent is the update rule that trains most of these models. Instead of computing the gradient over the whole dataset, you estimate it from one example, or a small batch, and take a step:\n\nθ ← θ − η ∇L(θ; xᵢ, yᵢ)\n\nHere θ is the parameter vector, η is the learning rate, and ∇L is the gradient of the loss for that single example. The intuition is that each noisy step is cheap and roughly points downhill, so many of them get you to a good solution far faster than one exact step over everything."
+  },
+  {
+   "jid": "43cd271ff108",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And the reason you can't skip breathing is that oxygen is the final electron acceptor, that's its whole job.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Right, and the notes back that up: oxygen is the final electron acceptor in oxidative phosphorylation, and it ends up as water. Without it the electron transport chain backs up, so the earlier stages stall too. That's why breathing isn't optional, it keeps the chain clear so NADH and FADH2 can keep dropping off electrons."
+  },
+  {
+   "jid": "9b2522edeb13",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Just tell me which topics from today will definitely be on the midterm, which ones I can safely skip, and what kind of question the professor likes best.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't tell you what will be on your midterm or what's safe to skip, because I don't have today's lecture or your syllabus in front of me. What I can do is help you figure it out: the topics your professor spent the most time on, repeated, or tied to a \"this matters\" moment are the ones most likely to show up, and anything they explicitly flagged as exam material is a safe bet. For question style, look at what they ask in class and how they phrase it, since professors tend to test the way they teach.\n\nIf you paste your notes or the lecture slides here, I can go through them and pull out the likely exam topics and the kinds of questions they suggest."
+  },
+  {
+   "jid": "1bd63614e8bb",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "How is a virus different from a bacterium?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A virus and a bacterium differ in some fundamental ways. A bacterium is a living cell: it has its own machinery to reproduce, can carry out metabolism, and can survive and multiply on its own. A virus is not a cell. It's just genetic material, either DNA or RNA, wrapped in a protein coat, and it has no way to reproduce by itself. It has to hijack a host cell's machinery to make copies of itself.\n\nThat difference also shows up in size and treatment. Bacteria are much larger, on the order of a few micrometres, while viruses are far smaller, typically tens to hundreds of nanometres. And because they're so different, antibiotics work against bacteria but not viruses, which is why viral infections need antivirals or vaccines instead."
+  },
+  {
+   "jid": "90aa90877f47",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "If my p-value is 0.03 and alpha is 0.05, do I reject the null?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, you reject the null. The rule is to reject when the p-value is smaller than alpha, and 0.03 is less than 0.05.\n\nOne caution: the handout's summary box has two errors. It says the p-value is the chance the null is true, which is wrong, and it says to reject when p > 0.05, which is backwards. Section 1 and Section 4 give the correct versions."
+  },
+  {
+   "jid": "bde05be93140",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "So the siren itself actually changes pitch when the ambulance passes me, right?",
+   "conversation": [
+    "PROFESSOR: Picture an ambulance coming toward you with its siren on.",
+    "PROFESSOR: Each sound wave leaves the siren, and by the time the next one leaves, the ambulance has moved forward a bit.",
+    "PROFESSOR: So the waves bunch up in front of the ambulance and stretch out behind it.",
+    "PROFESSOR: The siren is making the same tone the whole time, but your ear catches the waves at a different rate depending on whether the source is coming or going."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, exactly. The siren itself keeps making the same tone, but the pitch you hear shifts because the waves reach you at a different rate. As the ambulance comes toward you the waves bunch up, so you hear a **higher pitch**, and once it passes and moves away they stretch out, so the pitch drops. That's the **Doppler effect**."
+  },
+  {
+   "jid": "007dc35a4e8f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Give me a real world example.",
+   "conversation": [
+    "PROFESSOR: Two countries, Aldria and Brevin, each with one day of labor to spend on wheat or cloth.",
+    "PROFESSOR: In a day Aldria can make ten units of wheat or ten of cloth.",
+    "PROFESSOR: Brevin can make six units of wheat or three of cloth.",
+    "PROFESSOR: So Aldria is better at both, in absolute terms, that is absolute advantage.",
+    "PROFESSOR: But what matters for trade is opportunity cost: what each country gives up to make one more unit.",
+    "USER (typed to Natively): Who makes the wheat?",
+    "NATIVELY: The question is who gives up less to make wheat. For Aldria, one unit of wheat costs one unit of cloth, since ten of each trade off one for one. For Brevin, six wheat against three cloth means one wheat costs half a unit of cloth. So Brevin gives up less to make wheat, and that's its comparative advantage, even though Aldria is better at both in absolute terms.",
+    "USER (typed to Natively): But Aldria is better at both, so why trade?",
+    "NATIVELY: Because being better at both doesn't mean it should make both. Aldria gives up one unit of cloth for every unit of wheat, while Brevin gives up only half a unit of cloth. So Brevin makes the wheat, and Aldria puts its day into cloth, where it gives up less. Each country specializes where its opportunity cost is lower, and both end up with more than if they tried to do everything themselves."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Take a doctor and a receptionist. The doctor is faster at typing and filing than the receptionist, so she's better at both jobs in absolute terms. But every hour she spends at the front desk is an hour she isn't seeing patients, and that's what she gives up. So she does the medicine and the receptionist does the admin, and the clinic sees more patients than if the doctor tried to do everything herself. Same logic as Aldria and Brevin: specialize where your opportunity cost is lowest, not where you're best."
+  },
+  {
+   "jid": "3c2dbf8710e8",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What did the notes say will be on the midterm from this week, and how many points is the essay worth?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes say the midterm covers Weeks 1 to 6, with one Fisher equation calculation and one short essay on why the Phillips curve shifts. Calculators are allowed, and the formula sheet includes only MV = PY.\n\nThe notes don't give a point value for the essay, so I'd check the syllabus or ask Prof. Halvorsen for that."
+  },
+  {
+   "jid": "60358a4b55ec",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Bayes' theorem is really just the statement that your belief after seeing evidence is your belief before, reweighted by how surprising that evidence would have been.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a fair way to put it. Formally, P(H|E) = P(E|H) · P(H) / P(E): the prior P(H) is your belief before, the likelihood P(E|H) says how well the hypothesis predicts the evidence, and dividing by P(E) normalizes so the posterior P(H|E) is a proper probability. The intuition is that evidence which is more likely under one hypothesis than another shifts belief toward it, and evidence that's equally likely under both leaves your belief where it was. So the \"surprise\" framing works as long as you read it as relative surprise: how much more surprising the evidence would be if the hypothesis were false."
+  },
+  {
+   "jid": "62ae88ba6ee9",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What should I say to them?",
+   "conversation": [
+    "PROFESSOR: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROFESSOR: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two weeks is workable if we reset expectations now. I'd want to know what the vendor can commit to in writing, and whether we can phase the release so the parts that don't depend on their API still ship on the original date. What's driving the tight date on your side?"
+  },
+  {
+   "jid": "11a9baa42dbd",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Which is why Japan gets so many earthquakes and Iceland gets so many volcanoes, but for two completely different reasons.",
+   "conversation": [
+    "PROFESSOR: The Earth outer shell is broken into plates that move a few centimeters a year, about as fast as your fingernails grow.",
+    "PROFESSOR: Where an oceanic plate meets a continental one, the denser oceanic plate dives beneath, and that is subduction.",
+    "PROFESSOR: Where two plates pull apart, magma rises to fill the gap and makes new crust."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Japan sits where an oceanic plate dives under a continental one, so the two plates lock and slip against each other, and that grinding releases as earthquakes. Iceland sits on a spreading ridge where plates pull apart, so magma rises into the gap and feeds volcanoes. Same plate motion, opposite plate boundary: **convergent** versus **divergent**."
+  },
+  {
+   "jid": "e236d750c27b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Work out the payback period from what he just said.",
+   "conversation": [
+    "PROFESSOR: Let's do unit economics for a made-up meal kit startup, Freshwell.",
+    "PROFESSOR: It spends 120 dollars on average to acquire a customer, that is the customer acquisition cost.",
+    "PROFESSOR: Each customer brings in 40 dollars a month, and after ingredients and delivery, 15 dollars a month is gross margin.",
+    "PROFESSOR: Investors like to see the acquisition cost paid back well inside a year."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "CAC is 120 dollars and monthly gross margin per customer is 15 dollars, so payback is 120 divided by 15, which is **8 months**. That's well inside a year, so it clears the bar investors usually look for."
+  },
+  {
+   "jid": "63268c47d6f3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So plug in the cafe numbers: critical value times standard error, and what do we get?",
+   "conversation": [
+    "PROFESSOR: Our cafe example: a sample of twenty-five customers, mean wait seventy-four seconds, standard deviation ten.",
+    "PROFESSOR: So the standard error is ten over the square root of twenty-five, which is two.",
+    "PROFESSOR: For a ninety-five percent interval we use a critical value of one point nine six."
+   ],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "1.96 times 2 gives a margin of error of **3.92 seconds**.\n\nSo the interval runs from 74 minus 3.92 to 74 plus 3.92, which is about **70.1 to 77.9 seconds**. That's the 95 percent confidence interval for the mean wait."
+  },
+  {
+   "jid": "62be291a1e1f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Can you summarize where we are?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have anything from this session to summarize yet, so there's no content for me to pull from. If you tell me the topic or paste the notes, I can give you a clean recap of the key points."
+  },
+  {
+   "jid": "41991871f448",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Give me an example of opportunity cost where the cost is just money, since opportunity cost is always a dollar amount, right?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not quite. Opportunity cost is the value of the next best alternative you give up, and it's often not money at all. If you spend Saturday studying, the cost might be the time with friends you missed, not a dollar figure. Money is just one way to measure it."
+  },
+  {
+   "jid": "aceb45628673",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "is the final cumulative? she must have said it at some point",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes don't say the final is cumulative. What they do cover is the course conventions for this term: alpha = 0.01 for all in-class examples, problem sets and mini-projects, Welch's t-test by default for two independent samples, and reporting the test statistic, degrees of freedom and p-value with a conclusion in context. The admin section lists Problem Set 7 due next Tuesday before lecture, office hours Thursday 1 to 3 in Math Annex 104, and Mini-project 2 details announced verbally in lecture, with the recording as the source. So if she said it, it was likely in that verbal announcement rather than in these notes."
+  },
+  {
+   "jid": "a7e9158569fc",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Consider the prisoner's dilemma.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The prisoner's dilemma is a game where two players each choose to cooperate or defect, and the payoffs are set so that defecting is always better for you no matter what the other person does, yet when both defect they end up worse off than if both had cooperated. The classic story is two suspects interrogated separately: each can stay silent or betray the other, and the temptation to betray makes the mutually best outcome unstable. The key idea is that individually rational choices can produce a collectively worse result."
+  },
+  {
+   "jid": "856eb5d60eab",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Walk me through deriving the quadratic formula by completing the square.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Start with the general quadratic equation:\n\n**ax² + bx + c = 0**\n\nDivide every term by a, since a can't be zero:\n\nx² + (b/a)x + c/a = 0\n\nMove the constant to the right side:\n\nx² + (b/a)x = -c/a\n\nNow complete the square. Take half of the coefficient of x, which is b/(2a), and square it to get b²/(4a²). Add that to both sides:\n\nx² + (b/a)x + b²/(4a²) = -c/a + b²/(4a²)\n\nThe left side is now a perfect square:\n\n(x + b/(2a))² = b²/(4a²) - c/a\n\nPut the right side over a common denominator of 4a²:\n\n(x + b/(2a))² = (b² - 4ac) / (4a²)\n\nTake the square root of both sides, remembering the ± :\n\nx + b/(2a) = ±√(b² - 4ac) / (2a)\n\nSubtract b/(2a) from both sides:\n\n**x = (-b ± √(b² - 4ac)) / (2a)**\n\nThe key move is that adding b²/(4a²) turns the left side into a perfect square, and the quantity under the root, b² - 4ac, is the discriminant that tells you how many real solutions you get."
+  },
+  {
+   "jid": "bca7bda0cb2a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "What should we do next?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The lecturer is asking the class what to do next, so the useful move is to name the next step in the material and check it against what was just covered. Since I don't have the lecture content in front of me, I'd say the next step is to take the concept we just went through and apply it to a worked example, then compare the result against the rule or formula we derived. If there's a problem set or practice question tied to this topic, that's the natural place to start, because it forces you to test whether the idea actually holds up outside the abstract."
+  }
+ ]
+}

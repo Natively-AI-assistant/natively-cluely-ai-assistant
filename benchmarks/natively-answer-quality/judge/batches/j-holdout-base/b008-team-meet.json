@@ -1,0 +1,149 @@
+{
+ "batch": "b008-team-meet",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HTEAM-CTX-G2": {
+   "title": "Project Juniper plan v3",
+   "text": "Project Juniper - plan v3\nOwner: Marcus Oyelaran. Last updated: 1 September 2026.\n\nGoal\nReplace the nightly Ledgerd batch invoicing job with an event-driven pipeline on the Stream bus, so usage shows up on a customer's draft invoice within 5 minutes instead of the next morning, with zero double-billing.\n\nIn scope\n- Usage event consumers for metered products (API calls, seats, storage).\n- Proration and plan-change handling for monthly and annual plans.\n- Historical backfill of March-August usage events into the new store.\n- Reconciliation tooling against Ledgerd during shadow mode.\n- Cutover runbook and rollback procedure.\n\nOut of scope\n- Invoice PDF template redesign.\n- Multi-currency discount rules (tracked separately by Revenue Engineering).\n- Changes to the customer-facing billing page.\n- Tax calculation logic (we call the existing tax provider as-is).\n\nMilestones\nM1 Event schema frozen - 21 Aug (done)\nM2 Shadow run - 7 Sept to 18 Sept\nM3 Cohort A cutover - 29 Sept\nM4 Cohort B cutover - 13 Oct\nM5 General cutover - 27 Oct\nM6 Ledgerd decommission - 30 days after M5\n\nDependencies\n- SRE (Ines Duarte): increase Stream bus partitions for the billing topic from 12 to 24 before M3. Requested 25 Aug, not yet scheduled.\n- Tax team (Rafael Lindqvist): refresh tax provider sandbox credentials before the backfill dry run. Current credentials expire 20 Sept.\n- Finance Ops (Siobhan Walsh): sign-off that the reconciliation diff is within the 0.1 percent tolerance before each cohort.\n- Data Platform: no schema migrations on the usage warehouse during the week of each cutover.\n\nRACI\nAccountable: Marcus Oyelaran\nResponsible: Hana Kobayashi (pipeline and proration), Tomas Reyes (backfill), Leila Farrokh (QA and reconciliation)\nConsulted: Siobhan Walsh (Finance Ops), Rafael Lindqvist (Tax)\nInformed: Grace Mbeki (Support lead), Dev Anand (Product)\n\nRisks\nR1 Month-end traffic spike overwhelms consumers. Likelihood medium, impact high. Mitigation: partition increase (SRE dependency); avoid any cutover in the last 3 days of a month.\nR2 Backfill throttled by the tax provider rate limit. Likelihood medium, impact medium. Mitigation: run the backfill overnight, capped at 40 requests per second.\nR3 Reconciliation diff does not reach tolerance. Likelihood low, impact high. Mitigation: extend the shadow run; do not cut over any cohort while the diff is above tolerance.\nR4 Support unprepared for invoice questions. Likelihood medium, impact low. Mitigation: support briefing one week before each cohort.\n\nSuccess measures\n- Usage event to draft invoice line in under 5 minutes (p95).\n- Reconciliation diff at or below 0.1 percent for two consecutive weeks before general cutover.\n- Zero double-billed invoices.\n\nNot covered in this plan\nBudget, vendor costs and headcount are tracked by Marcus separately and are not part of this document."
+  },
+  "HTEAM-CTX-G1": {
+   "title": "Juniper weekly sync notes, 8 September",
+   "text": "Juniper weekly sync - notes\nDate: Tuesday 8 September 2026, 10:00-10:45\nChair: Marcus Oyelaran (engineering manager)\nAttendees: Hana Kobayashi (backend), Tomas Reyes (data engineering), Leila Farrokh (QA), Dev Anand (product), Siobhan Walsh (Finance Ops)\nNotes taken by: Leila Farrokh\n\n1. Shadow run results\nThe shadow run has been comparing new-pipeline invoices against Ledgerd output since 7 Sept. Reconciliation diff rate is 0.4 percent against the 0.1 percent target agreed with Finance Ops. Hana traced most of the diff to currency rounding in the proration path (mid-cycle plan changes on non-USD accounts). The remaining diffs look like timezone boundary issues on usage events stamped near midnight UTC.\nDecision: extend the shadow run by one week. The shadow run now ends Friday 25 September instead of 18 September.\n\n2. Cutover approach\nDiscussed big-bang versus staged. Siobhan and Leila both preferred staged, because Finance Ops cannot manually review more than about 300 invoices per day if something goes wrong.\nDecision: cutover will be done by customer cohort, not all at once. Cohort A is internal accounts plus 40 friendly customers, then Cohort B (roughly 2,000 accounts on monthly plans), then everyone else. Dates per the plan, adjusted for the shadow-run extension - Marcus to update the plan.\n\n3. Scope\nDev raised that Design has been mocking up a new invoice PDF layout.\nDecision: the invoice PDF redesign is out of scope for Juniper and moves to the Q1 backlog. Dev to tell Design.\n\n4. Rollback\nDecision: keep Ledgerd running in read-only mode for 30 days after the final cohort is cut over, so any invoice can be regenerated from the old system if needed.\n\n5. Pricing-table freeze\nSiobhan asked whether pricing-table changes should be frozen during cutover. Not decided. Siobhan to check with Revenue and bring an answer to the next sync (15 Sept).\n\n6. Go/no-go sign-off\nOpen question: who signs off on the Cohort A go/no-go. Marcus suggested Dev; Dev suggested Finance Ops should, since they own the reconciliation tolerance. Left open.\n\nRisks raised\n- Stream bus consumer lag spikes at month end. Tomas saw 11 minutes of lag on 31 August with the current 12 partitions.\n- The tax provider API is rate limited to 50 requests per second; the historical backfill may get throttled if it runs alongside live traffic.\n- Leila is on PTO 28 Sept - 2 Oct, which overlaps the planned Cohort A window. No QA backup named yet.\n\nAction items\n- Hana: fix currency rounding in the proration path. Due Thursday 17 Sept.\n- Tomas: backfill script for March-August usage events; dry run on staging by 22 Sept.\n- Leila: reconciliation dashboard showing diff rate by cohort. Due 21 Sept.\n- Dev: tell Design the PDF redesign moved to Q1; update the roadmap page.\n- Siobhan: ask Revenue about a pricing-table freeze; answer at the 15 Sept sync.\n- Marcus: confirm on-call coverage for cutover weekend with the SRE lead (Ines Duarte); update plan dates.\n\nNext sync: Tuesday 15 September."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  }
+ },
+ "items": [
+  {
+   "jid": "94a31279174e",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Is the invoice PDF redesign part of Juniper or not? Design keeps pinging me about it.",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, the invoice PDF redesign is out of scope for Juniper. The plan lists it under out of scope, so Design should route that work separately rather than through this project."
+  },
+  {
+   "jid": "42a42d9b28c7",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Sum up what we just decided in two sentences so I can say it back to the group.",
+   "conversation": [
+    "COLLEAGUE: Okay, proposal. We don't freeze pricing changes for the whole month, just the cutover weekend, so Friday six p.m. to Monday nine a.m.",
+    "COLLEAGUE: Revenue can live with that as long as they get a heads-up by the Wednesday before.",
+    "COLLEAGUE: Fine by me. And Ledgerd stays read-only for the thirty days, no change there.",
+    "COLLEAGUE: Great, that's settled then. Leila, can you send the heads-up to Revenue? Actually no, you're out that week. Siobhan, you own it, it's your contact anyway.",
+    "COLLEAGUE: Yep, I'll send it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "We're not freezing pricing changes for the whole month, just the cutover weekend, Friday six p.m. to Monday nine a.m., and Revenue needs a heads-up by the Wednesday before. Ledgerd stays read-only for the thirty days, and Siobhan will send that heads-up to Revenue."
+  },
+  {
+   "jid": "610a331ccc42",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Leadership is asking whether Juniper is green, yellow, or red right now. What are you telling them?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd tell them Juniper is **yellow** right now. We're on track on the things that matter most, but there are a couple of open items I want to close before I'd call it green. Let me confirm where those stand and I'll send a short update with the specifics right after this."
+  },
+  {
+   "jid": "5f27e85ab3e9",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Hold on, I thought we agreed last week to cut everyone over at once and drop the cohort idea. Why are we still talking about cohorts?",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "We did discuss big-bang versus staged, and the decision went the other way. The notes from the 8 September sync record that cutover will be done by customer cohort, not all at once, with Cohort A being internal accounts plus 40 friendly customers, then Cohort B, then everyone else. The reason staged won was that Finance Ops can't manually review more than about 300 invoices a day if something goes wrong. So the cohort idea is still live, and Marcus is updating the plan dates to account for the shadow-run extension."
+  },
+  {
+   "jid": "a9595b91d85e",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Did we decide last week whether pricing-table changes are frozen during cutover? If we did, who made the call, and give me the one line I should say to the group about it.",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, that one wasn't decided. Siobhan raised whether pricing-table changes should be frozen during cutover, and the notes record it as **not decided**, with Siobhan checking with Revenue and bringing an answer to the next sync on 15 September. So there's no call and no owner to name yet.\n\nThe line to say: \"Pricing-table freeze during cutover is still open, Siobhan is checking with Revenue and we'll have an answer at the 15 September sync.\""
+  },
+  {
+   "jid": "bd7f57751cb9",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "We've got one sprint and three things on the table: the proration rounding bug, the reconciliation dashboard, and the flaky integration tests. Which one do you think goes first?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The proration rounding bug goes first. It's the one that touches money customers can see, so every day it's open is a day we're shipping wrong numbers, and that's the kind of thing that erodes trust fast. The dashboard and the flaky tests matter, but they're not producing incorrect output in front of users. If the bug turns out to be deeper than expected, I'd want to know that early so we can decide whether to timebox the fix or ship a stopgap."
+  },
+  {
+   "jid": "69853de661d4",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "You've done a billing migration like this somewhere before, right? What bit you last time?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "Honestly, the part that always bites is the data, not the code. Old records that don't map cleanly, duplicate subscriptions, and invoices that were already paid under the old system. So I'd reconcile first, run both systems side by side for a cycle, and only then cut over."
+  },
+  {
+   "jid": "c027a43474af",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Anything blocking you?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nothing's blocking me right now. I'm on track with what I've got, and I'll flag it straight away if something comes up. If there's anything you want me to prioritize or hand off, tell me now and I'll adjust."
+  },
+  {
+   "jid": "4e8866148aba",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Marcus just asked me to also pick up the tax sandbox credentials work. I'm already on the consumer rewrite and I'm on call next week. Give me words to push back without sounding like I'm refusing, offer what could slip instead, and ask him to choose.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can take the tax sandbox credentials on, but not alongside everything else at full speed. Right now the consumer rewrite and next week's on-call are both live, so something has to give. If the credentials work is the priority, I'd push the rewrite's next milestone by a week, or hand off part of my on-call rotation. Which of those works better for you?"
+  },
+  {
+   "jid": "f78b8fe09c0e",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Give me a 20-second status update I can read out. Consumer rewrite is about 70 percent done, integration tests are red because of the staging Kafka upgrade, and I expect them green by Wednesday.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Quick status: the consumer rewrite is about **70 percent** done. Integration tests are red right now because of the staging **Kafka upgrade**, and I expect them green by **Wednesday**. No other blockers on my side."
+  }
+ ]
+}

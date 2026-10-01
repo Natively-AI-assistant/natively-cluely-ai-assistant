@@ -1,0 +1,82 @@
+{
+ "batch": "b007-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DGEN-CTX-G1": {
+   "title": "Okafor family Lisbon and Porto itinerary",
+   "text": "Okafor Family Trip - Lisbon and Porto (6 days)\nPrepared by: Adaeze Okafor. Travellers: Adaeze, Tomi, and the kids Kemi (11) and Dayo (8).\n\nFLIGHTS\nOutbound: Atlantica Air flight AT 418, departs Newark 9:40 PM on day 0, lands Lisbon (LIS) at 11:15 AM on day 1. Checked bags: 2 included on the booking.\nReturn: Atlantica Air flight AT 419, departs Porto (OPO) 12:30 PM on day 6. Plan to be at OPO by 10:30 AM.\n\nLISBON HOTEL (days 1 to 4)\nCasa Rio Hotel, Rua dos Remedios 41, Alfama. Family room, confirmation CR-77310.\nCheck-in from 3:00 PM. Early bag drop is free from 10:00 AM. Check-out by 11:00 AM.\nAirport to hotel: pre-booked van with Lusotransfer, about 35 minutes. The driver waits up to 60 minutes after landing, then the booking is cancelled with no refund (EUR 48).\n\nDAY 1 - Arrive, Alfama\nLand, van to hotel, drop bags, lunch near the hotel.\nAlfama walking tour with Marta (Sete Colinas Walks), meeting at Largo das Portas do Sol at 4:30 PM. Duration 2.5 hours, mostly stairs, not stroller friendly. Tickets EUR 38 per adult, EUR 19 per child, already paid and non-refundable. The guide will move us to the 6:00 PM group once if we message her by 2:00 PM the same day.\nDinner: no reservation, keep it easy.\n\nDAY 2 - Belem\nTram 15 to Belem around 9:30 AM. Jeronimos Monastery timed entry 10:30 AM (tickets on Adaeze's phone). Pasteis at the bakery after. Afternoon at the MAAT riverside park for the kids. Back by 5:00 PM.\n\nDAY 3 - Sintra day trip\nTrain from Rossio station, trains roughly every 20 minutes, about 40 minutes each way. Pena Palace timed entry 11:00 AM. Pack lunch. Last comfortable train back around 6:00 PM. This is the long walking day, so the kids need proper shoes.\n\nDAY 4 - Lisbon to Porto\nLeave Casa Rio at 9:15 AM by taxi (about 20 minutes, book at the front desk the night before).\nTrain: Alfa Pendular 10:09 AM from Lisboa Santa Apolonia, arrives Porto Campanha 1:02 PM. Four tickets, car 3, seats 41 to 44. Tickets can be changed up to 15 minutes before departure for a EUR 5 fee per ticket. After departure, missed tickets are not refundable.\nFrom Campanha, metro line to Trindade, then 8-minute walk to the apartment.\nPorto apartment (Ribeira Flats, host: Nuno): check-in from 3:00 PM. Nuno wants our arrival time by 12:00 noon on day 4. Late check-in after 8:00 PM costs EUR 20.\nEvening: Livraria Lello timed entry 5:30 PM (4 tickets, EUR 10 each, redeemable against a book). Entry slots cannot be moved on the day.\n\nDAY 5 - Porto\nMorning boat ride on the Douro (six bridges cruise), 10:00 AM from Cais da Ribeira, 50 minutes. Afternoon free. Dinner booked at Tasca do Largo at 7:30 PM, table for 4.\n\nDAY 6 - Home\nCheck out of the apartment by 10:00 AM, taxi to OPO (about 25 minutes). Flight AT 419 at 12:30 PM.\n\nBUDGET NOTES\nTotal trip budget excluding flights: EUR 3,200. Hotels and apartment are already paid. Daily food budget EUR 120 for the four of us. Keep EUR 200 cash for taxis and small cafes.\n\nEMERGENCY CONTACTS\nCasa Rio front desk: +351 21 000 4471. Nuno (Porto host): +351 91 000 2288. Travel insurance: Harborline Travel, policy HT-5520931."
+  }
+ },
+ "items": [
+  {
+   "jid": "e7eab72d05df",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Write a haiku about my cat knocking my coffee off the desk this morning.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Black mug tips and falls,\ndark arc across the morning,\ncat blinks, unashamed."
+  },
+  {
+   "jid": "3e79346b9f19",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Okay, turn all of day 4 into a two-line text I can send my mom so she knows where we are.",
+   "conversation": [
+    "USER (typed to Natively): What time do we need to leave the hotel on day 4 to make the Porto train?",
+    "NATIVELY: Leave Casa Rio at **9:15 AM** by taxi on day 4. It's about a 20 minutes ride, and the Alfa Pendular leaves Lisboa Santa Apolonia at 10:09 AM. Book the taxi at the front desk the night before.",
+    "USER (typed to Natively): What if the train's an hour late, does that mess anything up in Porto?",
+    "NATIVELY: An hour late puts you in Porto around 2:00 PM, which is still fine. Check-in opens at 3:00, so you'd just arrive closer to it. The one thing to watch is Nuno, who wants your arrival time by noon, so message him if the train slips."
+   ],
+   "evidence_ids": [
+    "DGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Day 4: leave Casa Rio at 9:15 AM by taxi, then the 10:09 train from Santa Apolonia, arriving Porto Campanha at 1:02 PM. Metro to Trindade and a short walk to the Ribeira apartment, check-in from 3:00, then Livraria Lello at 5:30."
+  },
+  {
+   "jid": "53608cb5794b",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Can we still make the walking tour on day 1? If not, what are our options?",
+   "conversation": [
+    "OTHER PERSON: Bad news, the airline just emailed. Our flight got pushed, we land at 3:50 now, not the morning.",
+    "USER (spoken): Ugh. Same day at least?",
+    "OTHER PERSON: Same day, just afternoon."
+   ],
+   "evidence_ids": [
+    "DGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, the 4:30 tour won't work now. You land at 3:50, and the van ride is about 35 minutes, so you'd be cutting it very close.\n\nThe good news: Marta will move you to the 6:00 PM group once, if you message her by 2:00 PM that day. That's the cleanest option."
+  },
+  {
+   "jid": "b87cc988031f",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What time do we need to leave the hotel on day 4 to make the Porto train?",
+   "conversation": [],
+   "evidence_ids": [
+    "DGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Leave Casa Rio at **9:15 AM** by taxi on day 4. It's about a 20 minutes ride, and the Alfa Pendular leaves Lisboa Santa Apolonia at 10:09 AM. Book the taxi at the front desk the night before."
+  },
+  {
+   "jid": "33c7a948cff9",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay, and before your appointment Thursday, are you on any medications right now, and any allergies we should put in the chart?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a list in front of me right now, so I'd rather confirm it than guess. Let me pull up my current medications and allergies and get you the exact names and doses before Thursday."
+  }
+ ]
+}

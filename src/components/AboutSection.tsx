@@ -2,13 +2,18 @@ import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Linkedin, Instagram, Send, Star, Bug, Mail, Heart,
-    Zap, ListOrdered, Gauge, RefreshCw, Boxes,
+    CalendarCheck, Palette, Smartphone, ListOrdered,
     LayoutGrid, Search, FileText, UserRound,
     HardDrive, Sliders, Lock,
 } from 'lucide-react';
+import { AutoAnswerIcon } from './AutoAnswerIcon';
 import evinProfile from '../assets/evin.png';
-import nativelyIcon from './icon.png';
-import { useResolvedTheme } from '../hooks/useResolvedTheme';
+// Each platform's own app icon: the Liquid Glass render macOS shows in the Dock
+// (assets/icons/mac/dock-icon.png) and the Windows icon (assets/icons/png), at
+// 192px for an 80px header.
+import appIconMac from '../assets/about/app-icon-mac.webp';
+import appIconWin from '../assets/about/app-icon-win.webp';
+import { isMac } from '../utils/platformUtils';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
@@ -39,12 +44,20 @@ type AboutIcon = React.ComponentType<{ size?: number; className?: string; stroke
 
 interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIcon }
 
+// 2.9 official build, the owner's picks from the last 30 days of commits:
+// Auto Answer (off by default and "Beta" in General; the judge skips asks
+// named to someone else, 2cf229bd), embeddings + rerankers, Phone Mirror 2.0
+// (nav label "Sync"), Calendar sync (calendarSessionMatch + follow-up draft),
+// and the month's UI pass (Liquid Glass controls, the motion passes across
+// Settings, overlay, meeting notes and cards). Undetectable is
+// deliberately not claimed here: the owner won't promise it. Nothing here
+// needs the Companion extension.
 const WHATS_NEW: AboutItem[] = [
-    { title: 'Direct Assist', body: 'Sends your last three minutes and files verbatim. In AI Providers.', badge: 'Off by default', Icon: Zap },
-    { title: 'Rerankers', body: 'Jina AI, OpenRouter, or a local model. In Retrieval.', Icon: ListOrdered },
-    { title: 'Lighter and faster', body: 'About a quarter less memory. Windows open faster.', Icon: Gauge },
-    { title: 'Provider failover', body: 'Stalled providers switch to a spare. Local models are untouched.', Icon: RefreshCw },
-    { title: 'Embedding models', body: 'Gemini, OpenAI, Voyage AI, Ollama and more. In Retrieval.', Icon: Boxes },
+    { title: 'Auto Answer', body: 'Answers when a question ends, and skips ones meant for others. In General.', badge: 'Beta', Icon: AutoAnswerIcon },
+    { title: 'Embeddings and rerankers', body: 'Gemini, OpenAI, Voyage AI, Jina AI or local models. In Retrieval.', Icon: ListOrdered },
+    { title: 'Phone Mirror 2.0', body: 'Live transcript, streaming answers and photos from your phone. In Sync.', Icon: Smartphone },
+    { title: 'Calendar sync', body: 'Meetings link to their event, with names and a follow-up email. In Calendar.', Icon: CalendarCheck },
+    { title: 'Better UI and animations', body: 'Liquid Glass controls, and smoother motion in every window.', Icon: Palette },
 ];
 
 // Compressed 2026-09-25 at the owner's request; every claim still checked
@@ -124,7 +137,6 @@ interface AboutSectionProps { }
 
 export const AboutSection: React.FC<AboutSectionProps> = () => {
     const t = useT();
-    const theme = useResolvedTheme();
     const donationClickTimeRef = useRef<number | null>(null);
     const appVersion = import.meta.env.VITE_APP_VERSION || 'unknown';
     const buildCommit = import.meta.env.VITE_BUILD_COMMIT || 'unknown';
@@ -167,11 +179,16 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                 <button
                     key={url}
                     onClick={() => openLink(url)}
-                    className="text-text-tertiary hover:text-text-primary transition-colors"
+                    className="group text-text-tertiary hover:text-text-primary transition-colors"
                     title={label}
                     aria-label={label}
                 >
-                    <Icon size={18} />
+                    {/* The Community buttons' glyph pop, so the creator's links
+                        answer the pointer the same way: spring in, plain out. */}
+                    <Icon
+                        size={18}
+                        className="[transition:transform_150ms_cubic-bezier(0.23,1,0.32,1)] group-hover:[transition:transform_280ms_cubic-bezier(0.34,1.56,0.64,1)] group-hover:scale-[1.12] motion-reduce:group-hover:scale-100"
+                    />
                 </button>
             ))}
         </div>
@@ -225,12 +242,33 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart, 'group-hover:text-pink-500') },
     ];
 
+    const shortCommit = buildCommit !== 'unknown' ? buildCommit.slice(0, 7) : null;
+    const versionLine = `${t('Version')} ${appVersion}${shortCommit ? ` (${shortCommit})` : ''}`;
+
     return (
         // General's own shell: space-y-6, and the stagger attribute is the ONLY
         // entrance. General pairs it with "animated fadeIn", which is dead —
         // neither `.animated` nor `.fadeIn` exists in any stylesheet (0 hits in
         // dist/assets/*.css), so copying it would have copied nothing.
         <div className="space-y-6 pb-10" data-settings-stagger>
+            {/* The header, as About This Mac draws one: the app's icon, its name,
+                and the version. The one element off the row grid — it is the
+                page's title, not a section. The build moved up here from the
+                footnote under Community, where it sat a screen away from the
+                question "which version am I on?". */}
+            <header className="flex flex-col items-center text-center pt-1">
+                <img
+                    src={isMac ? appIconMac : appIconWin}
+                    alt=""
+                    // The macOS render carries the Dock's own margin and shadow; the
+                    // Windows icon is full-bleed, so it is drawn smaller to match.
+                    className={isMac ? 'w-[88px] h-[88px]' : 'w-[76px] h-[76px] my-1.5'}
+                    draggable={false}
+                />
+                <h2 className="mt-2 text-[22px] leading-7 font-bold tracking-[-0.02em] text-text-primary">Natively</h2>
+                <div className="mt-0.5 text-xs text-text-secondary tabular-nums select-text">{versionLine}</div>
+            </header>
+
             <section>
                 <SettingsSectionHeading
                     title={`${t("What's New in")} v${APP_FEATURE_VERSION}`}
@@ -306,32 +344,6 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     {actions.map(({ title, body, action }) => (
                         <CommunityActionRow key={title} title={title} body={body} control={action} />
                     ))}
-                </div>
-                {/* Build identity is a FOOTNOTE, not a sixth row.
-                    As a row it read as out of place, for two reasons that are both
-                    about weight rather than position: it re-introduced a 40px tile
-                    after four deliberately tile-less action rows, so the text column
-                    stepped in, out and back in again down one group; and it put a
-                    second set of social links directly under the creator's, which is
-                    the same doubling the action tiles were removed for.
-
-                    A version string is metadata about the page, not a peer of
-                    "Support Development" — so it drops to `text-xs text-text-secondary`,
-                    the mark shrinks to 14px inline, and the links come down to 16px.
-                    Nothing is lost; it simply stops competing. Shape is Sync's
-                    `SettingsFootnote` from the shared module (px-1, mt-3, 12px
-                    secondary), widened to carry the links on the right. */}
-                <div className="flex items-center justify-between gap-4 px-4 mt-3 text-xs text-text-secondary">
-                    <span className="flex items-center gap-2 min-w-0">
-                        <img
-                            src={nativelyIcon}
-                            alt=""
-                            className="w-3.5 h-3.5 object-contain shrink-0 opacity-60"
-                            style={{ filter: theme === 'light' ? 'brightness(0)' : 'brightness(0) invert(1)' }}
-                            draggable={false}
-                        />
-                        <span className="tabular-nums truncate">{`Natively ${appVersion} · Build ${buildCommit}`}</span>
-                    </span>
                 </div>
             </section>
         </div>

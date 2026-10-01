@@ -26,6 +26,8 @@ const entryPoints = [
   path.join(srcDir, 'service-worker.ts'),
   path.join(srcDir, 'content-script.ts'),
   path.join(srcDir, 'popup.ts'),
+  // The Meet reader (names on the transcript), registered only when allowed.
+  path.join(srcDir, 'meet-reader.ts'),
 ];
 
 async function run() {

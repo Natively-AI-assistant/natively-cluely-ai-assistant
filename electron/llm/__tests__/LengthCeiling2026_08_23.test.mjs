@@ -21,7 +21,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = (p) => pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/llm/', p)).href;
 const { renderLengthDirectiveForPlan } = await import(dist('AnswerPlanner.js'));
-const { HARD_MAX_WORDS, SPOKEN_FULL_MAX_WORDS } = await import(dist('speakability.js'));
+const { HARD_MAX_WORDS, SPOKEN_FULL_MAX_WORDS, SPOKEN_FULL_PROMPT_MAX_WORDS } = await import(dist('speakability.js'));
 
 const plan = (answerType, question) => ({ answerType, answerStyle: undefined, question });
 
@@ -48,11 +48,24 @@ describe('SPOKEN_SHORT bands carry a clamped hard ceiling', () => {
 });
 
 describe('SPOKEN_FULL gets its own budget, never the outer cap', () => {
-  test('a behavioral STAR story is capped at SPOKEN_FULL_MAX_WORDS, not 130', () => {
+  // 2026-09-29: the prompt cap is SPOKEN_FULL_PROMPT_MAX_WORDS (~45s), below
+  // the 180-word telemetry ceiling — the ~30-second live-answer target.
+  test('a behavioral STAR story is capped at SPOKEN_FULL_PROMPT_MAX_WORDS', () => {
     const d = renderLengthDirectiveForPlan(plan('behavioral_interview_answer', 'Tell me about a time you disagreed with your manager.'));
-    assert.match(d, new RegExp(`at most ${SPOKEN_FULL_MAX_WORDS} words`));
-    assert.doesNotMatch(d, /130 words/);
+    assert.match(d, new RegExp(`at most ${SPOKEN_FULL_PROMPT_MAX_WORDS} words \\(~45 seconds spoken\\)`));
+    assert.doesNotMatch(d, /130 words|180 words|60 seconds/);
     assert.match(d, /a hard cap, not a target/);
+    assert.ok(SPOKEN_FULL_PROMPT_MAX_WORDS < SPOKEN_FULL_MAX_WORDS, 'the prompt cap sits under the telemetry ceiling');
+  });
+  test('the cap never asks for a story (a length line on story questions invited invented events)', () => {
+    const d = renderLengthDirectiveForPlan(plan('behavioral_interview_answer', 'How do you handle conflict within a team?'));
+    assert.doesNotMatch(d, /tell the story/i);
+    assert.match(d, /make the point completely, then stop/);
+  });
+  test('explicit styles stay exempt, star included (measured: any line there made a small model invent events)', () => {
+    for (const answerStyle of ['star', 'detailed', 'bullets', 'notes', 'code_only']) {
+      assert.equal(renderLengthDirectiveForPlan({ answerType: 'general_meeting_answer', answerStyle, question: 'x' }), '', answerStyle);
+    }
   });
 });
 

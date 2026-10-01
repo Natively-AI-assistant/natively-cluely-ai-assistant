@@ -20,6 +20,7 @@ import { X, ArrowRight } from 'lucide-react';
 import { GenieModal } from '../ui/GenieModal';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { TRIAL_FALLBACK_LIMITS, formatCompact } from '../../types/nativelyUsage';
+import { TRIAL_START_COPY, type TrialStartKind } from '../../lib/trial/trialStart.mjs';
 import flowerArt from '../../assets/cards/flower.jpg';
 
 // ─── Tokens ────────────────────────────────────────────────────
@@ -91,17 +92,26 @@ interface Props {
   isOpen:         boolean;
   hasNativelyKey: boolean;
   hasTrialToken:  boolean;
-  onDismiss:      () => void;
-  onStartTrial:   () => Promise<void>;
+  /** 'after_error': closed after our own error (network, server), which is no strike. */
+  onDismiss:      (reason?: 'after_error') => void;
+  /** Starts the trial (the host retries our own error once) and says how it went. */
+  onStartTrial:   () => Promise<TrialStartKind>;
   onManualSetup:  () => void;   // open settings; the toaster reports its own dismiss
+  onGetKey:       () => void;   // "Get a Natively key" once the trial is unavailable
 }
 
 export const TrialPromoToaster: React.FC<Props> = ({
-  isOpen, hasNativelyKey: _hasNativelyKey, hasTrialToken: _hasTrialToken, onDismiss, onStartTrial, onManualSetup,
+  isOpen, hasNativelyKey: _hasNativelyKey, hasTrialToken: _hasTrialToken, onDismiss, onStartTrial, onManualSetup, onGetKey,
 }) => {
   const [visible,    setVisible]    = useState(false);
   const [starting,   setStarting]   = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
+  // How the last start went. Never a raw code: the message is vetted copy.
+  const [outcome,    setOutcome]    = useState<TrialStartKind | null>(null);
+  const message = outcome && outcome !== 'started' ? TRIAL_START_COPY[outcome] : null;
+  // Rate limited: wait. Unavailable: the trial is gone, the card offers keys.
+  const blocked = outcome === 'rate_limited' || outcome === 'unavailable';
+  // Read by the Escape handler, whose closure outlives a render.
+  const ourErrorRef = React.useRef(false);
   const [plateHover, setPlateHover] = useState(false);
   const [ctaActive,  setCtaActive]  = useState(false);
   const [ctaPressed, setCtaPressed] = useState(false);
@@ -128,7 +138,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
     setVisible(false);
   };
 
-  const handleDismiss = () => closeThen(onDismiss);
+  const handleDismiss = () => closeThen(() => onDismiss(ourErrorRef.current ? 'after_error' : undefined));
 
   // Escape closes it, like every other card in the onboarding set.
   useEffect(() => {
@@ -140,20 +150,20 @@ export const TrialPromoToaster: React.FC<Props> = ({
   }, [visible, starting]);
 
   const handleStartTrial = async () => {
-    if (starting) return;
+    if (starting || blocked) return;
     setStarting(true);
-    setError(null);
-    try {
-      await onStartTrial();
-      closeThen(onDismiss);
-    } catch (e: any) {
-      setError(e?.message || 'Could not start trial. Check your connection.');
-      setStarting(false);
-    }
+    setOutcome(null);
+    let kind: TrialStartKind;
+    try { kind = await onStartTrial(); } catch { kind = 'failed'; }
+    if (kind === 'started') { closeThen(() => onDismiss()); return; }
+    ourErrorRef.current = kind === 'failed' || kind === 'rate_limited';
+    setOutcome(kind);
+    setStarting(false);
   };
 
   // Settings opens once this card has gone, so the two never pour at once.
   const handleManual = () => closeThen(() => { onManualSetup(); onDismiss(); });
+  const handleGetKey = () => closeThen(() => { onGetKey(); onDismiss(); });
 
   const ctaDur = ctaActive ? CTA_IN : CTA_OUT;
 
@@ -163,7 +173,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
       label="TrialPromoToaster"
       // It opens fresh (the orchestrator remounts it), so a picture of it
       // starting or showing an error is never one of what the next open shows.
-      keepPictures={!starting && !error}
+      keepPictures={!starting && !message}
       zIndex={9998}
       onBackdropClick={() => { if (!starting) handleDismiss(); }}
       onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}
@@ -258,12 +268,12 @@ export const TrialPromoToaster: React.FC<Props> = ({
           {/* marginTop: auto pins the action row to the bottom of the
               column however short the copy above it runs. */}
           <motion.div variants={ITEM} style={{ marginTop: 'auto', paddingTop: '32px' }}>
-            {error && (
+            {message && (
               <p role="alert" style={{
                 margin: '0 0 12px', fontSize: '12px', lineHeight: 1.45,
                 color: isLight ? '#B42318' : '#FCA5A5',
               }}>
-                {error}
+                {message}
               </p>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap' }}>
@@ -274,8 +284,8 @@ export const TrialPromoToaster: React.FC<Props> = ({
               */}
               <button
                 type="button"
-                onClick={handleStartTrial}
-                disabled={starting}
+                onClick={outcome === 'unavailable' ? handleGetKey : handleStartTrial}
+                disabled={starting || outcome === 'rate_limited'}
                 onPointerEnter={e => { if (e.pointerType === 'mouse') setCtaActive(true); }}
                 onPointerLeave={() => { setCtaActive(false); setCtaPressed(false); }}
                 onPointerDown={() => setCtaPressed(true)}
@@ -293,18 +303,20 @@ export const TrialPromoToaster: React.FC<Props> = ({
                     ? (ctaActive ? 'rgba(11,16,32,0.04)' : 'rgba(11,16,32,0)')
                     : (ctaActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0)'),
                   outline: 'none',
-                  cursor: starting ? 'progress' : 'pointer',
+                  cursor: starting ? 'progress' : outcome === 'rate_limited' ? 'default' : 'pointer',
                   fontFamily: FONT,
                   fontSize: '13px', fontWeight: 500, letterSpacing: '-0.01em',
                   color: ctaActive ? INK.strong : (isLight ? 'rgba(11,16,32,0.84)' : 'rgba(255,255,255,0.88)'),
-                  opacity: starting ? 0.55 : 1,
+                  opacity: starting || outcome === 'rate_limited' ? 0.55 : 1,
                   transform: ctaPressed && !reduced ? 'scale(0.97)' : 'none',
                   transition:
                     `border-color ${ctaDur}ms ${EASE_CSS}, background-color ${ctaDur}ms ${EASE_CSS},`
                     + ` color ${ctaDur}ms ${EASE_CSS}, opacity 200ms ${EASE_CSS}, transform 120ms ${EASE_CSS}`,
                 }}
               >
-                <span>{starting ? 'Starting trial…' : 'Start free trial'}</span>
+                <span>{starting ? 'Starting trial…'
+                  : outcome === 'unavailable' ? 'Get a Natively key'
+                  : outcome === 'failed' ? 'Try again' : 'Start free trial'}</span>
                 <ArrowRight
                   size={14} strokeWidth={1.9} aria-hidden
                   style={{
@@ -332,7 +344,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
                 onFocus={e => (e.currentTarget.style.color = INK.body)}
                 onBlur={e => (e.currentTarget.style.color = INK.faint)}
               >
-                I'll set up manually
+                {outcome === 'unavailable' ? 'Use my own keys' : "I'll set up manually"}
               </button>
             </div>
           </motion.div>

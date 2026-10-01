@@ -1,0 +1,302 @@
+{
+ "batch": "b006-recruiting",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DREC-CTX-G2": {
+   "title": "Candidate file: Dana Whitfield resume and phone-screen scorecard",
+   "text": "CANDIDATE FILE - Dana Whitfield\nReq: KF-ENG-2231 Senior Backend Engineer, Settlements Platform\nSource: referral (Owen Tran, Carrier Ops)\n\nRESUME (as submitted)\n\nDana Whitfield\nSenior Software Engineer - Denver, CO\n\nEXPERIENCE\n\nHarborline Freight - Senior Software Engineer (Mar 2023 - present)\n- Co-led the migration of the carrier-settlement ledger from a Rails monolith to Go services, with one other senior engineer.\n- Reduced p99 settlement API latency from 840ms to 190ms after the migration.\n- Built a change-data-capture pipeline from Postgres into Kafka together with a platform engineer.\n- Mentored 2 junior engineers. Team of 4 engineers, reporting to the platform engineering manager.\n- Participated in the on-call rotation for settlement services.\n\nQuillpay - Software Engineer II (Jun 2019 - Aug 2022)\n- Built payment retry logic with idempotency keys for card and ACH payments.\n- Wrote nightly reconciliation jobs comparing internal ledger entries against processor reports.\n- Primary on-call for the payments API for 18 months.\n\nBrightfield Analytics - Software Engineer (Jul 2016 - May 2019)\n- Built data ingestion services in Python and Go.\n- Maintained internal reporting APIs.\n\nEDUCATION\nB.S. Computer Engineering, University of Northern Colorado, 2016\n\nSKILLS\nGo, Postgres, Kafka, Terraform, Python, gRPC, Datadog\n\nPHONE SCREEN SCORECARD\nDate: September 24, 2026\nScreener: Tomasz Weller (Talent Acquisition)\nDuration: 30 minutes\n\nRatings (1-5)\n- Communication: 4\n- Payments domain depth: 4\n- Go and backend fundamentals: 3 (screen was light on technical depth; defer to onsite)\n- Motivation for this role: 4\n\nNotes\n- Clear, organized answers about the ledger migration. Described the dual-write cutover in some detail.\n- Flag: said \"I managed a team of six\" at Harborline. Resume says Team of 4 and the title is individual contributor. Clarify whether Dana managed people or led a workstream.\n- Flag: the resume shows no role between Quillpay and Harborline (Sep 2022 to Feb 2023). Not discussed on the screen.\n- Salary expectation stated by candidate: $195,000 base.\n- Notice period: 3 weeks.\n- Currently interviewing at two other companies, one at final round.\n- Work arrangement: candidate said hybrid is fine.\n\nRecommendation: Advance to hiring manager call. Probe (1) personal ownership vs team ownership of the ledger migration, (2) the management claim, (3) the gap between Quillpay and Harborline."
+  },
+  "DREC-CTX-G1": {
+   "title": "Role brief: Senior Backend Engineer, Settlements Platform (Kestrel Freightworks)",
+   "text": "ROLE BRIEF - Senior Backend Engineer, Settlements Platform\nCompany: Kestrel Freightworks (Denver, CO)\nReq ID: KF-ENG-2231\nHiring manager: Hollis Barrington, Engineering Manager, Settlements Platform\nProduct partner: Anjali Mehra, Senior PM\nRecruiter of record: Talent Acquisition, Engineering pod\nLast updated: September 18, 2026\n\nABOUT THE TEAM\nThe Settlements Platform team owns everything that moves money between Kestrel, shippers and carriers: invoice matching, carrier payouts, fuel-surcharge adjustments and the daily reconciliation against bank files. The team is 7 engineers: 2 staff, 3 senior and 2 mid-level. Five sit in the Denver office and two are in the Salt Lake City satellite office. The team runs two-week sprints and ships to production several times a day behind feature flags.\n\nWHY THE ROLE IS OPEN\nThis is a backfill. The senior engineer who previously held this seat transferred internally to the Fraud Detection team in July 2026. It is not a new headcount.\n\nWHAT THE PERSON WILL DO\n- Design and build Go services for carrier payouts and settlement ledgers.\n- Own the migration of the last pieces of the legacy billing service off Kotlin and onto the Go platform.\n- Improve reconciliation tooling so finance can close the month in under three days.\n- Join the team on-call rotation (one week, roughly every 7 weeks).\nThis is an individual contributor role. Expect roughly 70% hands-on coding; the rest is design reviews, mentoring and cross-team work with Finance and Carrier Ops. It has no direct reports.\n\nMUST-HAVES\n- 6+ years building backend services in production.\n- Strong Go. Postgres at scale. Event streaming (Kafka or similar).\n- Has shipped something that handles money: payments, billing, ledgers or payouts.\n\nNICE-TO-HAVES\n- Kotlin experience is a nice-to-have, not required. The Kotlin service is being retired.\n- Logistics or freight domain experience.\n- Terraform.\n\nLOCATION AND WORK ARRANGEMENT\nHybrid. The team is in the office on Tuesdays and Thursdays (Denver or Salt Lake City). Fully remote is not available for this req. A relocation stipend of $7,500 is available for candidates moving to Denver or Salt Lake City.\n\nCOMPENSATION\nBase salary band: $168,000-$204,000. Target annual bonus: 10% of base. Equity: an RSU grant, sized by the Compensation team at offer stage; recruiters should not quote a number before then. Recruiters may share the full base band with any candidate who asks (Colorado pay transparency).\n\nBENEFITS\n- Parental leave: 16 weeks fully paid for all parents, available after 90 days of employment.\n- 401(k) with a 4% company match, vesting immediately.\n- Medical, dental and vision: Kestrel covers 90% of employee premiums.\n- Learning budget: $1,200 per year.\n- 20 days PTO plus 10 company holidays.\n\nVISA\nH-1B transfers are supported for this req. New cap-subject sponsorship is not available for this req.\n\nINTERVIEW PROCESS\n1. Recruiter screen (30 minutes).\n2. Hiring manager call with Hollis (45 minutes).\n3. Onsite loop, virtual or in Denver: 4 interviews (system design, Go coding, payments domain deep-dive, values and collaboration).\nDecision within 5 business days of the onsite.\n\nTIMELINE\nTarget start date: on or before November 16, 2026.\n\nRECRUITER-ONLY NOTES (DO NOT SHARE WITH CANDIDATES)\n- Offers with base above $196,000 need VP Engineering sign-off.\n- Hollis has passed on the last two finalists because they had drifted into full-time management; probe recent hands-on work early.\n- A competing internal candidate may apply; do not mention this to external candidates."
+  },
+  "DREC-CTX-I1": {
+   "title": "Req summary: Warehouse Operations Supervisor, Reno",
+   "text": "REQ SUMMARY - Warehouse Operations Supervisor, Reno Distribution Center\nReq ID: KF-OPS-0874\n\nKestrel Freightworks is hiring a Warehouse Operations Supervisor for the night shift at the Reno Distribution Center. The supervisor leads a crew of 14 to 18 associates across receiving, putaway and outbound loading.\n\nResponsibilities\n- Run shift start huddles and assign dock doors.\n- Track units per hour and dock-to-stock time on the floor dashboard.\n- Coordinate with the day-shift supervisor at handoff.\n- Enforce powered-equipment safety rules and complete incident reports.\n\nRequirements\n- 2+ years supervising in a warehouse or distribution setting.\n- Current forklift certification, or ability to certify within 30 days.\n- Able to lift 50 pounds and stand for a 10-hour shift.\n\nPay and schedule\n- $31.00 to $38.00 per hour depending on experience.\n- Night shift differential: $2.50 per hour for hours worked between 10 p.m. and 6 a.m.\n- Schedule: four 10-hour shifts, Sunday through Wednesday.\n- On-call weekend coverage is paid at time and a half.\n\nInterview process\n- One 20-minute phone screen, then a single 60-minute onsite walk-through with the site manager.\n- Offers typically go out within 48 hours."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DREC-CTX-C1": {
+   "title": "Req handoff notes from previous recruiter, KF-ENG-2231",
+   "text": "REQ HANDOFF NOTES - KF-ENG-2231 Senior Backend Engineer, Settlements\nFrom: Maren Ostby (previous recruiter on this req)\nTo: incoming recruiter\nWritten in pieces between June and August 2026\n\nHi! Handing this one over since I'm moving to the GTM pod. Brain dump below, sorry it's messy.\n\nCOMP\nBase band is $150,000-$180,000. Don't go above that without talking to Hollis.\nUpdate 8/12: per Hollis, the band was updated and the top of band is now $195,000. I think that's approved, not 100% sure it went through Comp yet.\n\nLOCATION\nRole is remote-friendly. Fully remote OK for strong candidates, Hollis said he'd make an exception for the right person.\nLater in July Hollis told me he wants people in the office Tue/Thu, no exceptions, because the last remote hire didn't work out. So I'm not sure where this landed.\n\nLEVEL / SCOPE\nThis is basically a lead-level role. It's ok if they've been managing for a while, Hollis wants someone who can grow into running the team.\nAlso from the kickoff: HM wants 70% hands-on coding and no direct reports for at least the first year.\n\nINTERVIEW LOOP\nRecruiter screen, HM call, then a 3-round onsite (system design, coding, values).\nNote: Anjali asked to add a payments domain round, so it might be 4 interviews now. Check the ATS.\n\nSTART DATE\nHollis said ASAP, ideally before the end of Q3.\nFinance also mentioned the headcount is budgeted for a January 2027 start.\n\nWHY OPEN\nNew headcount from the 2026 plan. (Someone on the team also mentioned it might be a backfill for the engineer who moved to Fraud? Not sure.)\n\nCANDIDATES IN FLIGHT\nTwo in the pipeline when I left, both at HM call stage. Notes are in the ATS.\n\nGood luck, it's a good team!"
+  }
+ },
+ "items": [
+  {
+   "jid": "6eb5a2c75f01",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "I've heard some rumors about layoffs over there this year. Is that true? Should I be worried?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't speak to rumors about layoffs, and I wouldn't want to guess at something like that. What I can tell you is that this role is open because the team is growing, and I'll get you a direct answer from the hiring manager before you go further."
+  },
+  {
+   "jid": "209ffa07885c",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Scorecard's in and I have fifteen minutes left with Dana. What are the two or three things I should dig into, and what's the first question for each?",
+   "conversation": [],
+   "evidence_ids": [
+    "DREC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Three things, in this order:\n\n1. The ledger migration: \"Walk me through what you personally built versus what your co-lead owned.\"\n2. The management claim: \"You mentioned managing a team of six at Harborline. What did that look like day to day?\"\n3. The gap: \"What were you doing between Quillpay and Harborline?\""
+  },
+  {
+   "jid": "0e292e05a279",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "I'd have to give three weeks' notice, so realistically I could start mid-November. Does that work with your timeline?",
+   "conversation": [],
+   "evidence_ids": [
+    "DREC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Mid-November works on our side, and thanks for flagging the notice period up front. Let me confirm the exact start date with the hiring manager and get back to you today. While I have you, what's drawing you to this role specifically?"
+  },
+  {
+   "jid": "e166c6fccf87",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Give me one good behavioral question about handling a disagreement with a manager.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ask: \"Tell me about a time you disagreed with a manager's decision. What did you do, and how did it end?\"\n\nThen listen for whether they raised it directly with the manager, what evidence they brought, and whether they could commit once the call was made."
+  },
+  {
+   "jid": "d197f54c21eb",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Give me a quick read on her so far: two strengths, one concern, and should I push her through to the onsite? Only what she actually said.",
+   "conversation": [
+    "USER (spoken): Walk me through a production incident you owned.",
+    "CANDIDATE: Um, so we had an outage once where payments were double-posting. We fixed it pretty fast, it was a team effort really.",
+    "USER (spoken): What was your part specifically?",
+    "CANDIDATE: I was on the incident call, I helped look through logs. Then afterwards I added the idempotency check on the posting endpoint, keyed on the carrier invoice ID, and I wrote the backfill script that reversed 312 duplicate entries.",
+    "USER (spoken): How did you verify the backfill?",
+    "CANDIDATE: We reconciled against the bank file for the three affected days and it matched to the cent."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two strengths: she moved from a vague \"team effort\" answer to real ownership when pressed, naming the idempotency check keyed on the carrier invoice ID and the backfill script that reversed 312 duplicates. And she verified the fix concretely, reconciling against the bank file for the three affected days to the cent.\n\nThe concern is that her first pass was thin and she only got specific when you pushed. Probe whether that's nerves or her default level of detail.\n\nI'd push her through. Ask next: \"Tell me about a time the fix didn't hold or the reconciliation didn't match. What did you do then?\""
+  },
+  {
+   "jid": "9743ebd442f1",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "And why is the role open? Did the last person leave?",
+   "conversation": [
+    "CANDIDATE (heard): Can you tell me a bit about the team? Like how many engineers, what's the senior to junior mix, and is everyone in Denver or spread out?",
+    "NATIVELY: I don't have the team breakdown in front of me, so I don't want to guess at numbers. What I can tell you is that this role sits on the team you'd be working with day to day, and I'll get you the exact headcount, the seniority mix, and where everyone's based. Let me confirm those details and follow up with you directly.",
+    "CANDIDATE (heard): Who'd I report to?",
+    "NATIVELY: I don't have the reporting line in front of me either, so I won't guess at a name or title. What I can tell you is that this role sits on the team you'd be working with day to day, and I'll confirm exactly who you'd report to and get back to you directly."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the details on why the role is open in front of me, so I won't speculate about whether someone left. What I can tell you is that this is a role on the team you'd be working with day to day, and I'll confirm the reason it's open and get back to you directly."
+  },
+  {
+   "jid": "49202c901207",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "What's the salary range for this role?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The range for this role is something I want to give you accurately rather than approximately, so let me confirm the band with our team and follow up with you directly. In the meantime, what number are you working with, so I can tell you whether it's in the right area?"
+  },
+  {
+   "jid": "f6aea735c669",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "A conflict? Hmm. I mean, I get along with pretty much everyone, honestly. I can't really think of a real conflict.",
+   "conversation": [],
+   "evidence_ids": [
+    "DREC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's a common dodge, so don't let it stand. Ask for a disagreement rather than a fight: \"That's fair. It doesn't have to be a blowup. Think of a time you and someone saw a decision differently. What was the disagreement, and what did you do?\""
+  },
+  {
+   "jid": "fb6ac1335eef",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Before we get into it, what's your background? Were you ever an engineer yourself, or have you always been in recruiting?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I came up through engineering before moving into recruiting, so I've sat on both sides of the table. These days I run the hiring side, but I still think like someone who's shipped things, which is why I care a lot about how you actually solve problems."
+  },
+  {
+   "jid": "f4b6c2a42d1b",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "So I've been at Harborline about five years now, and I've been leading the platform team pretty much the whole time.",
+   "conversation": [],
+   "evidence_ids": [
+    "DREC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's a good opening, but it doesn't match what's on file. Ask: \"Help me square that with your resume. It shows you at Harborline since March 2023 as a senior engineer on a team of four, and earlier you mentioned managing a team of six. Which is it, and what did you actually own on the ledger migration versus the other senior engineer?\""
+  },
+  {
+   "jid": "9daf764daef9",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Sure. So I'm a backend engineer, about ten years in, mostly payments and logistics. Right now I'm at a freight company working on ledger and settlement services in Go, before that a fintech startup, and before that some data work. I'm looking mainly because I want bigger scale and, honestly, a team that ships more often than once a month.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ten years across payments and logistics is a solid base for this. Let me start with the scale piece: what's the largest system you've owned end to end, and what broke first when it grew?"
+  },
+  {
+   "jid": "764d557495f9",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Follow-up on ownership?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ask them to separate what they decided from what they executed: \"Walk me through one decision on that project that was yours alone. What did you choose, and what happened because of it?\" Then follow the thread: \"Who else was involved, and where did your call override theirs?\" If the answer stays on \"we,\" keep pressing for the specific call, the tradeoff they weighed, and the result they owned."
+  },
+  {
+   "jid": "c93ec52b2a0c",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "I'll be upfront, I've been managing for the last two years and I haven't written much production code lately. Is that going to be an issue for this role?",
+   "conversation": [],
+   "evidence_ids": [
+    "DREC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The role is 70% hands-on coding with no direct reports for at least the first year, so the honest answer is that recent production work matters here. What I'd want to hear is how they've stayed close to the code while managing, and how quickly they'd ramp back into writing it day to day.\n\nAsk: \"That's fair to flag. Tell me how much hands-on work you've kept up in the last two years, and what you'd do in your first month here to get back to writing production code regularly.\""
+  },
+  {
+   "jid": "a536d3f44cf3",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Summarize this candidate's Kafka experience for my notes.",
+   "conversation": [
+    "USER (spoken): Tell me a bit about your Kafka experience.",
+    "CANDIDATE: Sure. At my current job we stream settlement events through Kafka, I'd say around forty thousand events a minute at peak. I set up the consumer groups for the reconciliation service and I wrote our dead-letter handling. I didn't do the cluster ops, that's a separate platform team.",
+    "USER (spoken): Any schema management?",
+    "CANDIDATE: Yeah, we use Avro with a schema registry, and I pushed us to add backward compatibility checks in CI so nobody could break consumers on deploy."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "For your notes: he streams settlement events through Kafka, around forty thousand events a minute at peak, and he built the consumer groups for the reconciliation service plus the dead-letter handling. He didn't do cluster ops, that sat with a separate platform team. On schema management, Avro with a schema registry, and he pushed for backward compatibility checks in CI. Worth probing how he sized partitions and handled consumer lag."
+  },
+  {
+   "jid": "0fe32c6eaa13",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "What's our parental leave policy? She just asked.",
+   "conversation": [],
+   "evidence_ids": [
+    "DREC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Parental leave is **16 weeks fully paid** for all parents, available after **90 days** of employment. That's the whole policy as it's written in the role brief, so if she wants details on how it's taken, whether it can be split, or how it interacts with state leave, tell her you'll confirm those with HR and follow up."
+  },
+  {
+   "jid": "98c483785aad",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "And before that it was Quillpay, straight through, I went right from one to the other.",
+   "conversation": [
+    "CANDIDATE (heard): So I've been at Harborline about five years now, and I've been leading the platform team pretty much the whole time.",
+    "NATIVELY: That's a good opening, but it doesn't match what's on file. Ask: \"Help me square that with your resume. It shows you at Harborline since March 2023 as a senior engineer on a team of four, and earlier you mentioned managing a team of six. Which is it, and what did you actually own on the ledger migration versus the other senior engineer?\""
+   ],
+   "evidence_ids": [
+    "DREC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the gap I want to close. Ask: \"You said straight through, but your resume shows Quillpay ending in August 2022 and Harborline starting in March 2023. What were you doing in those months?\""
+  },
+  {
+   "jid": "6ff61c7a51ee",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Give me a sharper follow-up.",
+   "conversation": [
+    "USER (spoken): Tell me about a time you had to influence a decision without having authority over the people involved.",
+    "CANDIDATE: Yeah so, there was this time the team wanted to adopt a new message queue and I thought it was a bad idea, so I, you know, talked to people about it, and eventually we went a different way. It worked out pretty well.",
+    "USER (typed to Natively): Was that a strong answer?",
+    "NATIVELY: Thin answer: no specifics on who he influenced, what he actually said, or how he knew it worked. Ask: \"What was your specific objection to the message queue, and who did you have to convince to change the decision?\""
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sharper version: \"You said you pushed back on the message queue. What was your specific objection, who owned that decision, and what did you say to them to change it?\"\n\nThat forces a name, a reason, and the actual words he used, so you can tell whether he drove the change or just disagreed from the sidelines."
+  },
+  {
+   "jid": "b34a7bc33293",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Come on, ballpark?",
+   "conversation": [
+    "CANDIDATE (heard): What's the salary range for this role?",
+    "NATIVELY: The range for this role is something I want to give you accurately rather than approximately, so let me confirm the band with our team and follow up with you directly. In the meantime, what number are you working with, so I can tell you whether it's in the right area?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I hear you, and I don't want to guess at a number and have it be wrong. I'll get you the confirmed band today. If you tell me what you're targeting, I can tell you right now whether that's in the right area."
+  },
+  {
+   "jid": "12728df5220e",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "What's CDC?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "CDC usually means **Change Data Capture**: reading a database's write-ahead or binlog stream and turning each insert, update, and delete into an event other systems consume, so downstream stores stay in sync without full reloads. Tools like Debezium and Kafka Connect are common."
+  },
+  {
+   "jid": "6a21c6bf1a9c",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Quick one, I'm on an H-1B right now. Is that going to be a problem, do you do transfers?",
+   "conversation": [],
+   "evidence_ids": [
+    "DREC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, we do sponsor transfers, and being on an H-1B isn't a problem on our end. I'll confirm the specifics of how we handle the transfer and timing with our team and get back to you."
+  }
+ ]
+}

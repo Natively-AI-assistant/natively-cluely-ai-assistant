@@ -130,6 +130,12 @@ export function createProviderRateLimiters() {
         // this is the same conservative gateway default rather than a
         // documented figure.
         fluxion: new RateLimiter(120, 2.0),
+        // AgentRouter publishes no numbers either, but its terms name bypassing
+        // its rate and concurrency limits as grounds for suspension, and it is a
+        // free community service. Half the gateway default: an interactive
+        // meeting never needs 60 requests a minute, and a runaway loop should
+        // queue here rather than get the user's account flagged.
+        agentrouter: new RateLimiter(60, 1.0),
         // 9Router runs on the user's own machine, so the only ceiling that
         // matters is the upstream it forwards to — which it chooses per
         // request and rotates between accounts. Nothing local to rate-limit,

@@ -404,7 +404,7 @@ app.whenReady().then(async () => {
   if (l.hoverTint === '') fail('grey CTA has no --pi-cta-hover declared.');
   else if (rgb(l.hoverTint) && lBg && lum(rgb(l.hoverTint)) <= lum(lBg)) fail(`the grey pill's hover tint ${l.hoverTint} is not brighter than its body ${l.bg} — an achromatic body has brightness as its only lever.`);
   // The neutral hover rule is (0,3,0) and .pi-cta--trial is (0,1,0), so the
-  // variant has to declare its own or the purple cross-fades to grey.
+  // variant has to declare its own or the blue cross-fades to grey.
   const t = rgb(m.darkTrial.hoverTint);
   if (!t) fail(`trial variant has no own --pi-cta-hover (${m.darkTrial.hoverTint}) — it would lose the cascade to the neutral hover rule and turn grey under the pointer.`);
   else if (chroma(t) < 40) fail(`trial hover tint ${m.darkTrial.hoverTint} has lost its hue (chroma ${chroma(t)}).`);

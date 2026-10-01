@@ -1,0 +1,265 @@
+{
+ "batch": "b035-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-G1": {
+   "title": "ECON 201 Week 6 notes: money, inflation, Phillips curve",
+   "text": "ECON 201 - Principles of Macroeconomics\nLecture notes, Week 6: Money, Inflation and the Phillips Curve\nLecturer: Prof. Marguerite Halvorsen, Eastbrook University\n\n1. What inflation is\nInflation is a sustained rise in the general price level, measured as the percentage change in a price index. The consumer price index (CPI) compares the cost of a fixed basket of goods today with the cost of the same basket in a base year: CPI = (cost of basket today / cost of basket in base year) x 100. Example: the basket cost 400 dollars in the base year and costs 432 dollars today, so CPI = 108, meaning prices are 8 percent higher than in the base year.\n\n2. Quantity theory of money\nThe identity is MV = PY, where M is the money supply, V is velocity (how often a unit of money changes hands), P is the price level and Y is real output. If V and Y are roughly stable, growth in M shows up as growth in P. Worked example for the fictional economy of Norvale: M = 500 billion, V = 4, so nominal spending PY = 2,000 billion. Real output Y = 1,000 billion, so P = 2.0. If the central bank raises M by 10 percent to 550 billion while V and Y stay put, PY = 2,200 billion and P = 2.2, a 10 percent rise in prices. Prof. Halvorsen stressed that the \"V and Y stable\" assumption is the whole argument, and it fails in the short run.\n\n3. Real versus nominal interest rates\nFisher equation: i is approximately r + expected inflation (pi-e), where i is the nominal rate and r is the real rate. Example: a nominal rate of 7 percent with expected inflation of 4 percent gives an expected real rate of about 3 percent. The exact form is (1 + i) = (1 + r)(1 + pi-e). When inflation is unexpected it redistributes wealth: borrowers with fixed-rate loans gain, while lenders and savers holding fixed nominal assets lose.\n\n4. Costs of inflation\nShoe-leather costs (extra trips to the bank to hold less cash), menu costs (the cost of repricing), tax distortions, and uncertainty that makes long-term contracts risky. Extreme case: hyperinflation in Weimar Germany in 1923, when at the peak prices were doubling roughly every four days and workers were paid twice a day so they could spend wages before they lost value.\n\n5. The Phillips curve\nThe original observation was a short-run inverse relationship between unemployment and inflation. The stagflation of the 1970s (high inflation and high unemployment together) showed that this is not a stable menu that policymakers can choose from. The expectations-augmented version is pi = pi-e - b(u - u*), where u* is the natural rate of unemployment and b measures how strongly inflation responds to the unemployment gap. The curve shifts up when expected inflation rises. In the long run, the curve is vertical at u*, so there is no lasting trade-off.\n\n6. Disinflation case study\nBetween 1979 and 1982 the US central bank, under Paul Volcker, pushed its policy rate to about 20 percent in 1981. Unemployment rose to about 10.8 percent in 1982, and inflation fell from double digits to roughly 4 percent by 1983. The lost output during a disinflation is often summarized by the \"sacrifice ratio\".\n\n7. Rule of 72\nYears to double is approximately 72 divided by the growth rate in percent. At 3 percent inflation the price level doubles in about 24 years (72 / 3 = 24).\n\nMidterm note: the midterm covers Weeks 1 to 6. Expect one Fisher equation calculation and one short essay on why the Phillips curve shifts. Calculators are allowed. The formula sheet will include only MV = PY."
+  },
+  "LECTURE-CTX-C1": {
+   "title": "STAT 101 Week 4 handout: p-values and confidence intervals",
+   "text": "STAT 101 - Week 4 handout: p-values and confidence intervals\nInstructor: Dr. Priyanka Vashti, Eastbrook University\n\nSection 1. What a p-value is\nA p-value is the probability of seeing data at least as extreme as ours, assuming the null hypothesis is true. It is not the probability that the null hypothesis is true.\n\nSection 2. Worked example: the cafe\nA cafe claims its average wait is 70 seconds. We sample n = 25 customers and find a mean wait of 74 seconds with a sample standard deviation s = 10. Standard error = s / sqrt(n) = 10 / 5 = 2 seconds. The test statistic is (74 - 70) / 2 = 2.0.\n\nSection 3. The 95 percent confidence interval\nCritical value for 95 percent confidence: z = 1.96. Margin of error = critical value x standard error. Using z = 1.65 for 95 percent confidence, the margin of error is 1.65 x 2 = 3.3 seconds, so the interval is 70.7 to 77.3 seconds. Since our sample mean of 72 seconds sits inside this interval, we cannot distinguish it from the claim.\n\nSection 4. Decision rule\nChoose a significance level alpha in advance, usually 0.05. Reject the null hypothesis when the p-value is smaller than alpha. For a larger check, with n = 36 the standard error would shrink to 10 / 6 = 1.67 seconds and the same 4-second gap would be even more convincing.\n\nQuick summary box (read this before the quiz)\n- The p-value tells you the chance that the null hypothesis is true.\n- If p > 0.05, reject the null hypothesis.\n- A 95 percent confidence interval uses z = 1.96.\n- Bigger samples give smaller standard errors.\n\nNote: a \"large sample\" means the sample is big enough for the normal approximation to work. Roughly 30 or more is the usual rule of thumb, but this handout does not say exactly where the line is."
+  },
+  "LECTURE-CTX-I1": {
+   "title": "Campus parking closure notice",
+   "text": "EASTBROOK UNIVERSITY - TRANSPORTATION AND PARKING SERVICES\nNotice to the campus community\n\nEffective Monday, Lot C (behind the Fenwick Athletic Center) will be closed for resurfacing. The closure is expected to last approximately three weeks, weather permitting.\n\nWhat this means for you:\n- Permit holders assigned to Lot C may park in Lot F or Lot H at no extra charge for the duration of the closure. Please display your existing permit.\n- Lot F is a ten-minute walk from the main quad. The free campus shuttle will run every fifteen minutes between Lot F and the Student Union from 7:30 a.m. to 6:30 p.m.\n- Visitor parking has been relocated to the lower level of the Ashworth Garage. Visitors should collect a temporary pass from the kiosk at the garage entrance.\n- Accessible parking spaces displaced by the closure have been reassigned to the first row of Lot F, nearest the shuttle stop.\n- Vehicles left in Lot C after 6:00 a.m. on Monday will be towed at the owner's expense.\n\nQuestions about permits can be sent to the Parking Services office in the Ashworth Building, room 104, or answered at the front desk between 9:00 a.m. and 4:00 p.m. on weekdays. Bicycle racks near the Fenwick Center remain open and are not affected. We appreciate your patience while we improve campus facilities."
+  }
+ },
+ "items": [
+  {
+   "jid": "47211538afb6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "That's the central limit theorem, and honestly it's the closest thing to a miracle in statistics.",
+   "conversation": [
+    "PROFESSOR: Roll a single die and every face from one to six is equally likely, so the distribution is flat, not a bell at all.",
+    "PROFESSOR: Now roll thirty dice and write down the average. Do that a thousand times and plot all the averages.",
+    "PROFESSOR: What you get is a bell curve centered on three and a half."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The lecturer is right, and the reason it feels like a miracle is that the shape of the original distribution barely matters. Roll one die and you get a flat distribution, but average thirty of them and the sampling distribution of the mean is approximately normal, centered on the true mean of 3.5. The theorem says that as the sample size grows, the distribution of the sample mean approaches a normal distribution regardless of the underlying population's shape, and the spread shrinks by a factor of the square root of n. That's why thirty dice give you a tight bell while one die gives you a rectangle."
+  },
+  {
+   "jid": "79af9737fefe",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Is that realistic?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That depends on what \"that\" is, and I don't have the specifics in front of me. If you tell me the number or the plan you're asking about, I can give you a straight read on whether it holds up."
+  },
+  {
+   "jid": "ad6214aeb28c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So remember, the Phillips curve is not a menu you can order from, it moves when people's expectations move.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Right, and the expectations-augmented version captures that: pi = pi-e - b(u - u*), where u* is the natural rate and b measures how strongly inflation responds to the unemployment gap. The key is that pi-e sits on the right-hand side, so when expected inflation rises, the whole curve shifts up. That's why the 1970s stagflation broke the simple menu story, and why in the long run the curve is vertical at u*, with no lasting trade-off."
+  },
+  {
+   "jid": "1e64b28e87b2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "The notes say the p-value is the probability that the null hypothesis is true, right? So a p of 0.03 means a 3 percent chance the null holds?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the classic mix-up, and the handout actually contradicts itself on it. Section 1 has it right: a p-value is the probability of data at least as extreme as yours, assuming the null is true. It is not the probability that the null is true, so 0.03 is not a 3 percent chance the null holds. The summary box at the end states it incorrectly, and its decision rule is backwards too."
+  },
+  {
+   "jid": "805186a51381",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Can you say that in plainer words?",
+   "conversation": [
+    "USER (typed to Natively): What is entropy?",
+    "NATIVELY: Entropy is a measure of how many ways a system's microscopic parts can be arranged to produce the same overall state. The more arrangements that look the same from the outside, the higher the entropy.\n\nIn thermodynamics it's often described as disorder, but the cleaner idea is missing information: entropy counts the configurations you can't distinguish. The formula is **S = k log W**, where S is entropy, k is Boltzmann's constant, and W is the number of microstates matching the observed macrostate.\n\nA simple example: a shuffled deck of cards has high entropy because almost every arrangement looks equally random, while a sorted deck has low entropy because only a few arrangements count as \"sorted.\""
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Entropy is basically a count of how many ways you can rearrange the small parts of something without changing how it looks from the outside. A messy room has high entropy because there are tons of arrangements that all look messy. A tidy room has low entropy because only a few arrangements count as tidy. So more hidden arrangements means more entropy."
+  },
+  {
+   "jid": "a0d3622a2015",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I need the previous question or topic to answer that — what was just asked?"
+  },
+  {
+   "jid": "1171d0f4b84c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Consider the prisoner's dilemma.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The prisoner's dilemma is a setup where two people each choose to cooperate or defect, and the payoffs are arranged so that defecting is always better for you no matter what the other person does, yet if you both defect you both end up worse off than if you'd both cooperated. The classic story is two suspects interrogated separately: each is tempted to confess for a lighter sentence, but if both confess they both get a longer sentence than if both stayed quiet. The tension is that the individually rational choice leads to a collectively worse outcome, which is why it's the standard model for why cooperation is hard without trust or repeated interaction."
+  },
+  {
+   "jid": "d1f888f8659a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Does that make sense?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, that makes sense. The part about how the pieces fit together is clear, and I can follow the reasoning. If anything, I'd just want to double-check the one step where it moves from the general idea to the specific case, but otherwise I'm with you."
+  },
+  {
+   "jid": "f079cd8b596e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What is entropy?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Entropy is a measure of how many ways a system's microscopic parts can be arranged to produce the same overall state. The more arrangements that look the same from the outside, the higher the entropy.\n\nIn thermodynamics it's often described as disorder, but the cleaner idea is missing information: entropy counts the configurations you can't distinguish. The formula is **S = k log W**, where S is entropy, k is Boltzmann's constant, and W is the number of microstates matching the observed macrostate.\n\nA simple example: a shuffled deck of cards has high entropy because almost every arrangement looks equally random, while a sorted deck has low entropy because only a few arrangements count as \"sorted.\""
+  },
+  {
+   "jid": "d8d8b00942b6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "I zoned out for the last few minutes and now the professor is on a totally different topic. What did I miss, what should I write down now, and what should I look up afterwards?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't tell you what the professor actually said in those minutes, since I don't have the lecture content. What I can do is help you catch up fast.\n\nWrite down the topic name the professor is on right now, plus any definition, formula, or example they put on the board. Then ask a neighbor or the professor after class what the last few minutes covered, and check the syllabus or posted slides for that topic.\n\nFor looking up afterward, focus on the current topic's core concept and one worked example, not the whole chapter. If you tell me the topic, I can explain it in plain terms."
+  },
+  {
+   "jid": "ecd421f2db7d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "How long will this take?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That depends on what we're scoping. If you mean the full thing end to end, I'd want to break it into stages first and give you a realistic estimate per stage rather than one number. Can you tell me what's in scope, or should I put together a rough breakdown and send it over?"
+  },
+  {
+   "jid": "4e74f1cc3cd2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Why the contradiction?",
+   "conversation": [
+    "USER (typed to Natively): If my p-value is 0.03 and alpha is 0.05, do I reject the null?",
+    "NATIVELY: Yes, you reject the null. The rule is to reject when the p-value is smaller than alpha, and 0.03 is less than 0.05.\n\nOne caution: the summary box in the handout has two errors. It says the p-value is the chance the null is true, which is wrong, it's the chance of data at least this extreme assuming the null is true. And it says to reject when p > 0.05, which is backwards. The Section 4 rule is the correct one."
+   ],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The contradiction is between the summary box and the rest of the handout. The summary box says to reject when p > 0.05, but Section 4 says to reject when the p-value is smaller than alpha, and Section 1 defines the p-value correctly as the chance of data at least this extreme assuming the null is true. The summary box also flips that definition, calling it the chance the null is true. So the box has two errors and Section 4 is the one to trust, which is why 0.03 against 0.05 still means you reject the null."
+  },
+  {
+   "jid": "76041c9e28af",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "What's the biggest risk?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The biggest risk is usually the one that's hardest to see: the assumption everyone in the room shares and nobody has tested. So I'd start by asking what we're treating as settled, and whether we've actually checked it or just agreed on it. If that assumption is wrong, everything built on top of it goes with it, and by the time it shows up it's expensive to undo."
+  },
+  {
+   "jid": "2d9162f475db",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Photosynthesis takes light and stores it in the bonds of sugar, and basically every calorie you've ever eaten traces back to that.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the core of it: photosynthesis captures light energy and stores it in the chemical bonds of glucose, and when we eat plants or the animals that ate plants, we break those bonds to release the energy. So the calories in food are really stored sunlight, passed along the food chain."
+  },
+  {
+   "jid": "c55d78bc5146",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Explain natural selection like I'm twelve.",
+   "conversation": [
+    "PROFESSOR: Reminder that the lab report template is on the course page.",
+    "PROFESSOR: Teaching assistants have office hours Wednesday afternoon in the atrium."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Natural selection is basically nature's way of picking winners, but nobody's doing the picking on purpose. Here's the idea: living things have babies, and those babies aren't identical. Some are a little faster, or better camouflaged, or better at finding food. If a trait helps an animal survive and have more babies, that trait gets passed on more often. Over many generations, the helpful traits spread through the population and the unhelpful ones fade out.\n\nA quick example: imagine a bunch of beetles, mostly green, a few brown. Birds eat the green ones because they're easy to spot on brown dirt. The brown beetles survive, have brown babies, and soon most of the beetles are brown. Nobody planned it. The environment just made brown beetles more likely to live long enough to pass on their color. That's natural selection in a nutshell: variation, plus survival and reproduction, plus lots of time."
+  },
+  {
+   "jid": "0657c17dda66",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "You can't understand 1917 without understanding 1905, and you can't understand 1905 without the war with Japan.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That chain holds up. The war with Japan in 1904 to 1905 ended in Russia's defeat, and the humiliation fed straight into the 1905 Revolution, with Bloody Sunday, strikes, and the October Manifesto. The Tsar survived by conceding a Duma, but the autocracy was shaken and the grievances stayed unresolved. That unfinished business, plus the strains of the First World War, is what made 1917 possible."
+  },
+  {
+   "jid": "b9a86c11d3d1",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Which is why Japan gets so many earthquakes and Iceland gets so many volcanoes, but for two completely different reasons.",
+   "conversation": [
+    "PROFESSOR: The Earth outer shell is broken into plates that move a few centimeters a year, about as fast as your fingernails grow.",
+    "PROFESSOR: Where an oceanic plate meets a continental one, the denser oceanic plate dives beneath, and that is subduction.",
+    "PROFESSOR: Where two plates pull apart, magma rises to fill the gap and makes new crust."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Japan sits where several plates meet, so the movement builds up stress that gets released as earthquakes. Iceland sits on a spreading ridge, where plates pull apart and magma rises to fill the gap, which is what feeds its volcanoes. Same plate motion, but one is a collision and subduction setting and the other is a divergent one."
+  },
+  {
+   "jid": "934179847fb2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What should I say?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have anything from your lecture or notes to work from here, so I can't tell you what to say about a specific topic. Tell me the question you're being asked, or the concept you need to explain, and I'll give you the words."
+  },
+  {
+   "jid": "34dacef686c5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Give me an example of opportunity cost where the cost is just money, since opportunity cost is always a dollar amount, right?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not quite. Opportunity cost is the value of the next best thing you give up, and that value isn't always money. Say you take a Saturday to study instead of picking up a paid shift. If the shift paid $80, the opportunity cost is $80. But if you gave up a friend's birthday instead, the cost is that experience, not a dollar figure. Money is just the easiest case to measure."
+  },
+  {
+   "jid": "48d45648bbd8",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Alright, to recap: supply shifts, demand shifts, and what happens to price when both move at once.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "When demand shifts, price and quantity move the same way. When supply shifts, they move in opposite directions. If both move at once, the effect on price depends on which shift is bigger. If demand rises and supply falls, price clearly goes up, but quantity is ambiguous."
+  }
+ ]
+}
