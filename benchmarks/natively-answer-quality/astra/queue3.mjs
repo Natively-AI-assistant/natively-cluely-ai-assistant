@@ -21,22 +21,24 @@ const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar
 
 // 2026-10-01 11:00Z plan — CHARTER v2 (claim kinds). A charter change re-keys every judgment, so everything compared
 // from here on is judged again into its own "-c2" sets: charter-v1 files (abs-dev, abs-holdout, …) are never mixed in.
-// Tier 1: dev — the kept build (fix6), fix9 (I18 + I21 + I22) and fix10 (claim kinds) under the same charter.
+// Candidate = fix11 (claim-kinds verifier + source-word rail). Reference = fix6 (provisional). fix9 = I18 + I21 + I22
+// without claim kinds (its holdout is 207 clean rows, no Seminar / Call Center).
+// Tier 1: dev — candidate, reference, fix9, under the same charter.
 // Tier 2: holdout — the same three. A build is promoted only on its holdout read.
 // Tier 3: the starting column: main as it was (dev aq2-dev-cur, holdout aq-holdout-fix2).
-// Tier 4: supp-behavior, blind pairwise kept-vs-candidate, the final-set sample.
-// Last batch gave ~2,160 judgments: tiers 1-2 need ~1,080 + 810; tier 3 (630) and later spill into the next batch.
+// Tier 4: supp-behavior, blind pairwise reference-vs-candidate, fix10 (the candidate before the rail).
+// Last batch gave ~2,160 judgments: tiers 1-2 need ~1,080 + 750; tier 3 (630) and later spill into the next batch.
 const TIERS = [
   [
     ['calibrate', ['astra/calibrate.mjs']],
   ],
   [
-    ['dev-c2-fix10', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix10', '--concurrency', C], 'results/aq2-dev-fix10'],
+    ['dev-c2-fix11', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix11', '--concurrency', C], 'results/aq2-dev-fix11'],
     ['dev-c2-fix6', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix6', '--concurrency', C], 'results/aq2-dev-fix6'],
     ['dev-c2-fix9', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix9', '--concurrency', C], 'results/aq2-dev-fix9'],
   ],
   [
-    ['holdout-c2-fix10', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix10', '--concurrency', C], 'results/aq2-holdout-fix10'],
+    ['holdout-c2-fix11', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix11', '--concurrency', C], 'results/aq2-holdout-fix11'],
     ['holdout-c2-fix6', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix6', '--concurrency', C], 'results/aq2-holdout-fix6'],
     ['holdout-c2-fix9', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix9', '--concurrency', C], 'results/aq2-holdout-fix9'],
   ],
@@ -45,8 +47,10 @@ const TIERS = [
     ['holdout-c2-cur', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq-holdout-fix2', '--concurrency', C], 'results/aq-holdout-fix2'],
   ],
   [
-    ['sb-c2', ['astra/judge.mjs', '--set', 'abs-sb-c2', '--runs', 'results/aq2-sb-fix10,results/aq2-sb-fix6', '--concurrency', C], 'results/aq2-sb-fix10'],
-    ['ab-c2-fix6-vs-fix10', ['astra/ab.mjs', '--set', 'ab-c2-dev-fix6-vs-fix10', '--a', 'results/aq2-dev-fix6', '--b', 'results/aq2-dev-fix10', '--concurrency', C], 'results/aq2-dev-fix10'],
+    ['sb-c2', ['astra/judge.mjs', '--set', 'abs-sb-c2', '--runs', 'results/aq2-sb-fix11,results/aq2-sb-fix6', '--concurrency', C], 'results/aq2-sb-fix11'],
+    ['ab-c2-fix6-vs-fix11', ['astra/ab.mjs', '--set', 'ab-c2-dev-fix6-vs-fix11', '--a', 'results/aq2-dev-fix6', '--b', 'results/aq2-dev-fix11', '--concurrency', C], 'results/aq2-dev-fix11'],
+    ['dev-c2-fix10', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix10', '--concurrency', C], 'results/aq2-dev-fix10'],
+    ['holdout-c2-fix10', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix10', '--concurrency', C], 'results/aq2-holdout-fix10'],
   ],
 ];
 
