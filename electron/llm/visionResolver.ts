@@ -40,6 +40,8 @@ export interface VisionFacts {
   ninerouterVisionModels?: readonly string[];
   /** The active custom or cURL provider; its template decides whether an image can travel. */
   customProvider?: { curlCommand?: string; multimodal?: boolean } | null;
+  /** What a provider's catalogue publishes (visionCapabilityStore), for a ROUTED id; undefined = it hasn't said. */
+  providerReportsVision?: (provider: string, routedModel: string) => boolean | undefined;
 }
 
 const UNKNOWN: VisionVerdict = { reads: 'unknown', source: null };
@@ -75,6 +77,13 @@ export function resolveVision(q: VisionQuery, facts: VisionFacts = {}): VisionVe
       if (catalogue.length > 0) return answer(catalogue.includes(model.replace(/^ninerouter\//, '')), 'provider');
       return fromNames(model, false);
     }
+    // OpenRouter publishes input_modalities per model and refuses images to the
+    // ones it lists as text-only, so its answer is trusted both ways (2026-10-01).
+    case 'openrouter': {
+      const reported = facts.providerReportsVision?.('openrouter', model);
+      if (reported !== undefined) return answer(reported, 'provider');
+      return fromNames(model, false);
+    }
     default:
       return fromNames(model, false);
   }
@@ -86,13 +95,18 @@ export function readsImages(v: VisionVerdict, unknownMeans: boolean): boolean {
 }
 
 /**
+ * What an unknown answer means for each selected-gateway seat. 9Router and
+ * OpenRouter seat (an unfetched catalogue is not "text-only"; failing closed on
+ * absent data was a bug once already); AgentRouter does not (no evidence, no
+ * screenshot). Phase 1 kept each rung's behaviour; OpenRouter joins in phase 2.
+ */
+const SEAT_ON_UNKNOWN = { ninerouter: true, openrouter: true, agentrouter: false } as const;
+
+/**
  * Whether a selected gateway model is seated for a screenshot. One function for
  * BOTH screenshot paths — LLMHelper's streaming chain and VisionProviderRegistry
- * — so they cannot answer differently. Unknown keeps what each rung did before
- * phase 1: 9Router seats (an unfetched catalogue is not "text-only"; failing
- * closed on absent data was a bug once already), AgentRouter does not (no
- * evidence, no screenshot).
+ * — so they cannot answer differently.
  */
-export function gatewaySeatReadsImages(provider: 'ninerouter' | 'agentrouter', model: string, facts: VisionFacts = {}): boolean {
-  return readsImages(resolveVision({ provider, model }, facts), provider === 'ninerouter');
+export function gatewaySeatReadsImages(provider: keyof typeof SEAT_ON_UNKNOWN, model: string, facts: VisionFacts = {}): boolean {
+  return readsImages(resolveVision({ provider, model }, facts), SEAT_ON_UNKNOWN[provider]);
 }
