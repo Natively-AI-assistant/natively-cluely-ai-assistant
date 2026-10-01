@@ -292,3 +292,15 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
   18 → 8; validators Sales 3/3, General 1/1, Seminar 2/2 unchanged; LFW total p50 2429 → 2140 ms, CC 1984 → 1875.
   Call Center "+Q" 2 → 5 is not appending: the verifier dropped a trailing product claim after an existing question.
 * Judge: replay read queued (queue3 tier 3, control = fix6 in-app on the same drafts), in-app fix7 in the last tier.
+
+### Paired same-time latency (partial) + run-integrity incident 2026-10-01 00:42Z
+* Baseline (aq-astra, main 61bb0956) and fix7 (aq-fix2 57e21fdf) answered the same dev items at the same time
+  (`tools/latency-paired.mjs results/lat-cur-1 results/lat-fix7-1`). 35 paired rows before the incident:
+  TTFT p50 661 → 640 ms (median per-item Δ −67), total p50 971 → 1117 ms (median Δ +109); Sales total median Δ +842,
+  LFW +490 (n=3), General −114, Recruiting +109, Team Meet −43.
+* Incident: two Electron apps + two electron builds at once pushed the load average past 9 and the user session went
+  down at 00:42Z — every process of the session was killed (both apps, both supervisors, the two `nohup` judge
+  chains, the user's own apps). Evin: "dont run too many session making the lap turn off".
+* Rule from here: ONE app instance at a time, no parallel builds. The paired run is not repeated; the latency
+  deliverable is the recorded runs + these 35 paired rows.
+* Judge chains re-armed with `astra/arm.mjs` (own session via detached spawn, wall-clock sleeps): 0200 and 1100.
