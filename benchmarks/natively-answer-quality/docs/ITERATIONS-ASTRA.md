@@ -601,8 +601,8 @@ Priority in the spec puts realtime usability above p10 and the mean, so the late
   | SBSEM-002 conflict validator, 6 repeats | 1/6 | 2/6 |
 * Not fixed by it: the source-conflict rewrite (blocker 4), DSEM-005 ("I didn't run quantization-aware training"
   still removed), DJOB-021 (kept 3/6).
-* Tests: the verifier's file 63/63 (module transpiled alone). The full llm suite and the electron build were NOT run
-  yet — the machine was at load 19–24 from another session's builds; they run before any app run of fix12.
+* Tests: `npm run test:llm` on e7325287 (electron build + suite, 11:07Z once the load fell): 5,673 tests, 5,645
+  pass, 0 fail, 28 skipped. The verifier's own file is 63/63.
 * Status: NOT judged, NOT run in the app. It is built only if fix11's holdout read keeps fix11 as the base; then it
   needs its own dev + holdout + supp-behavior runs and the 02:00Z batch.
 * Harness: tools/verifier-replay.mjs now passes the surface to the gate (spoken General turns were skipped in replay).
