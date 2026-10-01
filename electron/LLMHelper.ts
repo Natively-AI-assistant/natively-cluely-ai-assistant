@@ -27,7 +27,7 @@ import { orderVisionCandidates } from "./llm/visionOrdering"
 import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
-import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
+import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
@@ -7441,7 +7441,10 @@ let isMultimodal = !!(imagePaths?.length);
     const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{ role: "user" as const, content }],
@@ -11997,7 +12000,10 @@ let isMultimodal = !!(imagePaths?.length);
       // models that still take it. Opus 4.7+ and the Claude 5 families 400 on
       // any temperature (claudeAcceptsSamplingParams), so it is left off there.
       ...(claudeAcceptsSamplingParams(model) ? { temperature: INTERACTIVE_TEMPERATURE } : {}),
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{ role: "user" as const, content: userMessage }],
@@ -12326,7 +12332,10 @@ let isMultimodal = !!(imagePaths?.length);
     const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; image bytes + user text stay in `messages`.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{
