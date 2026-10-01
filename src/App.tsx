@@ -163,7 +163,7 @@ const App: React.FC = () => {
   // useEffect(deps:[onComplete]). An inline closure would be a new identity on
   // every App re-render — and the boot path re-renders many times (7-10 async
   // IPCs each setState on resolve, plus orchestrator notifies). That would tear
-  // down and re-arm BOTH the 2.2s primary AND the 5s hard-cap timer on every
+  // down and re-arm BOTH the primary AND the 5s hard-cap timer on every
   // render, so under a slow/re-render-heavy boot the hard-cap could keep
   // resetting and never fire — the "stuck at the startup animation" symptom.
   // Memoizing to [] makes the splash timers arm exactly once.
@@ -173,7 +173,7 @@ const App: React.FC = () => {
   // fresh install only (src/lib/onboarding/welcomeGate.mjs). null = not decided
   // yet: the splash holds until it is, because showing the launcher first let
   // it mount and start the orchestrator's clock, so the permissions card opened
-  // on top of the welcome when the flag read landed after the 2.2s splash (a
+  // on top of the welcome when the flag read landed after the splash (a
   // busy first boot). WELCOME_DECIDE_TIMEOUT_MS below bounds the wait.
   const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
   const readWelcomeLocal = useCallback(() => {
@@ -1261,10 +1261,22 @@ const App: React.FC = () => {
         {showStartup || showWelcome === null ? (
           <motion.div
             key="startup"
-            className="h-full w-full"
-            initial={{ opacity: 0, scale: 1.01 }}
-            animate={{ opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.23, 1, 0.32, 1] } }}
-            exit={{ opacity: 0, scale: 1.04, pointerEvents: "none", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } }}
+            // Laid OVER the page, not in its flow. As an `h-full` block it pushed
+            // whatever replaced it a full window-height down until it unmounted,
+            // so the splash faded to black and the launcher then cut in, already
+            // at the end of an entrance nobody saw. Out of the flow, the launcher
+            // (or the welcome) is laid out underneath from the moment the splash
+            // is dismissed, and rises behind the logo as it lets go. z-[100]
+            // keeps the splash in front of it for that moment.
+            className="absolute inset-0 z-[100]"
+            // The splash draws its own entrance and exit: the window is already
+            // black, and on the way out it clears its own backdrop while the
+            // logo dissolves into characters in front of the launcher. So this
+            // layer animates nothing visible. It only keeps the splash mounted
+            // for the length of that exit (EXIT_MS in splashTimeline.ts), and
+            // stops it taking clicks at once.
+            initial={false}
+            exit={{ opacity: 0, pointerEvents: "none", transition: { opacity: { delay: 0.4, duration: 0.05 } } }}
           >
             <StartupSequence onComplete={dismissStartup} />
           </motion.div>

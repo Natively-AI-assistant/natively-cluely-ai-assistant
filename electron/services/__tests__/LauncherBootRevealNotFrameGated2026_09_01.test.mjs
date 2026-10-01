@@ -11,7 +11,7 @@
 // / Windows virtual desktop.
 //
 // Timers, by contrast, are only throttled to ~1Hz. So on a launcher that boots
-// while covered, StartupSequence's 2.2s dismissal timer still fires and
+// while covered, StartupSequence's dismissal timer still fires and
 // `showStartup` still flips to false — but the AnimatePresence exit animation
 // never completes, so the full-screen black splash is never unmounted, and the
 // launcher layer underneath never leaves its `initial` opacity 0. The window
