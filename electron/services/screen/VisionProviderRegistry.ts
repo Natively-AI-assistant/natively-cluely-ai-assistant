@@ -218,6 +218,12 @@ function groqScout(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
 }
 
 function ollama(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  // NEVER CONFIGURED (found 2026-10-01): nothing in the app writes
+  // `ollamaBaseUrl` or `ollamaModel` to the credential store, so this rung has
+  // never run. That is now the intended behaviour (Evin, 2026-10-01): with
+  // Ollama selected the pre-pass stays off the cloud (selectionIsLocal) and
+  // there is no local pre-pass — a local vision model rarely answers inside
+  // the 6 s budget, and Ollama reads the screenshot in the answer itself.
   const baseUrl = (creds.getAllCredentials() as any)?.ollamaBaseUrl as string | undefined;
   const ollamaModel = (creds.getAllCredentials() as any)?.ollamaModel as string | undefined;
   const isVisionModel = ollamaModel ? isOllamaVisionModel(ollamaModel) : false;
@@ -259,9 +265,16 @@ function codex(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): V
     id: 'codex_cli',
     displayName: 'Codex CLI',
     modelId: (creds.getAllCredentials() as any)?.codexCliModel,
-    isLocal: true,
+    // false since 2026-10-01: Codex sends to chatgpt.com. `true` was a routing
+    // hint that would have made this rung eligible under "Keep screenshots on
+    // this device" the day `supportsVision` was flipped (see SAFETY above).
+    isLocal: false,
+    // `codexCliPath` lives in SettingsManager, never in the credential store,
+    // so this has always been false. No Codex pre-pass is built: it is a slow
+    // reasoning route, the pre-pass has 6 s, and a rung that cannot answer in
+    // time delays every screenshot answer by that much.
     isConfigured: !!cliPath,
-    supportsVision: false, // unverified; see SAFETY above before flipping — also set isLocal:false
+    supportsVision: false,
     scopeAllowsScreenshots: true,
     hint: 'codex',
     invoke: async () => { throw new Error('Codex CLI vision unverified — capability disabled'); },
@@ -564,6 +577,27 @@ function selectionIsLocal(): boolean {
   if (selection.provider === 'custom') return customProviderIsLocal(readActiveCustomProvider());
   if (selection.provider === 'curl') return customProviderIsLocal(readActiveCurlProvider());
   return false;
+}
+
+/**
+ * The rung that carries the SELECTED model, with a key that changes whenever
+ * that selection does, or null when no rung does. Vendor rungs (OpenAI,
+ * Claude, Gemini, Groq, Natively) run a fixed model, so the selection does not
+ * own their breaker. Used by ScreenUnderstandingService to forget a breaker
+ * that was opened for a different selection.
+ */
+export function selectionRung(): { id: string; key: string } | null {
+  const selection = readActiveSelection();
+  if (!selection) return null;
+  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'ninerouter', 'deepseek'];
+  const id = GATEWAYS.includes(selection.provider) ? selection.provider
+    : selection.provider === 'custom' || selection.provider === 'curl' ? selection.provider
+    : null;
+  if (!id) return null;
+  // A custom or cURL provider keeps its id when its command is edited.
+  const command = id === 'custom' ? readActiveCustomProvider()?.curlCommand
+    : id === 'curl' ? readActiveCurlProvider()?.curlCommand : '';
+  return { id, key: `${selection.provider}|${selection.model}|${command ?? ''}` };
 }
 
 function registryVisionFacts(baseURL = '', extra: { ninerouterVisionModels?: readonly string[] } = {}) {

@@ -336,3 +336,95 @@ describe('runVisionRequest: the two new rungs go through the existing adapters',
     assert.equal(calls.length, 0);
   });
 });
+
+// ── Privacy enumeration, the Codex trap, breaker reset ───────────────────────
+
+describe('where a pre-pass screenshot may go', () => {
+  const isEligible = (p, mode) => p.isConfigured && p.supportsVision && p.scopeAllowsScreenshots && (mode !== 'private_vision' || p.isLocal);
+  test('"keep screenshots on this device": only rungs that stay on the machine, for every key set and selection', () => {
+    const LOCAL_ENDPOINTS = new Set(['custom local, reads images', 'curl local, reads images']);
+    for (const keySet of Object.keys(KEY_SETS)) for (const label of Object.keys(SELECTIONS)) {
+      const rungs = all(keySet, label, 'private_vision').filter((p) => isEligible(p, 'private_vision'));
+      for (const p of rungs) assert.equal(p.isLocal, true, `${keySet} / ${label}: ${p.id} is eligible and not local`);
+      // …and "local" is earned by a loopback or private host, never assumed.
+      assert.deepEqual(rungs.map((p) => p.id), LOCAL_ENDPOINTS.has(label) ? [label.split(' ')[0]] : [], `${keySet} / ${label}`);
+    }
+  });
+  test('a local selection: no cloud rung is eligible in any mode', () => {
+    for (const keySet of Object.keys(KEY_SETS)) for (const label of LOCAL_SELECTIONS) for (const mode of MODES) {
+      for (const p of all(keySet, label, mode).filter((r) => isEligible(r, mode))) {
+        assert.equal(p.isLocal, true, `${mode} / ${keySet} / ${label}: ${p.id}`);
+      }
+    }
+  });
+  test('Codex is not a local destination: it sends to chatgpt.com', () => {
+    const codex = all('everything', 'gemini-3.8-flash', 'vision_first').find((p) => p.id === 'codex_cli');
+    assert.equal(codex.isLocal, false, 'isLocal:true would make it eligible under "keep on this device" the day its vision is switched on');
+    assert.equal(codex.supportsVision, false, 'and it is still not a pre-pass provider');
+  });
+});
+
+describe('a breaker never outlives the selection it was about', () => {
+  const { forgetBreakersOfOtherSelections } = require(dist('llm/visionOrdering.js'));
+  const { selectionRung } = require(dist('services/screen/VisionProviderRegistry.js'));
+  const open = () => ({ openUntil: Date.now() + 300_000 });
+
+  test('forgetBreakersOfOtherSelections: a rung that last ran for another selection starts clean', () => {
+    const ledFor = new Map(); const health = new Map([['openrouter', open()], ['openai', open()]]);
+    forgetBreakersOfOtherSelections(ledFor, health, ['openrouter'], 'openrouter|a');
+    assert.ok(health.has('openrouter'), 'never seen before: its breaker is kept (it may be about the key)');
+    forgetBreakersOfOtherSelections(ledFor, health, ['openrouter'], 'openrouter|a');
+    assert.ok(health.has('openrouter'), 'same selection: kept');
+    forgetBreakersOfOtherSelections(ledFor, health, ['openrouter'], 'openrouter|b');
+    assert.ok(!health.has('openrouter'), 'another model: forgotten');
+    assert.ok(health.has('openai'), 'other rungs are not touched');
+  });
+  test('selectionRung: the rung that carries the selected model, and a key that changes with it', () => {
+    installHelper('openrouter/openai/gpt-4o');
+    assert.deepEqual(selectionRung(), { id: 'openrouter', key: 'openrouter|openrouter/openai/gpt-4o|' });
+    installHelper('deepseek-v4-flash');
+    assert.equal(selectionRung().id, 'deepseek');
+    installHelper('custom hosted, reads images');
+    const first = selectionRung();
+    assert.equal(first.id, 'custom');
+    installHelper('custom hosted, reads images', { getActiveCustomProvider: () => ({ id: 'c-hosted', name: 'c-hosted', curlCommand: 'curl https://fixed.example.com' }) });
+    assert.notEqual(selectionRung().key, first.key, 'an edited endpoint is a different selection');
+    installHelper('curl local, reads images');
+    assert.equal(selectionRung().id, 'curl');
+    // Vendor rungs run a FIXED model, so the selection does not own their breaker.
+    for (const label of ['gemini-3.8-flash', 'gpt-5.5', 'claude-opus-5', 'natively', 'ollama selected']) {
+      installHelper(label);
+      assert.equal(selectionRung(), null, label);
+    }
+    delete globalThis.__nativelyGetLLMHelper;
+    assert.equal(selectionRung(), null);
+  });
+  test('the service: a gateway rung skipped for model A is tried again as soon as model B is selected', async () => {
+    const { getScreenUnderstandingService } = require(dist('services/screen/ScreenUnderstandingService.js'));
+    const { renderDigitsPng } = require(dist('llm/visionTestImage.js'));
+    const svc = getScreenUnderstandingService();
+    const calls = [];
+    const provider = {
+      id: 'openrouter', displayName: 'OpenRouter', modelId: 'x', isLocal: false, isConfigured: true, supportsVision: true,
+      scopeAllowsScreenshots: true, hint: 'generic', invoke: async () => { calls.push(1); return 'A code editor showing a two-sum function.'; },
+    };
+    let n = 0;
+    const understand = () => {
+      const png = path.join(userData, `screen-${++n}.png`);
+      fs.writeFileSync(png, renderDigitsPng(String(1000 + n)));      // a new image each time: no cache hit
+      return svc.understand({
+        imagePaths: [png], userAction: 'what_to_answer', transcript: 'q', screenUnderstandingMode: 'vision_first',
+        providerPolicy: { allowScreenshots: true, __providersOverride: [provider] },
+      });
+    };
+    installHelper('openrouter/openai/gpt-4o');
+    assert.equal((await understand()).providerUsed, 'openrouter');
+    svc.rungHealth.set('openrouter', open());                        // model A's upstream starts failing
+    await understand();
+    assert.equal(calls.length, 1, 'same selection, breaker open: skipped');
+    installHelper('openrouter/x-ai/grok-4.7');
+    assert.equal((await understand()).providerUsed, 'openrouter', 'a new selection must not inherit model A\'s breaker');
+    assert.equal(calls.length, 2);
+    svc.rungHealth.clear();
+  });
+});

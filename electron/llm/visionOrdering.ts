@@ -42,3 +42,28 @@ export function orderVisionCandidates<T extends { id: string; priority: number; 
   // rungs are kept as they are, so everything seated is still tried.
   return ordered;
 }
+
+/**
+ * A breaker never outlives the selection it was about.
+ *
+ * A rung's id is the same for every model it can carry (`openrouter`,
+ * `openai_selected`, `custom`, …), so without this a retired or text-only
+ * model's demotion — up to a day in the chat path — carried over to the next
+ * model the user picked. A rung that last ran for a DIFFERENT selection starts
+ * clean; one never seen before keeps its breaker (a fixed vendor rung that
+ * failed as a fallback is about the key, not about the pick).
+ *
+ * Shared by both screenshot paths: `ledFor` and `health` belong to the caller.
+ */
+export function forgetBreakersOfOtherSelections(
+  ledFor: Map<string, string>,
+  health: { delete(id: string): unknown },
+  rungIds: readonly string[],
+  selectionKey: string,
+): void {
+  for (const id of rungIds) {
+    const last = ledFor.get(id);
+    if (last !== undefined && last !== selectionKey) health.delete(id);
+    ledFor.set(id, selectionKey);
+  }
+}

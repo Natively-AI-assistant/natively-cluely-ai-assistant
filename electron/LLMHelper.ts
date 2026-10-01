@@ -23,7 +23,7 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionFacts, type VisionVerdict } from "./llm/visionResolver"
-import { orderVisionCandidates } from "./llm/visionOrdering"
+import { forgetBreakersOfOtherSelections, orderVisionCandidates } from "./llm/visionOrdering"
 import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
@@ -8980,12 +8980,7 @@ let isMultimodal = !!(imagePaths?.length);
     // (A custom provider keeps its id when its command is edited, so the
     // command is part of what "this selection" means.)
     const selectionKey = sel ? `${sel.provider}|${sel.model}|${this.customProvider?.curlCommand ?? ''}` : '';
-    const ledFor = (this.visionLeadSelection ??= new Map());
-    for (const p of front) {
-      const last = ledFor.get(p.id);
-      if (last !== undefined && last !== selectionKey) this.visionHealth.delete(p.id);
-      ledFor.set(p.id, selectionKey);
-    }
+    forgetBreakersOfOtherSelections((this.visionLeadSelection ??= new Map()), this.visionHealth, front.map(p => p.id), selectionKey);
     const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
 
     if (ordered.length === 0) {
