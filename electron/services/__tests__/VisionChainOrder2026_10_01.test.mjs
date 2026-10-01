@@ -268,3 +268,62 @@ test('a selected rung refused as image-unsupported re-tests the selected model',
   assert.deepEqual(out, ['seen by gpt-5.4'], 'the screenshot is still answered, by the next rung');
   assert.equal(forced.length, 1, 'the refusal contradicts "reads images": test the selected model again');
 });
+
+// ── Review fixes (2026-10-01) ────────────────────────────────────────────────
+
+const DAY = 24 * 3600_000;
+test('a breaker opened by ONE selected model does not hold back the next model picked', async () => {
+  // The rung id is the same for every model it can carry, so a retired or
+  // text-only model's demotion (up to a day) outlived picking another model.
+  for (const [keys, first, rung, second] of [
+    [VENDORS, 'claude-opus-5', 'claude_selected', 'claude-fable-5-1'],
+    [VENDORS, 'gpt-5.5', 'openai_selected', 'gpt-6-astra'],
+    [VENDORS, 'gemini-2.5-flash', 'gemini_selected', 'gemini-3.5-flash'],
+    [EVERYTHING, 'openrouter/openai/gpt-4o', 'openrouter', 'openrouter/x-ai/grok-4.7'],
+    [EVERYTHING, 'fluxion/claude-opus-5', 'fluxion', 'fluxion/gpt-5.5'],
+  ]) {
+    const h = helper(keys, first);
+    assert.equal((await h.buildVisionChain(REQ))[0].id, rung, `${first} leads`);
+    h.visionHealth.set(rung, { openUntil: Date.now() + DAY, consecutiveFails: 1, ttftEma: null }); // e.g. retired upstream
+    assert.notEqual((await h.buildVisionChain(REQ))[0].id, rung, `${first}: the same failing selection stays demoted`);
+    h.currentModelId = second;
+    const after = await h.buildVisionChain(REQ);
+    assert.equal(after[0].id, rung, `${second} must lead: ${first}'s breaker says nothing about it (got ${after.map((p) => p.id).join(' > ')})`);
+    assert.match(after[0].name, new RegExp(second.split('/').pop().replace(/[.]/g, '\\.')));
+  }
+});
+test('going back to the model that failed does not clear another rung, and a fixed rung keeps its own breaker', async () => {
+  // `openai` (the fixed vision model) failed as a FALLBACK while Claude was
+  // selected. Selecting that same fixed model later does not make a dead key lead.
+  const h = helper(VENDORS, 'claude-opus-5');
+  await h.buildVisionChain(REQ);
+  h.visionHealth.set('openai', { openUntil: Date.now() + DAY, consecutiveFails: 1, ttftEma: null });
+  h.currentModelId = 'gpt-5.4';
+  assert.notEqual((await h.buildVisionChain(REQ))[0].id, 'openai');
+});
+test('a new key retries the selection at once: every setter clears its own rungs', () => {
+  const state = () => ({
+    visionHealth: new Map(), textHealth: new Map(), geminiPromptCache: { clear() {} },
+    litellmModelBudgets: new Map(), ninerouterModelBudgets: new Map(), ninerouterModelInputCaps: new Map(), ninerouterVisionModels: new Set(),
+  });
+  for (const [setter, args, ids] of [
+    ['setApiKey', [''], ['gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'gemini_selected']],
+    ['setOpenaiApiKey', [''], ['openai', 'openai_selected']],
+    ['setClaudeApiKey', [''], ['claude', 'claude_selected']],
+    ['setGroqApiKey', [''], ['groq']],
+    ['setDeepseekApiKey', [''], ['deepseek']],
+    ['setLitellmConfig', ['', ''], ['litellm']],
+    ['setNinerouterConfig', ['', ''], ['ninerouter']],
+    ['setNativelyKey', [null], ['natively']],
+  ]) {
+    const h = Object.assign(Object.create(LLMHelper.prototype), state());
+    for (const id of [...ids, 'someone_else']) h.visionHealth.set(id, { openUntil: Date.now() + DAY, consecutiveFails: 3, ttftEma: null });
+    h[setter](...args);
+    assert.deepEqual([...h.visionHealth.keys()], ['someone_else'], `${setter} must clear ${ids.join(', ')} and nothing else`);
+  }
+});
+test('a selected local model leads even while its breaker is open', async () => {
+  const ollama = SELECTIONS.find((s) => Array.isArray(s) && s[0] === 'ollama llava');
+  const ids = await chainIds(VENDORS, ollama, { visionHealth: coolingUntil('ollama', Date.now() + 60_000) });
+  assert.deepEqual(ids.slice(0, 2), ['ollama', 'openai'], 'the cloud follows only if the local model fails');
+});

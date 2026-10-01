@@ -41,8 +41,14 @@ describe('orderVisionCandidates', () => {
     assert.deepEqual(order({ selected: [cloud[3]], health }), ['openai', 'claude', 'gemini_flash', 'fluxion', 'custom', 'ollama'], 'cooling: tried last among cloud, not first');
     assert.deepEqual(order({ selected: [cloud[3]], health, now: 6000 }), ['fluxion', 'openai', 'claude', 'gemini_flash', 'custom', 'ollama']);
   });
-  test('a LOCAL selection whose breaker is open goes behind the cloud rungs', () => {
-    assert.deepEqual(order({ selected: [local[1]], health: new Map([cooling('ollama')]) }), ['openai', 'claude', 'gemini_flash', 'fluxion', 'custom', 'ollama']);
+  test('a LOCAL selection leads even while its breaker is open: the cloud follows only if it fails', () => {
+    // Design section 3: "A selected local model leads; the cloud follows only
+    // if it fails." The breaker exception exists for cloud first-token budgets;
+    // a person who picked a local model must not have a recovered Ollama
+    // skipped for the rest of a cooldown while their screenshots go to a cloud.
+    assert.deepEqual(order({ selected: [local[1]], health: new Map([cooling('ollama')]) }), ['ollama', 'openai', 'claude', 'gemini_flash', 'fluxion', 'custom']);
+    assert.deepEqual(order({ selected: [local[0], cloud[3]], health: new Map([cooling('custom'), cooling('fluxion')]) }),
+      ['custom', 'openai', 'claude', 'gemini_flash', 'fluxion', 'ollama'], 'the local one still leads; the cooling cloud one does not');
   });
   test('if the cooling selection is the only rung, it is still tried', () => {
     const only = [r('fluxion', 0)];

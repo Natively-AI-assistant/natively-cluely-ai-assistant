@@ -867,6 +867,8 @@ export class LLMHelper {
   //   - ttftEma: exponentially-weighted moving avg of time-to-first-token (alpha 0.2),
   //     used to reorder healthy providers fastest-first.
   private visionHealth: Map<string, VisionHealthEntry> = new Map();
+  /** Which selection each leading screenshot rung last ran for (see buildVisionChain). */
+  private visionLeadSelection?: Map<string, string>;
 
   // ─── Streaming TEXT fallback: per-provider health + TTFT tracking ────────
   // Twin of visionHealth for the text TTFT race (runStreamingTextFallback).
@@ -1566,8 +1568,10 @@ export class LLMHelper {
     // "API key expired" cache.create failures). Also clear the vision circuit
     // breaker for Gemini so a freshly-entered key is retried immediately.
     this.geminiPromptCache.clear();
-    this.visionHealth.delete('gemini_flash');
-    this.visionHealth.delete('gemini_pro');
+    // Every Gemini rung, the selected-model one included: since 2026-10-01 a
+    // selection whose breaker is open does not lead, so a rung left out here
+    // would keep a fresh key's selection off the front for the cooldown.
+    for (const id of ['gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'gemini_selected']) this.visionHealth.delete(id);
     this.textHealth.delete('gemini_flash'); // text race uses gemini_flash — retry fresh key immediately
     if (!trimmed) {
       this.apiKey = null;
@@ -1611,6 +1615,7 @@ export class LLMHelper {
   public setOpenaiApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
     this.visionHealth.delete('openai'); // fresh key → retry immediately, skip auth cooldown
+    this.visionHealth.delete('openai_selected');
     this.textHealth.delete('openai');
     if (!trimmed) {
       this.openaiApiKey = null;
@@ -1626,6 +1631,7 @@ export class LLMHelper {
   public setClaudeApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
     this.visionHealth.delete('claude'); // fresh key → retry immediately, skip auth cooldown
+    this.visionHealth.delete('claude_selected');
     this.textHealth.delete('claude');
     if (!trimmed) {
       this.claudeApiKey = null;
@@ -1640,6 +1646,7 @@ export class LLMHelper {
 
   public setDeepseekApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
+    this.visionHealth.delete('deepseek'); // fresh key → its selection leads again at once
     if (!trimmed) {
       this.deepseekApiKey = null;
       this.deepseekClient = null;
@@ -1770,6 +1777,7 @@ export class LLMHelper {
    */
   public setLitellmConfig(apiKey: string, baseURL: string, maxTokens?: number) {
     const trimmedURL = (baseURL || '').trim();
+    this.visionHealth.delete('litellm'); // new config → its selection leads again at once
     if (!trimmedURL) {
       this.litellmApiKey = null;
       this.litellmClient = null;
@@ -1899,6 +1907,7 @@ export class LLMHelper {
    */
   public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number, thinking?: string | null) {
     const trimmedURL = (baseURL || '').trim();
+    this.visionHealth.delete('ninerouter'); // new config → its selection leads again at once
     if (!trimmedURL) {
       this.ninerouterApiKey = null;
       this.ninerouterClient = null;
@@ -2122,6 +2131,7 @@ export class LLMHelper {
 
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
+    this.visionHealth.delete('natively'); // fresh key → its selection leads again at once
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
   }
 
@@ -8922,6 +8932,20 @@ let isMultimodal = !!(imagePaths?.length);
       if (selectedGroq) lead('groq');
       if (sel?.provider === 'natively') lead('natively');
       if (sel?.provider === 'antigravity') lead('antigravity');
+    }
+    // A breaker opened by a DIFFERENT selection says nothing about this one.
+    // A leading rung's id is the same for every model it can carry
+    // (`openai_selected`, `openrouter`, `groq`, …), so a retired or text-only
+    // model's demotion — up to a day — would outlive the user picking another
+    // model, and their new selection would not lead. A rung that last led for
+    // another selection starts clean; one that never led keeps its breaker (the
+    // fixed `openai` rung failing as a fallback is about the key, not the pick).
+    const selectionKey = sel ? `${sel.provider}|${sel.model}` : '';
+    const ledFor = (this.visionLeadSelection ??= new Map());
+    for (const p of front) {
+      const last = ledFor.get(p.id);
+      if (last !== undefined && last !== selectionKey) this.visionHealth.delete(p.id);
+      ledFor.set(p.id, selectionKey);
     }
     const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
 

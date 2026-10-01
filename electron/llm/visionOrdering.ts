@@ -5,10 +5,13 @@
 // streaming chain (LLMHelper) and, from phase 5b, the screen-reading chain
 // (VisionProviderRegistry) order their rungs the same way.
 //
-//   1. The user's own selection leads its own turn — unless its circuit breaker
-//      is open. A selected model that keeps failing must not cost its full
-//      first-token budget on every screenshot; it rejoins its pool and is
-//      tried in the cooling group, as any other broken rung is.
+//   1. The user's own selection leads its own turn. A CLOUD selection stops
+//      leading while its circuit breaker is open: a selected model that keeps
+//      failing must not cost its full first-token budget on every screenshot;
+//      it rejoins its pool and is tried in the cooling group, as any other
+//      broken rung is. A LOCAL selection always leads: "the cloud follows only
+//      if it fails" — someone who picked a local model must not have a
+//      recovered Ollama skipped for a cooldown while a cloud reads the screen.
 //   2. Cloud rungs, fastest healthy first (orderByHealth).
 //   3. Local rungs.
 //   Local-only mode: local rungs only.
@@ -27,7 +30,8 @@ export function orderVisionCandidates<T extends { id: string; priority: number }
   const { selected, cloud, local, localOnly, health, now } = args;
   if (localOnly) return orderByHealth([...local], health, now);
   const cooling = (p: T) => (health.get(p.id)?.openUntil ?? 0) > now;
-  const lead = selected.filter((p) => !cooling(p));
+  const isLocal = new Set(local.map((p) => p.id));
+  const lead = selected.filter((p) => isLocal.has(p.id) || !cooling(p));
   const leading = new Set(lead.map((p) => p.id));
   const backCloud = cloud.filter((p) => !leading.has(p.id));
   const backLocal = local.filter((p) => !leading.has(p.id));
