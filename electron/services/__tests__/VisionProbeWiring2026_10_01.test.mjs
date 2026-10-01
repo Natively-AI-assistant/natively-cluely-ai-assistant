@@ -48,6 +48,14 @@ function withAdapters(h, reply) {
     yield r;
   };
   for (const name of ['streamWithFluxion', 'streamWithAgentRouter', 'streamWithOpenRouter', 'streamWithLiteLLM', 'streamWithNvidiaNim', 'streamWithNinerouter']) h[name] = adapter(name);
+  // Every OTHER adapter a test could reach is recorded too (test audit,
+  // 2026-10-01): a probe wrongly sent to DeepSeek, Groq, Natively, Gemini or
+  // Claude used to hit an unstubbed adapter, throw inside the probe's own
+  // catch, and leave `seen` empty — so "no test" tests could not fail.
+  const record = (name) => async function* () { seen.push({ name, imagePaths: [], existed: true }); yield 'x'; };
+  for (const name of ['streamWithDeepseek', 'streamWithGroqMultimodal', 'streamWithGroq', 'streamWithNatively', 'streamWithGeminiModel', 'streamWithClaudeMultimodal', 'streamWithClaude', 'streamWithOpenai']) {
+    if (!Object.prototype.hasOwnProperty.call(h, name)) h[name] = record(name);
+  }
   h.streamWithOpenaiMultimodal = async function* (_prompt, imagePaths) { seen.push({ name: 'streamWithOpenaiMultimodal', imagePaths: [...imagePaths], existed: imagePaths.every((p) => fs.existsSync(p)) }); const r = typeof reply === 'function' ? reply('openai') : reply; if (r instanceof Error) throw r; yield r; };
   return seen;
 }
@@ -127,10 +135,16 @@ describe('setModel starts a test only when it should', () => {
 describe('a test leaves no trace in what real answers record', () => {
   test('no vision health entry, no discovery', async () => {
     const h = helper(); h.enableVisionProbing();
-    withAdapters(h, new Error('404 No endpoints found that support image input'));
+    // Discovery is RECORDED, not thrown: a throw inside the probe is swallowed
+    // by its own catch, so the old throwing stub could never fail this test.
+    const discovery = [];
+    h.modelVersionManager = { getAllVisionTiers: () => [], onModelError: async (name) => { discovery.push(name); } };
+    const seen = withAdapters(h, new Error('404 No endpoints found that support image input'));
     h.setModel('fluxion/glm-5.3');
     await settle();
+    assert.equal(seen.length, 1, 'control: the test really ran');
     assert.equal(h.visionHealth.size, 0);
+    assert.deepEqual(discovery, [], 'a refused TEST image must not retire the model in the version manager');
   });
 });
 

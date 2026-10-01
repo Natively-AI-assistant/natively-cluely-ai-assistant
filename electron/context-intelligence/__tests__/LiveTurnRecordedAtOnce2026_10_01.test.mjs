@@ -70,17 +70,24 @@ describe('recordLiveTurn', () => {
   afterEach(async () => { delete globalThis.__nativelyGetLLMHelper; await ollama?.stop(); ollama = null; });
 
   test('the answer is in history at once, while a slow local record is still being written', async () => {
-    let release;
-    ollama = fakeOllama({ 'llava:7b': true }, { holdChat: () => new Promise((r) => { release = r; }).then(() => false) });
-    // (holdChat returning a promise is truthy: the record request is held open.)
+    ollama = fakeOllama({ 'llava:7b': true }, { holdChat: true });        // the record request is accepted and held open
     const h = helper(await ollama.start(), 'llava:7b');
     globalThis.__nativelyGetLLMHelper = () => h;
     engine().recordLiveTurn('Your disk is full; free some space.', undefined, 'what is this error?', 1, [shot()]);
     assert.equal(await until(() => turns().length === 1, 500), true, 'the turn was not recorded until the screen record finished');
     assert.equal(turns()[0].a, 'Your disk is full; free some space.');
     assert.equal(turns()[0].screen, SCREEN_NOT_TRANSCRIBED, 'until the record arrives, the turn says a screen was there');
-    assert.equal(ollama.chats().length <= 1, true);
-    void release;
+    // …and the record really is still being written: its request reaches the
+    // daemon and is held open, with the turn already in history. (`<= 1` was
+    // true for 0, so "in flight" was never observed.)
+    assert.equal(await until(() => ollama.chats().length === 1, 2000), true, 'the record request never reached the daemon');
+    assert.equal(turns()[0].screen, SCREEN_NOT_TRANSCRIBED, 'still pending while the request is held');
+    // The slow model finishes: its text lands on that same turn. (Also ends
+    // the request inside this test — one left in flight fails when the daemon
+    // stops, and that failure cools the Ollama rung for the test that follows.)
+    ollama.release('FATAL E4012: disk quota exceeded');
+    assert.equal(await until(() => /E4012/.test(turns()[0]?.screen ?? ''), 3000), true, `the finished record was not attached: ${JSON.stringify(turns())}`);
+    assert.equal(turns().length, 1);
   });
   test('when the record arrives it is attached to that turn, even after a later turn was recorded', async () => {
     ollama = fakeOllama({ 'llava:7b': true }, { reply: 'FATAL E4012: disk quota exceeded' });

@@ -100,6 +100,21 @@ describe('a selected Groq vision model that Groq has retired', () => {
     assert.equal(chain[0].id, 'groq');
     assert.match(chain[0].name, /qwen3\.8-27b/);
   });
+  test('…and it is the SELECTION the rung names, not the default that happens to equal it', async () => {
+    // Groq's default vision model is the same id as the selection above, so
+    // that test cannot tell them apart. A Groq model switched to "Reads images:
+    // On" is a selection that differs from the default.
+    const { GROQ_VISION_MODEL } = require(dist('llm/groqModels.js'));
+    const store = new VisionCapabilityStore({ filePath: null });
+    store.setOverride('groq', '', 'openai/gpt-oss-120b', true);
+    __setVisionCapabilityStore(store);
+    try {
+      const chain = await cloudHelper('openai/gpt-oss-120b', { groqClient: {}, openaiClient: {} }).buildVisionChain(REQ);
+      assert.equal(chain[0].id, 'groq');
+      assert.equal(chain[0].name, 'Groq (openai/gpt-oss-120b)');
+      assert.notEqual(GROQ_VISION_MODEL, 'openai/gpt-oss-120b');
+    } finally { __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })); }
+  });
 });
 
 describe('a gateway model the one-time test found text-only, with nothing else configured', () => {
@@ -444,6 +459,14 @@ describe('the screen text goes to the turn it belongs to', () => {
     assert.equal(store.attachScreenToAnsweredTurn(S, 'Yes, that looks right.', 'port: 8080', { turn: first, placeholder: SCREEN_NOT_TRANSCRIBED }), true);
     const turns = store.getConversationState(S).turns;
     assert.deepEqual(turns.map((t) => t.screen), ['port: 8080', undefined], 'the text landed on the later turn, which had no screenshot');
+  });
+  test('the writer\'s turn is gone (session cleared mid-record): the text is dropped, not given to a look-alike turn', () => {
+    const old = store.recordAnswerSummary(S, 'Your disk is full.', SCREEN_NOT_TRANSCRIBED, 'what is this error?');
+    store.clearConversationState(S);
+    store.recordAnswerSummary(S, 'Your disk is full.', SCREEN_NOT_TRANSCRIBED, 'what is this error?');   // same words, a NEW turn, its own record pending
+    assert.equal(store.attachScreenToAnsweredTurn(S, 'Your disk is full.', 'the OLD screen', { turn: old, placeholder: SCREEN_NOT_TRANSCRIBED }), false);
+    assert.equal(store.getConversationState(S).turns[0].screen, SCREEN_NOT_TRANSCRIBED, 'the new turn still waits for ITS screen');
+    assert.equal(store.attachScreenToAnsweredTurn(S, 'Your disk is full.', 'ignored', { turn: null, placeholder: SCREEN_NOT_TRANSCRIBED }), false, 'a turn that was never recorded has nothing to fill');
   });
   test('without the turn in hand, only a turn still waiting for its text is filled', () => {
     store.recordAnswerSummary(S, 'Same.', SCREEN_NOT_TRANSCRIBED, 'q1');

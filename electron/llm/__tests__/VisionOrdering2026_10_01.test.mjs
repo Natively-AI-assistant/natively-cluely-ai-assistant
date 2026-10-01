@@ -67,8 +67,14 @@ describe('orderVisionCandidates', () => {
     assert.deepEqual(order({ selected: [cloud[3]], localOnly: true }), ['custom', 'ollama']);
   });
   test('the inputs are not mutated', () => {
-    const c = [...cloud], l = [...local];
-    orderVisionCandidates({ selected: [c[3]], cloud: c, local: l, localOnly: false, health: new Map(), now: 1 });
-    assert.deepEqual(ids(c), ids(cloud)); assert.deepEqual(ids(l), ids(local));
+    // Out of priority order, with measured speeds: an in-place sort WOULD move
+    // these (in priority order with no health, sorting was a no-op and the
+    // test could not fail).
+    const c = [cloud[2], cloud[0], cloud[3], cloud[1]], l = [local[1], local[0]];
+    const before = [ids(c), ids(l)];
+    const health = new Map([['claude', { openUntil: 0, consecutiveFails: 0, ttftEma: 100 }], ['openai', { openUntil: 0, consecutiveFails: 0, ttftEma: 900 }]]);
+    const out = ids(orderVisionCandidates({ selected: [c[2]], cloud: c, local: l, localOnly: false, health, now: 1 }));
+    assert.notDeepEqual(out.slice(1, 4), before[0].filter((id) => id !== 'fluxion'), 'control: ordering really reorders these');
+    assert.deepEqual([ids(c), ids(l)], before);
   });
 });

@@ -60,7 +60,17 @@ describe('the resolver consults the provider for OpenRouter', () => {
     assert.equal(gatewaySeatReadsImages('openrouter', 'openrouter/x-ai/grok-4.7', facts({})), true);
     assert.equal(gatewaySeatReadsImages('openrouter', 'openrouter/deepseek/deepseek-v4-flash', facts({ 'deepseek/deepseek-v4-flash': false })), false);
   });
-  test('other providers never read OpenRouter answers', () => {
-    assert.deepEqual(resolveVision({ provider: 'fluxion', model: 'fluxion/gpt-4o' }, facts({ 'gpt-4o': false })).reads, 'yes');
+  test('only OpenRouter (both ways) and LiteLLM (a yes) read a provider\'s published answer', () => {
+    // The stub used to enforce this rule itself (it answered for 'openrouter'
+    // only), so a resolver that read provider data for EVERY provider passed.
+    // This one answers whoever asks.
+    const says = (answer) => ({ providerReportsVision: () => answer });
+    for (const provider of ['fluxion', 'agentrouter', 'nvidia_nim', 'ninerouter', 'openai', 'claude', 'gemini', 'groq', 'deepseek']) {
+      assert.equal(resolveVision({ provider, model: `${provider}/never-heard-of-it` }, says(true)).reads, 'unknown', `${provider}: a published "yes" is not its answer`);
+    }
+    assert.equal(resolveVision({ provider: 'fluxion', model: 'fluxion/gpt-4o' }, says(false)).reads, 'yes', 'a published "no" does not beat the name list either');
+    assert.equal(resolveVision({ provider: 'openrouter', model: 'openrouter/x/y' }, says(false)).reads, 'no');
+    assert.equal(resolveVision({ provider: 'litellm', model: 'litellm/x' }, says(true)).reads, 'yes');
+    assert.equal(resolveVision({ provider: 'litellm', model: 'litellm/x' }, says(false)).reads, 'unknown', 'LiteLLM: nothing there is not "no"');
   });
 });

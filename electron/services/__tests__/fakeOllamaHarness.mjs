@@ -72,6 +72,13 @@ export function fakeOllama(models, { reply = 'local model reply', holdChat = fal
   return {
     requests,
     chats: () => requests.filter((r) => r.path === '/api/chat'),
+    /** Answer every chat that is being held open (a slow local model finishing). */
+    release: (text = reply) => {
+      for (const res of [...open]) {
+        open.delete(res);
+        res.end(JSON.stringify({ message: { role: 'assistant', content: text }, done: true }) + '\n');
+      }
+    },
     start: () => new Promise((r) => server.listen(0, '127.0.0.1', () => r(`http://127.0.0.1:${server.address().port}`))),
     stop: () => new Promise((r) => { for (const res of open) res.destroy(); server.closeAllConnections?.(); server.close(r); }),
   };

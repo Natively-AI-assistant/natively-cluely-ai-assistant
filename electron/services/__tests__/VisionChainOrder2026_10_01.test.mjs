@@ -131,6 +131,22 @@ test('the chain order changes only by the selection moving to the front', async 
   }
 });
 
+test('wherever a selection that reads images has a rung of its own, that rung is first', async () => {
+  // The fixture test above only inspects cases that CHANGED, so it passes with
+  // phase 5a reverted. This one states the rule for every case.
+  const TEXT_ONLY = new Set(['gpt-3.5-turbo', 'llama-3.3-70b-versatile']);
+  const now = await orders();
+  let checked = 0;
+  for (const [name, is] of Object.entries(now)) {
+    const label = name.slice(name.indexOf('] ') + 2);
+    const own = ownRungs(label);
+    if (own.length === 0 || TEXT_ONLY.has(label) || !is.some((id) => own.includes(id))) continue;
+    checked += 1;
+    assert.ok(own.includes(is[0]), `${name}: ${is.join(' > ')}`);
+  }
+  assert.ok(checked >= 40, `only ${checked} cases have a selection with its own rung`);
+});
+
 const chainIds = async (keys, selection, state = {}) => {
   const h = Object.assign(helper(keys, selection), state);
   return (await h.buildVisionChain(REQ)).map((p) => p.id);
