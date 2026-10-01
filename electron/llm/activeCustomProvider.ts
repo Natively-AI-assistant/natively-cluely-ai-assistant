@@ -87,3 +87,20 @@ export function readActiveModelId(): string {
     return '';
   }
 }
+
+/**
+ * Each vendor's fixed vision model, as the live helper would send it (see
+ * LLMHelper.getFixedVisionModels). Empty when the helper is not up: the
+ * registry then keeps its own label, and no request can be made anyway.
+ */
+export function readFixedVisionModels(): { openai?: string; claude?: string } {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return {};
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getFixedVisionModels !== 'function') return {};
+    return helper.getFixedVisionModels() || {};
+  } catch {
+    return {};
+  }
+}

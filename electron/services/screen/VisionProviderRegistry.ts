@@ -25,7 +25,7 @@ import {
   customProviderIsLocal,
   isOllamaVisionModelByName,
 } from '../../llm/visionCapability';
-import { readActiveCustomProvider, readActiveModelId } from '../../llm/activeCustomProvider';
+import { readActiveCustomProvider, readActiveModelId, readFixedVisionModels } from '../../llm/activeCustomProvider';
 import { gatewaySeatReadsImages } from '../../llm/visionResolver';
 import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from '../../llm/visionCapabilityStore';
 import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
@@ -117,7 +117,8 @@ function openai(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): 
   return {
     id: 'openai',
     displayName: 'OpenAI',
-    modelId: 'gpt-4o',
+    // The model runVisionRequest('openai') actually sends to (it was a stale `gpt-4o`).
+    modelId: readFixedVisionModels().openai ?? 'gpt-4o',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -162,7 +163,7 @@ function claude(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): 
   return {
     id: 'claude',
     displayName: 'Claude',
-    modelId: 'claude-sonnet-4-6',
+    modelId: readFixedVisionModels().claude ?? 'claude-sonnet-4-6',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,

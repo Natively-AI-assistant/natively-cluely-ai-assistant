@@ -128,9 +128,13 @@ function matrix() {
   return out;
 }
 
-/** What `before` must have become. One named rule per allowed difference; none yet. */
+/** What `before` must have become. One named rule per allowed difference. */
 function expected(_name, before) {
-  return before;
+  let rungs = [...before];
+  // (d) Defect 9: the OpenAI rung said `gpt-4o` while the request went to the
+  //     SELECTED OpenAI model. It now names, and sends to, the fixed vision model.
+  rungs = rungs.map((r) => (r === 'openai=gpt-4o' ? `openai=${FIXED.openai}` : r));
+  return rungs;
 }
 
 test('the pre-pass tries what it tried before, except where a named rule says otherwise', () => {
@@ -148,3 +152,62 @@ test('the pre-pass tries what it tried before, except where a named rule says ot
 });
 
 export { eligible, all, expected, matrix, KEY_SETS, SELECTIONS, LOCAL_SELECTIONS, MODES, FIXED, FIXTURE, installHelper, credentials };
+
+// ── Defect 9: the pre-pass sent the screenshot to the SELECTED OpenAI model ────
+
+const { LLMHelper } = require(dist('LLMHelper.js'));
+const TIERS = [
+  { family: 'openai', tier1: 'gpt-5.4', tier2: 'gpt-5.4', tier3: 'gpt-5.4' },
+  { family: 'claude', tier1: 'claude-sonnet-4-6', tier2: 'claude-sonnet-4-6', tier3: 'claude-sonnet-4-6' },
+];
+function bareHelper(state = {}) {
+  const calls = [];
+  const h = Object.create(LLMHelper.prototype);
+  const record = (name) => async (...args) => { calls.push({ name, args }); return `from ${name}`; };
+  Object.assign(h, {
+    currentModelId: 'gpt-3.5-turbo', modelVersionManager: { getAllVisionTiers: () => TIERS },
+    generateWithOpenai: record('openai'), generateWithClaude: record('claude'), generateWithGroqMultimodal: record('groq'),
+    ...state,
+  });
+  return { h, calls };
+}
+
+describe('runVisionRequest: each vendor rung names its own vision model', () => {
+  test('OpenAI: a text-only selected model never receives the pre-pass screenshot', async () => {
+    const { h, calls } = bareHelper({ currentModelId: 'gpt-3.5-turbo' });
+    assert.equal(await h.runVisionRequest('openai', 'user', 'system', '/tmp/x.png'), 'from openai');
+    const [user, system, images, model] = calls[0].args;
+    assert.deepEqual([user, system, images], ['user', 'system', ['/tmp/x.png']]);
+    assert.equal(model, 'gpt-5.4', 'with no model argument generateWithOpenai falls back to the SELECTED OpenAI model');
+  });
+  test('OpenAI: a selected vision model does not lead the pre-pass either (cloud order stays fast)', async () => {
+    const { h, calls } = bareHelper({ currentModelId: 'gpt-5.5' });
+    await h.runVisionRequest('openai', 'u', 's', '/tmp/x.png');
+    assert.equal(calls[0].args[3], 'gpt-5.4');
+  });
+  test('Claude: the fixed vision model, whatever Claude model is selected', async () => {
+    const { h, calls } = bareHelper({ currentModelId: 'claude-opus-5-5' });
+    await h.runVisionRequest('claude', 'u', 's', '/tmp/x.png');
+    assert.equal(calls[0].args[3], 'claude-sonnet-4-6');
+  });
+  test('the fixed models follow the version manager, and fall back to the built-in ones', () => {
+    assert.deepEqual(bareHelper().h.getFixedVisionModels(), { openai: 'gpt-5.4', claude: 'claude-sonnet-4-6' });
+    const promoted = bareHelper({ modelVersionManager: { getAllVisionTiers: () => [{ family: 'openai', tier1: 'gpt-6-vision', tier2: 'x', tier3: 'x' }] } }).h.getFixedVisionModels();
+    assert.equal(promoted.openai, 'gpt-6-vision');
+    assert.match(promoted.claude, /^claude-/, 'no Claude tier → the built-in Claude model');
+    const broken = bareHelper({ modelVersionManager: { getAllVisionTiers: () => { throw new Error('not ready'); } } }).h.getFixedVisionModels();
+    assert.match(broken.openai, /^gpt-/);
+  });
+  test('the registry labels the OpenAI and Claude rungs with those models', () => {
+    const rungs = all('vendors', 'gpt-3.5-turbo', 'vision_first', { getFixedVisionModels: () => ({ openai: 'gpt-6-vision', claude: 'claude-next' }) });
+    assert.equal(rungs.find((p) => p.id === 'openai').modelId, 'gpt-6-vision');
+    assert.equal(rungs.find((p) => p.id === 'claude').modelId, 'claude-next');
+  });
+});
+test('Groq: the pre-pass adapter sends to the Groq vision model, never the selected Groq model', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../../LLMHelper.ts'), 'utf8');
+  const start = src.indexOf('private async generateWithGroqMultimodal(');
+  const body = src.slice(start, src.indexOf('\n  }\n', start));
+  assert.match(body, /model: GROQ_VISION_MODEL,/);
+  assert.doesNotMatch(body, /currentModelId/);
+});

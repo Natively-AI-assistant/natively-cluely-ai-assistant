@@ -2223,10 +2223,14 @@ export class LLMHelper {
           timeoutMs: opts?.timeoutMs,
           signal: opts?.signal,
         });
+      // The model is named explicitly (2026-10-01). With none, both adapters
+      // fall back to the SELECTED model of that vendor — so the pre-pass sent
+      // the screenshot to a text-only gpt-3.5-turbo whenever one was selected,
+      // while the registry labelled the rung `gpt-4o`.
       case 'openai':
-        return this.generateWithOpenai(userPrompt, systemPrompt, [imagePath]);
+        return this.generateWithOpenai(userPrompt, systemPrompt, [imagePath], this.getFixedVisionModels().openai);
       case 'claude':
-        return this.generateWithClaude(userPrompt, systemPrompt, [imagePath]);
+        return this.generateWithClaude(userPrompt, systemPrompt, [imagePath], this.getFixedVisionModels().claude);
       case 'groq_scout':
         return this.generateWithGroqMultimodal(userPrompt, [imagePath], systemPrompt);
       // OpenAI-compatible gateways. Registered here so ScreenUnderstandingService
@@ -2281,6 +2285,20 @@ export class LLMHelper {
       default:
         throw new Error(`runVisionRequest: unknown providerId ${providerId}`);
     }
+  }
+
+  /**
+   * Each vendor's FIXED vision model, as the screen pre-pass uses it: the
+   * version manager's current tier 1, else the built-in model. The pre-pass
+   * does not use the selected model (Evin, 2026-10-01: it runs before the
+   * answer inside a 6 s budget, and the selected model reads the screenshot in
+   * the answer itself).
+   */
+  public getFixedVisionModels(): { openai: string; claude: string } {
+    let tiers: Array<{ family: ModelFamily; tier1: string }> = [];
+    try { tiers = this.modelVersionManager.getAllVisionTiers(); } catch { /* not ready: the built-ins */ }
+    const tier1 = (family: ModelFamily) => tiers.find(t => t.family === family)?.tier1;
+    return { openai: tier1(ModelFamily.OPENAI) || OPENAI_MODEL, claude: tier1(ModelFamily.CLAUDE) || CLAUDE_MODEL };
   }
 
   /**
