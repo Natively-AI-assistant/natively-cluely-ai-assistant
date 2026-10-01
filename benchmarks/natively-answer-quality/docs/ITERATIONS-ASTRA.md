@@ -919,7 +919,7 @@ recurring, rule-shaped defect left in the clean answers.
 reasoning on (effort low) 2220 ms p50 / 6551 ms p95 (one Technical interview turn took 18.8 s). Total 1.6 s → 3.0 s
 at the median. So the lever costs about 1.4 s to the first word at the median and has a long tail.
 
-### Prepared for the judge — the Looking-for-work fallback reworded after the judge's own expected behaviour (15:55Z)
+### Prepared for the judge — the Looking-for-work fallback reworded after the judge's own expected behaviour (15:45Z)
 * The 13 dev Looking-for-work answers in the "no stored answer" class average 5.70 (the other 27: about 9.2). The
   dataset lists these facts as deliberately absent (reason for leaving, the gap, a weakness), so the ceiling here is
   the quality of the truthful fallback, not an answer bank.
@@ -940,7 +940,7 @@ at the median. So the lever costs about 1.4 s to the first word at the median an
   Looking-for-work-only change if its paired gain over lfw-base on these 40 drafts is at least +0.3 with the interval
   excluding 0 and its hard fails are not up; then it needs its own app runs (that mode only) and a holdout read.
 
-### Prepared for the judge — Call Center with no policy document: a "no policy on file" notice to the GENERATOR (16:10Z)
+### Prepared for the judge — Call Center with no policy document: a "no policy on file" notice to the GENERATOR (15:52Z)
 * 21 of 40 dev Call Center answers score under 8.5; 16 of them have no document. The judge's expected behaviour on
   those is one shape: name what the customer asked, say plainly what cannot be confirmed yet, say exactly what will
   be checked ("I can't confirm a refund for today yet. I'll check whether a refund or credit is available for this
@@ -958,3 +958,20 @@ at the median. So the lever costs about 1.4 s to the first word at the median an
   Call Center-only composer notice if the paired gain on dev is at least +0.3 with the interval excluding 0 and hard
   fails are not up; then that mode's app runs and a holdout read.
 * Harness: tools/verifier-replay.mjs takes `--answers <replay.jsonl>` (verify a generator replay's output).
+
+### Prepared for the judge — Sales with no reference file: "how to say it when nothing can be stated" (16:05Z)
+* 18 of 40 dev Sales answers score under 8.6; 14 have no document. The existing notice (I7) holds the product facts
+  back, and what is left is long and indirect: a preamble about not wanting to guess, an invented pricing driver
+  ("it depends on how many people would be using it", capped at 4.0), a discovery detour, "on our next call". The
+  judge's improvement lines are the same short shape each time: "Let me confirm the price so I can give you an
+  accurate number." / "Let me confirm whether invoicing is built in so I can give you a clear yes or no." / for a
+  "why you" ask, a clearly conditional line.
+* `tools/variants/sales-noshape-v1.mjs`: a notice to the generator on Sales turns with no reference file, then the
+  unchanged fix12 verifier. 24 such dev rows: preamble 7 → 2; replies that say what will be confirmed 8 → 14; "it
+  depends on" 1 → 0; median 50 → 44 words; verifier edits 8 → 6.
+* Not built. salesfin-base and salesfin-shape-v1 are queued for 02:00Z with the same rule as the other two (paired
+  dev gain at least +0.3, interval excluding 0, hard fails not up; then that mode's app runs and a holdout read).
+* The three prepared changes (Looking for work, Call Center, Sales) are one idea: when the material cannot answer,
+  the judge rewards a short reply that names the ask and says exactly what will be confirmed (or, for a personal
+  question, the nearest documented facts plus one conditional sentence) — and penalises both the invented detail and
+  the long deflection. If they hold on dev they would be built together as one change and read on holdout once.

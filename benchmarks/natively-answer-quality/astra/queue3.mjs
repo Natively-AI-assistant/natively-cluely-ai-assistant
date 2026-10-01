@@ -53,6 +53,10 @@ const TIERS = [
     // verifier (40 dev drafts regenerated both ways).
     R('ccfin-base', 'ccfin-base', 'aq2-dev-fix11'),
     R('ccfin-nopolicy-v1', 'ccfin-nopolicy-v1', 'aq2-dev-fix11'),
+    // Sales with no reference file: a short "how to say it when nothing can be stated" notice to the generator,
+    // then the unchanged fix12 verifier (40 dev drafts regenerated both ways).
+    R('salesfin-base', 'salesfin-base', 'aq2-dev-fix11'),
+    R('salesfin-shape-v1', 'salesfin-shape-v1', 'aq2-dev-fix11'),
     R('think-off-til', 'think-off-til', 'aq2-dev-fix11'),
     R('think-low-til', 'think-low-til', 'aq2-dev-fix11'),
     J('sb-c2-fix11', 'abs-sb-c2', 'aq2-sb-fix11'),
