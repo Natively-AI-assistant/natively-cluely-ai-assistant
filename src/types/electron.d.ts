@@ -93,6 +93,8 @@ export interface VisionModelState {
   checking: boolean
   /** The one-time test may ask this model now. */
   testable: boolean
+  /** Only on the answer to "Test again": the test ran and could not finish. */
+  inconclusive?: boolean
 }
 
 export interface ElectronAPI {

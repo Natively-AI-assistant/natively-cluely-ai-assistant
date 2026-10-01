@@ -569,4 +569,5 @@ export const RU_GENERATED: Record<string, string> = {
     "Send this model a test image now and see whether it can read it": "Отправить этой модели тестовое изображение и проверить, прочитает ли она его",
     "Test again": "Проверить снова",
     "Test now": "Проверить сейчас",
+    "Could not test just now · try again later": "Сейчас проверить не удалось · попробуйте позже",
 };

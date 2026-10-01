@@ -14470,6 +14470,7 @@ let isMultimodal = !!(imagePaths?.length);
   public async retestVision(id: string): Promise<VisionModelState | null> {
     const selection = this.visionSelectionForId(id);
     if (!selection) return null;
+    let inconclusive = false;
     if (this.userVisionOverride(selection.provider, selection.model) === undefined && this.visionTestAllowed(selection)) {
       const run = this.getVisionProbe().ensure(selection, { force: true }).catch(() => 'unknown' as const);
       this.visionCapabilityChanged();   // "Checking…"
@@ -14477,11 +14478,14 @@ let isMultimodal = !!(imagePaths?.length);
       // An inconclusive re-test must not leave the OLD answer standing as if it
       // had been confirmed: the model is "not known" until a test settles it.
       if (outcome === 'unknown') {
+        inconclusive = true;
         getVisionCapabilityStore().forgetTest(selection.provider, this.visionStoreBaseURL(selection.provider), visionWireModel(selection.provider, selection.model));
       }
       this.visionCapabilityChanged();
     }
-    return this.describeVisionSelection(selection);
+    // The row says so: a test that could not finish (no credit, rate limit,
+    // provider down) otherwise looks like a button that did nothing.
+    return { ...this.describeVisionSelection(selection), ...(inconclusive ? { inconclusive: true } : {}) };
   }
 
   /** Providers the one-time test can ask. The rest are decided by their route, their own table, or /api/show. */

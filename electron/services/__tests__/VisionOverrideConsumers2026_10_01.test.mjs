@@ -346,6 +346,7 @@ describe('what Settings is told, and what it can change', () => {
       const state = await h.retestVision('fluxion/glm-5.3');
       assert.deepEqual(asked, ['fluxion/glm-5.3']);
       assert.deepEqual({ reads: state.reads, source: state.source, checking: state.checking }, { reads: 'yes', source: 'test', checking: false });
+      assert.equal(state.inconclusive, undefined);
     });
     test('an inconclusive re-test leaves the model "not known", not confirmed as before', async () => {
       const h = settings();
@@ -354,6 +355,8 @@ describe('what Settings is told, and what it can change', () => {
       const state = await h.retestVision('fluxion/glm-5.3');
       assert.deepEqual({ reads: state.reads, source: state.source }, { reads: 'unknown', source: null });
       assert.equal(store.tested('fluxion', '', 'glm-5.3'), undefined);
+      assert.equal(state.inconclusive, true, 'the row is told the test could not finish — else the button looks dead');
+      assert.equal(h.describeVisionModels(['fluxion/glm-5.3'])['fluxion/glm-5.3'].inconclusive, undefined, 'only on the answer to that click');
     });
     test('nothing is sent when the user answered for the model, in local-only mode, without a key, or when screenshots stay on this device', async () => {
       for (const [label, prepare] of [

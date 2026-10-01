@@ -857,7 +857,14 @@ export const AIP_CSS = `
 }
 .aip-vision-label { font-size:11px; color: var(--aip-secondary); margin-right:2px; }
 .aip-vision-status { font-size:10.5px; color: var(--aip-secondary); margin-left:auto; text-align:right; }
-.aip-vision-chip { border-style:solid; border-color: var(--aip-border); }
+/* A three-way choice, not three independent toggles: solid at rest (the dashed
+   chip means "off, tap to add"). Two classes, so it outranks .aip-chip below. */
+.aip-chip.aip-vision-chip { border-style:solid; border-color: var(--aip-border-strong); }
+.aip-chip.aip-vision-chip[aria-pressed='true'] { border-color: var(--aip-accent-border); }
+/* The glyph takes 28px of the row. The NAME keeps its room; the raw id, which
+   never shrank, gives way instead (it is in the row's tooltip in full). */
+.aip-model-row--vision .aip-model-id { flex-shrink:1; min-width:64px; }
+.aip-model-row--vision .aip-model-name { flex-shrink:0; max-width:68%; }
 
 .aip-chip {
     display:inline-flex; align-items:center; gap:4px; box-sizing:border-box;
@@ -1565,6 +1572,9 @@ type VisionSetting = VisionModelState['setting'];
 /** What "Auto" means for this model right now, as one short line. */
 export function visionAutoText(state: VisionModelState, t: (text: string) => string): string {
     if (state.checking) return t('Checking…');
+    // The provider could not be asked just now (no credit, rate limit, down).
+    // No code and no provider text: nothing here is the user's to fix.
+    if (state.inconclusive) return t('Could not test just now · try again later');
     const { reads, source } = state.auto;
     if (reads === 'unknown') return state.testable ? t('Not known yet · tested when you select it') : t('Not known');
     if (source === 'test') return reads === 'yes' ? t('Yes · tested') : t('No · tested');
@@ -1579,6 +1589,12 @@ export function visionAutoText(state: VisionModelState, t: (text: string) => str
  */
 export function useVisionStates(ids: readonly string[], active: boolean) {
     const [states, setStates] = useState<Record<string, VisionModelState | null>>({});
+    // Ids whose last "Test again" could not finish. Kept here because main's
+    // change event re-reads every state, and a re-read knows nothing of it.
+    const [inconclusive, setInconclusive] = useState<ReadonlySet<string>>(() => new Set());
+    const note = useCallback((id: string, on: boolean) => {
+        setInconclusive(prev => { if (prev.has(id) === on) return prev; const next = new Set(prev); if (on) next.add(id); else next.delete(id); return next; });
+    }, []);
     const key = ids.join('\n');
     // Only the newest request may write: a slow answer for an old id list must
     // not overwrite a fresh one.
@@ -1598,6 +1614,7 @@ export function useVisionStates(ids: readonly string[], active: boolean) {
     }, [active, key, refresh]);
 
     const set = useCallback(async (id: string, setting: VisionSetting) => {
+        note(id, false);
         // Shown at once; main's answer (which also carries the new "reads") replaces it.
         setStates(prev => prev[id] ? { ...prev, [id]: { ...prev[id]!, setting } } : prev);
         try {
@@ -1605,16 +1622,23 @@ export function useVisionStates(ids: readonly string[], active: boolean) {
             if (result?.state) setStates(prev => ({ ...prev, [id]: result.state }));
             else void refresh();
         } catch { void refresh(); }
-    }, [refresh]);
+    }, [refresh, note]);
     const retest = useCallback(async (id: string) => {
+        note(id, false);
         setStates(prev => prev[id] ? { ...prev, [id]: { ...prev[id]!, checking: true } } : prev);
         try {
             const result = await window.electronAPI?.retestVision?.(id);
-            if (result?.state) setStates(prev => ({ ...prev, [id]: result.state }));
+            if (result?.state) { setStates(prev => ({ ...prev, [id]: result.state })); note(id, result.state.inconclusive === true); }
             else void refresh();
         } catch { void refresh(); }
-    }, [refresh]);
-    return { states, set, retest };
+    }, [refresh, note]);
+    const shown = useMemo(() => {
+        if (inconclusive.size === 0) return states;
+        const out: Record<string, VisionModelState | null> = { ...states };
+        for (const id of inconclusive) { const s = out[id]; if (s && !s.checking) out[id] = { ...s, inconclusive: true }; }
+        return out;
+    }, [states, inconclusive]);
+    return { states: shown, set, retest };
 }
 
 /** The glyph at the end of a model row: does it read images, and did the user decide that. */
@@ -1998,7 +2022,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                 const visionPanelId = `${idRef.current}-vision-${i}`;
                                 return (
                                     <React.Fragment key={m.id}>
-                                    <div className="aip-model-row aip-row">
+                                    <div className={`aip-model-row aip-row${visionState ? ' aip-model-row--vision' : ''}`}>
                                         <button
                                             type="button"
                                             data-index={i}

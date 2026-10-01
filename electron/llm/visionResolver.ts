@@ -176,4 +176,6 @@ export interface VisionModelState {
   checking: boolean;
   /** The one-time test may ask this model now (a key, the provider on, screenshots allowed off this device). */
   testable: boolean;
+  /** Only on the answer to "Test again": the test ran and could not finish (no credit, rate limit, provider down). */
+  inconclusive?: boolean;
 }

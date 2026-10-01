@@ -1105,4 +1105,5 @@ export const ZH_GENERATED: Record<string, string> = {
     "Send this model a test image now and see whether it can read it": "立即向此模型发送测试图片，看它能否读取",
     "Test again": "重新测试",
     "Test now": "立即测试",
+    "Could not test just now · try again later": "暂时无法测试 · 请稍后重试",
 };

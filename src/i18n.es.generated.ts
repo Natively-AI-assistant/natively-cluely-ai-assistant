@@ -1106,4 +1106,5 @@ export const ES_GENERATED: Record<string, string> = {
     "Send this model a test image now and see whether it can read it": "Enviar ahora una imagen de prueba a este modelo y ver si puede leerla",
     "Test again": "Probar de nuevo",
     "Test now": "Probar ahora",
+    "Could not test just now · try again later": "No se pudo probar ahora · inténtalo más tarde",
 };

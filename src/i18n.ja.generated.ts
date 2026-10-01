@@ -1091,4 +1091,5 @@ export const JA_GENERATED: Record<string, string> = {
     "Send this model a test image now and see whether it can read it": "今すぐテスト画像を送り、読めるか確認します",
     "Test again": "再テスト",
     "Test now": "今すぐテスト",
+    "Could not test just now · try again later": "今はテストできませんでした · 後でもう一度お試しください",
 };

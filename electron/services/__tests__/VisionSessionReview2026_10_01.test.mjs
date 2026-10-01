@@ -385,6 +385,19 @@ describe('the one-time image test: only positive evidence saves a "no"', () => {
       "Images aren't supported here.", 'As a text-only model I am unable to view pictures.', 'No image was provided.', 'The number is 1234.', '42',
     ]) assert.equal(judgeProbeReply(reply, '7392'), 'no', reply);
   });
+  test('measured replies from a model that cannot see (typographic apostrophes and all) are a no', () => {
+    // Direct deepseek-v4-pro, 2026-10-01, to an image of 7392. The curly
+    // apostrophe hid "can't" from the rule, so the model stayed "not known".
+    for (const reply of [
+      'I’m sorry, but I can’t view or interpret images directly. If you describe the image or type out the number, I’ll be happy to help.',
+      'I don’t have the ability to see images.',
+      'As an AI text model, I do not have vision capabilities.',
+      'I am a text-based assistant without image input support.',
+      'Sorry, I cannot process images.',
+    ]) assert.equal(judgeProbeReply(reply, '7392'), 'no', reply);
+    // …and a refusal that says nothing about seeing is still not one.
+    for (const reply of ['I’m sorry, I can’t help with that.', 'I can’t share that information.']) assert.equal(judgeProbeReply(reply, '7392'), 'unknown', reply);
+  });
   test('through the probe: two error sentences in a row record nothing', async () => {
     const recorded = [];
     const probe = new VisionProbe({
