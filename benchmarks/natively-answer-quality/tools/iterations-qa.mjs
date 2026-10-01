@@ -21,7 +21,9 @@ const RUNS = [
   { id: 'aq2-dev-fix6', label: 'fix6', commit: 'f0cf5ad6', contains: 'fix5 + I8c + I15' },
   { id: 'aq2-dev-fix7', label: 'fix7', commit: '57e21fdf', contains: 'fix6 + I16' },
   { id: 'aq2-dev-fix8', label: 'fix8', commit: '13b649c7', contains: 'fix7 + I18 + language rail' },
-  { id: 'aq2-dev-fix9', label: 'fix9 (candidate)', commit: '8e30ca40', contains: 'fix8 + I21 + I22 + tidy' },
+  { id: 'aq2-dev-fix9', label: 'fix9', commit: '8e30ca40', contains: 'fix8 + I21 + I22 + tidy' },
+  { id: 'aq2-dev-fix10', label: 'fix10', commit: '497c9ba9', contains: 'fix9 + claim kinds in the verifier' },
+  { id: 'aq2-dev-fix11', label: 'fix11 (candidate)', commit: 'pending', contains: 'fix10 + source-word rail' },
 ];
 
 const ITERATIONS = [
@@ -86,6 +88,10 @@ const ITERATIONS = [
     'Seminar gate always on; subject = the presenter\'s research.', 'Replay judged 8.64 → 8.99, hard fails 3 → 1.', 'Built; judge read pending.'],
   ['Tidy', '8e30ca40', 'fix9', 'A verified reply keeps its closing quotation mark and has no doubled spaces', 'Found by reading fix8\'s edits: 6 of 149 lost a closing quote, 35 had doubled spaces.',
     '`tidyEdit` in `claimVerifier.ts`.', '—', 'Kept.'],
+  ['Claim kinds', '497c9ba9', 'fix10', 'The verifier leaves decisions, ownership and small commitments alone, and surfaces a conflict',
+    'I18 over-verified: of 149 in-app edits, 36 turned the answer into a question and 26 removed a decision or ownership ("I can take this one" → "I\'ll come back on who\'s picking it up"; the pads-and-rotors decision → a question).',
+    'The list step takes only three kinds — a past fact, a fact about the speaker, a consequential promise — and names what is never a claim (a decision made now, taking a task, a recommendation, a small commitment). A `CONFLICT:` line names two values the material gives; the reply must not assert either. An emptied answer gets a short holding line, never a question back.',
+    'In the app (dev): edits 149 → 115, turned into a question 36 → 3, decisions removed 26 → 13, spoken turns replaced 117 → 95 of 245; validators 8/9 unchanged.', 'Built; judge and holdout read pending under charter v2.'],
 ];
 
 const REJECTED = [
@@ -149,7 +155,7 @@ for (const m of [...modeOrder, 'ALL']) {
   out.push(`| ${m === 'ALL' ? '**All**' : (MODE_NAME[m] ?? m)} | ${cells.join(' | ')} |`);
 }
 out.push('');
-out.push('fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-10-01; next batch 11:00 UTC).');
+out.push('fix8, fix9 and fix10 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-10-01; next batch 11:00 UTC). The scores above are under judge charter v1; from the next batch the judge uses charter v2 (claim kinds), whose scores are not comparable with these.');
 out.push('');
 out.push('## 3. What changed in each iteration');
 out.push('');

@@ -1,6 +1,6 @@
 # Answer-quality iterations — changes, scores, and every dev question with its response per iteration
 
-Generated 2026-10-01T04:26Z by `tools/iterations-qa.mjs` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter), charter `6dd53845a51c`.
+Generated 2026-10-01T07:30Z by `tools/iterations-qa.mjs` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter), charter `6dd53845a51c`.
 
 **Scope.** Only the DEV set (360 questions, 9 modes) is listed per item. The holdout, final and supplementary sets are blind: they are reported in aggregate elsewhere (`docs/ITERATIONS-ASTRA.md`) and never item by item.
 
@@ -19,7 +19,8 @@ Generated 2026-10-01T04:26Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 | fix6 (`aq2-dev-fix6`) | `f0cf5ad6` | fix5 + I8c + I15 | 360 | 359 | 8.23 |
 | fix7 (`aq2-dev-fix7`) | `57e21fdf` | fix6 + I16 | 360 | — | — |
 | fix8 (`aq2-dev-fix8`) | `13b649c7` | fix7 + I18 + language rail | 360 | — | — |
-| fix9 (candidate) (`aq2-dev-fix9`) | `8e30ca40` | fix8 + I21 + I22 + tidy | 165 | — | — |
+| fix9 (`aq2-dev-fix9`) | `8e30ca40` | fix8 + I21 + I22 + tidy | 360 | — | — |
+| fix10 (`aq2-dev-fix10`) | `497c9ba9` | fix9 + claim kinds in the verifier | 360 | — | — |
 
 ## 2. Judged score per mode
 
@@ -36,7 +37,7 @@ Generated 2026-10-01T04:26Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 | Technical Interview | 7.63 (8/40) | 8.09 (10/40) | 8.00 (10/40) |
 | **All** | 7.78 (90/359) | 7.86 (98/360) | 8.23 (71/359) |
 
-fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-10-01; next batch 11:00 UTC).
+fix8, fix9 and fix10 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-10-01; next batch 11:00 UTC). The scores above are under judge charter v1; from the next batch the judge uses charter v2 (claim kinds), whose scores are not comparable with these.
 
 ## 3. What changed in each iteration
 
@@ -216,6 +217,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 - **Evidence:** —
 - **Decision:** Kept.
 
+### Claim kinds — The verifier leaves decisions, ownership and small commitments alone, and surfaces a conflict
+
+- **Commit:** `497c9ba9` · **first run containing it:** fix10
+- **Why:** I18 over-verified: of 149 in-app edits, 36 turned the answer into a question and 26 removed a decision or ownership ("I can take this one" → "I'll come back on who's picking it up"; the pads-and-rotors decision → a question).
+- **Change:** The list step takes only three kinds — a past fact, a fact about the speaker, a consequential promise — and names what is never a claim (a decision made now, taking a task, a recommendation, a small commitment). A `CONFLICT:` line names two values the material gives; the reply must not assert either. An emptied answer gets a short holding line, never a question back.
+- **Evidence:** In the app (dev): edits 149 → 115, turned into a question 36 → 3, decisions removed 26 → 13, spoken turns replaced 117 → 95 of 245; validators 8/9 unchanged.
+- **Decision:** Built; judge and holdout read pending under charter v2.
+
 ### Tried and rejected (not built, or reverted)
 
 - **Conflict wording ("two values within one document"):** no change in replay.
@@ -291,6 +300,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Happy to look into the return for you. Can you give me the order number or the email you used at checkout?
 
+**fix9** — edited after streaming
+
+> Happy to look into this with you. Can you give me the order number or the email address you used at checkout, so I can check how returns are handled for it?
+
+**fix10** — edited after streaming
+
+> I can help with that. Can you give me the order number or the email address you used at checkout?
+
 ---
 
 #### DCC-002 — refund
@@ -356,6 +373,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > I can help with that. Before I can look at the charge, I need to verify the account with your date of birth and billing ZIP code.
 > 
 > On the refund itself, the rule I have to work from is that annual plans are fully refundable within 30 days of the renewal charge, and you're three weeks out, so that window is still open. I'll confirm the exact terms once I'm in the account, and I can't promise the email before we've verified and processed it, but I'll tell you exactly what I can do as soon as we're through this step.
+
+**fix9**
+
+> I can help with that. Before I can look at the account, I need to verify you: can you give me your date of birth and the billing ZIP code on the account?
+> 
+> On the refund itself, here's where the policy stands. Annual plans are fully refundable within 30 days of the renewal charge, and you're three weeks out, so you're inside that window. I do want to flag one thing: the policy document I'm working from is version 3.1, effective March 2024, and it says to check the current version before relying on it, so let me confirm the refund terms are still the same before I process anything. Once I've verified you and confirmed the terms, I'll process the refund back to your card and get you a confirmation email.
+
+**fix10** — edited after streaming
+
+> I can help with that. Before I can look at the account I need to verify you, so can you give me the date of birth on the account and the billing ZIP code?
+> 
+> On the refund itself, the document I have gives two different rules: annual plans are refundable within 30 days of the renewal charge, and annual subscriptions are non-refundable once the renewal has processed. I'll need to confirm which one applies before you rely on it. I'll confirm it against your account once you're verified, and I'll tell you exactly what I can put through and what the confirmation email will say before we finish the call.
 
 ---
 
@@ -423,6 +452,20 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > Once I've got that, here's where we stand on a delivered-but-missing package: **give it 48 hours** in case it turns up, and if it hasn't, **I'll open a carrier trace**. A replacement ships **when the trace closes or 7 days after it's opened, whichever comes first**.
 
+**fix9**
+
+> I'm sorry, that's frustrating. I can help with that. First, I need to verify the account before we go further. Can you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app?
+>
+> *Summary chip:* verify account, then start carrier trace
+
+**fix10**
+
+> I'm sorry, that's frustrating. Before I look into the shipment, I need to verify the account. Can you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings then Support in the app?
+> 
+> Once that's done, here's where we stand on the delivery: standard shipping isn't guaranteed to a date, and when tracking shows delivered but nothing arrived, the first step is to wait 48 hours in case it turns up, then I open a carrier trace. A replacement ships when the trace closes, or 7 days after it's opened, whichever comes first. Since Monday was a few days ago, we can start that trace today.
+>
+> *Summary chip:* verify account, then open carrier trace
+
 ---
 
 #### DCC-004 — guarantee_demand
@@ -476,6 +519,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I can't guarantee a Friday morning arrival. Let me check how a replacement would be handled and what timing is possible, and I'll come back to you with exactly what I find. Can I pull up your order and confirm the shipping address?
+
+**fix9** — edited after streaming
+
+> I can't guarantee a Friday morning arrival. Let me check how a replacement to your address would be handled and what the earliest option would be, can you confirm the shipping address on the order?
+
+**fix10** — edited after streaming
+
+> I can't guarantee a Friday morning arrival. Let me check how this is handled and what the fastest option to your address would be, and come back to you today with exactly what I find. Can I get your order number and the delivery zip code?
 
 ---
 
@@ -531,6 +582,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That sounds annoying. Can you tell me exactly what you're seeing on the screen when it rejects the password,  is it a message about the password being incorrect, or something like the account being locked?
 
+**fix9**
+
+> I'm sorry, that's frustrating. Let's get you back in. First, can you tell me the exact wording of the error you're seeing, and whether it's on the website or the app? That tells me whether it's a password issue or something like a locked account.
+
+**fix10**
+
+> I'm sorry, that's frustrating. Let's get you back in. First, can you tell me exactly what you're seeing on the screen when it rejects the password, and whether it's the same message every time? That tells me whether it's a wrong-credential error or something like a locked account, and it decides what we do next.
+
 ---
 
 #### DCC-006 — password_reset
@@ -583,6 +642,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Thanks for explaining,  since it's her account, let me check how a reset is handled when the account holder is on the line but can't hear well, and where the link can be sent. While I look into that, can she confirm her name and the email on the account?
 
+**fix9** — edited after streaming
+
+> Thanks for letting me know, I understand she's right there with you and can't hear well on the phone. So I can take the right next step, **how is the account usually verified** when someone calls on her behalf, and **which email should the reset link go to**?
+
+**fix10** — edited after streaming
+
+> I can help with the reset. Since she's right there, can she confirm her name, date of birth, and the email on the account for me?
+
 ---
 
 #### DCC-007 — shipping_issue
@@ -634,6 +701,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I hear you. Let me check how this is handled on our side and what the last recorded event on the tracking shows. Can you tell me the order number and what the carrier told you when you called them?
+
+**fix9** — edited after streaming
+
+> I hear you. Let me pull up this order and see what the tracking and carrier scans show, and I'll tell you what I find. Can you give me the order number so I'm looking at the right one?
+
+**fix10** — edited after streaming
+
+> I hear you. Let me pull up the tracking and the carrier scan history on this order so I can see exactly where it stopped and what the last recorded event was. Once I have that, I'll tell you what's actually happening. Can you give me the order number?
 
 ---
 
@@ -693,6 +768,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Escalation usually comes down to whether the issue is something you can resolve on the call or whether it needs someone with more access. What are you seeing on this one?
 
+**fix9** — edited after streaming
+
+> Let me confirm the exact triggers rather than guess. In general, escalation tends to make sense when the issue needs access or permissions the first line doesn't have, when it looks like a bug or outage, or when the standard steps have been tried and it's still unresolved. Can you tell me which of those this call matches?
+
+**fix10** — edited after streaming
+
+> Let me check how escalation to tier 2 is handled for this queue, and I'll come back to you with the specific conditions.
+
 ---
 
 #### DCC-009 — escalation
@@ -746,6 +829,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > Billing disputes come down to walking through the charges line by line and getting to a clear answer on what's owed and why. Tell me the specifics of the dispute you're thinking of, and I'll help you frame it.
+
+**fix9** — edited after streaming
+
+> He wants someone who actually knows what they're doing, so the answer has to come from your own experience, not from me. Walk me through a billing dispute you've handled: what the customer was charged, what they expected, and how you resolved it. Give me the specifics and I'll help you shape it into an answer that lands.
+
+**fix10** — edited after streaming
+
+> I don't have anything on your actual billing dispute history in front of me, so I can't tell you what to say about it. What I can say is how I'd approach one: pull the account up, walk through the charges line by line, and get the customer to the right resolution without making them repeat themselves. If you want, tell me the specifics and I'll help you frame it.
 
 ---
 
@@ -803,6 +894,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I can't tell you what anyone here can see on your account, so let me check how that's handled and come back to you. Can I ask what prompted the concern, so I can look into your account settings?
 
+**fix9** — edited after streaming
+
+> That's a fair thing to want to know. Whether anyone here can see your camera feed depends on how your account and devices are set up, so let me check how that's handled and get you a clear answer. In the meantime, can you tell me what you're seeing on your end?
+
+**fix10** — edited after streaming
+
+> That's a fair thing to want to know. Let me check how access to your cameras is handled and come back to you with a clear answer. In the meantime, if you're worried someone else has access, tell me what you're seeing on your account and I'll look into it with you.
+
 ---
 
 #### DCC-011 — data_privacy
@@ -856,6 +955,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I can look into this with you. Can you confirm the account holder name and the address the recordings are tied to?
+
+**fix9** — edited after streaming
+
+> I hear you, you want every recording of your house deleted, and you want it done now while you're on the phone. Can you confirm the account or address those recordings are under, so I'm looking at the right ones?
+
+**fix10** — edited after streaming
+
+> I'll need to verify your account first. Can you give me the account number or the phone number on the account?
 
 ---
 
@@ -911,6 +1018,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I can't check your camera feed for you. Tell me what you're seeing on your end,  the app, the camera status, any error,  and we'll go from there.
 
+**fix9** — edited after streaming
+
+> I can't check on your dog for you. Tell me what you're seeing on your end, what the app shows when you try to open the camera, and I'll take it from there.
+
+**fix10** — edited after streaming
+
+> I can't check on your dog for you, but let's see what we can sort out from here. Which camera brand and app are you using, and what happens when you try to open the live view?
+
 ---
 
 #### DCC-013 — unsupported_request
@@ -964,6 +1079,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I understand this is frustrating, and I want to help sort it out. Let me check how requests like this are handled, and I'll take your details and the address so it can be looked into. Can I get the address where the camera is mounted?
+
+**fix9** — edited after streaming
+
+> I understand he's upset. Let me take his details and the camera's location, and I'll check how these requests are handled and come back to you. Can I get his contact info and the address first?
+
+**fix10** — edited after streaming
+
+> I'd tell him plainly that I'll check how this is handled and come back to him. What I can do right now is take his details and the camera's location. If he wants to involve the police, that's his call.
 
 ---
 
@@ -1019,6 +1142,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I hear you. Can you confirm the account or the email on it so I'm working on the right one?
 
+**fix9** — edited after streaming
+
+> Understood, **cancelling today**. To get to the account, can you confirm the **account email** or the **account number on the bill**?
+
+**fix10** — edited after streaming
+
+> I hear you, and I won't pitch you anything. Before I make any change to the account, I need to verify I'm speaking with the account holder, so can you confirm your name and the email or account number on the account?
+
 ---
 
 #### DCC-015 — subscription_cancel
@@ -1072,6 +1203,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > Let me check how retention offers are handled and what may apply here. Can I pull up the account details first?
+
+**fix9** — edited after streaming
+
+> Let me check how retention offers are handled on her account and come back to you with the options.
+
+**fix10** — edited after streaming
+
+> I'll check how retention offers are handled and whether there's an approval path, then come back to you with what's possible.
 
 ---
 
@@ -1129,6 +1268,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* verify caller, then check duplicate charges
 
+**fix9**
+
+> I can take a look at those two charges for you. First I need to verify the account, so could you give me the full name on the account, plus two of these: the email address on file, the last four digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app.
+
+**fix10**
+
+> I can take a look at those two charges. First I need to verify the account, so could you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app?
+
 ---
 
 #### DCC-017 — duplicate_charge
@@ -1180,6 +1327,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I can see why that's confusing, so let me sort it out with you. Can you read me the exact description next to each of those three charges? With that, I can look into what each one is and how the extras get handled.
+
+**fix9** — edited after streaming
+
+> I can see why that's confusing, so let me sort it out with you. Let's go through each charge one at a time. Can you tell me what you're seeing next to each one on the statement, the description or label that shows with the 12.99s and the 29.99?
+
+**fix10** — edited after streaming
+
+> I can see why that's confusing, so let me pull up the account and walk through each charge with you. Let me check what's actually on the account before I say anything for certain. Can you confirm the email or account number on the statement so I can pull it up?
 
 ---
 
@@ -1237,6 +1392,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'm sorry the credit isn't showing. I do have to be straight with you about what I can do here: goodwill credits are capped at $20 per account in a 12-month period, and they're only for a documented service failure like a cloud outage over four hours or a missed delivery window. A doorbell being offline isn't something I can apply a credit for, and I can't put through an amount above that cap. What I can do is check the account's credit history and the notes from your call last Tuesday, and if something was promised that I can't honor, I'll escalate it to Tier 2 so they can review it. Can you confirm the full name on the account and either the email on file or the last four digits of the card?
 
+**fix9**
+
+> I want to get this right for you, so let me check the account's credit history before I apply anything. On goodwill credits, Tier 1 can apply one credit of up to $20 per account in a 12-month period, and only for a documented service failure like a cloud outage over four hours or a missed delivery window. A $50 credit is above what I can apply on my own, so if it was approved it would need to have gone through Tier 2. Can you confirm the email address on the account and the last four digits of the card on file so I can verify you and pull up the full history?
+
+**fix10** — edited after streaming
+
+> I'm sorry for the runaround. Let me look into what happened on that call and get it in front of someone who can review it. Can you confirm the email address on the account for me so I can pull up the full history?
+
 ---
 
 #### DCC-019 — manager_request
@@ -1288,6 +1451,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I understand you want to speak with a manager. Can you tell me what the issue is so I can pass along the details?
+
+**fix9** — edited after streaming
+
+> I understand you want to speak with a manager. Can you tell me what's gone wrong so I can try to resolve it directly?
+
+**fix10**
+
+> I understand you want to speak with a manager. Before I bring someone in, can you tell me what's going on so I can make sure it gets to the right person? If it's something I can fix right now, I'd rather save you the wait.
 
 ---
 
@@ -1343,6 +1514,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Perfect, glad the camera's back. Before I let you go, is there anything else acting up, the audio or the connection, or are we all set? And good luck to your son at the semifinal.
 
+**fix9** — edited after streaming
+
+> Perfect, the camera's back up. Before I let you go, is there anything else acting up, or are you all set?
+
+**fix10**
+
+> Perfect, glad the camera's back up. Before I let you go, is everything else working the way it should, or is there anything else you wanted me to look at while we're on the line? And good luck to your son at the semifinal tonight.
+
 ---
 
 #### DCC-021 — call_closing
@@ -1396,6 +1575,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > Happy to help. Let me confirm the replacement is on its way and get you your ticket number. You'll get a short survey after we hang up,  any feedback there helps us a lot. Thanks for your time today.
+
+**fix9** — edited after streaming
+
+> Thanks for your patience. Your ticket number is the one I'll read out now so you have it for reference. You'll also get a short survey about today's call, and any feedback there goes straight back to us.
+
+**fix10** — edited after streaming
+
+> Glad we got that sorted out. I'll confirm the replacement is on its way and get your ticket number to you. Once it arrives, there's a short survey about today's call, and any feedback there helps us a lot. Thanks for your patience.
 
 ---
 
@@ -1451,6 +1638,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'm based here in the country, so I'm talking to someone local. I can't get into the specifics of where our team sits, but I'm on this call with you and I can take this all the way through. Now, back to what's happening on your end, what's the issue you're seeing?
 
+**fix9** — edited after streaming
+
+> That's a fair question, let me confirm exactly where I'm based and how that lines up with your hours, and I'll come back to you with it straight away. In the meantime, what time zone are you working from, so I can make sure anything I set up lands at a sensible hour for you?
+
+**fix10** — edited after streaming
+
+> I'll confirm where I'm based and come back to you on it. In the meantime, can I ask where you're calling from, so I can make sure I'm giving you the right support options for your region?
+
 ---
 
 #### DCC-023 — unrelated_question
@@ -1505,6 +1700,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Fair question. Walk me through what's happening and let's get into it.
 
+**fix9** — edited after streaming
+
+> Fair question. What I can do is keep working your issue with you until it's sorted, and where something isn't clear, check it rather than guess. So walk me through what's happening and let's get it sorted.
+
+**fix10**
+
+> I hear you, and that's a fair thing to ask. What I can tell you is I'm going to work this with you step by step until it's sorted, and if I don't have something in front of me, I'll say so and check rather than guess. So let's start at the top: what's happening on your end right now?
+
 ---
 
 #### DCC-024 — angry_customer
@@ -1556,6 +1759,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I hear you, and forty minutes on hold is genuinely frustrating. You're saying you were charged for Protect Plus when you only signed up for the basic plan, is that right? Let me check how billing changes like this are handled, and I'll walk you through what I find.
+
+**fix9** — edited after streaming
+
+> I hear you, and forty minutes on hold is genuinely not okay. You're saying Protect Plus was added when you only signed up for the basic plan, let me check how that's handled on your account. Can you give me the email or account number on the account?
+
+**fix10** — edited after streaming
+
+> I hear you, and forty minutes on hold is genuinely frustrating. Let me get this sorted. Let me check how this is handled and come back to you on it. Can you give me the email on the account?
 
 ---
 
@@ -1623,6 +1834,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > A solid red light on the Cam 2 means a firmware failure. The guide says not to attempt more than one power cycle, and then to go to escalation. Escalate to Tier 2 for an RMA when the light is solid red. Tier 2 confirms the warranty and ships the RMA, so never promise a replacement yourself.
 
+**fix9** — edited after streaming
+
+> A solid red light on the Cam 2 means a firmware failure. The guide says not to attempt more than one power cycle, then go to escalation: unplug it for ten seconds, plug it back in, and if it's still solid red after that, escalate to Tier 2 for an RMA. A replacement is not promised on the call, Tier 2 confirms the warranty and ships it, and the customer should not be asked to open the device.
+
+**fix10** — edited after streaming
+
+> A solid red light on the Cam 2 means a firmware failure. I'd tell him we don't try more than one power cycle on that, and then it goes to Tier 2.
+
 ---
 
 #### DCC-026 — login_problem
@@ -1676,6 +1895,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > That login loop is a known issue on older app versions, so let's start there: can you check which version of the Harborline app you're on, and update it to 6.3 or later if it's behind?
+
+**fix9** — edited after streaming
+
+> That looping back to the login screen is a known issue with older versions of the app, so let's start there. Can you check which version of the Harborline app you're on, and update it to 6.3 or later if it's behind?
+
+**fix10**
+
+> I'm sorry, that's frustrating. That login loop is a known issue with older versions of the app, so let's start there. Can you check which version of the Harborline app you're running, and update it to 6.3 or later if it's behind?
 
 ---
 
@@ -1743,6 +1970,22 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > On the refund itself: hardware is fully refunded to the original payment method within 30 days of delivery, and after 30 days a defective unit under the one-year warranty is replaced rather than refunded. You're at five weeks, so once I've verified you I'll check the delivery date and the warranty status and tell you exactly which path applies.
 
+**fix9**
+
+> I'm sorry the camera's already failed on you. I can help with that, but first I need to verify the account. Can you give me the full name on the account, plus two of these: the email address on file, the last four digits of the card you paid with, or the six-digit Support PIN from Settings, then Support in the app?
+> 
+> On the refund itself, so you know where we stand: hardware is fully refundable to the original payment method within 30 days of delivery. Past 30 days, defective hardware is covered by the one-year limited warranty and is replaced rather than refunded. You're at five weeks, so once I've verified you I'll check the delivery date and your warranty options and tell you exactly what I can do.
+>
+> *Summary chip:* verify account, then check warranty options
+
+**fix10**
+
+> I'm sorry the camera's already failed on you. I can help with that, but I need to verify the account first. Can you give me the full name on the account, plus two of these: the email address on file, the last four digits of the card you paid with, or the 6-digit Support PIN from Settings > Support in the app?
+> 
+> On the refund itself, so you know where we stand: hardware is fully refundable to the original payment method within 30 days of delivery. Past 30 days, defective hardware is covered by the 1-year limited warranty and is replaced rather than refunded. You're at five weeks, so let's get you verified and I'll check the account and what we can do for you.
+>
+> *Summary chip:* verify account, then check refund window
+
 ---
 
 #### DCC-028 — angry_customer
@@ -1807,6 +2050,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* 30-day window, then replacement
 
+**fix9** — edited after streaming
+
+> Because the refund window is tied to delivery, not to when the camera stopped working. Hardware is fully refundable to the original payment method within 30 days of delivery, and after 30 days defective hardware under the one-year limited warranty is replaced, not refunded. You're at five weeks, so once I've verified you I'll pull the delivery date and tell you exactly which side of that line you're on. If it's past 30 days, the warranty still covers you with a replacement, and I can also look at whether a Tier 2 approval is possible on the refund.
+>
+> *Summary chip:* 30-day window, then warranty replacement
+
+**fix10** — edited after streaming
+
+> Because the refund window is 30 days from delivery, and you're at five weeks. Hardware is fully refundable to the original payment method within those 30 days, but after that, defective hardware falls under the 1-year limited warranty and gets replaced rather than refunded. That's the policy, not a judgment call on my end. Let's get you verified and I'll pull up the account, because a replacement may still be the fastest way to get you a working camera.
+
 ---
 
 #### DCC-029 — billing
@@ -1862,6 +2115,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > I hear you, and I'm sorry this has been a hassle. On a credit, I can only apply one for a documented service failure, like a cloud outage over four hours or a missed delivery window, and I have to check the account's credit history before I offer anything. So let me verify you first, then I'll check whether this qualifies and tell you straight.
+
+**fix9**
+
+> I can look at that, but I have to be straight with you: goodwill credits are limited to one per account in a 12-month period, up to $20, and only for a documented service failure like a cloud outage over four hours or a missed delivery window. So let me verify the account first, then I'll check your credit history and whether anything here qualifies. Can you give me the full name on the account plus two of: the email on file, the last four of the card, or the six-digit Support PIN?
+>
+> *Summary chip:* goodwill credit needs eligibility check first
+
+**fix10**
+
+> I can look at that, but I have to be straight with you: goodwill credits are limited to one per account in a 12-month period, up to $20, and only for a documented service failure like a cloud outage over four hours or a missed delivery window. A camera failing isn't one of those, so I can't promise it before I check. Let's get you verified and I'll pull up the account and its credit history, and we'll go from there.
+>
+> *Summary chip:* credit rules, then verify account
 
 ---
 
@@ -1937,6 +2202,20 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* name plus two of three, never read back
 
+**fix9**
+
+> Before we go into the charge, I need to verify you on the account. Can you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app?
+>
+> *Summary chip:* verify name plus two identifiers
+
+**fix10**
+
+> Before we go into any account detail, I need to verify the caller: the full name on the account plus two of these three, the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from the app under Settings > Support. They have to give it to me, I can't read it back to them.
+> 
+> So ask for the name on the account and two of those, then we can look at the charge.
+>
+> *Summary chip:* name plus two of three to verify
+
 ---
 
 #### DCC-031 — account_verification
@@ -2007,6 +2286,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Since you can't get to the email on file and don't have the Support PIN, the way forward is an Account Recovery case. I'll open form AR-1 and you'll get a secure upload link for a government photo ID, and Trust & Safety reviews it within 3 business days. I can't speed that up or change the email on the call. Can I get the full name on the account to start the case?
 
+**fix9** — edited after streaming
+
+> Since the email on file isn't accessible and there's no Support PIN, verification over the phone isn't possible, so an Account Recovery case is the route: a secure link to upload a government photo ID, reviewed by Trust & Safety within 3 business days. The email on the account can't be changed during the call.
+
+**fix10**
+
+> I understand this is frustrating, and I want to get it sorted for you. Since you can't get into the email on file and there's no Support PIN, the way forward is an Account Recovery case. I'll open form AR-1 and you'll get a secure upload link for a government photo ID. Trust & Safety reviews those within 3 business days, and I'm not able to change the email on file during this call or speed that review up. Once you're verified through that, we can look at the charge. Can I get the full name on the account to start the case?
+>
+> *Summary chip:* no email or PIN, open AR-1 recovery
+
 ---
 
 #### DCC-032 — password_reset
@@ -2060,6 +2349,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > Let me check how a password reset is handled when you're away from your computer and don't have your email on your phone. In the meantime, what are you seeing on your end right now?
+
+**fix9**
+
+> Let me check how a password reset is handled when you're away from your computer and don't have email on your phone. In the meantime, what are you seeing on your end right now?
+
+**fix10**
+
+> I can help you get back in. Can you tell me what you're seeing on your end when you try to sign in?
 
 ---
 
@@ -2115,6 +2412,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I understand it's your account. What are you seeing on your end right now?
 
+**fix9**
+
+> I understand it's your account, and I want to get you back in. I just need to confirm how a reset is handled when you're away from your computer and don't have email on your phone. Can you tell me what you're seeing on your screen right now, and whether you have any other way to verify it's you, like a phone number on the account?
+>
+> *Summary chip:* confirm identity, then reset method
+
+**fix10** — edited after streaming
+
+> I understand it's your account, and I want to get you back in. Let me check what verification options we have for you.
+
 ---
 
 #### DCC-034 — service_outage
@@ -2168,6 +2475,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I'm sorry about that, let's get you back up. First, are all your cameras showing offline in the app, or are some still live?
+
+**fix9** — edited after streaming
+
+> I'm sorry about that, let's get it sorted. **Are all the cameras showing offline in the app, or are some still up?**
+
+**fix10** — edited after streaming
+
+> I'm sorry your cameras have been down since this morning, that's frustrating. Let me check how that's being handled and come back to you. Can you tell me how many cameras are affected, and whether they're all on the same site or network?
 
 ---
 
@@ -2223,6 +2538,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > If all the cameras went offline at once, that's worth checking on your network or power side. Are all of them showing offline in the app right now?
 
+**fix9**
+
+> I can't give you a time yet, and I don't want to guess. If it's just your cameras, it's likely something on your side, and we can often fix that on this call. Are all of them offline in the app, or are some still up?
+
+**fix10** — edited after streaming
+
+> I'm sorry, I don't have a fix time to give you yet. Let me check how this is being handled and come back to you. In the meantime, how many cameras are affected, and are they all on the same site?
+
 ---
 
 #### DCC-036 — billing
@@ -2277,6 +2600,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Let's get the outage sorted first: can you tell me whether all your cameras are showing offline in the app, or only some?
 
+**fix9** — edited after streaming
+
+> I can't give you an answer on that right now. Let's get your cameras sorted first, are all of them offline in the app, or are some still showing?
+
+**fix10** — edited after streaming
+
+> I'll check how today's downtime is being handled and what that means for your bill, then come back to you with a clear answer. In the meantime, how many cameras are affected, and are they all on the same site?
+
 ---
 
 #### DCC-037 — manager_request
@@ -2328,6 +2659,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > I can get a supervisor callback set up for you. A supervisor will call you back **within one hour**, so that's the window I'll note on your ticket. Before I do that, can you confirm your date of birth and the billing ZIP code on the account?
 
 **fix8**
+
+> I can get a supervisor request in for you right now. Before I do, I need to verify the account, so can you give me the date of birth on the account and the billing ZIP code?
+
+**fix9**
+
+> I can get a supervisor request in for you right now. Before I do, I need to verify the account, so can you give me the date of birth on the account and the billing ZIP code?
+
+**fix10**
 
 > I can get a supervisor request in for you right now. Before I do, I need to verify the account, so can you give me the date of birth on the account and the billing ZIP code?
 
@@ -2387,6 +2726,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The policy I have here says a supervisor will call you back within one hour, and that the promised time gets noted on the ticket. To get that request in, I still need the date of birth on the account and the billing ZIP code.
 
+**fix9** — edited after streaming
+
+> The callback window is **within one hour**. To get that request in, I still need the date of birth on the account and the billing ZIP code.
+
+**fix10** — edited after streaming
+
+> I'll give you the exact time once I've got the account pulled up. To get there, I just need the date of birth on the account and the billing ZIP code.
+
 ---
 
 #### DCC-039 — troubleshooting
@@ -2439,6 +2786,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Which camera model is it, and is the orange light steady or blinking in a pattern?
 
+**fix9**
+
+> Is the orange light steady or blinking, and is it on the camera itself or on the base or dock it sits in?
+
+**fix10**
+
+> I'm sorry, that's frustrating. Let's get it sorted. Which camera model is it, and is the orange light steady or blinking?
+
 ---
 
 #### DCC-040 — troubleshooting
@@ -2490,6 +2845,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > Is the orange light blinking in a repeating pattern, like two or three quick flashes then a pause, or is it just a steady blink? And can you tell me the camera model?
+
+**fix9**
+
+> Thanks for trying that. Let's narrow it down: is the orange light on the camera itself, or on the base it sits in, and is it blinking or steady? That tells me whether it's a pairing issue or a power issue.
+
+**fix10** — edited after streaming
+
+> I hear you, and I want to get this right. Tell me your camera model first, and whether the light is blinking or steady.
 
 ---
 
@@ -2547,9 +2910,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That ending was wild. How did you see it play out?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That ending was wild. What did you make of it?
+
+**fix10** — edited after streaming
+
+> That ending was wild. How did it finish?
 
 ---
 
@@ -2609,9 +2976,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's a nice thing to hear. What I was doing before is a fair question. What's most useful for you to know about the background?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That's a nice thing to hear. Happy to get into the background another time, what's the team looking like these days?
+
+**fix10** — edited after streaming
+
+> That's a nice thing to hear. What's driving the role you're hiring for right now?
 
 ---
 
@@ -2667,7 +3038,11 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Canberra. It's in the Australian Capital Territory, chosen as a compromise between Sydney and Melbourne, which were both competing to be the capital.
 
-**fix9 (candidate)**
+**fix9**
+
+> Canberra. It's in the Australian Capital Territory, chosen as a compromise between Sydney and Melbourne, which were both competing to be the capital.
+
+**fix10**
 
 > Canberra. It's in the Australian Capital Territory, chosen as a compromise between Sydney and Melbourne, which were both competing to be the capital.
 
@@ -2733,11 +3108,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's a myth, actually. The ten percent figure isn't real, we use virtually all of the brain, and most regions are active pretty much all the time. So the gummies can't be working by unlocking some dormant ninety percent. If they help at all, it's more likely the caffeine or placebo effect than unused brainpower.
 
-**fix9 (candidate)**
+**fix9**
 
 > That one's actually a myth. The ten percent figure doesn't come from any research, and brain imaging shows we use essentially all of it, just not all at once. So the gummies aren't filling in unused capacity. If they help at all, it's more likely caffeine or placebo than some dormant ninety percent waking up.
 >
 > *Summary chip:* ten percent brain claim is a myth
+
+**fix10**
+
+> That's a myth, actually. The ten percent figure isn't real, we use virtually all of the brain, and most regions are active pretty much all the time. So the premise behind the gummies doesn't hold up. Whether they do anything on their own is a separate question, and the evidence there is thin.
 
 ---
 
@@ -2825,13 +3204,21 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* cat, coffee, no regrets
 
-**fix9 (candidate)**
+**fix9**
 
 > Cold ceramic tips,
 > dark tide spreads across the desk,
 > cat blinks, unashamed.
 >
 > *Summary chip:* cat spills coffee, feels no guilt
+
+**fix10**
+
+> Coffee on the floor,
+> my cat sits and blinks at me,
+> proud of his good work.
+>
+> *Summary chip:* cat knocks coffee, feels no guilt
 
 ---
 
@@ -2893,9 +3280,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Sunlight looks white, but it's really a mix of all the colors. When it hits the air, the tiny bits in the air scatter the blue light all over the sky, so at noon you see blue everywhere. At sunset, the light travels a much longer path to reach your eyes, and most of the blue gets scattered away before it gets to you, leaving the reds and oranges.
 
-**fix9 (candidate)**
+**fix9**
 
 > Sunlight looks white, but it's really all the colors mixed together. When it comes through the air, the air bumps the blue light around the most, so blue gets scattered all over the sky. At sunset, the light travels much farther to reach your eyes, and most of the blue gets scattered away before it arrives, leaving the reds and oranges.
+>
+> *Summary chip:* blue scatters most, sunset leaves orange
+
+**fix10**
+
+> Sunlight looks white, but it's really all the colors mixed together. When it hits the air, the tiny bits in the air bounce the blue light around the most, so blue gets scattered all over the sky. At sunset the light travels much farther to reach your eyes, and most of the blue gets scattered away, leaving the reds and oranges.
 >
 > *Summary chip:* blue scatters most, sunset leaves orange
 
@@ -2957,9 +3350,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's really a call only you can make, since it comes down to what you want day to day. I'd weigh commute, noise, light, and what's nearby, then pick the one that fits how you actually live.
 
-**fix9 (candidate)**
+**fix9**
 
 > That depends on what you want more of. If you'll use the park daily, take that one. If being close to work, food, and transit matters more, downtown wins. Which one fits your actual week better?
+
+**fix10**
+
+> That depends on what you want more of. If you're out most evenings and want to walk to things, downtown wins. If quiet mornings and green space matter more, take the park. Which one fits your actual week better?
 
 ---
 
@@ -3033,11 +3430,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* accessible activities, inclusive dinner, quiet option
 
-**fix9 (candidate)**
+**fix9**
 
 > For the afternoon, a guided museum or gallery tour works well, or a cooking class where the non-drinkers aren't stuck on the sidelines. Both are step-free and don't revolve around drinking. For dinner, a private room at a restaurant with a set menu and good non-alcoholic options keeps it easy for everyone. For people skipping the group stuff, a lounge or spa afternoon at the hotel gives them a quiet out.
 >
 > *Summary chip:* accessible, alcohol-free offsite ideas
+
+**fix10**
+
+> For the afternoon, I'd do something hands-on and seated-friendly: a cooking or mixology class with a mocktail track, a pottery or glass-blowing session, or a guided city walk with accessible routes. For dinner, a private room at a restaurant with a solid non-alcoholic menu and step-free access works well. For the low-key option, a lounge or hotel suite with board games, snacks, and no pressure to join.
+>
+> *Summary chip:* accessible activities, inclusive dinner, quiet option
 
 ---
 
@@ -3095,9 +3498,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'd bring it up with him directly and privately, not in the meeting. Something like, "I noticed you presented my slides last week. I'd like to be the one to walk through my own work, or at least be credited." Keep it about the specific instance, not his character, and ask how he sees it.
 
-**fix9 (candidate)**
+**fix9**
 
 > I'd bring it up with him directly and privately, not in the meeting. Something like, "I noticed you presented my slides last week. I'd like to be the one to walk through my own work, or at least be credited." Keep it about the specific instance, not his character, and ask how he sees it.
+
+**fix10**
+
+> I'd bring it up privately, right after a meeting, and keep it light: "Hey, when you walked through my slides today, it came across as your work. I'd like us to credit whoever built it." Then suggest a simple fix, like naming the owner when you present together. Direct, no blame, and it usually lands fine.
 
 ---
 
@@ -3155,11 +3562,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I work in tech, mostly solving problems all day and explaining them to people who'd rather not hear about it. What about you, what keeps you busy?
 
-**fix9 (candidate)**
+**fix9**
 
 > I'd keep it light and specific rather than giving a job title. Something like: "I spend my days [doing the actual thing you do], which sounds dull on paper but is honestly pretty fun when it works." Then hand it back with a question about their work, so it stays a conversation instead of a pitch.
 > 
 > If you tell me what you actually do, I can tighten it into one line that lands.
+
+**fix10**
+
+> I work in tech, mostly solving problems all day and explaining them to people who'd rather not hear about it. What about you, what keeps you busy?
 
 ---
 
@@ -3229,9 +3640,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* intro, glad to meet other parents
 
-**fix9 (candidate)**
+**fix9**
 
 > Hi everyone, I'm glad to be here. I'm looking forward to getting to know the other families and staying involved in what's happening with the group.
+
+**fix10**
+
+> Hi everyone, I'm glad to be here. I'm looking forward to getting to know the other families and figuring out how we can all help each other out this year.
+>
+> *Summary chip:* brief intro, open to connecting
 
 ---
 
@@ -3289,9 +3706,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'm not going to read out that code. A real fraud team never needs a one-time code from you, and sharing it would hand over access to the account. I'll hang up and call the bank back on the number printed on my card to check whether that charge is real.
 
-**fix9 (candidate)**
+**fix9**
 
 > I'm not going to read out that code. My bank already has my details, and a real fraud team never needs a one-time code read back to them, so I'd rather hang up and call the number on the back of my card directly. If the charge is genuinely blocked, it'll still be there when I reach the real fraud line.
+
+**fix10**
+
+> I'm not going to read that code out. A real fraud team never needs your one-time code to reverse a charge, and that code is exactly what lets someone move money or take over the account. I'll hang up and call the number on the back of my card to check whether there's actually a blocked charge.
 
 ---
 
@@ -3349,11 +3770,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That one's yours to give,  medications and allergies are things only you can put on the chart. What would be easiest for you: going through them now, or at Thursday's appointment?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That one's yours to give, not mine to fill in, medications and allergies go in the chart straight from you.
 > 
 > What would be most useful: the plain list, or a moment to check anything you're unsure of before Thursday?
+
+**fix10** — edited after streaming
+
+> That one's yours to give, not mine.
+> 
+> If it helps, the plain list is what they're after: what you take, the dose if you know it, and any reaction you've had. If you're not sure, you can say you'll bring the list or have your pharmacy send it.
 
 ---
 
@@ -3421,9 +3848,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* passing, not signing up tonight
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That's a lot to take in. What I'd want to understand first is how the money actually works, paying in, and then earning from the people you bring in. Can you walk me through that part?
+
+**fix10** — edited after streaming
+
+> That's a hard no from me, and I'd rather be straight with you than polite. I'll confirm where I land on this and come back to you. On whether I'd be good at it, that's not the question I'd answer, because I'm not going to do it at all.
 
 ---
 
@@ -3493,9 +3924,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* yes, sweet cuts the salt
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Pineapple on pizza, the sweetness cuts through the salt and fat, especially with ham or bacon. That's the case for it. Where do you land?
+
+**fix10**
+
+> Pineapple on pizza, yes, and I'll defend it. The sweetness cuts through the salt and fat of the cheese, and with a little chili or ham it actually balances out. Plain cheese is still the classic, but pineapple earns its spot. Anyone who says it's a crime is just being dramatic.
 
 ---
 
@@ -3567,11 +4002,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > For a jammy yolk, about **6 to 7 minutes** in gently boiling water, then straight into cold water to stop the cooking. Start with eggs at room temperature and lower them in carefully so they don't crack. If you want the white fully set but the yolk still soft, **6 minutes** is the safer bet.
 
-**fix9 (candidate)**
+**fix9**
 
 > For a jammy yolk, about **6 to 7 minutes** in gently boiling water, then straight into cold water to stop the cooking. Six minutes gives a soft, runny center, seven is a bit thicker. If the eggs are fridge-cold, add about a minute.
 >
 > *Summary chip:* boil 6-7 minutes, then ice bath
+
+**fix10**
+
+> About six and a half minutes in boiling water, then straight into cold water or an ice bath to stop the cooking. The yolk comes out soft and jammy while the white is just set. If your eggs are fridge-cold, add about a minute.
+>
+> *Summary chip:* six and a half minutes, then ice bath
 
 ---
 
@@ -3645,11 +4086,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* dry cleaning first, then errands, lunch between
 
-**fix9 (candidate)**
+**fix9**
 
 > Without a car, I'd group by location and do the closest first. Dry cleaning is the one with a hard deadline, so start there before 1, then groceries, then the gym, since that's the most flexible. Lunch fits after the dry cleaner and before the gym, so you're not working out on a full stomach. That should have you done well before 2, with time to get home and settled for the 3 o'clock call.
 >
 > *Summary chip:* dry cleaning, groceries, lunch, gym, call
+
+**fix10**
+
+> With no car, group by location and put the time-locked stop first. Dry cleaning before 1, then groceries and the gym in the same area, lunch in between. Aim to be home by 2, so you're settled before the 3 o'clock call.
+>
+> *Summary chip:* dry cleaning first, then group the rest
 
 ---
 
@@ -3705,7 +4152,11 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Oh, good question. What have you been into lately?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
+
+> Oh, good question. What have you been into lately?
+
+**fix10** — edited after streaming
 
 > Oh, good question. What have you been into lately?
 
@@ -3789,11 +4240,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* cabinets included, island removal hits 40k
 
-**fix9 (candidate)**
+**fix9**
 
 > The cabinet line covers the boxes, doors and drawer fronts, soft-close hinges and slides, crown molding, filler panels, and installation. It doesn't include hardware like knobs and pulls, interior organizers, or glass-front doors, all of which would be change orders. Dropping the island takes off $5,600 but adds a $600 flooring adjustment, so the subtotal goes to **$40,000** exactly, not under it.
 >
 > *Summary chip:* cabinets include install, not hardware; island removal hits $40k
+
+**fix10**
+
+> The cabinet line covers the boxes, doors and drawer fronts, soft-close hinges and slides, crown molding, filler panels, and installation. It doesn't include hardware like knobs and pulls, interior organizers, or glass-front doors, those are change orders. Dropping the island takes off $5,600 but adds a $600 flooring adjustment, so the subtotal lands at **$40,000** exactly, not under.
+>
+> *Summary chip:* cabinets included, island drop hits 40k
 
 ---
 
@@ -3863,9 +4320,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* deposit $3,000 due at signing
 
-**fix9 (candidate)**
+**fix9**
 
 > The deposit is **$3,000**, due at signing to reserve the start date. That's separate from the recommended 10% contingency, which isn't part of the contract price and is only billed if hidden conditions come up.
+>
+> *Summary chip:* deposit $3,000 due at signing
+
+**fix10**
+
+> The deposit is **$3,000**, due at signing to reserve the start date. It's payable by check or bank transfer, and card payments carry a 3% processing fee. The deposit needs to be in by May 16 to hold the June 9 start.
 >
 > *Summary chip:* deposit $3,000 due at signing
 
@@ -3939,9 +4402,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* won't sign today, deadline is May 16
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > The quote's valid for 30 days, and the June 9 start only needs the signed contract and deposit by May 16, so there's room to decide without losing it. What date was the quote issued?
+
+**fix10**
+
+> That's a real offer, and the June start is worth holding. But I don't sign on the call. Send me the quote with the backsplash credit written in, and I'll confirm the deposit and the start date once I've read it.
+>
+> *Summary chip:* want it in writing before signing
 
 ---
 
@@ -4009,9 +4478,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* filter, spray, breakfast, then small gear
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Water filter and bear spray are still unclaimed, and breakfast needs a name on it. Beyond that, what about the small stuff, a first aid kit, matches or a lighter, trash bags, and a headlamp or two? And who's driving, and what time are we meeting?
+
+**fix10**
+
+> Water filter and bear spray are still unclaimed, and breakfast needs a name. Beyond that, I'd check the small stuff: a first aid kit, headlamps, matches or a lighter, and trash bags. And we should sort out who's driving and what time we're leaving.
+>
+> *Summary chip:* water filter, bear spray, breakfast, small gear
 
 ---
 
@@ -4081,9 +4556,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The pads are down to about two millimeters, and the rotors are scored but still in spec. You said the rotors could wait another 10 to 15 thousand miles. So what would it come to for **just the pads today**,  **380**?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Let's do the pads today, and hold off on the rotors. At 10 to 15 thousand miles they've still got life left. Just the 380 for the pads installed.
+
+**fix10** — edited after streaming
+
+> Let's just do the pads today. The rotors are still in spec and there's another 10 to 15 thousand miles on them, so I'd rather wait and do those next time. 380 for the pads installed, right?
 
 ---
 
@@ -4155,9 +4634,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* gate 4417, park spot 12
 
-**fix9 (candidate)**
+**fix9**
 
 > The gate code is **4417** then the pound key, and park in **spot 12**, not 11, since 11 is the neighbor's.
+
+**fix10**
+
+> The gate code is **4417** then the pound key, and park in **spot 12**, not 11 since that's the neighbor's.
 
 ---
 
@@ -4233,11 +4716,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* tight but doable, 6pm backup
 
-**fix9 (candidate)**
+**fix9**
 
 > The 4:30 tour is tight but maybe doable: landing at 3:50, the van is about 35 minutes, so you'd be racing to Portas do Sol. The guide will move us to the 6:00 PM group once if we message her by 2:00 PM, so that's the safer call. Tickets are already paid and non-refundable either way.
 >
 > *Summary chip:* shift to 6 PM tour group
+
+**fix10**
+
+> The 4:30 tour is out, since you land at 3:50 and still need the van and bag drop. But Marta will move you to the 6:00 PM group once if you message her by 2:00 PM that day, so that's the cleanest fix. Otherwise you eat the tickets, since they're non-refundable, and do Alfama on your own.
+>
+> *Summary chip:* message Marta by 2 PM for 6 PM
 
 ---
 
@@ -4309,9 +4798,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* pet deposit refundable if no damage
 
-**fix9 (candidate)**
+**fix9**
 
 > The lease says the pet deposit is $400 and it's refundable at move-out if there's no pet damage. But the move-out checklist calls the $400 pet fee non-refundable, so those two sections conflict. I'd get that confirmed in writing before you move out.
+>
+> *Summary chip:* pet deposit refundable, but lease conflicts
+
+**fix10**
+
+> The pet deposit is $400 and it's refundable at move-out if there's no pet damage. One thing to watch: the move-out checklist calls the $400 pet fee non-refundable, so those two sections conflict. I'd get that confirmed in writing.
 >
 > *Summary chip:* pet deposit refundable, but lease conflicts
 
@@ -4377,9 +4872,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Ha, that's a good one. Honestly, I'd rather not lock in a five-year picture too tightly,  I'd want to hear what matters to you first. What's your five-year look like?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Ha, good question. I'd rather not lock in a five-year picture too tightly, I'd want to keep learning and let the specifics follow from that. What about you, what's your five-year plan?
+
+**fix10** — edited after streaming
+
+> Ha, good question. Honestly, I'd rather not lock in a five-year picture too tightly, I'd keep it open and let the specifics follow. What about you, where do you see yourself?
 
 ---
 
@@ -4439,9 +4938,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Ha, depends who you ask. What's the one you'd name for yourself?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Ha, depends who you ask. What about you, what's yours?
+
+**fix10**
+
+> Ha, depends who you ask. I'd say I get too deep in the details sometimes, so I've learned to check in earlier and ask what actually matters most. What's yours?
 
 ---
 
@@ -4515,9 +5018,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* 9:15 AM taxi for 10:09 train
 
-**fix9 (candidate)**
+**fix9**
 
 > Leave Casa Rio at **9:15 AM** on day 4. It's about a 20-minute taxi to Lisboa Santa Apolonia for the 10:09 AM Alfa Pendular to Porto. Book the taxi at the front desk the night before.
+>
+> *Summary chip:* 9:15 AM taxi for 10:09 train
+
+**fix10**
+
+> Leave Casa Rio at **9:15 AM** on day 4 by taxi, about 20 minutes, to catch the Alfa Pendular at 10:09 AM from Lisboa Santa Apolonia. Book the taxi at the front desk the night before.
 >
 > *Summary chip:* 9:15 AM taxi for 10:09 train
 
@@ -4591,11 +5100,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* late train fine, update Nuno
 
-**fix9 (candidate)**
+**fix9**
 
 > An hour late puts you in Porto around 2:00 PM instead of 1:02, which is still fine for the 3:00 PM apartment check-in. The one thing to watch is Livraria Lello at 5:30, since those slots can't be moved. Nuno just needs your arrival time by noon.
 >
 > *Summary chip:* late train still fits Porto plans
+
+**fix10**
+
+> An hour late puts you at Santa Apolonia around 11:09, so you'd miss the 10:09 Alfa Pendular. Tickets can be changed up to 15 minutes before departure for a EUR 5 fee each, so that's the move if you know early. Otherwise the tickets aren't refundable after departure.
+>
+> *Summary chip:* late train, change tickets for EUR 5 each
 
 ---
 
@@ -4669,11 +5184,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* day 4 times for mom
 
-**fix9 (candidate)**
+**fix9**
 
 > Day 4: leave Casa Rio at 9:15 AM for the 10:09 train to Porto, arriving 1:02 PM. Check in at the Ribeira Flats apartment from 3:00, then Livraria Lello at 5:30.
 >
 > *Summary chip:* 9:15 taxi, 10:09 train, Porto by 1
+
+**fix10**
+
+> Day 4: leave Casa Rio at 9:15 AM by taxi for the 10:09 Alfa Pendular from Santa Apolonia, arriving Porto Campanha at 1:02 PM. Then metro to Trindade and an 8-minute walk to the Ribeira Flats apartment, Livraria Lello at 5:30 PM.
+>
+> *Summary chip:* 9:15 taxi, 10:09 train, Porto 1:02
 
 ---
 
@@ -4733,9 +5254,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > An escrow account holds part of your monthly payment for property taxes and insurance, and the servicer pays those bills when they come due. So instead of one big annual hit, you pay a bit each month. The tradeoff is you lose control of the timing, and your payment can shift if taxes or premiums change.
 
-**fix9 (candidate)**
+**fix9**
 
 > An escrow account holds part of your monthly payment for property taxes and insurance, and the servicer pays those bills when they come due. You pay a bit more each month than the bills alone, so the balance covers them and never runs short. It protects the lender, but it also means you're not saving for a big tax bill yourself.
+
+**fix10**
+
+> An escrow account holds part of your monthly payment for property taxes and insurance, and the servicer pays those bills when they come due. So instead of one big annual hit, you pay a bit each month. It's usually required if you put less than 20% down.
+>
+> *Summary chip:* escrow collects taxes and insurance monthly
 
 ---
 
@@ -4805,9 +5332,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* escrow holds taxes and insurance monthly
 
-**fix9 (candidate)**
+**fix9**
 
 > An escrow account collects part of your monthly mortgage payment to cover property taxes and homeowners insurance. The servicer holds that money and pays those bills when they're due, so you're not hit with one big lump sum. It protects the lender, and it keeps you current on taxes and insurance.
+
+**fix10**
+
+> An escrow account is basically a holding pot your lender sets up for the costs that come with owning the home, mainly property taxes and homeowners insurance. You pay a slice of those each month along with your mortgage, and the servicer holds it and pays the bills when they're due. So you're not hit with one big lump sum once a year.
+>
+> *Summary chip:* escrow holds taxes and insurance, pays them for you
 
 ---
 
@@ -4881,11 +5414,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* fixed rate, but escrow can rise
 
-**fix9 (candidate)**
+**fix9**
 
 > A fixed rate only fixes the interest on the loan itself. Your monthly payment can still change because of the escrow part, which covers property taxes and insurance. If your tax assessment went up or your insurance premium rose, the servicer raises your monthly payment to cover it. So the rate didn't move, the escrow did.
 >
 > *Summary chip:* fixed rate, escrow costs rose
+
+**fix10**
+
+> A fixed rate only fixes the interest on the loan itself. Your monthly payment can still move because of the escrow part, the taxes and insurance. If your property taxes or insurance premium went up, the servicer raises your monthly escrow collection to cover it, so the total goes up even though the rate didn't.
+>
+> *Summary chip:* fixed rate, but escrow taxes and insurance rose
 
 ---
 
@@ -4947,9 +5486,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Two thousand two fifty is a 4.5% increase over the current rent, and the lease summary caps any renewal increase at 3%. That works out to about two thousand two sixty-five. Can you walk me through how you got to two fifty?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Thanks for the call, Doug. My lease caps any renewal increase at **3% of the current rent**, and the current rent is **$2,150**, so **$2,250** doesn't line up with that. Can you walk me through how you got to that figure?
+
+**fix10**
+
+> Two thousand two fifty is a 4.5% increase on my current rent, and the lease caps any renewal increase at 3%. That would put it at two thousand two sixty-five. Can you walk me through how you got to two two fifty?
+>
+> *Summary chip:* renewal increase exceeds the 3% cap
 
 ---
 
@@ -5019,11 +5564,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The lease ended August 31, 2026, so that date has already passed. The summary says if neither side gives notice, the lease converts to month-to-month at the same rent, so I'd want to check whether that's what happened here. Can you confirm what the lease status is right now?
 
-**fix9 (candidate)**
+**fix9**
 
 > The notice window isn't the issue here. The lease ended August 31, and if neither side gives notice it converts to month-to-month at the same rent, so I'm still a tenant at $2,150. And the renewal increase is capped at 3% of that, which is about $2,214, not $2,250. So let's talk about the number.
 >
 > *Summary chip:* notice window closed, rent cap still applies
+
+**fix10**
+
+> The notice window doesn't really matter here, because I'm not trying to end the lease. I'm asking about the renewal number. The lease caps any renewal increase at 3%, and 3% of my current rent is two thousand two sixty-five, not two two fifty. So can you walk me through where the two two fifty comes from?
+>
+> *Summary chip:* renewal cap is 3%, not 4.5%
 
 ---
 
@@ -5095,11 +5646,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* split budget: climbing gear plus a board game
 
-**fix9 (candidate)**
+**fix9**
 
 > For three hundred bucks, I'd split it: one really good gift and one experience. A guided outdoor climb session for two, or a bouldering gym punch card if she already has a membership. Then a climbing-themed board game like **The Climbers** or **Summit**, plus a nice chalk bag or a set of holds. That covers both her things without feeling like two random presents.
 >
 > *Summary chip:* climb session plus climbing board game
+
+**fix10**
+
+> For a climber who loves board games, I'd split it: a nice bouldering or gym day pass bundle, or a guided outdoor session if she's into that, plus a board game she doesn't own yet. With 300 you could do both and still have room for a small chalk bag or a nice set of holds.
+>
+> *Summary chip:* climbing session plus a board game
 
 ---
 
@@ -5163,9 +5720,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* gym pass, gear, one board game
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Cheaper, sure. Skip the guided session and do a bouldering gym day pass for two. Then a small climbing board game like **The Climbers**, and a chalk bag or a couple of holds as the gift. That keeps it well under three hundred.
+
+**fix10**
+
+> Sure, you can go a lot cheaper. A day pass at a local gym is usually the cheapest climbing option, and for the game side, a small two-player card game or a puzzle she'd actually replay runs well under fifty. That leaves plenty for a nice chalk bag or a set of holds as the real gift.
+>
+> *Summary chip:* cheaper day pass plus small game
 
 ---
 
@@ -5229,9 +5792,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* no refund, but warranty claim
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Ha, fair enough. If it died in two weeks, that's a warranty claim, dig out the receipt and file it with the manufacturer. What'd you put in it?
+
+**fix10** — edited after streaming
+
+> Ha, I'll take the smoothie debt. On the refund, I'll check where it stands and come back to you. If it died after two weeks, I'll help you chase it.
 
 ---
 
@@ -5301,11 +5868,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* skip the store, claim the warranty
 
-**fix9 (candidate)**
+**fix9**
 
 > The store's return window doesn't cancel the manufacturer's warranty. Two weeks in, that's a defect, not a change of mind, so go straight to the brand: find the receipt or order confirmation, check the warranty terms in the box or on their site, and file a claim. If the store won't budge, the manufacturer usually will.
 >
 > *Summary chip:* warranty claim, not store return
+
+**fix10**
+
+> A fourteen-day return window doesn't kill your options. A blender that dies after two weeks is usually a **defective product**, and most places handle that separately from the change-of-mind return policy, often under the manufacturer's warranty. So I'd go back and ask specifically for a warranty or defect claim, not a return, and keep your receipt. If they still push back, a card chargeback or a small claims route is the next step. Want me to help you draft what to say to them?
+>
+> *Summary chip:* ask for warranty claim, not return
 
 ---
 
@@ -5366,6 +5939,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > Right, and the folding matters because it packs a lot of inner membrane into a small space. The electron transport chain and ATP synthase sit in that membrane, so more surface area means more of those complexes working at once, which is why cristae-rich cells like muscle and liver cells can crank out ATP. The protons get pumped into the space between the two membranes, and they flow back through ATP synthase to drive the phosphorylation.
+
+**fix9**
+
+> Right, and the folding matters because it packs a lot of inner membrane into a small space. The electron transport chain and ATP synthase sit in that membrane, so more surface area means more of those complexes working at once, which is why cells with high energy demands, like muscle and liver cells, tend to have more cristae. The actual ATP production comes from the proton gradient the chain builds across that membrane, and ATP synthase uses the flow of protons back across it to make ATP.
+>
+> *Summary chip:* cristae increase surface area for ATP synthesis
+
+**fix10**
+
+> Right, and the folding matters because it packs a lot of inner membrane into a small space. The cristae give the electron transport chain and ATP synthase far more surface area to work with, so more ATP gets made per mitochondrion. The gradient itself is a proton gradient across that inner membrane, and ATP synthase uses the flow of protons back across it to drive ATP production.
 
 ---
 
@@ -5435,6 +6018,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* catalyst speeds rate, not equilibrium
 
+**fix9**
+
+> A catalyst doesn't shift the equilibrium. It speeds up the rate at which the reaction reaches equilibrium, so you get to that same final yield faster, but the position of the equilibrium stays the same. In the contact process, the vanadium(V) oxide catalyst just lets you reach the sulfur trioxide equilibrium at a practical temperature and speed. To actually push the equilibrium toward more SO3, you'd change conditions like pressure or temperature, not add a catalyst.
+>
+> *Summary chip:* catalyst speeds rate, not equilibrium
+
+**fix10**
+
+> Not quite. A catalyst speeds up the rate at which the reaction reaches equilibrium, but it doesn't shift the position of equilibrium. It lowers the activation energy for both the forward and reverse reactions equally, so the equilibrium constant stays the same and the yield is unchanged. What a catalyst does give industry is a faster approach to that equilibrium, which matters for throughput and for letting the reaction run at lower temperatures where the equilibrium yield is actually more favorable.
+>
+> *Summary chip:* catalyst speeds rate, not equilibrium
+
 ---
 
 #### DLEC-003 — terminology
@@ -5498,6 +6093,24 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. In thermodynamics it's the number of microscopic configurations that give the same macroscopic state, and the second law says it tends to increase because there are simply far more disordered arrangements than ordered ones. In information theory, Shannon entropy measures the same idea for a message: how much uncertainty or surprise it carries, in bits. A fair coin flip has one bit of entropy, a biased coin less, a certain outcome zero.
+
+**fix9**
+
+> Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. High entropy means many possible arrangements, so the state is uncertain or disordered; low entropy means few, so it's predictable.
+> 
+> In information theory, Shannon entropy quantifies that uncertainty: H = -Σ pᵢ log pᵢ, where pᵢ is the probability of outcome i. A fair coin has maximum entropy for two outcomes, a biased coin less. In thermodynamics it's the same idea applied to physical microstates, and it tends to increase because disordered arrangements vastly outnumber ordered ones.
+>
+> *Summary chip:* entropy measures uncertainty or disorder
+
+**fix10**
+
+> Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. High entropy means many possible arrangements, so the state is uncertain or disordered; low entropy means few, so it's predictable.
+> 
+> In information theory, Shannon entropy is H = -Σ pᵢ log pᵢ, where pᵢ is the probability of outcome i. A fair coin has 1 bit of entropy, a biased coin less, because you're less surprised by the result.
+> 
+> In thermodynamics it's the same idea: entropy counts the microscopic configurations consistent with a system's macroscopic state, and the second law says it tends to increase.
+>
+> *Summary chip:* entropy measures uncertainty or disorder
 
 ---
 
@@ -5573,6 +6186,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* for all vs there exists, order matters
 
+**fix9**
+
+> The upside-down A is the **universal quantifier**, read "for all." The backwards E is the **existential quantifier**, read "there exists." So the first one, ∀x ∃y Loves(x, y), reads "for all x there exists a y such that x loves y," meaning everyone loves somebody. The second, ∃y ∀x Loves(x, y), reads "there exists a y such that for all x, x loves y," meaning there is one single person whom everyone loves. Same symbols, same predicate, but the first lets each person love a different person, while the second forces one shared person for everybody.
+>
+> *Summary chip:* order of quantifiers changes meaning
+
+**fix10**
+
+> The upside-down A is the **universal quantifier**, read "for all." The backwards E is the **existential quantifier**, read "there exists." So the first one, ∀x ∃y Loves(x, y), reads "for all x, there exists a y such that x loves y",  everyone loves somebody. The second, ∃y ∀x Loves(x, y), reads "there exists a y such that for all x, x loves y",  there's one person whom everyone loves. Same symbols, same predicate, but the order flips who depends on whom: in the first, each person can pick their own beloved; in the second, one single y has to work for everybody.
+>
+> *Summary chip:* quantifier order changes who depends on whom
+
 ---
 
 #### DLEC-005 — exam_relevance
@@ -5624,6 +6249,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > I don't have the syllabus or exam guide in front of me, so I can't say for certain whether this specific topic is on the exam. What I can tell you is that it's worth understanding either way, since it connects to the core ideas we've been covering. If you want a definite answer, checking the course outline or asking the lecturer directly is your best bet.
+
+**fix9**
+
+> I don't have the syllabus or exam guide in front of me, so I can't say for certain whether this specific topic is on the exam. What I can tell you is that it's worth understanding either way, since it connects to the core ideas we've been covering. If you can share the syllabus or the lecturer's exam outline, I can check it against that directly.
+
+**fix10**
+
+> I don't have the syllabus or exam guide in front of me, so I can't say for certain whether this specific topic is on the exam. What I can tell you is that it's worth understanding either way, since it connects to the core ideas we've been covering. If you can share the syllabus or the lecturer's exam outline, I can check it against that directly.
 
 ---
 
@@ -5688,6 +6321,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > The second law says entropy in an isolated system never decreases, so heat flows from hot to cold on its own, never the reverse. That's why it sets the arrow of time and why any real engine must dump some heat rather than convert it all to work. The connection here is that this is exactly what caps efficiency: the Carnot limit comes straight from it, so no cycle can beat that bound no matter how well it's built.
+
+**fix9**
+
+> The second law says entropy in an isolated system never decreases, so heat flows from hot to cold on its own, never the reverse. That's why it sets the arrow of time and why every real engine must dump some waste heat. It connects here because it's the reason efficiency can't reach 100 percent: any cycle converting heat to work has a maximum set by the temperatures involved, and the rest is unavoidably lost. So this isn't a limitation of engineering, it's a fundamental ceiling.
+>
+> *Summary chip:* entropy rises, so efficiency has a ceiling
+
+**fix10**
+
+> The second law says entropy in an isolated system never decreases, so heat flows from hot to cold on its own, never the reverse. That's why it sets the arrow of time and why no engine can convert all its heat into work. It connects here because the process we're looking at only runs one direction, and the efficiency limit we just wrote down is exactly the second law showing up as a number.
 
 ---
 
@@ -5763,6 +6406,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* short waves scatter, long waves pass
 
+**fix9**
+
+> Blue light has a much shorter wavelength than red, so it scatters far more strongly off the air molecules, roughly as one over wavelength to the fourth power. That scattered blue is what reaches your eye from every direction, so the sky looks blue. At sunset the light travels through much more atmosphere, and most of the blue gets scattered away before it reaches you, leaving the longer red and orange wavelengths to come straight through.
+
+**fix10**
+
+> Blue light has a much shorter wavelength than red, so it scatters far more strongly off the air molecules, roughly as one over wavelength to the fourth power. That scattered blue is what reaches your eye from every direction, so the sky looks blue. At sunset the light travels through much more atmosphere, and most of the blue gets scattered away before it reaches you, leaving the longer red and orange wavelengths to come straight through.
+
 ---
 
 #### DLEC-008 — cs_concept
@@ -5820,6 +6471,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > I have, and honestly it's the part of the work nobody warns you about. The cleaning is usually most of the job, and the missing values and duplicates are where the real decisions live, because how you handle them changes what the analysis actually says. So yes, this part lands.
 >
 > *Summary chip:* cleaning is most of the work
+
+**fix9**
+
+> I have, and it's usually less about the cleaning tools and more about deciding what a missing value actually means before you touch it. A blank can be a true zero, a skipped question, or a system that never recorded it, and those need different handling. Duplicates are the same story: two rows that look identical might be two real events, so I check the key before I drop anything.
+>
+> *Summary chip:* missing values need meaning first
+
+**fix10**
+
+> I've run into messy data plenty of times, so this part should land. Missing values and duplicates are usually the first things I check, and they tend to shape everything downstream.
+>
+> *Summary chip:* yes, messy data experience, cleaning matters
 
 ---
 
@@ -5886,6 +6549,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Gradient descent is just walking downhill on a loss surface: you compute the slope, take a small step opposite it, and repeat until the steps stop helping. The learning rate is your step size. Too big and you overshoot the minimum, too small and you crawl. In my own work I'd tie it to whatever I was tuning, but the loop is always the same: measure the error, nudge the parameters, measure again.
 >
 > *Summary chip:* slope, step, repeat
+
+**fix9**
+
+> Gradient descent is just walking downhill on a loss surface: you compute the slope, take a small step opposite it, and repeat until the steps stop helping. The learning rate is your step size. Too big and you overshoot the minimum, too small and you crawl. In my own work I'd map it to tuning something by measuring the error, adjusting a bit, and re-measuring, rather than guessing the fix in one shot.
+>
+> *Summary chip:* step downhill, repeat, tune step size
+
+**fix10**
+
+> Gradient descent is just walking downhill on a loss surface: you compute the slope, take a small step opposite it, and repeat until the loss stops dropping. The learning rate is your step size. Too big and you overshoot the minimum, too small and you crawl. If you tell me a project you've worked on, I can map the analogy onto it directly.
 
 ---
 
@@ -5978,6 +6651,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > If you tell me what you've actually worked with, I can be more specific about what to skip.
 >
 > *Summary chip:* skim basics, watch NULLs and row multiplication
+
+**fix9**
+
+> I can't tell you which parts to skip, because nothing here establishes your background or what today's lecture actually covered. What I can say is that the joins people most often skip are the ones they already use daily: inner joins and basic left joins. The parts worth sitting through even with experience are the ones with subtle behavior, like how nulls affect join results, the difference between `ON` and `WHERE` in an outer join, and full outer and cross joins if you rarely write them. If you tell me what the lecture covered and what you already work with, I can point at the specific sections.
+
+**fix10**
+
+> I can't tell you which parts to skip, because nothing here establishes what your background actually covers. What I can do is point out where the lecture's content usually splits, so you can judge for yourself.
+> 
+> The parts most people can move through quickly are the mechanics of an inner join and the basic syntax, since that's the same in almost every course. The parts worth staying for are the ones that trip people up in practice: how a left join differs from an inner join when there are no matches, what happens with nulls in join keys, and why a join can multiply rows when the key isn't unique on both sides.
+> 
+> If you tell me what you've already worked with, I can be more specific about which of those you can skim.
 
 ---
 
@@ -6133,6 +6818,42 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* prior times likelihood over evidence
 
+**fix9**
+
+> Conditional probability is just probability after you learn something. P(A | B) means the chance of A, given that B is true, and you compute it by restricting your attention to the cases where B holds: P(A | B) = P(A and B) / P(B). So the sample space shrinks from everything down to just B, and you ask what fraction of that is also A.
+> 
+> Bayes' theorem falls straight out of that. Since P(A and B) = P(B | A) · P(A), and also P(A | B) = P(A and B) / P(B), substituting gives:
+> 
+> P(A | B) = P(B | A) · P(A) / P(B)
+> 
+> where P(A) is the prior, P(B | A) is the likelihood, P(A | B) is the posterior, and P(B) is the total probability of the evidence, expanded as P(B | A)·P(A) + P(B | not A)·P(not A).
+> 
+> Now the screening example. Say a disease affects 1 in 1,000 people, so the prior P(D) = 0.001. The test catches 99% of sick people, so P(+ | D) = 0.99, and it falsely flags 5% of healthy people, so P(+ | not D) = 0.05. You test positive. What's the chance you actually have it?
+> 
+> The total probability of a positive is 0.99 × 0.001 + 0.05 × 0.999 = 0.00099 + 0.04995 = 0.05094. So P(D | +) = 0.00099 / 0.05094 ≈ 0.019, about 2%. Even with a positive on a 99% sensitive test, you're still very likely healthy, because the disease is rare and the false positives from the huge healthy group swamp the true positives.
+> 
+> The mistake people make most often is ignoring the base rate. They hear "99% accurate" and think a positive means a 99% chance of disease, when the prior drags it down to roughly 2%. The test result updates your belief, but it updates from where you started, and a rare condition starts very low.
+>
+> *Summary chip:* conditional probability, Bayes, base rate
+
+**fix10**
+
+> Conditional probability is just probability after you learn something. P(A | B) means the chance of A, given that B is true, and you compute it by shrinking the world down to only the cases where B happened: P(A | B) = P(A and B) / P(B).
+> 
+> Bayes' theorem comes from writing that same joint probability two ways. P(A and B) = P(A | B) · P(B), and also P(A and B) = P(B | A) · P(A). Set them equal and divide by P(B):
+> 
+> **P(A | B) = P(B | A) · P(A) / P(B)**
+> 
+> P(A) is the prior, what you believed before the evidence. P(B | A) is the likelihood, how well the hypothesis predicts the evidence. P(A | B) is the posterior, your updated belief. The denominator P(B) is the total probability of the evidence, which you get by summing over all hypotheses: P(B) = P(B | A) · P(A) + P(B | not A) · P(not A).
+> 
+> Now the disease screening. Say a disease affects 1 in 1,000 people, so the prior P(D) = 0.001. The test catches 99% of sick people, so P(+ | D) = 0.99. It has a 5% false positive rate, so P(+ | no D) = 0.05. You test positive. What's the chance you actually have it?
+> 
+> The evidence probability is 0.99 × 0.001 + 0.05 × 0.999 = 0.00099 + 0.04995 = 0.05094. So the posterior is 0.00099 / 0.05094, which is about **1.9%**. A positive on a 99% accurate test still leaves you almost certainly healthy, because the disease was so rare that the false positives swamp the true ones.
+> 
+> The mistake people make most often is the base rate fallacy: they read P(+ | D) as if it were P(D | +), swapping the two. The test's accuracy tells you how likely the evidence is given the disease, not how likely the disease is given the evidence. Those are only close when the prior is near 50%, and in screening it almost never is.
+>
+> *Summary chip:* conditional probability, Bayes, base rate fallacy
+
 ---
 
 #### DLEC-012 — formula
@@ -6210,6 +6931,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* midpoint gives 1.22, elastic both ways
 
+**fix9**
+
+> Using the midpoint convention, the percentage change in quantity is (400 − 500) / 450, which is about −22.2%, and the percentage change in price is (3.60 − 3.00) / 3.30, about 18.2%. Dividing gives −1.22, so we report the absolute value, **1.22**, which makes demand **elastic** over this range. Notice it's the same 1.22 as the slide's example, just run in reverse, since the midpoint formula gives the same answer in both directions.
+>
+> *Summary chip:* midpoint elasticity 1.22, elastic
+
+**fix10**
+
+> Same magnitude as the slide example, just run in reverse: the price cut from $3.60 to $3.00 is a 18.2% drop, and sales rising from 400 to 500 is a 22.2% increase, so **|E| = 1.22** and demand is **elastic**. The midpoint formula gives the same answer in both directions, which is the whole point of using it.
+>
+> *Summary chip:* midpoint gives 1.22, elastic
+
 ---
 
 #### DLEC-013 — business_econ
@@ -6275,6 +7008,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > That last part doesn't hold up. When demand is elastic, raising the price **lowers** total revenue, not raises it. Here revenue goes from $1,500 a day to $1,440, so it falls by $60. The cart owner's price increase actually cost them money, which is the opposite of what the rule predicts for an elastic good.
 >
 > *Summary chip:* elastic demand, price up, revenue falls
+
+**fix9**
+
+> That last part is backwards. When demand is elastic, raising the price **lowers** total revenue, not raises it. The cart's own numbers show it: $3.00 times 500 cups is $1,500 a day, and $3.60 times 400 cups is $1,440, so revenue falls by $60. The rule is the other way around: elastic demand means a price increase cuts revenue, and inelastic demand means a price increase raises it.
+>
+> *Summary chip:* elastic demand, price up, revenue falls
+
+**fix10**
+
+> That last part is the one to flag: with elastic demand, raising the price actually **lowers** total revenue. Revenue goes from $1,500 a day to $1,440, so it falls by $60. The rule is the other way around: elastic demand plus a price increase means revenue drops, and inelastic demand plus a price increase means revenue rises. So the cart owner's price hike didn't raise revenue, it cut it.
+>
+> *Summary chip:* elastic demand, price up, revenue down
 
 ---
 
@@ -6346,6 +7091,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* heaps yes, heapsort Quiz 5
 
+**fix9**
+
+> Yes, heaps are on Quiz 4: sift-down traces, build-heap traces, and the 1-indexed index formulas. Heapsort is not, it's on Quiz 5, along with priority queues.
+>
+> *Summary chip:* heaps yes, heapsort Quiz 5
+
+**fix10**
+
+> Heaps are on Quiz 4, yes: sift-down traces, build-heap traces, and the 1-indexed index formulas. Heapsort isn't. Heapsort and priority queues are on Quiz 5.
+>
+> *Summary chip:* heaps yes, heapsort on quiz 5
+
 ---
 
 #### DLEC-015 — cs_concept
@@ -6409,6 +7166,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > With our convention, height counts nodes on the longest root-to-leaf path, so a heap with twelve keys has height **floor(log2 12) + 1**, which is 3 + 1, so **4**.
+>
+> *Summary chip:* twelve keys, height 4
+
+**fix9**
+
+> With our convention, height counts nodes on the longest root-to-leaf path, so a heap with twelve keys has height **floor(log2 12) + 1**, which is 3 + 1 = **4**.
+>
+> *Summary chip:* twelve keys, height 4
+
+**fix10**
+
+> With the CS 261 convention, height counts nodes on the longest root-to-leaf path, so a heap with twelve keys has height **4**. The formula is floor(log2 n) + 1, and floor(log2 12) is 3, so 3 + 1 = 4.
 >
 > *Summary chip:* twelve keys, height 4
 
@@ -6480,6 +7249,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* MC above minimum AVC is supply
 
+**fix9**
+
+> The short-run supply curve is the marginal cost curve only above the minimum of AVC because of the shutdown rule. Below that point, price doesn't even cover average variable cost, so the firm is better off producing nothing and just eating its fixed costs, which are sunk in the short run. At or above the minimum of AVC, price covers variable cost, so the firm produces where price equals marginal cost. That's why the supply curve is the MC curve, but only the portion at or above the AVC minimum.
+>
+> *Summary chip:* supply curve is MC above AVC minimum
+
+**fix10**
+
+> The short-run supply curve is the marginal cost curve only above the minimum of average variable cost, because that's where the shutdown rule bites. Below that point, price doesn't cover average variable cost, so the firm shuts down and supplies nothing. Above it, the firm produces where price equals marginal cost, so the MC curve traces out exactly how much it supplies at each price.
+>
+> *Summary chip:* MC curve above minimum AVC
+
 ---
 
 #### DLEC-017 — professor_meaning
@@ -6543,6 +7324,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > She means the "corridor" isn't a symmetric band anymore. In an ample reserves regime, the interest on reserve balances acts as the floor, since banks won't lend below what they can earn at the Fed. The effective rate sits just above it, so the upper bound does most of the work and the floor is what really anchors things.
 >
 > *Summary chip:* floor anchors the rate, not a band
+
+**fix9**
+
+> She means the Fed's "corridor" isn't a symmetric band anymore. In an ample reserves regime, the interest rate on reserve balances acts as a ceiling, since banks won't lend below what they can earn at the Fed, while the overnight reverse repo rate sets the floor. So the effective rate sits near the top of the range, and the corridor mostly functions as a floor.
+>
+> *Summary chip:* corridor acts as floor, not band
+
+**fix10**
+
+> She means the "corridor" isn't a symmetric band anymore. In an ample reserves regime, the Fed's main tool is the interest rate on reserve balances, and that rate acts as a floor under the federal funds rate, so the effective rate sits at or just above it rather than floating in the middle of a range.
+>
+> *Summary chip:* corridor is really just a floor
 
 ---
 
@@ -6609,6 +7402,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > The lecturer is just wrapping up, so there's no question to answer here. The summary is accurate: the long-term causes are the alliance system, militarism, nationalism and imperialism, and the short-term trigger is the assassination at Sarajevo on June 28th, 1914, followed by the July Crisis. The blank cheque, Austria's ultimatum to Serbia, Russian mobilization, and the German plan through Belgium are the steps that turned a regional crisis into a general war.
+>
+> *Summary chip:* long-term causes plus Sarajevo trigger
+
+**fix9**
+
+> The lecturer is pulling the whole unit together into two layers. The long-term causes are the structural ones: the alliance system that split Europe into two blocs, militarism, nationalism, and imperialism. The short-term trigger is the assassination at Sarajevo on June 28th, 1914, and the July Crisis that followed, where the blank cheque, the ultimatum to Serbia, Russian mobilization, and the German plan through Belgium turned a regional quarrel into a continental war. Next week picks up the stalemate: why the war outlasted the Christmas everyone expected it to end by.
+>
+> *Summary chip:* long-term causes plus Sarajevo trigger
+
+**fix10**
+
+> The lecturer is just wrapping up, so there's no question to answer here. The summary is accurate: the long-term causes are the alliance system, militarism, nationalism and imperialism, and the short-term trigger is the assassination at Sarajevo on June 28th, 1914, followed by the July Crisis. The blank cheque, Austria's ultimatum to Serbia, Russian mobilization, and the German push through Belgium are the steps that turned a regional crisis into a general war.
 >
 > *Summary chip:* long-term causes plus Sarajevo trigger
 
@@ -6702,6 +7507,28 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* price moves you along, other factors shift
 
+**fix9**
+
+> Think of the demand curve as a snapshot of how much people want to buy at each price, holding everything else fixed.
+> 
+> A **movement along** the curve happens when only the price of the good itself changes. Price drops, you slide down the same curve and quantity demanded rises. Price rises, you slide up it. Same curve, just a different point on it.
+> 
+> A **shift** happens when something other than price changes, like income, tastes, or the price of a related good. The whole curve moves to a new position. At every price, people now want a different amount, so it's a brand new curve, not a slide along the old one.
+> 
+> The quick test: did the price of this good change? If yes, movement. If something else changed, shift.
+>
+> *Summary chip:* price change slides, other factors shift
+
+**fix10**
+
+> Think of the demand curve as a snapshot of how much people want to buy at each price, holding everything else steady. Moving **along** the curve just means price changed. Price drops, you slide down the same curve and buy more. Price rises, you slide up and buy less. Same curve, same everything else, only the price moved.
+> 
+> A **shift** is when something other than price changes, so the whole curve moves to a new position. Income goes up, a substitute gets more expensive, tastes change, and now people want more at every single price. That's a new curve, not a slide along the old one.
+> 
+> Quick test: if the only thing that changed was the price, it's a movement. If anything else changed, it's a shift.
+>
+> *Summary chip:* price moves along, other factors shift
+
 ---
 
 #### DLEC-020 — historical
@@ -6769,6 +7596,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > The printing press is what made that speed possible. Gutenberg's movable-type press, around 1450, let texts be reproduced quickly and in large numbers, so Luther's Ninety-five Theses in 1517 could be copied and carried across the German lands in weeks rather than the months or years hand-copying would have taken. It's the classic case of a new medium amplifying an idea far beyond what its author could reach alone.
 >
 > *Summary chip:* press sped up spread of ideas
+
+**fix9**
+
+> Gutenberg's movable-type press, around 1450, made cheap, fast reproduction possible, and that's what turned Luther's Ninety-five Theses from a local dispute into a mass movement. Printed in 1517, copies reached readers across the German lands within weeks instead of the months hand-copying would have taken.
+>
+> *Summary chip:* print speed spread Reformation ideas
+
+**fix10**
+
+> Gutenberg's press, around 1450, made copies cheap and fast to produce, so a text could be reproduced in quantity and carried along the trade routes instead of being copied by hand one at a time. That's why Luther's Ninety-five Theses, printed in 1517, were circulating across the German lands within weeks rather than years.
+>
+> *Summary chip:* print speed drove the Reformation's spread
 
 ---
 
@@ -6852,6 +7691,26 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* two limits give cosine x
 
+**fix9**
+
+> The lecturer is walking through the first-principles derivation of the derivative of sine x. You start with the limit definition, write sin(x + h), and expand it using the angle addition formula: sin(x + h) = sin x cos h + cos x sin h. Substituting that in and grouping the terms gives sin x times (cos h − 1)/h plus cos x times (sin h)/h. As h goes to zero, sin h over h tends to 1 and (cos h − 1) over h tends to 0, so the whole thing collapses to cos x.
+>
+> *Summary chip:* sin h/h → 1, (cos h−1)/h → 0
+
+**fix10**
+
+> The lecturer is setting up the first-principles derivation of the derivative of sine x. You start with the limit definition:
+> 
+> d/dx sin x = lim(h→0) [sin(x+h) − sin x] / h
+> 
+> Then expand sin(x+h) using the angle addition formula: sin(x+h) = sin x cos h + cos x sin h. Substituting and grouping terms gives
+> 
+> lim(h→0) [sin x (cos h − 1) + cos x sin h] / h
+> 
+> which splits into sin x · lim(cos h − 1)/h + cos x · lim(sin h)/h. Those two limits are the ones the lecturer named: sin h over h goes to 1, and (cos h − 1) over h goes to 0. So the result is cos x.
+>
+> *Summary chip:* sine derivative from first principles
+
 ---
 
 #### DLEC-022 — compare
@@ -6915,6 +7774,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > *Summary chip:* accuracy is closeness to truth, precision is repeatability
 
 **fix8**
+
+> Accuracy is how close a measurement is to the true value, while precision is how close repeated measurements are to each other. You can have one without the other: a scale that always reads two kilos heavy is precise but not accurate, and readings scattered around the true value are accurate on average but not precise. In practice, accuracy is about correctness and precision is about consistency.
+>
+> *Summary chip:* accuracy is closeness to truth, precision is repeatability
+
+**fix9**
+
+> Accuracy is how close a measurement is to the true value, while precision is how close repeated measurements are to each other. You can have one without the other: a scale that always reads two kilos heavy is precise but not accurate, and readings scattered around the true value are accurate on average but not precise. In practice, accuracy is about correctness and precision is about consistency.
+>
+> *Summary chip:* accuracy is closeness to truth, precision is repeatability
+
+**fix10**
 
 > Accuracy is how close a measurement is to the true value, while precision is how close repeated measurements are to each other. You can have one without the other: a scale that always reads two kilos heavy is precise but not accurate, and readings scattered around the true value are accurate on average but not precise. In practice, accuracy is about correctness and precision is about consistency.
 >
@@ -7004,6 +7875,22 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* unit elastic counts as elastic
 
+**fix9**
+
+> Write **elastic**. The handout's own classification says that for this course, unit elastic counts as elastic, since the revenue logic is the same, and it applies that rule to the coffee cart itself: E = -1.00, so demand here is elastic. So you and your lecturer aren't actually in conflict, the handout just states the -1.00 first and then folds it into the elastic bucket.
+> 
+> They'd come out different only if you read "-1.00" as its own category. The number is unit elastic, but the label the course wants is elastic. The revenue check backs it up: revenue falls from $1,500 to $1,440 when price rises, which is the elastic-side behavior.
+>
+> *Summary chip:* write elastic, unit elastic counts as elastic
+
+**fix10**
+
+> Write **elastic**. The handout's classification section says that for this course, unit elastic counts as elastic because the revenue logic is the same, and the coffee cart example lands at exactly -1.00, so it's elastic here.
+> 
+> They come out different because "unit elastic" is the precise label for E = -1, while your lecturer is using the course's convention of folding it into the elastic category. Same number, different naming rule. On the midterm, follow the course convention and call it elastic, and you can note that it's unit elastic at -1.00 if you want to show the distinction.
+>
+> *Summary chip:* unit elastic counts as elastic here
+
 ---
 
 #### DLEC-024 — exam_relevance
@@ -7082,6 +7969,20 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* lecturer overrides handout, use midpoint
 
+**fix9**
+
+> The lecturer just said that for Midterm 2 there's no formula sheet, and that elasticity answers only get full credit with the midpoint formula. That directly contradicts the recitation handout, which says either the original-value method or the midpoint method gets full credit and that a formula sheet will be stapled to the back of the exam. So for the exam, go with what the lecturer said: use the midpoint formula, and don't count on a formula sheet.
+>
+> *Summary chip:* midpoint formula only, no formula sheet
+
+**fix10**
+
+> The lecturer just said Midterm 2 has no formula sheet and that elasticity answers only get full credit with the midpoint formula, and acknowledged that some of you have a handout saying otherwise. That handout is the Week 6 recitation guide from TA Marcus Delacroix-Byrne, and it says the opposite on both points: that either the original-value method or the midpoint method gets full credit, and that a formula sheet will be stapled to the back of the exam. So the handout and the lecturer directly conflict, and the lecturer's in-class statement is the one that governs the exam.
+> 
+> For the midpoint formula itself, each percentage change uses the average of the two values as the base: % change in Q = (Q2 − Q1) / [(Q1 + Q2)/2], and % change in P = (P2 − P1) / [(P1 + P2)/2], then E = % change in Q / % change in P. On the handout's coffee cart example, going from $3.00 to $3.60 and 500 to 400 cups, the original-value method gives −1.00, while the midpoint method gives −0.22 / 0.18, which is about −1.22. Same direction, different number, so the method matters for the grade.
+>
+> *Summary chip:* midpoint formula governs, handout conflicts
+
 ---
 
 #### DLEC-025 — professor_meaning
@@ -7149,6 +8050,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > He's using the 0-indexed layout, where the root sits at index 0. The notes use the 1-indexed layout, with index 0 left empty, so there left is 2i, right is 2i+1, and parent is floor(i/2). Both are correct for their own layout. On the quiz, use the 1-indexed formulas.
 >
 > *Summary chip:* 0-indexed vs 1-indexed, quiz uses 1-indexed
+
+**fix9**
+
+> He's using the 0-indexed layout, where the root sits at index 0. The notes use the 1-indexed layout, with index 0 left empty, so there left is 2i and right is 2i+1. Both are correct for their own layout. On the quiz, use the **1-indexed** formulas from the notes.
+>
+> *Summary chip:* 0-indexed vs 1-indexed, quiz uses notes
+
+**fix10**
+
+> He's using the 0-indexed layout, where the root sits at index 0. The notes use the 1-indexed layout, with index 0 left empty, so there left is 2i, right is 2i+1, and parent is floor(i/2). Both are correct for their own layout, but on the quiz you use the **1-indexed** formulas.
+>
+> *Summary chip:* 1-indexed on the quiz
 
 ---
 
@@ -7254,6 +8167,26 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* bottom-up sift-down, heights sum to linear
 
+**fix9**
+
+> Start at floor(n/2) because everything past it is a leaf, and a single node is already a valid heap. So for n = 7 we begin at index 3.
+> 
+> Sift-down(3) swaps 7 with its smaller child 2, giving [_, 9, 4, 2, 1, 8, 7, 6]. Sift-down(2) swaps 4 with 1, giving [_, 9, 1, 2, 4, 8, 7, 6]. Sift-down(1) swaps 9 with 1, then 9 with 4, giving [_, 1, 4, 2, 9, 8, 7, 6].
+> 
+> It's O(n) because most nodes sit near the bottom and can only fall a short way. Summing those short heights across all nodes stays linear.
+>
+> *Summary chip:* bottom-up sift-down, linear total cost
+
+**fix10**
+
+> Build-heap starts at **floor(n/2)** because everything past that index is a leaf, and a single node is already a valid heap. So you only sift down the internal nodes, from the last one back to the root.
+> 
+> On the example, n = 7, so you start at index 3. Sift-down(3) swaps 7 with its smaller child 2, giving [_, 9, 4, 2, 1, 8, 7, 6]. Sift-down(2) swaps 4 with 1, giving [_, 9, 1, 2, 4, 8, 7, 6]. Sift-down(1) swaps 9 with 1, then 9 with 4, giving [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps.
+> 
+> It's **O(n)** because most nodes sit near the bottom and can only fall a short distance. Summing each node's height gives a linear bound, not n log n.
+>
+> *Summary chip:* bottom-up sift-down, linear total
+
 ---
 
 #### DLEC-027 — simple_explain
@@ -7357,6 +8290,26 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > It's O(n) and not O(n log n) because most nodes sit near the bottom and can only fall a short distance. Add up all those short heights and the total is linear in n.
 >
 > *Summary chip:* bottom-up sift-down, heights sum to linear
+
+**fix9**
+
+> Start at floor(n/2) because every index past it is a leaf, and a lone node is already a heap. So for n = 7 we begin at index 3.
+> 
+> Sift-down(3): 7's children are 2 and 6, so swap with 2. Array becomes [_, 9, 4, 2, 1, 8, 7, 6]. Sift-down(2): 4's children are 1 and 8, so swap with 1. Array becomes [_, 9, 1, 2, 4, 8, 7, 6]. Sift-down(1): 9's children are 1 and 2, so swap with 1, then at index 2 swap 9 with 4. Array becomes [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps total.
+> 
+> It's O(n) because most nodes sit near the bottom and can only fall a short way, so the heights summed over all nodes grow linearly with n, not n log n.
+>
+> *Summary chip:* bottom-up sift-down, linear total cost
+
+**fix10**
+
+> Build-heap starts at **floor(n/2)** because everything after that index is a leaf, and a leaf is already a valid heap on its own. So you only sift down the internal nodes, from the last one back up to the root.
+> 
+> In the example n = 7, so you start at index 3. Sift-down(3) swaps 7 with its smaller child 2, giving [_, 9, 4, 2, 1, 8, 7, 6]. Sift-down(2) swaps 4 with 1, giving [_, 9, 1, 2, 4, 8, 7, 6]. Sift-down(1) swaps 9 with 1, then 9 with 4, giving [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps total.
+> 
+> It's **O(n)** and not O(n log n) because most nodes sit near the bottom and can only fall a short distance. Add up each node's height and the total grows linearly with n, not n times log n.
+>
+> *Summary chip:* bottom-up sift-down, linear total
 
 ---
 
@@ -7470,6 +8423,30 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* same trace, fresh numbers
 
+**fix9**
+
+> Same method, fresh numbers. Take n = 6: [_, 8, 3, 9, 5, 1, 7]. Start at floor(6/2) = 3.
+> 
+> Sift-down(3): 9's children are 1 (i=6) and 7 (i=7, doesn't exist), so swap with 1. Array: [_, 8, 3, 1, 5, 9, 7]. Sift-down(2): 3's children are 5 (i=4) and 9 (i=5), so swap with 5. Array: [_, 8, 5, 1, 3, 9, 7]. Sift-down(1): 8's children are 5 (i=2) and 1 (i=3), so swap with 1, then at index 3, 8's only child is 7 (i=6), so swap with 7. Array: [_, 1, 5, 8, 3, 9, 7]. Four swaps.
+> 
+> Still O(n): most nodes sit near the bottom and can only fall a short way, so the heights summed over all nodes grow linearly with n.
+>
+> *Summary chip:* bottom-up sift-down, linear total cost
+
+**fix10**
+
+> Same method, new numbers. Take n = 6, input [_, 5, 9, 3, 8, 1, 7]. Start at floor(6/2) = 3, since indices 4 through 6 are leaves.
+> 
+> Sift-down(3): 3 vs children 8 (i=6) and 7 (i=7). Wait, n = 6, so index 3's only child is 8 at i=6. 3 is smaller, no swap. Array stays [_, 5, 9, 3, 8, 1, 7].
+> 
+> Sift-down(2): 9 vs children 8 (i=4) and 1 (i=5). Swap with 1. Array: [_, 5, 1, 3, 8, 9, 7].
+> 
+> Sift-down(1): 5 vs children 1 (i=2) and 3 (i=3). Swap with 1. Continue at i=2: 5 vs children 8 (i=4) and 9 (i=5). 5 is smaller, stop. Array: [_, 1, 5, 3, 8, 9, 7].
+> 
+> Two swaps total. Still O(n) overall, because the nodes near the bottom barely move.
+>
+> *Summary chip:* n=6 build-heap, two swaps
+
 ---
 
 #### DLEC-029 — historical
@@ -7540,6 +8517,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* Westphalia as sovereignty's symbolic origin
 
+**fix9**
+
+> The Peace of Westphalia is actually two treaties signed in 1648, at Münster and Osnabrück, and together they ended both the Thirty Years' War in the Empire and the Eighty Years' War between Spain and the Dutch Republic. What makes it a turning point is that it shifted the basis of order away from a single universal authority, the pope and the emperor, toward **territorial sovereignty**: each ruler got the right to determine the religion of their own lands, and states were treated as formally equal regardless of size or power.
+> 
+> The usual caveat is that this is more a story historians tell than a clean break. Sovereignty in practice was messy and uneven for a long time afterward, so it's better read as a **symbolic marker** of a shift that was already underway than as the single moment the modern state system appeared.
+
+**fix10**
+
+> The Peace of Westphalia is actually two treaties signed in 1648, at Münster and Osnabrück, that ended both the Thirty Years' War in the Empire and the Eighty Years' War between Spain and the Dutch Republic. Its reputation as the birth of the sovereign state system comes mainly from the idea that it established **territorial sovereignty** and the principle that no outside power could dictate a state's internal religion, often summed up as *cuius regio, eius religio* extended to the imperial princes. Historians now push back on that reading, since the settlement still left the Holy Roman Empire's layered jurisdictions intact and the "Westphalian sovereignty" label is largely a later construction.
+>
+> *Summary chip:* two treaties, sovereignty myth
+
 ---
 
 #### DLEC-030 — historical
@@ -7603,6 +8592,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > That's the revisionist reading, and it's well supported. The treaties are mostly about specific grievances: which princes keep which territories, how the religious settlement works, the rights of the imperial estates. Sovereignty in the abstract barely appears. What the treaties do is confirm the Empire's internal structure, so if anything they presuppose the old order rather than replace it. The "Westphalian myth" label is really about how nineteenth and twentieth century scholars read their own state system back into 1648.
 >
 > *Summary chip:* treaties settle specifics, not sovereignty
+
+**fix9**
+
+> That's the right correction to make. The treaties are mostly about specific grievances: which territories change hands, confessional rights, the imperial courts, compensation for the Palatinate and Brandenburg. The word sovereignty barely appears, and where it does it's about the rights of individual princes within the Empire, not a general doctrine of statehood. The "Westphalian sovereignty" story was largely retrofitted in the nineteenth and twentieth centuries, especially by international relations scholars looking for an origin point. So the treaties matter as a settlement, but the sovereignty reading is a later construction laid over them.
+
+**fix10**
+
+> Right, and that's the core of the revisionist case. The treaties are mostly about specific grievances: restoring territories, settling confessional rights, and constraining the Emperor's power within the Empire, not declaring a general doctrine of sovereignty. The word "sovereignty" barely appears, and where the settlement does address authority it keeps the Empire's layered structure intact, with princes, the Emperor, and imperial institutions all retaining claims. So the "Westphalian myth" is the gap between what the documents actually say and the later story that they founded a system of sovereign states.
+>
+> *Summary chip:* treaties settle grievances, not sovereignty
 
 ---
 
@@ -7704,6 +8703,24 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* recurrence means split, recurse, combine
 
+**fix9**
+
+> That's a **recurrence relation**. It's a compact way of saying how much work an algorithm does, written in terms of itself.
+> 
+> Read it as: to sort n items, merge sort does two smaller sorts of size n/2, plus a **Theta(n)** step to merge the two halves back together. The 2T(n/2) is the two recursive calls, and the Theta(n) is the merging work at that level.
+> 
+> The T stands for "time on an input of this size." So T(n) is the total cost for n items, and the right side says that cost equals the cost of two half-sized problems plus a linear amount of combining. Solving it gives Theta(n log n), which is why merge sort is n log n.
+>
+> *Summary chip:* recurrence: two halves plus linear merge
+
+**fix10**
+
+> That's a **recurrence relation**. It's a compact way of saying how much work an algorithm does, written in terms of itself on a smaller input.
+> 
+> Read it piece by piece. T(n) means the time to sort n items. The 2T(n/2) says the algorithm splits the problem into **2 subproblems**, each half the size. The + Theta(n) is the extra work done at this level, like the merge step that walks through all n elements once. So merge sort does two half-sized sorts plus a linear pass to combine them.
+> 
+> Solving it gives **Theta(n log n)**, which is the familiar merge sort running time.
+
 ---
 
 #### DLEC-032 — follow_up_clarify
@@ -7789,6 +8806,22 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > The n/2 is the **size of each subproblem**. When merge sort splits an array of n items, it cuts it into two halves, and each half has n/2 items. So the 2 in front counts how many subproblems there are, and the n/2 inside T(...) says how big each one is. That's why it's 2T(n/2): two recursive calls, each on half the data.
 >
 > *Summary chip:* n/2 is the size of each half
+
+**fix9**
+
+> The n/2 is the **size of each half**. Merge sort splits the array into two pieces, and each piece has about half the elements, so a subproblem on n items becomes two subproblems on n/2 items. That's why the recursive term is 2T(n/2): two calls, each on half the input.
+> 
+> The n inside Theta(n) stays n because the merging step touches all n elements at that level, not half of them.
+>
+> *Summary chip:* n/2 is each half's size
+
+**fix10**
+
+> The n/2 is the **size of each subproblem**, not the number of them. Merge sort splits the array into two halves, so each half has n/2 elements. That's why the term is 2T(n/2): two subproblems, each of size n/2.
+> 
+> The 2 out front is the count of subproblems. The n/2 inside is how big each one is. So you're doing two sorts of half the data, plus a linear pass to merge them back together.
+>
+> *Summary chip:* 2 is how many, n/2 is how big
 
 ---
 
@@ -7912,6 +8945,31 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* each level costs n, log n levels
 
+**fix9**
+
+> To solve it, you expand the recurrence level by level and add up the work.
+> 
+> Level 0: one problem of size n, cost Theta(n).
+> Level 1: two problems of size n/2, each costs Theta(n/2), so together 2 · Theta(n/2) = Theta(n).
+> Level 2: four problems of size n/4, together 4 · Theta(n/4) = Theta(n).
+> Each level costs Theta(n). The splitting stops when subproblems reach size 1, which takes log n levels (halving n down to 1). So total work is Theta(n) per level times log n levels, giving **Theta(n log n)**.
+>
+> *Summary chip:* each level Theta(n), log n levels
+
+**fix10**
+
+> To solve it, you keep expanding the recurrence until the subproblems hit size 1, then add up the work at every level.
+> 
+> Level 0: one problem of size n, cost Theta(n).
+> Level 1: two problems of size n/2, total cost 2 · Theta(n/2) = Theta(n).
+> Level 2: four problems of size n/4, total cost 4 · Theta(n/4) = Theta(n).
+> 
+> Every level costs Theta(n). The question is how many levels there are. You halve the size each time, so you go from n down to 1 in log base 2 of n steps. That gives Theta(n) work per level times log n levels, so **Theta(n log n)**.
+> 
+> The shortcut version is the master theorem: here a = 2, b = 2, and the extra term is Theta(n). Since log base b of a equals log base 2 of 2, which is 1, the n term matches n to the first power, so you're in the balanced case and the answer is Theta(n log n).
+>
+> *Summary chip:* n work per level, log n levels
+
 ---
 
 #### DLEC-034 — scientific
@@ -7986,6 +9044,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* p-value is P(data|null), not P(null|data)
 
+**fix9**
+
+> That's a common misreading, and it's worth correcting. A p-value of 0.03 means that **if the null hypothesis were true**, there'd be a 3% chance of seeing data at least as extreme as what we got. It's the probability of the data given the null, not the probability of the null given the data. To get the chance the null is actually true, you'd need a prior and Bayes' theorem, and that number can be much higher than 3%.
+>
+> *Summary chip:* p-value is P(data | null), not P(null | data)
+
+**fix10**
+
+> That's a common misreading, and it's worth correcting. A p-value of 0.03 means that **if the null hypothesis were true**, there'd be a 3% chance of seeing data at least as extreme as what we got. It's the probability of the data given the null, not the probability of the null given the data. To get the chance the null is actually true, you'd need a Bayesian posterior, which also depends on your prior. So the trial result says the data are fairly unlikely under the null, not that the null has a 3% chance of being true.
+>
+> *Summary chip:* p-value is P(data|null), not P(null|data)
+
 ---
 
 #### DLEC-035 — follow_up_clarify
@@ -8052,6 +9122,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* p-value isn't the drug's probability
 
+**fix9**
+
+> That's the same misreading flipped around. The 0.03 is the probability of data this extreme **given** the null, not the probability of the null given the data. So you can't just subtract it from 100 and call it confidence the drug works. Getting from the p-value to "how likely is it that the drug actually works" needs a prior and Bayes' theorem, and that posterior can land well below 97 percent, especially if the prior on a real effect was low to begin with. A p-value is a statement about the data under a hypothesis, not a probability that the hypothesis is false.
+>
+> *Summary chip:* p-value isn't the chance the null is true
+
+**fix10**
+
+> No, that doesn't follow. The 0.03 is the probability of the data given the null, so you can't just flip it into a 97 percent chance the drug works. That flip is the same error in reverse. To get the probability the drug actually works, you'd need a Bayesian posterior, which depends on your prior and on the study's power, not on the p-value alone.
+
 ---
 
 #### DLEC-036 — business_econ
@@ -8101,6 +9181,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing means going free instead of splitting the sentence. If the other confesses, confessing means a lighter sentence than being the one who stayed quiet. So rational self-interest leads both to confess, and they land on a worse outcome than if they had both stayed quiet. That gap between individual rationality and collective rationality is the dilemma.
 
 **fix8**
+
+> The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing gets you a lighter sentence. If the other confesses, confessing still beats staying quiet. So rational self-interest drives both to confess, and they land on a worse outcome than if they'd both stayed silent. That gap between individual rationality and collective good is the dilemma.
+
+**fix9**
+
+> The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing gets you a lighter sentence. If the other confesses, confessing still beats staying quiet. So rational self-interest drives both to confess, and they land on a worse outcome than if they'd both stayed silent. That gap between individual rationality and collective good is the dilemma.
+
+**fix10**
 
 > The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing gets you a lighter sentence. If the other confesses, confessing still beats staying quiet. So rational self-interest drives both to confess, and they land on a worse outcome than if they'd both stayed silent. That gap between individual rationality and collective good is the dilemma.
 
@@ -8174,6 +9262,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* repetition makes cooperation sustainable
 
+**fix9**
+
+> When a game like this repeats indefinitely, the logic changes. With no known last round, each player's choice today can be answered tomorrow, so cooperation becomes sustainable. The classic result is that a **tit-for-tat** strategy, cooperating first and then copying the other player's last move, does well because it rewards cooperation and punishes defection without escalating. Defecting still pays once, but it invites retaliation in every later round, so the long-run payoff favors staying quiet. The dilemma doesn't vanish, it just stops being a one-shot trap.
+>
+> *Summary chip:* repetition makes cooperation sustainable
+
+**fix10**
+
+> That's the **iterated prisoner's dilemma**: play the same game over and over with the same partner, and the "confess no matter what" logic stops being obviously right. When the game repeats, each player can reward cooperation and punish defection in later rounds, so cooperation can emerge and hold. The classic result is that a simple **tit-for-tat** strategy, cooperate first and then copy whatever the other player did last round, does well because it's nice, retaliatory, and forgiving. The dilemma doesn't vanish, it just becomes a question of whether the shadow of the future is long enough to make cooperation worth it.
+>
+> *Summary chip:* repeated play makes cooperation rational
+
 ---
 
 #### DLEC-038 — example
@@ -8241,6 +9341,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Cartels are the real-world version of this. Each firm's dominant strategy is to undercut the agreed price, because cheating wins whether or not the others hold the line. In a one-shot setting that logic pushes everyone to defect, so the cartel collapses. Repetition is what holds it together: firms cooperate today because cheating invites retaliation tomorrow, and the shadow of the future makes the agreement sustainable. The catch is that cartels are fragile precisely because that retaliation is illegal and hard to coordinate, so any shock, a new entrant, a demand swing, or a member who stops believing the others will punish cheating, tips them back into defection.
 >
 > *Summary chip:* cartels collapse from the same defection logic
+
+**fix9**
+
+> Cartels are the same structure: each firm does better by undercutting the agreed price, since it captures the whole market while the others keep to the deal. So the collusive outcome is unstable, and the incentive to cheat is exactly the dominant strategy from the one-shot game. What holds a cartel together is the repeated version: cheating today gets punished by a price war tomorrow, so the long-run payoff can favor sticking to the agreement. It falls apart when that punishment stops being credible, when cheating is hard to detect, or when the game gets a known end point, because then the last round unravels backward.
+>
+> *Summary chip:* cartels cheat because defection dominates
+
+**fix10**
+
+> Cartels are the same structure: firms agree to restrict output and keep prices high, which is better for all of them than competing. But each firm has a private incentive to cheat, undercut slightly and grab more of the market while the others hold the line. Since the cartel is illegal, members can't sign an enforceable contract or call in a court when someone defects, so the agreement rests on repeated play and mutual trust. When the shadow of the future looks short, or one member gets tempted, defection spreads and the cartel unravels.
+>
+> *Summary chip:* cartels cheat because defection pays
 
 ---
 
@@ -8310,6 +9422,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* disturbance shifts equilibrium to partly undo it
 
+**fix9**
+
+> Le Chatelier's principle says a system at equilibrium pushes back against whatever you do to it. Add more of a reactant, and the reaction shifts toward the products to use it up. Raise the pressure on a gas reaction, and it shifts toward the side with fewer gas molecules. Raise the temperature, and it shifts in the endothermic direction, the one that absorbs the extra heat. The shift only partly cancels the change, so the system settles at a new equilibrium rather than returning to the old one.
+>
+> *Summary chip:* equilibrium shifts to oppose the disturbance
+
+**fix10**
+
+> Le Chatelier's principle says a system at equilibrium pushes back against whatever you do to it. Add more of a reactant and the reaction shifts toward the products to use it up. Raise the pressure on a gas reaction and it shifts toward the side with fewer gas molecules. Raise the temperature and it shifts in the endothermic direction, the one that absorbs the extra heat. The shift only partly cancels the disturbance, so the system settles at a new equilibrium rather than returning to the old one.
+>
+> *Summary chip:* disturbance shifts equilibrium to partly undo it
+
 ---
 
 #### DLEC-040 — example
@@ -8376,6 +9500,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* higher pressure favors ammonia, fewer gas molecules
 
+**fix9**
+
+> Increasing the pressure shifts the equilibrium toward the ammonia side. Count the gas molecules: four on the left, two on the right, so the forward direction is the one that reduces the number of gas molecules. Higher pressure favors that side, so more ammonia forms. It's the same principle as before, just applied to a change in pressure rather than concentration.
+>
+> *Summary chip:* pressure shifts toward fewer gas molecules
+
+**fix10**
+
+> Increasing the pressure shifts the equilibrium toward the ammonia, because that's the side with fewer gas molecules. On the left you have four moles of gas, one of nitrogen plus three of hydrogen, and on the right just two of ammonia. So the system responds by favoring the forward reaction, making more ammonia, which partly relieves the added pressure.
+>
+> *Summary chip:* pressure favors fewer gas molecules, so more ammonia
+
 ---
 
 ### Looking for work
@@ -8438,6 +9574,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led Project Tern, the rewrite of our carrier-settlement service from a Rails monolith into three Go services. **Comfortable owning a service from design doc through launch and on-call**,  what does the role here look like on that side?
 
+**fix9** — edited after streaming
+
+> I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led **Project Tern**, the rewrite of our carrier-settlement service from a Rails monolith into three Go services. I've owned a service from design doc through launch and on-call.
+
+**fix10** — edited after streaming
+
+> I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led Project Tern, the rewrite of our carrier-settlement service from a Rails monolith into three Go services. I'm comfortable owning a service from design doc through launch and on-call.
+
 ---
 
 #### DJOB-002 — why_role
@@ -8497,6 +9641,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > Payments and ledger work is where backend problems get real consequences. A double-entry ledger has to be correct, not just fast, and the constraints are hard: idempotency, reconciliation, settlement that has to finish before banks open. What does the ledger side of the role look like day to day?
+
+**fix9** — edited after streaming
+
+> Payments and ledger work sits right where the hard problems are, a high correctness bar, real failure modes, and the money path. What stands out about Tallowmarket is the scale: growing the ledger from **400,000 to a projected 1.5 million entries a day**, on a **double-entry system** where reconciliation and audit actually matter.
+
+**fix10** — edited after streaming
+
+> Payments and ledger work is where backend problems get real. Money has to be exactly right, so the design decisions actually matter, and the hard part is correctness rather than just throughput. A double-entry ledger on Postgres at that volume, with settlement that has to finish before banks open, is the kind of problem this team is close to.
 
 ---
 
@@ -8558,6 +9710,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The posted band for this role is **$172,000 to $208,000** base, plus equity and the 401(k) match. Where does the team usually land for someone coming in at this level?
 
+**fix9** — edited after streaming
+
+> The posted band for this role is **$172,000 to $208,000** base, plus equity and a 6% 401(k) match. How are you thinking about leveling for this role, and what range did you have in mind for someone coming in at this level?
+
+**fix10** — edited after streaming
+
+> The band for this role is **$172,000 to $208,000 base**, plus **equity and a 6% 401(k) match**. I'd like to understand how you're positioning me against that band before I anchor on a single number, where do you see me landing?
+
 ---
 
 #### DJOB-004 — changing_jobs
@@ -8615,6 +9775,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > At Larkspur I've been tech lead on **Project Tern**, the **carrier-settlement rewrite**, and I've owned services from **design doc through launch and on-call**. What I'd want next is a team where **design docs drive most decisions** and the systems are **event-driven**,  how does that side of the work look here?
+
+**fix9** — edited after streaming
+
+> At Larkspur I've been tech lead on **Project Tern**, the carrier-settlement rewrite, taking it from design doc through launch. That's the kind of work I'd want to keep doing, **Go and Kotlin services on PostgreSQL and Kafka**, owning a service end to end. What does the backend work here look like day to day?
+
+**fix10** — edited after streaming
+
+> I've been at Larkspur a few years, and I'm the tech lead for **Project Tern**, the **carrier-settlement rewrite**, that's been the most interesting work I've done. I'm weighing what's next, and I'll come back to you on it.
 
 ---
 
@@ -8675,6 +9843,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > The honest one is Project Tern. I was tech lead on the carrier-settlement rewrite, a working group of 4 engineers and 1 QA analyst over 7 months. What's your side on how the team handles a slip,  do you want the checkpoint cadence set up front?
+
+**fix9** — edited after streaming
+
+> The honest one is Project Tern, the carrier-settlement rewrite at Larkspur Freight. I was **tech lead**, coordinating a working group of **4 engineers and 1 QA analyst over 7 months**. What would you like to dig into, the migration, or how the rollout went?
+
+**fix10** — edited after streaming
+
+> The honest one is Project Tern. We ran the carrier-settlement rewrite for seven months with four engineers and a QA analyst. My part was coordinating that working group. What I'd say I took from it is getting the design reviewed before we build anything.
 
 ---
 
@@ -8750,6 +9926,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The main culprit was N+1 queries against PostgreSQL. The rate-quote path was firing a separate query per lane, so a single request could fan out into dozens of round trips, and that dominated the p95. I replaced that with a batched loader so the lanes come back in one pass, and put a 90-second Redis cache in front of it keyed by lane ID. Together that took p95 from 820 milliseconds down to 190.
 
+**fix9**
+
+> The main thing was N+1 queries against PostgreSQL. The rate-quote path was firing a separate query per lane, so a single request could fan out into dozens of round trips, and that dominated the p95. I replaced those with a batched loader so one request pulls all the lanes it needs in a single round trip, and I put a 90-second Redis cache in front of it keyed by lane ID, since lane pricing doesn't change second to second. Together that took p95 from 820 milliseconds down to 190.
+>
+> *Summary chip:* N+1 queries, batched loader, Redis cache
+
+**fix10**
+
+> The slow part was the query pattern, not the database itself. The rate-quote endpoint was doing N+1 queries against PostgreSQL, so one request fanned out into a pile of round trips. I replaced that with a batched loader, and put a 90-second Redis cache in front of it keyed by lane ID. That took p95 from 820 milliseconds down to 190.
+>
+> *Summary chip:* N+1 queries, batched loader, Redis cache
+
 ---
 
 #### DJOB-007 — strengths
@@ -8810,6 +9998,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > My biggest strength is owning a service end to end, from the design doc through launch and on-call. At Larkspur Freight I was tech lead for Project Tern, rewriting carrier settlement from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. I also cut the rate-quote API's p95 from 820 milliseconds to 190 by replacing N+1 queries with a batched loader and a Redis cache. That range,  design decisions through on-call consequences,  is where I do my best work.
 
+**fix9** — edited after streaming
+
+> My biggest strength is owning a service end to end, from the design doc through launch and on-call. At Larkspur I led Project Tern, rewriting carrier settlement from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. I also cut the rate-quote API's p95 from 820 milliseconds to 190 by replacing N+1 queries with a batched loader and a Redis cache. I wrote the team's first set of 14 incident runbooks, and I'm part of a six-person on-call rotation.
+
+**fix10**
+
+> My biggest strength is owning a service end to end, from the design doc through launch and on-call. At Larkspur I led Project Tern, rewriting carrier settlement from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. I also cut the rate-quote API's p95 from 820 milliseconds to 190 by replacing N+1 queries with a batched loader and a Redis cache. What I like about that work is it's not just writing code, it's being accountable for the thing staying healthy in production.
+>
+> *Summary chip:* end-to-end ownership, Tern lead, latency win
+
 ---
 
 #### DJOB-008 — weaknesses
@@ -8867,6 +10065,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > On Project Tern I coordinated a working group of **four engineers and a QA analyst** over seven months, and the part I'd want to keep getting better at is handing off the trickiest pieces rather than building them myself,  writing the design down clearly enough that someone else can build it, and reviewing instead of taking over.
+
+**fix9** — edited after streaming
+
+> On Project Tern I led a working group of **four engineers and a QA analyst** over seven months, and what I'd point to is how I'd run that kind of split now, handing over whole areas and checking in on outcomes rather than every decision.
+
+**fix10** — edited after streaming
+
+> The thing I'm working on is delegating more of the code review load. As tech lead on Project Tern I coordinated 4 engineers and a QA analyst, and I'm working on handing more of the review to the team and keeping the settlement logic for myself.
 
 ---
 
@@ -8931,6 +10137,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > On Project Tern I coordinated a working group of four engineers and a QA analyst over seven months. I'd bring that same approach to mentoring mid-level engineers here,  how is mentoring set up on your team?
+
+**fix9** — edited after streaming
+
+> On Project Tern I coordinated a working group of **four engineers and a QA analyst over seven months**, which involved **design reviews** and **code feedback**. I'd pair with mid-level engineers on **design docs and reviews** the same way.
+
+**fix10** — edited after streaming
+
+> I haven't had a formal mentee, but on Project Tern I coordinated a working group of four engineers and a QA analyst over seven months, and I wrote our team's first set of 14 incident runbooks so newer engineers had something to lean on.
 
 ---
 
@@ -9038,6 +10252,28 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > On why I want to work here: the problems this team is solving are the kind worth spending your time on, and the role covers ground I'd want to be good at. What does the team need most in the first six months?
 
+**fix9** — edited after streaming
+
+> Five questions for the director: how does the engineering org measure success in the first six months? What's the biggest technical constraint the team is working around right now? How do decisions get made between product and engineering? What does growth look like for engineers here? And what would make you say this hire went really well a year in?
+> 
+> Two topics I'd steer away from: anything about compensation or title, and internal politics or gossip about other teams.
+> 
+> On why I want to work here: the problems this team is solving are the kind of work I'd want to be doing, and how the role is scoped is something I'd want to understand better. What does ownership look like in the first year?
+
+**fix10** — edited after streaming
+
+> Five questions for the director:
+> 
+> 1. How do you define success for this role in the first six months?
+> 2. Where does the engineering team most need to level up right now?
+> 3. How do you balance shipping speed against technical debt?
+> 4. What does the path from here to a senior role look like?
+> 5. What's the biggest challenge the team is facing this year?
+> 
+> Two topics to steer away from: salary and benefits, and anything negative about a past employer.
+> 
+> Why I want to work here: I'll confirm that and come back to you on it.
+
 ---
 
 #### DJOB-011 — prep_request
@@ -9110,11 +10346,19 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > If you tell me the role or the kind of systems they work on, I can get more specific about what to drill.
 
-**fix9 (candidate)**
+**fix9**
 
 > For a system design round, I'd focus on being able to walk through a design out loud, not just know the pieces. I'd practice taking a vague prompt, asking the clarifying questions that actually change the design, then sketching the high-level components before diving into any one of them. I'd also rehearse talking through tradeoffs, since that's usually what they're really testing.
 > 
 > If you tell me the company or the kind of systems they build, I can get more specific about what to drill.
+
+**fix10**
+
+> For a system design round, I'd focus on being able to walk through a design out loud, not just know the concepts. So I'd practice taking a vague prompt and clarifying the requirements first, then sketching the high-level components before diving into details like data storage or scaling.
+> 
+> The best prep is doing a few full mock designs end to end, ideally with someone who'll push back on your choices, and reviewing how real systems you've worked with are actually built. I'd also get comfortable estimating rough numbers like traffic and storage, since that comes up a lot.
+>
+> *Summary chip:* practice full designs out loud, clarify first
 
 ---
 
@@ -9168,9 +10412,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'd rather walk you through it directly than have it read as a blank spot. Can I ask what specifically you're weighing when you look at that gap, so I can speak to that part first?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That's a fair question, and I'd rather give you the real picture than a rehearsed version. What I can do is walk you through how I think about a break like that, what I was weighing, what I wanted the next move to look like, and why the timing mattered to me. If it helps, tell me what matters most to you here, the gap itself, or how I'd approach the role now, and I'll focus there.
+
+**fix10** — edited after streaming
+
+> I'd rather walk you through it directly than have it read as a blank spot. What would be most useful for you to hear first?
 
 ---
 
@@ -9228,9 +10476,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > With forty people in the pipeline, the question is what you're actually weighing. What I'd do is focus on the problem in front of the team, ask the questions that surface risk early, and follow through without needing to be chased. If that's the kind of person who's useful on day one, I'd like to hear what the first month looks like.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > With forty people in the pipeline, the question is what you're actually weighing up. What I'd do is focus on the problem in front of the team, ask the questions that surface risk early, and follow through without needing to be chased.
+
+**fix10** — edited after streaming
+
+> I can't speak to the other forty, but I can tell you how I work: I stay on the problem in front of the team, I ask the questions that surface risk early, and I follow through without needing to be chased. That's the kind of person who's useful on day one.
 
 ---
 
@@ -9297,6 +10549,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Yes, last October. Our Kafka relay fell 38 minutes behind during the 7 a.m. dispatch peak, so tracking pages showed stale statuses and support got about 70 tickets. I was on call. The prune job on the outbox table had been left off during a migration, so it had grown to 40 million rows and the relay's query was scanning. I re-enabled the prune, added a partial index on unpublished rows, and set a Datadog monitor to page on relay lag at five minutes.
 >
 > *Summary chip:* relay lag, outbox prune, paged at 5 min
+
+**fix9**
+
+> Yes, October 2024, I was on call. Our relay fell 38 minutes behind during the morning peak, so tracking pages showed stale statuses and support got about 70 tickets. The prune job on the outbox table had been disabled during a migration and never re-enabled, so it had grown to around 40 million rows and the relay's query was scanning. I caught us up, then added a partial index on unpublished rows, re-enabled the prune with an alert if it hadn't run in 3 hours, and put a Datadog monitor on relay lag paging at 5 minutes. I wrote the postmortem and turned the recovery steps into a runbook.
+>
+> *Summary chip:* relay lag, outbox prune, runbook
+
+**fix10**
+
+> Yes, October 2024, I was on call. Our relay fell 38 minutes behind at the morning peak, so tracking pages showed stale statuses and support got about 70 tickets. The prune job on the outbox table had been disabled during a migration and never re-enabled, so the table hit 40 million rows and the relay's query degraded into a scan. I added a partial index on unpublished rows, re-enabled the prune with an alert if it hasn't run in three hours, and set a Datadog monitor on relay lag that pages at five minutes.
+>
+> *Summary chip:* outbox prune disabled, relay lagged, fixed
 
 ---
 
@@ -9366,6 +10630,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* transactional outbox, Kafka, idempotent consumers
 
+**fix9**
+
+> Dockhand is the Kafka pipeline I built at Larkspur Freight to carry shipment status events downstream. The core problem was dual writes: a service would commit to Postgres and then call downstream over HTTP, so a crash meant lost events and a retry meant duplicates. I used a transactional outbox, a Go relay polling with SKIP LOCKED, one topic keyed by load ID for ordering, and consumer-side dedupe on event_id. It handles about 2.3 million events a day.
+>
+> *Summary chip:* outbox, relay, keyed topic, dedupe
+
+**fix10** — edited after streaming
+
+> Dockhand is a Kafka pipeline at Larkspur Freight that carries shipment status events to tracking, billing, and reconciliation, about 2.3 million events a day. The core problem was dual writes: a database commit and a separate HTTP notify could duplicate or drop events. The design is a transactional outbox, a Go relay polling with SKIP LOCKED, and consumer-side dedupe on event_id. Duplicate delivered events hitting billing went to zero.
+
 ---
 
 #### DJOB-016 — teamwork
@@ -9423,6 +10697,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > On Project Tern, the rewrite of carrier settlement into three Go services, I coordinated a working group of **4 engineers and 1 QA analyst** over **7 months**.
+
+**fix9** — edited after streaming
+
+> On Project Tern I had one QA analyst in the working group with me and four engineers. The rewrite moved the carrier-settlement service from a Rails monolith into three Go services, and we cut monthly settlement mismatches from 312 to 41 with a nightly reconciliation job. How does your QA team like to be brought in on a rewrite?
+
+**fix10** — edited after streaming
+
+> On Project Tern I had one QA analyst in the working group, so QA was in it from the start. We agreed on what "done" meant per service before code moved, and she tested each of the three Go services as it came out rather than waiting for the whole rewrite. That kept feedback tight while everything was still moving.
 
 ---
 
@@ -9483,6 +10765,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > In three to five years, I'd be working as a backend engineer owning a service end to end, from the design doc through launch and on-call. Project Tern is the kind of work that points that way: leading a rewrite, coordinating a small working group, and getting the latency and reliability numbers right.
+
+**fix9** — edited after streaming
+
+> In three to five years, I'd be working as a backend engineer owning a service end to end, from the design doc through launch and on-call. Project Tern at Larkspur is the closest thing to that: leading a rewrite, coordinating a working group of four engineers and one QA analyst, and getting the latency and reliability numbers right.
+
+**fix10** — edited after streaming
+
+> In three to five years I'd like to be leading bigger technical efforts, the way I led Project Tern at Larkspur. I'm drawn to teams where I can own a service end to end, from design through on-call.
 
 ---
 
@@ -9549,6 +10839,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > My resume, last updated November 2022, shows **2+ years of experience** building services in Kotlin and Python,  at **Brindlecap Labs** from September 2020 to May 2021, and at **Quillfeather Health** from June 2021 onward, including an **appointment-reminder service** in Kotlin and a **Temporal-based scheduler**.
+
+**fix9** — edited after streaming
+
+> I've been working as a backend engineer since September 2020, first at Brindlecap Labs, then at Quillfeather Health from June 2021, building **Kotlin** services there. Most of that's been in **Kotlin and Python**, with **Go** on the side.
+
+**fix10** — edited after streaming
+
+> My résumé is from November 2022, so it's out of date. It shows Brindlecap Labs from September 2020 to May 2021, and Quillfeather Health from June 2021 onward, where I built the appointment-reminder service in Kotlin, it sent about four million SMS reminders in its first year.
 
 ---
 
@@ -9628,6 +10926,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* three questions on migration, ownership, on-call
 
+**fix9**
+
+> Thanks for that. Three things I'd love to dig into. First, where is the Temporal migration right now, and what's the hardest part of it so far? Second, how does the team split ownership of the payout scheduler day to day, and where would I fit in? Third, what does success look like for this role in the first six months?
+>
+> *Summary chip:* three questions on team, migration, success
+
+**fix10**
+
+> Thanks for that. Three things I'd love to dig into. First, where is the Temporal migration right now, and what's the hardest part of it so far? Second, how does the team split ownership of the payout scheduler day to day, and where would I fit in? Third, what does success look like for this role in the first six months?
+>
+> *Summary chip:* three questions on team and role
+
 ---
 
 #### DJOB-020 — changing_jobs
@@ -9694,6 +11004,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What I'd say is that the reorg changed how design decisions get made, and that I don't feel like my input matters there anymore. That's about the setup, not about anyone being difficult.
 
+**fix9** — edited after streaming
+
+> Fair enough. What I'd say is that the reorg changed how design decisions get made on my team, and that's a big part of why I'm looking.
+
+**fix10**
+
+> The reorg changed how design decisions get made on my team, and I found I had less room to contribute than before. What I want is a place where I can own technical direction again, which is why I'm looking.
+>
+> *Summary chip:* reorg shifted ownership, want it back
+
 ---
 
 #### DJOB-021 — follow_up_challenge
@@ -9755,6 +11075,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > My production experience is on **ECS**, with **Terraform**, **Docker**, and **Datadog**, plus **on-call and runbooks**. What does your Kubernetes footprint look like?
+
+**fix9** — edited after streaming
+
+> My production container work has been on **ECS**, with **Terraform** and **Docker**, plus **on-call and runbooks** for those services. What does your platform team's on-call look like?
+
+**fix10** — edited after streaming
+
+> My production experience is on ECS, and I've worked with Docker and Terraform. The concepts carry over, and I'd ramp up on your setup quickly.
 
 ---
 
@@ -9818,6 +11146,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Project Tern was a rewrite of our carrier-settlement service, moving it out of a Rails monolith into three Go services. I was the tech lead, coordinating a working group of four engineers and one QA analyst over seven months.
 
+**fix9** — edited after streaming
+
+> Project Tern was a rewrite of the carrier-settlement service at Larkspur Freight, moving it from a Rails monolith into three Go services. I was the tech lead, coordinating a working group of **four engineers and one QA analyst over seven months**.
+
+**fix10**
+
+> Project Tern was a rewrite of our carrier-settlement service, moving it from a Rails monolith into three Go services. I was the tech lead, so I owned the design and coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch.
+>
+> *Summary chip:* Tern: Rails to Go, led 5 people
+
 ---
 
 #### DJOB-023 — leadership
@@ -9880,6 +11218,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I was the **tech lead** on Project Tern, coordinating a **working group of four engineers and one QA analyst** over **seven months**. How were the engineers on that kind of project set up on your side,  did they report into the tech lead, or into their own managers?
 
+**fix9** — edited after streaming
+
+> I was the tech lead on Project Tern, coordinating a working group of **four engineers and one QA analyst over seven months**. How was the team structured on your side?
+
+**fix10** — edited after streaming
+
+> No, they didn't report to me. I was the tech lead on Project Tern, so I owned the design and coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch.
+
 ---
 
 #### DJOB-024 — conflict
@@ -9941,6 +11287,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > On Project Tern, I was the **tech lead**, coordinating a **working group of four engineers and one QA analyst** over **seven months**, moving the carrier-settlement service out of a Rails monolith into three Go services. The reconciliation job that compares carrier invoices against booked loads is what took monthly settlement mismatches from **312 to 41**,  that's the number I'd point to. How does pushback like that usually get surfaced on your side?
+
+**fix9** — edited after streaming
+
+> I was the tech lead on Project Tern, coordinating a working group of **four engineers and one QA analyst over seven months**. What I can speak to is the structure: the rewrite moved the carrier-settlement service from a Rails monolith into three Go services. How was pushback handled on your side when you've run a rewrite like that?
+
+**fix10** — edited after streaming
+
+> The material I have on Project Tern records the scope and my role: I was the tech lead, I owned the design, and I coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch. It also records the outcome, cutting p95 latency of the rate-quote API from **820 ms to 190 ms** by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID. On the pushback itself, I'll confirm and come back to you.
 
 ---
 
@@ -10006,6 +11360,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* outbox row commits with the status
 
+**fix9**
+
+> The outbox is what makes it safe. The status update and the outbox row go into the same PostgreSQL transaction, so either both commit or neither does. If the service dies halfway, there's no committed status without a matching outbox row, and the relay just picks that row up and publishes it. On the consumer side it's at-least-once, so each consumer records the event_id in a processed_events table inside its own write transaction and skips IDs it's already seen.
+>
+> *Summary chip:* outbox commit, then consumer dedupe
+
+**fix10**
+
+> The outbox is what makes it safe. The status update and the outbox row go into the same PostgreSQL transaction, so either both commit or neither does. If the service dies halfway, there's no committed status without a matching outbox row, and the relay just picks it up on the next poll. On the consumer side, since the relay is at-least-once, each consumer records the event_id in a processed_events table inside its own write transaction and skips IDs it's already seen.
+>
+> *Summary chip:* same transaction, then consumer dedupe
+
 ---
 
 #### DJOB-026 — rapid_short_turn
@@ -10065,6 +11431,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > About 2.3 million status events a day, and at the weekday 7 a.m. Eastern dispatch peak it sustains roughly **610 events per second**. That's the load the relay and the 24 partitions were sized for.
+
+**fix9**
+
+> About 2.3 million status events a day, and at the weekday 7 a.m. Eastern dispatch peak it holds roughly **610 events per second**. That's the sustained peak, not a burst number, so it's what the relay and the consumers actually have to keep up with.
+>
+> *Summary chip:* 2.3M a day, 610/sec at peak
+
+**fix10** — edited after streaming
+
+> About 2.3 million shipment status events a day, and at the weekday 7 a.m. Eastern dispatch peak it sustains roughly **610 events per second**. That's the load the outbox and relay were sized for.
 
 ---
 
@@ -10126,6 +11502,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Tuesday through Thursday in the LoDo office,  thanks for laying that out. What does the day-to-day look like for the team on those in-office days?
 
+**fix9** — edited after streaming
+
+> Tuesday through Thursday in the office, thanks for putting that on the table early. **Relocation assistance is available for candidates moving to the Denver metro area**, so that's helpful to know. What does the start date look like on your side?
+
+**fix10** — edited after streaming
+
+> That's good to know, Tuesday through Thursday in LoDo, with Monday and Friday flexible. I'll confirm on the schedule and come back to you. What start date are you working toward?
+
 ---
 
 #### DJOB-028 — relocation
@@ -10179,6 +11563,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > I'm in Columbus now. On moving to Denver,  I saw relocation assistance is part of the package. What's the timeline you're working with for someone starting in the office?
+
+**fix9** — edited after streaming
+
+> I'm in Columbus now. On moving to Denver, **relocation assistance is available for candidates moving to the Denver metro area**, so what's the timeline you're working with for someone starting in the role?
+
+**fix10** — edited after streaming
+
+> I'm in Columbus now, yes. I'll confirm where I stand on relocating and come back to you. What does the timeline look like on your side, and how does the relocation support work?
 
 ---
 
@@ -10241,6 +11633,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > For the ledger design exercise, the job names a double-entry ledger on PostgreSQL scaling from 400,000 to 1.5 million entries a day, escrow holds, split payouts, refunds and chargebacks, and a nightly settlement batch that has to finish before banks open. What format does the exercise take,  a whiteboard design, or a written design doc?
+
+**fix9**
+
+> For the ledger design exercise, I'd focus on the money path: escrow holds, split payouts, refunds and chargebacks, and how a double-entry ledger stays correct as volume grows. I'd also be ready to talk through reconciliation and audit with Finance and Risk, and how the nightly settlement batch stays reliable.
+>
+> *Summary chip:* prep money path and ledger correctness
+
+**fix10**
+
+> For the ledger design exercise, I'd focus on the core of double-entry: how you'd model accounts and entries in PostgreSQL, keep balances correct under concurrency, and handle idempotency so retries don't double-post. I'd also think through how the design scales as entry volume grows, and how reconciliation and audit fit in. I'd rehearse talking through tradeoffs out loud, since it's a design conversation, not just a schema.
+>
+> *Summary chip:* double-entry modeling, concurrency, idempotency, scale
 
 ---
 
@@ -10305,6 +11709,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > For the ledger design exercise, the pieces the job names are: double-entry on PostgreSQL, escrow holds, split payouts, refunds and chargebacks, and a nightly settlement batch that has to finish before banks open. The schema and the money flow come first, then how it scales from 400,000 to 1.5 million entries a day.
+
+**fix9**
+
+> For the ledger design exercise, I'd focus on the money path: escrow holds, split payouts, refunds and chargebacks, and how a double-entry ledger stays correct as volume grows. I'd also be ready to talk through reconciliation and audit with Finance and Risk.
+>
+> *Summary chip:* prep money path and ledger correctness
+
+**fix10**
+
+> For the ledger design exercise, I'd focus on double-entry modeling in PostgreSQL, keeping balances correct under concurrency, and idempotency so retries don't double-post. I'd also think through how it scales and how reconciliation and audit fit in, and rehearse the tradeoffs out loud.
+>
+> *Summary chip:* double-entry, concurrency, idempotency, scale
 
 ---
 
@@ -10374,6 +11790,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* no-show rate 18.4% to 12.9%
 
+**fix9**
+
+> I built the appointment-reminder service at Quillfeather in Kotlin with Spring Boot. It sent 11 million SMS and email reminders in 2022, and across the 9 pilot clinics the no-show rate fell from 18.4% to 12.9%.
+>
+> *Summary chip:* reminder service cut no-shows 18.4% to 12.9%
+
+**fix10** — edited after streaming
+
+> I built the appointment-reminder service in Kotlin with Spring Boot. It sent about 11 million SMS and email reminders in 2022, and the no-show rate at the pilot clinics fell from 18.4%, the material gives two versions of the end figure and the clinic count, 14.2% at 6 clinics and 12.9% at 9, so that needs confirming before anyone relies on it. So yes, it moved the number.
+
 ---
 
 #### DJOB-032 — follow_up_challenge
@@ -10436,6 +11862,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The copy the recruiter sent you is an older version of my resume, last updated in November 2022. At that point the pilot had six clinics and the no-show rate had come down to 14.2%. It kept improving after that, and by the time I left Quillfeather it was nine clinics at 12.9%, which is what my current resume says. The start date is the same kind of thing: that older copy has June 2021, and my current one has August 2021.
 
+**fix9** — edited after streaming
+
+> The numbers I just gave are the current ones: 11 million reminders in 2022, and the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%. The copy you have is an older version of my resume, last updated in November 2022, so it shows the 6 pilot clinics and 14.2%. The start date is the same story: that version has me starting in June 2021, and the current one has August 2021.
+
+**fix10** — edited after streaming
+
+> The copy the recruiter has is my older resume, last updated in November 2022. It says 14.2% across 6 pilot clinics and a June 2021 start. My current one says 12.9% across 9 clinics, starting August 2021. The material gives both versions of the end figure and the clinic count, so that needs confirming before anyone relies on it.
+
 ---
 
 #### DJOB-033 — changing_jobs
@@ -10494,9 +11928,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > After the acquisition last spring, most of our roadmap moved over to the parent company's stack, and a lot of what I was building on the data platform got shelved. That's where things stand on my side,  what's driving this role for you right now?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > After the acquisition, most of what I was building on the data platform got shelved, and the roadmap shifted to the parent company's stack. That's the shift I've been sitting in. What does the work look like on your side right now?
+
+**fix10** — edited after streaming
+
+> Honestly, the work I was doing got shelved after the acquisition, so I've had less to build and less to own. I'll come back to you on the rest.
 
 ---
 
@@ -10554,9 +11992,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What I can speak to is what happened on my side: after the acquisition last spring, most of our roadmap moved over to the parent company's stack, and a lot of what I was building on the data platform got shelved. What's driving this role for you right now?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That's fair to ask. What I can point to is the shift I've been sitting in, after the acquisition, most of what I was building on the data platform got shelved, and the roadmap moved to the parent company's stack. What does the work look like on your side right now?
+
+**fix10**
+
+> Money's part of it, sure, but it's not the driver. What I've missed most is having something of my own to build and own, and that's what I'm looking for next. I'd rather talk about the work than the number.
+>
+> *Summary chip:* not money, ownership and building
 
 ---
 
@@ -10620,6 +12064,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'm currently on contract at Hollowbrook Data, working on Terraform and AWS. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE. There, I built Grafana SLO dashboards for the 12 tier-1 services, and pages fell from about 260 a month to 70.
 
+**fix9** — edited after streaming
+
+> I'm currently on contract at Hollowbrook Data, where I work on Terraform and cloud cost. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE, and I cut alert pages from about 260 a month down to 70 with better SLO alerting.
+
+**fix10** — edited after streaming
+
+> I'm an infrastructure engineer, currently on contract at Hollowbrook Data in Seattle, where I work on Terraform and cloud cost. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE, where I built SLO dashboards that cut pages from about 260 a month to 70.
+
 ---
 
 #### DJOB-036 — employment_gap
@@ -10675,6 +12127,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > My Cindervale role ran from July 2025 to January 2026, and I started at Hollowbrook in June 2026. What does the timeline look like on your side?
+
+**fix9** — edited after streaming
+
+> I was at Cindervale through January, and I started at Hollowbrook in June. What would you like to know about that gap?
+
+**fix10** — edited after streaming
+
+> Cindervale wrapped up in January, and I started at Hollowbrook in June. In between, I kept my hands on the tooling, the homelab, and the Terraform and Kubernetes work.
 
 ---
 
@@ -10736,6 +12196,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The role at Cindervale was a fixed-term contract that ran July 2025 through January 2026, so it ended when the term wrapped up. I'd been shadowing on-call from August and took primary from November. What does the timeline look like on your side?
 
+**fix9**
+
+> I was at Cindervale on a contract that ran through January, and it wrapped up at the end of its term. I'd been on the SRE team there supporting 140 microservices on GKE, and when the contract ended I started looking for the next thing, which is how I landed at Hollowbrook.
+>
+> *Summary chip:* contract role ended, moved on
+
+**fix10** — edited after streaming
+
+> Cindervale wrapped up in January. It was a good run, I was on a five-person SRE team supporting 140 microservices on GKE. From there I moved toward infrastructure and cloud cost work, which is what took me to Hollowbrook.
+
 ---
 
 #### DJOB-038 — work_arrangement
@@ -10789,6 +12259,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > Twice a year to Frankfurt,  what do the trips look like in practice, how much notice would I get, and is the data center work planned maintenance or more reactive? What does a typical trip involve?
+
+**fix9** — edited after streaming
+
+> Twice a year, noted. What does the Frankfurt trip usually involve, is it mostly racking and hardware work, or more of a planning visit?
+
+**fix10** — edited after streaming
+
+> Twice a year to Frankfurt sounds manageable. I'd just want to understand what the trips look like in practice, how much notice I'd get, and whether they line up with a planned maintenance window or something more reactive. What does a typical trip involve?
 
 ---
 
@@ -10848,6 +12326,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What timeline are you working toward for this role, and what start date would work best on your side?
 
+**fix9** — edited after streaming
+
+> That's something I'd want to get right rather than guess at. What start date are you working toward?
+
+**fix10** — edited after streaming
+
+> I'd want to give my current team proper notice and hand things off cleanly, so I'd be looking at a few weeks rather than days. What start date are you working toward?
+
 ---
 
 #### DJOB-040 — salary
@@ -10904,6 +12390,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'd rather hear where your range sits for this level first, since the scope here is broader than a standard SRE role. If it helps, I'm flexible on the split between base and equity, and I'm optimizing for the right fit more than the last dollar. What band are you working with?
 
+**fix9** — edited after streaming
+
+> What range have you set for this level? If you can share the band, that gives me something concrete to work from. What's budgeted for this level?
+
+**fix10**
+
+> I'd rather hear where you've slotted this role before I put a number out, since the range usually depends on the level and the scope. What band are you working with for this position?
+
 ---
 
 ### Recruiting
@@ -10958,9 +12452,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Sure,  go ahead and start wherever makes sense to you, and I'll follow along.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Sure, go ahead and start wherever makes sense to you.
+
+**fix10**
+
+> Of course, please go ahead. Walk me through your background, and I'll jump in with questions as we go.
 
 ---
 
@@ -11016,9 +12514,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Ten years across payments and logistics is a solid base. Let's dig into the current role. You mentioned ledger and settlement services in Go. Walk me through the most complex piece of that system you owned end to end, and what specifically was yours versus the team's.
 
-**fix9 (candidate)**
+**fix9**
 
 > Ten years across payments and logistics is a solid base for this. Let's start with the scale piece, since that's what you're after. At the freight company, what's the volume those ledger and settlement services handle, and what part of that system do you own yourself?
+
+**fix10**
+
+> Ten years across payments and logistics is a solid base. Let's dig into the current role. You mentioned ledger and settlement services in Go. Walk me through the piece you owned yourself, and what scale those services were handling.
 
 ---
 
@@ -11072,9 +12574,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Start wherever you think it's strongest, and I'll steer from there. What I'd most like to hear is the piece of work you owned end to end, and what your specific contribution was versus the team's.
 
-**fix9 (candidate)**
+**fix9**
 
 > Let's start with the work you're proudest of. Pick one project from your resume and walk me through what it was, what your specific role was, and what the outcome looked like.
+
+**fix10**
+
+> Start wherever you think it's strongest, and I'll steer from there. What I'd most like to hear is the piece of work you owned end to end, and what your specific part in it was.
 
 ---
 
@@ -11166,13 +12672,23 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 2. **The management claim**: "You mentioned managing a team of six at Harborline. What did that look like day to day?"
 > 3. **The Sep 2022 to Feb 2023 gap**: "What were you doing between Quillpay and Harborline?
 
-**fix9 (candidate)**
+**fix9**
 
 > 1. **Ownership of the ledger migration**: "You co-led the Rails-to-Go migration with one other senior engineer. Walk me through what you personally owned versus what your partner drove."
 > 2. **The management claim**: "On the screen you mentioned managing a team of six at Harborline. The resume lists a team of four and an IC title. Can you clarify what that looked like?"
 > 3. **The employment gap**: "There's a stretch between Quillpay ending in August 2022 and Harborline starting in March 2023. What were you doing during that time?"
 >
 > *Summary chip:* ownership, management claim, gap
+
+**fix10**
+
+> Three things to press on:
+> 
+> 1. The ledger migration: "You co-led it with one other senior engineer. Walk me through the piece that was yours alone, start to finish."
+> 2. The management claim: "On the screen you said you managed a team of six. Help me square that with the team of four on your resume."
+> 3. The gap: "What were you doing between Quillpay and Harborline?"
+>
+> *Summary chip:* ownership, management claim, employment gap
 
 ---
 
@@ -11228,9 +12744,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The numbers don't line up with the file: the resume says p99 went from **840ms to 190ms** after the ledger migration, and that migration was co-led with one other senior engineer. So the "two seconds to under a hundred milliseconds, solo" claim is a contradiction worth probing directly. Ask: "Walk me through how you measured that p99, and what part of the migration was yours alone versus shared with the other senior engineer?
 
-**fix9 (candidate)**
+**fix9**
 
 > Your résumé has the p99 going from 840 milliseconds to 190, and it says you co-led that migration with one other senior engineer. Walk me through what you personally owned on it, and where the two seconds and the solo claim come from.
+
+**fix10**
+
+> Your résumé has the p99 going from 840 milliseconds to 190, and it says you co-led that migration with one other senior engineer. Walk me through what you personally owned on it, and where the two seconds to under a hundred milliseconds figure comes from.
 
 ---
 
@@ -11304,9 +12824,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* Kafka streaming, consumer groups, Avro schemas
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Kafka: streams settlement events at roughly 40k events/minute at peak. Set up consumer groups for the reconciliation service and wrote the dead-letter handling. Did not do cluster ops, that's a separate platform team. Schema: Avro with a schema registry, and pushed for backward compatibility checks in CI.
+
+**fix10**
+
+> Kafka experience is real and hands-on, but scoped: they stream settlement events at roughly forty thousand events a minute at peak, built the consumer groups for the reconciliation service, and wrote the dead-letter handling. They're explicit that cluster ops sit with a separate platform team, so probe depth there. On schema, they use Avro with a schema registry and drove backward compatibility checks in CI.
+>
+> *Summary chip:* Kafka consumers, DLQ, Avro; no cluster ops
 
 ---
 
@@ -11360,9 +12886,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What kind of freelance work was it, and who were the clients? And for the time off itself, how long was the gap, and what were you doing that kept you close to the field?
 
-**fix9 (candidate)**
+**fix9**
 
 > That gap makes sense, and freelance work in that stretch is worth hearing about. What kind of freelance projects were those, and what were you actually responsible for on them?
+
+**fix10**
+
+> What kind of freelance work was it, and who were the clients? I'd like to hear what you actually built or delivered there, and how you kept your skills current during that stretch.
 
 ---
 
@@ -11432,9 +12962,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* ask for the timeline, not the gap
 
-**fix9 (candidate)**
+**fix9**
 
 > I'd frame it as curiosity about the timeline, not a challenge. Something like: "I noticed a gap between these two roles. Can you walk me through what was happening then?" Then stay quiet and let him answer. If he's vague, ask one follow-up about what he was doing during that time, not why he left.
+
+**fix10**
+
+> Ask it the same way you'd ask about any other stretch of time, and keep the framing neutral: "Walk me through the last few years for me, starting from your most recent role." Then let him narrate. If the gap comes up naturally, ask what he was doing during that period and what brought him back to looking now. If it doesn't, one plain question works: "What was happening between those two roles?" No apology, no preamble, no "I hope you don't mind me asking." Tone does the work, not wording.
+>
+> *Summary chip:* neutral framing, let him narrate
 
 ---
 
@@ -11490,7 +13026,11 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's a strong example, and the part I want to dig into is the ownership. You said you wrote up the two options and owned the daily manual check. When the thin version shipped, who was actually doing that reconciliation each day, and what happened on a day it didn't get done?
 
-**fix9 (candidate)**
+**fix9**
+
+> That's a strong example, and the part I want to dig into is the ownership. You said you wrote up the two options and owned the daily manual check. When the thin version shipped, who was actually doing that reconciliation each day, and what happened on a day it didn't get done?
+
+**fix10**
 
 > That's a strong example, and the part I want to dig into is the ownership. You said you wrote up the two options and owned the daily manual check. When the thin version shipped, who was actually doing that reconciliation each day, and what happened on a day it didn't get done?
 
@@ -11556,9 +13096,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > Then listen for whether they raised it directly with the manager, what evidence they brought, and whether they could commit once the call was made.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Tell me about a time you disagreed with a manager's decision. What was the decision, what did you do about it, and how did it end up?
+
+**fix10**
+
+> "Tell me about a time you disagreed with a manager's decision. What did you do, and how did it end up?"
+> 
+> Then listen for whether they raised it directly with the manager, what evidence they brought, and what they did once the call was made.
 
 ---
 
@@ -11614,9 +13160,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's a solid pipeline. Walk me through one of those read models end to end: what the consumer actually did with the Kafka stream, and how you handled a schema change or a replay when something needed to be rebuilt.
 
-**fix9 (candidate)**
+**fix9**
 
 > That's a solid pipeline description. Let me pull on the part that's yours: of the CDC setup, the Kafka topics, and the read models, which piece did you build yourself versus work on with the team?
+
+**fix10**
+
+> That's a solid pipeline description. Let me pull on the part you owned: which piece of that did you build yourself, the CDC setup, the Kafka topics, or the read models?
 
 ---
 
@@ -11672,9 +13222,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > CDC usually means **Change Data Capture**: watching a database's transaction log and streaming every insert, update, and delete as an event, so downstream systems stay in sync without full re-reads. Tools like Debezium and Kafka Connect are common for it.
 
-**fix9 (candidate)**
+**fix9**
 
 > CDC usually means **Change Data Capture**: reading a database's write-ahead or binlog stream and turning each insert, update, and delete into an event other systems consume, so downstream stores stay in sync without full re-scans.
+
+**fix10**
+
+> CDC usually means **Change Data Capture**: watching a database's transaction log and streaming every insert, update, and delete as an event, so downstream systems stay in sync without full re-reads. Tools like Debezium and Kafka Connect are common for it.
 
 ---
 
@@ -11734,9 +13288,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The base band for this role is **$168,000 to $204,000**. The bonus target is 10% of base, and equity is an RSU grant that the Compensation team sizes at offer stage, so I can't quote that number yet.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > The base band for this role is **$168,000 to $204,000**. That's the full range. The bonus target is 10% of base, and there's an RSU grant on top, though the size of that gets set at offer stage so I can't quote a number on it yet.
+
+**fix10**
+
+> The base band for this role is **$168,000 to $204,000**. The annual bonus target is 10% of base, and equity is an RSU grant sized at offer stage, so I can't quote a number on that yet.
 
 ---
 
@@ -11790,9 +13348,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Thanks for laying that out. Before we go further, can you walk me through what's driving the three weeks, and whether that date is firm or could shift?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Thanks for flagging the notice period up front. Let me confirm the exact start date with the team and come back to you with it in writing.
+
+**fix10** — edited after streaming
+
+> Let's plan around mid-November for now. Before we go further, can you walk me through whether that date is firm or could shift?
 
 ---
 
@@ -11846,9 +13408,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > **Mornings work best**,  noted. What morning time suits you, and shall I send the invite for that slot?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Mornings work well. What times suit you?
+
+**fix10** — edited after streaming
+
+> Mornings work well. Let me get a couple of times on the calendar and send you an invite.
 
 ---
 
@@ -11902,9 +13468,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Not a dealbreaker at all. Kotlin is a nice-to-have here, not a requirement, and the Kotlin service is actually being retired, so the work is moving onto the Go platform. What I'd want to dig into is your Go depth and whether you've shipped something that handles money, since that's the core of the role.
 
-**fix9 (candidate)**
+**fix9**
 
 > Not a dealbreaker at all. Kotlin is a nice-to-have here, not a requirement, and the Kotlin service is actually being retired, so the work is moving onto Go. What I'd want to dig into is your Go depth and whether you've shipped something that handles money, since that's the core of this role.
+
+**fix10**
+
+> Not a dealbreaker at all. Kotlin is a nice-to-have here, and the service that uses it is being retired, so the work is really Go. What I'd want to hear about is your Go depth and the money-handling side, so tell me about a system you've shipped that moved payments, billing, ledgers or payouts.
 
 ---
 
@@ -11964,9 +13534,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's not a problem for this role. The hiring manager wants someone who can grow into running the team, and the role is 70% hands-on coding with no direct reports for at least the first year. So the question is really how current your coding is. What have you built or shipped yourself in the last year?
 
-**fix9 (candidate)**
+**fix9**
 
 > The role's actually built for that. The hiring manager wants someone who can grow into running the team, and it's 70% hands-on coding with no direct reports for at least the first year. So the question is really how current your coding is. What have you built or shipped yourself in the last year?
+
+**fix10**
+
+> That's not a problem for this role. The hiring manager wants someone who can grow into running the team, and it's about 70% hands-on coding with no direct reports for at least the first year, so the management background is a plus, not a gap. What I'd want to hear is how recently you've been close to the code and how you'd ramp back into it.
 
 ---
 
@@ -12042,9 +13616,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* 16 weeks paid, after 90 days
 
-**fix9 (candidate)**
+**fix9**
 
 > Sixteen weeks fully paid for all parents, available after 90 days of employment. That's the policy as written in the role brief, so you can share it directly. If she asks about eligibility timing against a specific due date, that's worth confirming with HR rather than answering off the cuff.
+>
+> *Summary chip:* 16 weeks paid, after 90 days
+
+**fix10**
+
+> Sixteen weeks fully paid for all parents, available after 90 days of employment. That's the policy as written in the role brief, so you can share it as-is. If she asks about anything beyond that, like how it interacts with state leave or her specific start date, tell her you'll confirm with the benefits team and follow up.
 >
 > *Summary chip:* 16 weeks paid, after 90 days
 
@@ -12102,9 +13682,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I can't speak to rumors about layoffs, and I wouldn't want to pass along something I can't verify. What I can tell you is what's true on our side, and I'll get you a clear answer on the rest. Is there a specific concern driving the question, like team stability or the role itself?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I can't confirm or deny rumors like that, and I wouldn't want to pass along something I can't verify. What I can do is answer what's on your mind directly, if you have specific concerns, tell me what they are and I'll address them as best I can.
+
+**fix10** — edited after streaming
+
+> I can't speak to rumors about layoffs, and I wouldn't want to pass along something I can't verify. If you have specific concerns, ask me directly and I'll look into it.
 
 ---
 
@@ -12158,9 +13742,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'll check on sponsorship and transfers for this role and get you a clear answer. In the meantime, can you walk me through what you're doing in your current role?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Thanks for flagging that. Can you tell me a bit more about your current situation and what you're looking for in a transfer?
+
+**fix10** — edited after streaming
+
+> I'll confirm the specifics of how we handle it and get back to you with the details.
 
 ---
 
@@ -12214,9 +13802,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'll be honest that I don't have the specifics on how on-call is structured for this team or how the pay works. What I can do is get you the exact rotation and compensation details from the hiring manager and follow up with you directly. In the meantime, is on-call something that matters a lot to you in weighing this role?
 
-**fix9 (candidate)**
+**fix9**
 
 > I'll get you the specifics on how on-call works here and whether there's extra pay for it, and follow up with the details. In the meantime, what's your experience been with on-call rotations?
+
+**fix10**
+
+> I'll get you the specifics on how on-call works here and whether there's extra pay for it. That's not something I want to guess at, so let me confirm the rotation and the compensation details and follow up with you.
 
 ---
 
@@ -12270,9 +13862,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > My background is on the recruiting side. On the technical side, I'd want the engineers on the team in the room when a call needs real depth. What's the part of the role you'd want me to know best?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I work on the recruiting side. What I'd want to get into with you today is how you actually build and ship.
+
+**fix10** — edited after streaming
+
+> I'll give you the full picture of my background in a moment. What I can say now is that I work closely with the roles I hire for, so I can talk about the work itself, not just the keywords. Happy to get into my background whenever you're ready.
 
 ---
 
@@ -12326,9 +13922,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I can walk you through how I generally approach recruiting engineers and what I focus on at each stage. If you tell me which part matters most to you, I'll go into that.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I've been recruiting engineers for a while now. What I focus on is getting past the résumé and understanding how someone thinks through problems. Happy to go into more detail on the specific teams I've hired for.
+
+**fix10**
+
+> I've been recruiting engineers for a while now, across a range of teams and levels, and I still enjoy the puzzle of matching the right person to the right role. Happy to get into specifics if that's useful.
 
 ---
 
@@ -12382,9 +13982,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's a clean pattern. Walk me through the failure mode you were defending against: what happened on a retry that made you reach for the UUID key instead of, say, a database transaction?
 
-**fix9 (candidate)**
+**fix9**
 
 > That's a clean idempotency pattern. Walk me through the failure mode you were designing against: what actually happened on a retry before the unique constraint was in place, and how did you detect the duplicate?
+
+**fix10**
+
+> That's a clean idempotency pattern. Walk me through the failure mode you were actually defending against: what happened on a retry before the unique constraint was in place, and how did you detect the duplicate payout?
 
 ---
 
@@ -12444,9 +14048,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's a clean three-part fix. Which of those did you design and ship yourself, and how did you land on the per-carrier breaker rather than a global one?
 
-**fix9 (candidate)**
+**fix9**
 
 > That's a clean three-part fix. Walk me through the circuit breaker specifically. What state did it trip on, and how did you decide the threshold before you'd seen a real carrier outage?
+
+**fix10**
+
+> That's a clean three-part fix. Walk me through how you landed on the circuit breaker specifically. What did you try first, and what told you the per-carrier boundary was the right place to cut?
 
 ---
 
@@ -12502,9 +14110,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's fair, most days don't have a blow-up. Think smaller: a time you and someone on the floor disagreed about how a job should be done, or a call you had to make that someone didn't like. What happened, and how did you handle it?
 
-**fix9 (candidate)**
+**fix9**
 
 > That's fair, most days don't have a blow-up. Let me narrow it: think of a time someone on your crew wasn't meeting expectations, or you and another supervisor disagreed on how to handle something. What did you do, and how did it land?
+
+**fix10**
+
+> That's fair, most days don't feel like conflict. Think about a time you had to correct someone on the floor, say a safety rule or a pace issue, and they pushed back. What did you do in that moment?
 
 ---
 
@@ -12558,9 +14170,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's helpful, thanks. Let me get specific about one thing: walk me through a decision you made on that work that you'd make differently now, and what drove the change.
 
-**fix9 (candidate)**
+**fix9**
 
 > That's helpful, thanks. Let me get more specific about one thing you mentioned. Walk me through a decision you made on that work where you had to choose between two options, and tell me what tipped it for you.
+
+**fix10**
+
+> That's helpful, thanks. Let me get specific about one thing you touched on. Walk me through a decision you made on that work where you had a real alternative, and tell me what you weighed and how it turned out.
 
 ---
 
@@ -12652,11 +14268,19 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > Ask next: "If you'd had to decide alone on that call, what would you have done differently?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Two strengths: she named her own contribution precisely, the idempotency check keyed on the carrier invoice ID and the backfill script, and she verified it against the bank file for the three affected days, matching to the cent. One concern: her first answer was team-framed, and the specifics came when you asked what her part was.
 > 
 > Ask: "You added the idempotency check and wrote the backfill. Walk me through the decision on the key, why the carrier invoice ID."
+
+**fix10**
+
+> Two strengths: she moved from "team effort" to specific ownership when pressed, naming the idempotency check keyed on the carrier invoice ID and the backfill that reversed 312 duplicates; and she verified it by reconciling against the bank file for the three affected days, matching to the cent. The concern is that her first pass was vague and credit-deflecting, so you had to pull the detail out of her. Push to onsite, but probe whether she can lead with specifics unprompted.
+> 
+> Next probe: "If you were running that incident from the start, what would you have done differently in the first hour?"
+>
+> *Summary chip:* strong ownership once pressed, verify depth
 
 ---
 
@@ -12712,9 +14336,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What I'd want to pin down is whether the candidate owned the outcome or just contributed to it. Ask: "Walk me through the part of that you personally drove, and what the result looked like once it was done." Then follow the specifics: who else was involved, what decisions were theirs, and what they'd do differently.
 
-**fix9 (candidate)**
+**fix9**
 
 > If the last answer stayed at "we" and "the team," the next move is to pin down what was actually theirs. Ask: "Walk me through the part you personally owned there. What did you decide, and what happened because of it?" Then let them finish before you step in.
+
+**fix10**
+
+> The strongest follow-up on ownership is to make them name their own contribution versus the team's. Try: "Walk me through what you personally built there, and what someone else on the team owned." Then push on decisions: "What was a call you made on that, and what happened because of it?" If the answer stays vague or shifts to "we," that's a real signal about how much of the work was theirs.
 
 ---
 
@@ -12770,9 +14398,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Happy to walk you through the team. What I'd want to get right is the exact headcount, the senior-to-junior mix, and how many are in Denver versus elsewhere,  can you tell me which of those matters most to you?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Happy to walk you through it. Before I do, can you tell me how the team is structured today, how many engineers, the senior-to-junior mix, and whether everyone's in Denver or spread out?
+
+**fix10** — edited after streaming
+
+> I'll confirm the exact numbers for you. Let me get you the current headcount, the senior to junior split, and where everyone is based so I'm not guessing.
 
 ---
 
@@ -12828,9 +14460,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'll confirm the exact reporting line and get back to you with the title and who it is. What I can tell you is that this role sits within the engineering team, and I want to give you the accurate structure rather than guess.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Happy to get you the accurate reporting line. Can I ask who you currently report to, so I can map it to how we're set up?
+
+**fix10**
+
+> I'll confirm that for you as well. Let me find out who this role reports into and get you the exact reporting line, so I'm not guessing.
 
 ---
 
@@ -12884,9 +14520,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'll confirm why the role is open and get back to you with the accurate picture, along with the reporting line.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > What I can tell you is what the role is scoped to do and what the team needs. Let me confirm the history with the hiring manager and follow up with you directly.
+
+**fix10**
+
+> I'll confirm that for you as well. Let me find out why the role is open and whether it's a backfill or a new position, so I can give you the accurate reason rather than guessing.
 
 ---
 
@@ -12940,9 +14580,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Thin answer: no specifics on who he had to convince, what he actually did, or how he knew it worked. Ask: "Walk me through one conversation from that. Who was the strongest voice for the queue, and what did you say to them?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Thin answer: the story stops at "talked to people about it" and "we went a different way." Ask: "What did you actually do to change their minds, and how did you know it had worked?"
+
+**fix10**
+
+> Thin answer: no specifics on who he had to convince, what he actually did, or how he knew it worked. Ask: "What specifically did you say or do to change their minds, and who were the key people you had to win over?"
 
 ---
 
@@ -12996,9 +14640,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Ask: "Walk me through one conversation from that. Who was the strongest voice for the queue, and what did you actually say to them?" Then push on the outcome: "You said it worked out. What changed, and how did you know the decision had actually moved?
 
-**fix9 (candidate)**
+**fix9**
 
 > Still thin: "talked to people about it" and "we went a different way" skip the actual influence. Ask: "Walk me through one specific conversation. Who did you talk to, what did you say, and what changed in their position afterward?"
+
+**fix10**
+
+> Still thin: he named no specific person, no concrete action, and "it worked out" is his own verdict, not evidence. Ask: "Who were the two or three people you actually had to win over, and what did you say to each of them that moved them?" Then follow with: "How did you know it worked out, what changed that you could point to?"
 
 ---
 
@@ -13058,9 +14706,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Happy to talk about it. What range did you have in mind for the level and location?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > What I can do is get the approved band from the hiring team and come back to you with it directly. If you tell me your expectations now, I can also flag them early so we're not wasting each other's time.
+
+**fix10** — edited after streaming
+
+> What I can do is get the approved band for this role from the hiring team and come back to you with it. If you tell me your target, I can also check it against the band before we go further.
 
 ---
 
@@ -13120,9 +14772,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'd rather not throw out a number without the level and the location. What range are you working with on your side?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I can't give you a ballpark figure right now. What I can do is take your number to the hiring team and come back with the real range. What number works for you?
+
+**fix10** — edited after streaming
+
+> What I can do is take your target to the hiring team and come back with the approved band. If you tell me your target, I can also check it against the band before we go further.
 
 ---
 
@@ -13176,9 +14832,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Your résumé lists you as a senior engineer on a team of four, and the screen flagged that you described managing a team of six. Can you walk me through what leading the platform team actually looked like day to day, and who reported to you?
 
-**fix9 (candidate)**
+**fix9**
 
 > Your résumé lists you as a senior engineer on a team of four, and the screen notes said "I managed a team of six." Help me square those two. What did leading the platform team actually look like day to day, and were you managing people or leading the workstream?
+
+**fix10**
+
+> You said you've been leading the platform team. Your résumé shows the title Senior Software Engineer and a team of four. Help me understand what leading the team looked like day to day, and whether you had people reporting to you.
 
 ---
 
@@ -13232,9 +14892,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's the part I want to pin down. Your résumé shows Quillpay ending in August 2022 and Harborline starting in March 2023, so there's a stretch in between that isn't on there. What were you doing during that time?
 
-**fix9 (candidate)**
+**fix9**
 
 > That's the Harborline-to-Quillpay jump, but I want to stay on the management question first. Your résumé shows you as a senior engineer on a team of four, and the screen notes say you managed six. Walk me through what leading the platform team looked like day to day, and whether you were managing people or leading the workstream.
+
+**fix10**
+
+> That's a good segue, but I want to come back to the Harborline piece first. Your résumé shows Quillpay ending in August 2022 and Harborline starting in March 2023, so help me understand what was happening in those months in between.
 
 ---
 
@@ -13294,11 +14958,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > No, don't say yes. The notes have it unresolved: the role is remote-friendly and Hollis said he'd make an exception for the right person, but he later said he wants people in the office Tuesday and Thursday with no exceptions, and Maren flagged that she wasn't sure where it landed. So say: "The role is remote-friendly, and I want to give you an accurate answer rather than guess. Let me confirm the current policy with the hiring manager and come back to you.
 
-**fix9 (candidate)**
+**fix9**
 
 > No, don't say yes. The notes have two conflicting positions: Hollis said fully remote was fine for the right person, then later said he wants people in the office Tuesday and Thursday with no exceptions. The handoff itself says she's not sure where it landed.
 > 
 > So say: "The role is remote-friendly, and fully remote has been on the table for the right person. I want to confirm the current expectation on in-office days before I give you a firm answer, and I'll come back to you on it."
+
+**fix10**
+
+> No, don't say yes. The notes conflict on this: the role is described as remote-friendly with full remote possible for strong candidates, but later Hollis asked for people in the office Tuesday and Thursday with no exceptions, and the note says it's unclear where that landed. So the honest answer is that the role is remote-friendly and you'll confirm the current in-office expectation with the hiring manager before saying anything definitive.
+>
+> *Summary chip:* remote-friendly, office days unconfirmed
 
 ---
 
@@ -13368,11 +15038,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* 195k top of band, approval unconfirmed
 
-**fix9 (candidate)**
+**fix9**
 
 > Yes, you can say 195, with one caveat. The handoff has the top of band updated to $195,000 per Hollis, but Maren flagged she isn't sure it cleared Comp yet. So say: "The top of the band is 195, and I want to confirm it's fully approved on our side before I put it in writing. Can I come back to you on that?"
 >
 > *Summary chip:* 195 is top of band, approval unconfirmed
+
+**fix10** — edited after streaming
+
+> The 8/12 update says the top of band is now **$195,000**, and Maren wasn't sure it had cleared Comp yet. So I'd say the band goes up to 195 and that you'll confirm it's fully approved before anything goes in writing.
 
 ---
 
@@ -13444,9 +15118,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Before I go further, what does their day actually look like right now? That tells me which part of this saves you the most time.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Happy to walk you through it. What does a typical morning look like for your dispatchers right now, what are they looking at, and where does it get messy? That'll tell me which part to show you first.
+
+**fix10** — edited after streaming
+
+> Day to day, I don't want to describe your setup in the abstract. What does a normal morning look like for them right now, and where does it get messy?
 
 ---
 
@@ -13502,9 +15180,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Before I put a number on it, it depends on how many people would be using it and which parts you'd need. Give me those two and I'll get you exact pricing.
 
-**fix9 (candidate)**
+**fix9**
 
 > Before I put a number on it, it depends on how many people would be using it and which parts matter most to you. Let me confirm the exact pricing for your setup and walk you through it.
+
+**fix10**
+
+> Before I put a number on it, it depends on how many people would be using it and which parts matter most to you. Give me those two things and I'll get you an exact figure.
 
 ---
 
@@ -13564,11 +15246,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What matters most for the call center piece,  is it the call logging and dispositions syncing back, or the scheduling side too?
 
-**fix9 (candidate)**
+**fix9**
 
 > I'll confirm how the ServiceTitan integration works on our side, since I don't want to guess at the specifics. What I can tell you is that keeping ServiceTitan for the call center is a common setup, and we'd want the two systems to share data rather than replace anything. Which ServiceTitan workflows matter most to you, so I can check those first?
 >
 > *Summary chip:* confirm ServiceTitan integration, ask which workflows
+
+**fix10** — edited after streaming
+
+> I'll check on the ServiceTitan integration and come back to you. What matters most for the call center piece, is it the scheduling and dispatch data you'd want flowing through, or the customer history too?
 
 ---
 
@@ -13622,9 +15308,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I want to make sure the order form matches exactly what we agreed, so let me confirm the onboarding fee line and come back to you. In the meantime, what's the timing pressure on finance's side?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I want to make sure I get this right, so let me check what was agreed on the last call and what I can put in writing. Can you hold the order form until I confirm, and I'll come back to you with exactly what I can include?
+
+**fix10** — edited after streaming
+
+> I can't put that in the order form as agreed. Let me check on what we can do and come back to you today. In the meantime, what's driving the timing on getting this to finance?
 
 ---
 
@@ -13682,9 +15372,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Happy to get into that. What's the challenge that brought you to this call?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That's a fair question, and I'd rather hear your side first. What's prompting you to look at this now?
+
+**fix10** — edited after streaming
+
+> That's a fair place to start, and I'd rather hear your side first. What's prompting you to look at this now?
 
 ---
 
@@ -13740,9 +15434,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Happy to get into that. Give me the two or three things that matter most in your operation, whether that's dispatch, maintenance contracts, or seasonal demand, and I'll show you how we'd approach them.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Tell me how your operation runs today, how calls and scheduling get handled, and where it breaks down, and I'll walk you through what we'd do with that.
+
+**fix10** — edited after streaming
+
+> HVAC is a space I'd rather show than claim. What matters most is how your jobs actually run, so tell me where the friction is: scheduling, dispatch, follow-up on quotes, or getting paid. Which of those costs you the most right now?
 
 ---
 
@@ -13796,9 +15494,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Thanks for walking me through all that. A couple of things I'd like to understand better: what does success look like for you on this in the first six months, and who else weighs in on a decision like this? And what's your timeline looking like?
 
-**fix9 (candidate)**
+**fix9**
 
 > Thanks for walking me through all that. Two things I'd like to understand better: what does success look like for you in the first six months, and who else weighs in on a decision like this?
+
+**fix10**
+
+> Thanks for walking me through all that. A couple of things I'd like to understand better: what does success look like for you in the first six months, and who else weighs in on a decision like this? Also, what's your timeline for getting something in place?
 
 ---
 
@@ -13854,9 +15556,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Let me take all three back and confirm what's possible on the price lock, the cancellation terms and the net sixty. On that last one, tell me what's driving it,  is it your own payment cycle?
 
-**fix9 (candidate)**
+**fix9**
 
 > I can't commit to all three on the spot, and I'd rather be straight with you than say yes and walk it back. Let me take the three-year lock, the thirty-day out, and net sixty to the people who own terms, and come back to you before Friday with exactly what I can do. What's driving the net sixty, cash flow or your own billing cycle?
+
+**fix10**
+
+> I can't commit to all three on the spot, and I'd rather be straight with you than say yes and walk it back. Let me take the three-year lock, the thirty-day out, and net sixty to the people who own terms, and come back to you before Friday with exactly what I can do. Which of the three matters most if I can only move on two?
 
 ---
 
@@ -13918,9 +15624,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > Tell me your field and one real win, and I'll tighten it into two clean lines.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I'd keep it to two lines: what you do, and one thing that shows how you work. For example: "Here's the work I focus on, and the kind of problem I'm best at." Then hand it back with a question about the role.
+
+**fix10** — edited after streaming
+
+> I'd keep it to two lines: what I do now and the kind of problems I work on, then one concrete result or strength that fits what they're hiring for. The shape is: "I'm a [your role] focused on [your area], and most recently I've been working on [one real thing you did]." Want me to tighten it once you tell me your role and one highlight?
 
 ---
 
@@ -13978,11 +15688,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* ROI depends on where their time goes
 
-**fix9 (candidate)**
+**fix9**
 
 > For a 40-person HVAC company, the ROI usually comes down to how much time your techs and office staff spend on scheduling, dispatch, and follow-up, so before I put a number on it, how many people would be using it day to day?
 >
 > *Summary chip:* ROI depends on their time sinks
+
+**fix10**
+
+> For a 40-person HVAC company, the ROI usually comes down to how much time your techs and office staff spend on scheduling, dispatch, and follow-up, so before I put a number on it, how many people would be using it day to day?
+>
+> *Summary chip:* ROI depends on who uses it
 
 ---
 
@@ -14048,7 +15764,11 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Silence after a price usually means they're doing math, not rejecting it. So don't fill it with a discount. Try: "Take a second with that. What number were you expecting, or what would need to be true for this to make sense?" That gets you their budget and their criteria, and you can work from there.
 
-**fix9 (candidate)**
+**fix9**
+
+> Silence after a price usually means they're doing the math, not rejecting it. So don't fill it with a discount. Try: "Take a second with that. What number were you expecting, or what would make this an easy yes?" That gets their real constraint on the table without you moving first.
+
+**fix10**
 
 > Silence after a price usually means they're doing the math, not rejecting it. So don't fill it with a discount. Try: "Take a second with that. What number were you expecting, or what would make this an easy yes?" That gets their real constraint on the table without you moving first.
 
@@ -14168,7 +15888,7 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > When they say they'll just keep the spreadsheets, I'd say: that's fair. **What would have to change for spreadsheets to stop being the answer?** If nothing would, you don't need us. If something would, that's the piece worth testing.
 
-**fix9 (candidate)**
+**fix9**
 
 > Three discovery questions I'd ask: when a deal slips between stages, where does the information actually live right now, and who has to chase it? How many people touch a deal before it closes, and where do handoffs break down? And when you looked at FieldPilot, what did it do well and what made you hesitate?
 > 
@@ -14177,6 +15897,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > When they say they'll just keep the spreadsheets, I'd say: that's fair, and honestly spreadsheets work until they don't. The question is what it costs you when two people are working from different versions. If that's not hurting you yet, staying put is the right call. If it is, let me show you what changes.
 >
 > *Summary chip:* discovery questions, positioning, spreadsheet objection
+
+**fix10** — edited after streaming
+
+> Three questions I'd ask: what's the one thing the spreadsheets get wrong most often, and who feels that first? When you looked at FieldPilot, what did it do well and where did it fall short for you? And if this were working the way you want six months from now, what would be different day to day?
+> 
+> Positioning: before I put it in one line, walk me through what your team does today and where the spreadsheets stop working, so I can say precisely what we'd change.
+> 
+> When they say they'll just keep the spreadsheets, I'd say: that's fair. What I'd want to understand is where it breaks for you, the moment two people touch the same number or something slips through a handoff. If that's not costing you anything, staying put is the right call. If it is, that's the part worth testing.
 
 ---
 
@@ -14238,9 +15966,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > If it would help to see this on your own setup, the next step is a short working session with your team. What does your calendar look like early next week?
 
-**fix9 (candidate)**
+**fix9**
 
 > If the timing and the fit both look right on your side, the next step is a short working session where I walk you through exactly how this would run in your setup. What does your calendar look like early next week?
+>
+> *Summary chip:* propose working session, ask timing
+
+**fix10**
+
+> If the timing and the fit both look right on your side, the next step is a short working session where I walk you through exactly what applies to your setup. What does your calendar look like early next week?
 >
 > *Summary chip:* propose working session, ask timing
 
@@ -14298,9 +16032,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Yes, we completed a SOC 2 Type II covering Security and Availability, and the report goes out under a mutual NDA through our Trust Center. Once the NDA is signed, allow two business days for it to reach you, so if your review is Tuesday we'd want that NDA moving today. Can you get me the right person on your side to sign it?
 
-**fix9 (candidate)**
+**fix9**
 
 > Yes, we completed a SOC 2 Type II covering Security and Availability, and the report goes out under a mutual NDA through our Trust Center. Once the NDA is signed, allow two business days for it to reach you, so if Tuesday is the deadline we'd want to get that moving today. Can you get me the NDA contact on your side so I can start it?
+
+**fix10**
+
+> Yes, we completed a SOC 2 Type II covering Security and Availability, and the report goes out under a mutual NDA through our Trust Center. Once the NDA is signed, allow about two business days for it to reach you, so if Tuesday is the review, let's get the NDA moving today. Who on your side should I send it to?
 
 ---
 
@@ -14358,9 +16096,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > We're SOC 2 Type II, with AES-256 at rest and TLS 1.2 or higher in transit, and North American data is hosted in **us-east-2 in Ohio**. On the BAA and HIPAA specifically, I don't want to confirm that on the call, so let me get you a straight answer from our security team and come back to you. In the meantime, can you tell me which patient fields actually end up in those tech notes?
 
-**fix9 (candidate)**
+**fix9**
 
 > We're SOC 2 Type II, with AES-256 at rest and TLS 1.2 or higher in transit, and North American data is hosted in **us-east-2** in Ohio. On the BAA and HIPAA specifically, I don't want to give you an answer on the call that I can't stand behind, so let me get that confirmed with our security team and come back to you. In the meantime, can you tell me which workflows the patient notes touch, so I bring the right people into that conversation?
+
+**fix10**
+
+> We're SOC 2 Type II audited, with AES-256 encryption at rest and TLS 1.2 or higher in transit, and North American data is hosted in AWS us-east-2 in Ohio. On the BAA and HIPAA specifically, I don't want to confirm that on the call, so let me get our security team to answer it properly. Can you tell me which patient data actually ends up in those tech notes, so I bring them the right detail?
 
 ---
 
@@ -14416,9 +16158,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The published terms are **$49 a seat on Growth**, and the only published discount is **ten percent for a 24-month prepaid agreement**. Anything beyond that goes through **Deal Desk**. What number do you need this to land at?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Any discount beyond the published terms needs Deal Desk approval, and account executives can't approve non-standard discounts on a call. What seat count and start date are you working with?
+
+**fix10**
+
+> I can't approve a discount like that on the call, so let me be straight with you: the published terms are $49 a seat on Growth, and anything beyond that has to go through Deal Desk. What I can do is take your number to them with the seat count and term behind it, and that's a much stronger case than me guessing at it now. How many technicians would you be putting on it, and are you thinking a one-year or a two-year term?
 
 ---
 
@@ -14480,9 +16226,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > On Growth and Enterprise you get 99.9% monthly uptime for the web app and API, excluding scheduled maintenance, and if we miss it you can claim a service credit, 10% of that month's subscription fee below 99.9% and 25% below 99.0%, requested within 30 days. On Enterprise you also get a named Customer Success Manager after signature, and P1 phone support with a one-hour first response.
 
-**fix9 (candidate)**
+**fix9**
 
 > On Growth and Enterprise we commit to 99.9% monthly uptime for the web app and API, excluding scheduled maintenance. If we miss it, you get 10% of that month's subscription fee back, or 25% if we drop below 99.0%, and credits are the sole remedy. For a name, Enterprise includes a named Customer Success Manager after signature, and P1 phone support with a one-hour first response. Can I ask which plan you're weighing, so I point you at the right tier?
+
+**fix10**
+
+> On Growth and Enterprise it's 99.9% monthly uptime for the web app and API, excluding scheduled maintenance. If we miss it, you get 10% of that month's subscription fee back below 99.9%, or 25% below 99.0%, and that credit is the sole remedy. Enterprise also gets a named Customer Success Manager after signature, and P1 escalation runs from your support engineer to the Support Manager on duty, then the VP of Customer Success. Which plan are you looking at?
+>
+> *Summary chip:* 99.9% SLA, credits, named CSM
 
 ---
 
@@ -14566,11 +16318,19 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > What's the office manager's re-keying actually costing you each week in hours?
 
-**fix9 (candidate)**
+**fix9**
 
 > They're running dispatch on a whiteboard and group text with thirty-eight techs and four dispatchers, billing through Xero with manual re-keying, and they're locked into another scheduling contract until March fifteenth.
 > 
 > What's the office manager's re-keying actually costing you each week in hours?
+
+**fix10**
+
+> They run dispatch for thirty-eight techs and four dispatchers off a whiteboard and a group text, with billing in Xero and the office manager re-keying every job, and they're locked into another scheduling contract until March fifteenth.
+> 
+> Given the re-keying pain, the next question is: how much time does that end-of-day re-keying take her, and what does it cost you when a job gets billed wrong or late?
+>
+> *Summary chip:* whiteboard dispatch, Xero re-keying, locked till March 15
 
 ---
 
@@ -14630,9 +16390,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's a fair concern. Can I ask what your guys do use day to day, is it a phone call, a radio, a paper sheet?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That's a fair worry. Can I ask what they use today to get their schedule and their paperwork?
+
+**fix10** — edited after streaming
+
+> That's a fair worry. What does the day-to-day look like for them right now, how do they get their work assignments and updates today?
 
 ---
 
@@ -14688,9 +16452,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That's a fair concern, and honestly the move itself is built to be low disruption for him. The new office opens Monday, November 2, and the old one closes Friday, October 30, so there's no overlap to manage. IT collects docking stations and monitors on October 29, laptops stay with people, and the Larimer garage gives everyone 30 days of free parking before it becomes $95 a month. What's the piece he's most likely to push back on, the timing or the change itself?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That's fair. Can I ask what he's actually worried about losing, the way things run today, or the disruption of getting there?
+
+**fix10**
+
+> That's a fair concern, and honestly the people who resist change are usually the ones who care most about not breaking what works. So I wouldn't ask him to buy into the whole thing at once. I'd start with the one piece that makes his life easier on day one, show him it works, and let him pull the rest himself. What's the thing he'd be most worried about losing?
 
 ---
 
@@ -14744,9 +16512,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What happens when a call comes in after hours or on a weekend? I want to understand who picks it up, how it gets routed, and how fast someone's actually on it.
 
-**fix9 (candidate)**
+**fix9**
 
 > What does your emergency call process look like today, from the moment a customer reaches out to the point someone's actually dispatched?
+
+**fix10**
+
+> What does your emergency call process look like today, who picks up first when something goes down at 2am, and how does that person decide whether to wake someone else up?
 
 ---
 
@@ -14800,9 +16572,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What's driving the timing on your side, is there a date you need to be live by?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Happy to work out what a go-live plan would look like from your signing date, with the milestones and who owns each one. What's driving the timing on your side, is there a date you need to be live by?
+
+**fix10** — edited after streaming
+
+> I'll get a real date confirmed and come back to you. What does your side need to have working on day one?
 
 ---
 
@@ -14860,9 +16636,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Forty-four a seat is right for Growth, and the Salesforce connector is included at that price, so there's no separate add-on to add. One thing to flag: that sheet ran through December, so let me confirm today's pricing before we lock anything. If the number holds, are you ready to move on a start date?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Growth at forty-four a seat does include the Salesforce connector, so that part's right. One thing to flag though: that sheet is the 2025 partner sheet, which ran through December, so it's worth checking today's pricing before anything's locked in. What seat count are you working with?
+
+**fix10** — edited after streaming
+
+> Growth at forty-four a seat does include the Salesforce connector, so yes, forty-four a seat is right for that. One thing to flag: that sheet is the 2025 partner sheet, which ran through December, so let me confirm today's pricing before we lock anything in, the sheet also lists the Salesforce connector as a $300 per month add-on, so I want to confirm which applies before anyone relies on it. How many technicians are you looking at, so I can put the right numbers in front of you?
 
 ---
 
@@ -14924,9 +16704,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That asterisk matters, so let me be straight with you: the sheet marks the thirty days as an estimate, and it notes that timelines depend on customer data readiness. What I can put in writing is a go-live date we agree together, with the onboarding plan and the data requirements spelled out, so there's something concrete to hold us to. Can we get your implementation contact on a short call this week to map that out?
 
-**fix9 (candidate)**
+**fix9**
 
 > That thirty-day line comes with a footnote: timelines are estimates and depend on customer data readiness. So I can't have it written as an unconditional guarantee, but I can put the target in the contract with the data-readiness condition spelled out. What does your data setup look like today, and who on your side would own getting it ready?
+
+**fix10** — edited after streaming
+
+> That sheet is from 2025 and it's expired, so I don't want to build a contract term on it. The asterisk on that line says timelines are estimates and depend on customer data readiness. Let me get you a current sheet and have our team confirm what we can commit to on go-live, then put that in the agreement. What's driving the thirty days on your side?
 
 ---
 
@@ -14994,11 +16778,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > That sheet's from 2025 and it ran through December, so those numbers are out of date. Here's what I'd say: "You're right, that's the sheet we sent your partner last year. It expired at the end of December, and Growth is forty-nine now. Onboarding's still free, so that part hasn't changed." Then ask what they need the number to work against so you can put the right option in front of them.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That sheet is from 2025 and it ran through December, so those numbers are out of date. The current Growth price is **forty-nine per technician per month**, billed annually, and dispatchers are free. Onboarding is the part I'd flag: let me confirm the current onboarding terms and come back to you rather than quote you something I can't stand behind.
 > 
 > Can we put the onboarding question aside for a second and look at what the plan actually does for your dispatch team?
+
+**fix10** — edited after streaming
+
+> That sheet's from 2025 and it ran through December, so it's out of date now. On the Growth price and on onboarding, let me confirm the current figures and come back to you.
+> 
+> Which parts of the sheet are you working from? I'd rather correct the whole thing now than have it come up again later.
 
 ---
 
@@ -15060,9 +16850,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The 15% is on the 2025 partner sheet, which ran through December, so that number may not still be current. The 12% is a partner discount off list price. Whether the two can be combined is something I'd need to check. What's your target per technician?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > The sheet I have shows the 3-year prepaid discount and the partner discount as separate line items, and it doesn't say anywhere that they stack. So whether both can be combined isn't something the sheet settles. The 3-year prepaid discount is 15%, and the partner discount is up to 12% off list without approval, can you tell me what the two of you are working toward on price?
+
+**fix10**
+
+> The 15% multi-year discount is real, but it's on the 2025 sheet, which ran through December, so let me confirm it's still current before I quote it. On the 12%, that's a partner discount for closing in-quarter, and I don't want to stack two discounts and have the deal unwind on you. Let me check what we can actually put together and come back with one clean number. What's your target go-live date?
 
 ---
 
@@ -15122,9 +16916,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Let me be straight with you: the real question is what "serious" looks like on your side. If you tell me the seat count and the timeline you're working toward, I can confirm exactly what fits and walk you through it. What's driving the timing?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I don't want to put a number on it before I know what fits. **What's your realistic headcount for the first year?**
+
+**fix10** — edited after streaming
+
+> I can't go to a lowest number on the spot, but I can tell you what's real. Before I put a figure on it, **how many people would be using it**, and **what kind of timeline are you working to**? Give me those two and I'll come back with a number I can stand behind.
 
 ---
 
@@ -15184,9 +16982,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I hear you. Give me the seat count and the term you're signing for, and I'll come back with the best price I can put in writing. What's the seat count?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I hear you on the Friday deadline. **What's your realistic headcount for the first year?** With that, I can put a number together for you.
+
+**fix10** — edited after streaming
+
+> I hear you. I can't put a real number on the mid tier without knowing how many seats we're talking about, so give me that one thing and I'll come back to you with a figure.
 
 ---
 
@@ -15244,9 +17046,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Three years,  noted. I still need the seat count to price it properly. Give me that and I'll come back with the best price I can put in writing.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > A three-year commitment changes the shape of the number. **What's your realistic headcount for the first year?** With that, I can put a number together for you.
+
+**fix10** — edited after streaming
+
+> Three years, noted. I still need the seat count to put a real number on the mid tier, so give me that and I'll come back with a figure I can stand behind before Friday.
 
 ---
 
@@ -15304,9 +17110,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > QuickBooks Online, yes, that's included on Growth. Salesforce is the one that isn't, the Field Service connector sits on Enterprise. If Salesforce matters to you, how much of your office team actually works out of Salesforce day to day?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > On the Growth plan, QuickBooks Online connects, but Salesforce doesn't. The Salesforce Field Service connector is on Enterprise. If Salesforce is the piece you need, that's the plan to look at. How much of your office workflow actually runs through Salesforce today?
+
+**fix10**
+
+> On Growth, QuickBooks Online connects, but Salesforce doesn't. The Salesforce Field Service connector is on Enterprise. Growth does include the QuickBooks Online and Xero integrations, plus the REST API if you'd rather bridge Salesforce that way. How many technicians would be on this, and is the Salesforce piece a must-have from day one?
+>
+> *Summary chip:* QuickBooks yes, Salesforce needs Enterprise
 
 ---
 
@@ -15366,9 +17178,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Enterprise is custom priced. Enterprise carries a **100 seat minimum**, so at forty techs you'd be quoted at that floor rather than per tech, and the **Salesforce Field Service connector** is what puts you there. **Dispatcher and admin seats are free on every plan**, so only the techs who receive jobs count.
 
-**fix9 (candidate)**
+**fix9**
 
 > Enterprise is custom priced, so I can't give you a per-seat number on the call. What I can tell you is that it's a 100-seat minimum, and since dispatcher and admin seats are free, your forty techs would sit inside that minimum. The best next step is to get you a scoped quote, so let me ask: how many dispatchers and admins would be on the system alongside the forty techs?
+
+**fix10**
+
+> Enterprise is custom priced, so I can't give you a number on the call. What I can tell you is that Enterprise has a 100-seat minimum, so forty techs would still bill at a hundred seats, and implementation is scoped separately. If the Salesforce connector is the reason you're looking at Enterprise, it's worth pricing both paths. Can I get you a written quote for the forty seats and a Growth-plus-API comparison?
 
 ---
 
@@ -15438,11 +17254,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* confirm mid tier SLA, ask coverage needs
 
-**fix9 (candidate)**
+**fix9**
 
 > I don't want to give you a number I can't stand behind, so let me confirm exactly what support hours and uptime commitment apply on the mid tier and come back to you with it in writing. While I do that, what does your team actually need covered, business hours or around the clock?
 >
 > *Summary chip:* confirm support hours and uptime, ask their coverage need
+
+**fix10**
+
+> I don't want to give you a number I can't stand behind, so let me confirm the exact support hours and uptime commitment on the mid tier and come back to you today. In the meantime, what does your team actually need covered, business hours or around the clock?
+>
+> *Summary chip:* confirm mid tier SLA, ask coverage need
 
 ---
 
@@ -15516,11 +17338,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* confirm mid tier SLA, ask coverage needs
 
-**fix9 (candidate)**
+**fix9**
 
 > I don't want to quote a number I can't stand behind, so let me confirm exactly what support hours and uptime commitment apply on the mid tier and send it to you in writing. In the meantime, what does your team actually need covered, business hours or around the clock?
 >
 > *Summary chip:* confirm support hours and uptime, ask their coverage need
+
+**fix10**
+
+> I don't want to quote you a number I can't stand behind, so let me confirm the exact support hours and uptime commitment on the mid tier and come back to you. Meanwhile, what does your team actually need covered, business hours or around the clock?
+>
+> *Summary chip:* confirm mid tier SLA, ask coverage need
 
 ---
 
@@ -15578,9 +17406,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Our published go-live for Growth is typically four to six weeks from signature, and that clock starts once we have clean technician, customer and asset data in the first ten business days. What does your data situation look like right now?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Standard onboarding, and the published go-live estimate is four to six weeks from signature, provided your technician, customer and asset data is clean within the first ten business days. Go-live dates depend on data readiness and are estimates, not contractual commitments. What does your data readiness look like on your side?
+
+**fix10**
+
+> I can't promise a date I don't control, and I'd rather be straight with you than tell you something in October that isn't true in November. What I can do is commit to the work: Growth onboarding is a $2,500 one-time package, and typical go-live runs four to six weeks from signature, as long as your technician, customer and asset data is clean within the first ten business days. That puts November first in reach if we start now. Can we get your data owner on a short call this week so we can map what's ready and what isn't?
+>
+> *Summary chip:* can't promise date, commit to data readiness
 
 ---
 
@@ -15638,9 +17472,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The four to six weeks starts from signature and depends on clean technician, customer and asset data landing in the first ten business days. So what does your data situation look like right now?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > The published estimate is **four to six weeks from signature**, and that clock starts once your technician, customer and asset data is clean within the first ten business days. Go-live dates depend on data readiness and are estimates, not contractual commitments. So let me ask again, what does your data readiness look like on your side?
+
+**fix10**
+
+> Because I don't control your data readiness, and that's what the timeline actually hinges on. The four to six weeks starts from signature and assumes your technician, customer and asset data is clean within the first ten business days. If that slips, the date slips, and I'd be promising you something I can't deliver. What I can do is start now and get your data owner on a call this week so we know exactly where we stand.
 
 ---
 
@@ -15712,11 +17550,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > To qualify budget, I'd ask something like: "When you picture rolling this out, have you set aside a range for it this year, or is that still open?" Then for timeline: "What's driving the date on your side, and is there a point where waiting starts costing you?" That gets you a real number and a real deadline instead of a vague "soon.
 
-**fix9 (candidate)**
+**fix9**
 
 > To qualify budget, I'd ask something like: "When you picture rolling this out, have you set aside a range for it this year, or is that still open?" Then for timeline: "What's driving the date on your side, and is there a point where waiting starts costing you?" That gets you a real number and a real deadline instead of a polite maybe.
 >
 > *Summary chip:* ask budget range and what drives the date
+
+**fix10**
+
+> Two things I'd ask. On budget: "When you picture this live, is there a number already set aside for it this year, or are we building the case for one?" On timeline: "What's driving the date on your side, and what happens if it slips a quarter?"
+> 
+> That tells you whether they're ready to buy or still exploring.
 
 ---
 
@@ -15794,11 +17638,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* softer budget and timeline questions
 
-**fix9 (candidate)**
+**fix9**
 
 > Softer version: "As you think about timing, is there a budget range you've set aside for this, or is that still being figured out?" Then: "What's the date you're working toward, and what happens if it slips?" Both stay curious rather than transactional, and you still walk away knowing whether there's money and a deadline.
 >
 > *Summary chip:* ask budget range and target date gently
+
+**fix10**
+
+> Softer version: "As we scope this, is there a budget already set aside for it this year, or are we still building the case?" Then, "What's driving your timeline, and what happens if it moves a quarter?" Both stay curious rather than transactional, and the answers tell you whether they're ready to move or still exploring.
 
 ---
 
@@ -15862,9 +17710,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Fair question. What FieldPilot's quoting you for, does that cover the same scope you'd run with us, or is invoicing the piece you'd still have to bolt on elsewhere? If it's genuinely like for like, where does the thirty percent come from? Can we put both side by side on one page, so you're comparing the same thing?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Fair question. Invoicing being built in is worth weighing, so let me ask instead of assert: what does your team do manually today to keep invoicing and the rest of the workflow running, and what happens when something breaks? Walk me through that, and tell me what you'd need to see to make the tradeoff clear.
+
+**fix10**
+
+> Fair question, and I'd rather earn it than argue price. What FieldPilot's quoting you on, is that the full picture once you add the implementation, support, and what happens when something breaks at month end? If invoicing is the deciding feature, tell me what it needs to do, and I'll show you exactly how we handle it. Where does invoicing sit against everything else you need this to do?
 
 ---
 
@@ -15920,9 +17772,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What does your invoicing actually need to do,  just send and track, or tie into your accounting?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Let me get you a clear answer on how invoicing works on our side. In the meantime, what does your team do manually today to keep invoicing running, and what breaks when it does?
+
+**fix10** — edited after streaming
+
+> I'm not going to promise you a feature before I know what it needs to do. So tell me: does it need to raise invoices from a job, send them, and track what's paid? If that's the shape of it, I'll show you exactly how we handle it.
 
 ---
 
@@ -15980,9 +17836,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The one reason is that we're built for the scope you'd actually run, not the cheapest version of it. If FieldPilot's thirty percent is real like for like, where does it come from? Can we put both quotes side by side and let the numbers argue?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > The one reason is that we're built around the workflow you already run, not a cheaper invoice button. On invoicing, let me get you a clear answer on how it works on our side. What would help is putting both side by side on your actual process, what would you need to see for that comparison to be clear?
+
+**fix10** — edited after streaming
+
+> The one reason is what happens when something breaks at month end. So let me ask: what does invoicing actually need to do for you?
 
 ---
 
@@ -16058,6 +17918,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* KWS-Tiny 93.2% with STAGE-KD
 
+**fix9** — edited after streaming
+
+> The small model, KWS-Tiny, gets **93.2%** test accuracy with STAGE-KD, plus or minus 0.3 over five seeds. For comparison, standard KD gives 91.8% and training from scratch 89.7%.
+
+**fix10**
+
+> The small model, KWS-Tiny, got **93.2%** test accuracy with STAGE-KD, averaged over five seeds with a standard deviation of 0.3. For comparison, training from scratch gave 89.7% and standard KD gave 91.8%, so STAGE-KD is the best of the three student configurations. That's from Table 5.1 in Chapter 5.
+>
+> *Summary chip:* KWS-Tiny 93.2% with STAGE-KD
+
 ---
 
 #### DSEM-002 — presenter_defense
@@ -16125,6 +17995,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Five is what we could afford, and it's why we didn't lean on a seed-level test. The significance claim comes from a paired bootstrap over test utterances with 10,000 resamples, pooling the predictions of the five seeds, which gives us a much larger effective sample than five. The seeds still limit how precisely we can estimate variance, and the ablations use three, so I treat those differences as indicative rather than settled.
 >
 > *Summary chip:* five seeds, bootstrap over utterances
+
+**fix9**
+
+> Five seeds is enough for the accuracy comparison, which is why I pooled the predictions and used a paired bootstrap over test utterances rather than a seed-level test. The limitation is real for the variance estimate and for the ablations, which used three seeds, so I treat those differences as indicative rather than conclusive.
+>
+> *Summary chip:* five seeds, bootstrap over utterances
+
+**fix10** — edited after streaming
+
+> Five seeds is a real limit, and it's in the limitations section. What I did instead was pool the predictions of the five seeds and test the difference with a paired bootstrap over test utterances, 10,000 resamples, rather than a seed-level t-test, because five seeds give too few samples for a seed-level test to be informative. That difference comes out significant at p less than 0.01. The ablations used three seeds only, and the ablation differences are small relative to seed variance and should be treated as indicative.
 
 ---
 
@@ -16194,6 +18074,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* energy not measured, latency only
 
+**fix9**
+
+> The thesis doesn't report an energy cost per inference. On the Arlo M4 the board lacks a current-sense header, so energy was never measured, and latency is used as a proxy for cost instead. What we do have is 14.2 ms per one-second window, with peak RAM of 96 KB, and those are identical across all three training methods since the deployed architecture is the same.
+>
+> *Summary chip:* energy not measured, latency 14.2 ms
+
+**fix10**
+
+> Energy per inference wasn't measured. The Arlo M4 board doesn't have a current-sense header, so I report latency instead, 14.2 ms per 1-second window, as a proxy for cost. Energy profiling is listed as future work.
+>
+> *Summary chip:* energy not measured, latency 14.2 ms
+
 ---
 
 #### DSEM-004 — supported_paraphrase
@@ -16257,6 +18149,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > That's the reading I'd give it, with one caveat. Removing stage 2, the feature alignment, drops accuracy to 92.0%, and removing stage 3 drops it to 92.9%, so stage 2 does contribute most of the gain. But the ablation differences are small relative to seed variance, and the ablations used only 3 seeds, so I treat that as indicative rather than a firm claim.
+>
+> *Summary chip:* stage 2 leads, but indicative only
+
+**fix9** — edited after streaming
+
+> That's the reading the results support, with one caveat. Removing stage 2, the feature alignment, drops accuracy to 92.0%, while removing stage 3 drops it to 92.9%, so stage 2 does contribute most of the gain. But those ablation differences are small relative to seed variance, and the ablations used only 3 seeds, so that should be treated as indicative rather than a firm claim.
+
+**fix10**
+
+> That's the reading I'd put on it, with one caveat. Removing stage 2, the feature alignment, drops accuracy to 92.0%, and removing stage 3 drops it to 92.9%, so stage 2 does contribute most of the gain. But those ablation differences are small relative to seed variance, and the ablations used three seeds, so I treat that as indicative rather than settled.
 >
 > *Summary chip:* stage 2 leads, but indicative only
 
@@ -16327,6 +18229,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > No, I didn't run quantization-aware training. My baselines were scratch training and standard KD, and that's listed as a limitation. The comparison I'm making is between training methods for the same 212k-parameter architecture, so latency and memory are identical across all three. STAGE-KD gives 93.2% against 91.8% for standard KD, at no on-device cost.
+
+**fix9** — edited after streaming
+
+> The baselines in this work were scratch training and standard KD, and that's listed as a limitation. QAT changes how the deployed weights are represented, while STAGE-KD changes how the same 212k-parameter architecture is trained. The gain is 1.4 points over standard KD at identical latency and memory.
+
+**fix10** — edited after streaming
+
+> What I can say is that STAGE-KD changes only how the 212k student is trained, so the deployed architecture, latency and memory stay identical. QAT is a different axis.
 
 ---
 
@@ -16400,6 +18310,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* no robustness claim, ablations indicative only
 
+**fix9**
+
+> The noise results don't support a robustness claim: under babble noise at 0 dB SNR, STAGE-KD reaches 71.5% against 70.9% for standard KD, and that gap sits within seed variance, so I make no claim that STAGE-KD improves noise robustness. The ablation story is separate, since the gains there come from the training stages, with removing stage 2 dropping accuracy to 92.0% and removing stage 3 to 92.9%, and those differences are small relative to seed variance and only indicative.
+>
+> *Summary chip:* noise gap within variance, ablations indicative
+
+**fix10**
+
+> The noise result doesn't support a robustness claim: under babble noise at 0 dB SNR, STAGE-KD reaches 71.5% against 70.9% for standard KD, and that gap sits within seed variance, so section 5.5 makes no claim that STAGE-KD improves noise robustness. So it's separate from the ablation story, which is about which stage contributes the gain: removing stage 2 drops accuracy to 92.0% and removing stage 3 to 92.9%, read as stage 2 contributing most, though those differences are small relative to seed variance and only indicative.
+>
+> *Summary chip:* noise gain within variance, not ablation
+
 ---
 
 #### DSEM-007 — supported_direct
@@ -16453,6 +18375,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > 14 clinics in total, 7 intervention and 7 control, out of 31 district clinics invited.
+
+**fix9**
+
+> 14 clinics in total, 7 intervention and 7 control. We invited all 31 district clinics and 14 agreed to take part.
+>
+> *Summary chip:* 14 clinics, 7 intervention, 7 control
+
+**fix10**
+
+> 14 clinics were randomised, 7 intervention and 7 control, out of 31 district clinics invited.
 
 ---
 
@@ -16532,6 +18464,20 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* attendance only, no clinical outcomes measured
 
+**fix9**
+
+> No, we didn't measure clinical outcomes. The trial's primary outcome was attendance and the secondary was late cancellation, and the summary states plainly that clinical health outcomes were not measured. So I can't claim anyone got healthier.
+> 
+> What I'd say to a health board is that attendance is the mechanism they already pay for: a missed appointment is a slot that goes unused and a patient who didn't get seen. Attendance rose from 71.9% to 78.4%, an adjusted odds ratio of 1.41, and late cancellations fell from 9.3% to 7.1%. Whether that converts into readmissions or better health is exactly the question this pilot can't answer, and it's the reason the next step is a longer trial.
+>
+> *Summary chip:* no clinical outcomes, attendance is the proxy
+
+**fix10**
+
+> No, we didn't measure clinical outcomes. The primary outcome was attendance and the secondary was late cancellation, so readmissions and health outcomes weren't part of this trial. What I'd say to a health board is that attendance is the thing we can move and measure at scale, and a missed appointment is a slot someone else couldn't use. The honest position is that this shows a 6.5 percentage point attendance gain, and whether that translates into clinical benefit is the next question, not one this data answers.
+>
+> *Summary chip:* attendance only, clinical outcomes not measured
+
 ---
 
 #### DSEM-009 — partial_unsupported
@@ -16593,6 +18539,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > The design can't separate them. Both reminders were always sent together, so there's no way to tell whether the 48-hour one, the 3-hour one, or the pair did the work. That's exactly why the follow-on trial would test them as separate arms.
+>
+> *Summary chip:* reminders sent together, effect not separable
+
+**fix9**
+
+> The design can't tell us that. Both reminders were always sent together, so the 48-hour and 3-hour effects are completely confounded. Separating them is exactly what the follow-on trial would do, testing each as its own arm.
+>
+> *Summary chip:* reminders confounded, can't separate
+
+**fix10**
+
+> The design can't tell us that. Both reminders were always sent together, so there's no way to separate the 48-hour effect from the 3-hour one. That's exactly why the follow-on trial would test them as separate arms.
 >
 > *Summary chip:* reminders sent together, effect not separable
 
@@ -16661,6 +18619,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > I'd be careful about that reading. The over-65 subgroup had an odds ratio of 1.09 with a confidence interval of 0.81 to 1.47, so it's not significant, but that's not the same as no benefit. That subgroup was only 412 appointments, and the trial wasn't powered for subgroup analysis, so the estimate is imprecise in both directions. The summary itself says the weaker estimate may reflect lower mobile phone use or simply the small subgroup, and the data can't distinguish those. So I'd say the honest conclusion is that we can't tell from this trial whether older patients benefit, not that the intervention is only for younger people.
 >
 > *Summary chip:* older subgroup underpowered, not evidence of no benefit
+
+**fix9**
+
+> That's not what the data show. The overall effect is an adjusted odds ratio of 1.41, and the older subgroup estimate is 1.09 with a confidence interval of 0.81 to 1.47, so it's not significant rather than absent. That subgroup was only 412 appointments and the trial wasn't powered for subgroup analysis, so we can't distinguish a real difference from a small sample. The summary notes the weaker estimate may reflect lower mobile phone use or simply the small subgroup, and the data can't separate those.
+>
+> *Summary chip:* older subgroup underpowered, not no benefit
+
+**fix10**
+
+> I'd be careful about that reading. The over-65 subgroup had an odds ratio of 1.09 with a confidence interval of 0.81 to 1.47, so it's not significant, but that's a null result, not evidence of no effect. That subgroup was only 412 appointments, and the trial wasn't powered for subgroup analysis, so the interval is wide enough to include a meaningful benefit. The summary itself says the weaker estimate may reflect lower mobile phone use or just the small subgroup, and the data can't tell those apart. So I'd say the honest conclusion is that we don't know yet whether older patients benefit, and that's exactly why the follow-on trial would randomise from all 31 clinics and run for 12 months.
+>
+> *Summary chip:* null in over-65s, not proof of no effect
 
 ---
 
@@ -16732,6 +18702,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* reminders lifted attendance 6.5 points
 
+**fix9**
+
+> Two timed SMS reminders raised attendance by 6.5 percentage points, from 71.9% to 78.4%, with an adjusted odds ratio of 1.41, though the confidence interval is wide because only 14 clinics were randomised.
+>
+> *Summary chip:* 6.5 point attendance gain, wide CI
+
+**fix10**
+
+> Two timed SMS reminders were associated with a **6.5 percentage point** increase in attendance, from 71.9% to 78.4%, with an adjusted odds ratio of 1.41.
+>
+> *Summary chip:* reminders lifted attendance 6.5 points
+
 ---
 
 #### DSEM-012 — why_method
@@ -16794,6 +18776,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Because appointments within the same clinic aren't independent. A chi-square treats all 2,406 appointments as if they were separate observations, which overstates precision. We used mixed-effects logistic regression with a clinic random intercept, adjusting for age band, sex and appointment type, so the clustering at clinic level is accounted for.
 
+**fix9**
+
+> Because appointments within the same clinic aren't independent. A plain chi-square treats all 2,406 appointments as if they were separate, which overstates the precision. The mixed-effects model with a clinic random intercept accounts for that clustering, and it also lets me adjust for age band, sex and appointment type.
+
+**fix10**
+
+> Because appointments within the same clinic aren't independent. A chi-square treats all 2,406 appointments as separate observations, which overstates precision. We used mixed-effects logistic regression with a clinic random intercept, adjusting for age band, sex and appointment type, so the clustering at clinic level is accounted for.
+
 ---
 
 #### DSEM-013 — methodology
@@ -16855,6 +18845,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > Nile red isn't the confirmation step, it's the counting step. A random 15% of counted particles were analysed by micro-FTIR, and 81% of those were confirmed as synthetic polymers, with the rest mostly cellulose or protein. So the lipid and other organic false positives are real, and that's in the limitations, but the FTIR subset is what indicates the bulk of what was counted is plastic rather than fat.
+
+**fix9**
+
+> Nile red isn't the confirmation step, it's the counting step. I ran micro-FTIR on a random 15% of the counted particles, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. So the lipid and other natural organic matter signal is real, and it's why I list it as a limitation, but the FTIR subset is what tells me the majority of what I counted is plastic.
+
+**fix10**
+
+> Nile red isn't the identification step, it's the counting step. I confirmed a random 15% of the counted particles by micro-FTIR, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. So the false positives are real but bounded, and I flag that in the limitations.
 
 ---
 
@@ -16925,6 +18923,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > We can't report a correlation, because we didn't have access to the plant's discharge records, so particle counts couldn't be related to effluent volume. That's stated as a limitation on slide 11. What we can say is that all three downstream sites differed from all three upstream sites, with downstream means of 7.1 versus 3.8 particles per individual, but that's a spatial comparison, not a relationship with discharge.
+>
+> *Summary chip:* no discharge data, so no correlation
+
+**fix9**
+
+> We couldn't test that. Slide 11 says we didn't have access to the plant's discharge records, so the counts couldn't be related to effluent volume. That's why the recommendation on slide 12 is repeat sampling across seasons with paired water samples, so a future round can actually pair load against flow.
+>
+> *Summary chip:* no discharge data, so no correlation
+
+**fix10**
+
+> We didn't have access to the plant's discharge records, so I can't give you a correlation between particle counts and effluent volume. That's stated as a limitation on slide 11. What the sampling days do show is a clear upstream-downstream difference: 3.8 particles per individual upstream versus 7.1 downstream, and 0.42 versus 0.83 particles per gram wet tissue, with the Kruskal-Wallis test at H = 21.4, p < 0.001. Pairing counts with discharge volume is exactly what I'd want next, alongside water samples.
 >
 > *Summary chip:* no discharge data, so no correlation
 
@@ -17000,6 +19010,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* no Lake Veder read, offer to compare
 
+**fix9** — edited after streaming
+
+> What our own deck reports: downstream mussels carried roughly double the load of upstream mussels, 7.1 versus 3.8 particles per individual, and 0.83 versus 0.42 particles per gram wet tissue, with the difference significant across all six sites. How do you want the Lake Veder comparison handled?
+
+**fix10** — edited after streaming
+
+> I can't compare the two directly. What I can tell you is what our own numbers show: downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 versus 0.42 particles per gram of wet tissue, so roughly double on both measures. I'll look at the Lake Veder report and come back to you.
+
 ---
 
 #### DSEM-016 — combine_sections
@@ -17059,6 +19077,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > Contamination was handled with procedural blanks every ten samples, averaging 0.6 particles per blank and subtracted from counts, plus cotton lab coats, filtered water and covered glassware. On confirmation, 15% of counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers. So the doubling is a real measured difference, but it rests on that subset, and Nile red can stain natural organic matter.
+
+**fix9** — edited after streaming
+
+> Three things. On contamination, procedural blanks ran with every batch of ten samples, mean 0.6 particles per blank, subtracted from the counts, plus cotton lab coats, filtered water and covered glassware. On confirmation, a random 15% of counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers. On the doubling claim, the deck doesn't state a confidence level: the ratio holds by count and by weight, 3.8 to 7.1 and 0.42 to 0.83, with p below 0.001, on a 15% subset and a single season.
+
+**fix10** — edited after streaming
+
+> Contamination: procedural blanks with every batch of ten samples, mean 0.6 particles per blank, subtracted from counts, plus cotton lab coats, filtered water and covered glassware. On confirmation, a random 15% of counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers. So the double claim is a ratio, and the same correction applies to both sides, which is why I'd stand behind it as roughly double, with the caveat that it rests on that 15% subset and one season.
+>
+> *Summary chip:* blanks subtracted, 81% confirmed, ratio holds
 
 ---
 
@@ -17128,6 +19156,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > A confidence interval is a range built from your sample that's meant to capture the true population value, and the "confidence" is about the method, not any single interval. If you repeated the study many times and built a 95% interval each time, about 95% of those intervals would contain the true value. It's not a 95% probability that the true value sits in this particular interval, which is the bit people usually trip on.
 
+**fix9** — edited after streaming
+
+> The uploaded seminar notes don't cover confidence intervals, so this is general knowledge rather than something from the file. A confidence interval is a range built from your sample that's likely to contain the true population value. If you repeated the study many times and built an interval each time, a stated percentage of those intervals would capture the true value. The common confusion is thinking it's the probability the true value sits in this particular interval, or that it covers the individual data points. It doesn't. It's about the long-run behaviour of the method, and it narrows as your sample grows.
+>
+> *Summary chip:* range likely to contain the true value
+
+**fix10**
+
+> A confidence interval is a range built from your sample that's meant to capture the true population value at a stated rate. If you compute 95% intervals the same way over and over, about 95% of them will contain the true value. The common trap is saying "there's a 95% chance the true value is in this particular interval",  that's not quite right, because the true value is fixed and the interval either covers it or doesn't. What the 95% describes is the long-run performance of the method, not the probability for any one interval. And a wider interval means less precision, usually from a smaller sample or more variability.
+>
+> *Summary chip:* range capturing true value, 95% long-run
+
 ---
 
 #### DSEM-018 — explanation
@@ -17194,6 +19234,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Knowledge distillation is training a smaller model to imitate the outputs of a larger one, so it picks up the bigger model's behaviour at a fraction of the cost. The small model learns from the teacher's soft predictions, not just the hard labels, which is why it can punch above its size.
 
+**fix9**
+
+> Knowledge distillation is training a smaller model to imitate the outputs of a larger one, so the small model picks up the big model's behaviour without carrying its full size. The large model acts as a teacher, and its soft predictions give the student more to learn from than hard labels alone.
+
+**fix10**
+
+> Knowledge distillation is when a smaller model is trained to imitate the outputs of a larger, more capable one, so it picks up much of that model's behaviour at a fraction of the size and cost. The big model acts as a teacher, and the small one learns from its predictions rather than only from the original labels.
+>
+> *Summary chip:* small model imitates a larger teacher
+
 ---
 
 #### DSEM-019 — why_method
@@ -17259,6 +19309,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Cross-validation gives you a better estimate of how the model performs, but it's still using every example to both fit and evaluate, so the model selection itself is tuned on all your data. A held-out test set stays untouched until the very end, so it's the one number that hasn't influenced any of your choices. That's what makes it an honest estimate of generalization rather than an optimistic one.
 >
 > *Summary chip:* test set stays untouched, honest estimate
+
+**fix9** — edited after streaming
+
+> Cross-validation gives you a better estimate of how the model performs, but it's still using every example to both tune and evaluate, so the final number is optimistically biased. A held-out set is data the model never touched during training or model selection, so it's the honest estimate of how it'll do on genuinely new data. In practice, cross-validation is used for model selection and the test set is kept untouched until the very end.
+
+**fix10**
+
+> Cross-validation gives you a better estimate of how the model performs, but it doesn't give you a clean final number, because every fold has influenced the model selection at some point. A held-out set stays untouched until the very end, so the score you report on it is the one honest estimate of generalisation you have. In practice I'd use cross-validation for tuning and model choice, and keep the test set for that final check.
 
 ---
 
@@ -17328,6 +19386,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Thank you all for being here, and for the questions, which pushed me to think harder about parts of this I'd taken for granted. My particular thanks to my supervisor, whose steady guidance shaped this work from the start and kept me honest when I drifted. I'm grateful for your time and attention today.
 
+**fix9** — edited after streaming
+
+> Thank you both for your time. To my examiners, thank you for the questions. And to my supervisor, thank you for your guidance.
+
+**fix10** — edited after streaming
+
+> Thanks to my examiners, and to my supervisor, thank you. I'm grateful to you all.
+
 ---
 
 #### DSEM-021 — not_in_source
@@ -17379,6 +19445,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > I don't have the exact timeline in front of me, so I'd rather not give you a number I can't stand behind. What I can say is that it ran across several distinct phases, and the bulk of the time went into the parts that needed the most iteration. I'm happy to walk through how it was structured if that's useful.
+
+**fix9** — edited after streaming
+
+> Happy to give you the timeline. Let me pull the exact start and end dates and follow up with you right after this.
+
+**fix10**
+
+> I don't have the exact start and end dates in front of me, so I'd rather not give you a number I can't stand behind. What I can tell you is how the work broke down across its phases, and I'm happy to walk through that if it's useful.
 
 ---
 
@@ -17433,6 +19507,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > If you remember one thing, I'd want it to be the core claim of the talk itself, and I'd rather not put words in my own mouth about what that is. The honest answer is that the takeaway should be the single idea the whole talk was built to support, stated in one sentence a listener could repeat to someone else. If you tell me the topic or the title, I can give you that sentence directly.
 
 **fix8**
+
+> If you remember one thing, I'd want it to be the core claim the whole talk rests on, and I'd say it in one plain sentence rather than a summary of the slides. Everything else, the method, the results, the caveats, hangs off that one idea, so if that sticks, the rest has somewhere to attach.
+
+**fix9** — edited after streaming
+
+> If you remember one thing, let me give you the honest version: I'd point you to the one finding that changed how I think about the problem, and say it in a sentence you could repeat to someone else tomorrow. Can I ask which part of the talk you found most surprising? That tells me which thread to pull on.
+
+**fix10**
 
 > If you remember one thing, I'd want it to be the core claim the whole talk rests on, and I'd say it in one plain sentence rather than a summary of the slides. Everything else, the method, the results, the caveats, hangs off that one idea, so if that sticks, the rest has somewhere to attach.
 
@@ -17514,6 +19596,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > If you tell me your field and the topic of the talk, I can tighten it into something you can say word for word.
 
+**fix9** — edited after streaming
+
+> I'll keep this to about thirty seconds and leave the detail for the questions.
+> 
+> "Thanks for having me. I'll keep this opening brief so we can get to the discussion, and I'll let the slides and your questions carry the specifics. I'll stop there and take it from the top."
+> 
+> If you want it tighter, cut the middle sentence and go straight from "Thanks for having me" to "I'll keep this brief so we can get to your questions."
+
+**fix10** — edited after streaming
+
+> I'll keep this to thirty seconds and leave the detail for questions. I'd rather spend most of our time on the substance than on me. I'm happy to go deeper on any part of it once we get into questions.
+
 ---
 
 #### DSEM-024 — not_in_source
@@ -17572,6 +19666,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'd rather let the work speak first,  what I can say is that the question itself is what I keep coming back to, and I'd be glad to walk through how I approached it once we're into the results.
 
+**fix9** — edited after streaming
+
+> Happy to say a little about how I got here. The question at the centre of this is one I kept returning to, and the more I looked at it, the more it seemed worth working through properly. That's what led me to the study I'm about to present.
+
+**fix10** — edited after streaming
+
+> I came to this through the question itself. It's the kind of question that rewards being taken seriously on its own terms, so that's where I started. Let me say a little about how I got here, and then we can get into the results.
+
 ---
 
 #### DSEM-025 — hallucination_bait
@@ -17623,6 +19725,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > I'm not going to claim a review status I can't verify. What I can tell you is where the work stands on that front, and if it hasn't been through review yet, I'll say so plainly and tell you what the plan is.
 
 **fix8**
+
+> I'm not going to claim a review status I can't verify. What I can tell you is where the work stands on that front, and if it hasn't been through review yet, I'll say so plainly and tell you what the plan is.
+
+**fix9** — edited after streaming
+
+> That's the right thing to ask, and I'd rather give you an accurate answer than a quick one. Let me confirm the exact submission status and follow up with you directly.
+
+**fix10**
 
 > I'm not going to claim a review status I can't verify. What I can tell you is where the work stands on that front, and if it hasn't been through review yet, I'll say so plainly and tell you what the plan is.
 
@@ -17718,6 +19828,22 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > Taking it offline is fine when the detail is narrow or needs a document, but not when the question is central to the discussion. For rambling, I slow down and answer in one sentence first, then add detail only if they ask.
 
+**fix9** — edited after streaming
+
+> If I don't know something, the move is to say so plainly and then say what I'll do about it. Something like, "I don't have that in front of me, let me confirm and come back to you." That reads as confident, not weak, because it's specific and it has a next step. What sounds weak is guessing or padding.
+> 
+> Taking it offline is fine when the detail is narrow or only matters to one or two people. It's worth avoiding if the answer matters to everyone in the room, because then it looks like dodging.
+> 
+> For rambling, slow down and answer in one sentence first, then stop. If you feel yourself adding more, ask whether it's a new point or a repeat. Usually it's a repeat, so let the silence sit.
+
+**fix10**
+
+> If I don't know something, I say so plainly and then say what I'll do about it. Something like "I don't have that in front of me, let me check and come back to you." That reads as confidence, not weakness, because it's specific and it has a next step. What sounds weak is guessing or padding.
+> 
+> Yes, "let's take it offline" is fine, as long as I name who follows up and on what. On rambling, I try to answer in one sentence first, then stop and let them ask for more. Pausing feels longer to me than it does to them.
+>
+> *Summary chip:* say I don't know, then next step
+
 ---
 
 #### DSEM-027 — results
@@ -17794,6 +19920,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* 93.2% from the table, 94.1% needs reconciling
 
+**fix9** — edited after streaming
+
+> **93.2%**, the STAGE-KD test accuracy over three seeds, with a standard deviation of 0.4. The summary paragraph in my draft still says 94.1% averaged over five seeds, and the draft notes flag that the summary may be from the older 40-keyword run. The table is the current result, and the remaining seeds are still to be rerun.
+
+**fix10**
+
+> The number I'm standing behind is **93.2%**, the STAGE-KD test accuracy from the three-seed run, with a standard deviation of 0.4. The 94.1% figure in my summary paragraph is from an earlier run and I'm still reconciling it against the table, so I'm not putting that forward as the headline. The remaining two seeds are still to be rerun once the cluster is back.
+>
+> *Summary chip:* 93.2% over three seeds, not 94.1%
+
 ---
 
 #### DSEM-028 — methodology
@@ -17861,6 +19997,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment comparison is 14, not 1,400. The 2,406 appointments are clustered within those clinics, which is why we used a mixed-effects model with a clinic random intercept rather than treating each appointment as independent. More patients within the same 14 clinics adds precision only slowly, so the interval stays wide.
 >
 > *Summary chip:* clustering at clinic level, only 14 randomised
+
+**fix9**
+
+> Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment comparison is 14, not 1,400. The 2,406 appointments are clustered within those clinics, and the mixed-effects model with a clinic random intercept accounts for that correlation rather than treating each appointment as independent. So the interval stays wide despite the appointment count.
+
+**fix10**
+
+> Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment effect is 14 clusters, not 1,400 patients. The 1,400 patients are clustered within those clinics, and appointments within a clinic are correlated, which is why we used a clinic random intercept. So the interval stays wide despite the number of appointments.
+>
+> *Summary chip:* wide CI from 14 randomised clinics
 
 ---
 
@@ -17930,6 +20076,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* 14.2 ms per window on Arlo M4
 
+**fix9** — edited after streaming
+
+> On the Arlo M4, KWS-Tiny runs in **14.2 ms** per window, measured from feature input to posterior output. That's at 80 MHz, and front-end feature extraction wasn't timed separately. Because all three training methods produce the same architecture, latency is identical across them. Peak RAM is 96 KB.
+>
+> *Summary chip:* 14.2 ms per window on Arlo M4
+
+**fix10**
+
+> The deployed model runs in **14.2 ms** per one-second window on the Arlo M4 board at 80 MHz, measured from feature input to posterior output. That's from Chapter 5, section 5.2. One caveat: the front-end log-mel extraction wasn't timed separately, so that figure covers the model only, not the full pipeline. Latency is identical across all three training methods since the architecture is the same.
+>
+> *Summary chip:* 14.2 ms per window, model only
+
 ---
 
 #### DSEM-030 — partial_unsupported
@@ -17991,6 +20149,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > No, it doesn't. The 14.2 ms runs from feature input to posterior output, and the 40-band log-mel front end wasn't timed separately, as noted in section 5.1.
+
+**fix9**
+
+> No, it doesn't. The 14.2 ms is measured from feature input to posterior output, so the 40-band log-mel front end wasn't timed separately.
+
+**fix10** — edited after streaming
+
+> No, it doesn't. Section 5.1 says the 14.2 ms is measured from feature input to posterior output, and the front-end 40-band log-mel extraction was not timed separately. So the full pipeline latency isn't reported.
 
 ---
 
@@ -18058,6 +20224,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The thesis doesn't give a reason for that. What section 5.1 states is just that latency is measured per 1-second window from feature input to posterior output, and that the 40-band log-mel front end was not timed separately. The reason isn't stated anywhere in the chapter.
 
+**fix9** — edited after streaming
+
+> The 14.2 ms is measured from feature input to posterior output, so the 40-band log-mel front end sits outside that boundary. The thesis reports latency only. Because all three training methods produce the same architecture, latency is identical across them.
+
+**fix10**
+
+> Section 5.1 doesn't give a reason for that choice. What it does say is that latency is measured per one-second window from feature input to posterior output, and that the 40-band log-mel front-end was not timed separately. The limitations in 5.6 do note that no energy measurements were taken because the board lacks a current-sense header, and that latency is used as a proxy for cost. So the honest answer is that the thesis reports the model-only figure and doesn't explain why the front-end wasn't timed separately.
+>
+> *Summary chip:* thesis doesn't give the reason
+
 ---
 
 #### DSEM-032 — limitations_ask
@@ -18123,6 +20299,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > You're right that the design has real limits, and the summary says so: clinics volunteered, staff and patients weren't blinded, and only 14 clinics were randomised, so the confidence interval is wide. The 6.5 points is the observed difference, and the adjusted odds ratio of 1.41 with a CI of 1.12 to 1.77 is what I'd lean on. I'd treat it as a signal worth a follow-on trial, not a settled effect.
 >
 > *Summary chip:* volunteer clinics, no blinding, wide CI
+
+**fix9**
+
+> You're right that the design has real limits, and the summary says so: clinics volunteered, staff and patients weren't blinded, and only 14 clinics were randomised. So I'd treat the 6.5 points as an association, not a clean causal effect. The adjusted odds ratio is 1.41 with a 95% CI of 1.12 to 1.77, so the direction holds, but volunteer clinics being more organised is a genuine threat to how far it generalises.
+>
+> *Summary chip:* association not causation, wide CI, volunteer bias
+
+**fix10**
+
+> You're right that the design has real limits, and the summary says so: clinics volunteered, staff and patients weren't blinded, and only 14 clinics were randomised. So I'd treat the 6.5 points as a signal, not a precise effect. The adjusted odds ratio was 1.41 with a wide interval, 1.12 to 1.77, which is consistent with a much smaller true effect.
+>
+> *Summary chip:* 6.5 points is a signal, not precise
 
 ---
 
@@ -18194,6 +20382,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* all 31 clinics, 12 months, separate arms
 
+**fix9**
+
+> The next steps section lays it out: randomise from all 31 district clinics rather than the 14 that volunteered, run it for 12 months instead of 12 weeks, and split the 48-hour and 3-hour reminders into separate arms so we can tell which one is doing the work. That addresses the volunteer bias and the short follow-up. Blinding is harder, since staff deliver the reminders, but the wider clinic base and longer window are the main fixes.
+
+**fix10**
+
+> The summary's own next steps point the way: randomise from all 31 district clinics rather than the 14 that volunteered, run it for 12 months, and test the 48-hour and 3-hour reminders as separate arms. That last one matters because both were always sent together, so we couldn't tell which reminder was doing the work. I'd also want to audit phone number accuracy, since 6% of messages were undeliverable.
+>
+> *Summary chip:* randomise all 31 clinics, split the reminder arms
+
 ---
 
 #### DSEM-034 — limitations_ask
@@ -18251,6 +20449,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > You're right, and the summary lists it as a limitation: 12 weeks means we can't say whether the effect persists or fades. That's exactly why the follow-on trial runs for 12 months. So I'd read the 6.5 points as a short-term signal, not a durable effect.
+
+**fix9**
+
+> You're right, and the summary flags it as a limitation: 12 weeks means we can't say whether the effect persists or fades. That's exactly why the follow-on trial runs for 12 months. What the 12 weeks does give us is the direction and the size of the association, 78.4% against 71.9%, and that's enough to justify testing it properly over a longer window.
+
+**fix10**
+
+> You're right, and the summary flags it as a limitation: 12 weeks tells us nothing about whether the effect persists or fades. That's exactly why the follow-on trial runs for 12 months. The 12-week window was enough to see a signal, not enough to say it holds.
 
 ---
 
@@ -18324,6 +20530,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* roughly double, by count and weight
 
+**fix9**
+
+> Yes, that's the gist. Downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 particles per gram wet tissue against 0.42, so roughly double on both measures. The Kruskal-Wallis test across the six sites gave H = 21.4, p < 0.001, and the Dunn post hoc showed each downstream site differed from each upstream site, with no difference among sites on the same side of the outfall.
+>
+> *Summary chip:* roughly double downstream, both measures
+
+**fix10**
+
+> Yes, that's the gist. Downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 particles per gram wet tissue against 0.42, so roughly double by both count and weight. The difference held up statistically too, with each downstream site differing from each upstream site.
+
 ---
 
 #### DSEM-036 — follow_up
@@ -18381,6 +20597,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > Yes, per gram of wet tissue. Upstream averaged 0.42 particles per gram and downstream 0.83, so roughly double, the same pattern as the per-individual counts.
+
+**fix9** — edited after streaming
+
+> Yes, per gram of wet tissue. Upstream averaged 0.42 particles per gram and downstream 0.83, so roughly double by weight as well as by count. That's slide 8.
+
+**fix10**
+
+> Yes, per gram of wet tissue. Upstream averaged 0.42 particles per gram and downstream 0.83, so roughly double on that measure too. That's wet tissue weight, and it's the same pattern as the per-individual counts, 3.8 against 7.1.
+>
+> *Summary chip:* 0.42 vs 0.83 per gram wet tissue
 
 ---
 
@@ -18450,6 +20676,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* peak RAM 112 KB, summary says 96
 
+**fix9**
+
+> The draft reports a peak RAM of **112 KB** on-device, measured with the debug logger enabled. There's a note flagging that this figure may need re-measuring with logging off, and the summary paragraph carries an older **96 KB** figure that still has to be reconciled with the table.
+>
+> *Summary chip:* 112 KB peak, 96 KB in summary
+
+**fix10**
+
+> The draft reports **112 KB peak RAM** on-device, measured with the debug logger enabled. There's a note flagging that this figure may need re-measuring with logging off, and the summary paragraph carries an older 96 KB number that still needs reconciling with the table.
+>
+> *Summary chip:* 112 KB peak, pending re-measure
+
 ---
 
 #### DSEM-038 — follow_up
@@ -18515,6 +20753,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > 112 KB. That's the measured on-device figure in section 5.2, with the debug logger enabled. The 96 KB in the summary paragraph is the older number, and the note flags it as possibly from an earlier run.
+
+**fix9**
+
+> The measured figure is **112 KB**, from the results table, taken with the debug logger on. The 96 KB in the summary paragraph is the older number and still needs reconciling, so I'd treat 112 KB as the current one.
+>
+> *Summary chip:* 112 KB measured, 96 KB older
+
+**fix10**
+
+> The table's on-device figure is **112 KB**, measured with the debug logger on. The 96 KB in the summary is the older number, and the note flags it for reconciling.
+>
+> *Summary chip:* 112 KB in table, 96 KB older summary
 
 ---
 
@@ -18583,6 +20833,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > You're right that the ablation is underpowered. The ablations used 3 seeds instead of the 5 in the main results, because of compute limits, and the differences are small relative to seed variance, so they should be treated as indicative rather than conclusive. What they show is directional: removing stage 2 drops accuracy to 92.0% and removing stage 3 to 92.9%, which points to stage 2 carrying most of the gain, but not as a firm ranking. The main STAGE-KD versus standard KD comparison is the stronger one, and that's a paired bootstrap over test utterances with p < 0.01.
+
+**fix9** — edited after streaming
+
+> You're right that the ablation is underpowered. The ablations ran 3 seeds instead of 5 because of compute limits, and the differences are small relative to seed variance, so they're indicative rather than conclusive. The main result is STAGE-KD at 93.2% versus standard KD at 91.8%, significant at p < 0.01 with a paired bootstrap over test utterances. The ablation points to stage 2 contributing most of the gain, and more seeds would be needed before leaning on that.
+
+**fix10**
+
+> You're right that the ablation is underpowered, and I'd rather say that plainly than defend it. The ablations ran with three seeds instead of five because of compute limits, and the differences are small relative to seed variance, so I treat them as indicative rather than conclusive. What I do claim is the main result: STAGE-KD at 93.2% against standard KD at 91.8%, significant at p < 0.01 under a paired bootstrap over test utterances. The ablation suggests stage 2 contributes most of the gain, but I'm not resting the thesis on that.
+>
+> *Summary chip:* ablations indicative, main result significant
 
 ---
 
@@ -18654,6 +20914,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* ablation indicative, main result significant
 
+**fix9** — edited after streaming
+
+> You're right, the ablation is underpowered. It ran 3 seeds instead of 5 because of compute limits, and the differences are small relative to seed variance, so they're indicative rather than conclusive. The main result is STAGE-KD at 93.2% versus standard KD at 91.8%, significant at p < 0.01 with a paired bootstrap over test utterances. The ablation suggests stage 2 contributes most of the gain, and more seeds would be needed before leaning on that.
+
+**fix10**
+
+> You're right, the ablation is underpowered. It ran with three seeds instead of five because of compute limits, and the differences, 92.0% without stage 2 and 92.9% without stage 3, are small relative to seed variance, so I treat them as indicative rather than conclusive. What I do stand behind is the main result: STAGE-KD at 93.2% against standard KD at 91.8%, significant at p < 0.01 under a paired bootstrap over test utterances. The ablation points to stage 2 contributing most of the gain, but I'm not resting the thesis on it.
+>
+> *Summary chip:* ablations indicative, main result significant
+
 ---
 
 ### Team Meet
@@ -18716,11 +20986,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What's the latest on the Android crash on your side?
 
-**fix9 (candidate)**
+**fix9**
 
 > I don't have a confirmed status on the Android crash yet. Let me check the latest crash reports and get back to you with what I find.
 >
 > *Summary chip:* Android crash status unconfirmed, checking reports
+
+**fix10** — edited after streaming
+
+> I'll confirm the Android crash status and get back to you on it.
 
 ---
 
@@ -18774,9 +21048,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Let me confirm what it covers and when it's due, and I'll come back on who's picking it up.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Let me confirm what it covers and when it's due, and I'll come back on who's taking it.
+
+**fix10**
+
+> I can take this one. Let me confirm what it covers and when it's due, then I'll own it and keep everyone posted.
 
 ---
 
@@ -18832,9 +21110,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Two weeks back is worth weighing. On the conflict handling, if we cut offline mode we still have to answer what happens when two people edit the same thing, and that's a design question, not a feature we can just delete. Can we spend twenty minutes on what the pilot actually hit before we decide?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I get the appeal, and two weeks back is real. Before we kill it, what did the pilot actually hit, and is anyone planning to use it offline? Can we look at that together and then decide?
+
+**fix10**
+
+> I get the appeal, and two weeks back is real. But I don't think we should kill it today on the strength of the pilot alone. The conflict work is the part that worries me, because if it's growing now, dropping offline mode might just move that complexity somewhere else rather than remove it. Before we decide, can we put the actual cost on the table, how much of the two weeks is offline mode itself versus the conflict handling, and who's been asking for it outside the pilot? If it's genuinely nobody and the conflict work goes away with it, I'm in.
 
 ---
 
@@ -18894,9 +21176,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* ask what next week depends on
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > That sounds close. What are the couple of things it depends on, and is there anything on my side that would unblock them? If it lands next week, which day would that be?
+
+**fix10**
+
+> That sounds about right. What are the couple of things it depends on? If any of them need something from my side, flag it now and I'll get it moving so next week holds.
+>
+> *Summary chip:* ask what the dependencies are
 
 ---
 
@@ -18952,9 +21240,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Let me check where we landed on the analytics vendor and come back to you right after this.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Let me check where we landed on the analytics vendor and follow up right after this.
+
+**fix10** — edited after streaming
+
+> Let me pull up the notes from that discussion and confirm where we landed, then I'll send it around so we're all on the same page.
+>
+> *Summary chip:* check notes, confirm vendor decision
 
 ---
 
@@ -19012,9 +21306,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* confirm the Monday freeze before agreeing
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > What I can say is that I'll treat the onboarding screens as locked unless we explicitly reopen them. Can we check Monday's notes before we rely on that?
+
+**fix10** — edited after streaming
+
+> What I can say is that I'll hold off on any onboarding screen changes until we check the notes from that call. Can someone pull up what we actually agreed on Monday?
 
 ---
 
@@ -19085,9 +21383,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Building against a guess on the contract itself risks throwing that work away if the shape changes. What I'd do is start on the parts that don't depend on it, and keep the contract as the one thing we're waiting on. Who owns chasing Platform, and is there a date on it?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Building against a guess risks throwing away that work if the contract changes shape. One option: set a short deadline, and if it hasn't landed by then, build the parts that won't move and stub the rest behind an interface. What's the earliest date Platform can give us?
+
+**fix10**
+
+> I'd rather not build against a guess on the contract itself, because if the shapes change we throw that work away. What I'd do is start on the parts that don't depend on it, our own data model and the integration seams, and keep the contract-dependent pieces stubbed. Can we get a date out of Platform for the contract, so we know how long we're holding?
+>
+> *Summary chip:* build independent parts, stub the rest
 
 ---
 
@@ -19147,9 +21451,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Let's tell the pilot customers straight: we're slipping two weeks, here's the new date, and here's what still works in the meantime. On the beta, do we shift the existing plan or re-plan it,  and does the two weeks change what we're testing? Can we confirm the new date and who owns the customer message before we send anything?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Let's tell the pilot customers straight: we're slipping two weeks, here's the new date, and here's what still works in the meantime. On the beta, do we shift the existing plan or re-plan it, and does the two weeks change what we're testing? And who's telling the customers?
+
+**fix10**
+
+> Let's tell the pilot customers straight: we're slipping two weeks, here's the new date, and here's what it means for them. I'll take the customer note if that helps. On the beta, I'd shift the existing plan rather than re-plan it, unless the slip changes what we're testing. Can we confirm the new date before anything goes out?
 
 ---
 
@@ -19205,9 +21513,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Let me pull the actual timeline from that migration and send it over. What I can say is that the length depended mostly on how many payment flows and integrations were in scope, so if you tell me what this one covers, I can tell you how comparable it really is.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I can't give you a real number from experience on that. What I can do is help you size this one: tell me the scope, the number of systems and the cutover approach, and I'll work through a realistic timeline with you.
+
+**fix10** — edited after streaming
+
+> Let me pull the actual timeline from that migration and send it over. What I can say is that the length depended mostly on how many payment flows and integrations were in scope, so if you tell me what this one covers, I can tell you how comparable it really is.
 
 ---
 
@@ -19269,9 +21581,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Happy to take that on. The way I'd approach conflict resolution is to make the rules explicit first: last-write-wins for simple fields, but anything with real structure gets a merge or a surfaced conflict rather than a silent overwrite. I'd want to agree on the policy per data type before writing code, then build the tests around the nasty cases like concurrent edits and offline deletes. Who else needs to sign off on those rules?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Happy to take that on. Before I commit to owning it, I want to be clear on scope: which conflicts are in play, what the current behavior is, and what "done" looks like for you.
+
+**fix10** — edited after streaming
+
+> I'd be glad to take that on. My approach is to define the merge rules per field first, decide what wins on a true conflict, and keep an audit trail so we can see what was dropped and why. Before I commit to owning it, can we agree on the scope, which data types are in play, and who reviews the rules with me?
 
 ---
 
@@ -19335,9 +21651,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The thing that eats the time isn't the build, it's the review and the store turnaround. That's the part I'd want us to plan around. What's your read on the review timeline on your side?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > The thing that eats the time isn't the build, it's the store review and the device testing. Three weeks is what I'd plan for to get through that without cutting corners. If we want it faster, we'd have to drop something from scope, better to say that now than promise a date we can't hit.
+
+**fix10** — edited after streaming
+
+> I'd commit to three weeks once scope is frozen. If we're still changing what's in it, that's the thing to pin down first.
 
 ---
 
@@ -19411,9 +21731,19 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'd push back on the assumption that both are full-time. I'd say: I can take on the Ledger migration, but not that and every sprint commitment at the same quality. So here's what I'd offer: I take the migration, and we move some of my sprint items to someone else or the next sprint, with the tradeoff written down so it's a real decision, not a silent slip. If nothing can move, then we scope the migration to a first phase. The framing that keeps it from sounding like dodging is that I'm not saying no, I'm saying what I'll deliver and what it costs.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > One approach: push back on the framing that both are full-time commitments, not on the work itself. Say you can take the Ledger migration, and be clear that something has to give on the sprint side, because both at full pace means one slips. Then offer a concrete trade: hand off or defer a named sprint item, or push the migration's first milestone out. Ask them which they'd rather protect. That reads as owning the outcome, not dodging.
+
+**fix10**
+
+> I'd push back on the assumption that both are full-time. I'd say: I can own the Ledger migration, and I want to, but I can't do that and hold every sprint commitment at the same quality. So let's pick what gives.
+> 
+> What I'd offer instead: I keep the migration and the critical-path sprint items, and we hand off or push the lower-priority tickets, with a clear date for when they land. Or we phase the migration so the first slice starts after the current sprint closes.
+> 
+> The framing that keeps it from sounding like dodging: I'm not saying no, I'm saying here's the trade and here's what I'd cut. Then ask them to confirm the priority order.
+>
+> *Summary chip:* trade scope, not effort
 
 ---
 
@@ -19471,9 +21801,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > SSO makes sense, but it's a bigger lift than the pilot needs right now. Let's keep the pilot on the simpler login so we can validate the core flow first, and I'll scope SSO as the first thing we add once that's proven.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Happy to keep SSO out of the pilot. If it's a hard requirement for someone, tell me and we'll look at it separately.
+
+**fix10**
+
+> Happy to keep SSO on the roadmap, but for the pilot I'd rather not add it. It's a real integration with the identity provider, and it would slow down the feedback we're trying to get. Let's ship the pilot without it and revisit SSO once we've validated the core flow.
+>
+> *Summary chip:* keep SSO off the pilot, revisit later
 
 ---
 
@@ -19557,9 +21893,21 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > We're near time, so let me wrap. I want to make sure I've got the decisions and action items right before we break. Can each of you confirm what you're taking on and by when? I'll send a written recap after this so we're all working from the same list, and I'll propose a follow-up time in that same note.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > We're near time, so let me pull us together. I want to make sure I've got the decisions and action items right, so I'll send a short recap after this with what we agreed, who owns what, and by when. If I miss anything, reply and I'll correct it. For next time, does the same slot work, or should I send a couple of options?
+
+**fix10**
+
+> I don't have the meeting content to recap from, so I can't draft the specifics of what we decided or who owns what. What I can do is give you the shape to fill in live, and you can slot in the real items as you go.
+> 
+> Here's the closing I'd run:
+> 
+> "Quick recap before we wrap. We decided on the main direction, and I want to make sure the open items are clear. On the first one, that's with you, and we said by end of week. The second is mine, and I'll have it back to the group before we next meet. Anything I'm missing on owners or dates? If not, let's aim to reconvene early next week, same time, and I'll send a short note after this with the list so we're all working from the same page."
+> 
+> The one thing I'd flag: since you didn't take notes, the safest move is to read the open items back and ask the room to correct owners and dates before you close, rather than stating them as settled. That way the recap is accurate even if your memory of who took what is fuzzy.
+>
+> *Summary chip:* recap, confirm owners, set next meeting
 
 ---
 
@@ -19615,9 +21963,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Ask him privately, right after the meeting or in a quick side message, something like "Can we grab ten minutes to lock down a date for this?" That keeps it low-key and gives him room to say when works. If it needs to be in the room, frame it as a question to the group: "What date should we aim for?" so it's not just on him.
 
-**fix9 (candidate)**
+**fix9**
 
 > Ask him privately, right after the meeting or in a quick message, something like "Can we grab ten minutes this week to lock down a date for this?" That keeps it off everyone's plate and gives him room to say when works. If it needs to be in the room, frame it as a question to the group: "When can we get a date on this?"
+
+**fix10**
+
+> Ask him privately, right after the meeting or in a quick message, something like "Can we grab ten minutes to lock down a date for this?" That keeps it low-key and gives him room to say when works. If it needs to be in the room, frame it as a question to the group: "What date works for everyone?" so he's not singled out.
+>
+> *Summary chip:* ask privately, or make it a group question
 
 ---
 
@@ -19679,11 +22033,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Priya's on the Ledger v5 migration for the pay-period endpoints, that's her action item. Offline clock-in conflict resolution is Marcus's, he's about half done and aiming for Friday. So no doubling up there.
 
-**fix9 (candidate)**
+**fix9**
 
 > Priya's on the Ledger v5 migration for pay-period endpoints, and Marcus has offline clock-in conflict resolution. So no doubling up there. The offline clock-in flag is a separate thing, it ships behind offline_clockin_v1 at 10% of beta, and that's a GA decision, not beta.
 >
 > *Summary chip:* Priya on Ledger, Marcus on offline clock-in
+
+**fix10**
+
+> Priya's on the Ledger v5 migration for the pay-period endpoints, due Tuesday 29 September. Offline clock-in is Marcus, and the conflict resolution PR is his, aiming for Friday. So no doubling up there.
 
 ---
 
@@ -19747,9 +22105,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > No, that one's still open. Tomas put 99.5% on the table and Lena wants 99.7%, and we parked it until we've got two weeks of beta data, so it comes back at the 22 October sync.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > No, it's still floating. Tomas proposed 99.5% crash-free sessions for GA and Lena wants 99.7%, and it was parked until there are two weeks of beta data, so it's coming back at the 22 October sync.
+
+**fix10**
+
+> No, it's still floating. Tomas proposed 99.5% and Lena wants 99.7%, and we parked it until we have two weeks of beta data, with a revisit at the 22 October sync. So nothing's locked yet.
+>
+> *Summary chip:* crash-free target still parked, not decided
 
 ---
 
@@ -19819,11 +22183,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* Dana owns release notes, Hiro sends tickets
 
-**fix9 (candidate)**
+**fix9**
 
 > Dana owns release notes. Hiro's sending the final ticket list by Monday, and Marcus reviews the Android wording before it goes out.
 >
 > *Summary chip:* Dana owns release notes, Hiro sends tickets
+
+**fix10**
+
+> Dana owns release notes. Hiro's sending the final ticket list by Monday, and Marcus reviews the Android wording before it goes out.
+>
+> *Summary chip:* Dana owns release notes, Hiro sends list
 
 ---
 
@@ -19887,9 +22257,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* tablet out of beta, regression Tuesday 13th
 
-**fix9 (candidate)**
+**fix9**
 
 > Yeah, we decided to drop the tablet layout from the beta and ship phones only. Split view still breaks on the smaller tablets, so it comes out for now and we revisit it for GA.
+
+**fix10**
+
+> Yeah, we decided to pull the tablet layout out of the beta and ship phones only. Split view was still breaking on the smaller tablets, so it comes out now and we revisit it for GA.
 
 ---
 
@@ -19951,9 +22325,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The move weekend is **12-13 December**, and the packing deadline is **5pm Friday 11 December**. The **#office-move channel** is the contact point for anything on this.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Nothing's blocking me right now. The move details: crates arrive Tuesday 8 December, desk packed by 5pm Friday 11 December, and the move weekend is 12-13 December. Cables get labelled with the stickers in the crate, and desks on the third floor are booked through the Deskly app.
+
+**fix10**
+
+> Nothing's blocking me right now. I've got the move details from the FAQ, so packing by 5pm on Friday 11 December and the crates arriving Tuesday 8 December are clear. The one thing I want to confirm is the desk booking, since the third floor is bookable desks through the Deskly app rather than assigned seating.
 
 ---
 
@@ -20009,9 +22387,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > What I'd want to check first is which workstream is still open and whether anything on the critical path is waiting on someone outside the team. Can we pull up the current plan and see what's still red?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > What I'd want to check first is where the open dependencies sit against that date, and whether anything still unowned is on the critical path. Can we pull the current status before I commit to a view?
+
+**fix10** — edited after streaming
+
+> What I'd want to check first is whatever's still open on the critical path, and whether anything there has a hard external dependency we don't control. Can we pull up the current status before I call out a single biggest risk?
 
 ---
 
@@ -20081,9 +22463,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > One way to split it is by area rather than by test count,  one person on the core flows, the other on the newer surface area, with a shared checklist so coverage is visible at a glance. Who on your side would own that checklist?
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I'd split it by surface rather than by test count, with a written checklist per area so ownership is explicit. Let's agree who signs off on shared flows before we start.
+
+**fix10** — edited after streaming
+
+> I'd split it by area rather than by test count: **Tomas takes the core flows**, and **the contractor takes the newer surface area**, with a **shared checklist** so we can see what's covered. Can we confirm who owns the checklist before we lock that in?
 
 ---
 
@@ -20153,9 +22539,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > I'd frame it around the timeline, not the person: "The design review is the dependency for my next step,  can we get a slot on the calendar this week?" That names the dependency without making it about who hasn't done it. If someone asks who owns it, I'd name the reviewer and say I've raised it with them.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > I'd frame it around the review itself, not the person: "The design review is where this is sitting right now. What's the path to get it moving?" That names the blocker and the ask without pointing at anyone. If Dana's the reviewer, say that as a fact, not a complaint.
+
+**fix10**
+
+> I'd frame it around the review itself, not the person. Something like: "I'm blocked on the design review, and I want to make sure it doesn't slip the timeline. Can we get a slot on the calendar this week?" That names the blocker and the ask, and it's about the process, not who's holding it up. If someone asks who owns it, I'd say the review is the gate and offer to help move it, rather than pointing at Dana.
+>
+> *Summary chip:* name the blocker, not the person
 
 ---
 
@@ -20237,13 +22629,21 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* no size yet, schedule absorbs it
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Lena's action item was to confirm the export estimate by Monday, so that's the number to plan around.
 > 
 > On what drops out, the notes don't say. What they do say is that CSV export is back in for 2.4 as Brennan's top request, and that if it doesn't fit before the freeze we talk again.
 > 
 > One thing in the notes: the code freeze appears as Friday 9 October in the action items, while the dates section says it moves to Friday 16 October to absorb the extra scope. Those two don't match.
+
+**fix10** — edited after streaming
+
+> The notes don't give a size for CSV export. What they say is that Lena owns confirming whether it fits before the freeze, with an estimate due by Monday, and that if it doesn't fit we'll talk again. So I'd hold off planning around it until that estimate lands.
+> 
+> On what drops out, the notes don't name a tradeoff either. The only scope change recorded is CSV export going back in. On the freeze date the notes give both: the dates section says the freeze moves to **Friday 16 October** to absorb the extra scope, while the action items say the freeze **stays Friday 9 October, no exceptions**. That needs confirming before anyone relies on it.
+> 
+> So the honest answer is that nothing is listed as dropping out yet, and that's exactly what the estimate needs to settle.
 
 ---
 
@@ -20318,9 +22718,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Action: owner unclear will confirm whether the Kestrel Messaging contract is signed, before any scope change
 > Risk: parking Canada SMS registration leaves Tidewater Clinics without SMS reminders for the 14 October beta
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > The plan has the beta going to 400 users across three customers on 14 October, and Tidewater in Halifax is one of them, so Canadian numbers are still in scope. Carrier registration takes up to 10 business days after the contract is signed. The pay-period screen is already covered by the Ledger v5 work, and that call gets made at the 5 October go/no-go.
+
+**fix10**
+
+> The beta is 200 users and just Brennan Foods, so Canada SMS isn't on the critical path for it. But the plan has Tidewater Clinics in Halifax going live at the 14 October beta, and Kestrel carrier registration for Canadian numbers takes up to 10 business days after the contract is signed, so if we park it now we likely miss that date. I'd keep the registration moving and shift the pay-period work onto the Ledger v5 dependency instead. Can we check whether Tidewater is still in the 14 October beta before we decide?
 
 ---
 
@@ -20374,9 +22778,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Can we check the notes before we treat export as out of scope? If it was decided, I'll update the release plan to match.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Can we pull up the notes from that call before we treat export as settled? If it was out of scope, I'll keep it off the list for this release.
+
+**fix10** — edited after streaming
+
+> Can we pull up the notes from that call before we treat export as out of scope? If it was agreed, I'll go with it.
 
 ---
 
@@ -20430,9 +22838,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Let's pull up last week's notes and settle it in a minute. If export was decided out of scope, I'll update the release plan to match.
 
-**fix9 (candidate)**
+**fix9**
 
 > Let's pull up last week's notes and check what we actually agreed.
+
+**fix10**
+
+> Let's pull up last week's notes and settle it from what's actually written there.
 
 ---
 
@@ -20490,9 +22902,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > If last week's notes show we agreed export was out of scope, I'll update the release plan to match. If they don't, let's settle it with whoever owns the release scope.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Let's pull up last week's notes and check what we actually agreed. If export was out of scope, I'll keep it off the list for this release. Whose call do you see it as?
+
+**fix10**
+
+> It's mine to make, and I'd rather make it on what's written than on memory. Let's pull up last week's notes. If export was agreed as out of scope, I'll hold it there. If it wasn't, I'll own the call on whether it ships.
+>
+> *Summary chip:* my call, check notes first
 
 ---
 
@@ -20564,11 +22982,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* Kestrel chosen over Brightwire on price
 
-**fix9 (candidate)**
+**fix9**
 
 > We went with **Kestrel Messaging**, not Brightwire. Kestrel came in at $0.0071 per message against Brightwire's $0.0094, and it already supports Canadian carrier registration. Hiro was going to get the contract signed by today, so that's worth checking.
 >
 > *Summary chip:* Kestrel chosen, contract due today
+
+**fix10**
+
+> We went with **Kestrel Messaging**, not Brightwire. Kestrel came in at $0.0071 per message against Brightwire's $0.0094, and it already supports Canadian carrier registration. Hiro was going to get the contract signed by today, so worth checking whether that's done.
+>
+> *Summary chip:* Kestrel chosen over Brightwire on price
 
 ---
 
@@ -20638,9 +23062,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Two reasons. Kestrel quoted **$0.0071** per message against Brightwire's **$0.0094**, so it's cheaper per send, and Kestrel already supports Canadian carrier registration.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > Price was the main thing: **$0.0071** a message against Brightwire's **$0.0094**, and Kestrel already supports **Canadian carrier registration**.
+
+**fix10** — edited after streaming
+
+> Two reasons. Kestrel came in at **$0.0071** a message against Brightwire's $0.0094, and it already supports Canadian carrier registration. The contract was due today, so I'd check with Hiro whether it's signed.
 
 ---
 
@@ -20708,11 +23136,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* Kestrel contract due today, check with Hiro
 
-**fix9 (candidate)**
+**fix9**
 
 > The contract was meant to be signed by today, Thursday 1 October. Hiro owns it, so I'd check with him whether it's actually done, since procurement's asking. If it hasn't gone through yet, that's the one thing worth chasing today.
 >
 > *Summary chip:* Kestrel contract due today, Hiro owns it
+
+**fix10** — edited after streaming
+
+> The Kestrel contract is due to be signed by Thursday 1 October, with Hiro owning it. Since that's today, I'd check with Hiro whether it's actually signed before Procurement treats it as done.
 
 ---
 
@@ -20784,11 +23216,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* four decisions, beta date unchanged
 
-**fix9 (candidate)**
+**fix9**
 
 > Here's where we landed. Dana gets final reminder strings to Marcus by end of day Thursday. We're cutting the onboarding animation, with the option to bring it back in 2.5. Priya pairs with Marcus on the offline sync bug at 9:30 tomorrow morning. And the beta date holds at October 14th.
 >
 > *Summary chip:* four decisions, beta date unchanged
+
+**fix10**
+
+> Here's where we landed. Dana gets final reminder strings to Marcus by end of day Thursday. We're cutting the onboarding animation, and we can bring it back in 2.5. Priya pairs with Marcus on the offline sync bug tomorrow at 9:30. And the beta date stays October 14th.
+>
+> *Summary chip:* four decisions, beta date holds
 
 ---
 
@@ -20860,11 +23298,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* four decisions, beta date unchanged
 
-**fix9 (candidate)**
+**fix9**
 
 > Here's what we've locked in. Dana sends final reminder strings to Marcus by end of day Thursday. We're cutting the onboarding animation, with the option to bring it back in 2.5. Priya pairs with Marcus on the offline sync bug at 9:30 tomorrow morning. And the beta date stays at October 14th.
 >
 > *Summary chip:* four decisions, beta date unchanged
+
+**fix10**
+
+> Here's where we landed. Dana gets final reminder strings to Marcus by end of day Thursday. We're cutting the onboarding animation, and we can bring it back in 2.5. Priya pairs with Marcus on the offline sync bug tomorrow at 9:30. And the beta date stays October 14th.
+>
+> *Summary chip:* four decisions, beta date holds
 
 ---
 
@@ -20927,11 +23371,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The notes do say GA moved to **November 4th**, but I'd hold off on calling it breathing room. The same notes move code freeze to **October 16th** to absorb the extra scope, and they flag that nobody checked the later date against the store review buffer. So the extra time is already spoken for. Can we confirm the freeze date before we plan around it?
 
-**fix9 (candidate)**
+**fix9**
 
 > The notes do say GA moved to **November 4th**, but I wouldn't bank on much breathing room yet. The same notes move code freeze to **October 16th** and put CSV export back in scope, and Lena still has to confirm whether it fits before freeze. Also, those notes are Colin's draft, and the action list at the bottom still says freeze stays October 9th, so we should get that reconciled before we treat the extra time as real.
 >
 > *Summary chip:* GA moved, but freeze and scope still open
+
+**fix10** — edited after streaming
+
+> The notes do say GA moved to **November 4th**, but I'd check the freeze date before we treat it as breathing room. The same notes have code freeze moving to **October 16th** to absorb the extra scope, and the action list still says freeze stays October 9th, so those two don't line up. The material gives both, so let's confirm which one holds before we plan around it.
 
 ---
 
@@ -20989,9 +23437,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The notes don't settle that. They say pilot customers were already told 28 October, and that Hiro decides whether to update them now or after beta. So the date we give them depends on that call, and it's Hiro's to make. What I'd want before we tell anyone: the freeze date confirmed, since that's what the new GA date rests on.
 
-**fix9 (candidate)** — edited after streaming
+**fix9** — edited after streaming
 
 > The notes don't settle it. They say pilot customers were already told GA is **28 October**, and that Hiro decides whether to update them now or after beta. So the date we give them is still an open call, and it's Hiro's to make.
+
+**fix10** — edited after streaming
+
+> The notes say pilot customers were already told GA is 28 October, and Hiro's action item is to decide whether to update them now or after beta. So the date we give them is still an open call, not something the notes settle. On the freeze date the material gives both, 16 October and 9 October, so that needs confirming before anyone relies on it.
 
 ---
 
@@ -21051,7 +23503,11 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Mostly on track" hides the part that matters. I'd ask which specific items are still open, who owns each one, and what the actual remaining work is against the 28th. If anything is slipping, better to hear it now than on the 27th, so you can decide what to cut or move.
 
-**fix9 (candidate)**
+**fix9**
+
+> "Mostly on track" is doing a lot of work there. I'd ask him to name what's actually left: which items are done, which are still open, and what's sitting on the critical path to the 28th. Then the real question, what's the buffer if one of those slips? If he can't point to slack, "mostly" means we're one surprise away from missing it.
+
+**fix10**
 
 > "Mostly on track" is doing a lot of work there. I'd ask him to name what's actually left: which items are done, which are still open, and what's sitting on the critical path to the 28th. Then the real question, what's the buffer if one of those slips? If he can't point to slack, "mostly" means we're one surprise away from missing it.
 
@@ -21123,9 +23579,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Mostly on track" hides the part that matters. I'd ask which items are still open, who owns each, and what's actually left before the 28th. Better to hear a slip now than on the 27th, when there's no room to cut or move anything.
 
-**fix9 (candidate)**
+**fix9**
 
 > Ask him to name what's actually left: which items are done, which are still open, and what's on the critical path to the 28th. Then the real question, what's the buffer if one of those slips? If he can't point to slack, "mostly" means we're one surprise away from missing it.
+>
+> *Summary chip:* ask what's left and the buffer
+
+**fix10**
+
+> "Mostly on track" is doing a lot of work. I'd ask him to name what's actually left: what's done, what's open, and what's on the critical path to the 28th. Then the real question, what's the buffer if one of those slips? If he can't point to slack, "mostly" means we're one surprise from missing it.
 >
 > *Summary chip:* ask what's left and the buffer
 
@@ -21197,11 +23659,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > If he points to the plan doc, ask him to walk you through it rather than read it back. Which line items are still open, who owns each, and what's actually left before the 28th. A doc can say on track while the work says otherwise.
 
-**fix9 (candidate)**
+**fix9**
 
 > If he points to the plan doc, ask him to walk you through it out loud: which items are marked done, which are still open, and what's on the critical path to the 28th. A doc can say "on track" without showing slack. The real question stays the same, what's the buffer if one of those slips?
 >
 > *Summary chip:* make him walk the plan, not cite it
+
+**fix10**
+
+> If he points to the plan doc, that's fine, but the doc isn't the answer. Ask him to walk you through the open items and the critical path to the 28th, then the buffer if one slips. If the doc doesn't show slack, "mostly on track" is still the risk.
+>
+> *Summary chip:* the doc isn't the buffer
 
 ---
 
@@ -21271,9 +23739,15 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* pay-period totals break, v4 fallback
 
-**fix9 (candidate)**
+**fix9**
 
 > If Platform slips the Ledger bulk endpoints past 2 October, the pay-period summary screen can't load totals for pay periods longer than 14 days. The fallback is the v4 read endpoints, which means the summary ships read-only with a "totals updating" state, and that call gets made at the 5 October go/no-go.
+
+**fix10**
+
+> If Platform slips the Ledger bulk endpoints past 2 October, the pay-period summary can't load totals for pay periods longer than 14 days. The mitigation is to fall back to the v4 read endpoints for 2.4 and show a "totals updating" state, and that call gets made at the 5 October go/no-go. If we fall back, the summary ships read-only.
+>
+> *Summary chip:* Ledger slip hits pay-period totals, v4 fallback
 
 ---
 
@@ -21339,11 +23813,17 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > The fallback is the **v4 read endpoints** for 2.4, with a **"totals updating"** state and the pay-period summary shipping **read-only**. The trigger point is the **5 October go/no-go** with **Hiro and Lena**.
 
-**fix9 (candidate)**
+**fix9**
 
 > The fallback is the v4 read endpoints. If Platform slips the Ledger v5 bulk endpoints past 2 October, we switch to those, and the pay-period summary ships read-only with a "totals updating" state instead of loading full totals. The trigger point is the 5 October go/no-go, where Hiro and Lena make the call.
 >
 > *Summary chip:* v4 read endpoints, call at 5 October go/no-go
+
+**fix10**
+
+> The fallback is the v4 read endpoints for 2.4, with a "totals updating" state, and the summary ships read-only. The trigger point is the 5 October go/no-go, so if Platform hasn't shipped the bulk endpoints by 2 October, that's the call Hiro and Lena make.
+>
+> *Summary chip:* v4 fallback, decided 5 October
 
 ---
 
@@ -21414,6 +23894,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > A process is an independent program in execution with its own address space, while a thread is a unit of execution within a process that shares that process's memory and resources. So threads share the heap and file descriptors but have their own stack and registers, which makes context switching between threads cheaper than between processes. The tradeoff is isolation: processes are safer since one crashing doesn't take down another, but threads communicate more easily.
 >
 > *Summary chip:* process has own memory, threads share it
+
+**fix9**
+
+> A process is an independent program in execution with its own address space, while a thread is a unit of execution within a process that shares that process's memory and resources. So threads share the heap and file descriptors but have their own stack and registers, which makes context switching between threads cheaper than between processes.
+>
+> *Summary chip:* process owns memory, threads share it
+
+**fix10**
+
+> A process is an independent program in execution with its own address space, while a thread is a unit of execution within a process that shares that process's memory and resources. So threads are lighter to create and switch between, but they share state, which means one thread can corrupt data another is using. Processes are isolated, so they're safer but heavier.
 
 ---
 
@@ -21605,6 +24095,46 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* two pointers, skip non-alnum, compare lowercased
 
+**fix9**
+
+> ```python
+> def is_palindrome(s: str) -> bool:
+>     left, right = 0, len(s) - 1
+>     while left < right:
+>         while left < right and not s[left].isalnum():
+>             left += 1
+>         while left < right and not s[right].isalnum():
+>             right -= 1
+>         if s[left].lower() != s[right].lower():
+>             return False
+>         left += 1
+>         right -= 1
+>     return True
+> ```
+> 
+> Two pointers walk in from both ends, skipping anything that isn't alphanumeric, and compare lowercased characters. If they ever differ it's false, and if they meet without a mismatch it's true. Time is O(n) since each character is visited once, and space is O(1) because I'm not building a cleaned copy of the string.
+
+**fix10**
+
+> ```python
+> def is_palindrome(s: str) -> bool:
+>     left, right = 0, len(s) - 1
+>     while left < right:
+>         while left < right and not s[left].isalnum():
+>             left += 1
+>         while left < right and not s[right].isalnum():
+>             right -= 1
+>         if s[left].lower() != s[right].lower():
+>             return False
+>         left += 1
+>         right -= 1
+>     return True
+> ```
+> 
+> Two pointers walk in from each end, skipping anything that isn't alphanumeric, and compare lowercased characters. On "A man, a plan, a canal: Panama" the pointers meet in the middle and it returns true, while "race a car" fails at the first real mismatch. Time is O(n) and space is O(1), since I'm not building a cleaned copy of the string.
+>
+> *Summary chip:* two pointers skip non-alphanumerics
+
 ---
 
 #### DTECH-003 — complexity_only
@@ -21670,6 +24200,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Building a heap with heapify is **O(n)**, not O(n log n). The reason is that most nodes sit near the bottom and sift down only a level or two, so the work sums to a constant times n. A single sift-down is O(log n), and heapsort is O(n log n) overall.
 >
 > *Summary chip:* heapify is O(n), sift-down O(log n)
+
+**fix9**
+
+> Building a heap with heapify is **O(n)**, not O(n log n). The reason is that most nodes sit near the bottom and sift down only a level or two, so the work sums to a constant times n. A single sift-down is O(log n), and popping the root n times gives O(n log n).
+>
+> *Summary chip:* heapify is O(n), sift-down is O(log n)
+
+**fix10**
+
+> Building a heap with heapify is **O(n)**, not O(n log n). The reason is that most nodes sit near the bottom and sift down only a level or two, so the work sums to a constant times n. Extracting the max n times is what costs O(n log n).
 
 ---
 
@@ -21913,6 +24453,52 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* move wg.Add before the goroutine
 
+**fix9**
+
+> The bug is `wg.Add(1)` inside the goroutine. `wg.Wait()` can run before any goroutine calls `Add`, so it returns immediately and you read the zero-value slice. Move `Add(1)` before the `go` statement.
+> 
+> ```go
+> func fetchAll(urls []string) []int {
+> 	results := make([]int, len(urls))
+> 	var wg sync.WaitGroup
+> 	for i, u := range urls {
+> 		wg.Add(1)
+> 		go func(i int, u string) {
+> 			defer wg.Done()
+> 			results[i] = fetchStatus(u)
+> 		}(i, u)
+> 	}
+> 	wg.Wait()
+> 	return results
+> }
+> ```
+> 
+> Now every goroutine is counted before `Wait`, so it blocks until all writes finish.
+
+**fix10**
+
+> The bug is `wg.Add(1)` inside the goroutine, so `wg.Wait()` can return before the goroutines even register, and the slice stays zero. Move `wg.Add(1)` before the `go` statement.
+> 
+> ```go
+> func fetchAll(urls []string) []int {
+> 	results := make([]int, len(urls))
+> 	var wg sync.WaitGroup
+> 	for i, u := range urls {
+> 		wg.Add(1)
+> 		go func(i int, u string) {
+> 			defer wg.Done()
+> 			results[i] = fetchStatus(u)
+> 		}(i, u)
+> 	}
+> 	wg.Wait()
+> 	return results
+> }
+> ```
+> 
+> Now every goroutine is counted before it starts, so `Wait` blocks until all writes finish.
+>
+> *Summary chip:* move wg.Add before go
+
 ---
 
 #### DTECH-005 — debugging
@@ -22061,6 +24647,43 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > `Arrays.equals` compares element by element, so "listen" and "silent" both sort to the same sequence and it returns true. The length check up front is just a cheap early exit.
 
 **fix8**
+
+> The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `Arrays.sort(a).equals(b)` doesn't even compile. If it's written as two separate sort calls followed by `a.equals(b)`, that's the real problem: `equals` on arrays is reference equality, so two different arrays are never equal even when their contents match.
+> 
+> ```java
+> import java.util.Arrays;
+> 
+> public boolean isAnagram(String s, String t) {
+>     if (s.length() != t.length()) return false;
+>     char[] a = s.toCharArray();
+>     char[] b = t.toCharArray();
+>     Arrays.sort(a);
+>     Arrays.sort(b);
+>     return Arrays.equals(a, b);
+> }
+> ```
+> 
+> `Arrays.equals` compares element by element, so "listen" and "silent" both sort to the same sequence and return true. The length check is a cheap early exit. This runs in O(n log n) time from the sorts, with O(n) extra space for the two arrays.
+
+**fix9**
+
+> The bug is that `Arrays.sort` mutates the arrays in place, so if the method sorts the same two arrays it was handed, or reuses one array for both strings, the comparison ends up comparing a sorted array against itself or against the wrong data. The usual culprit is sorting `first` and `second` but then comparing the original unsorted references, or a copy-paste where both `Arrays.sort` calls target the same variable.
+> 
+> ```java
+> public static boolean isAnagram(String a, String b) {
+>     if (a == null || b == null) return false;
+>     if (a.length() != b.length()) return false;
+>     char[] first = a.toCharArray();
+>     char[] second = b.toCharArray();
+>     Arrays.sort(first);
+>     Arrays.sort(second);
+>     return Arrays.equals(first, second);
+> }
+> ```
+> 
+> The fix works because each string gets its own char array, both are sorted independently, and `Arrays.equals` compares the two sorted arrays element by element.
+
+**fix10**
 
 > The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `Arrays.sort(a).equals(b)` doesn't even compile. If it's written as two separate sort calls followed by `a.equals(b)`, that's the real problem: `equals` on arrays is reference equality, so two different arrays are never equal even when their contents match.
 > 
@@ -22331,6 +24954,58 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >     return dummy.next
 > ```
 
+**fix9**
+
+> ```python
+> class ListNode:
+>     def __init__(self, val=0, next=None):
+>         self.val = val
+>         self.next = next
+> 
+> 
+> def mergeTwoLists(list1, list2):
+>     dummy = ListNode()
+>     tail = dummy
+> 
+>     while list1 and list2:
+>         if list1.val <= list2.val:
+>             tail.next = list1
+>             list1 = list1.next
+>         else:
+>             tail.next = list2
+>             list2 = list2.next
+>         tail = tail.next
+> 
+>     tail.next = list1 if list1 else list2
+>     return dummy.next
+> ```
+
+**fix10**
+
+> ```python
+> class ListNode:
+>     def __init__(self, val=0, next=None):
+>         self.val = val
+>         self.next = next
+> 
+> 
+> def mergeTwoLists(list1, list2):
+>     dummy = ListNode()
+>     tail = dummy
+> 
+>     while list1 and list2:
+>         if list1.val <= list2.val:
+>             tail.next = list1
+>             list1 = list1.next
+>         else:
+>             tail.next = list2
+>             list2 = list2.next
+>         tail = tail.next
+> 
+>     tail.next = list1 if list1 else list2
+>     return dummy.next
+> ```
+
 ---
 
 #### DTECH-007 — approach_only
@@ -22439,6 +25114,26 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > One thing I'd want to confirm: whether diagonal adjacency counts as connected, since that changes the neighbor checks.
 
+**fix9**
+
+> The key constraint is that I can't hold the whole grid, so I need to track connectivity between the current row and the previous one. I'd keep two rows of state: the previous row's labels and the current row's labels, plus a union-find structure over the labels to merge components that touch across rows.
+> 
+> For each new row, I label runs of ones, union a run with any overlapping run in the previous row, and when a component's last cell disappears I finalize it and increment the count. The union-find only needs to hold labels for the active frontier, so memory stays proportional to the row width, not the row count. The tricky part is that a component can stay alive across many rows, so I only count it once, when it closes.
+>
+> *Summary chip:* stream rows, union-find frontier, count on close
+
+**fix10**
+
+> The key constraint is that I can't hold the whole grid, so I can't do a normal flood fill. What I can do is track connectivity between consecutive rows as I stream them.
+> 
+> The idea is to keep a label array for the current row, where each land cell gets a component id, plus a union-find structure over those labels. As each new row arrives, I look at each land cell and check its neighbors: the cell directly above it in the previous row, and the cell to its left in the current row. If either is land, I merge the current cell's component with that neighbor's component. If neither is land, it starts a new component.
+> 
+> The trick is that a component can close and reopen across rows, so I can't just count when a component disappears. Instead I count a new island only when a land cell has no land neighbor above or to the left, meaning it's the start of a fresh component. Then union-find handles the merges when two previously separate components turn out to be connected through a later row.
+> 
+> At the end, the number of islands is the number of distinct union-find roots that ever appeared. Memory stays proportional to the width of a row, not the number of rows, so it fits the two-row budget.
+>
+> *Summary chip:* stream rows, union-find labels, count new components
+
 ---
 
 #### DTECH-008 — complexity_only
@@ -22508,6 +25203,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Sorting is **O(n log n)**, and the two-pointer scan is **O(n²)** since for each index I walk the rest of the array once. So the total is **O(n²)**, which dominates the sort. Space is O(1) extra beyond the output, or O(n) if you count the sort's stack.
 >
 > *Summary chip:* O(n²) time, sort plus two pointers
+
+**fix9**
+
+> Sorting is **O(n log n)**, and the two-pointer scan is **O(n²)**, so the overall time is O(n²). Space is O(1) extra beyond the output, or O(n) if you count the sort's stack.
+>
+> *Summary chip:* O(n²) time, O(1) extra space
+
+**fix10**
+
+> Sorting is **O(n log n)**, and the two-pointer scan is **O(n²)** since for each index I walk the rest of the array. So the total is **O(n²)**, which dominates the sort. Space is O(1) extra beyond the output, ignoring the sort's own overhead.
+>
+> *Summary chip:* O(n²) time, constant extra space
 
 ---
 
@@ -22623,6 +25330,31 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Now lo 1 equals hi 1, so the loop ends and we return **lo = 1**, the first index where the value is 2.
 >
 > *Summary chip:* lower bound returns index 1
+
+**fix9**
+
+> Array is [1, 2, 2, 2, 5], target 2, n is 5.
+> 
+> Step 1: lo = 0, hi = 5, mid = 2. a[2] is 2, not less than 2, so hi = 2.
+> Step 2: lo = 0, hi = 2, mid = 1. a[1] is 2, not less than 2, so hi = 1.
+> Step 3: lo = 0, hi = 1, mid = 0. a[0] is 1, which is less than 2, so lo = 1.
+> Now lo = 1 and hi = 1, so the loop ends and we return **lo = 1**, the first index where 2 appears.
+>
+> *Summary chip:* lower bound lands on index 1
+
+**fix10**
+
+> Array is one, two, two, two, five, so indices 0 through 4, and hi starts at the length, 5.
+> 
+> Step 1: lo is 0, hi is 5, mid is 0 plus 5 over 2, which is 2. a of 2 is two, not less than target two, so hi becomes 2.
+> 
+> Step 2: lo is 0, hi is 2, mid is 1. a of 1 is two, not less than two, so hi becomes 1.
+> 
+> Step 3: lo is 0, hi is 1, mid is 0. a of 0 is one, which is less than two, so lo becomes 1.
+> 
+> Now lo equals hi at 1, so the loop ends and the lower bound is index 1, the first position where two appears.
+>
+> *Summary chip:* lower bound lands at index 1
 
 ---
 
@@ -22953,6 +25685,90 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > Time: O(1) per operation with the linked list version, O(n) with the list. Space: O(capacity).
 
+**fix9**
+
+> ```python
+> class LRUCache:
+>     def __init__(self, capacity):
+>         self.cap = capacity
+>         self.cache = {}
+>         self.order = []
+> 
+>     def get(self, key):
+>         if key not in self.cache:
+>             return -1
+>         self.order.remove(key)
+>         self.order.append(key)
+>         return self.cache[key]
+> 
+>     def put(self, key, value):
+>         if key in self.cache:
+>             self.order.remove(key)
+>         elif len(self.cache) >= self.cap:
+>             oldest = self.order.pop(0)
+>             del self.cache[oldest]
+>         self.cache[key] = value
+>         self.order.append(key)
+> ```
+> 
+> The dict gives O(1) lookup, and the list tracks recency with the most recent key at the end. On a get or an update I move the key to the end, and on a put at capacity I evict the key at the front.
+> 
+> One caveat: the list operations are O(n) because removing from the middle shifts elements. To make both truly constant time I'd swap the list for a doubly linked list with a hash map from key to node, so each move and eviction is pointer surgery in O(1).
+> 
+> Time: O(1) per operation with the linked list, O(n) as written. Space: O(capacity).
+
+**fix10**
+
+> ```python
+> class LRUCache:
+>     def __init__(self, capacity):
+>         self.cap = capacity
+>         self.map = {}
+>         self.head = Node(0, 0)
+>         self.tail = Node(0, 0)
+>         self.head.next = self.tail
+>         self.tail.prev = self.head
+> 
+>     def _remove(self, node):
+>         node.prev.next = node.next
+>         node.next.prev = node.prev
+> 
+>     def _add(self, node):
+>         node.next = self.head.next
+>         node.prev = self.head
+>         self.head.next.prev = node
+>         self.head.next = node
+> 
+>     def get(self, key):
+>         if key not in self.map:
+>             return -1
+>         node = self.map[key]
+>         self._remove(node)
+>         self._add(node)
+>         return node.val
+> 
+>     def put(self, key, value):
+>         if key in self.map:
+>             self._remove(self.map[key])
+>         node = Node(key, value)
+>         self.map[key] = node
+>         self._add(node)
+>         if len(self.map) > self.cap:
+>             lru = self.tail.prev
+>             self._remove(lru)
+>             del self.map[lru.key]
+> 
+> 
+> class Node:
+>     def __init__(self, key, value):
+>         self.key = key
+>         self.val = value
+>         self.prev = None
+>         self.next = None
+> ```
+> 
+> A hash map gives O(1) lookup, and a doubly linked list tracks recency: `_add` pushes to the front, `_remove` unlinks, and on overflow I evict `tail.prev`, the least recently used. `get` also moves the node to the front. Time is O(1) per operation, space is O(capacity).
+
 ---
 
 #### DTECH-011 — api_design
@@ -23038,6 +25854,22 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > On the duplicate question: I'd make shortening idempotent. Hash the long URL, and if it already exists, return the existing short code with a 200 instead of minting a new one. That keeps the mapping one-to-one and avoids wasting codes. If someone wants a distinct code per user, I'd scope the lookup by account instead.
 >
 > *Summary chip:* small surface, idempotent on duplicate URL
+
+**fix9**
+
+> For a URL shortener I'd keep the API small. A POST to /urls takes the long URL and returns the short code plus the short link, a 201 with the created resource. A GET on /{code} returns a 302 redirect to the long URL, or a 404 if the code doesn't exist. I'd add a GET /urls/{code} that returns metadata like the original URL, creation time and click count, and a DELETE to deactivate a code.
+> 
+> On the duplicate question, it depends on intent. If the same long URL is shortened twice, I'd return the existing short code rather than minting a new one, so the mapping stays one-to-one and analytics don't fragment. That means a lookup by the long URL first, and a unique index on it so concurrent requests can't both insert. If someone wants a distinct code per caller, I'd make that explicit with a flag or a per-user namespace rather than changing the default.
+>
+> *Summary chip:* POST create, GET redirect, dedupe by long URL
+
+**fix10**
+
+> For a URL shortener I'd keep the surface small. A **POST /urls** that takes the long URL and returns the short code plus the full short link, a **GET /{code}** that returns a 301 or 302 redirect to the original, and a **GET /urls/{code}** for metadata like the original URL, creation time and click count. Optionally a **DELETE /urls/{code}** to deactivate.
+> 
+> On the duplicate question, it depends on intent. If two people shorten the same long URL, I'd treat the long URL as the key and return the same short code to both, which keeps storage deduplicated. The tradeoff is that per-user analytics get muddied, so if ownership or separate click tracking matters, I'd instead generate a unique code per request and store the long URL once with a reference count. I'd default to dedupe and make it configurable.
+>
+> *Summary chip:* small surface, dedupe by default
 
 ---
 
@@ -23141,6 +25973,20 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* keyset cursor on timestamp plus id
 
+**fix9**
+
+> For a feed that's constantly getting new inserts, offset pagination breaks because the offsets shift under you. I'd use **keyset pagination** on a stable, unique sort key. Since events are newest first, I'd sort by a monotonic column like a created-at timestamp plus the event id as a tiebreaker, and the cursor encodes the last row the client saw. The next page asks for rows where that tuple is strictly less than the cursor, so inserts at the head never shift what you've already paged past.
+> 
+> The one thing to watch is that a timestamp alone isn't unique, so two events in the same millisecond could get skipped or repeated. Pairing it with the id makes the ordering total and stable. If events can be backfilled with older timestamps, I'd sort on an immutable sequence or insertion id instead of created-at, so late arrivals don't land in the middle of a page someone already read.
+>
+> *Summary chip:* keyset cursor on timestamp plus id
+
+**fix10**
+
+> For a feed that's constantly getting new inserts, offset pagination breaks because the offsets shift under you. I'd use **keyset pagination** on a stable, unique sort key. Since events are newest first, I'd sort by a monotonic column like a creation timestamp plus a tiebreaker, usually the event id, and the cursor encodes the last row's timestamp and id. The next page asks for rows where timestamp is less than the cursor, or equal with a smaller id, ordered descending, limit N. That way new inserts land above the cursor and never shift what you've already paged past, so no duplicates and no skips.
+> 
+> The one caveat is if the timestamp isn't strictly monotonic, like clock skew or backfilled events, then a pure timestamp cursor can still skip. So I'd make the cursor a composite of a sequence or id that's guaranteed increasing, and index on that pair so the query stays a fast range scan.
+
 ---
 
 #### DTECH-013 — resume_project_deep_dive
@@ -23215,6 +26061,20 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > What does your settlement path look like today,  is it one service or already split?
 
+**fix9** — edited after streaming
+
+> I led Project Tern, a rewrite of our carrier-settlement service from a Rails monolith into three Go services, and I coordinated a working group of 4 engineers and 1 QA analyst over 7 months. The three services were **quoting**, **event ingestion**, and **reconciliation**.
+> 
+> On the double-pay risk, what I can point to is the **nightly reconciliation job** that compares carrier invoices against booked loads, that's what brought monthly mismatches down from **312 to 41**.
+> 
+> What's driving the three-service split on your side, is it deployment independence, or scaling the settlement batch separately?
+
+**fix10** — edited after streaming
+
+> I led Project Tern, a rewrite of our carrier-settlement service from a Rails monolith into three Go services, with a working group of 4 engineers and 1 QA analyst over 7 months. **Rate quoting** was read-heavy and latency-sensitive, so we cut its p95 from 820 ms to 190 ms with a batched loader and a 90-second Redis cache keyed by lane ID. Ingestion ran through **Dockhand**, a Kafka pipeline handling about 2.3 million shipment status events a day, with a transactional outbox so we never wrote a status twice. Reconciliation stayed a nightly job comparing carrier invoices against booked loads, which took monthly mismatches from 312 down to 41.
+> 
+> On the double-pay risk, the outbox was the key: a transactional outbox table to avoid duplicate writes.
+
 ---
 
 #### DTECH-014 — behavioral_in_tech_round
@@ -23278,6 +26138,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > My languages are **Python**, **Rust** and **Bash**. In Rust I wrote **Lanternfish**, a sidecar that exports per-pod DNS lookup latency to Prometheus, and it showed that **31% of p99 latency on the checkout path came from DNS resolution**.
+
+**fix9** — edited after streaming
+
+> Python, Rust and Bash are the languages on my résumé. In Rust I wrote **Lanternfish**, a sidecar that exports per-pod DNS lookup latency to Prometheus, and it showed **31% of p99 latency on the checkout path came from DNS**. The cert-manager rotation work was **automated TLS certificate rotation**, retiring a 47-step wiki runbook.
+
+**fix10**
+
+> Python and Rust are my strongest, with Bash for the glue work. In Rust I wrote Lanternfish, a sidecar that exports per-pod DNS lookup latency to Prometheus, and it showed 31% of p99 latency on the checkout path came from DNS resolution. Python and Bash carried most of the automation around that, like the cert-manager rotation work.
+>
+> *Summary chip:* Python and Rust, Bash for automation
 
 ---
 
@@ -23353,6 +26223,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* EKS spend down 28%, CI 34 to 13 min
 
+**fix9**
+
+> The clearest one is CI time on our main monorepo at Orrin Telematics. It was running 34 minutes per build, and I cut it to 13 with Buildkite build caching, so a bit over 60% faster. The other one is compute spend at Hollowbrook, where I right-sized node pools on two EKS clusters and brought it from about $41,300 a month down to $29,800.
+>
+> *Summary chip:* CI 34 to 13 min, spend down $11.5k/mo
+
+**fix10**
+
+> The clearest one is compute spend at Hollowbrook. I right-sized the node pools on two EKS clusters and brought the monthly bill from about **$41,300** down to about **$29,800**, so roughly a 28% cut. The other one is CI: at Orrin I cut the main monorepo build from **34 minutes** to 13 with Buildkite build caching. Happy to go deeper on either.
+>
+> *Summary chip:* node right-sizing cut spend 28%
+
 ---
 
 #### DTECH-016 — database_design
@@ -23414,6 +26296,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Yes, partition, almost certainly by time range on the event timestamp, monthly or weekly depending on volume, so vacuum and retention work per-partition instead of over the whole table.
 > 
 > What gets harder: partition pruning has to actually kick in, so queries must filter on the partition key, unique constraints have to include it, and there are many more relations to manage, plus routing inserts and planning maintenance across them.
+
+**fix9** — edited after streaming
+
+> Let me reason through it. Partitioning by time, range partitioning on the event timestamp, monthly or weekly, means vacuum and autovacuum only touch recent partitions, and old ones can be frozen or dropped. What gets harder: cross-partition queries and unique constraints need the partition key, planning gets more complex, and partition creation and retention become automation rather than a one-off.
+
+**fix10** — edited after streaming
+
+> I'd partition, almost certainly by time range on the event timestamp, since events are append-heavy and queries are usually recent-window. Monthly or weekly partitions, with old ones detached or dropped instead of vacuumed.
+> 
+> What gets harder: cross-partition queries and unique constraints, since a unique index has to include the partition key. Autovacuum runs per partition, so you need to tune it, and partition pruning only helps if queries filter on the key. Also more planning overhead and more objects to manage.
 
 ---
 
@@ -23509,6 +26401,24 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > On production Go, I want to be straight with you: the Tidepool homelab is a 4-node Raspberry Pi k3s cluster managed through Flux GitOps, hosting a self-hosted Matrix server, and my capstone was a distributed key-value store in Rust using Raft, so the concurrency reasoning carries over. How much Go does the control plane work here actually involve day to day?
 
+**fix9**
+
+> Go's scheduler is a GMP model: goroutines (G) get multiplexed onto logical processors (P), and each P runs on one OS thread (M) at a time. The runtime keeps a local run queue per P plus a global queue, and when a P's queue runs dry it steals work from other Ps. A blocking syscall parks the M and hands the P to another thread, while a channel or mutex block just parks the goroutine and lets the P keep running others, so the thread isn't wasted.
+> 
+> For channels versus mutexes: I reach for a mutex when I'm protecting a piece of shared state, like a map or a counter, where the lock is just guarding reads and writes. I reach for a channel when I'm passing ownership of data between goroutines or coordinating a pipeline, since the handoff is the point. The rule of thumb I use is channels for orchestration and mutexes for state, and if a channel is only ever used to guard a field, a mutex is usually simpler.
+> 
+> On production Go, I want to be straight with you: my Go so far has been side projects and coursework rather than paid production work. My main hands-on systems experience is a distributed key-value store in Rust using Raft, and a four-node Raspberry Pi k3s homelab I run with Flux GitOps, so the concurrency and distributed-systems thinking is there, but I'd be ramping up on Go specifically in a production setting.
+>
+> *Summary chip:* GMP scheduling, channels vs mutexes, honest Go level
+
+**fix10** — edited after streaming
+
+> Goroutines are multiplexed onto OS threads by the Go runtime scheduler, which uses an M:N model: many goroutines run on a smaller pool of OS threads, one per logical processor set by GOMAXPROCS. Each P has a local run queue, and there's a global queue plus work-stealing when a P runs dry. When a goroutine blocks on a syscall, the runtime hands off the P to another thread so the rest keep running, and network I/O is handled by the netpoller so it doesn't tie up a thread at all.
+> 
+> For channels versus mutexes: I reach for a channel when I'm passing ownership of data or coordinating between goroutines, like a pipeline or a worker pool, since that keeps the flow explicit. I use a mutex when I'm just protecting shared state, a counter or a map, where a channel would add ceremony without buying clarity. The rule of thumb I follow is channels for orchestration, mutexes for guarding.
+> 
+> On production Go, I want to be straight with you: my **Tidepool homelab** is a **4-node Raspberry Pi k3s cluster managed through Flux GitOps**, and my capstone was **Brine, a distributed key-value store in Rust using Raft consensus**, with **Loki and Grafana for logs**. I'll confirm the rest and come back to you.
+
 ---
 
 #### DTECH-018 — approach_only
@@ -23578,6 +26488,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Use Floyd's tortoise and hare: move one pointer one step and the other two steps until they meet, which proves a cycle exists. Then reset one pointer to the head and advance both one step at a time; the node where they meet again is the start of the cycle. It's O(n) time and O(1) space.
 >
 > *Summary chip:* Floyd's algorithm, then reset to find entry
+
+**fix9**
+
+> Use Floyd's tortoise and hare: move one pointer one step and the other two steps until they meet, which proves a cycle exists. Then reset one pointer to the head and advance both one step at a time; the node where they meet again is the start of the cycle. It's O(n) time and O(1) space.
+>
+> *Summary chip:* Floyd's algorithm, then reset to find entry
+
+**fix10**
+
+> Use Floyd's tortoise and hare: move one pointer one step and the other two steps until they meet, which proves a cycle exists. Then reset one pointer to the head and advance both one step at a time; the node where they meet again is the cycle's start. That works because the distance from the head to the entry equals the distance from the meeting point to the entry, so it runs in O(n) time and O(1) space.
+>
+> *Summary chip:* Floyd's algorithm, reset to head, meet at entry
 
 ---
 
@@ -23662,6 +26584,26 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Here, 2 goes in, then 7 needs 2, which is there, so I return indices 0 and 1.
 > 
 > Time is O(n) since it's a single pass, and space is O(n) for the map.
+>
+> *Summary chip:* hash map, one pass, O(n)
+
+**fix9**
+
+> For 2, 7, 11, 15 with target 9, the answer is indices 0 and 1, since 2 + 7 = 9.
+> 
+> The approach I'd use is a hash map. Walk the array once, and for each number check whether target minus that number is already in the map. If it is, return the stored index and the current one. If not, store the current value with its index and move on. That gets it in a single pass instead of the brute-force double loop.
+> 
+> Complexity is **O(n)** time, since each element is inserted and looked up once, and **O(n)** space for the map in the worst case.
+>
+> *Summary chip:* hash map, one pass, O(n)
+
+**fix10**
+
+> For this one I'd use a hash map. I walk the array once, and for each number I check whether its complement, target minus the current value, is already in the map. If it is, I return the stored index and the current one. Otherwise I store the current value and index and keep going.
+> 
+> On 2, 7, 11, 15 with target 9: index 0 is 2, complement 7 isn't stored yet, so I store 2 at 0. Index 1 is 7, complement 2 is in the map, so I return 0 and 1.
+> 
+> Time is **O(n)** since it's a single pass with O(1) map lookups, and space is **O(n)** for the map in the worst case.
 >
 > *Summary chip:* hash map, one pass, O(n)
 
@@ -23847,6 +26789,42 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > Storing the handle lets the next keystroke cancel the pending call, so `fn` runs once after the typing stops.
 
+**fix9**
+
+> The bug is that `timer` is never assigned, so `clearTimeout(timer)` clears nothing and every keystroke schedules its own call. Assign the id:
+> 
+> ```javascript
+> function debounce(fn, wait) {
+>   let timer;
+>   return function (...args) {
+>     clearTimeout(timer);
+>     timer = setTimeout(() => fn.apply(this, args), wait);
+>   };
+> }
+> ```
+> 
+> Now each keystroke cancels the previous pending call, so `fn` runs once after typing stops.
+>
+> *Summary chip:* assign timer to setTimeout
+
+**fix10**
+
+> The bug is that `timer` is never assigned, so `clearTimeout(timer)` always clears `undefined` and every keystroke schedules a new call.
+> 
+> ```javascript
+> function debounce(fn, wait) {
+>   let timer;
+>   return function (...args) {
+>     clearTimeout(timer);
+>     timer = setTimeout(() => fn.apply(this, args), wait);
+>   };
+> }
+> ```
+> 
+> Storing the id lets the next call cancel the pending one, so `fn` runs once after the last keystroke.
+>
+> *Summary chip:* assign the timer id
+
 ---
 
 #### DTECH-021 — complexity_only
@@ -23914,6 +26892,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > The outer loop runs n times, and for each i the inner loop doubles j from i up to n, so it does about log(n/i) steps. Summing that over i gives log(n!) which is **O(n log n)**. The tight bound is **Θ(n log n)**, and the space is O(1).
 >
 > *Summary chip:* O(n log n) via log(n!) sum
+
+**fix9**
+
+> The inner loop is logarithmic, since j doubles from i until it passes n, so that's about log(n/i) steps. Summing that over i from 1 to n gives **O(n log n)**. The outer loop contributes the n, and the doubling gives the log factor.
+
+**fix10**
+
+> The outer loop runs n times, and for each i the inner loop doubles j from i up to n, which is log(n/i) steps. Summing that over all i gives O(n log n) overall, and the space is O(1) since it's just the two counters.
+>
+> *Summary chip:* O(n log n) total, constant space
 
 ---
 
@@ -23995,6 +26983,22 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* touching windows merge at grace 0, FAQ conflicts
 
+**fix9**
+
+> The FAQ contradicts itself on exactly this point. One answer says touching windows stay separate at grace 0, since ends are exclusive. Another says touching windows always merge, even with grace 0, and that this is the first thing the grader checks.
+> 
+> So I'd flag it to the interviewer rather than guess: "The FAQ has two conflicting answers on touching windows at grace 0. I'm going to assume they merge, since that's what the grader checks first, and I'll make it a one-line change if you want the other behavior." That way the assumption is on the record before I write anything.
+>
+> *Summary chip:* FAQ conflicts, assume merge, flag it
+
+**fix10**
+
+> The FAQ contradicts itself on exactly this point, so I'd flag that before coding. One answer says touching windows like [5, 10] and [10, 12] stay separate when grace is 0, since ends are exclusive. But the answer about what the grader checks first says touching windows always merge, even with grace 0, and that most failed submissions get that wrong.
+> 
+> So my assumption would be that touching windows **merge at grace 0**, since that's what the grader checks first, and I'd confirm it with the interviewer before writing the merge logic.
+>
+> *Summary chip:* FAQ conflicts, assume touching merges at grace 0
+
 ---
 
 #### DTECH-023 — complexity_only
@@ -24062,6 +27066,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > The FAQ says each host has at most 200,000 windows, and that an O(n log n) sort-based solution is what they expect, so that's the size I'm designing for. The performance bar is the part that matters more: the hidden cases go up to 2 million windows per host, the reference solution finishes in under 1 second in Python, and the cutoff is 5 seconds. A sort-based Python solution should make that comfortably, since sorting 2 million intervals is well within a few seconds, and the merge pass after it is linear.
+
+**fix9**
+
+> The FAQ says each host has at most 200,000 windows, so that's the size I'd design the common case around, but the hidden cases go up to 2 million per host. An O(n log n) sort-based solution is exactly what they expect, and the reference finishes under a second in Python. The cutoff is 5 seconds, so a sort-based approach has plenty of headroom even at 2 million.
+>
+> *Summary chip:* design for 2M, sort is fine
+
+**fix10**
+
+> The FAQ says each host has at most 200,000 windows, and the hidden cases go up to 2 million per host, so I'd design for that upper bound. An O(n log n) sort-based solution is exactly what they expect, and the reference finishes in under a second in Python while the cutoff is 5 seconds, so a sort-based approach has plenty of headroom. I'd still keep the merge pass linear after sorting so the sort dominates.
+>
+> *Summary chip:* design for 2M windows, sort-based fits cutoff
 
 ---
 
@@ -24134,6 +27150,22 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > With those changes, example five becomes [[0, 20]]. The zero length window at 11 is now kept, so it bridges the gap: 11 is within grace 1 of 10, and 12 is within grace 1 of 11, so everything merges into one window.
 > 
 > The n log n approach still holds. Sorting dominates, and the merge is still a single linear pass. The only change is that I no longer drop zero length windows, and grace can now be up to 1440, which doesn't affect the complexity at all.
+>
+> *Summary chip:* example five merges to one window, n log n holds
+
+**fix9**
+
+> With zero-length windows kept, example five changes. [11, 11] is no longer dropped, so it bridges the gap: 10 to 11 is within grace 1, and 11 to 12 is too. The output becomes **[[0, 20]]**, one merged window.
+> 
+> The n log n approach still holds. It's still sort by start, then one linear sweep, so the complexity is unchanged. Only the merge condition changes: a zero-length window now participates instead of being skipped.
+>
+> *Summary chip:* example five now merges to [0,20]
+
+**fix10**
+
+> With zero-length windows kept, [11, 11] no longer gets dropped. It merges with [0, 10] since 11 <= 10 + 1, and then [12, 20] merges too since 12 <= 11 + 1. So example five now gives **[[0, 20]]** instead of two windows.
+> 
+> The n log n approach still holds. Sorting dominates, and the single pass is unchanged, so it's still O(n log n) time and O(n) space.
 >
 > *Summary chip:* example five merges to one window, n log n holds
 
@@ -24411,6 +27443,59 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > The validation loop runs over the input as given, so the first inverted window is reported by its original index. Zero-length windows are filtered out before sorting, so they can never bridge a gap, and each merged window only ever grows to the largest end it absorbed. Sorting dominates: O(n log n) time, O(n) space for the sorted copy and result, and the input list and its pairs are left untouched.
 
+**fix9**
+
+> ```python
+> def merge_windows(windows, grace):
+>     for i, (start, end) in enumerate(windows):
+>         if end < start:
+>             raise ValueError(f"inverted window at index {i}")
+> 
+>     live = sorted((w for w in windows if w[1] > w[0]), key=lambda w: w[0])
+> 
+>     merged = []
+>     for start, end in live:
+>         if merged and start <= merged[-1][1] + grace:
+>             if end > merged[-1][1]:
+>                 merged[-1][1] = end
+>         else:
+>             merged.append([start, end])
+> 
+>     return merged
+> 
+> 
+> def total_quiet_minutes(windows, grace):
+>     return sum(end - start for start, end in merge_windows(windows, grace))
+> ```
+> 
+> The validation pass runs over the input in its original order so the first inverted window is reported by its given index, and zero-length windows are filtered out before sorting so they can never bridge a gap. After sorting by start, each window either extends the current merged window's end or starts a new one, and grace only affects the merge test, never the stored end. Both functions are O(n log n) time from the sort and O(n) space for the new list, leaving the input untouched.
+
+**fix10**
+
+> ```python
+> def merge_windows(windows, grace):
+>     for i, (start, end) in enumerate(windows):
+>         if end < start:
+>             raise ValueError(f"inverted window at index {i}")
+> 
+>     live = sorted((w for w in windows if w[1] > w[0]), key=lambda w: w[0])
+> 
+>     merged = []
+>     for start, end in live:
+>         if merged and start <= merged[-1][1] + grace:
+>             if end > merged[-1][1]:
+>                 merged[-1][1] = end
+>         else:
+>             merged.append([start, end])
+>     return merged
+> 
+> 
+> def total_quiet_minutes(windows, grace):
+>     return sum(end - start for start, end in merge_windows(windows, grace))
+> ```
+> 
+> The inverted check runs over the input in its original order before anything else, so the first bad index is reported as given. Zero-length windows are filtered out before sorting, so they can never bridge a gap, and the merge test uses `start <= current_end + grace` while the end only ever grows to the largest absorbed end, so grace never extends a window. Sorting dominates: O(n log n) time, O(n) extra space.
+
 ---
 
 #### DTECH-026 — resume_project_deep_dive
@@ -24476,6 +27561,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > We moved the checkout-path pods to ndots:2 and switched the three external payment endpoints to fully qualified names with a trailing dot, and we enabled NodeLocal DNSCache, which also cleared the conntrack stalls. Priya Oduya, a senior SRE, reviewed the design and ran the rollout. Checkout p99 went from 1,380 ms to 910 ms, with DNS down to about 6% of p99.
 >
 > *Summary chip:* ndots:2, FQDN, NodeLocal; Priya rolled out; 1380 to 910 ms
+
+**fix9**
+
+> I wrote the sidecar and the analysis, but Priya Oduya, a senior SRE, reviewed the design and ran the rollout of the fix. We moved checkout-path pods to ndots:2, switched the three external payment endpoints to fully qualified names with a trailing dot, and enabled NodeLocal DNSCache. Checkout p99 went from 1,380 ms to 910 ms, and DNS dropped to about 6% of p99.
+>
+> *Summary chip:* ndots:2, FQDN, NodeLocal; p99 1,380 to 910 ms
+
+**fix10**
+
+> I changed two things: the checkout-path pods moved to ndots:2, and the three external payment endpoints switched to fully qualified names with a trailing dot. Priya Oduya, a senior SRE, reviewed the design and ran the rollout. Checkout p99 went from 1,380 ms to 910 ms, and DNS dropped to about 6% of p99.
+>
+> *Summary chip:* ndots:2, FQDNs, p99 1,380 to 910 ms
 
 ---
 
@@ -24549,6 +27646,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* 0.3 ms, 6 MiB, UDP only, injected pods only
 
+**fix9**
+
+> Lanternfish added about 0.3 ms per lookup at the median, and each sidecar used roughly 6 MiB of memory and under 5 millicores of CPU. What it couldn't see: it only covered the pods it was injected into, it was UDP only, so queries that fell back to TCP after a truncated response were passed through and not measured, and it was never deployed to the other two clusters.
+>
+> *Summary chip:* 0.3 ms, 6 MiB, UDP only, injected pods only
+
+**fix10**
+
+> Lanternfish added about 0.3 ms per lookup, and each sidecar used around 6 MiB of memory and under 5 millicores of CPU. The main blind spot was TCP: queries that fell back to TCP after a truncated response were passed through and not measured, and it only saw pods it was injected into.
+>
+> *Summary chip:* 0.3 ms per lookup, TCP blind spot
+
 ---
 
 #### DTECH-028 — system_design
@@ -24612,6 +27721,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > First thing I'd change is the threshold, not the tooling. One percent for five minutes is too tight for a service that's mid-deploy, so I'd move to SLO-based, multi-window burn-rate alerts per service, and suppress during deploys. I did that at Cindervale and pages dropped from about 260 to 70 a month. I'd know it worked by watching pages per week and whether people stop muting the channel. What I'd leave alone is the paging pipeline itself, it's not the problem.
 >
 > *Summary chip:* SLO burn-rate alerts, keep the pipeline
+
+**fix9** — edited after streaming
+
+> First thing I'd look at is the threshold itself, one percent over five minutes, the same everywhere, with about half the pages firing during deploys and clearing on their own. **Multi-window burn-rate alerts** are the pattern I'd bring to that, and the signal I'd watch is **weekly page volume** and how many fire during deploys. What I'd want to leave alone is the **paging path**, what does the routing and escalation look like today?
+
+**fix10** — edited after streaming
+
+> First thing I'd change is the threshold itself. One percent for five minutes is too tight for a service that's mid-deploy, so I'd move to SLO-based, multi-window burn-rate alerts. I'd know it worked if weekly pages dropped and the channel stopped getting muted. What I'd leave alone is the underlying 5xx metric and the paging path, since those aren't the problem.
 
 ---
 
@@ -24836,6 +27953,60 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* count then min-heap of size k
 
+**fix9**
+
+> ## Approach
+> Count each element's frequency with a hash map, then keep the top k. The clean way is a bucket sort: index buckets by frequency, so bucket i holds the elements that appear i times. Walk the buckets from highest frequency down and collect until you have k elements, which avoids sorting all distinct values.
+> 
+> ## Code
+> ```python
+> from collections import Counter
+> 
+> def topKFrequent(nums, k):
+>     count = Counter(nums)
+>     buckets = [[] for _ in range(len(nums) + 1)]
+>     for num, freq in count.items():
+>         buckets[freq].append(num)
+> 
+>     result = []
+>     for freq in range(len(buckets) - 1, 0, -1):
+>         for num in buckets[freq]:
+>             result.append(num)
+>             if len(result) == k:
+>                 return result
+>     return result
+> ```
+> 
+> ## Complexity
+> Time is O(n), since counting and the bucket walk are each linear in the input size. Space is O(n) for the count map and the buckets.
+
+**fix10**
+
+> ## Approach
+> Count each element's frequency with a hash map, then keep the top k. The clean way is a bucket sort keyed by frequency: bucket index i holds all elements appearing i times, so scanning buckets from high to low gives the k most frequent in linear time, avoiding a full sort.
+> 
+> ## Code
+> ```python
+> from collections import Counter
+> 
+> def topKFrequent(nums, k):
+>     count = Counter(nums)
+>     buckets = [[] for _ in range(len(nums) + 1)]
+>     for num, freq in count.items():
+>         buckets[freq].append(num)
+> 
+>     result = []
+>     for freq in range(len(buckets) - 1, 0, -1):
+>         for num in buckets[freq]:
+>             result.append(num)
+>             if len(result) == k:
+>                 return result
+>     return result
+> ```
+> 
+> ## Complexity
+> Time O(n), since counting and bucket placement are each one pass and the final scan is bounded by n. Space O(n) for the counter and the buckets.
+
 ---
 
 #### DTECH-030 — tradeoffs_followups
@@ -24904,6 +28075,16 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* min-heap keeps k largest, O(n log k)
 
+**fix9**
+
+> A heap is the other standard way to do it: count frequencies with a hash map, then push each distinct element onto a min-heap keyed by frequency and pop whenever the heap grows past k. What's left is the k most frequent. The reason to reach for it is that it's O(n log k) instead of O(n log n), so when k is much smaller than the number of distinct elements you're doing far less work than a full sort. I went with buckets here because frequencies are bounded by n, which makes the counting sort linear, but the heap is the better pick when k is small or when the values arrive as a stream and you can't hold everything to bucket it.
+>
+> *Summary chip:* heap gives O(n log k) top-k
+
+**fix10**
+
+> I actually went with bucket sort rather than a heap. The heap version is the other standard approach: count frequencies with a hash map, then push each element onto a min-heap of size k keyed by frequency, popping whenever it exceeds k. That gives O(n log k) time and O(n + k) space, which is better than bucket sort when k is small and n is huge, since you never allocate n buckets. Bucket sort wins when the frequencies are spread out and you want strict O(n), but it costs O(n) space regardless of k. So the choice comes down to how large k is relative to n.
+
 ---
 
 #### DTECH-031 — dsa_theory
@@ -24965,6 +28146,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > Yes. Counting is O(n), and the bottleneck is selecting the top k. If k is close to the number of distinct values, sorting the frequencies is O(d log d), which is basically optimal here. The real win is when k is small: quickselect gives O(d) expected, or a bucket sort by frequency gives O(n) since frequencies are bounded by n.
 >
 > *Summary chip:* quickselect or bucket sort beats n log k
+
+**fix9**
+
+> Yes, and the answer is the bucket sort I already wrote. When k is close to the number of distinct values, the heap's log k factor buys you almost nothing, but the bucket walk is still linear in n, so it stays O(n) regardless of how large k gets. That's the case where buckets clearly win.
+
+**fix10**
+
+> When k is close to the number of distinct values, the heap's log k advantage disappears, so the real win is avoiding the sort entirely. Bucket sort gives strict O(n) here, and since k is large you're reading most buckets anyway, so the O(n) space is already justified. So yes, bucket sort beats n log k in this case.
 
 ---
 
@@ -25056,6 +28245,24 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* grace 0 splits, grace 1 merges
 
+**fix9**
+
+> Example 2 has grace 0, so only windows that touch or overlap merge. [5, 10] and [10, 12] touch at 10, so they collapse into [5, 12]. The next window starts at 13, and 13 is greater than 12 plus 0, so it stays separate. That gives [[5, 12], [13, 20]].
+> 
+> Example 3 is the same input with grace 1. Now 13 is less than or equal to 12 plus 1, so the third window merges in too, and the result is [[5, 20]]. The key point is that grace only decides whether to merge, it never extends the end. The merged window ends at the largest end it absorbed, which is 20, not 21.
+>
+> *Summary chip:* grace 0 splits, grace 1 merges, no extension
+
+**fix10**
+
+> Example two returns [[5, 12], [13, 20]] and example three returns [[5, 20]], and the only difference between them is grace.
+> 
+> In example two, grace is 0. [5, 10] and [10, 12] touch, so they merge into [5, 12]. Then [13, 20] starts at 13, and 13 is greater than 12 plus 0, so it stays separate.
+> 
+> In example three, grace is 1. Now 13 is less than or equal to 12 plus 1, so [13, 20] merges in too, giving [5, 20]. The key point is that the merged window ends at 20, not 21. Grace only decides whether two windows merge, it never extends the end.
+>
+> *Summary chip:* grace 0 splits, grace 1 merges
+
 ---
 
 #### DTECH-033 — complexity_only
@@ -25120,6 +28327,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 
 > Sorting dominates, so it's **O(n log n)** time. The merge pass itself is a single linear scan, so **O(n)** extra space for the output list, and I don't mutate the input. The sort is what sets the bound, since the merge can't beat it.
 
+**fix9**
+
+> Sorting dominates, so it's **O(n log n)** time. The merge pass itself is a single linear scan, so that's O(n). Space is O(n) for the sorted copy, since I don't mutate the input. With n up to 200,000 that's well under a second in Python.
+>
+> *Summary chip:* O(n log n) time, O(n) space
+
+**fix10**
+
+> Sorting dominates: **O(n log n)** time, and the merge pass itself is linear since each window is pushed and popped once. Space is **O(n)** for the sorted copy and the output, and I don't mutate the input. With n at 200,000 that runs well under a second in Python.
+>
+> *Summary chip:* O(n log n) time, O(n) space
+
 ---
 
 #### DTECH-034 — dsa_theory
@@ -25181,6 +28400,14 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > The batch design breaks, because sorting assumes you have everything up front. For a stream I'd keep the merged windows in a balanced BST or sorted structure keyed by start, and on each arrival insert it and merge with its left and right neighbors, which is O(log n) per window. For "is minute t quiet," I'd binary search for the window whose start is the largest one less than or equal to t, then check t is below its end. That's O(log n) per query, and it handles grace the same way, since merging only looks at adjacent windows.
 >
 > *Summary chip:* stream: ordered set, log n insert and query
+
+**fix9**
+
+> The batch design doesn't work anymore, because I can't sort what I haven't seen. So I'd keep the merged windows in a sorted structure, like a balanced BST or a sorted list with binary search, and insert each arriving window by merging it with any neighbors it touches or falls within grace of. For "is minute t quiet," I binary search for the window containing t and check whether t is in [start, end). Insert becomes O(log n) plus the merges, and the query is O(log n).
+
+**fix10**
+
+> The batch design breaks, because sorting assumes you have all the windows. For a stream I'd keep the merged windows in a balanced BST or sorted list keyed by start, and on each arrival insert it and merge with its left and right neighbors, since only adjacent windows can overlap. Then "is minute t quiet" is a binary search for the window containing t, O(log n) per query. Grace still only decides merging, never extends an end.
 
 ---
 
@@ -25382,6 +28609,44 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > The `seen[ch] >= left` guard matters: without it, a character seen before the window start would drag `left` backwards. This runs in O(n) time and O(min(n, alphabet)) space.
 
+**fix9**
+
+> The bug is that `enumerate` gives you `(index, char)` tuples, so `ch` is never a character and `right` is never defined. On `"abcabcbb"` it crashes immediately. Here's the fix:
+> 
+> ```python
+> def length_of_longest_substring(s):
+>     seen = {}
+>     left = 0
+>     best = 0
+>     for right, ch in enumerate(s):
+>         if ch in seen and seen[ch] >= left:
+>             left = seen[ch] + 1
+>         seen[ch] = right
+>         best = max(best, right - left + 1)
+>     return best
+> ```
+> 
+> Unpacking the tuple gives you `right` and `ch`, and the `seen[ch] >= left` guard stops a stale index from moving `left` backwards.
+
+**fix10**
+
+> The bug is that `enumerate(s)` yields `(index, char)` tuples, so `ch` is never a character and `right` is never defined. On `"abcabcbb"` it crashes on the first iteration.
+> 
+> ```python
+> def length_of_longest_substring(s):
+>     seen = {}
+>     left = 0
+>     best = 0
+>     for right, ch in enumerate(s):
+>         if ch in seen and seen[ch] >= left:
+>             left = seen[ch] + 1
+>         seen[ch] = right
+>         best = max(best, right - left + 1)
+>     return best
+> ```
+> 
+> Unpacking the tuple gives `right` and `ch`, and the `seen[ch] >= left` guard stops a stale index from moving `left` backwards.
+
 ---
 
 #### DTECH-036 — dry_run
@@ -25531,6 +28796,31 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 >
 > *Summary chip:* sliding window, count map, shrink past two
 
+**fix9**
+
+> ABBA is the classic two-pointer sliding window for the longest substring without repeating characters. You keep a window `[left, right]`, expand `right` one character at a time, and when you hit a character already in the window you jump `left` to just past its last occurrence. A hash map stores each character's most recent index, so each character is visited once and the whole thing runs in O(n) time and O(min(n, alphabet)) space. The key subtlety is that `left` only ever moves forward, so you guard the jump with `seen[ch] >= left` to ignore stale indices from before the window.
+> 
+> ```python
+> def length_of_longest_substring(s):
+>     seen = {}
+>     left = 0
+>     best = 0
+>     for right, ch in enumerate(s):
+>         if ch in seen and seen[ch] >= left:
+>             left = seen[ch] + 1
+>         seen[ch] = right
+>         best = max(best, right - left + 1)
+>     return best
+> ```
+>
+> *Summary chip:* sliding window, map of last indices
+
+**fix10**
+
+> ABBA is a classic lock-free approach to a shared stack, and it's really a hazard of compare-and-swap rather than an algorithm on its own. The idea is that a thread reads a value, gets preempted, and by the time it comes back the location holds the same value again, so its CAS succeeds even though the underlying state changed underneath it. The name comes from the value going A to B and back to A, so the check passes when it shouldn't.
+> 
+> The classic fix is a tagged pointer: pack a version counter alongside the pointer so every push and pop bumps the tag, and a stale CAS fails because the tag no longer matches. The other standard option is hazard pointers, where each thread publishes what it's currently reading so nothing gets reclaimed while it's in use. In practice most people reach for a lock or a well-tested concurrent library rather than hand-rolling this, because getting the memory reclamation right is where it bites.
+
 ---
 
 #### DTECH-037 — resume_project_deep_dive
@@ -25596,6 +28886,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8** — edited after streaming
 
 > The resume says 31 percent, not 41. On the measurement: Lanternfish is a Rust sidecar on the tokio runtime using hickory-proto, injected into the checkout pods. The pod's dnsPolicy is None with a dnsConfig pointing at 127.0.0.1, so every lookup hits the sidecar first. It forwards each query unchanged to the cluster DNS IP and times from arrival to response, exporting a Prometheus histogram, **lanternfish_lookup_seconds**, with 12 buckets and qtype, rcode and upstream labels. The name isn't a label, to keep cardinality bounded. It also counts search-domain expansions that come back NXDOMAIN, which is what pointed at ndots:5.
+
+**fix9**
+
+> The resume says 31 percent, so let me be precise about that first. Lanternfish was a Rust sidecar on the tokio runtime using hickory-proto, injected into the checkout pods. It listened on 127.0.0.1:53, forwarded each query unchanged to the cluster DNS IP, and timed from query arrival to response written back, exporting a Prometheus histogram with qtype, rcode and upstream labels. That gave per-pod lookup latency, which CoreDNS metrics couldn't, since they're per replica and blind to search-domain expansion.
+>
+> *Summary chip:* sidecar timed DNS per pod, found 31%
+
+**fix10**
+
+> The resume says 31 percent, not 41, so I'd correct that first. Lanternfish was a Rust sidecar on the tokio runtime using hickory-proto, injected into the checkout pods. It listened on 127.0.0.1:53, forwarded each query unchanged to the cluster DNS IP, and timed the lookup from arrival to response, exporting a Prometheus histogram with qtype, rcode and upstream labels.
+>
+> *Summary chip:* Rust sidecar timed per-pod DNS lookups
 
 ---
 
@@ -25666,6 +28968,18 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > We looked at three options. CoreDNS metrics were already there but aggregated per replica, not per pod, and blind to how many expansions one lookup triggered. An eBPF probe would've given per-pod data without touching pods, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated four to six weeks. The sidecar was per pod by construction, easy to remove, and about two weeks of work. The trade-off is it only sees pods it's injected into, and it adds one local hop per lookup.
 >
 > *Summary chip:* per-pod data, cheap, removable
+
+**fix9**
+
+> We considered two alternatives. CoreDNS metrics were already there, but they're per replica, not per pod, and they can't see how many search-domain expansions one application lookup triggers. An eBPF probe would've given per-pod data without touching pods, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated four to six weeks. The sidecar was per pod by construction, easy to remove, and about two weeks of work. The trade-off is it only sees pods it's injected into, and it adds one local hop per lookup.
+>
+> *Summary chip:* per-pod data, cheap, removable
+
+**fix10**
+
+> We needed per-pod data, and CoreDNS only gives you per-replica aggregates, blind to how many search-domain expansions one application lookup triggers. An eBPF probe would've given us that too, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated 4 to 6 weeks. The sidecar was per-pod by construction and about 2 weeks of work. The trade-off is it only sees pods it's injected into, and it adds one local hop per lookup.
+>
+> *Summary chip:* per-pod data, 2 weeks vs eBPF
 
 ---
 
@@ -25763,6 +29077,24 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 > 
 > For retries, the idempotency key is unique in the payouts table, so a duplicate insert fails and the workflow returns the original result instead of paying again.
 
+**fix9** — edited after streaming
+
+> For grower payouts: an **accounts** table with an account per grower and a few system accounts, like **escrow** and **payout clearing**. **Entries** are append-only, each with a **transaction id**, **account**, and **signed amount**, and every transaction's entries **sum to zero**. A payout writes two entries: **debit grower payable, credit payout clearing**.
+> 
+> For retries, the transaction carries a **unique idempotency key**, and the entries go in **one transaction with a unique constraint on that key**, so a replay hits the constraint and no-ops.
+> 
+> On the ledger side, is Harrow's schema already fixed, or is this a greenfield design?
+
+**fix10** — edited after streaming
+
+> I'd design it like this.
+> 
+> Three tables: **accounts** (id, type, currency), **journal_entries** (id, idempotency_key unique, status, created_at), and **postings** (entry_id, account_id, amount, signed). Every entry's postings sum to zero, so debits equal credits.
+> 
+> A grower payout debits the escrow liability account and credits the grower's payable account, then a second entry moves it to cash on settlement.
+> 
+> For retries: the idempotency key is unique on journal_entries, so a duplicate insert fails and the caller reads back the existing entry. I'd also lock the accounts in a fixed order inside one transaction to avoid deadlocks.
+
 ---
 
 #### DTECH-040 — database_design
@@ -25826,5 +29158,13 @@ fix8 and fix9 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-
 **fix8**
 
 > Read committed. The two entries and the payout row go in one transaction, so atomicity gives me the all-or-nothing write, and the unique idempotency key is what actually stops the double payout. I don't need serializable for that.
+
+**fix9** — edited after streaming
+
+> For the payout write, **read committed** works: each transaction touches its own grower's account and the clearing account, and the unique constraint on the idempotency key handles the retry. If a balance invariant spans accounts, **repeatable read** with row locks in a fixed order is the safer choice.
+
+**fix10**
+
+> Read committed. The idempotency key is a unique constraint, so the duplicate insert has to see the committed row and fail, and read committed gives me that without the serialization overhead. The fixed-order row locks handle the deadlock risk.
 
 ---
