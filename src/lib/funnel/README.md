@@ -51,12 +51,20 @@ The endpoint takes no key and the app is open source, so nothing can prove an ev
 real app. It is bounded instead (`natively-api/lib/funnelGuard.js`):
 
 - one install per request;
-- 300 events per install per day, 50 installs per address per day, 250,000 rows per day overall
-  (`FUNNEL_MAX_EVENTS_PER_INSTALL_PER_DAY`, `FUNNEL_MAX_INSTALLS_PER_IP_PER_DAY`, `FUNNEL_MAX_EVENTS_PER_DAY`);
+- 300 events per install per day; per address, 50 installs and 3,000 events per day, with IPv6
+  addresses grouped by /64; 250,000 rows per day overall (`FUNNEL_MAX_EVENTS_PER_INSTALL_PER_DAY`,
+  `FUNNEL_MAX_INSTALLS_PER_IP_PER_DAY`, `FUNNEL_MAX_EVENTS_PER_IP_PER_DAY`, `FUNNEL_MAX_EVENTS_PER_DAY`);
 - an event must claim a time no more than 35 days back or 2 days ahead;
-- past the overall cap the endpoint answers 503, clients keep their events, and an alert goes out once.
+- past the overall cap the endpoint answers 503, clients keep their events, and an alert goes out once;
+- installs the server has itself recorded a new trial or a purchase for are **confirmed** and are not
+  subject to the overall cap, so filling it with made-up installs cannot pause them. A failed checkout
+  or a re-issued trial token confirms nothing: both can be produced for any install at no cost.
 
 The counters live in the server's memory only; an address is held as a salted hash and never written.
+
+Not stopped: someone with many real addresses can still post made-up installs up to the overall cap
+and pause unconfirmed installs until UTC midnight (they keep their events and deliver the next day).
+Only requiring an account would stop that.
 
 Trial starts and purchases are written by the server from what it saw, and cannot be made up. The
 report's "Can the client-side numbers be believed?" section sets claimed trial starts beside
