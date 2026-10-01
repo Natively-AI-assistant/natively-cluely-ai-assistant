@@ -164,6 +164,10 @@ export async function chat(messages, { maxTokens = 4000, temperature = 0, retrie
       continue;
     }
     if (r.status === 402) { RATIONED = `402 ration exhausted at ${new Date().toISOString()}: ${scrub(r.text).slice(0, 160)}`; console.error(`[astra] ${RATIONED} — stopping new judge calls`); break; }
+    // 2026-10-01 12:26Z: a second way a batch ends — the ACCOUNT's own balance, not the GPT ration pool:
+    // {"error":{"message":"user quota is not enough","code":"insufficient_user_quota"}}. It is not a 402, so every
+    // remaining row failed one by one. Same handling: fail fast from here on; the wording keeps the two apart.
+    if (/insufficient_user_quota|user quota is not enough/i.test(r.text)) { RATIONED = `account quota exhausted (insufficient_user_quota) at ${new Date().toISOString()}`; console.error(`[astra] ${RATIONED} — stopping new judge calls`); break; }
     if (!(r.status === 0 || TRANSIENT.has(r.status))) break;
     const ra = Number(r.headers['retry-after']);
     const backoff = Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(60000, 1500 * 2 ** attempt);

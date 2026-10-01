@@ -80,7 +80,7 @@ function runStep([name, argv, needs]) {
     log.write(`\n=== ${name} ${new Date().toISOString()}\n`);
     console.log(`${new Date().toISOString().slice(11, 19)} start ${name}`);
     const child = spawn(process.execPath, argv, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
-    const watch = (buf) => { const s = String(buf); log.write(s); if (/402 ration exhausted/.test(s)) rationed = true; };
+    const watch = (buf) => { const s = String(buf); log.write(s); if (/402 ration exhausted|account quota exhausted/.test(s)) rationed = true; };
     child.stdout.on('data', watch);
     child.stderr.on('data', watch);
     child.on('close', (code) => {

@@ -752,3 +752,47 @@ validator defect is reported as open.
   5 of 6 rewrites were refused by the `source_exposed` rail; the one shipped was good. Not a clean fit for the pass.
 * Not built. It is a persona-compliance error of the generator on 2–3% of Lecture turns (≈ +0.03 on the aggregate if
   fully repaired); a proper fix belongs in the response-contract validator of that mode, not in the claim pass.
+
+### fix12 (aq-fix2 f0c3a263) — Seminar rows in the app and judged; PROMOTED — 12:27Z
+* Runs (Seminar rows only): aq2-dev-fix12 40, aq2-holdout-fix12 30, aq2-sb-fix12 10; 0 failed rows. The holdout run
+  hung twice on a profile step (the app's structured generation went to the Codex CLI and never returned); the run
+  process and then the app were restarted, the rows are from the same committed build.
+* Objective: supp-behavior Seminar validators 5/5 (fix11 3/5, fix6 4/5) — SBSEM-007 and SBSEM-002 both pass; holdout
+  1/1, dev 2/2. Seminar edits: sb 1 of 10 (fix11 3), holdout 5 of 30 (5), dev 8 of 40 (9). Seminar total p50
+  2534 / 2545 / 3217 ms (dev / holdout / sb), fix11 2409 / 2450 / 3572.
+* Judged, Seminar, charter v2 (paired):
+  | set | vs fix11 | vs fix6 | hard fails fix6 → fix11 → fix12 | question unanswered |
+  |---|---:|---:|---:|---:|
+  | holdout (30) | −0.10 (±0.23) | +0.64 (±0.74) | 7 → 3 → 3 | 0 → 1 → 1 |
+  | dev (38 of 40; 2 lost to the quota) | +0.21 (±0.45) | +0.34 (±0.48) | 3 → 2 → 1 | 0 → 3 → 3 |
+* fix12 as a whole = fix11's runs for the eight unchanged modes + fix12's Seminar rows:
+  holdout 8.02 → 8.43, +0.41 (±0.23), hard fails 60 → 31; dev 8.23 → 8.49, +0.25 (±0.18), hard fails 66 → 38 (358).
+* Against the rule amended at 11:57Z: (1) holdout aggregate clears rules 1–4 — yes; (2) Seminar on holdout not below
+  fix11 by more than 0.4, hard fails not up — yes; (3) validators on gated / edited answers not worse than fix6 on
+  dev (8/9 = 8/9), holdout (2/2 = 2/2) and supp-behavior (Seminar 5/5; the one remaining failure, SBLEC-002, is an
+  unedited answer in an ungated mode) — yes; (4) question-unanswered in Seminar not up against fix11 — yes.
+* **DECISION: fix12 is promoted over fix6. The kept build is aq-fix2 f0c3a263 (branch fix/aq-astra-i5).** Holdout
+  confirms the bundle (I16, I18, language rail, I21, I22, claim kinds, source-word rail, Seminar study scope), not
+  each part. It is NOT landed on main.
+
+### fix9 (I18 + I21 + I22, no claim kinds) under charter v2 — attribution
+* dev (360): fix6 8.24 → fix9 8.37 (+0.13 ±0.18, hard fails 66 → 40) → fix11 8.47 (fix11 − fix9 = +0.09 ±0.16).
+* holdout (207 clean rows, no Seminar / Call Center): fix6 8.29 → fix9 8.59 (+0.30 ±0.25, hard fails 38 → 21);
+  fix11 − fix9 = −0.07 (±0.25).
+* So the gain of the bundle is I18's list-then-rewrite; claim kinds are judged NEUTRAL (kept for what they do
+  objectively: edits 149 → 115, replies turned into a question 36 → 3, fewer text swaps).
+* One per-mode disagreement, not actionable: Team Meet fix11 − fix9 is −0.81 (±0.71) on holdout and +0.15 (±0.22) on
+  dev. Looking for work is −0.28 / −0.23 on both (inside the noise) with hard fails 3 → 7 and 4 → 7: read on dev,
+  the kinds-aware pass LISTS the invented motive or weakness and then keeps a reworded version of it ("What I want
+  is to be somewhere the platform work is still the main event"), where fix9 removed it and asked a question back
+  ("What does the work look like on your side right now?") — which the judge scores higher (7.5 vs 5.0) and the
+  phase-3 spec forbids. Neither is a good answer: this is blocker 1 (no stored answer for motive / own-past asks).
+
+### The batch ended on the ACCOUNT's quota, not the ration — 12:26Z
+`{"error":{"message":"user quota is not enough","code":"insufficient_user_quota"}}` — a different error from the
+402 "Budget pool quota has been exhausted" that ends a ration batch. About 2,770 judgments were made in this batch.
+The client now fails fast on it (it was not a 402, so every remaining row failed one by one); the queue was stopped.
+Judged before it: calibration, dev and holdout for fix11 / fix6 / fix9, the I25 read, fix12 Seminar (holdout 30,
+dev 38). NOT judged: the starting baseline is partial (dev 201 of 360: General, Sales, Recruiting, Team Meet, 36 of
+Looking for work; holdout 202 of 270: six modes and 21 of Technical interview), supp-behavior under charter v2, the
+blind A/B, fix10. No judging is possible until the AgentRouter account has quota again.

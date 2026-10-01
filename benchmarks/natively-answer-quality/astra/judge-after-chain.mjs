@@ -35,6 +35,6 @@ for (const [set, run] of steps) {
     c.stdout.on('data', w); c.stderr.on('data', w); c.on('close', resolve);
   });
   console.log(`${stamp()} done ${run} exit ${code}`);
-  if (/402 ration exhausted/.test(out)) { console.log(`${stamp()} ration spent — stopping`); break; }
+  if (/402 ration exhausted|account quota exhausted/.test(out)) { console.log(`${stamp()} ration spent — stopping`); break; }
 }
 console.log(`${stamp()} judge-after-chain ${tag} finished`);
