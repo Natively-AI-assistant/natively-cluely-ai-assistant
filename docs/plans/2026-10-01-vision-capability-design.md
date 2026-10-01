@@ -265,14 +265,45 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
      already added in phases 1 to 3b (local-only, OpenRouter text-only,
      DeepSeek Pro, AgentRouter).
 
-   **Phase 5b** (not built): the screen-reading path adopts
-   `orderVisionCandidates` and gains cURL, Codex, Antigravity and DeepSeek
-   rungs (defects 6, 7, 8, 9); the non-streaming image paths
-   (`generateWithVisionFallback`, `chatWithGemini`, `streamChatWithGemini`)
-   follow the same order; "Keep screenshots on this device" reads `/api/show`
-   and any installed vision model (defect 4); and the on-the-spot test: when a
-   screenshot arrives, the selected model is still unknown and nothing else can
-   read it, test first and send only on a pass.
+   **Phase 5b** (built), the screen pre-pass (`VisionProviderRegistry` →
+   `ScreenUnderstandingService`): the quick "describe the screen" step that
+   runs before an answer starts, inside a 6 s total budget (first rung 3.6 s).
+   Two decisions by Evin (2026-10-01) amend section 3 for this path:
+   - **Cloud order stays fast.** A cloud selection does NOT lead the pre-pass.
+     Measured full pre-pass reply on a real screenshot (4 runs each):
+     Flash-Lite ~1.5 s, Flash ~2.2 s, Pro ~4.0 s. Since 5a the selected model
+     reads the screenshot in the answer itself.
+   - **No cloud pre-pass for a local selection.** With Ollama, a local custom
+     endpoint or a local cURL provider selected, only local rungs remain. A
+     local endpoint that reads images runs the pre-pass; Ollama gets none.
+   What was built:
+   - Defect 9: the OpenAI and Claude rungs name the vendor's fixed vision
+     model. Before, the screenshot went to the SELECTED model of that vendor,
+     text-only or not.
+   - Defect 8, as decided above: a local selection removes the cloud rungs.
+   - Defect 7, corrected: the registry's Ollama and Codex rungs read credential
+     fields nothing writes, so neither has ever run. Ollama stays without a
+     pre-pass by decision. Codex and Antigravity rungs were NOT added: both are
+     slow reasoning routes that could not be measured (no sign-in in a script),
+     and a rung that cannot answer inside 6 s delays every screenshot answer.
+     The Codex rung no longer claims to be local.
+   - New selected-only rungs: `deepseek` (when the resolver says the selected
+     model reads images; live 1.6–1.9 s) and `curl` (local only on a loopback
+     or private host).
+   - A breaker never outlives its selection, through one helper shared with
+     the chat path (`forgetBreakersOfOtherSelections`).
+   - Held by a baseline of 240 (keys × selection × mode) cases recorded before
+     the change; every difference matches a named rule.
+   - Not in the pre-pass (unreachable today, left alone): the non-streaming
+     image paths `generateWithVisionFallback`, `chatWithGemini` with images
+     (no renderer caller) and `streamChatWithGemini` (RAG passes no images).
+
+   **Phase 5c** (not built): a cURL rung in the chat screenshot chain
+   (defect 6); "Keep screenshots on this device" reading `/api/show` and any
+   installed vision model in `probeOllama` (defect 4); the on-the-spot test
+   when a screenshot arrives, the selected model is still unknown and nothing
+   else can read it; a cap on the leading selected rung's attempts (measured:
+   ~16 s before fallback with Natively unreachable).
 
 ### Verification status
 
@@ -283,6 +314,7 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
 | 3a | full suite | one-time test through 7 real models | **not run** (closed by Evin, 2026-10-01: the machine was held by another session's app). Unverified: the app starting the test at startup and writing the `tests` section of `vision-capabilities.json`. Covered instead by the startup-order unit test and the script run. |
 | 3b | full suite | DeepSeek Flash reads a real screenshot; Pro refused | **not run**, same reason |
 | 5a | full suite | Gemini Flash / Pro / Natively selected, with an OpenAI key present, before / after | not run (no renderer change) |
+| 5b | full suite | the real registry + pre-pass chain: DeepSeek Flash answers in 1.6–1.9 s; Pro not tried; cloud order unchanged with Gemini keyed | not run (no renderer change) |
 
 Windows: no phase added OS-specific code; none has been run on Windows.
 
