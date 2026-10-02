@@ -1123,3 +1123,66 @@ Positive but interval includes 0 → not promoted; fix13 stays the kept build an
 * First reading of the Fable scale: stricter at the top. Best of the 40 Looking-for-work replies 9.44; "No material
   issue" still comes with a concrete nit and 9.3–9.4. A 9.5 mode mean is further away under this judge than under
   gpt-6-astra; the agreement table on the kept build's dev rows will say by how much.
+
+### The kept build under the Fable judge, and the two judges compared (00:30Z 2026-10-02)
+| | dev (360) | holdout (270) |
+|---|---:|---:|
+| kept build (fix13), Fable | 8.29, p10 5.63, 23 hard fails | 8.35, p10 5.82, 13 hard fails |
+| same answers, gpt-6-astra vs Fable | 8.49 vs 8.27 (342 shared) | 8.45 vs 8.34 (260 shared) |
+| rank correlation (Spearman) / hard-fail kappa | 0.88 / 0.67 | 0.83 / 0.54 |
+
+* The judges order answers alike; Fable is 0.1–0.2 lower on the mean, flags fewer hard fails (dev 23 vs 37) and is
+  stricter at the top: 67 of 360 dev answers reach 9.5. Per mode on dev: Lecture 8.86, Team Meet 8.72, Seminar 8.53,
+  Recruiting 8.45, General 8.33, Sales 8.27, Technical interview 8.25, Call Center 7.65, Looking for work 7.57.
+  No mode is near 9.5 under either judge.
+* Where Fable takes the points: intent fulfilment 7.8 and direct usefulness 7.6 against correctness 8.6 and grounding
+  8.6. Flags on dev: insufficient_answer 23, important_question_unanswered 20, missed_available_evidence 15,
+  unsupported_personal_claim 9. The remaining cost is replies that do not answer, not invented claims.
+* **fix13 (typed refinement notice) is confirmed by the judge:** its re-run rows against fix12's, dev +1.52 (±0.84)
+  on 17, holdout +1.61 (±1.65) on 10; hard fails 1 → 0 and 1 → 1.
+
+### fix14 (Looking-for-work fallback, aq-fix2 2a2caed0) — app runs judged: NOT promoted
+* dev (40 app rows vs the kept build's): −0.01 (±0.39), hard fails 5 → 4. holdout (30): +0.09 (±0.24), 3 → 3.
+* Rule 1 (holdout gain with the interval excluding 0) and rule 4 (dev app rows agree in sign) are not met. fix13
+  stays the kept build; the rule change stays a candidate on `fix/aq-astra-i6`.
+* Why the replay said +0.30 and the app said 0: the replay ran ONE set of drafts through two verifier prompts; the
+  app runs compare two different samples of the generator's drafts, and that sampling alone moves a 40-row mode by
+  about ±0.4 (the same closing sentence scored 8.8 in one sample and 5.0 in the other, DJOB-026). An app re-run
+  cannot see an effect of this size. For a change that touches only the claim pass, the same-draft comparison is the
+  instrument with the power to decide; the app run is for what it alone shows (validators, latency, breakage).
+
+### The claim pass itself, measured without sampling: draft vs shown on the same rows (dev, Fable, 00:35Z)
+`tools/edit-pairs.mjs` writes, for every row the pass edited, the streamed draft and the shown answer; both are
+judged against the same recorded conversation. 111 of 360 dev rows were edited.
+| | edits | draft | shown | change (95%) | hard fails |
+|---|---:|---:|---:|---:|---:|
+| all | 111 | 7.23 | 7.32 | +0.10 (±0.31) | 31 → 12 |
+| heard | 91 | 7.27 | 7.47 | +0.20 (±0.36) | 27 → 9 |
+| typed | 20 | 7.06 | 6.67 | −0.39 (±0.51) | 4 → 3 |
+| draft had a hard fail | 31 | | | +1.56 | |
+| draft had none | 80 | | | −0.47 (20 worse by a point or more, 3 better) | |
+
+Heard, by mode: Team Meet +0.48 (±0.42, 15), Call Center +0.67 (15, 5 → 2), Technical interview +0.71 (4),
+Looking for work +0.22 (24, 12 → 4), General −0.05 (8), Sales −0.13 (12), Seminar −0.32 (5), Recruiting −0.46 (8,
+2 → 0).
+* The pass does what it was built for (hard fails 31 → 12) and pays for it on the 80 drafts that had nothing to cap:
+  it removes supported or harmless content and leaves a thinner reply. An oracle that edited only the capped drafts
+  would add about +0.10 to the dev mean — that is the whole ceiling of verifier tuning.
+* Kinds of harm seen: a résumé in two versions re-opened as "given two ways" although the draft had used the
+  current one (DJOB-031 9.6 → 5.1, DJOB-032 8.9 → 5.6) — while the same rule helps a genuine conflict (two prices on
+  one sheet +1.3, two refund rules +1.1); a drafted thank-you cut to 27 words (DSEM-020 9.5 → 7.1); a plan question
+  turned back on the interviewer (DJOB-017 8.4 → 5.6).
+
+### Rules written 00:40Z, BEFORE the holdout draft-vs-shown pairs are judged
+**I27a — typed turns.** The claim pass is switched off on typed turns if, on holdout, the typed edits' change is
+≤ 0 and the pass removes at most one hard fail there. (Dev: −0.39, 4 → 3.) Otherwise typed keeps it.
+**I27b — a mode's heard turns.** A mode keeps the pass unless dev and holdout BOTH show a negative change AND the
+pass removes at most one hard fail in that mode over dev and holdout together. Hard-fail reduction ranks first, so
+a mode where the pass removes two or more hard fails keeps it whatever the mean says.
+**I27c — Looking for work: no conflict step, plus the v2 fallback.** A candidate does not tell an interviewer that
+their own résumé "gives it two ways"; the generator already follows the current version. Evaluated on the SAME
+drafts (the kept build's Looking-for-work drafts through the fix12 verifier and through the variant): build if the
+dev gain is at least +0.3 with the interval excluding 0 and hard fails are not up; promote if the holdout same-draft
+gain is positive with the interval excluding 0 and hard fails are not up.
+**Protocol for a change that touches only the claim pass:** same-draft pairs on dev, then on holdout (aggregates
+only), then ONE app regression run for validators, latency and breakage. App re-runs are not used to measure it.

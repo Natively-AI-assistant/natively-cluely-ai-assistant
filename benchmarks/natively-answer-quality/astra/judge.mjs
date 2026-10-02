@@ -97,7 +97,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const lim = limiter(conc);
   for (const dir of runs) {
     const run = loadRun(dir);
-    const outFile = path.join(outDir, `${run.header.run_id}.jsonl`);
+    // Named after the run DIRECTORY: a composite run (tools/compose-run.mjs) keeps the run_id of the run it was built
+    // from, and two composites judged into one set would otherwise share a file (and each other's "done" rows).
+    const outFile = path.join(outDir, `${path.basename(dir)}.jsonl`);
     // --force: judge again even when the out file holds a judgment (the cache still answers an unchanged envelope).
     const done = opt('force') ? new Set() : new Set(readJsonl(outFile).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.repeat}`));
     const todo = [];
