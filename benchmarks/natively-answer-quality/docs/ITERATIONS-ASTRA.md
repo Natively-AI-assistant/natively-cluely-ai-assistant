@@ -1335,7 +1335,7 @@ the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Hol
   the two replay pairs and these app rows are queued for gpt-6-astra. fix15 is a candidate until then.
 * App stopped through its launcher, build output deleted (5.2 GB free).
 
-### Corrections to the 02:00Z plan, written 01:33Z before any of these rows has a gpt-6-astra score
+### Corrections to the 02:00Z plan, written 01:32Z before any of these rows has a gpt-6-astra score
 * **The reasoning pair that decides is now the change that was built.** fix15 reasons on typed turns only, but the
   queued pair regenerated every turn, heard ones included (49 of 80 dev, 39 of 60 holdout) — the same mismatch
   already corrected for the Call Center and Sales notices. New deciding sets `think-low-til-typed` and
