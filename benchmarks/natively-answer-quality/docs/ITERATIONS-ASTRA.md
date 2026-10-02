@@ -1883,3 +1883,41 @@ build's to size that.
   change to it is a behaviour change and goes to Evin with the numbers; starting the same retrieval when the
   question is transcribed, rather than at the press, is the one option that keeps the prompt identical.
 
+## Speed, cause 1 separated: the bundled rerank, awaited on heard turns — and the embedder did not move the score (15:05Z)
+
+**Stage trace** (`aq2-dev-emb3`: kept build, Looking for work, 40 dev rows, embedder working,
+`NATIVELY_H4_STAGE_TRACE=1`; 43 hybrid retrievals):
+
+| step inside the hybrid retriever | retrievals | p50 | p90 | max |
+|---|---:|---:|---:|---:|
+| whole retrieval | 43 | 191 ms | 385 ms | 431 ms |
+| query embedding and hybrid search | 10 | 13 ms | 194 ms | 194 ms |
+| **rerank (bundled cross-encoder)** | 30 | **250 ms** | **405 ms** | 426 ms |
+| document map, answerability | 34 | 0 ms | 1 ms | 2 ms |
+
+* The rerank is the wait. It ran on 30 of the 38 retrievals that reached its gate: the gate's "low confidence"
+  was true on 30 of 38 and no reranker was selected by a user. The code describes this path as an escalation the
+  default install should not pay on every query; on profile lookups it is paid on about four in five.
+* V3's profile retrieval in the same run: heard 296 ms p50 / 408 p90 (28 turns), typed 14 / 17 ms (7 turns).
+* The reranker's own benchmark gives it +0.032 MRR over no reranker (`docs/reranker-benchmark-2026-09-04.md`).
+
+**The embedder working did not raise the score.** `aq2-dev-emb2` (embedder and reranker working) judged against the
+kept build's rows (no embedder: lexical lookup and seeded profile entries), same items. The ration pool ended at
+15:00Z with 70 of 120 judged (50 wait for the next batch):
+
+| mode | rows | kept build, no embedder | embedder working | difference (95 %) | hard fails |
+|---|---:|---:|---:|---:|---:|
+| Looking for work | 39 | 7.94 | 7.79 | −0.14 (±0.30) | 7 → 10 |
+| Technical interview | 29 | 8.10 | 7.71 | −0.39 (±0.77) | 7 → 9 |
+| both (with 2 Seminar rows) | 70 | 7.97 | 7.73 | −0.24 (±0.36) | 15 → 20 |
+
+Within the noise of an app re-run (the same code sampled twice moved by ±0.5 today), and not upward. So the report's
+numbers for profile-backed modes are not understated by the missing embedder, as far as 70 rows can show; and
+semantic retrieval plus rerank is not buying answer quality on these items that the judge can see.
+
+**Next measurement, started 15:05Z:** the same three modes with the embedder working and the bundled rerank switched
+off by its own setting (`NATIVELY_RAG_LOCAL_RERANK=0`, no code change) — `aq2-dev-emb4`. It gives the speed side
+directly (the wait on profile turns with and without the rerank). The quality side is `emb4` against `emb2`, same
+embedder, judged at the next batch; holdout after that, in aggregate. Whether to stop awaiting the rerank on heard
+turns is Evin's decision: it changes which profile passages are sent.
+
