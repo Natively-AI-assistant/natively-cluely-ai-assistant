@@ -11069,11 +11069,11 @@ html[data-platform="linux"][data-window="launcher"] body {
 .nat-caret-mirror {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
+  display: block;
   border: 1px solid transparent; /* match the input's border box exactly */
   border-radius: 0.75rem;        /* rounded-xl */
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
   overflow: hidden;
   pointer-events: none;
   /* No `font: inherit`. This rule lands after `@tailwind utilities`, so the
@@ -11085,11 +11085,10 @@ html[data-platform="linux"][data-window="launcher"] body {
 /* Takes width, paints nothing — the real input still renders the glyphs. */
 .nat-caret-mirror > .nat-caret-text {
   visibility: hidden;
-  flex: none;
 }
 .nat-caret {
-  flex: none;
   display: inline-block;
+  vertical-align: text-bottom;
   width: 1.5px;
   height: 1.15em;
   border-radius: 1px;

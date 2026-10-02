@@ -1861,19 +1861,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [stealthTapActive, setStealthTapActive] = useState<boolean>(false);
   const stealthTapActiveRef = useRef<boolean>(false);
   const caretMirrorRef = useRef<HTMLDivElement>(null);
-  // While the stealth hook is engaged the input is never DOM-focused (always
-  // on Windows), so the browser does not scroll it to the insertion point as
-  // text is appended: a sentence longer than the box stays pinned to its start
-  // and the drawn caret runs off past the right edge. Scroll the input to its
-  // end and give the caret mirror the same offset, so the glyphs and the caret
-  // shift together and the caret stays on the last character.
-  useLayoutEffect(() => {
-    const input = textInputRef.current;
-    const mirror = caretMirrorRef.current;
-    if (!stealthTapActive || !input || !mirror) return;
-    input.scrollLeft = input.scrollWidth;
-    mirror.scrollLeft = input.scrollLeft;
-  }, [stealthTapActive, inputValue]);
   // True when the click-to-engage stealth path is safe. False when an IME
   // (Pinyin / Hangul / Kanji / …) is enabled in macOS HIToolbox: the tap
   // captures below the IME so composition would never reach the chat box.
@@ -2216,6 +2203,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     input.style.height = `${nextHeight}px`;
     input.style.overflowY = scrollHeight > CHAT_INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
   }, [inputValue]);
+
+  // The unfocused stealth input does not follow appended text itself. Run
+  // after autosizing, match its usable width (including Windows scrollbar
+  // space), and keep the wrapped caret on the same visible final line.
+  useLayoutEffect(() => {
+    const input = textInputRef.current;
+    const mirror = caretMirrorRef.current;
+    if (!stealthTapActive || !input || !mirror) return;
+    const syncCaretViewport = () => {
+      const style = getComputedStyle(input);
+      const borders = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+      mirror.style.width = `${input.clientWidth + borders}px`;
+      mirror.style.height = `${input.offsetHeight}px`;
+      input.scrollLeft = 0;
+      input.scrollTop = input.scrollHeight;
+      mirror.scrollLeft = input.scrollLeft;
+      mirror.scrollTop = input.scrollTop;
+    };
+    syncCaretViewport();
+    const observer = new ResizeObserver(syncCaretViewport);
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [stealthTapActive, inputValue]);
 
   // PERF: hoist ReactMarkdown `components` maps for every streaming intent
   // into a single useMemo so their identity is stable across renders. Each
@@ -11418,6 +11428,12 @@ Provide only the answer, nothing else.`;
                     rows={1}
                     value={inputValue}
                     onChange={(e) => { setInputValue(e.target.value); setSkillPickerIndex(0); }}
+                    onScroll={(e) => {
+                      const mirror = caretMirrorRef.current;
+                      if (!mirror) return;
+                      mirror.scrollTop = e.currentTarget.scrollTop;
+                      mirror.scrollLeft = e.currentTarget.scrollLeft;
+                    }}
                     onKeyDown={(e) => {
                       // Shift+Enter inserts a newline, IME Enter confirms composition,
                       // and Cmd/Ctrl+Enter belongs to general:process-screenshots.
