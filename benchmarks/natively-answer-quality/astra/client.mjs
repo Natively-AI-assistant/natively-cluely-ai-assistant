@@ -50,7 +50,11 @@ export const JUDGE_MODEL = JUDGE === 'fable' ? 'claude-fable-5-1' : 'gpt-6-astra
 /** What the caches are keyed by. Unchanged for gpt-6-astra, so its existing cache stays valid. */
 export const JUDGE_KEY = JUDGE === 'fable' ? `${JUDGE_MODEL}/effort-${FABLE_EFFORT}` : JUDGE_MODEL;
 export const JUDGED_SUFFIX = JUDGE === 'fable' ? '.judged-fable.jsonl' : '.judged.jsonl';
-export const KEY_VAR = 'AGENTROUTER_API_KEY';
+// 2026-10-02 04:35Z — Evin: "theres a second api key for agentrouter". The first key's ACCOUNT ran out of quota on
+// 2026-10-01 12:26Z and the 02:00Z batch did not restore it. Same gateway, same model id, same client header: the
+// judge does not change, only whose quota pays for the call. A key that reports its quota (or its ration batch)
+// spent hands over to the next one; new calls stop only when every key has said so. Names only, never values.
+export const KEY_VARS = Object.freeze(['AGENTROUTER_API_KEY', 'AGENTROUTER_API_KEY_1']);
 // The app worktrees deliberately carry no .env; the key lives in the MAIN checkout's .env.
 function findEnv() {
   if (process.env.NATIVELY_ENV_FILE) return process.env.NATIVELY_ENV_FILE;
@@ -66,30 +70,71 @@ function findEnv() {
 export const ENV_FILE = findEnv();
 export const PROBE_FILE = path.join(HERE, 'probe-result.json');
 
-let KEY = null;
-function loadKey() {
-  if (KEY) return KEY;
+/** [{ name, value }] in KEY_VARS order; a value repeated under a second name counts once. */
+let KEYS = null;
+function loadKeys() {
+  if (KEYS) return KEYS;
   let txt;
   try { txt = fs.readFileSync(ENV_FILE, 'utf8'); } catch { throw new Error(`env file not readable (${path.basename(ENV_FILE)})`); }
+  const found = new Map();
   for (const line of txt.split(/\r?\n/)) {
     const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!m || m[1] !== KEY_VAR) continue;
+    if (!m || !KEY_VARS.includes(m[1]) || found.has(m[1])) continue;
     let v = m[2].trim();
     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-    if (v) { KEY = v; return KEY; }
+    if (v) found.set(m[1], v);
   }
-  throw new Error(`${KEY_VAR} not found in env file`);
+  const keys = [];
+  for (const name of KEY_VARS) {
+    const value = found.get(name);
+    if (value && !keys.some((k) => k.value === value)) keys.push({ name, value });
+  }
+  if (!keys.length) throw new Error(`${KEY_VARS.join(' / ')} not found in env file`);
+  KEYS = keys;
+  return KEYS;
 }
 
-/** Remove the key (and anything shaped like a bearer header) from any text. */
+/** Remove every key (and anything shaped like a bearer header) from any text. */
 export function scrub(s) {
   let out = String(s ?? '');
-  if (KEY) out = out.split(KEY).join('[REDACTED]');
+  for (const k of KEYS ?? []) out = out.split(k.value).join('[REDACTED]');
   return out.replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer [REDACTED]').replace(/sk-[A-Za-z0-9_\-]{12,}/g, 'sk-[REDACTED]');
 }
 
 export function readProbe() {
   try { return JSON.parse(fs.readFileSync(PROBE_FILE, 'utf8')); } catch { return null; }
+}
+
+// Which key is in use. It starts at the key the last successful probe answered on, so a process does not spend
+// its first calls on a key already known to be out of quota.
+let ACTIVE = -1;
+const SPENT = new Set();
+function activeIndex() {
+  const keys = loadKeys();
+  if (ACTIVE < 0) {
+    const p = readProbe();
+    const i = p?.ok ? keys.findIndex((k) => k.name === p.key_var) : -1;
+    ACTIVE = i >= 0 ? i : 0;
+  }
+  return ACTIVE;
+}
+/** The variable NAMES of the keys present, in order. */
+export const keyVars = () => loadKeys().map((k) => k.name);
+/** The variable NAME of the key in use. */
+export const activeKeyVar = () => loadKeys()[activeIndex()].name;
+/**
+ * The key at `index` reported its quota or ration spent. Moves to a key that has not, if there is one.
+ * Returns true when a call made on `index` should be repeated (another key is now in use).
+ */
+export function keySpent(index) {
+  const keys = loadKeys();
+  SPENT.add(index);
+  if (activeIndex() !== index) return !SPENT.has(ACTIVE);
+  const next = keys.findIndex((_, i) => !SPENT.has(i));
+  if (next < 0) return false;
+  console.error(`[astra] ${keys[index].name} is out of quota — continuing on ${keys[next].name}`);
+  ACTIVE = next;
+  return true;
 }
 
 /** Throws unless a successful probe against JUDGE_MODEL is on record. */
@@ -114,11 +159,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TRANSIENT = new Set([408, 409, 425, 429, 500, 502, 503, 504, 520, 522, 524]);
 
 /**
- * One raw HTTP call. Returns { status, json, text, headers, latencyMs }.
- * Never throws with the key in the message.
+ * One raw HTTP call. Returns { status, json, text, headers, latencyMs, keyIndex, keyVar }.
+ * Never throws with the key in the message. `keyIndex` picks a key by position (the probe tries each one);
+ * without it the key in use is taken.
  */
-export async function rawCall(method, route, body, { timeoutMs = 120000 } = {}) {
-  const key = loadKey();
+export async function rawCall(method, route, body, { timeoutMs = 120000, keyIndex = activeIndex() } = {}) {
+  const { name: keyVar, value: key } = loadKeys()[keyIndex];
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeoutMs);
   const t0 = Date.now();
@@ -133,9 +179,9 @@ export async function rawCall(method, route, body, { timeoutMs = 120000 } = {}) 
     let json = null; try { json = JSON.parse(text); } catch { /* keep text */ }
     const headers = {};
     for (const h of ['x-request-id', 'x-oneapi-request-id', 'openai-processing-ms', 'retry-after', 'content-type']) { const v = res.headers.get(h); if (v) headers[h] = v; }
-    return { status: res.status, json, text: scrub(text).slice(0, 4000), headers, latencyMs: Date.now() - t0 };
+    return { status: res.status, json, text: scrub(text).slice(0, 4000), headers, latencyMs: Date.now() - t0, keyIndex, keyVar };
   } catch (e) {
-    return { status: 0, json: null, text: scrub(e?.name === 'AbortError' ? `timeout after ${timeoutMs} ms` : e?.message ?? e), headers: {}, latencyMs: Date.now() - t0 };
+    return { status: 0, json: null, text: scrub(e?.name === 'AbortError' ? `timeout after ${timeoutMs} ms` : e?.message ?? e), headers: {}, latencyMs: Date.now() - t0, keyIndex, keyVar };
   } finally { clearTimeout(t); }
 }
 
@@ -178,6 +224,7 @@ export async function chat(messages, { maxTokens = 4000, temperature = 0, retrie
         latency_ms: r.latencyMs,
         temperature: 'temperature' in body ? body.temperature : 'default',
         temperature_dropped: droppedTemperature || TEMPERATURE_REJECTED,
+        key_var: r.keyVar,
         attempts: attempt + 1,
         at: new Date().toISOString(),
       };
@@ -190,11 +237,17 @@ export async function chat(messages, { maxTokens = 4000, temperature = 0, retrie
       console.error('[astra] route rejected temperature=0; retrying without it (default temperature)');
       continue;
     }
-    if (r.status === 402) { RATIONED = `402 ration exhausted at ${new Date().toISOString()}: ${scrub(r.text).slice(0, 160)}`; console.error(`[astra] ${RATIONED} — stopping new judge calls`); break; }
     // 2026-10-01 12:26Z: a second way a batch ends — the ACCOUNT's own balance, not the GPT ration pool:
     // {"error":{"message":"user quota is not enough","code":"insufficient_user_quota"}}. It is not a 402, so every
     // remaining row failed one by one. Same handling: fail fast from here on; the wording keeps the two apart.
-    if (/insufficient_user_quota|user quota is not enough/i.test(r.text)) { RATIONED = `account quota exhausted (insufficient_user_quota) at ${new Date().toISOString()}`; console.error(`[astra] ${RATIONED} — stopping new judge calls`); break; }
+    const accountSpent = /insufficient_user_quota|user quota is not enough/i.test(r.text);
+    if (r.status === 402 || accountSpent) {
+      // Another key may still have quota: repeat this call on it (not counted as a retry).
+      if (keySpent(r.keyIndex)) continue;
+      RATIONED = accountSpent ? `account quota exhausted (insufficient_user_quota) at ${new Date().toISOString()}` : `402 ration exhausted at ${new Date().toISOString()}: ${scrub(r.text).slice(0, 160)}`;
+      console.error(`[astra] ${RATIONED} — stopping new judge calls`);
+      break;
+    }
     if (!(r.status === 0 || TRANSIENT.has(r.status))) break;
     const ra = Number(r.headers['retry-after']);
     const backoff = Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(60000, 1500 * 2 ** attempt);

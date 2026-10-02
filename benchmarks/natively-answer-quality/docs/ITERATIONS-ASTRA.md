@@ -1363,3 +1363,28 @@ the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Hol
   of reasoning, then no visible text. In the app a stream that closes before any visible text is an `empty-stream`
   failure to the fallback engine (`llm/streamFallbackEngine.ts`), so the turn goes to the parallel retry or the next
   provider instead of showing nothing. The 52 typed app rows had no empty answer.
+
+## A second AgentRouter key — Evin, 2026-10-02 04:34Z ("theres a second api key for agentrouter")
+* The main checkout's `.env` holds `AGENTROUTER_API_KEY` and `AGENTROUTER_API_KEY_1` (two different values; read by
+  name, never printed). Same gateway, same model id `gpt-6-astra`, same client header, same charter: **the judge
+  does not change**, only whose quota pays for a call. Scores stay one series (`JUDGE_KEY` is unchanged); each
+  judgment now records the NAME of the key it was made on (`key_var`), so the two can be told apart afterwards.
+* Probe at 04:35Z, both keys list `gpt-6-astra`:
+  | key | chat probe | meaning |
+  |---|---|---|
+  | `AGENTROUTER_API_KEY` | 403 `insufficient_user_quota` | the account balance is spent (since 2026-10-01 12:26Z); needs a top-up |
+  | `AGENTROUTER_API_KEY_1` | 402 "Budget pool quota has been exhausted" | the sentence that has ended every ration batch so far; this key has never been seen answering |
+  So nothing can be judged before the next batch. If the second key answers after 11:00Z, the 402 was the batch
+  pool; if it still says 402 then, it is a fixed limit on that key and goes back to Evin.
+* `astra/client.mjs`: keys are tried in order. A key that answers 402 or `insufficient_user_quota` hands the SAME
+  call to the other key (not counted as a retry); new calls stop only when every key has said so, with the same
+  stop line `astra/queue3.mjs` watches for. A process starts on the key the last successful probe answered on.
+  `astra/probe.mjs` tries each key and records the first that answers. Both armed chains (pids 58884, 32411) start
+  a fresh process for every probe and every queue step, so they run this code without being re-armed.
+* Guard against a different route behind the second key: tier 0 (calibration, 25 fixtures) runs first on whichever
+  key answers. If it fails there, the queue stops and that key's judgments are not pooled with the first key's.
+* Tested offline (`node --test astra/client-keys.test.mjs`, 6 of 6): a copy of the client in a temp directory with
+  made-up keys and a stubbed fetch — hand-over on 403, both spent → stop line seen by the queue's own regex (read
+  from `queue3.mjs`), start on the probe's key and fall back, 8 calls in flight while the first key dies (all 8
+  land on the second, none stops the run), neither key in any error text or log line, one key behaves as before.
+  Not tested live: a real judgment on the second key (it has not answered yet).
