@@ -108,11 +108,14 @@ for (let t = fromTier; t < TIERS.length; t++) {
   await Promise.all(TIERS[t].map(runStep));
   if (t === 0 && summary.steps.find((s) => s.name === 'calibrate')?.exit !== 0) { console.log('calibration did not pass — stopping'); break; }
 }
-// The pre-registered rule, applied mechanically to whatever is judged (local, no judge calls).
-await new Promise((resolve) => {
-  const out = fs.openSync(path.join(logDir, 'decide.md'), 'w');
-  spawn(process.execPath, ['astra/decide.mjs'], { cwd: ROOT, stdio: ['ignore', out, out] }).on('close', resolve);
-});
+// The pre-registered rules, applied mechanically to whatever is judged (local, no judge calls): the replay pairs
+// (decide.md), then the candidates' app rows against the kept build (promote.md).
+for (const [script, file] of [['astra/decide.mjs', 'decide.md'], ['astra/promote.mjs', 'promote.md']]) {
+  await new Promise((resolve) => {
+    const out = fs.openSync(path.join(logDir, file), 'w');
+    spawn(process.execPath, [script], { cwd: ROOT, stdio: ['ignore', out, out] }).on('close', resolve);
+  });
+}
 summary.finished_at = new Date().toISOString();
 summary.rationed = rationed;
 fs.writeFileSync(path.join(logDir, `queue3-${summary.started_at.replace(/[:.]/g, '-')}.json`), JSON.stringify(summary, null, 2));
