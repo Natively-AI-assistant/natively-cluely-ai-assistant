@@ -4,13 +4,13 @@ Status 2026-10-01 14:55 UTC. Generator: deepseek-flash. Judge: gpt-6-astra throu
 `c725615a54f6` (claim kinds), calibration 25 of 25. Every score in this report is under charter v2; nothing from
 charter v1 is mixed in. Holdout is reported in aggregate only.
 
-## 0. Status on 2026-10-02 05:14 UTC — what is waiting, and on what
+## 0. Status on 2026-10-02 09:10 UTC — what is waiting, and on what
 
 Nothing in sections 1–11 has changed since 2026-10-01 14:55 UTC: no new gpt-6-astra score exists. The judge has not
 answered since 2026-10-01 12:26 UTC. There are now two AgentRouter keys with account quota (`AGENTROUTER_API_KEY`,
 replaced by Evin on 2026-10-02, and `AGENTROUTER_API_KEY_1`); the judge client uses whichever answers and hands
 over when one runs out. Probed 05:12 UTC: both list `gpt-6-astra` and both answer 402 "Budget pool quota has been
-exhausted" — the ration pool of the current batch, shared across accounts. **Nothing can be judged before the
+exhausted" — the ration pool of the current batch, shared across accounts (the same at 08:53 UTC). **Nothing can be judged before the
 11:00 UTC batch; no top-up is needed.** A detached chain probes every 10 minutes (every minute around a batch) and
 runs the queue on its own the moment either key answers; the verdicts land in `astra/out/logs/decide.md` (replay
 pairs) and `astra/out/logs/promote.md` (the candidates' app rows against the kept build).
@@ -18,7 +18,12 @@ pairs) and `astra/out/logs/promote.md` (the candidates' app rows against the kep
 The generator stays on the direct DeepSeek key (Evin, 05:05 UTC): DeepSeek through AgentRouter was measured to
 cost about one judgment per generated answer, from the balance the judge needs.
 
-A second judge (Fable) was tried for about an hour on 2026-10-02 at Evin's request and withdrawn at his request.
+**The laptop's disk is nearly full, and not from this work.** 09:02 UTC: 0.8 GB free, 100 % used; 2.7 GB eight
+minutes later. The judge now sends no call when under 300 MB is free and its files survive a write cut short
+(`astra/store.mjs`), so a full disk costs a batch, not the saved judgments. No app run is started under 4 GB free.
+What is idle on the disk and belongs to other work is listed in `docs/ITERATIONS-ASTRA.md` for Evin to decide.
+
+A second judge (Fable) was tried for about an hour on 2026-10-02 at Evin's request and withdrawn at Evin's request.
 Its scores are in the repository as a record (`abs-*-f1`, `*.judged-fable.jsonl`); none is used in this report and no
 decision rests on them.
 
