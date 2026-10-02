@@ -37,7 +37,14 @@ export const CLIENT_HEADERS = Object.freeze({ originator: 'codex_cli_rs' });
  * neutral working directory — so a judgment sees the charter and the envelope and nothing of the session that is
  * doing the optimising. No key is read or sent by this path (the CLI's own login is used).
  */
-export const JUDGE = process.env.AQ_JUDGE === 'fable' ? 'fable' : 'astra';
+// 2026-10-02 01:00Z — Evin: "use gpt astra 6 only revert from using fable model". The judge is gpt-6-astra and
+// nothing else. The Fable backend below is kept as the record of how the `*-f1` series was produced, and refuses to
+// run: no new judgment may come from it.
+if (process.env.AQ_JUDGE === 'fable') {
+  console.error('judge unavailable: the Fable judge was withdrawn on 2026-10-02 (the judge is gpt-6-astra only). Unset AQ_JUDGE.');
+  process.exit(2);
+}
+export const JUDGE = 'astra';
 export const FABLE_EFFORT = process.env.AQ_FABLE_EFFORT || 'medium';
 export const JUDGE_MODEL = JUDGE === 'fable' ? 'claude-fable-5-1' : 'gpt-6-astra';
 /** What the caches are keyed by. Unchanged for gpt-6-astra, so its existing cache stays valid. */

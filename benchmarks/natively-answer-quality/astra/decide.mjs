@@ -64,6 +64,7 @@ console.log('| change | rows judged | base | variant | gain (95%) | hard fails |
 console.log('|---|---:|---:|---:|---:|---:|---:|---|');
 // The candidate build applies the two notices on HEARD turns only ("h"); those are the deciding pairs.
 const PAIRS = [
+  ['Reasoning on (low) — Technical interview + Lecture, dev prompts', 'think-off-til', 'think-low-til'],
   ['Looking for work — fallback rule reworded (v2)', 'lfw-base', 'lfw-bridge-v2'],
   ['Call Center — "no policy on file" notice, heard turns', 'ccfin-base', 'ccfin-nopolicy-v1h'],
   ['Sales — "how to say it when nothing can be stated", heard turns', 'salesfin-base', 'salesfin-shape-v1h'],
@@ -88,6 +89,17 @@ for (const [label, base, variant] of [...PAIRS, ...SECONDARY]) {
   if (m.mismatched) console.log(`\nWARNING ${label}: ${m.mismatched} of ${m.shared} rows with the SAME answer in both arms have different scores — judged twice; that pair's interval is inflated.`);
 }
 console.log(`\nSame-answer rows scored differently in the deciding pairs: ${PAIRS.reduce((n, [, b, v]) => n + sharedAnswerMismatches(b, v).mismatched, 0)} (must be 0).`);
+// Holdout confirmation of a lever that passed on dev: positive, interval excludes 0, hard fails not up. Aggregate only.
+console.log('\n## Holdout confirmation (rule: gain > 0, interval excludes 0, hard fails not up)\n');
+console.log('| lever | rows judged | base | variant | gain (95%) | hard fails | verdict |');
+console.log('|---|---:|---:|---:|---:|---:|---|');
+for (const [label, base, variant] of [['Reasoning on (low) — Technical interview + Lecture, holdout prompts', 'think-off-til-hold', 'think-low-til-hold']]) {
+  const ids = [...new Set(rowsOf(`results/replay/${base}.jsonl`).filter((r) => (r.k ?? 0) === 0).map((r) => r.id))];
+  const p = pair(load(`results/replay/${base}${JUDGED}`), load(`results/replay/${variant}${JUDGED}`), ids);
+  if (p.n < p.expected) { console.log(`| ${label} | ${p.n} of ${p.expected} | | | | | INCOMPLETE — no verdict |`); continue; }
+  const ok = p.diff > 0 && p.diff - p.half > 0 && p.hfB <= p.hfA;
+  console.log(`| ${label} | ${p.n} of ${p.expected} | ${p.a.toFixed(2)} | ${p.b.toFixed(2)} | ${f2(p.diff)} (±${p.half.toFixed(2)}) | ${p.hfA} → ${p.hfB} | ${ok ? 'CONFIRMED' : 'NOT CONFIRMED'} |`);
+}
 console.log('\n## Reported only (same rule shown, nothing is built from these)\n');
 console.log('| variant | rows judged | base | variant | gain (95%) | hard fails | rows that moved | |');
 console.log('|---|---:|---:|---:|---:|---:|---:|---|');

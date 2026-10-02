@@ -36,5 +36,6 @@ await Promise.all(recs.filter((r) => !done.has(`${r.id}#${r.k}`)).map((r) => lim
 const J = fs.readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((j) => j.ok && recs.some((r) => r.id === j.benchmark_id && r.k === j.k));
 const by = {};
 for (const j of J) (by[j.benchmark_id] ??= []).push(j.official.overall);
-for (const [id, v] of Object.entries(by).sort()) console.log(`${id.padEnd(12)} mean ${mean(v).toFixed(2)}  [${v.map((x) => x.toFixed(1)).join(', ')}]`);
+// --aggregate: the total only (holdout replays are read in aggregate, also in the step's log file).
+if (!args.includes('--aggregate')) for (const [id, v] of Object.entries(by).sort()) console.log(`${id.padEnd(12)} mean ${mean(v).toFixed(2)}  [${v.map((x) => x.toFixed(1)).join(', ')}]`);
 console.log(`ALL mean ${(mean(J.map((j) => j.official.overall)) ?? NaN).toFixed(2)} over ${J.length}; hard-fail ${J.filter((j) => j.official.hard_fail).length}`);

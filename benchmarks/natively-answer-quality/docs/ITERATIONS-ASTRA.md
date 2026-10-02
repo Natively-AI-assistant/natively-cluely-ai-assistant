@@ -1279,3 +1279,35 @@ The app sends `thinking: disabled` on every DeepSeek turn. Same 80 recorded dev 
   against fix6 with half the hard fails, for +0.45–0.7 s to the settled answer and a text swap on a fifth of turns.
   Per mode on holdout under Fable no difference is outside its interval; Sales is the lowest at −0.22 (±0.38).
 * Reported only: the Call Center and Sales notices on typed turns too — +0.10 (±0.36) and +0.08 (±0.19). Not built.
+
+## The judge is gpt-6-astra ONLY again — Evin, 2026-10-02 01:00Z ("use gpt astra 6 only revert from using fable model")
+* The Fable judge is withdrawn: `AQ_JUDGE=fable` now refuses to run (`astra/client.mjs`). No Fable call was in flight.
+  Its series (`abs-dev-f1`, `abs-holdout-f1`, `*.judged-fable.jsonl`, the sections above dated 23:50Z–00:55Z) stays
+  in the repository as a record and is NOT a result: no number from it goes into the report, and no decision rests
+  on it.
+* **Every decision it touched is re-opened and waits for gpt-6-astra:**
+  | decision made on Fable scores | state now |
+  |---|---|
+  | fix13 (typed refinement notice) "confirmed by the judge" | kept on its objective rule, as before; its rows are unjudged |
+  | Call Center / Sales notices "do not build" | undone: `fix/aq-astra-i6` is back at c399f399 (all three parts), pending |
+  | Looking-for-work rule: replay "build", app runs "not promoted" | pending; the app rows (aq2-dev-fix14, aq2-holdout-fix14) are kept for gpt-6-astra to read |
+  | claim pass on/off by surface or mode (I27a/b), no change | no change was made, so nothing to undo; the draft/shown pairs are queued |
+  | Looking for work without the conflict step (I27c), not built | not built; not queued (a Fable-suggested variant) |
+  | reasoning on, "confirmed", I28 built for typed turns | aq-fix2 3b0c1a4f on `fix/aq-astra-i7` is a CANDIDATE; both replay pairs are queued |
+  | "the kept build's mean gain is not confirmed" | withdrawn; the gpt-6-astra reading stands (holdout +0.41 ±0.23, hard fails 60 → 31) |
+* What does not depend on a judge and stays: the harness changes (decisions-first queue, base-before-variant,
+  carried rows, `astra/decide.mjs`, `tools/edit-pairs.mjs`, out files named after the run directory), the app runs
+  themselves, and every objective count.
+* The rules stay as written; where a rule was written during the Fable hours it is restated here for gpt-6-astra,
+  before any of these rows has a gpt-6-astra score:
+  - **Reasoning lever (I28):** dev pair (80 prompts) gain ≥ +0.3 with the interval excluding 0 and hard fails not
+    up; holdout pair (60 prompts, aggregate) gain > 0 with the interval excluding 0 and hard fails not up. Both met →
+    fix15 is promoted if its app run is clean (wiring, no failures or extra requests, latency reported). Otherwise
+    it stays a candidate and is not part of the kept build.
+  - **The three "material cannot answer" parts:** as written on 2026-10-01 (dev pair ≥ +0.3, interval excluding 0,
+    hard fails not up → build that part; then holdout).
+  - **Looking-for-work app rows (fix14):** the fix14 promotion rule as written.
+* `astra/queue3.mjs` (armed for 02:00Z, pid 58884): calibrate → fix13 rows → reasoning dev pair → reasoning holdout
+  pair → Looking for work → Call Center → Sales → the candidates' app rows → Starting-column gaps → draft/shown
+  pairs → the rest. The probe still fails at 01:01Z (account quota); if it has not come back by the end of the
+  wait, nothing can be judged and the account needs a top-up.
