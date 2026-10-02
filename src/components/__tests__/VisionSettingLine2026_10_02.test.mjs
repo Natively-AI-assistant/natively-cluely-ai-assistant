@@ -198,6 +198,16 @@ describe('the line\'s motion (source)', () => {
         assert.match(detail, /<span className="aip-vision-would" data-open=\{onAuto \? 'false' : 'true'\} aria-hidden="true">\s*<span>\{`\$\{t\('Auto would say'\)\}: `\}<\/span>/);
     });
 
+    // .sr-only is absolutely positioned. Measured 2026-10-02 with a line open deep
+    // in a 300-model list: the Settings pane's scroll height went 2,642 -> 12,013px.
+    test('the sentence for screen readers stays inside its line', () => {
+        const at = css.indexOf('\n.aip-vision-status {');
+        assert.ok(at >= 0);
+        assert.match(css.slice(at, css.indexOf('}', at)), /position:relative/);
+        // it must be a child of that box, not of the line or the row
+        assert.match(detail, /<span className="aip-vision-status" data-answer=\{[^}]+\}>\s*\{\/\*[\s\S]*?\*\/\}\s*<span className="sr-only" aria-live="polite">/);
+    });
+
     // In Russian the line holds "Auto would say: No · tested" OR "No · tested" and
     // the test button, not both. Timed apart, the two overlapped for a moment, the
     // line wrapped to two rows and every row below it jumped down and back.
@@ -214,6 +224,7 @@ describe('the line\'s motion (source)', () => {
         // On or Off: the words open exactly as the button's place closes
         assert.equal(timing(wouldOpen, 'grid-template-columns'), timing(placeClosed, 'width'));
         assert.match(wouldClosed, /grid-template-columns:0fr/);
+        assert.match(wouldClosed, /justify-content:end/);   // mid-way, the words stay against the answer
         assert.match(wouldOpen, /grid-template-columns:1fr/);
         assert.match(wouldOpen, /visibility:inherit/);
         assert.match(rule('.aip-vision-would > span'), /min-width:0; overflow:hidden; white-space:pre/);

@@ -870,8 +870,13 @@ export const AIP_CSS = `
 }
 .aip-vision-label { font-size:11px; color: var(--aip-secondary); margin-right:2px; }
 /* Secondary while it is only what Auto WOULD say, or not an answer yet; primary
-   once it is the answer in force — the one thing on this line worth reading. */
-.aip-vision-status { display:flex; align-items:flex-start; justify-content:flex-end;
+   once it is the answer in force — the one thing on this line worth reading.
+   position:relative is load-bearing: the sentence for screen readers inside it
+   is absolutely positioned (.sr-only), and with no positioned box between it and
+   the Settings scroller it was laid out against THAT — outside the list's clip,
+   at its unscrolled offset. One line open deep in a 300-model list made the
+   whole pane 9,000px taller; under reduced motion every row did it at once. */
+.aip-vision-status { position:relative; display:flex; align-items:flex-start; justify-content:flex-end;
                      font-size:10.5px; color: var(--aip-secondary); text-align:right;
                      transition: color var(--aip-dur-state) var(--aip-ease-out); }
 .aip-vision-status[data-answer='true'] { color: var(--aip-primary); }
@@ -883,9 +888,11 @@ export const AIP_CSS = `
    translation overflowed for a moment: the line wrapped to two rows and every
    model row below it jumped down and back. So its two width timings are the
    test place's two, crossed — keep them in step (VisionSettingLine test).
-   A column going 0fr to 1fr, not a width: the words are as wide as the language. */
+   A column going 0fr to 1fr, not a width: the words are as wide as the language.
+   Mid-way the column is narrower than the box (a fraction of a fraction), so it
+   is held to the END: the words stay against the answer they introduce. */
 .aip-vision-would {
-    display:grid; grid-template-columns:0fr; flex-shrink:0;
+    display:grid; grid-template-columns:0fr; justify-content:end; flex-shrink:0;
     opacity:0; visibility:hidden;
     transition: grid-template-columns var(--aip-dur-travel) var(--aip-ease-out),
                 opacity var(--aip-dur-press) var(--aip-ease-out),
