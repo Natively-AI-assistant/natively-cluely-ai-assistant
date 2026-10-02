@@ -64,13 +64,15 @@ console.log('| change | rows judged | base | variant | gain (95%) | hard fails |
 console.log('|---|---:|---:|---:|---:|---:|---:|---|');
 // The candidate build applies the two notices on HEARD turns only ("h"); those are the deciding pairs.
 const PAIRS = [
-  ['Reasoning on (low) — Technical interview + Lecture, dev prompts', 'think-off-til', 'think-low-til'],
+  ['Reasoning on typed turns (what fix15 builds) — Technical interview + Lecture, dev', 'think-off-til', 'think-low-til-typed'],
   ['Looking for work — fallback rule reworded (v2)', 'lfw-base', 'lfw-bridge-v2'],
   ['Call Center — "no policy on file" notice, heard turns', 'ccfin-base', 'ccfin-nopolicy-v1h'],
   ['Sales — "how to say it when nothing can be stated", heard turns', 'salesfin-base', 'salesfin-shape-v1h'],
 ];
 // Reported, not built: the same notices on typed turns too.
 const SECONDARY = [
+  ['Reasoning on ALL turns, dev (the heard-turn question)', 'think-off-til', 'think-low-til'],
+  ['Reasoning on ALL turns, holdout (the heard-turn question)', 'think-off-til-hold', 'think-low-til-hold'],
   ['Call Center notice on typed turns too', 'ccfin-base', 'ccfin-nopolicy-v1c'],
   ['Sales notice on typed turns too', 'salesfin-base', 'salesfin-shape-v1c'],
   ['Looking for work, first wording (copies its example)', 'lfw-base', 'lfw-bridge-v1'],
@@ -88,12 +90,17 @@ for (const [label, base, variant] of [...PAIRS, ...SECONDARY]) {
   const m = sharedAnswerMismatches(base, variant);
   if (m.mismatched) console.log(`\nWARNING ${label}: ${m.mismatched} of ${m.shared} rows with the SAME answer in both arms have different scores — judged twice; that pair's interval is inflated.`);
 }
+for (const [label, base, variant] of [['dev', 'think-off-til', 'think-low-til-typed'], ['holdout', 'think-off-til-hold', 'think-low-til-hold-typed']]) {
+  const touched = rowsOf(`results/replay/${variant}.jsonl`).filter((r) => !r.carried && (r.k ?? 0) === 0).map((r) => r.id);
+  const p = pair(load(`results/replay/${base}${JUDGED}`), load(`results/replay/${variant}${JUDGED}`), touched);
+  console.log(p.n < p.expected ? `\nReasoning, the typed rows alone (${label}): ${p.n} of ${p.expected} judged` : `\nReasoning, the typed rows alone (${label}, reported next to the rule): ${p.a.toFixed(2)} → ${p.b.toFixed(2)}, ${f2(p.diff)} (±${p.half.toFixed(2)}), hard fails ${p.hfA} → ${p.hfB}, n ${p.n}`);
+}
 console.log(`\nSame-answer rows scored differently in the deciding pairs: ${PAIRS.reduce((n, [, b, v]) => n + sharedAnswerMismatches(b, v).mismatched, 0)} (must be 0).`);
 // Holdout confirmation of a lever that passed on dev: positive, interval excludes 0, hard fails not up. Aggregate only.
 console.log('\n## Holdout confirmation (rule: gain > 0, interval excludes 0, hard fails not up)\n');
 console.log('| lever | rows judged | base | variant | gain (95%) | hard fails | verdict |');
 console.log('|---|---:|---:|---:|---:|---:|---|');
-for (const [label, base, variant] of [['Reasoning on (low) — Technical interview + Lecture, holdout prompts', 'think-off-til-hold', 'think-low-til-hold']]) {
+for (const [label, base, variant] of [['Reasoning on typed turns — Technical interview + Lecture, holdout', 'think-off-til-hold', 'think-low-til-hold-typed']]) {
   const ids = [...new Set(rowsOf(`results/replay/${base}.jsonl`).filter((r) => (r.k ?? 0) === 0).map((r) => r.id))];
   const p = pair(load(`results/replay/${base}${JUDGED}`), load(`results/replay/${variant}${JUDGED}`), ids);
   if (p.n < p.expected) { console.log(`| ${label} | ${p.n} of ${p.expected} | | | | | INCOMPLETE — no verdict |`); continue; }

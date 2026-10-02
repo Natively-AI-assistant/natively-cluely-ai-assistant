@@ -26,8 +26,9 @@ const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar
 // DECISIONS FIRST, one pair at a time, base before variant (a shared answer is judged once; a half-judged pair is
 // worth nothing). Every step is cached, so only missing rows are judged.
 //   1      fix13's rows (17 dev + 10 holdout) and the 2 dev Seminar rows of fix12 lost to the quota.
-//   2-3    reasoning on vs off, dev (Technical interview + Lecture, 80 prompts each)      → decides I28's lever
-//   4-5    the same on holdout (60 prompts each, aggregate only)
+//   2-3    reasoning on TYPED turns vs off, dev (Technical interview + Lecture, 80 prompts)  → decides I28
+//   4-5    the same on holdout (60 prompts, aggregate only)
+//   then, after the three pairs below: reasoning on ALL turns (dev + holdout) — reported only, Evin's heard question
 //   6-7    Looking for work: lfw-base vs lfw-bridge-v2
 //   8-9    Call Center: ccfin-base vs ccfin-nopolicy-v1h      10-11  Sales: salesfin-base vs salesfin-shape-v1h
 //   12     the app rows of the two candidates: fix15 (reasoning on typed turns) and fix14 (Looking-for-work rule)
@@ -42,16 +43,20 @@ const D = 'aq2-dev-fix11'; const H = 'aq2-holdout-fix11'; const AGG = ['--aggreg
 const TIERS = [
   [['calibrate', ['astra/calibrate.mjs']]],
   [J('dev-c2-fix13', 'abs-dev-c2', 'aq2-dev-fix13'), J('holdout-c2-fix13', 'abs-holdout-c2', 'aq2-holdout-fix13'), J('dev-c2-fix12', 'abs-dev-c2', 'aq2-dev-fix12')],
+  // Reasoning: the build (fix15) reasons on TYPED turns only, so the deciding variant is the typed-only set — heard
+  // rows carry the reasoning-off answer (no judge call, a difference of exactly 0). The all-turns sets come later
+  // and are reported only: they are the evidence for the heard-turn question, which is Evin's to decide.
   [R('think-off-til', 'think-off-til', D)],
-  [R('think-low-til', 'think-low-til', D)],
+  [R('think-low-til-typed', 'think-low-til-typed', D)],
   [R('think-off-til-hold', 'think-off-til-hold', H, AGG)],
-  [R('think-low-til-hold', 'think-low-til-hold', H, AGG)],
+  [R('think-low-til-hold-typed', 'think-low-til-hold-typed', H, AGG)],
   [R('lfw-base', 'lfw-base', D)],
   [R('lfw-bridge-v2', 'lfw-bridge-v2', D)],
   [R('ccfin-base', 'ccfin-base', D)],
   [R('ccfin-nopolicy-v1h', 'ccfin-nopolicy-v1h', D)],
   [R('salesfin-base', 'salesfin-base', D)],
   [R('salesfin-shape-v1h', 'salesfin-shape-v1h', D)],
+  [R('think-low-til', 'think-low-til', D), R('think-low-til-hold', 'think-low-til-hold', H, AGG)],
   [J('dev-c2-fix15', 'abs-dev-c2', 'aq2-dev-fix15'), J('holdout-c2-fix15', 'abs-holdout-c2', 'aq2-holdout-fix15'), J('dev-c2-fix14', 'abs-dev-c2', 'aq2-dev-fix14'), J('holdout-c2-fix14', 'abs-holdout-c2', 'aq2-holdout-fix14')],
   [J('dev-c2-cur', 'abs-dev-c2', 'aq2-dev-cur'), J('holdout-c2-cur', 'abs-holdout-c2', 'aq-holdout-fix2')],
   [R('f13dev-draft', 'f13dev-draft', 'aq2-dev-fix13c'), R('f13hold-draft', 'f13hold-draft', 'aq2-holdout-fix13c', AGG)],

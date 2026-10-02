@@ -1334,3 +1334,24 @@ the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Hol
 * The validators say nothing here (they cover 2 of 140 rows). Whether the answers are better is the judge's question:
   the two replay pairs and these app rows are queued for gpt-6-astra. fix15 is a candidate until then.
 * App stopped through its launcher, build output deleted (5.2 GB free).
+
+### Corrections to the 02:00Z plan, written 01:33Z before any of these rows has a gpt-6-astra score
+* **The reasoning pair that decides is now the change that was built.** fix15 reasons on typed turns only, but the
+  queued pair regenerated every turn, heard ones included (49 of 80 dev, 39 of 60 holdout) — the same mismatch
+  already corrected for the Call Center and Sales notices. New deciding sets `think-low-til-typed` and
+  `think-low-til-hold-typed`: typed rows keep the reasoning answer, heard rows carry the reasoning-off answer (no
+  judge call, a difference of exactly 0). The all-turns sets are judged afterwards and reported only: they are the
+  evidence for the heard-turn question, which is Evin's.
+* **The rule is not changed to fit.** As restated at 01:02Z it is on all 80 dev prompts (gain ≥ +0.3, interval
+  excluding 0, hard fails not up) and on all 60 holdout prompts (gain > 0, interval excluding 0, hard fails not up).
+  With 49 rows fixed at 0 that asks for about +0.77 on the 31 typed rows — harder than before, and accepted, as it
+  was for Call Center and Sales. The typed rows alone are printed next to the verdict (`astra/decide.mjs`) so a real
+  gain on the touched turns is visible even if the mode-level bar is not cleared; in that case fix15 stays a
+  candidate and goes to Evin with the heard-turn numbers, not into the kept build.
+* **Condition (4) of the 00:54Z rule is restored.** The 01:02Z restatement left it out, which made promotion easier
+  between two writings. fix15 is promoted only if ALL hold: the dev pair and the holdout pair pass as above; the app
+  run is clean (shown at 01:28Z); and the judged typed APP rows are not below the kept build's — positive on holdout
+  with hard fails not up, and positive on dev (`aq2-*-fix15` against the fix13c composites, typed rows).
+* Checked: every fix13 row has a judged fix12 counterpart in the composites (17 of 17 dev, 10 of 10 holdout), so
+  that comparison cannot come back incomplete; every queued run's id equals its directory name, so the renamed out
+  files are the ones the readers open.
