@@ -1355,3 +1355,11 @@ the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Hol
 * Checked: every fix13 row has a judged fix12 counterpart in the composites (17 of 17 dev, 10 of 10 holdout), so
   that comparison cannot come back incomplete; every queued run's id equals its directory name, so the renamed out
   files are the ones the readers open.
+
+### Reasoning turns and the output cap — checked 01:36Z, nothing to change
+* Reasoning and answer share `max_tokens` (8,192 in the app). Across the 420 reasoning replays the completion size is
+  407–490 tokens at the median, 955–1,907 at p95, 3,393 at most: the cap is not near.
+* The one empty reply (1 of 420; holdout, a heard prompt) was not a cap stop: 111 completion tokens, 573 characters
+  of reasoning, then no visible text. In the app a stream that closes before any visible text is an `empty-stream`
+  failure to the fallback engine (`llm/streamFallbackEngine.ts`), so the turn goes to the parallel retry or the next
+  provider instead of showing nothing. The 52 typed app rows had no empty answer.
