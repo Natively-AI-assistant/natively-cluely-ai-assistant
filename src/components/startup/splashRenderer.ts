@@ -1,8 +1,8 @@
 // Canvas renderer for the startup splash: the logo rebuilt in characters.
 // The timeline lives in splashTimeline.ts; this file only lays out cells and draws them.
 import {
-    DRAIN_FADE_MS, FOCUS_MS, LOGO_SCALE, REVEAL_MS, RING_DENSITY, RING_WIDTH, SETTLE_AT_MS, STEP_MS,
-    animationTime, cameraAt, cellTimes, churnClock, easeOut, hash, irisAt, irisCover, logoLetGo, prog, revealReach, ringAt, smoothstep, zoomAt,
+    FOCUS_MS, LOGO_SCALE, SETTLE_AT_MS, STEP_MS,
+    animationTime, cameraAt, cellTimes, churnClock, easeOut, hash, prog, smoothstep,
 } from './splashTimeline';
 
 // The Natively mark: brand/natively-mark-*.svg, the same path as NativelyLogoMark.tsx.
@@ -79,19 +79,16 @@ interface Cell {
     dist: number; // distance from the centre, in logo radii
     id: number;
     phase: number; // every cell churns on its own beat
-    still: number; // the one character an empty cell shows when the ring crosses it
     appear: number; lockAt: number; drainAt: number;
 }
 
 export interface SplashScene {
     W: number; H: number; // the canvas, in device pixels
     R: number; // the logo's radius, in device pixels
-    reach: number; // how far the ring travels, in logo radii
     cx: number; cy: number;
     logo: Cell[]; // cells the logo covers
     field: Cell[]; // the sparse churning field around it
-    ringOnly: Cell[]; // otherwise-empty cells, lit only by the ring
-    sharp: Atlas; soft: Atlas; softer: Atlas; glow: Atlas;
+    sharp: Atlas; soft: Atlas; softer: Atlas;
 }
 
 /**
@@ -114,11 +111,8 @@ export function prepareSplash(W: number, H: number, u: number): SplashScene {
     const nx = (Math.ceil(W / cw) + 2) | 1, ny = (Math.ceil(H / ch) + 2) | 1; // odd counts: one cell sits dead centre
     const ox = cx - Math.floor(nx / 2) * cw - Math.floor(cw / 2), oy = cy - Math.floor(ny / 2) * ch - Math.floor(ch / 2);
     const fieldDensity = 0.2 * (((cw / u) * (ch / u)) / 81);
-    // the ring crosses the whole window, whatever its size, and takes the black with it
-    const reach = revealReach(Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) / R);
-    const ringDensity = Math.max(fieldDensity, RING_DENSITY), ringMax = reach + 3 * RING_WIDTH;
 
-    const logo: Cell[] = [], field: Cell[] = [], ringOnly: Cell[] = [];
+    const logo: Cell[] = [], field: Cell[] = [];
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
         const x0 = ox + i * cw, y0 = oy + j * ch;
         let sum = 0; // average the mask over this cell
@@ -133,70 +127,39 @@ export function prepareSplash(W: number, H: number, u: number): SplashScene {
             }
         const cov = contrast(sum / (cw * ch)), isField = cov < 0.03;
         const dist = Math.hypot((x0 + cw / 2 - cx) / R, (y0 + ch / 2 - cy) / R);
-        // The field outside the logo is sparse. A few more empty cells are kept for the ring alone
-        // (same noise channel, so the field cells are a subset of the cells the ring can light).
-        const sparse = hash(i, j, 3), ring = isField && sparse >= fieldDensity;
-        if (ring && (sparse >= ringDensity || dist > ringMax)) continue;
-        (isField ? (ring ? ringOnly : field) : logo).push({
+        if (isField && hash(i, j, 3) >= fieldDensity) continue; // the field outside the logo is sparse
+        (isField ? field : logo).push({
             x: x0, y: y0, cov, dist, id: i * 131 + j * 7919,
             phase: hash(i, j, 13) * STEP_MS,
-            still: CHURN[Math.floor(hash(i, j, 17) * CHURN.length)],
             ...cellTimes(dist, hash(i, j, 7), hash(i, j, 11), isField),
         });
     }
 
     return {
-        W, H, R, reach, cx, cy, logo, field, ringOnly,
+        W, H, R, cx, cy, logo, field,
         sharp: atlas(CHARS, cw, ch, font),
         soft: atlas(CHARS, cw, ch, font, 0.9 * u), // slightly out of focus
         softer: atlas(CHARS, cw, ch, font, 1.8 * u), // far from the centre
-        glow: atlas(CHARS, cw, ch, font, 2.2 * u), // the light around a character the ring is crossing
     };
 }
 
 /**
- * Clears the canvas and paints the black backdrop. While the splash stays it is
- * solid. In the reveal (`exitT` >= 0, real ms) a soft-edged opening grows from the
- * logo right behind the ring, so the launcher shows through it.
+ * Draws the frame `T` real ms after the splash mounted: the black, the field, the
+ * logo. From SPLASH_SETTLE_MS on it is the same frame every time.
  */
-export function drawBackdrop(ctx: CanvasRenderingContext2D, s: SplashScene, exitT = -1): void {
+export function renderSplash(ctx: CanvasRenderingContext2D, s: SplashScene, T: number): void {
+    const t = Math.min(animationTime(T), SETTLE_AT_MS);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.clearRect(0, 0, s.W, s.H);
-    if (exitT >= 0 && animationTime(exitT) >= REVEAL_MS) return; // the reveal is over: nothing is left
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, s.W, s.H);
-    if (exitT < 0) return;
-    const { edge, clear } = irisAt(animationTime(exitT), s.reach);
-    if (edge <= 0) return;
-    // cut the opening out of the black: gone inside `clear`, untouched beyond `edge`
-    const hole = ctx.createRadialGradient(s.cx, s.cy, Math.max(0, clear) * s.R, s.cx, s.cy, edge * s.R);
-    hole.addColorStop(0, `rgba(0,0,0,${clear >= 0 ? 1 : edge / (edge - clear)})`);
-    hole.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = hole;
-    ctx.fillRect(0, 0, s.W, s.H);
-    ctx.globalCompositeOperation = 'source-over';
-}
-
-/**
- * Draws the frame over the backdrop. `T` is real ms since the splash mounted;
- * `exitT` is real ms since the splash started to leave, or -1 while it stays.
- */
-export function renderSplash(ctx: CanvasRenderingContext2D, s: SplashScene, T: number, exitT = -1): void {
-    const t = Math.min(animationTime(T), SETTLE_AT_MS);
-    // the reveal runs on its own clock: it starts when the splash is actually being removed
-    const leaving = exitT >= 0, e = leaving ? Math.min(animationTime(exitT), REVEAL_MS) : 0;
-    const ring = leaving ? ringAt(e, s.reach) : null;
     const churn = (k: Cell, at: Atlas, alpha: number, clock: number) => {
         const step = Math.floor((clock + k.phase) / STEP_MS);
         glyph(ctx, at, CHURN[Math.floor(hash(k.id, step, 5) * CHURN.length)], k.x, k.y, alpha);
     };
-    // depth: the field is out of focus, more so far from the centre
-    const fieldAtlas = (k: Cell) => (k.dist > 2.4 ? s.softer : s.soft);
 
-    // the field and the ring first, outside the zoom and drifting towards the viewer
+    // the field first, out of focus (more so far from the centre) and drifting towards the viewer
     const camera = cameraAt(t);
     ctx.save();
     if (camera !== 1) {
@@ -209,39 +172,15 @@ export function renderSplash(ctx: CanvasRenderingContext2D, s: SplashScene, T: n
         if (a <= 0) continue;
         const base = k.dist < 1.05 ? 0.14 : 0.24 * Math.max(0.45, 1 - k.dist / 9);
         const alpha = base * a * (1 - easeOut(prog(t, k.drainAt, 260)));
-        if (alpha > 0.003) churn(k, fieldAtlas(k), alpha, t);
-        // under the ring a cell holds one character instead of churning, so the ring glides rather than flickers
-        if (ring) glyph(ctx, fieldAtlas(k), k.still, k.x, k.y, 0.45 * ring(k.dist));
+        if (alpha > 0.003) churn(k, k.dist > 2.4 ? s.softer : s.soft, alpha, t);
     }
-    if (ring) for (const k of s.ringOnly) glyph(ctx, fieldAtlas(k), k.still, k.x, k.y, 0.45 * ring(k.dist));
     ctx.restore();
 
-    // then the logo, inside the spring zoom
-    const zoom = leaving ? zoomAt(e) : 1;
-    ctx.save();
-    if (zoom !== 1) {
-        ctx.translate(s.cx, s.cy);
-        ctx.scale(zoom, zoom);
-        ctx.translate(-s.cx, -s.cy);
-    }
-    const lit: number[] = [], iris = leaving ? irisAt(e, s.reach) : null;
-    for (let n = 0; n < s.logo.length; n++) {
-        const k = s.logo[n];
-        // in the reveal a logo cell is only as visible as the black still behind it
-        const cover = iris ? irisCover(k.dist, iris) : 1;
-        if (cover <= 0) continue;
-        const a = easeOut(prog(t, k.appear, 140)) * cover;
+    // then the logo: its cells churn, slow and lock, each pulling into focus as it locks
+    for (const k of s.logo) {
+        const a = easeOut(prog(t, k.appear, 140));
         if (a <= 0) continue;
         const alpha = a * tone(k.cov);
-        if (leaving) {
-            // the logo dissolves with the ring: from the centre outwards its cells fall back
-            // into the churn, out of focus, and fade
-            const letGo = logoLetGo(k.dist, k.phase / STEP_MS);
-            if (e >= letGo) {
-                churn(k, s.soft, alpha * 0.7 * (1 - easeOut(prog(e, letGo, DRAIN_FADE_MS))), SETTLE_AT_MS + e);
-                continue;
-            }
-        }
         if (t < k.lockAt) {
             churn(k, s.soft, alpha * 0.7, churnClock(t, k.lockAt));
             continue;
@@ -249,20 +188,6 @@ export function renderSplash(ctx: CanvasRenderingContext2D, s: SplashScene, T: n
         const index = lockedChar(k.cov), focus = easeOut(prog(t, k.lockAt, FOCUS_MS));
         if (focus < 1) glyph(ctx, s.soft, index, k.x, k.y, alpha * (1 - focus));
         glyph(ctx, s.sharp, index, k.x, k.y, alpha * focus);
-        const light = ring ? 0.9 * ring(k.dist) : 0;
-        if (light > 0.01) lit.push(n, light * a * Math.max(tone(k.cov), 0.5));
     }
-    // the light: each character the ring is crossing gets a blurred copy of itself added on top
-    if (lit.length) {
-        ctx.globalCompositeOperation = 'lighter';
-        for (let n = 0; n < lit.length; n += 2) {
-            const k = s.logo[lit[n]], light = lit[n + 1], index = lockedChar(k.cov);
-            glyph(ctx, s.glow, index, k.x, k.y, light * 0.9);
-            glyph(ctx, s.sharp, index, k.x, k.y, light * 0.35);
-        }
-        ctx.globalCompositeOperation = 'source-over';
-    }
-    ctx.restore();
-
     ctx.globalAlpha = 1;
 }

@@ -1,9 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useIsPresent } from 'framer-motion';
 import appIcon from './icon.png';
-import { drawBackdrop, prepareSplash, renderSplash, type SplashScene } from './startup/splashRenderer';
+import { prepareSplash, renderSplash, type SplashScene } from './startup/splashRenderer';
 import {
-    EXIT_MS, SPLASH_DISMISS_MS, SPLASH_HARD_CAP_MS, SPLASH_SETTLE_MS,
+    LIFT, LOGO_OUT, SPLASH_DISMISS_MS, SPLASH_HARD_CAP_MS, SPLASH_SETTLE_MS,
 } from './startup/splashTimeline';
 
 interface StartupSequenceProps {
@@ -31,7 +31,7 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
 
     useEffect(() => {
         // Primary dismiss: the moment the logo has formed. The launcher is mounted
-        // behind the splash from here, and the reveal uncovers it. These are timers on purpose —
+        // behind the splash from here, and the exit uncovers it. These are timers on purpose —
         // Chromium stops requestAnimationFrame for a covered window, and the
         // splash must still hand over to the launcher there.
         const timer = setTimeout(() => {
@@ -59,28 +59,32 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
     // If the canvas cannot be set up, the splash is the plain logo: it must
     // never be the reason the app shows a blank window.
     const [plain, setPlain] = useState(false);
-    // The drawn exit starts when AnimatePresence starts removing the splash, not at
+    // The exit starts when AnimatePresence starts removing the splash, not at
     // the dismiss time: App can hold the splash past it (the welcome gate). App
-    // keeps the splash mounted for EXIT_MS and removes it; nothing here can delay that.
+    // keeps the splash mounted until the exit has ended and removes it; nothing
+    // here can delay that.
     const isPresent = useIsPresent();
     const boxRef = useRef<HTMLDivElement>(null);
-    const exitAt = useRef(-1);
-    const wake = useRef<() => void>(() => {});
+    const leaving = useRef(false);
     useEffect(() => {
-        if (isPresent || exitAt.current >= 0) return;
-        exitAt.current = performance.now();
-        const box = boxRef.current;
+        if (isPresent || leaving.current) return;
+        leaving.current = true;
+        // the logo is whatever the box holds: the canvas, or the plain image
+        const box = boxRef.current, logo = box?.firstElementChild;
         if (!box) return;
-        if (plain || prefersReducedMotion()) {
-            // no drawn exit: the still frame simply fades
+        if (!logo || prefersReducedMotion()) {
+            // no movement: the still frame dissolves
             box.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: 'ease-out', fill: 'forwards' });
             return;
         }
-        // From here the canvas paints the backdrop itself, and lets it clear so
-        // the launcher shows behind the dissolving logo.
-        box.style.background = 'transparent';
-        wake.current();
-    }, [isPresent, plain]);
+        // The logo falls back into the black, then the black lifts off the
+        // launcher underneath. The canvas is a finished frame by now, so this is
+        // transform and opacity only: it runs on the compositor and stays smooth
+        // while the launcher mounts on the main thread.
+        logo.animate([{ transform: 'scale(1)' }, { transform: `scale(${LOGO_OUT.scale})` }], { duration: LOGO_OUT.moveMs, easing: LOGO_OUT.moveEase, fill: 'forwards' });
+        logo.animate([{ opacity: 1 }, { opacity: 0 }], { duration: LOGO_OUT.fadeMs, easing: LOGO_OUT.fadeEase, fill: 'forwards' });
+        box.animate([{ opacity: 1 }, { opacity: 0 }], { delay: LIFT.at, duration: LIFT.ms, easing: LIFT.ease, fill: 'forwards' });
+    }, [isPresent]);
 
     useLayoutEffect(() => {
         const canvas = canvasRef.current;
@@ -98,12 +102,10 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
             raf = 0;
             if (!scene) return;
             // reduced motion: the settled frame, once
-            const now = performance.now(), t = reduced ? SPLASH_SETTLE_MS : now - startedAt;
-            const exitT = reduced || exitAt.current < 0 ? -1 : now - exitAt.current;
-            drawBackdrop(ctx, scene, exitT);
-            renderSplash(ctx, scene, t, exitT);
-            // from the settle on the frame no longer changes until the exit, so stop asking for frames
-            if (t < SPLASH_SETTLE_MS || (exitT >= 0 && exitT < EXIT_MS)) raf = requestAnimationFrame(draw);
+            const t = reduced ? SPLASH_SETTLE_MS : performance.now() - startedAt;
+            renderSplash(ctx, scene, t);
+            // from the settle on the frame no longer changes, so stop asking for frames
+            if (t < SPLASH_SETTLE_MS) raf = requestAnimationFrame(draw);
         };
         const layout = () => {
             // The layout size, not getBoundingClientRect: a transform on an
@@ -131,11 +133,9 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
         // Reduced motion gets the settled frame with no movement, but not a hard
         // cut: App no longer fades the splash in, so the still frame fades in here.
         if (reduced) canvas.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250, easing: 'ease-out' });
-        wake.current = () => { if (!raf) draw(); };
         const resize = new ResizeObserver(layout);
         resize.observe(canvas);
         return () => {
-            wake.current = () => {};
             resize.disconnect();
             if (raf) cancelAnimationFrame(raf);
         };
