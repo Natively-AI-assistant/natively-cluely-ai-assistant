@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import type { VisionModelState } from '../../types/electron';
+import { visionStatusText, visionAnswerInForce } from './visionLine';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, ImageOff, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
@@ -856,11 +857,49 @@ export const AIP_CSS = `
     padding:2px 6px 8px 27px;
 }
 .aip-vision-label { font-size:11px; color: var(--aip-secondary); margin-right:2px; }
-.aip-vision-status { font-size:10.5px; color: var(--aip-secondary); margin-left:auto; text-align:right; }
-/* A three-way choice, not three independent toggles: solid at rest (the dashed
-   chip means "off, tap to add"). Two classes, so it outranks .aip-chip below. */
-.aip-chip.aip-vision-chip { border-style:solid; border-color: var(--aip-border-strong); }
-.aip-chip.aip-vision-chip[aria-pressed='true'] { border-color: var(--aip-accent-border); }
+/* Secondary while it is only what Auto WOULD say, or not an answer yet; primary
+   once it is the answer in force — the one thing on this line worth reading. */
+.aip-vision-status { font-size:10.5px; color: var(--aip-secondary); text-align:right;
+                     transition: color var(--aip-dur-state) var(--aip-ease-out); }
+.aip-vision-status[data-answer='true'] { color: var(--aip-primary); }
+/* The result and its test button travel together. When a long translation does
+   not fit beside the control, BOTH drop to a second line and stay at the right
+   edge — the button alone used to land at the left, under the label. */
+.aip-vision-result { display:flex; align-items:center; gap:6px; margin-left:auto; min-width:0; }
+/* Auto / On / Off is ONE choice, so it is one control: the pane's own "pick one"
+   idiom (the provider-group track and its raised pill, .aip-tablist), at row
+   scale. Three separate chips read as three switches — in this pane a chip is
+   a tag you add or remove. The track takes the button fill, not the tablist's
+   well wash: this line already sits INSIDE a well, where that wash is invisible,
+   and it puts the control on the same surface as "Test again" beside it.
+   Each option is as wide as its own label — equal thirds would cost every row
+   three times its longest word ("Desactivado") and push the test button onto a
+   second line — so the pill is placed by measurement (AipVisionDetail), and
+   slides and resizes together. */
+.aip-vision-seg {
+    position:relative; display:inline-flex; align-items:stretch;
+    box-sizing:border-box; height:22px; padding:2px; flex-shrink:0;
+    border-radius: var(--aip-r-sm); border:1px solid var(--aip-border);
+    background: var(--aip-btn-bg);
+}
+.aip-vision-seg-pill {
+    position:absolute; top:2px; bottom:2px; left:0;
+    box-sizing:border-box; border-radius: var(--aip-r-xs); pointer-events:none;
+    background: var(--aip-pill-bg); border:1px solid var(--aip-pill-border);
+    box-shadow: var(--aip-pill-lift), var(--aip-pill-shadow);
+    transition: transform var(--aip-dur-travel) var(--aip-ease-out),
+                width var(--aip-dur-travel) var(--aip-ease-out);
+}
+.aip-vision-seg-opt {
+    position:relative; z-index:1; min-width:34px; padding:0 8px; border:0; background:transparent;
+    border-radius: var(--aip-r-xs); font-size:10.5px; font-weight:500; line-height:1; white-space:nowrap;
+    color: var(--aip-secondary); cursor:pointer;
+    transition: color 200ms var(--aip-ease-out), transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-vision-seg-opt:hover { color: var(--aip-primary); }
+.aip-vision-seg-opt:active { transform: scale(0.975); }
+.aip-vision-seg-opt[aria-pressed='true'] { color: var(--aip-hero); cursor:default; }
+.aip-vision-seg-opt[aria-pressed='true']:active { transform:none; }
 /* The glyph takes 28px of the row. The NAME keeps its room; the raw id, which
    never shrank, gives way instead (it is in the row's tooltip in full). */
 .aip-model-row--vision .aip-model-id { flex-shrink:1; min-width:64px; }
@@ -1569,18 +1608,7 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
 
 type VisionSetting = VisionModelState['setting'];
 
-/** What "Auto" means for this model right now, as one short line. */
-export function visionAutoText(state: VisionModelState, t: (text: string) => string): string {
-    if (state.checking) return t('Checking…');
-    // The provider could not be asked just now (no credit, rate limit, down).
-    // No code and no provider text: nothing here is the user's to fix.
-    if (state.inconclusive) return t('Could not test just now · try again later');
-    const { reads, source } = state.auto;
-    if (reads === 'unknown') return state.testable ? t('Not known yet · tested when you select it') : t('Not known');
-    if (source === 'test') return reads === 'yes' ? t('Yes · tested') : t('No · tested');
-    if (source === 'provider') return reads === 'yes' ? t('Yes · reported by the provider') : t('No · reported by the provider');
-    return reads === 'yes' ? t('Yes') : t('No');
-}
+// The line's wording lives in ./visionLine (pure, so a test can run it).
 
 /**
  * The answers for a set of picker ids, kept current: asked when `active`
@@ -1674,48 +1702,79 @@ export const AipVisionDetail: React.FC<{
     onSet: (setting: VisionSetting) => void; onRetest: () => void;
 }> = ({ id, state, open, onSet, onRetest }) => {
     const t = useT();
-    const auto = visionAutoText(state, t);
     const choices: Array<{ value: VisionSetting; label: string; title: string }> = [
         { value: 'auto', label: t('Auto'), title: t('Let Natively work it out') },
         { value: 'on', label: t('On'), title: t('Always send this model screenshots') },
         { value: 'off', label: t('Off'), title: t('Never send this model screenshots') },
     ];
+    // Where the raised pill sits: the selected option's own box. Measured only
+    // while the line is open — a provider can list hundreds of models, each with
+    // a closed line nobody can see — and before paint, so it never lands late.
+    const segRef = useRef<HTMLDivElement>(null);
+    const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
+    const labelsKey = choices.map(c => c.label).join('\n');
+    useLayoutEffect(() => {
+        const seg = segRef.current;
+        if (!open || !seg) return;
+        const measure = () => {
+            const el = seg.querySelector<HTMLElement>('[aria-pressed="true"]');
+            if (!el) return;
+            const next = { x: el.offsetLeft, w: el.offsetWidth };
+            setPill(prev => (prev && prev.x === next.x && prev.w === next.w ? prev : next));
+        };
+        measure();
+        // A late font swap changes every label's width.
+        const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+        observer?.observe(seg);
+        return () => observer?.disconnect();
+    }, [open, state.setting, labelsKey]);
     return (
         <div className="aip-reveal" data-open={open ? 'true' : 'false'} id={id}>
             <div>
                 <div className="aip-vision-detail" role="group" aria-label={t('Reads images')}>
                     <span className="aip-vision-label">{t('Reads images')}</span>
-                    {choices.map(c => (
-                        <button
-                            key={c.value}
-                            type="button"
-                            tabIndex={open ? 0 : -1}
-                            className="aip-chip aip-vision-chip"
-                            aria-pressed={state.setting === c.value}
-                            title={c.title}
-                            onClick={() => { if (state.setting !== c.value) onSet(c.value); }}
-                        >
-                            {c.label}
-                        </button>
-                    ))}
-                    <span className="aip-vision-status" aria-live="polite">
-                        {state.setting === 'auto' ? auto : `${t('Auto would say')}: ${auto}`}
-                    </span>
-                    {/* Only on Auto, and only where a test can run: On and Off are the
-                        user's own answer, and a test would send an image they may have
-                        just said not to send. */}
-                    {state.setting === 'auto' && state.testable && (
-                        <button
-                            type="button"
-                            tabIndex={open ? 0 : -1}
-                            className="aip-btn aip-btn-sm"
-                            disabled={state.checking}
-                            title={t('Send this model a test image now and see whether it can read it')}
-                            onClick={onRetest}
-                        >
-                            {state.auto.source === 'test' ? t('Test again') : t('Test now')}
-                        </button>
-                    )}
+                    <div className="aip-vision-seg" ref={segRef}>
+                        {pill && (
+                            <span
+                                className="aip-vision-seg-pill"
+                                aria-hidden="true"
+                                style={{ width: pill.w, transform: `translateX(${pill.x}px)` }}
+                            />
+                        )}
+                        {choices.map(c => (
+                            <button
+                                key={c.value}
+                                type="button"
+                                tabIndex={open ? 0 : -1}
+                                className="aip-vision-seg-opt"
+                                aria-pressed={state.setting === c.value}
+                                title={c.title}
+                                onClick={() => { if (state.setting !== c.value) onSet(c.value); }}
+                            >
+                                {c.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="aip-vision-result">
+                        <span className="aip-vision-status" aria-live="polite" data-answer={visionAnswerInForce(state) ? 'true' : 'false'}>
+                            {visionStatusText(state, t)}
+                        </span>
+                        {/* Only on Auto, and only where a test can run: On and Off are the
+                            user's own answer, and a test would send an image they may have
+                            just said not to send. */}
+                        {state.setting === 'auto' && state.testable && (
+                            <button
+                                type="button"
+                                tabIndex={open ? 0 : -1}
+                                className="aip-btn aip-btn-sm"
+                                disabled={state.checking}
+                                title={t('Send this model a test image now and see whether it can read it')}
+                                onClick={onRetest}
+                            >
+                                {state.auto.source === 'test' ? t('Test again') : t('Test now')}
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
