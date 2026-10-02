@@ -988,7 +988,10 @@ export function modeSuggestsVisual(mode, view) {
 
 // ── what a calculation needs ────────────────────────────────────────────────
 
-const PERCENT_RE = /\d+(?:\.\d+)?\s?(?:%|percent)/;
+// (Read from the START of a number, and a number of sane length: with no
+// anchor a run of 16,000 digits was scanned again from every digit in it —
+// 0.2 s on a laptop, 0.56 s on a CI runner, on both macOS and Windows.)
+const PERCENT_RE = /(?<!\d)\d{1,12}(?:\.\d{1,6})?\s?(?:%|percent)/;
 const MONEY_OR_COUNT_RE = /(?:[$€£₹]\s?\d[\d,]*(?:\.\d+)?\s?(?:k|m|bn|million|thousand)?)|\b\d[\d,]*(?:\.\d+)?\s?(?:k|m|bn|million|thousand|dollars|usd|eur|users|customers|seats|units)\b/;
 const HORIZON_RE = /\b(?:next|over|for|in|after) (?:the next )?(?:\d+|one|two|three|four|five|six|twelve|a) (?:day|week|month|quarter|year)s?\b|\b\d+ (?:day|week|month|quarter|year)s?\b/;
 const PERIOD_RE = /\b(?:daily|weekly|monthly|quarterly|annual(?:ly)?|yearly|per (?:day|week|month|quarter|year)|a (?:day|week|month|quarter|year)|month[- ]over[- ]month|year[- ]over[- ]year)\b/;

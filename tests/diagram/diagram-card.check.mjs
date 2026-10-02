@@ -260,11 +260,21 @@ window.__card = {
     const pageOverflow = await run(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     check('and does not make the page scroll sideways', pageOverflow <= 0, String(pageOverflow));
     await run(() => window.__card.width('w', 300));
+    // Waits for the refit instead of a fixed 250 ms: a slow machine (the
+    // Windows CI runner) had resized the viewport and not yet the drawing.
     s = await run(async () => {
-      await new Promise((r) => setTimeout(r, 250));
-      const img = document.querySelector('#w img.diagram-card__img');
-      const vp = document.querySelector('#w .diagram-card__viewport');
-      return { img: img.getBoundingClientRect().width, viewport: vp.clientWidth };
+      const read = () => {
+        const img = document.querySelector('#w img.diagram-card__img');
+        const vp = document.querySelector('#w .diagram-card__viewport');
+        return { img: img.getBoundingClientRect().width, viewport: vp.clientWidth };
+      };
+      const started = Date.now();
+      let now = read();
+      while (!(now.img <= now.viewport + 0.5 && now.viewport <= 300) && Date.now() - started < 4000) {
+        await new Promise((r) => setTimeout(r, 50));
+        now = read();
+      }
+      return { ...now, waitedMs: Date.now() - started };
     });
     check('on a narrow layout (300px) it refits', s.img <= s.viewport + 0.5 && s.viewport <= 300, JSON.stringify(s));
     await run(() => window.__card.unmount('w'));
@@ -629,8 +639,11 @@ window.__card = {
 
     // ── 10. reduced motion ──────────────────────────────────────────────────
     console.log('reduced motion');
-    const normal = await run(() => getComputedStyle(document.querySelector('#a figure.diagram-card')).transitionDuration);
+    // "Normal" is set, not assumed: a CI runner (macOS and Windows both)
+    // reports reduced motion as the machine's own preference.
     win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+    const normal = await run(() => getComputedStyle(document.querySelector('#a figure.diagram-card')).transitionDuration);
     await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     const reduced = await run(() => ({
       card: getComputedStyle(document.querySelector('#a figure.diagram-card')).transitionDuration,
