@@ -90,13 +90,11 @@ function isCloudIdentifier(id: string): boolean {
   const s = id.toLowerCase();
   if (s === 'natively' || s.startsWith('natively-')) return true;
   if (s.startsWith('gemini-') || s.startsWith('models/gemini')) return true;
-  if (s.startsWith('gpt-') || s.startsWith('o1-') || s.startsWith('o3-') || s.startsWith('o4-') || s.startsWith('chatgpt-')) return true;
-  // Bare `o1` / `o3`: OpenAI's own ids, which the `o1-` prefixes above miss.
-  if (/^o[1-9]$/.test(s)) return true;
+  if (s.startsWith('gpt-') || /^o\d+/.test(s) || s.startsWith('chatgpt-')) return true;
   if (s.startsWith('claude-')) return true;
   // DeepSeek cloud API (OpenAI-compatible). The local Ollama "deepseek-coder"
   // family is handled by the isOllama branch above.
-  if (isDeepseekModelId(s)) return true;
+  if (isDeepseekModelId(s) || s.startsWith('deepseek-')) return true;
   return false;
 }
 

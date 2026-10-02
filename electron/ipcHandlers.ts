@@ -738,11 +738,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // here. Omitting it made providerFamily return 'unknown', so the disabled-provider
         // check below never matched and switching OpenAI off did NOT hide o4 models from
         // routing. Keep this a superset of the fetcher's admitted prefixes.
-        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.includes('openai')) return 'openai';
+        if (modelId.startsWith('gpt-') || /^o\d+/.test(modelId) || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.startsWith('chatgpt-') || modelId.includes('openai')) return 'openai';
         if (modelId.startsWith('claude-')) return 'claude';
         // THE shared predicate (deepseekModels.ts); the `/^deepseek-v/i` that
         // stood here missed `deepseek-flash`, DeepSeek's current id.
         if (isDeepseekModelId(modelId)) return 'deepseek';
+        if (modelId.startsWith('deepseek-')) return 'deepseek';
         // Custom providers use arbitrary ids, so this must be an identity lookup and
         // must come last — anything matching a built-in prefix above is that
         // provider, not a custom one. Without it these classify as 'unknown' and
