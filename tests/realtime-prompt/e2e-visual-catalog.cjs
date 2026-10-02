@@ -417,7 +417,12 @@ const notCoding = (c) => !/<coding_contract>/.test(c.system) && !/verification_s
   for (const [lang, q] of [['Spanish', '¿Qué es un diagrama de secuencia?'], ['Russian', 'Объясни без схемы, просто словами, как работает очередь'], ['Chinese', '我昨天画了一个架构图'], ['Japanese', '図はいらないので言葉で説明して']]) {
     const c = makeEngine([PROSE]);
     r = await ask(c, q);
-    check('V17', `control, ${lang}: no contract for a question about one, a refusal, or the past`, contracts(r.sent) === 0, `count=${contracts(r.sent)} · ${q}`);
+    // A question about one and a refusal carry nothing. A statement that only
+    // MENTIONS a drawing ("I drew an architecture diagram yesterday") is one
+    // the rules do not decide: it carries the conditional contract, never the
+    // decided one, and the model is told a drawing someone made is no request.
+    const mentioned = contracts(r.sent) === 1 && /could not tell from its words whether one is being ASKED FOR/.test(contractOf(r.sent)) && /a statement about a drawing somebody made/.test(contractOf(r.sent));
+    check('V17', `control, ${lang}: never the decided contract for a question about one, a refusal, or the past`, lang === 'Chinese' ? mentioned : contracts(r.sent) === 0, `count=${contracts(r.sent)} · ${q} · ${contractOf(r.sent).slice(0, 120)}`);
   }
 
   // ── V18 ───────────────────────────────────────────────────────────────
@@ -477,6 +482,73 @@ const notCoding = (c) => !/<coding_contract>/.test(c.system) && !/verification_s
     delete process.env.NATIVELY_DENY_PROVIDER_SCOPES;
     // The next engine made by this harness answers on a provider again.
     makeEngine([PROSE]);
+  }
+
+  // ── V20 ───────────────────────────────────────────────────────────────
+  out('\nV20 Team meet · a turn the four-language rules cannot place: the model is asked, in the same call');
+  setMode('team-meet');
+  {
+    const RIDES = 'flowchart LR\n    app["Приложение райдера"] --> gw["API-шлюз"]\n    gw --> rides["Сервис поездок"]\n    rides --> pay["Платёжный сервис"]\n    rides --> q[["Очередь событий"]]\n    q --> notif["Уведомления"]';
+    const RIDES_2 = `${RIDES}\n    pay --> fraud["Антифрод"]`;
+    const blocks = (c) => count(all(c), '<active_design view=');
+    const action = (c) => (/<active_action name="([a-z_]+)">/.exec(all(c)) || [])[1] || 'none';
+    const EDIT = 'и ещё прицепи к платежам антифрод отдельным кубиком';
+    const c20 = makeEngine([`Вот схема.\n\n${fence('mermaid', RIDES)}\n\nПоездки ходят в платежи.`]);
+    await ask(c20, 'Спроектируй сервис проката велосипедов');
+    design = c20.session.getActiveDesign();
+    check('V20', 'a Russian design ask puts the drawing on the table (decided by the rules)', design && design.source === RIDES && design.version === 1, JSON.stringify(design));
+    // The same words with nothing on the table: what persona would the turn have had?
+    const plain = makeEngine([PROSE]);
+    const plainRun = await ask(plain, EDIT);
+    // An edit the rules cannot place ("прицепи … кубиком"), answered with the drawing changed.
+    const c20b = makeEngine([`Добавляю антифрод.\n\n${fence('mermaid', RIDES_2)}\n\nПлатежи теперь проверяются.`], c20.session);
+    r = await ask(c20b, EDIT);
+    check('V20', 'one call, the conditional contract once, the drawing in the turn once', r.calls.length === 1 && contracts(r.sent) === 1 && /could not tell from the words of this turn/.test(contractOf(r.sent)) && blocks(r.sent) === 1 && /It is here only in case this turn asks to change it or asks about it/.test(all(r.sent)) && all(r.sent).includes('Платёжный сервис'), `calls=${r.calls.length} contracts=${contracts(r.sent)} blocks=${blocks(r.sent)} · ${contractOf(r.sent).slice(0, 160)}`);
+    check('V20', 'never "do not redraw it", and never the decided contract\'s "this turn changes" as a fact', !/Do not redraw it/.test(all(r.sent)) && /IF THE TURN TELLS OR ASKS YOU TO CHANGE WHAT IS DRAWN/.test(contractOf(r.sent)), contractOf(r.sent).slice(0, 200));
+    check('V20', 'the persona the turn would have had with nothing on the table', action(r.sent) === action(plainRun.sent), `undecided=${action(r.sent)} plain=${action(plainRun.sent)}`);
+    design = c20b.session.getActiveDesign();
+    check('V20', 'the model changed the drawing: recorded as version 2, in focus', design && design.version === 2 && design.source === RIDES_2 && design.foreground === true, JSON.stringify(design));
+    // In focus, a turn that shares a word with a label and is about something else: answered in words.
+    const c20c = makeEngine([PROSE], c20b.session);
+    r = await ask(c20c, 'Во сколько завтра встреча с платёжной командой?');
+    check('V20', 'in focus, a turn that shares a word with a label: handed over, and the answer is the model\'s', contracts(r.sent) === 1 && /could not tell/.test(contractOf(r.sent)) && blocks(r.sent) === 1 && String(r.returned || '').includes('depends on the plan'), `contracts=${contracts(r.sent)} blocks=${blocks(r.sent)} returned=${String(r.returned).slice(0, 60)}`);
+    design = c20c.session.getActiveDesign();
+    check('V20', 'the drawing is untouched, and stays in focus through one answer nobody can place', design && design.version === 2 && design.source === RIDES_2 && design.foreground === true, JSON.stringify(design));
+    const c20c2 = makeEngine([PROSE], c20c.session);
+    r = await ask(c20c2, 'А обед сегодня во сколько?');
+    design = c20c2.session.getActiveDesign();
+    check('V20', 'a second such answer in a row: handed over once more, and the drawing leaves focus', contracts(r.sent) === 1 && blocks(r.sent) === 1 && design && design.version === 2 && design.foreground === false, `contracts=${contracts(r.sent)} blocks=${blocks(r.sent)} ${JSON.stringify(design)}`);
+    // Out of focus, a turn that names nothing of it is an ordinary turn.
+    const c20d = makeEngine([PROSE], c20c2.session);
+    r = await ask(c20d, 'А ужин во сколько?');
+    check('V20', 'out of focus, an ordinary turn: no contract and no drawing', contracts(r.sent) === 0 && blocks(r.sent) === 0, `contracts=${contracts(r.sent)} blocks=${blocks(r.sent)}`);
+    // …and one that names a part reaches it again, told that the conversation has moved on.
+    const c20e = makeEngine([PROSE], c20d.session);
+    r = await ask(c20e, 'А платёжный сервис у нас ходит в очередь событий напрямую или как?');
+    check('V20', 'out of focus, a turn that names its parts: handed over, and told the conversation has moved on', contracts(r.sent) === 1 && blocks(r.sent) === 1 && (/has moved on since it was drawn/.test(contractOf(r.sent)) || /question about the design already on the table/.test(contractOf(r.sent))), contractOf(r.sent).slice(0, 260));
+    // Nothing on the table: a drawing mentioned, in a form the rules do not place.
+    const TABLE = '| | Постгрес | Монга |\n| --- | --- | --- |\n| Транзакции | полные | в пределах документа |\n| Масштабирование | вертикальное | горизонтальное |';
+    const c20f = makeEngine([`Коротко так.\n\n${TABLE}\n\nПостгрес проще в поддержке.`]);
+    r = await ask(c20f, 'Мне бы табличку: Постгрес против Монги — транзакции, масштабирование, стоимость поддержки.');
+    check('V20', 'a table that may be asked for: the conditional contract for a comparison, no drawing attached', r.calls.length === 1 && contracts(r.sent) === 1 && /whether one is being ASKED FOR/.test(contractOf(r.sent)) && /Markdown table/.test(contractOf(r.sent)) && blocks(r.sent) === 0, `calls=${r.calls.length} contracts=${contracts(r.sent)} · ${contractOf(r.sent).slice(0, 200)}`);
+    check('V20', 'the table the model answered with reaches the user as a table', String(r.returned || '').includes('| --- | --- | --- |'), String(r.returned).slice(0, 200));
+    // The manual answer (the typed question's engine route) carries the same.
+    const c20g = makeEngine([`Коротко так.\n\n${TABLE}\n\nПостгрес проще в поддержке.`]);
+    const typed = await c20g.engine.runManualAnswer('Мне бы табличку: Постгрес против Монги — транзакции, масштабирование, стоимость поддержки.');
+    const g = c20g.captured[0] || { system: '', context: '', user: '' };
+    check('V20', 'manual answer: one call, the conditional contract once, and the table kept', c20g.captured.length === 1 && contracts(g) === 1 && /whether one is being ASKED FOR/.test(contractOf(g)) && String(typed || '').includes('| --- | --- | --- |'), `calls=${c20g.captured.length} contracts=${contracts(g)} · ${String(typed).slice(0, 120)}`);
+    const c20h = makeEngine([`Добавляю антифрод.\n\n${fence('mermaid', RIDES_2)}\n\nПлатежи теперь проверяются.`]);
+    await ask(makeEngine([`Вот схема.\n\n${fence('mermaid', RIDES)}\n\nПоездки ходят в платежи.`], c20h.session), 'Спроектируй сервис проката велосипедов');
+    await c20h.engine.runManualAnswer(EDIT);
+    const hsent = c20h.captured[0] || { system: '', context: '', user: '' };
+    design = c20h.session.getActiveDesign();
+    check('V20', 'manual answer on the drawing in focus: the conditional contract and the drawing once each, and the change recorded', c20h.captured.length === 1 && contracts(hsent) === 1 && /could not tell from the words of this turn/.test(contractOf(hsent)) && blocks(hsent) === 1 && design && design.version === 2 && design.source === RIDES_2, `calls=${c20h.captured.length} contracts=${contracts(hsent)} blocks=${blocks(hsent)} ${JSON.stringify(design)}`);
+    // A question about a KIND of drawing asks for words: asked to decide, a model illustrates it.
+    for (const [lang, q] of [['Spanish', '¿Para qué sirve un diagrama entidad-relación?'], ['Chinese', '类图和对象图有什么区别？']]) {
+      const c = makeEngine([PROSE]);
+      r = await ask(c, q);
+      check('V20', `control, ${lang}: a question about a kind of drawing is not handed over`, contracts(r.sent) === 0, `contracts=${contracts(r.sent)} · ${q}`);
+    }
   }
 
   const failed = results.filter((x) => !x.ok);

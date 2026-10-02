@@ -15,6 +15,12 @@
 //
 // One generation produces the whole answer — explanation and Mermaid in the
 // same stream. Nothing here asks for a second model call.
+//
+// That holds for a turn the rules could not place, too (Spanish, Russian,
+// Chinese, Japanese — see `undecidedOtherLanguageTurn`). Its contract is the
+// same text made conditional: the model that answers is told what the turn
+// MAY be, how to tell, and to answer as it normally would when it is not.
+// Still one generation, and still a bounded set of texts (`undecided: true`).
 
 import { DIAGRAM_EXAMPLES, selectDiagramExamples, renderDiagramExamplesBlock } from './diagramExamples.mjs';
 import { visualKind, isLegacyView, fenceTagForView, visualModeNote, CHART_INTENT_RULE, FLOWCHART_LAYOUTS } from './visualCatalog.mjs';
@@ -49,7 +55,21 @@ export function wantsDetailedDesign(question) {
  * @param {{ question?: string | null, maxExamples?: number }} [options]
  */
 export function diagramPromptSignals(request, options = {}) {
-  if (!request || !request.enabled) return null;
+  if (!request) return null;
+  if (!request.enabled) {
+    // The rules could not place the turn, and it may be one: the signals of
+    // the request it would be, marked so that every text built from them is
+    // conditional. A reference example rides only where the notation is JSON
+    // (a chart, a formal diagram): on a turn that may ask for nothing, the
+    // tokens are spent only where a block cannot be written without them.
+    const would = request.undecided;
+    if (!would || !would.enabled) return null;
+    const json = visualKind(would.view).renderer === 'chart' || visualKind(would.view).renderer === 'notation';
+    const signals = diagramPromptSignals(would, json ? options : { ...options, maxExamples: 0 });
+    if (!signals) return null;
+    delete signals.followUp;
+    return { ...signals, undecided: true, ...(would.away === true ? { away: true } : {}) };
+  }
   const freshDesign = request.operation === 'create' && !request.parentArtifactId;
   const legacy = isLegacyView(request.view);
   // A reference example teaches representation. For the original design views
@@ -182,14 +202,8 @@ export function renderDiagramContract(signals, options = {}) {
   if (!signals) return '';
   const tier = options.tier === 'local' ? 'local' : 'cloud';
   const surface = options.surface === 'chat' ? 'chat' : 'live';
-  // A system design in one of the four original views is told exactly what it
-  // always was. Anything else — including those views drawn for something
-  // that is not a system — gets the catalog body for its kind.
-  const legacy = isLegacyView(signals.view) && signals.general !== true;
-  let body;
-  if (legacy) body = tier === 'local' ? localBody(signals) : cloudBody(signals, surface);
-  else body = tier === 'local' ? catalogLocalBody(signals) : catalogBody(signals, surface);
-  if (signals.hasParent && signals.operation !== 'alternative') body = `${body}\n${NOT_ABOUT_IT}`;
+  let body = signals.undecided === true ? undecidedBody(signals, tier, surface) : coreBody(signals, tier, surface);
+  if (signals.undecided !== true && signals.hasParent && signals.operation !== 'alternative') body = `${body}\n${NOT_ABOUT_IT}`;
   // What the mode adds for something drawn (which sources, what is never invented).
   const modeNote = visualModeNote(signals.mode);
   if (modeNote && drawsSomething(signals)) body = `${body}\n\n${modeNote}`;
@@ -198,6 +212,88 @@ export function renderDiagramContract(signals, options = {}) {
   // Reference examples cost tokens a small local model cannot spare.
   const examples = tier === 'local' ? '' : examplesBlock(signals);
   return `${DIAGRAM_CONTRACT_OPEN}\n${body}${examples}\n${DIAGRAM_CONTRACT_CLOSE}`;
+}
+
+/**
+ * The body for a decided turn. A system design in one of the four original
+ * views is told exactly what it always was. Anything else — including those
+ * views drawn for something that is not a system — gets the catalog body for
+ * its kind.
+ */
+function coreBody(signals, tier, surface) {
+  const legacy = isLegacyView(signals.view) && signals.general !== true;
+  if (legacy) return tier === 'local' ? localBody(signals) : cloudBody(signals, surface);
+  return tier === 'local' ? catalogLocalBody(signals) : catalogBody(signals, surface);
+}
+
+// ── a turn the rules could not place ────────────────────────────────────────
+//
+// The same bodies, made conditional. Nothing here restates a rule of a kind:
+// what to do IF it is a request, a change or a question is the decided body
+// for that, word for word, so the two can never drift apart.
+
+/**
+ * @param {NonNullable<ReturnType<typeof diagramPromptSignals>>} signals  with `undecided: true`
+ */
+function undecidedBody(signals, tier, surface) {
+  const decided = { ...signals };
+  delete decided.undecided;
+  const legacy = isLegacyView(signals.view) && signals.general !== true;
+  const kind = kindFor(signals);
+  const tag = fenceTagForView(signals.view);
+  const block = tag ? `\`${tag}\` block` : 'table';
+
+  // The drawing on the table, and a turn that may be about it.
+  if (signals.hasParent && signals.operation === 'update') {
+    const thing = legacy ? 'design' : kind.name;
+    const change = coreBody({ ...decided, operation: 'update' }, tier, surface);
+    const ask = coreBody({ ...decided, operation: 'explain', output: 'text-only' }, tier, surface);
+    if (tier === 'local') {
+      return `This turn may or may not be about the ${thing} in <active_design>. Most turns are not.
+If it tells or asks you to CHANGE what is drawn: ${change}
+If it asks a QUESTION about it or about one of its parts: ${ask}
+Otherwise ignore <active_design> and this note, answer as you normally would, output no ${block}, and say nothing of the drawing or its parts. Start with the answer; never write out how you decided.`;
+    }
+    // Out of focus, a part's name alone is weak: "add a cache in front of the
+    // database" is said of any system, and of a new one.
+    const away = signals.away === true
+      ? ` The conversation has moved on since it was drawn, so the turn is about it only when it plainly points back at it: it names the drawing ("on that diagram", "the architecture from before"), or it speaks of one of its parts as the one already there. An instruction that would fit any system, with nothing pointing back, is not about it.`
+      : '';
+    return `The ${thing} already on the table is given in <active_design> in the turn. The app could not tell from the words of this turn whether the turn is about it. Most turns are not.${away} Read the turn, in whatever language it is said, and do exactly one of three things.
+
+IF THE TURN TELLS OR ASKS YOU TO CHANGE WHAT IS DRAWN — to add, remove, rename, connect, disconnect, split, merge, move, relabel, restyle or reorder something in it, to draw more of it, or it says what a part of it should do instead. It is an instruction or a request, never a question about how things are. Then:
+${change}
+
+IF THE TURN ASKS A QUESTION ABOUT IT, or about a part it shows — what a part does, why it is there, whether it does one thing or another, how two parts talk, what happens when one fails, whether it holds up, what a value it shows is. A question is always this, even when the honest answer is that the drawing should change. Then:
+${ask}
+
+OTHERWISE — another subject, even one that shares a word with a label; small talk or an acknowledgement; a question about what somebody said; a change to something that is not this drawing (a calendar, an invitation, a document, an order) — this contract and <active_design> do not exist for this turn: answer as you normally would, output no ${block}, and take nothing from the drawing. Do not mention it, name its parts or quote its numbers, and do not say that the turn is not about it.
+
+When you cannot tell a change from a question, it is a question. When you cannot tell whether the turn is about the drawing at all, it is not. Start with the answer itself: never write out which of these it is, or how you decided.`;
+  }
+
+  // A drawing that may be asked for.
+  const make = coreBody({ ...decided, operation: 'create' }, tier, surface);
+  const what = legacy ? 'a diagram' : `${kind.article} ${kind.name}`;
+  if (tier === 'local') {
+    return `A drawing is mentioned in this turn. Most turns that mention one do not ask for one. Draw ${what} only if the turn itself tells or asks you to make or show it now. Do not volunteer one: if a drawing is only talked about (somebody's, an earlier one, one asked of another person or of the speaker, one that ought to be made some time, a question about whether to make one or about what one is, one turned down), ignore this note, answer as you normally would, and output no ${block}. Start with the answer; never write out how you decided.
+If it does ask: ${make}`;
+  }
+  return `A drawing is mentioned in this turn, and the app could not tell from its words whether one is being ASKED FOR. Most turns that mention one do not ask for one. Read the turn, in whatever language it is said.
+Produce ${what} only if the turn itself tells or asks whoever answers it to make or show one now: an instruction ("sketch how…"), a request ("can you put that in a table?"), or a stated wish to see it ("I would like to see it as a chart", "it would help to have it in front of me").
+Do not volunteer one. A drawing would often help; that is not a request. None of these asks for one:
+- a statement about a drawing somebody made, sent, saw or will make ("the trainer drew a sequence diagram I still have not digested");
+- one asked of somebody else, or asked of the speaker by somebody else ("my manager wants me to draw the flow");
+- one the speaker plans to make, or thinks ought to exist some day ("we should really draw this up some time");
+- a question about WHETHER to make one ("should this be a diagram, what do you think?"): answer it in words;
+- a question about a KIND of drawing: what one is, what it is for, how two kinds differ, how to read one. Answer it in words, with no example drawn;
+- a word that only sounds like one (a work schedule, a painting, a form to fill in, a table to sit at);
+- one the speaker turns down.
+In all of those, this contract does not exist for this turn: answer as you normally would, output no ${block}, and do not offer or mention a drawing. When you cannot tell, it is not a request.
+Start with the answer itself: never write out whether it is a request, or how you decided.
+If, and only if, it is a request, everything below applies exactly as written, as if the app had been sure. One thing first: when neither the turn nor the conversation says WHAT the drawing should show ("draw all of this", with nothing described), ask what it should show in one sentence and output no ${block}; never invent a subject.
+
+${make}`;
 }
 
 function drawsSomething(signals) {
@@ -587,8 +683,12 @@ export function renderDiagramTurnBlock(request, activeDesign) {
   // Told plainly: "keep every node" cannot be asked of a diagram shown in part.
   const partial = clamped.truncated ? '\nOnly the first part of it fits here. Describe a change to it in words rather than redrawing it from this part.' : '';
   const noun = activeDesign.artifact === 'chart' ? 'chart' : activeDesign.artifact === 'notation' ? 'diagram' : 'design';
+  // (An undecided turn may be an edit of it: "do not redraw it" would forbid
+  // exactly that.)
   const note = request.enabled
     ? `This is the ${noun} currently on the table. It is the starting point for this turn, as the diagram contract describes.`
+    : request.undecided
+    ? `This is the ${noun} currently on the table. It is here only in case this turn asks to change it or asks about it: whether it does is for you to decide, as the diagram contract describes. When the turn is about anything else, answer as if this block were not here, and use nothing from it.`
     : `This is the ${noun} currently on the table. The request refers to it: keep ${noun === 'chart' ? 'its names and numbers' : 'component names'} consistent with it. Do not redraw it.`;
   // What the app computed from a chart, for the turns that state its values:
   // a question about it, a table of it, a request that only refers to it. (Not
@@ -669,6 +769,9 @@ export function chartValuesBlock(source) {
  */
 export function renderDiagramTurnNote(signals) {
   if (!signals) return '';
+  if (signals.undecided === true) {
+    return 'The diagram contract in the system prompt MAY apply to this turn: it says how to tell. When it does not, ignore it. When it does, any sentence or word limit, here or in the rules, governs the prose and never the block.';
+  }
   if (!isLegacyView(signals.view)) return catalogTurnNote(signals);
   const drawsDiagram = signals.output !== 'text-only' && signals.operation !== 'explain';
   if (!drawsDiagram) {

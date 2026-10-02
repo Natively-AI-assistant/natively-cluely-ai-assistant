@@ -805,7 +805,9 @@ The user triggered this action with a coding problem on screen and NO new questi
                 // A diagram turn is an artifact on screen, not words to read
                 // aloud — the same reason the engine's V3 persona switches to
                 // 'answer' — and it carries the diagram contract.
-                ...(diagramTurn?.signals ? { action: 'answer' as const, diagram: diagramTurn.signals } : {}),
+                // (An undecided turn keeps 'what_to_say': most of them ask
+                // for no drawing. See the engine's V3 persona.)
+                ...(diagramTurn?.signals ? { ...(diagramTurn.signals.undecided === true ? {} : { action: 'answer' as const }), diagram: diagramTurn.signals } : {}),
             });
             // Flag-off fallback: the legacy constants never knew about diagrams,
             // so the shared contract is appended (a v2 base already carries it;

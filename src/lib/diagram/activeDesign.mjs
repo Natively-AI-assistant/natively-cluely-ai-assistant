@@ -17,6 +17,7 @@
 import { extractVisualBlocks, parseFencedBlocks } from './fencedBlocks.mjs';
 import { checkDiagramSource, isPlaceholderDiagram } from './diagramPolicy.mjs';
 import { designVocabulary, designLabels, viewFromDiagramType } from './diagramRequest.mjs';
+import { answerNamesParts } from './diagramRequestI18n.mjs';
 import { checkVisualSource } from './visualArtifact.mjs';
 
 export const ACTIVE_DESIGN_TTL_MS = 30 * 60 * 1000;
@@ -64,7 +65,10 @@ export function answerIsAbout(answer, source) {
   if (phrases >= 2) return true;
   let words = 0;
   for (const word of designVocabulary(source)) if (text.includes(` ${word} `) || text.includes(` ${word}s `)) words += 1;
-  return phrases >= 1 ? words >= 3 : words >= 4;
+  if (phrases >= 1 ? words >= 3 : words >= 4) return true;
+  // The words above are ASCII. A drawing labelled in Spanish, Russian, Chinese
+  // or Japanese is talked about in those words.
+  return answerNamesParts(answer, source);
 }
 
 /**
@@ -120,6 +124,10 @@ export function createActiveDesignState(options = {}) {
   let pendingQuestion = null;
   /** When the turn now being answered was marked as a follow-up on the artifact (see touch); 0 when it was not. */
   let touchedAt = 0;
+  /** When the turn now being answered was marked as one that MAY be about it (see consider); 0 when it was not. */
+  let consideredAt = 0;
+  /** The artifact has already been kept in focus through one answer nobody could place (see observeAnswer). */
+  let spared = false;
 
   function live() {
     if (current && now() - current.updatedAt > ttlMs) current = null;
@@ -164,6 +172,20 @@ export function createActiveDesignState(options = {}) {
      */
     untouch() {
       touchedAt = 0;
+      consideredAt = 0;
+    },
+
+    /**
+     * The turn being answered MAY be about the artifact: the rules could not
+     * place it, the artifact was handed to the model, and the model decides
+     * (an undecided turn; see diagramRequestI18n.mjs). Nothing is known until
+     * the answer is: this only lets the artifact stay in focus through one
+     * answer that cannot be placed either. It does not keep it from expiring.
+     */
+    consider() {
+      if (!live()) return;
+      touchedAt = 0;
+      consideredAt = now();
     },
 
     /**
@@ -176,7 +198,9 @@ export function createActiveDesignState(options = {}) {
       const existing = live();
       // A mark is for the answer that follows its turn, which is seconds away.
       const followedUp = touchedAt > 0 && now() - touchedAt <= TOUCH_TTL_MS;
+      const considered = consideredAt > 0 && now() - consideredAt <= TOUCH_TTL_MS;
       touchedAt = 0;
+      consideredAt = 0;
       if (!found) {
         // The conversation's focus stays on the artifact only through answers
         // to turns that were ABOUT it. A code answer, or an answer to anything
@@ -191,8 +215,19 @@ export function createActiveDesignState(options = {}) {
         // the rules did not recognise dropped the focus, and the NEXT follow-up
         // was refused as well.
         const aboutIt = Boolean(existing) && answerIsAbout(answer, existing.source);
-        if (existing && (answerHasCodeBlock(answer) || !(followedUp || aboutIt))) existing.foreground = false;
+        const code = answerHasCodeBlock(answer);
+        // An undecided turn, answered in words that do not name the artifact's
+        // parts. That is what an unrelated answer looks like — and also what
+        // an answer about a drawing labelled in English looks like when it is
+        // given in Spanish or Japanese ("el proveedor de SMS es externo" over
+        // an "SMS Provider"). The artifact keeps its focus through ONE such
+        // answer, so the edit that follows a question still reaches it; a
+        // second one in a row moves on.
+        const sparedNow = Boolean(existing) && !code && !(followedUp || aboutIt) && considered && existing.foreground !== false && !spared;
+        if (sparedNow) spared = true;
+        else if (existing && (code || !(followedUp || aboutIt))) existing.foreground = false;
         else if (existing && aboutIt) existing.updatedAt = now();
+        if (existing && !sparedNow && (followedUp || aboutIt)) spared = false;
         // A design that was asked for and not drawn leaves no question behind.
         pendingQuestion = null;
         return existing ? { ...existing } : null;
@@ -205,8 +240,10 @@ export function createActiveDesignState(options = {}) {
         // The same diagram came back (a refined answer kept it): no new version.
         existing.updatedAt = now();
         existing.foreground = true;
+        spared = false;
         return { ...existing };
       }
+      spared = false;
 
       // A turn that asked for a fresh design (noteDesignQuestion) starts a new
       // lineage even if it happens to reuse common component names.
@@ -271,6 +308,8 @@ export function createActiveDesignState(options = {}) {
       current = null;
       pendingQuestion = null;
       touchedAt = 0;
+      consideredAt = 0;
+      spared = false;
     },
   };
 }

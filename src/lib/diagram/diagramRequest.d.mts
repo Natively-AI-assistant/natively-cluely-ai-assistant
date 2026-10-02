@@ -56,6 +56,14 @@ export interface DiagramRequest {
   layout?: 'lanes' | 'tree';
   /** The kind of artifact this one is drawn FROM ("show the chart as a table"). */
   parentFamily?: string | null;
+  /**
+   * Set only on a request that is NOT enabled: the rules could not place the
+   * turn (Spanish, Russian, Chinese, Japanese), and this is the request it
+   * would be if it is one. The contract built from it asks the model that
+   * answers to decide. Nothing that routes, validates or remembers a diagram
+   * turn reads it.
+   */
+  undecided?: DiagramRequest;
 }
 
 export interface ActiveDesignRef {

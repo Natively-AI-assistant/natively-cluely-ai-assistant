@@ -115,15 +115,15 @@ export function registerActiveDesignProvider(provider: ActiveDesignProvider | nu
 const ACTIVE_DESIGN_TOUCH_SLOT = '__nativelyActiveDesignTouch';
 
 /** Register (or, with null, clear) the function that marks the current turn as a follow-up on the active design. */
-export function registerActiveDesignToucher(touch: ((followsUp: boolean) => void) | null): void {
+export function registerActiveDesignToucher(touch: ((followsUp: boolean, mayFollowUp?: boolean) => void) | null): void {
   (globalThis as any)[ACTIVE_DESIGN_TOUCH_SLOT] = touch ?? undefined;
 }
 
-function touchRegisteredActiveDesign(followsUp: boolean): void {
-  const touch = (globalThis as any)[ACTIVE_DESIGN_TOUCH_SLOT] as ((followsUp: boolean) => void) | undefined;
+function touchRegisteredActiveDesign(followsUp: boolean, mayFollowUp: boolean = false): void {
+  const touch = (globalThis as any)[ACTIVE_DESIGN_TOUCH_SLOT] as ((followsUp: boolean, mayFollowUp?: boolean) => void) | undefined;
   if (typeof touch !== 'function') return;
   try {
-    touch(followsUp);
+    touch(followsUp, mayFollowUp);
   } catch { /* focus is a hint */ }
 }
 
@@ -404,7 +404,15 @@ export function resolveDiagramTurn(input: ResolveDiagramTurnInput): DiagramTurn 
     // speculative prefetch may be thrown away, so it changes nothing.
     // Every real turn says which it is: a turn that is NOT about it clears a
     // mark left by a follow-up that was resolved and never answered.
-    if (input.speculative !== true) touchRegisteredActiveDesign(Boolean(request.enabled && request.attachActiveDesign && request.parentArtifactId));
+    // An undecided turn that was handed the design marks nothing as followed
+    // up — the model decides, and the answer says — but the session is told
+    // the turn MAY be about it (see activeDesign.consider).
+    if (input.speculative !== true) {
+      touchRegisteredActiveDesign(
+        Boolean(request.enabled && request.attachActiveDesign && request.parentArtifactId),
+        Boolean(!request.enabled && request.undecided && request.undecided.parentArtifactId && request.attachActiveDesign),
+      );
+    }
     return { request, signals, turnBlock };
   } catch (err) {
     warnOnce('resolveDiagramTurn', err);
@@ -493,6 +501,21 @@ export function alternativeDesignTurn(
   } catch {
     return null;
   }
+}
+
+/**
+ * An undecided turn whose answer holds no drawing and no table.
+ *
+ * The rules could not place the turn (Spanish, Russian, Chinese, Japanese),
+ * so its prompt carried the conditional contract and the model that answered
+ * decided. When it decided that nothing was asked for, the answer is an
+ * ordinary one, and the passes that tidy an ordinary answer (flattening a
+ * tutorial-shaped reply into speech) still apply to it. They must not run on
+ * the answer that does hold a drawing: they delete fenced blocks.
+ */
+export function undecidedTurnAnsweredInWords(turn: DiagramTurn | null | undefined, answer: string | null | undefined): boolean {
+  if (!turn?.signals || turn.signals.undecided !== true) return false;
+  return !/^[ \t]*\|.+\|[ \t]*$|^ {0,3}(?:`{3,}|~{3,})/m.test(String(answer ?? ''));
 }
 
 /**

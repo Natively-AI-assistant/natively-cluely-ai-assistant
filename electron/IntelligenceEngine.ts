@@ -475,7 +475,7 @@ export class IntelligenceEngine extends EventEmitter {
      * design it resolved (a fresh design's question, or that it follows up on
      * the one on the table). Applied only if that run is adopted.
      */
-    private speculativeDesignNote: { question: string } | { followUp: true } | null = null;
+    private speculativeDesignNote: { question: string } | { followUp: true } | { mayFollowUp: true } | null = null;
     /**
      * A speculative prefetch that COMPLETED before anything adopted it. A
      * speculative stream never renders (the judge may still say no), so its
@@ -765,7 +765,7 @@ export class IntelligenceEngine extends EventEmitter {
         try {
             const dps = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
             dps.registerActiveDesignProvider(() => this.session.getActiveDesign());
-            dps.registerActiveDesignToucher((followsUp) => this.session.touchActiveDesign(followsUp));
+            dps.registerActiveDesignToucher((followsUp, mayFollowUp) => this.session.touchActiveDesign(followsUp, mayFollowUp === true));
             // What was SAID so far, so a forecast whose starting value nobody
             // stated is asked for instead of drawn on an invented number.
             //  - the durable transcript: the live context window is evicted
@@ -1483,6 +1483,7 @@ export class IntelligenceEngine extends EventEmitter {
         const designNote = this.speculativeDesignNote;
         this.speculativeDesignNote = null;
         if (designNote && 'question' in designNote) this.session.noteDesignQuestion(designNote.question);
+        else if (designNote && 'mayFollowUp' in designNote) this.session.touchActiveDesign(false, true);
         else if (designNote) this.session.touchActiveDesign();
         this.session.addAssistantMessage(text, finished.writeDecision, 'what_to_answer');
         if (finished.writeDecision?.policy !== 'do_not_store') {
@@ -3911,7 +3912,9 @@ export class IntelligenceEngine extends EventEmitter {
                     const isCreate = turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId;
                     const isFollowUp = turn.request.enabled && turn.request.attachActiveDesign && Boolean(turn.request.parentArtifactId);
                     if (isSpeculative) {
-                        this.speculativeDesignNote = isCreate ? { question: answerPlan.question } : isFollowUp ? { followUp: true } : null;
+                        // (An undecided turn that was handed the design: see activeDesign.consider.)
+                        const mayFollowUp = !turn.request.enabled && Boolean(turn.request.undecided?.parentArtifactId) && turn.request.attachActiveDesign;
+                        this.speculativeDesignNote = isCreate ? { question: answerPlan.question } : isFollowUp ? { followUp: true } : mayFollowUp ? { mayFollowUp: true } : null;
                     } else if (isCreate) {
                         this.session.noteDesignQuestion(answerPlan.question);
                     }
@@ -4236,7 +4239,13 @@ export class IntelligenceEngine extends EventEmitter {
                                 // the exact words the user should say … no labels",
                                 // and a Mermaid block is an artifact on screen, not
                                 // words to read aloud. The two cannot both be obeyed.
-                                const _liveDiagram = Boolean(wtaDiagramTurn?.signals);
+                                // An UNDECIDED turn (the rules could not place it; the
+                                // model is asked to) keeps the action it would have
+                                // had. Most such turns ask for no drawing, and their
+                                // answer is still the words to say; the contract it
+                                // carries states its own precedence for the turn that
+                                // does.
+                                const _liveDiagram = Boolean(wtaDiagramTurn?.signals) && wtaDiagramTurn?.signals?.undecided !== true;
                                 const _base = resolveV2SystemPrompt({
                                     action: (_liveCoding || _explanatoryMode) ? 'answer' : 'what_to_say',
                                     // The live overlay: whatever General answers,
@@ -4268,7 +4277,8 @@ export class IntelligenceEngine extends EventEmitter {
                                     suppliedTemplate: codingSignals.suppliedTemplate,
                                     // A diagram turn takes 'answer' too (see
                                     // _liveDiagram above) and carries the contract.
-                                    ...(_liveDiagram ? { action: 'answer' as const, diagram: wtaDiagramTurn?.signals ?? null } : {}),
+                                    ...(_liveDiagram ? { action: 'answer' as const } : {}),
+                                    ...(wtaDiagramTurn?.signals ? { diagram: wtaDiagramTurn.signals } : {}),
                                 });
                                 require('./llm/promptDebug').setPromptDebugTurnFacts({
                                     personaAction: (_liveCoding || _explanatoryMode || _liveDiagram) ? 'answer' : 'what_to_say',
@@ -6766,9 +6776,11 @@ export class IntelligenceEngine extends EventEmitter {
                     // …when the answer actually has that shape: a table row or a
                     // fenced block. A visual turn the model answered in labelled
                     // prose is cleaned like any other answer.
+                    // (An undecided turn is not a diagram turn until its
+                    // answer holds one: the same test of the answer's shape.)
                     const keepsVisualShape = Boolean(wtaDiagramTurn?.signals)
-                        && wtaDiagramTurn?.request.operation !== 'explain'
-                        && wtaDiagramTurn?.request.output !== 'text-only'
+                        && (wtaDiagramTurn?.signals?.undecided === true
+                            || (wtaDiagramTurn?.request.operation !== 'explain' && wtaDiagramTurn?.request.output !== 'text-only'))
                         && /^[ \t]*\|.+\|[ \t]*$|^ {0,3}(?:`{3,}|~{3,})/m.test(cleaned);
                     if (!keepsVisualShape && (SCAFFOLD_LABEL_RE.test(cleaned) || BOLD_PSEUDO_HEADER_RE.test(cleaned))) {
                         const speakable = compressToSpeakable(cleaned);

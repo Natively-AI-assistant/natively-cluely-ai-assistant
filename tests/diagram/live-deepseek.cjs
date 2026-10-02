@@ -2,7 +2,7 @@
 //
 // Opt-in, costs API calls:
 //   npm run build:electron
-//   RUN_DIAGRAM_LIVE=1 ELECTRON_RUN_AS_NODE=1 electron tests/diagram/live-deepseek.cjs --out=<dir> [--only=L1,L2] [--model=deepseek-flash]
+//   RUN_DIAGRAM_LIVE=1 ELECTRON_RUN_AS_NODE=1 electron tests/diagram/live-deepseek.cjs --out=<dir> [--only=L1,L2] [--suite=design|catalog|undecided] [--model=deepseek-flash]
 //
 // Real: DatabaseManager (isolated dir), ModesManager, IntelligenceEngine, the
 // planner / composer / prompt system, AND the real LLMHelper talking to
@@ -261,9 +261,45 @@ const CATALOG_SCENARIOS = [
   { id: 'N3', mode: 'lecture', seed: [], steps: [['wta', 'What is gradient descent?', 'control']] },
 ];
 
+// ── turns the four-language rules cannot place, live ────────────────────────
+//
+// Spanish, Russian, Chinese, Japanese. The rules leave each of the labelled
+// steps below UNDECIDED (pinned in diagramUndecided.test.mjs), so the prompt
+// carries the conditional contract and the model decides: a drawing asked
+// for, a change to the one on the table, a question about it, or neither.
+// The first step of U1 and U4 is a design ask the rules do place: it puts a
+// drawing on the table through the real engine.
+const UNDECIDED_SCENARIOS = [
+  {
+    id: 'U1', mode: 'technical-interview', seed: [],
+    steps: [
+      ['wta', 'Diseña un servicio de notificaciones que envíe correo y SMS, con reintentos.', 'u-draw'],
+      ['wta', 'póngale también una cola de mensajes muertos pues, para lo que falla del todo', 'u-update'],
+      ['wta', 'y el proveedor de SMS ese, ¿es nuestro o es de fuera?', 'explain'],
+      ['wta', '¿A qué hora quedamos mañana con el equipo de pagos?', 'u-none'],
+    ],
+  },
+  { id: 'U2', mode: 'general', seed: [], steps: [['wta', 'Мне бы табличку: Постгрес против Монги — транзакции, масштабирование, стоимость поддержки.', 'u-draw']] },
+  { id: 'U3', mode: 'general', seed: [], steps: [['wta', '上周培训的时候老师画了一张特别复杂的时序图，我到现在都没消化', 'u-none']] },
+  {
+    id: 'U4', mode: 'technical-interview', seed: [],
+    steps: [
+      ['wta', 'オンライン書店のシステム構成を設計してください。', 'u-draw'],
+      ['wta', '決済のところは外部のやつ使うから、名前を「外部決済」に変えといて', 'u-update'],
+      ['wta', '来週の面接って何時からでしたっけ', 'u-none'],
+    ],
+  },
+  { id: 'U5', mode: 'team-meet', seed: [], steps: [['wta', 'надо бы как-нибудь нарисовать схему всего этого хозяйства, а то новички путаются', 'u-none']] },
+  { id: 'U6', mode: 'general', seed: [], steps: [['wta', 'parce, hágame un favor y me pinta ahí cómo va el flujo de aprobación de un crédito, desde que el cliente lo pide hasta que se desembolsa', 'u-draw']] },
+];
+
 const SUITE = arg('suite', 'all');
 const selected = (list) => list.filter((s) => !ONLY || ONLY.split(',').some((o) => s.id === o));
-const RUN = [...(SUITE === 'catalog' ? [] : selected(SCENARIOS)), ...(SUITE === 'design' ? [] : selected(CATALOG_SCENARIOS))];
+const RUN = [
+  ...(SUITE === 'catalog' || SUITE === 'undecided' ? [] : selected(SCENARIOS)),
+  ...(SUITE === 'design' || SUITE === 'undecided' ? [] : selected(CATALOG_SCENARIOS)),
+  ...(SUITE === 'design' || SUITE === 'catalog' ? [] : selected(UNDECIDED_SCENARIOS)),
+];
 
 (async () => {
   const lib = (name) => import(pathToFileURL(path.join(root, 'src/lib/diagram', name)).href);
@@ -355,6 +391,10 @@ const RUN = [...(SUITE === 'catalog' ? [] : selected(SCENARIOS)), ...(SUITE === 
     forecast: (a) => (a.payloadBlocks[0]?.ok && a.payloadBlocks[0].label === 'Forecast' && has(tableValues(a), [10000, 10500, 11025, 11576.25]) ? [true, 'forecast chart, computed 10,500 / 11,025 / 11,576.25'] : [false, `wanted the computed forecast: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),
     update: (a) => (a.payloadBlocks[0]?.ok && has(tableValues(a), [10300, 10609, 10927.27]) ? [true, 'updated to 3%: 10,300 / 10,609 / 10,927.27'] : [false, `wanted the 3% forecast: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),
     explain: (a) => (a.visualBlockCount === 0 ? [true, 'prose, no new chart'] : [false, 'redrew on a question']),
+    // An undecided turn (the model decides; see UNDECIDED_SCENARIOS).
+    'u-draw': (a) => (a.mermaidBlocks.some((b) => b.ok) || a.payloadBlocks.some((b) => b.ok) || a.hasMarkdownTable ? [true, 'drew what was asked for'] : [false, 'no drawing for a request']),
+    'u-update': (a) => (a.mermaidBlocks.some((b) => b.ok && b.nodes >= 3) ? [true, 'the drawing came back changed, whole'] : [false, 'no updated drawing for a change']),
+    'u-none': (a) => (a.visualBlockCount === 0 && !a.hasMarkdownTable ? [true, 'answered in words'] : [false, 'drew on a turn that asked for nothing']),
     refine: (a, prev) => (a.payloadBlocks[0]?.ok && prev && a.payloadBlocks[0].source.trim() === prev.trim() ? [true, 'prose shortened, chart unchanged'] : [false, 'the chart changed or was dropped']),
     'no-baseline': (a) => (a.visualBlockCount === 0 ? [true, 'no chart: the baseline was never given'] : a.payloadBlocks[0] && !a.payloadBlocks[0].ok ? [true, `chart refused locally: ${a.payloadBlocks[0].refused.message}`] : [false, `drew a forecast from an invented baseline (stamped ${JSON.stringify(a.payloadBlocks[0]?.badges)}): ${JSON.stringify(tableValues(a).slice(0, 4))}`]),
     funnel: (a) => (a.payloadBlocks[0]?.ok && has(tableValues(a), [200, 120, 60, 22]) ? [true, `stage counts 200 / 120 / 60 / 22${a.payloadBlocks[0].notes.length ? ` (${a.payloadBlocks[0].notes[0]})` : ''}`] : [false, `wanted the stated counts: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),

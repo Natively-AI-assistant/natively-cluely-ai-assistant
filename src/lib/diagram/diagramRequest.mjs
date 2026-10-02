@@ -49,7 +49,7 @@
  * @property {{ needed: string[], inRequest: string[] }} [inputs]  what a calculation needs, and which of those the request itself states
  */
 
-import { resolveOtherLanguageRequest } from './diagramRequestI18n.mjs';
+import { resolveOtherLanguageRequest, undecidedOtherLanguageTurn, saysNoDrawing } from './diagramRequestI18n.mjs';
 
 const DISABLED = Object.freeze({
   enabled: false,
@@ -1996,6 +1996,19 @@ export function resolveDiagramRequest(input = {}) {
     // can change because of it.
     const other = resolveOtherLanguageRequest(input);
     if (other) return describeVisual(other, input);
+    // Neither set of rules could place it, and in those four languages the
+    // rules miss about one real request in three (measured on blind sets; see
+    // docs/diagrams/README.md). Where a drawing is plausibly in play the turn
+    // is left UNDECIDED: still not a diagram turn for anything that routes,
+    // validates or remembers — `enabled` stays false — but it carries the
+    // request it would be, and the contract built from that asks the model
+    // that answers to say which it is. A standing "no diagrams" holds.
+    const instructions = normalise(input.userInstructions);
+    const would = instructions && (NO_DIAGRAM_RE.test(instructions) || saysNoDrawing(input.userInstructions)) ? null : undecidedOtherLanguageTurn(input);
+    if (would) {
+      const described = describeVisual(would, input);
+      return { ...describeVisual(whole, input), reason: 'undecided', language: described.language, attachActiveDesign: described.attachActiveDesign === true, undecided: described };
+    }
   } else if (whole.enabled && !whole.parentArtifactId && whole.operation === 'create' && input.activeDesign && input.activeDesign.source) {
     // "Nice. Now show me the same thing as a sequence diagram.": the turn as a
     // whole reads as a fresh drawing; the sentence that asks reads as a view of

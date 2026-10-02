@@ -28,6 +28,8 @@ export interface ActiveDesignState {
   /** The turn being answered is about the artifact: keep it in focus and alive. */
   touch(): void;
   untouch(): void;
+  /** The turn being answered MAY be about the artifact (an undecided turn): it stays in focus through one answer that cannot be placed. */
+  consider(): void;
   observeAnswer(answer: string | null | undefined): ActiveDesign | null;
   applyRepair(originalSource: string, repairedSource: string): boolean;
   clear(): void;

@@ -31,6 +31,13 @@ export interface DiagramPromptSignals {
   followUp?: 'strong' | 'weak';
   layout?: 'lanes' | 'tree';
   ofChart?: boolean;
+  /**
+   * The rules could not place the turn: every text built from these signals is
+   * conditional, and the model that answers decides whether it applies.
+   */
+  undecided?: boolean;
+  /** With `undecided`: the drawing on the table is no longer what the conversation is on. */
+  away?: boolean;
 }
 
 export interface ActiveDesignForPrompt {

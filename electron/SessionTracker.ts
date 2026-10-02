@@ -851,10 +851,13 @@ export class SessionTracker {
      * in focus through the answer), or not one (`false`: forget a mark left by
      * a follow-up that was never answered).
      */
-    touchActiveDesign(followsUp: boolean = true): void {
+    touchActiveDesign(followsUp: boolean = true, mayFollowUp: boolean = false): void {
         try {
             if (followsUp) this.activeDesign.touch();
             else this.activeDesign.untouch();
+            // An undecided turn: the model was handed the design and decides
+            // whether the turn is about it (see activeDesign.consider).
+            if (!followsUp && mayFollowUp) this.activeDesign.consider();
         } catch { /* hint only */ }
     }
 

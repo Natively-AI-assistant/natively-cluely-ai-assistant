@@ -27,6 +27,15 @@
 // forms (pronoun-only edits, capability questions, elliptical questions), and
 // reading the inputs of a calculation out of the sentence. Those remain
 // English-only. Languages other than these four are not recognised at all.
+//
+// What these rules cannot place is not dropped (2026-10-02). Five blind sets
+// showed that they do not converge: about a third of real requests on unseen
+// sentences went unrecognised, whatever was added after the set before. So a
+// turn they cannot place, in which a drawing is plausibly in play — the one on
+// the table is in focus or is named, or a visual is mentioned at all — is
+// handed to the model that answers, with the question left open (see
+// `undecidedOtherLanguageTurn`, and the "undecided" contract in
+// diagramContract.mjs). No second call: the same generation decides and answers.
 
 const MAX_CHARS = 2400;
 const MAX_SENTENCES = 6;
@@ -66,7 +75,7 @@ const ES = {
       // A short command may hold neither ("dibuja la arquitectura", "quita la
       // cola"): a word that is Spanish and is not an English word.
       if (ES_WORD_RE.test(q)) return true;
-      const small = q.match(/(?<![\p{L}\p{N}])(?:el|la|los|las|un|una|del|al|que|por|para|con|es|como|de|en|lo|se|su|mi|tu|y|esto|este|esta|eso)(?![\p{L}\p{N}])/gu);
+      const small = q.match(/(?<![\p{L}\p{N}])(?:el|la|los|las|un|una|del|al|que|por|para|con|es|como|de|en|lo|se|su|mi|tu|y|esto|este|esta|eso|entonces|nunca|pero|porque|tambien|también|ahora|estoy|estamos|muy|donde|cuando|quien|nos|les|sus)(?![\p{L}\p{N}])/gu);
       return Boolean(small) && new Set(small).size >= 2;
     },
   },
@@ -193,6 +202,21 @@ const ES = {
   verbFirstStatement: /^(?:usa|a[ñn]ade|agrega|incluye|incorpora|cambia|mueve|quita|elimina|borra|reemplaza|sustituye|conecta|desconecta|separa|divide|une|actuali[zs]a|simplifica|ampl[ií]a|inserta|coloca|renombra) (?:el|la|los|las) [\p{L}\p{N}-]+ (?:el|la|los|las|su|sus) [\p{L}\p{N}]/u,
   // A lane of a swimlane diagram, said as one.
   laneWord: word('carril(?:es)?|swimlanes?|calle(?:s)?'),
+  // A drawing is MENTIONED, in any mood and by any verb that makes one. Far
+  // too wide to decide on — it is only what makes the turn worth asking the
+  // model about (see undecidedOtherLanguageTurn).
+  // What KIND a mentioned drawing would be, where the nouns above ask for a
+  // form of request these do not ("una tabla" in any place in the sentence).
+  // Read only for an undecided turn: they never decide anything.
+  // A question about a KIND of drawing — what one is, what it is for, how two
+  // differ, how to read one. Wider than `about` above, and read only for an
+  // undecided turn: with no verb that draws in the sentence, it asks for words.
+  aboutKind: word('que es|que son|que significa|para que sirven?|cual es la diferencia|que diferencia hay|en que se diferencian?|como se leen?|como se interpreta'),
+  looseNouns: [
+    [word('tablas?|tablita|cuadro (?:comparativo|resumen|sinoptico)'), { view: 'matrix' }],
+    [word('grafic[oa]s?|grafiqu\\p{L}*'), { view: 'chart', chartIntent: 'generic' }],
+  ],
+  visualish: word('cajitas?|flech(?:a|ita)s?|recuadros?|dibuj\\p{L}*|pint(?:a|as|ame|anos|alo|ala|e|es|eme|ar|arlo|arla|arme)|esquem\\p{L}*|diagram\\p{L}*|grafi[cq]\\p{L}*|bosquej\\p{L}*|esboz\\p{L}*|ilustr\\p{L}*|visual\\p{L}*|plasm\\p{L}*|tablas?|tablita|cuadro (?:comparativo|resumen|sinoptico)|organigrama|cronograma|gantt|linea de(?:l)? tiempo|mapa (?:mental|conceptual)|flujograma|embudo|a la vista|de un vistazo'),
   nextSteps: word('(?:proximos|siguientes) pasos|pasos (?:a seguir|siguientes)|siguiente paso'),
   chartTerms: word('tasa|crecimiento|churn|bajas|valor inicial|base|horizonte|meses|mensual|anual|trimestral|per[ií]odo|periodo|proyecci[oó]n|eje|barras?|columnas?|l[ií]neas?'),
   elsewhere: word(
@@ -306,6 +330,13 @@ const RU = {
   // the first cut to its opening letters (see usesLabel).
   compounds: true,
   laneWord: word('дорожк\\p{L}*'),
+  aboutKind: word('что такое|что значит|чем (?:[\\p{L}-]+ ){0,5}отлича\\p{L}+|в ч[её]м разница|в ч[её]м отличие|для чего нуж\\p{L}+|зачем нуж\\p{L}+|как читать|как называется'),
+  looseNouns: [
+    [word('табли[цч]\\p{L}*'), { view: 'matrix' }],
+    [word('график\\p{L}*|столбик\\p{L}*|столбц\\p{L}*'), { view: 'chart', chartIntent: 'generic' }],
+    [word('майнд[- ]?карт\\p{L}*'), { view: 'mindmap' }],
+  ],
+  visualish: word('столбик\\p{L}*|столбц\\p{L}*|столбчат\\p{L}*|майнд[- ]?карт\\p{L}*|нарис\\p{L}*|рису\\p{L}*|начер\\p{L}*|изобраз\\p{L}*|наброс\\p{L}*|накид\\p{L}*|отрис\\p{L}*|схем\\p{L}*|диаграмм\\p{L}*|график\\p{L}*|табли[цч]\\p{L}*|картинк\\p{L}*|нагляд\\p{L}*|визуал\\p{L}*|блок[- ]схем\\p{L}*|гант\\p{L}*|таймлайн\\p{L}*|оргструктур\\p{L}*|майнд[- ]?м[эа]п\\p{L}*|воронк\\p{L}*'),
   nextSteps: word('(?:следующ\\p{L}+|дальнейш\\p{L}+|ближайш\\p{L}+) шаг\\p{L}*|шаги дальше|что дальше'),
   chartTerms: word('ставк\\p{L}+|рост\\p{L}*|отток\\p{L}*|начальн\\p{L}+ значени\\p{L}+|баз\\p{L}+|горизонт\\p{L}*|месяц\\p{L}*|ежемесячн\\p{L}+|годов\\p{L}+|квартал\\p{L}*|период\\p{L}*|прогноз\\p{L}*|ос[ьи]\\p{L}*|столбц\\p{L}+|лини\\p{L}+'),
   elsewhere: word(
@@ -437,6 +468,12 @@ const ZH = {
   // The generic end of a part's name, dropped in speech: "预约" for the "预约服务".
   genericHead: /(?:服务|系统|数据库|模块|队列|中心|平台|管理|库)$/u,
   laneWord: /泳道/u,
+  // (Not the 画 of 画面 or 计划; not the 图 of 图书, 地图, 截图, 企图, 试图.)
+  aboutKind: /是什么|是啥|什么是|什么叫|干什么用|干嘛用|有什么用|有啥用|做什么用|什么意思|有什么区别|有啥区别|区别是|的区别|有什么不同|怎么读|怎么看懂/u,
+  looseNouns: [
+    [/表格|列(?:个|一个|张|一张)表|(?:个|张|份)表(?![格示达现明演扬情面单])/u, { view: 'matrix' }],
+  ],
+  visualish: /列(?:个|一个|张|一张)表|画(?![面家廊])|(?<![地截试企意插配贴拼])图(?![书片像标案])|表格|时间线|时间轴|甘特|可视化|直观|一目了然|一眼(?:看|就)/u,
 };
 
 // ── Japanese ────────────────────────────────────────────────────────────────
@@ -551,6 +588,12 @@ const JA = {
   ],
   nextSteps: /次のステップ|今後のステップ|次の段階/u,
   laneWord: /レーン/u,
+  // (Not the 図 of 地図, 意図, 図書館.)
+  aboutKind: /とは|って(?:何|なに|なん)|何のため|なんのため|違い|の意味|読み方|どういう(?:もの|意味)/u,
+  looseNouns: [
+    [/一覧表|比較表|表(?:で|に|形式)/u, { view: 'matrix' }],
+  ],
+  visualish: /(?<![地意合指企])図(?![書鑑る])|グラフ|チャート|ダイアグラム|タイムライン|年表|マインドマップ|フロー|描[いかきくけこ]|可視化|見える化|ビジュアル|一覧表|比較表|表(?:で|に|形式)|ぱっと見|ひと目|一目で/u,
   part: /サービス|キュー|データベース|システム|モジュール|コンポーネント|ゲートウェイ|キャッシュ|api|クラスタ|ノード|ストレージ|インデックス|エンジン|サーバ|ワーカー|db|バランサ/u,
   partAfterVerb: false,
   chartTerms: /成長率|成長|解約|初期値|開始値|ヶ月|か月|カ月|四半期|年|期間|予測|軸|棒|線/u,
@@ -1360,4 +1403,179 @@ export function resolveOtherLanguageRequest(input = {}) {
     };
   }
   return null;
+}
+
+// ── an answer about the drawing ─────────────────────────────────────────────
+
+/**
+ * Does a prose answer written in one of the four languages talk about this
+ * drawing — two of its own parts, by their labels? (`answerIsAbout` in
+ * activeDesign.mjs reads ASCII words only: for a drawing labelled "Сервис
+ * поездок" or "決済サービス" it could never say yes, so the drawing left focus
+ * after every answer that did not redraw it.) As demanding as the English
+ * test: one label, or a word two labels share, is not enough.
+ */
+export function answerNamesParts(answer, source) {
+  const raw = normalise(String(answer ?? '').replace(/```[\s\S]*?```/g, ' ').slice(0, 6000));
+  if (!raw) return false;
+  const lang = languageOf(raw);
+  if (!lang) return false;
+  const text = prepared(lang, raw);
+  const chart = /^\s*\{/.test(String(source ?? ''));
+  const labels = labelsOf(source, chart ? 'chart' : 'mermaid').filter((label) => /[^\x00-\x7f]/.test(label));
+  if (labels.length < 2) return false;
+  const used = labels.filter((label) => (lang.spaced ? usesLabel(lang, text, [label]) : text.includes(label.replace(/\s+/g, ''))));
+  return distinctNames(used) >= 2;
+}
+
+// ── a turn the rules cannot place ───────────────────────────────────────────
+
+/** The text as the rules of `lang` read it. */
+function prepared(lang, raw) {
+  return lang.code === 'es' ? foldAccents(raw) : lang.code === 'ru' ? raw.replace(/(\p{L})-ка(?![\p{L}])/gu, '$1') : raw;
+}
+
+/** Does the turn say anything to decide on? "Vale.", "ага", "はい" do not. */
+function saysSomething(lang, q) {
+  if (!lang.spaced) return q.replace(/[^\p{L}\p{N}]+/gu, '').length >= 4;
+  const rest = stripLead(lang, q.replace(/[^\p{L}\p{N}\s]+/gu, ' ').replace(/\s+/g, ' ').trim());
+  return rest.split(/\s+/u).filter(Boolean).length >= 2;
+}
+
+/** "No diagrams", said in any of the four languages (a standing instruction is one sentence among others). */
+export function saysNoDrawing(text) {
+  const raw = normalise(text);
+  if (!raw) return false;
+  return LANGUAGES.some((lang) => lang.negation.test(prepared(lang, raw)));
+}
+
+/**
+ * A turn said in Spanish, Russian, Chinese or Japanese that the rules above
+ * could not place, in which a drawing is nonetheless plausibly in play.
+ *
+ * Called only when `resolveOtherLanguageRequest` returned nothing. What comes
+ * back is NOT a decision: it is the request the turn WOULD be if it is one,
+ * and the caller marks the turn undecided. The contract built from it asks
+ * the model that answers to say which it is — a request for the drawing, a
+ * change to the one on the table, a question about it, or none of these — in
+ * the same generation as the answer.
+ *
+ * In play means one of:
+ *   - the drawing on the table is what the conversation is on (it leaves
+ *     focus with the first answer that is not about it); or, out of focus,
+ *     the turn names the drawing or one of its parts.
+ *     In focus no word of the turn is asked for. A gate on "shares a word
+ *     with a label" was tried and removed: a model asked in Spanish or
+ *     Japanese labels its drawing in English as often as not ("Payment
+ *     Service"), and "決済のところ…名前を変えといて" then shares nothing with
+ *     it (seen in the real engine, 2026-10-02). The cost is the turn right
+ *     after a drawing that is about something else: it carries the drawing
+ *     too, and the contract tells the model to take nothing from it;
+ *   - a visual is mentioned at all, in any mood ("me lo esquematizas",
+ *     "покажи это картинкой", "折线图 来一个", "ガントチャートで引いてみて").
+ *
+ * Never: a coding turn, a turn that says no drawing is wanted, or one with
+ * nothing in it to decide on.
+ *
+ * @param {{
+ *   question?: string | null,
+ *   activeDesign?: { artifactId?: string, artifact?: string, view?: string, source?: string, foreground?: boolean } | null,
+ *   answerType?: string | null,
+ *   questionTypes?: readonly string[] | null,
+ * }} input
+ * @returns {object | null} the request this turn would be, in the shape `resolveDiagramRequest` returns
+ */
+export function undecidedOtherLanguageTurn(input = {}) {
+  const raw = normalise(input.question);
+  if (!raw) return null;
+  const lang = languageOf(raw);
+  if (!lang) return null;
+  const q = prepared(lang, raw);
+  const types = Array.isArray(input.questionTypes) ? input.questionTypes : [];
+  if (input.answerType === 'coding_question_answer' || input.answerType === 'dsa_question_answer' || types.includes('CODING_TASK')) return null;
+  const sentences = sentencesOf(q);
+  if (sentences.length === 0 || !saysSomething(lang, q)) return null;
+  if (sentences.some((s) => lang.negation.test(s) && !asksForAnotherInstead(lang, s))) return null;
+
+  const active = input.activeDesign && input.activeDesign.source ? input.activeDesign : null;
+  // The visual the turn names, if it names one.
+  let named = null;
+  for (const sentence of sentences) {
+    const visual = visualIn(lang, sentence);
+    if (visual) { named = { visual, sentence }; break; }
+  }
+
+  /** A drawing that may be asked for: of what is on the table when the sentence points at it. */
+  const fresh = (visual, sentence) => {
+    // "¿Para qué sirve un diagrama ER?", "类图和对象图有什么区别？": a question
+    // about a kind of drawing, with no verb that draws. Asked to decide, a
+    // model illustrates its answer with one (seen live, in three languages).
+    if (lang.aboutKind && lang.aboutKind.test(sentence) && !lang.draw.test(sentence)) return null;
+    const family = active && (active.view === 'chart' || active.artifact === 'chart') ? 'chart' : active && active.view === 'matrix' ? 'table' : 'mermaid';
+    const ofActive = Boolean(active) && pointsAtDesign(lang, sentence, active);
+    const view = (visual && visual.view) || hintedView(lang, sentence);
+    const basis = lang.meeting && lang.meeting.test(q) ? 'meeting-reconstruction'
+      : lang.source && lang.source.test(q) ? 'source-reconstruction'
+      : lang.hypothetical && lang.hypothetical.test(q) ? 'illustrative'
+      : 'proposed-design';
+    let chartIntent = visual ? visual.chartIntent : undefined;
+    if (view === 'chart' && (!chartIntent || chartIntent === 'generic' || chartIntent === 'trend')) {
+      if (lang.fn && lang.fn.test(q)) chartIntent = 'function';
+      else if (lang.forecast && lang.forecast.test(q) && (q.match(/\d+(?:[.,]\d+)?/g) || []).length >= 2) chartIntent = 'forecast';
+    }
+    return {
+      enabled: true,
+      view,
+      operation: 'create',
+      output: 'text-and-diagram',
+      basis,
+      ...(ofActive ? { parentArtifactId: active.artifactId, followUp: 'weak', parentFamily: family } : {}),
+      withCode: false,
+      explicit: false,
+      attachActiveDesign: ofActive,
+      reason: 'undecided_request',
+      language: lang.code,
+      ...(chartIntent ? { chartIntent } : {}),
+      ...(visual && visual.layout ? { layout: visual.layout } : {}),
+    };
+  };
+
+  if (active) {
+    const chart = active.view === 'chart' || active.artifact === 'chart';
+    const labels = labelsOf(active.source, chart ? 'chart' : 'mermaid');
+    const inPlay = active.foreground !== false || sentences.some((s) => namesDrawing(lang, s, active)
+      || (chart
+        ? distinctNames(labels.filter((label) => usesLabel(lang, s, [label]))) >= (lang.chartTerms.test(s) ? 1 : 2)
+        : usesLabel(lang, s, labels) || namesALane(lang, s, active)));
+    if (inPlay) {
+      // Another kind of drawing is named: it may be asked for — of what is on
+      // the table when the sentence points at it, of something else otherwise.
+      const view = String(active.view || '');
+      const another = named && named.visual.view && named.visual.view !== view && !(BOXES.has(named.visual.view) && BOXES.has(view));
+      if (another) return fresh(named.visual, named.sentence);
+      return {
+        enabled: true,
+        view: active.view || 'architecture',
+        operation: 'update',
+        output: 'text-and-diagram',
+        basis: 'proposed-design',
+        parentArtifactId: active.artifactId,
+        withCode: false,
+        explicit: false,
+        attachActiveDesign: true,
+        followUp: 'weak',
+        reason: 'undecided_follow_up',
+        language: lang.code,
+        // The conversation has moved on from the drawing: said so, the model
+        // is told to hold the turn to a higher bar (see the contract).
+        ...(active.foreground === false ? { away: true } : {}),
+      };
+    }
+  }
+
+  if (named) return fresh(named.visual, named.sentence);
+  const mentions = lang.visualish ? sentences.find((s) => lang.visualish.test(s)) : null;
+  if (!mentions) return null;
+  const loose = (lang.looseNouns || []).find(([re]) => re.test(mentions));
+  return fresh(loose ? loose[1] : null, mentions);
 }
