@@ -24,14 +24,14 @@ const QUEUE_STOP = new RegExp(stopLiteral[1]);
 
 let seq = 0;
 /** A fresh client (its own module state) over the given keys, probe record and per-key answers. */
-async function client({ keys = { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY_1: KEY_B }, probeKeyVar = 'AGENTROUTER_API_KEY', answer, diskFloorMb = null }) {
+async function client({ keys = { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY_1: KEY_B }, probeKeyVar = 'AGENTROUTER_API_KEY', answer, diskFloorMb = null, diskWaitMs = 0 }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aq-client-keys-'));
   fs.copyFileSync(path.join(HERE, 'client.mjs'), path.join(dir, 'client.mjs'));
   fs.writeFileSync(path.join(dir, 'probe-result.json'), JSON.stringify({ ok: true, model_listed: true, requested_model: 'gpt-6-astra', key_var: probeKeyVar, unsupported_params: [], token_param: 'max_tokens' }));
   const envFile = path.join(dir, 'env');
   fs.writeFileSync(envFile, Object.entries(keys).map(([k, v]) => `${k}=${v}`).join('\n') + '\nOTHER=1\n');
   process.env.NATIVELY_ENV_FILE = envFile;
-  if (diskFloorMb != null) process.env.AQ_DISK_FLOOR_MB = String(diskFloorMb);
+  if (diskFloorMb != null) { process.env.AQ_DISK_FLOOR_MB = String(diskFloorMb); process.env.AQ_DISK_WAIT_MS = String(diskWaitMs); }
   const calls = [];
   const lines = [];
   const realFetch = globalThis.fetch; const realError = console.error;
@@ -43,7 +43,7 @@ async function client({ keys = { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY
   };
   console.error = (...x) => { lines.push(x.join(' ')); };
   const m = await import(`${pathToFileURL(path.join(dir, 'client.mjs')).href}?case=${++seq}`);
-  const restore = () => { globalThis.fetch = realFetch; console.error = realError; delete process.env.NATIVELY_ENV_FILE; delete process.env.AQ_DISK_FLOOR_MB; fs.rmSync(dir, { recursive: true, force: true }); };
+  const restore = () => { globalThis.fetch = realFetch; console.error = realError; delete process.env.NATIVELY_ENV_FILE; delete process.env.AQ_DISK_FLOOR_MB; delete process.env.AQ_DISK_WAIT_MS; fs.rmSync(dir, { recursive: true, force: true }); };
   return { m, calls, lines, restore };
 }
 const MSG = [{ role: 'user', content: 'x' }];
@@ -162,6 +162,18 @@ test('less free disk than the floor: no request is sent, and the queue sees its 
     assert.ok(QUEUE_STOP.test(c.lines[0]));
     await c.m.chat(MSG);
     assert.equal(c.lines.length, 1, 'said once');
+  } finally { c.restore(); }
+  // A dip is waited out first: the call is held (a line the queue does not stop on), and given up only after the wait.
+  const h = await client({ diskFloorMb: 1e15, diskWaitMs: 60, answer: () => OK_200 });
+  try {
+    const t0 = Date.now();
+    const r = await h.m.chat(MSG);
+    assert.equal(r.rationed, true);
+    assert.ok(Date.now() - t0 >= 60, 'held for the wait');
+    assert.equal(h.calls.length, 0);
+    assert.match(h.lines[0], /disk low \(\d+ MB free\) — holding judge calls/);
+    assert.equal(QUEUE_STOP.test(h.lines[0]), false, 'holding is not stopping');
+    assert.ok(QUEUE_STOP.test(h.lines[1]));
   } finally { c.restore(); }
   // With the default floor and room on the disk, calls go through as before.
   const d = await client({ answer: () => OK_200 });
