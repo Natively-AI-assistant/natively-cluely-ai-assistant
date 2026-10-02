@@ -216,9 +216,53 @@ describe('LiveModelCatalogService', () => {
     resolveFirstFetch();
     const firstResult = await firstPromise;
     assert.equal(firstResult.success, false);
-    assert.equal(firstResult.error, 'Superseded by a newer refresh request');
+    assert.equal(firstResult.error, 'Superseded by a newer committed catalog');
 
     // The cache must NOT be overwritten with first-model-slow!
     assert.equal(mockCm.getCloudFetchedModels('openai')[0].id, 'second-model-fast');
+  });
+
+  test('overlapping refreshes: when newer request fails, older successful fetch commits models', async () => {
+    const mockCm = new MockCredentialsManager();
+    mockCm.credentials.apiKeys.openai = 'same-key';
+
+    let resolveFirstFetch;
+    let callCount = 0;
+
+    const mockFetcher = async (provider, apiKey) => {
+      callCount++;
+      if (callCount === 1) {
+        return new Promise((resolve) => {
+          resolveFirstFetch = () => resolve([{ id: 'first-model-succeeded', label: 'First Succeeded' }]);
+        });
+      }
+      if (callCount === 2) {
+        throw new Error('Temporary 500 error from API');
+      }
+      return [];
+    };
+
+    const service = new LiveModelCatalogService({
+      credentialsManager: mockCm,
+      fetcher: mockFetcher,
+    });
+
+    // Start 1st forced refresh (slow but successful)
+    const firstPromise = service.refreshProvider('openai', true);
+
+    // Start 2nd forced refresh (fast but fails)
+    const secondPromise = service.refreshProvider('openai', true);
+
+    // 2nd fails first
+    const secondResult = await secondPromise;
+    assert.equal(secondResult.success, false);
+
+    // Now 1st finishes with valid models
+    resolveFirstFetch();
+    const firstResult = await firstPromise;
+    // 1st MUST succeed and commit its models, not be discarded!
+    assert.equal(firstResult.success, true);
+    assert.equal(firstResult.models[0].id, 'first-model-succeeded');
+    assert.equal(mockCm.getCloudFetchedModels('openai')[0].id, 'first-model-succeeded');
   });
 });
