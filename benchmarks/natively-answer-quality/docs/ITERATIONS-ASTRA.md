@@ -1616,3 +1616,27 @@ Same-answer rows scored differently inside a pair: 0.
   ones in the report's section 9, and none of them is another prompt rule. A further round of small changes cannot
   be decided on 40 items a mode (four results of +0.15 to +0.42 today, none separable from 0).
 
+## The claim pass measured on the answers it edits — judged draft against judged shown answer (12:10Z)
+
+`node tools/edit-effect.mjs f13dev results/aq2-dev-fix13c` and `… f13hold results/aq2-holdout-fix13c` (holdout
+aggregate only). The same turn and conversation, the streamed draft in one arm and the shown answer in the other.
+
+| answers the claim pass edited (kept build) | rows | streamed draft | shown answer | change (95 %) | hard fails | worse by 1+ | better by 1+ |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| dev, all edited rows | 111 | 6.58 | 7.72 | +1.14 (±0.39) | 56 → 17 | 9 | 44 |
+| dev, the draft had a hard fail | 56 | 4.46 | 6.94 | +2.48 (±0.48) | 56 → 16 | 0 | 40 |
+| dev, the draft had none | 55 | 8.74 | 8.51 | −0.23 (±0.34) | 0 → 1 | 9 | 4 |
+| holdout, all edited rows | 66 | 5.87 | 7.55 | +1.68 (±0.53) | 43 → 15 | 2 | 30 |
+| holdout, the draft had a hard fail | 43 | 4.33 | 6.88 | +2.56 (±0.63) | 43 → 15 | 0 | 28 |
+| holdout, the draft had none | 23 | 8.76 | 8.81 | +0.05 (±0.48) | 0 → 0 | 2 | 2 |
+
+By mode on dev the gain is in Call Center heard (+2.33 ±1.25, 15 rows), General heard (+1.92 ±1.11, 8), Looking for
+work heard (+1.43 ±0.71, 24) and Team Meet heard (+0.51 ±0.53, 15); Recruiting and Seminar edits are flat (−0.2 to
++0.3, intervals over ±0.5 wide).
+
+* The pass does what it was built for: of the drafts with a hard fail it repairs 40 of 56 on dev and 28 of 43 on
+  holdout and makes none of them worse by a point.
+* Its cost is the other half: 55 dev edits of drafts without a hard fail read −0.23 (±0.34), 9 worse by a point or
+  more against 4 better; on holdout +0.05 (±0.48) over 23. If none of those 55 edits were made the dev mean would
+  move by about +0.035 — not a lever, and not decidable at this sample size. No change.
+

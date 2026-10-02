@@ -252,6 +252,23 @@ Invocation = the turn passes the verifier's gate (mode, surface, question, draft
 | Call Center | 30 | 30 (100%) | 13 (43%) | 9/23 |
 | **All** | 270 | 203 (75%) | 66 (24%) | 52/189 |
 
+**What the claim pass does to the answers it edits** — the same turn judged twice, once with the streamed draft and
+once with the answer shown after the pass (`tools/edit-pairs.mjs`, `tools/edit-effect.mjs`; judged 2026-10-02):
+
+| answers the claim pass edited (kept build) | rows | streamed draft | shown answer | change (95 %) | hard fails | worse by 1+ | better by 1+ |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| dev, all edited rows | 111 | 6.58 | 7.72 | +1.14 (±0.39) | 56 → 17 | 9 | 44 |
+| dev, the draft had a hard fail | 56 | 4.46 | 6.94 | +2.48 (±0.48) | 56 → 16 | 0 | 40 |
+| dev, the draft had none | 55 | 8.74 | 8.51 | −0.23 (±0.34) | 0 → 1 | 9 | 4 |
+| holdout, all edited rows | 66 | 5.87 | 7.55 | +1.68 (±0.53) | 43 → 15 | 2 | 30 |
+| holdout, the draft had a hard fail | 43 | 4.33 | 6.88 | +2.56 (±0.63) | 43 → 15 | 0 | 28 |
+| holdout, the draft had none | 23 | 8.76 | 8.81 | +0.05 (±0.48) | 0 → 0 | 2 | 2 |
+
+The pass removes a hard fail from 40 of 56 edited dev answers and 28 of 43 on holdout, and adds one in 55 + 23 edits
+of answers that had none. Where the draft was already sound its edit is roughly neutral (dev −0.23 ±0.34, holdout
++0.05 ±0.48): 9 dev answers lose a point or more and 4 gain one. That neutral half is the cost side of the swap the
+user sees (section 9, item 3).
+
 ## 6. Latency impact in one line
 
 Time to first word: unchanged (against fix6: dev 854 → 875 ms, holdout 779 → 871 ms at the median; against main at the start it is faster, 990 → 875 and 965 → 871 ms; the verifier runs after the stream). Total time to the settled answer: dev 1555 → 2023 ms (+0.47 s), holdout 1485 → 2138 ms (+0.65 s) at the median against fix6, and 1498 → 2023 (+0.53 s) and 1438 → 2138 ms (+0.70 s) against main at the start; p95 2761 → 3413 and 2811 → 3665 ms. The verifier passes its gate on 74–75% of turns and replaces the shown text on 31% (dev) / 24% (holdout); on spoken turns 91 of 245 and 52 of 189.
