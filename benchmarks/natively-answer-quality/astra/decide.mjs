@@ -75,11 +75,13 @@ const SECONDARY = [
   ['Sales notice on typed turns too', 'salesfin-base', 'salesfin-shape-v1c'],
   ['Looking for work, first wording (copies its example)', 'lfw-base', 'lfw-bridge-v1'],
 ];
+const BUILT = {}; // dev variant → did its pair pass (holdout is a confirmation of a pass, not a second chance)
 const table = (pairs, verdicts) => { for (const [label, base, variant] of pairs) {
   const ids = [...new Set(rowsOf(`results/replay/${base}.jsonl`).filter((r) => (r.k ?? 0) === 0).map((r) => r.id))];
   const p = pair(load(`results/replay/${base}${JUDGED}`), load(`results/replay/${variant}${JUDGED}`), ids);
   if (p.n < p.expected) { console.log(`| ${label} | ${p.n} of ${p.expected} | | | | | | ${verdicts ? 'INCOMPLETE — no verdict' : 'incomplete'} |`); continue; }
   const pass = p.diff >= GAIN && p.diff - p.half > 0 && p.hfB <= p.hfA;
+  if (verdicts) BUILT[variant] = pass;
   const why = pass ? '' : ` (${[p.diff < GAIN ? 'gain under +0.3' : null, !(p.diff - p.half > 0) ? 'interval includes 0' : null, p.hfB > p.hfA ? 'hard fails up' : null].filter(Boolean).join('; ')})`;
   console.log(`| ${label} | ${p.n} of ${p.expected} | ${p.a.toFixed(2)} | ${p.b.toFixed(2)} | ${f2(p.diff)} (±${p.half.toFixed(2)}) | ${p.hfA} → ${p.hfB} | ${p.changed} | ${verdicts ? `${pass ? 'BUILD' : 'DO NOT BUILD'}${why}` : 'reported only'} |`);
 } };
@@ -98,12 +100,12 @@ console.log(`\nSame-answer rows scored differently in the deciding pairs: ${PAIR
 console.log('\n## Holdout confirmation (rule: gain > 0, interval excludes 0, hard fails not up)\n');
 console.log('| lever | rows judged | base | variant | gain (95%) | hard fails | verdict |');
 console.log('|---|---:|---:|---:|---:|---:|---|');
-for (const [label, base, variant] of [['Reasoning on typed turns — Technical interview + Lecture, holdout', 'think-off-til-hold', 'think-low-til-hold-typed']]) {
+for (const [label, base, variant, devVariant] of [['Reasoning on typed turns — Technical interview + Lecture, holdout', 'think-off-til-hold', 'think-low-til-hold-typed', 'think-low-til-typed']]) {
   const ids = [...new Set(rowsOf(`results/replay/${base}.jsonl`).filter((r) => (r.k ?? 0) === 0).map((r) => r.id))];
   const p = pair(load(`results/replay/${base}${JUDGED}`), load(`results/replay/${variant}${JUDGED}`), ids);
   if (p.n < p.expected) { console.log(`| ${label} | ${p.n} of ${p.expected} | | | | | INCOMPLETE — no verdict |`); continue; }
   const ok = p.diff > 0 && p.diff - p.half > 0 && p.hfB <= p.hfA;
-  console.log(`| ${label} | ${p.n} of ${p.expected} | ${p.a.toFixed(2)} | ${p.b.toFixed(2)} | ${f2(p.diff)} (±${p.half.toFixed(2)}) | ${p.hfA} → ${p.hfB} | ${ok ? 'CONFIRMED' : 'NOT CONFIRMED'} |`);
+  console.log(`| ${label} | ${p.n} of ${p.expected} | ${p.a.toFixed(2)} | ${p.b.toFixed(2)} | ${f2(p.diff)} (±${p.half.toFixed(2)}) | ${p.hfA} → ${p.hfB} | ${BUILT[devVariant] === false ? `NOT APPLIED — the dev pair did not pass; shown for the record (${ok ? 'would confirm' : 'would not confirm'})` : BUILT[devVariant] ? (ok ? 'CONFIRMED' : 'NOT CONFIRMED') : 'waits for the dev pair'} |`);
 }
 console.log('\n## Reported only (same rule shown, nothing is built from these)\n');
 console.log('| variant | rows judged | base | variant | gain (95%) | hard fails | rows that moved | |');
