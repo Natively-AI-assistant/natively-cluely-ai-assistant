@@ -1592,8 +1592,8 @@ Same-answer rows scored differently inside a pair: 0.
   `astra/final-report.mjs` and `astra/paired.mjs`.
 * **Reasoning on every Technical interview + Lecture turn** (reported only, the heard-turn question): dev 8.40 →
   8.85, +0.45 (±0.42), hard fails 14 → 9, 65 rows moved; holdout 8.31 → 8.72, +0.42 (±0.61), 12 → 6. On dev it
-  repairs 8 hard fails (an LRU cache, three complexity answers, "why a heap", a system-design answer, two that are
-  re-rolls of an invented personal claim) and makes 3 new ones (a debugging answer, a streaming-windows answer, a
+  repairs 8 hard fails (an LRU cache, two complexity answers, a worked example with numbers, "why a heap", a
+  system-design answer, and two that are re-rolls of an invented personal claim) and makes 3 new ones (a debugging answer, a streaming-windows answer, a
   "what can I skip" answer). Large swings on few rows: that is why the interval is wide.
 * **Question asked: can the delay be kept off most turns by reasoning only where it helps?** Looked at on dev, by
   signals the app already computes — no judge call, nothing tuned:
