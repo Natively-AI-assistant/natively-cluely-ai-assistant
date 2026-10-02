@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import type { VisionModelState } from '../../types/electron';
-import { visionStatusText, visionAnswerInForce } from './visionLine';
+import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown, visionNotesKept } from './visionLine';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, ImageOff, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
@@ -870,10 +870,41 @@ export const AIP_CSS = `
 }
 .aip-vision-label { font-size:11px; color: var(--aip-secondary); margin-right:2px; }
 /* Secondary while it is only what Auto WOULD say, or not an answer yet; primary
-   once it is the answer in force — the one thing on this line worth reading. */
-.aip-vision-status { font-size:10.5px; color: var(--aip-secondary); text-align:right;
+   once it is the answer in force — the one thing on this line worth reading.
+   position:relative is load-bearing: the sentence for screen readers inside it
+   is absolutely positioned (.sr-only), and with no positioned box between it and
+   the Settings scroller it was laid out against THAT — outside the list's clip,
+   at its unscrolled offset. One line open deep in a 300-model list made the
+   whole pane 9,000px taller; under reduced motion every row did it at once. */
+.aip-vision-status { position:relative; display:flex; align-items:flex-start; justify-content:flex-end;
+                     font-size:10.5px; color: var(--aip-secondary); text-align:right;
                      transition: color var(--aip-dur-state) var(--aip-ease-out); }
 .aip-vision-status[data-answer='true'] { color: var(--aip-primary); }
+/* "Auto would say:" in front of the answer, under the user's own On or Off. It is
+   a place too, and it TRADES with the test button's place below: as one closes
+   the other opens on the same clock and the same curve, so mid-way the line is
+   never wider than at either end. When the two were timed apart (the words
+   swapped out over 150ms while the button's place was already opening), a long
+   translation overflowed for a moment: the line wrapped to two rows and every
+   model row below it jumped down and back. So its two width timings are the
+   test place's two, crossed — keep them in step (VisionSettingLine test).
+   A column going 0fr to 1fr, not a width: the words are as wide as the language.
+   Mid-way the column is narrower than the box (a fraction of a fraction), so it
+   is held to the END: the words stay against the answer they introduce. */
+.aip-vision-would {
+    display:grid; grid-template-columns:0fr; justify-content:end; flex-shrink:0;
+    opacity:0; visibility:hidden;
+    transition: grid-template-columns var(--aip-dur-travel) var(--aip-ease-out),
+                opacity var(--aip-dur-press) var(--aip-ease-out),
+                visibility 0s linear var(--aip-dur-travel);
+}
+.aip-vision-would > span { min-width:0; overflow:hidden; white-space:pre; }
+.aip-vision-would[data-open='true'] {
+    grid-template-columns:1fr; opacity:1; visibility:inherit;
+    transition: grid-template-columns var(--aip-dur-state) var(--aip-ease-out) 50ms,
+                opacity var(--aip-dur-state) var(--aip-ease-out) 110ms,
+                visibility 0s;
+}
 /* The result and its test button travel together. When a long translation does
    not fit beside the control, BOTH drop to a second line and stay at the right
    edge — the button alone used to land at the left, under the label. */
@@ -996,8 +1027,9 @@ export const AIP_CSS = `
 .aip-reveal[data-instant='true'] > div > * { transition: none !important; }
 
 /* Content motion, scoped to the model list, a card's rows, and the line under a
-   model row (--line) — AipSelect's listbox is a menu and keeps the bare clip. The transform CANNOT go on ".aip-reveal > div": that element carries
-   the overflow:hidden, so transforming it would move the clip box with the content and
+   model row (--line) — AipSelect's listbox is a menu and keeps the bare clip.
+   The transform CANNOT go on ".aip-reveal > div": that element carries the
+   overflow:hidden, so transforming it would move the clip box with the content and
    the panel would overlap the trigger. It goes on its single child, inside the clip.
    -4px means the content settles DOWNWARD, travelling with the clip edge rather than
    against it — the panel hangs below the trigger, so it should read as drawn out of it.
@@ -1693,7 +1725,11 @@ export function useVisionStates(ids: readonly string[], active: boolean) {
         const mine = ++seq.current;
         try {
             const result = await window.electronAPI?.getVisionModelStates?.(key ? key.split('\n') : []);
-            if (mine === seq.current && result?.states) setStates(result.states);
+            if (mine === seq.current && result?.states) {
+                const fresh = result.states;
+                setStates(fresh);
+                setInconclusive(prev => visionNotesKept(prev, fresh));
+            }
         } catch { /* the rows simply show no control */ }
     }, [key]);
     useEffect(() => {
@@ -1722,13 +1758,23 @@ export function useVisionStates(ids: readonly string[], active: boolean) {
             else void refresh();
         } catch { void refresh(); }
     }, [refresh, note]);
-    const shown = useMemo(() => {
-        if (inconclusive.size === 0) return states;
-        const out: Record<string, VisionModelState | null> = { ...states };
-        for (const id of inconclusive) { const s = out[id]; if (s && !s.checking) out[id] = { ...s, inconclusive: true }; }
-        return out;
-    }, [states, inconclusive]);
+    const shown = useMemo(() => visionStatesShown(states, inconclusive), [states, inconclusive]);
     return { states: shown, set, retest };
+}
+
+/**
+ * Motion for one model row's glyph and line, on from the first time that row's
+ * line is opened. A gateway lists hundreds of models, and every motion piece
+ * costs a little to mount and again on each re-render: with them on for every
+ * row, a 300-model list took half as long again to open. A row nobody has opened
+ * has next to nothing to animate — a test is started from its open line — so it
+ * draws plain. The pane's own readiness (SettingsMotionReady) still applies.
+ */
+function useVisionRowMotion(open: boolean): boolean {
+    const paneReady = React.useContext(SettingsMotionReady);
+    const [opened, setOpened] = useState(open);
+    if (open && !opened) setOpened(true);
+    return paneReady && opened;
 }
 
 /** The glyph at the end of a model row: does it read images, and did the user decide that. */
@@ -1736,6 +1782,7 @@ export const AipVisionButton: React.FC<{
     state: VisionModelState; open: boolean; onClick: () => void; controls: string;
 }> = ({ state, open, onClick, controls }) => {
     const t = useT();
+    const motionReady = useVisionRowMotion(open);
     const answer = state.reads === 'yes' ? t('Reads images') : state.reads === 'no' ? t('Does not read images') : t('Not known whether it reads images');
     return (
         <button
@@ -1749,7 +1796,7 @@ export const AipVisionButton: React.FC<{
             title={state.setting !== 'auto' ? `${answer} · ${t('set by you')}` : answer}
             onClick={onClick}
         >
-            <Presence kind="icon" id={state.checking ? 'checking' : state.reads === 'no' ? 'no' : 'yes'} slotClassName="aip-vision-glyph">
+            <Presence kind="icon" id={state.checking ? 'checking' : state.reads === 'no' ? 'no' : 'yes'} slotClassName="aip-vision-glyph" ready={motionReady}>
                 {state.checking
                     ? <Loader2 size={12} strokeWidth={1.75} className="aip-spinner" aria-hidden="true" />
                     : state.reads === 'no'
@@ -1766,6 +1813,7 @@ export const AipVisionDetail: React.FC<{
     onSet: (setting: VisionSetting) => void; onRetest: () => void;
 }> = ({ id, state, open, onSet, onRetest }) => {
     const t = useT();
+    const motionReady = useVisionRowMotion(open);
     const choices: Array<{ value: VisionSetting; label: string; title: string }> = [
         { value: 'auto', label: t('Auto'), title: t('Let Natively work it out') },
         { value: 'on', label: t('On'), title: t('Always send this model screenshots') },
@@ -1792,11 +1840,35 @@ export const AipVisionDetail: React.FC<{
         observer?.observe(seg);
         return () => observer?.disconnect();
     }, [open, state.setting, labelsKey]);
+    // Opened on the last rows in view of a scrolling list, the line landed under
+    // the fold: the glyph lit up and nothing else seemed to happen. So while the
+    // line opens, the list follows it frame by frame and the two arrive together
+    // ("nearest": a line already in view moves nothing). Only for an opening the
+    // user just asked for — a row that comes back already open, when a filter is
+    // cleared, must not pull the list to itself.
+    const lineRef = useRef<HTMLDivElement>(null);
+    const wasOpen = useRef(open);
+    useEffect(() => {
+        const opening = open && !wasOpen.current;
+        wasOpen.current = open;
+        const line = lineRef.current;
+        if (!opening || !line) return;
+        // A little past the reveal's opening time (--aip-dur-travel, 220ms).
+        const until = performance.now() + 280;
+        let frame = 0;
+        const follow = () => {
+            line.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            if (performance.now() < until) frame = requestAnimationFrame(follow);
+        };
+        frame = requestAnimationFrame(follow);
+        return () => cancelAnimationFrame(frame);
+    }, [open]);
+    const auto = visionAutoText(state, t);
     const status = visionStatusText(state, t);
     const onAuto = state.setting === 'auto';
     const tested = state.auto.source === 'test';
     return (
-        <div className="aip-reveal aip-reveal--line" data-open={open ? 'true' : 'false'} id={id}>
+        <div ref={lineRef} className="aip-reveal aip-reveal--line" data-open={open ? 'true' : 'false'} id={id}>
             <div>
                 <div className="aip-vision-detail" role="group" aria-label={t('Reads images')}>
                     <span className="aip-vision-label">{t('Reads images')}</span>
@@ -1823,8 +1895,14 @@ export const AipVisionDetail: React.FC<{
                         ))}
                     </div>
                     <div className="aip-vision-result">
-                        <span className="aip-vision-status" aria-live="polite" data-answer={visionAnswerInForce(state) ? 'true' : 'false'}>
-                            <Presence kind="text" id={status}>{status}</Presence>
+                        <span className="aip-vision-status" data-answer={visionAnswerInForce(state) ? 'true' : 'false'}>
+                            {/* What a screen reader hears: the whole sentence, apart from
+                                the pieces below, which move and are for the eye only. */}
+                            <span className="sr-only" aria-live="polite">{status}</span>
+                            <span className="aip-vision-would" data-open={onAuto ? 'false' : 'true'} aria-hidden="true">
+                                <span>{`${t('Auto would say')}: `}</span>
+                            </span>
+                            <span aria-hidden="true"><Presence kind="text" id={auto} ready={motionReady}>{auto}</Presence></span>
                         </span>
                         {/* Only on Auto, and only where a test can run: On and Off are the
                             user's own answer, and a test would send an image they may have
@@ -1841,7 +1919,7 @@ export const AipVisionDetail: React.FC<{
                                     title={t('Send this model a test image now and see whether it can read it')}
                                     onClick={() => { if (onAuto) onRetest(); }}
                                 >
-                                    <Presence kind="text" id={tested ? 'again' : 'now'}>
+                                    <Presence kind="text" id={tested ? 'again' : 'now'} ready={motionReady}>
                                         {tested ? t('Test again') : t('Test now')}
                                     </Presence>
                                 </button>

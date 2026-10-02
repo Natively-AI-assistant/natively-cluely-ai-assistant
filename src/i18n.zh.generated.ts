@@ -159,7 +159,7 @@ export const ZH_GENERATED: Record<string, string> = {
     "Check your internet connection or download the update manually from GitHub.": "Check your internet connection or download the update manually from GitHub.",
     "Checking": "Checking",
     "Checking for Ollama...": "Checking for Ollama...",
-    "Checking…": "Checking…",
+    "Checking…": "检查中…",
     "Chinese": "Chinese",
     "Choose the engine that transcribes audio to text.": "选择将音频转录为文本的引擎。",
     "Chrome Web Store (Recommended)": "Chrome Web Store (Recommended)",
@@ -1108,4 +1108,8 @@ export const ZH_GENERATED: Record<string, string> = {
     "Test again": "重新测试",
     "Test now": "立即测试",
     "Could not test just now · try again later": "暂时无法测试 · 请稍后重试",
+    // The model list's pill column and summary (2026-10-02): these three were English in every language.
+    "Set default": "设为默认",
+    "default": "默认",
+    "Use this model by default for this provider": "将此模型设为该提供商的默认模型",
 };
