@@ -1,68 +1,82 @@
 # Natively answer quality — report after phase 3 (judge gpt-6-astra, charter v2)
 
-Status 2026-10-01 14:55 UTC. Generator: deepseek-flash. Judge: gpt-6-astra through AgentRouter, charter v2
+Status 2026-10-02 12:04 UTC. Generator: deepseek-flash. Judge: gpt-6-astra through AgentRouter, charter v2
 `c725615a54f6` (claim kinds), calibration 25 of 25. Every score in this report is under charter v2; nothing from
 charter v1 is mixed in. Holdout is reported in aggregate only.
 
-## 0. Status on 2026-10-02 09:10 UTC — what is waiting, and on what
+## 0. Status on 2026-10-02 12:04 UTC — what was decided today, and what is still being judged
 
-Nothing in sections 1–11 has changed since 2026-10-01 14:55 UTC: no new gpt-6-astra score exists. The judge has not
-answered since 2026-10-01 12:26 UTC. There are now two AgentRouter keys with account quota (`AGENTROUTER_API_KEY`,
-replaced by Evin on 2026-10-02, and `AGENTROUTER_API_KEY_1`); the judge client uses whichever answers and hands
-over when one runs out. Probed 05:12 UTC: both list `gpt-6-astra` and both answer 402 "Budget pool quota has been
-exhausted" — the ration pool of the current batch, shared across accounts (the same at 08:53 UTC). **Nothing can be judged before the
-11:00 UTC batch; no top-up is needed.** A detached chain probes every 10 minutes (every minute around a batch) and
-runs the queue on its own the moment either key answers; the verdicts land in `astra/out/logs/decide.md` (replay
-pairs) and `astra/out/logs/promote.md` (the candidates' app rows against the kept build).
+gpt-6-astra answered again at 11:02 UTC (key `AGENTROUTER_API_KEY`; calibration 25 of 25; every call answered by
+`gpt-6-astra`, 0 model mismatches). The decisions were judged first.
 
-The generator stays on the direct DeepSeek key (Evin, 05:05 UTC): DeepSeek through AgentRouter was measured to
-cost about one judgment per generated answer, from the balance the judge needs.
+**The four prepared changes were judged against the rules written for them beforehand. None passes; none is built.**
+Rule: on the dev replay pair, gain of at least +0.3, 95 % interval excluding 0, hard fails not up.
 
-**The laptop's disk is nearly full, and not from this work.** 09:02 UTC: 0.8 GB free, 100 % used; 2.7 GB eight
-minutes later. The judge now sends no call when under 300 MB is free and its files survive a write cut short
-(`astra/store.mjs`), so a full disk costs a batch, not the saved judgments. No app run is started under 4 GB free.
-What is idle on the disk and belongs to other work is listed in `docs/ITERATIONS-ASTRA.md` for Evin to decide.
+| change | rows | base | variant | gain (95 %) | hard fails | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| Reasoning before a typed answer, Technical interview + Lecture (`fix/aq-astra-i7`, `3b0c1a4f`) | 80 | 8.40 | 8.58 | +0.18 (±0.25) | 14 → 13 | do not build |
+| Looking for work: the claim pass's rule for a reply left unanswered (`fix/aq-astra-i6`, `c399f399`) | 40 | 7.98 | 8.13 | +0.15 (±0.33) | 7 → 6 | do not build |
+| Call Center: "no policy on file" notice on heard turns (same branch) | 40 | 7.47 | 7.89 | +0.42 (±0.48) | 9 → 7 | do not build |
+| Sales: reply-shape notice on heard turns (same branch) | 40 | 8.12 | 8.43 | +0.31 (±0.36) | 4 → 1 | do not build |
 
-A second judge (Fable) was tried for about an hour on 2026-10-02 at Evin's request and withdrawn at Evin's request.
-Its scores are in the repository as a record (`abs-*-f1`, `*.judged-fable.jsonl`); none is used in this report and no
-decision rests on them.
+All four point the same way and none can be told from zero on 40 items a mode (section 9, item 6). Both branches
+stay unmerged. The kept build is unchanged: **fix13 (`e000db4a`)**, and its own re-run rows are now judged
+(against fix12: dev +1.13 ±0.79 on 17 rows, holdout +1.07 ±1.62 on 10 rows; kept).
 
-**Candidates built or prepared, none in the kept build, all waiting for gpt-6-astra** (rules written beforehand in
-`docs/ITERATIONS-ASTRA.md`; the queue judges them first):
+**Reasoning is the one lever with a consistent signal, and it is Evin's decision, not a rule's.** Reported only —
+none of these lines changes a verdict:
 
-| candidate | where | what it changes | what is known without a judge |
-|---|---|---|---|
-| Reasoning before a typed answer in Technical interview and Lecture (I28) | app `3b0c1a4f`, branch `fix/aq-astra-i7` | DeepSeek `thinking: enabled`, effort low, on typed turns of those two modes; every other turn is unchanged | in the app: 52 of 52 typed turns reason, 0 of 88 heard turns; 0 failed or empty; no extra requests; first word on typed turns 0.70 s → 1.67 s (dev) and 0.81 s → 1.72 s (holdout) at the median, 5.4–6.3 s at p95, one turn 10.5 s |
-| Looking for work: the claim pass's rule for a reply left unanswered | app `c399f399`, branch `fix/aq-astra-i6` | nearest documented facts plus one forward sentence, instead of a holding line | replay on 40 dev drafts: holding lines 6 → 1; app rows exist (`aq2-dev-fix14`, `aq2-holdout-fix14`) |
-| Call Center and Sales, heard turn with no company document | same branch | one notice stating the short reply shape; only when no document truly exists | replay, heard dev turns: verification asks 4 → 0 and replies naming the check 6 → 11 of 17 (Call Center); preambles 5 → 1 of 14 (Sales). In the app (`aq2-dev-fix16`, `aq2-holdout-fix16`): 0 failed rows; the notice is on exactly the replay's 17 + 14 dev turns and on no typed turn; Call Center verification asks 7 → 1 (dev) and 3 → 1 (holdout), Sales preambles 8 → 1 and 2 → 0 |
+| Technical interview + Lecture, reasoning at low effort | rows | off | on | gain (95 %) | hard fails |
+|---|---:|---:|---:|---:|---:|
+| typed turns only, dev (the pair above) | 80 | 8.40 | 8.58 | +0.18 (±0.25) | 14 → 13 |
+| typed turns only, holdout | 60 | 8.31 | 8.63 | +0.33 (±0.31) | 12 → 9 |
+| every turn, dev | 80 | 8.40 | 8.85 | +0.45 (±0.42) | 14 → 9 |
+| every turn, holdout | 60 | 8.31 | 8.72 | +0.42 (±0.61) | 12 → 6 |
 
-Also queued: fix13's 27 re-run rows against fix12's, the rest of the Starting column, the claim pass measured on
-the same rows (streamed draft against shown answer, `tools/edit-pairs.mjs`), supp-behavior, the blind pairwise set.
+The cost is measured: on typed turns in the app the first word arrives at 1.67 s instead of 0.70 s at the median (5.4–6.3 s
+at p95, one turn 10.5 s); on the replay prompts 2.22 s instead of 0.78 s at the median and 6.6 s instead of 1.0 s at p95. Heard turns
+are the live conversation, where that delay costs most and where most of the gain is.
 
-**For Evin, beyond the open decisions in section 10:** whether heard turns in Technical interview and Lecture
-should reason too. The reasoning replays on all turns are queued as evidence; the cost is known (first word about
-1.4 s later at the median on those prompts, 6.6 s at p95).
+**The starting baseline is now judged in full**, so the headline no longer rests on a partial comparison: dev
+7.76 → 8.54 (+0.78 ±0.22), hard fails 89 → 37 of 360; holdout 7.92 → 8.47 (+0.55 ±0.25), hard fails 61 → 31 of 270.
+
+**Still being judged in this batch, none of it able to change a decision:** the claim pass on the rows it edited
+(streamed draft against shown answer), supp-behavior, then the candidates' app rows (reported only), the blind
+pairwise set and fix10. The queue stops when the ration pool does and resumes at the next batch (02:00 UTC).
+
+**The laptop's disk.** Free space fell to 0.29 GB at 11:06 UTC while another session was building, and stopped the
+first calibration. The judge now holds its calls through such a dip and its files survive a write cut short
+(`astra/store.mjs`); no app run is started under 4 GB free. What is idle on the disk and belongs to other work
+(build output, an 8.3 GB `release` folder in the main checkout) is listed in `docs/ITERATIONS-ASTRA.md`.
+
+The generator stays on the direct DeepSeek key (Evin, 05:05 UTC). A second judge (Fable) was tried for about an
+hour on 2026-10-02 at Evin's request and withdrawn at Evin's request; its scores are in the repository as a record
+(`abs-*-f1`, `*.judged-fable.jsonl`) and none is used in this report.
 
 ## 1. Outcome
 
 * **Kept build: `fix13` = app commit `e000db4a` on branch `fix/aq-astra-i5`. Not landed on main.** fix13 is fix12
-  (`f0c3a263`) plus one prompt notice that touches 7 of 360 dev rows and 4 of 270 holdout rows; it was kept on an
-  objective rule and is not judged yet, so **every judged number below is fix12's**.
-* Holdout, paired against the previous reference (fix6): **8.02 → 8.43, +0.41 (±0.23)**, hard fails **60 → 31**,
-  no mode down. Dev: 8.24 → 8.49, +0.25 (±0.18), hard fails 66 → 38.
-* Against main as it was at the start — PARTIAL, not a headline: the judge account's quota ran out before the
-  baseline was fully re-judged under charter v2. Dev +0.86 (±0.27) on 201 items covering only General, Sales,
-  Recruiting, Team Meet and 36 of 40 Looking for work — the modes the verifier helps most; no Lecture, Technical
-  interview, Seminar or Call Center. Holdout +0.52 (±0.27) on 202 items: General, Sales, Recruiting, Team Meet,
-  Looking for work, Lecture and 21 of 30 Technical interview; no Seminar or Call Center. The rest is queued for the
-  02:00 UTC batch of 2026-10-02.
-* **No mode is at 9.5.** Highest: Team Meet 9.12 and Recruiting 9.01 on dev; on holdout General 8.92. Lowest:
-  Looking for work 7.74–7.88, Call Center 7.62–7.93. Section 9 says why local fixes do not close the gap.
-* **9.5 on every mode is not reachable by fixing failures alone.** The 78% of answers with no flagged failure
-  average 9.23 on both sets; with every failure class fully repaired the modes would land between 8.5 (Call Center)
-  and 9.5 (Technical interview, Lecture). See section 9.
-* Price of the gain: the answer settles about 0.45–0.65 s later at the median (time to first word unchanged) and the
-  text shown is replaced after streaming on 24–30% of turns. That trade is Evin's to accept or change (section 9).
+  (`f0c3a263`) plus one prompt notice that touches 7 of 360 dev rows and 4 of 270 holdout rows.
+* **From main as it was at the start to the kept build, every answer judged on both sides:**
+
+  | | start | kept build | paired gain (95 %) | hard fails |
+  |---|---:|---:|---:|---:|
+  | dev (360) | 7.76 | 8.54 | +0.78 (±0.22) | 89 → 37 |
+  | holdout (270) | 7.92 | 8.47 | +0.55 (±0.25) | 61 → 31 |
+
+  Against the earlier reference (fix6): holdout +0.45 (±0.22), hard fails 60 → 31; dev +0.30 (±0.17), 66 → 37.
+* **No mode is at 9.5, and none will get there by fixing failures.** Highest: Team Meet 9.16, Seminar 9.02 and
+  Recruiting 9.01 on dev; General 8.97 on holdout. Lowest: Call Center 7.63 / 7.93 and Looking for work
+  7.92 / 7.74. The 78–79 % of answers with no flagged failure average 9.28 (dev) and 9.26 (holdout); with every
+  failure class fully repaired the modes would land between 8.5 (Call Center) and 9.5 (Technical interview,
+  Lecture). See section 9.
+* **No mode is worse than at the start beyond its interval.** Section 3 has the per-mode paired table; the two
+  negative holdout lines are Team Meet −0.18 (±0.61) and Lecture −0.07 (±0.59).
+* **The last round found nothing to add.** Four prepared changes were judged on 2026-10-02 and none passed its
+  rule (section 0). The one lever with a consistent signal, the generator reasoning before it answers in Technical
+  interview and Lecture, costs about a second on the first word and is a product decision.
+* Price of the gain: the answer settles about 0.5–0.7 s later at the median (time to first word unchanged) and the
+  text shown is replaced after streaming on 24–31 % of turns. That trade is Evin's to accept or change (section 9).
 
 fix12 is a composite for reporting: its only difference from fix11 is one Seminar-only clause in the verifier
 prompt (every other mode's prompt is byte-identical, checked), so only Seminar was re-run and re-judged; the other
@@ -70,7 +84,7 @@ eight modes are fix11's runs and judgments (`tools/compose-run.mjs`, runs `aq2-*
 
 ## 2. Iterations: attempted, kept, reverted
 
-42 changes were tried; 26 are in the kept build, 16 were rejected or taken back. Every one is described, with its
+46 changes were tried; 26 are in the kept build, 20 were rejected, taken back or not built. Every one is described, with its
 evidence, in `docs/ITERATIONS-ASTRA.md`; every dev question with each run's answer is in `docs/ITERATIONS-QA.md`.
 
 **In the kept build (26):** I1 small corpus read whole · I2 hidden arithmetic scratch block · I3 the user's own
@@ -85,11 +99,14 @@ I21 every spoken General turn verified · I22 every Seminar turn verified · tid
 ownership, small commitments are not claims; a conflict is surfaced) · source-word rail · I25 Seminar study scope ·
 I26 a typed "shorter" / "simpler" / "another one" revises the previous reply.
 
-**Rejected or taken back (16):** conflict wording · past-event notice · "use the specifics" · I13 wording in
+**Rejected, taken back or not built (20):** conflict wording · past-event notice · "use the specifics" · I13 wording in
 the app · I17 removing the Today line · scratch-v2 · I19 technical second look · I20 missing-facts line · I23 "what
 to say instead" · I24 early stop · a larger generator · the general honest-limit exemption (built as `e7325287`,
 judged −0.02 ±0.24, reverted) · "an older version is not a conflict" · "keep every can't" in Call Center · gate-v2
-(verify Lecture / Technical interview turns that carry a personal claim) · a Lecture voice rewrite.
+(verify Lecture / Technical interview turns that carry a personal claim) · a Lecture voice rewrite · and the four
+judged on 2026-10-02, none of which cleared its rule (section 0): I28 reasoning on typed Technical interview and
+Lecture turns · the Looking-for-work fallback rule · the Call Center "no policy on file" notice · the Sales
+reply-shape notice.
 
 **Promotion history under charter v2.** fix6 was the provisional reference. fix11 (fix6 + I16, I18, language rail,
 I21, I22, claim kinds, source rail) cleared holdout by +0.42 (±0.22) and failed one pre-registered rule: a
@@ -100,47 +117,65 @@ what they do objectively (fewer edits, no decision turned into a question).
 
 ## 3. Scores, p10 and hard fails per mode
 
+Every column is judged in full under charter v2 (gpt-6-astra). Main = main as it was at the start; fix6 = the earlier
+reference; fix13 = the kept build (`e000db4a`), reported as fix12's rows plus the rows fix13 re-ran (`aq2-*-fix13c`).
+
 ### Dev set
 
-| Mode | Main mean | p10 | hard fails | fix6 mean | p10 | hard fails | fix12 mean | p10 | hard fails |
+| Mode | Main mean | p10 | hard fails | fix6 mean | p10 | hard fails | fix13 mean | p10 | hard fails |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| General | 7.88 | 4.3 | 11/40 | 8.68 | 6.1 | 3/40 | 8.57 | 5.5 | 4/40 |
-| Sales | 6.89 | 4.0 | 17/40 | 7.82 | 4.0 | 9/40 | 8.31 | 6.5 | 3/40 |
+| General | 7.88 | 4.3 | 11/40 | 8.68 | 6.1 | 3/40 | 8.59 | 5.5 | 4/40 |
+| Sales | 6.89 | 4.0 | 17/40 | 7.82 | 4.0 | 9/40 | 8.44 | 7.1 | 3/40 |
 | Recruiting | 8.34 | 5.7 | 3/40 | 8.73 | 4.7 | 5/40 | 9.01 | 7.7 | 1/40 |
-| Team Meet | 8.38 | 5.0 | 6/40 | 8.56 | 5.0 | 5/40 | 9.12 | 8.4 | 1/40 |
-| Looking for work | 7.01 | 4.0 | 15/36 | 7.40 | 4.4 | 16/40 | 7.88 | 5.0 | 7/40 |
-| Lecture | — | — | (4 judged) | 9.01 | 8.1 | 3/40 | 8.71 | 4.2 | 5/40 |
-| Technical interview | — | — | (1 judged) | 8.01 | 4.0 | 10/40 | 8.21 | 4.0 | 9/40 |
-| Seminar | — | — | — | 8.67 | 6.8 | 3/40 | 8.95 | 7.0 | 1/38 |
-| Call Center | — | — | — | 7.29 | 4.0 | 12/40 | 7.62 | 4.0 | 7/40 |
-| **All** | 7.73† | 4.0 | 53/201 | 8.24 | 4.0 | 66/360 | 8.49 | 5.0 | 38/358 |
+| Team Meet | 8.38 | 5.0 | 6/40 | 8.56 | 5.0 | 5/40 | 9.16 | 8.5 | 1/40 |
+| Looking for work | 6.81 | 4.0 | 19/40 | 7.40 | 4.4 | 16/40 | 7.92 | 5.0 | 7/40 |
+| Lecture | 8.81 | 7.1 | 3/40 | 9.01 | 8.1 | 3/40 | 8.89 | 6.1 | 4/40 |
+| Technical interview | 7.50 | 4.0 | 9/40 | 8.01 | 4.0 | 10/40 | 8.21 | 4.0 | 9/40 |
+| Seminar | 8.66 | 5.7 | 4/40 | 8.67 | 6.8 | 3/40 | 9.02 | 7.4 | 1/40 |
+| Call Center | 6.56 | 4.0 | 17/40 | 7.29 | 4.0 | 12/40 | 7.63 | 4.0 | 7/40 |
+| **All** | 7.76 | 4.0 | 89/360 | 8.24 | 4.0 | 66/360 | 8.54 | 5.0 | 37/360 |
 
-† partial: judged on fewer than 90% of that mode's items (the judge batch ran out). Use the paired lines below, which compare common items only.
+Paired on 360 common items, fix13 (dev) − main at the start (`aq2-dev-cur`): +0.78 (±0.22).
 
-Paired on 201 common items, fix12 (dev) − aq2-dev-cur: +0.86 (±0.27).
-
-Paired on 358 common items, fix12 (dev) − aq2-dev-fix6: +0.25 (±0.18).
+Paired on 360 common items, fix13 (dev) − fix6: +0.30 (±0.17).
 
 ### Holdout (aggregate only)
 
-| Mode | Main mean | p10 | hard fails | fix6 mean | p10 | hard fails | fix12 mean | p10 | hard fails |
+| Mode | Main mean | p10 | hard fails | fix6 mean | p10 | hard fails | fix13 mean | p10 | hard fails |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| General | 8.46 | 5.0 | 5/30 | 8.44 | 5.0 | 4/30 | 8.92 | 7.7 | 1/30 |
+| General | 8.46 | 5.0 | 5/30 | 8.44 | 5.0 | 4/30 | 8.97 | 7.7 | 1/30 |
 | Sales | 7.38 | 4.0 | 9/30 | 8.10 | 4.0 | 5/30 | 8.49 | 6.9 | 3/30 |
 | Recruiting | 7.95 | 5.0 | 4/30 | 8.71 | 5.5 | 3/30 | 8.86 | 7.6 | 2/30 |
-| Team Meet | 8.79 | 5.0 | 4/30 | 8.43 | 5.0 | 6/30 | 8.45 | 4.9 | 4/30 |
+| Team Meet | 8.79 | 5.0 | 4/30 | 8.43 | 5.0 | 6/30 | 8.62 | 4.9 | 4/30 |
 | Looking for work | 6.53 | 4.8 | 16/30 | 7.31 | 5.0 | 11/30 | 7.74 | 5.0 | 7/30 |
-| Lecture | 8.87 | 6.1 | 2/30 | 8.66 | 5.0 | 4/30 | 8.73 | 5.8 | 3/30 |
-| Technical interview | 8.14† | 4.0 | 5/21 | 8.24 | 4.0 | 6/30 | 8.46 | 6.6 | 3/30 |
-| Seminar | — | — | — | 7.65 | 3.0 | 7/30 | 8.29 | 6.3 | 3/30 |
-| Call Center | — | — | (1 judged) | 6.66 | 4.0 | 14/30 | 7.93 | 4.0 | 5/30 |
-| **All** | 7.99† | 4.0 | 46/202 | 8.02 | 4.0 | 60/270 | 8.43 | 5.0 | 31/270 |
+| Lecture | 8.87 | 6.1 | 2/30 | 8.66 | 5.0 | 4/30 | 8.80 | 5.8 | 3/30 |
+| Technical interview | 7.86 | 4.0 | 7/30 | 8.24 | 4.0 | 6/30 | 8.46 | 6.6 | 3/30 |
+| Seminar | 8.16 | 4.0 | 4/30 | 7.65 | 3.0 | 7/30 | 8.36 | 6.3 | 3/30 |
+| Call Center | 7.24 | 4.0 | 10/30 | 6.66 | 4.0 | 14/30 | 7.93 | 4.0 | 5/30 |
+| **All** | 7.92 | 4.0 | 61/270 | 8.02 | 4.0 | 60/270 | 8.47 | 5.0 | 31/270 |
 
-† partial: judged on fewer than 90% of that mode's items (the judge batch ran out). Use the paired lines below, which compare common items only.
+Paired on 270 common items, fix13 (holdout) − main at the start (`aq-holdout-fix2`): +0.55 (±0.25).
 
-Paired on 202 common items, fix12 (holdout) − aq-holdout-fix2: +0.52 (±0.27).
+Paired on 270 common items, fix13 (holdout) − fix6: +0.45 (±0.22).
 
-Paired on 270 common items, fix12 (holdout) − aq2-holdout-fix6: +0.41 (±0.23).
+### Change per mode from the start to the kept build (paired, every item judged on both sides)
+
+| Mode | dev: start → kept | gain (95 %) | hard fails | holdout: start → kept | gain (95 %) | hard fails |
+|---|---:|---:|---:|---:|---:|---:|
+| General | 7.88 → 8.59 | +0.71 (±0.74) | 11 → 4 | 8.46 → 8.97 | +0.51 (±0.54) | 5 → 1 |
+| Sales | 6.89 → 8.44 | +1.55 (±0.70) | 17 → 3 | 7.38 → 8.49 | +1.11 (±0.81) | 9 → 3 |
+| Recruiting | 8.34 → 9.01 | +0.68 (±0.41) | 3 → 1 | 7.95 → 8.86 | +0.91 (±0.68) | 4 → 2 |
+| Team Meet | 8.38 → 9.16 | +0.78 (±0.49) | 6 → 1 | 8.79 → 8.62 | −0.18 (±0.61) | 4 → 4 |
+| Looking for work | 6.81 → 7.92 | +1.11 (±0.61) | 19 → 7 | 6.53 → 7.74 | +1.21 (±0.80) | 16 → 7 |
+| Lecture | 8.81 → 8.89 | +0.08 (±0.50) | 3 → 4 | 8.87 → 8.80 | −0.07 (±0.59) | 2 → 3 |
+| Technical interview | 7.50 → 8.21 | +0.71 (±0.87) | 9 → 9 | 7.86 → 8.46 | +0.60 (±0.95) | 7 → 3 |
+| Seminar | 8.66 → 9.02 | +0.35 (±0.50) | 4 → 1 | 8.16 → 8.36 | +0.19 (±0.63) | 4 → 3 |
+| Call Center | 6.56 → 7.63 | +1.06 (±0.79) | 17 → 7 | 7.24 → 7.93 | +0.69 (±0.89) | 10 → 5 |
+| **All** | 7.76 → 8.54 | +0.78 (±0.22) | 89 → 37 | 7.92 → 8.47 | +0.55 (±0.25) | 61 → 31 |
+
+Regression read: no mode is down with its interval excluding 0. Lecture is flat on both sets (the claim verifier
+does not run there) and its hard fails went 3 → 4 and 2 → 3; the flags are in the hard-fail tables below
+(`astra/paired.mjs`).
 
 ### Hard-fail categories, dev (kept build)
 
@@ -151,11 +186,11 @@ Paired on 270 common items, fix12 (holdout) − aq2-holdout-fix6: +0.41 (±0.23)
 | Recruiting | 1 | unsupported_personal_claim 1, important_question_unanswered 1 |
 | Team Meet | 1 | unsupported_personal_claim 1 |
 | Looking for work | 7 | unsupported_personal_claim 6, fabricated_behavioral_story 2, important_question_unanswered 1, major_factual_error 1 |
-| Lecture | 5 | major_reasoning_error 2, arithmetic_error 2, unsupported_personal_claim 1, major_factual_error 1, missed_available_evidence 1 |
+| Lecture | 4 | major_reasoning_error 1, unsupported_personal_claim 1, arithmetic_error 1, major_factual_error 1, missed_available_evidence 1 |
 | Technical interview | 9 | major_reasoning_error 4, major_factual_error 3, unsupported_personal_claim 3, missed_available_evidence 2, important_question_unanswered 1, unsupported_company_claim 1 |
 | Seminar | 1 | unsupported_personal_claim 1, insufficient_answer 1 |
 | Call Center | 7 | unsupported_policy_claim 4, important_question_unanswered 3, unsupported_company_claim 2, reference_conflict_ignored 1, unsafe_commitment 1 |
-| **All** | 38 | unsupported_personal_claim 14, major_reasoning_error 8, important_question_unanswered 7, major_factual_error 6, unsupported_policy_claim 5, missed_available_evidence 5, unsupported_company_claim 5, arithmetic_error 4, reference_conflict_ignored 3, unsafe_commitment 2, fabricated_behavioral_story 2, insufficient_answer 1 |
+| **All** | 37 | unsupported_personal_claim 14, major_reasoning_error 7, important_question_unanswered 7, major_factual_error 6, unsupported_policy_claim 5, missed_available_evidence 5, unsupported_company_claim 5, arithmetic_error 3, reference_conflict_ignored 3, unsafe_commitment 2, fabricated_behavioral_story 2, insufficient_answer 1 |
 
 ### Hard-fail categories, holdout (kept build)
 
@@ -163,14 +198,14 @@ Paired on 270 common items, fix12 (holdout) − aq2-holdout-fix6: +0.41 (±0.23)
 |---|---:|---|
 | General | 1 | unsupported_personal_claim 1 |
 | Sales | 3 | unsupported_company_claim 2, fabricated_meeting_history 1 |
-| Recruiting | 2 | unsupported_company_claim 1, unsupported_personal_claim 1, ai_epistemic_leak 1 |
-| Team Meet | 4 | unsupported_personal_claim 2, unsupported_company_claim 2 |
+| Recruiting | 2 | unsupported_personal_claim 1, ai_epistemic_leak 1, unsupported_company_claim 1 |
+| Team Meet | 4 | unsupported_company_claim 2, unsupported_personal_claim 2 |
 | Looking for work | 7 | unsupported_personal_claim 4, important_question_unanswered 2, major_reasoning_error 2, role_confusion 1, coaching_instead_of_answer 1 |
-| Lecture | 3 | unsupported_personal_claim 2, major_factual_error 1, fabricated_behavioral_story 1 |
+| Lecture | 3 | unsupported_personal_claim 2, fabricated_behavioral_story 1, major_reasoning_error 1, arithmetic_error 1 |
 | Technical interview | 3 | major_reasoning_error 2, code_incorrect 1 |
 | Seminar | 3 | unsupported_research_claim 3, major_reasoning_error 1 |
 | Call Center | 5 | unsupported_policy_claim 5, unsafe_commitment 1, reference_conflict_ignored 1 |
-| **All** | 31 | unsupported_personal_claim 10, unsupported_company_claim 5, major_reasoning_error 5, unsupported_policy_claim 5, unsupported_research_claim 3, important_question_unanswered 2, fabricated_meeting_history 1, ai_epistemic_leak 1, role_confusion 1, coaching_instead_of_answer 1, major_factual_error 1, fabricated_behavioral_story 1, code_incorrect 1, unsafe_commitment 1, reference_conflict_ignored 1 |
+| **All** | 31 | unsupported_personal_claim 10, major_reasoning_error 6, unsupported_company_claim 5, unsupported_policy_claim 5, unsupported_research_claim 3, important_question_unanswered 2, fabricated_meeting_history 1, ai_epistemic_leak 1, role_confusion 1, coaching_instead_of_answer 1, fabricated_behavioral_story 1, code_incorrect 1, unsafe_commitment 1, reference_conflict_ignored 1, arithmetic_error 1 |
 
 ## 4. Objective validators, time to first word and total latency
 
@@ -178,16 +213,16 @@ Paired on 270 common items, fix12 (holdout) − aq2-holdout-fix6: +0.41 (±0.23)
 |---|---:|---:|---:|---:|
 | Starting `aq2-dev-cur` | 360 | 5/9 (fails: DSALES-031, DSALES-026, DTECH-022, DTECH-023) | 990 / 2043 | 1498 / 2834 |
 | Kept `aq2-dev-fix6` | 360 | 8/9 (fails: DTEAM-034) | 854 / 1386 | 1555 / 2761 |
-| Final `fix12 (dev)` | 360 | 8/9 (fails: DTEAM-034) | 867 / 1593 | 2007 / 3413 |
+| Final `fix13 (dev)` | 360 | 8/9 (fails: DTEAM-034) | 875 / 1593 | 2023 / 3413 |
 | Starting `aq-holdout-fix2` | 270 | 2/2 | 965 / 1650 | 1438 / 2615 |
 | Kept `aq2-holdout-fix6` | 270 | 2/2 | 779 / 1363 | 1485 / 2811 |
-| Final `fix12 (holdout)` | 270 | 2/2 | 868 / 1644 | 2143 / 3665 |
+| Final `fix13 (holdout)` | 270 | 2/2 | 871 / 1644 | 2138 / 3665 |
 
 ## 5. Claim verifier: invocation rate and replacement rate
 
 Invocation = the turn passes the verifier's gate (mode, surface, question, draft). Replacement = the shown text differs from the streamed draft.
 
-**fix12 (dev)**
+**fix13 (dev)**
 
 | Mode | turns | verifier runs | text replaced | spoken turns replaced |
 |---|---:|---:|---:|---:|
@@ -195,14 +230,14 @@ Invocation = the turn passes the verifier's gate (mode, surface, question, draft
 | Sales | 40 | 40 (100%) | 14 (35%) | 12/28 |
 | Recruiting | 40 | 40 (100%) | 11 (28%) | 8/27 |
 | Team Meet | 40 | 40 (100%) | 16 (40%) | 15/28 |
-| Looking for work | 40 | 40 (100%) | 27 (68%) | 24/32 |
+| Looking for work | 40 | 40 (100%) | 29 (73%) | 24/32 |
 | Lecture | 40 | 0 (0%) | 0 (0%) | 0/20 |
 | Technical interview | 40 | 8 (20%) | 4 (10%) | 4/29 |
 | Seminar | 40 | 40 (100%) | 8 (20%) | 5/32 |
 | Call Center | 40 | 40 (100%) | 21 (53%) | 15/30 |
-| **All** | 360 | 267 (74%) | 109 (30%) | 91/245 |
+| **All** | 360 | 267 (74%) | 111 (31%) | 91/245 |
 
-**fix12 (holdout)**
+**fix13 (holdout)**
 
 | Mode | turns | verifier runs | text replaced | spoken turns replaced |
 |---|---:|---:|---:|---:|
@@ -217,11 +252,9 @@ Invocation = the turn passes the verifier's gate (mode, surface, question, draft
 | Call Center | 30 | 30 (100%) | 13 (43%) | 9/23 |
 | **All** | 270 | 203 (75%) | 66 (24%) | 52/189 |
 
-
-
 ## 6. Latency impact in one line
 
-Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the median; the verifier runs after the stream). Total time to the settled answer: dev 1555 → 2007 ms (+0.45 s), holdout 1485 → 2143 ms (+0.66 s) at the median; p95 2761 → 3413 and 2811 → 3665 ms. The verifier passes its gate on 74–75% of turns and replaces the shown text on 30% (dev) / 24% (holdout); on spoken turns 91 of 245 and 52 of 189.
+Time to first word: unchanged (against fix6: dev 854 → 875 ms, holdout 779 → 871 ms at the median; against main at the start it is faster, 990 → 875 and 965 → 871 ms; the verifier runs after the stream). Total time to the settled answer: dev 1555 → 2023 ms (+0.47 s), holdout 1485 → 2138 ms (+0.65 s) at the median against fix6, and 1498 → 2023 (+0.53 s) and 1438 → 2138 ms (+0.70 s) against main at the start; p95 2761 → 3413 and 2811 → 3665 ms. The verifier passes its gate on 74–75% of turns and replaces the shown text on 31% (dev) / 24% (holdout); on spoken turns 91 of 245 and 52 of 189.
 
 ## 7. The 20 worst remaining dev answers (kept build)
 
@@ -232,14 +265,6 @@ Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the
 > A: The notice window doesn't change the rent number. The lease caps any renewal increase at 3%, and 3% of my current rent is two thousand two hundred sixty-five, not two thousand two fifty. So let's settle the increase first, and then we can talk about whether I'm renewing.
 
 *Judge:* Instead of addressing the notice dispute, it repeats incorrect arithmetic and treats a cap as an exact required price, while ignoring conflicting notice periods, end dates, and rent figures.
-
-**DLEC-028** — Lecture — 4.0 — arithmetic_error, major_reasoning_error
-
-> Q: another one, different numbers
->
-> A: Same method, new numbers. Take [_, 8, 3, 9, 5, 1, 7, 2], n = 8, so start at floor(8/2) = 4. Sift-down(4): 5 vs child 2 (i=8). Swap. Array: [_, 8, 3, 9, 2, 1, 7, 5]. Sift-down(3): 9 vs children 1 (i=6) and 7 (i=7). Swap with 1. Array: [_, 8, 3, 1, 2, 9, 7, 5]. Sift-down(2): 3 vs children 2 (i=4) and 9 (i=5). Swap with 2. Array: [_, 8, 2, 1, 3, 9, 7, 5]. Sift-down(1): 8 vs children 2 (i=2) and 1 (i=3). Swap with 1, the
-
-*Judge:* The array has seven keys, not eight. The trace invents index 8, uses incorrect child indices, follows the wrong subtree, and produces a final array that violates min-heap order. The five-swap gist is also wrong.
 
 **DGEN-012** — General — 4.0 — unsupported_policy_claim
 
@@ -321,14 +346,6 @@ Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the
 
 *Judge:* The final elasticity and classification are correct, but both percentage changes have the wrong signs for the requested reversal. This makes the worked explanation mathematically misleading despite its correct conclusion.
 
-**DTECH-005** — Technical interview — 4.0 — major_factual_error
-
-> Q: Here's a quick one. Someone wrote a Java method to check if two strings are anagrams. It turns both into char arrays, sorts both with Arrays.sort, and then returns first dot equals second. It returns false even for liste
->
-> A: The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `first` and `second` are still the original unsorted arrays. Comparing them with `.equals` on arrays is also reference equality, not content equality, so it returns false even when the contents match. Here's the fix: ```java boolean isAnagram(String a, String b) { if (a.length() != b.length()) return false; char[] first = a.toCharArray(
-
-*Judge:* The opening falsely claims the arrays remain unsorted because Arrays.sort returns void, contradicting Java's in-place behavior and the final explanation. The actual equality diagnosis and supplied code are correct.
-
 **DLEC-023** — Lecture — 4.0 — major_factual_error, missed_available_evidence
 
 > Q: the handout says the coffee cart is unit elastic at -1.00 but I'm pretty sure she said elastic in lecture. which one is right, what should I write on the midterm, and why would they come out different?
@@ -336,6 +353,14 @@ Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the
 > A: Write elastic. The handout's own classification line says that for this course, unit elastic counts as elastic, and the coffee cart example lands at E = -1.00, so it's elastic by that rule. That's also why it sounds like a contradiction: -1.00 is the boundary value, and the handout is telling you to file it on the elastic side rather than treat it as its own category. They come out different because "unit elastic" is
 
 *Judge:* The exam label follows the handout, but the answer wrongly endorses identical revenue implications for unit-elastic and elastic demand. It also omits the method distinction: original-value elasticity is -1.00; midpoint elasticity is approximately -1.22.
+
+**DTECH-005** — Technical interview — 4.0 — major_factual_error
+
+> Q: Here's a quick one. Someone wrote a Java method to check if two strings are anagrams. It turns both into char arrays, sorts both with Arrays.sort, and then returns first dot equals second. It returns false even for liste
+>
+> A: The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `first` and `second` are still the original unsorted arrays. Comparing them with `.equals` on arrays is also reference equality, not content equality, so it returns false even when the contents match. Here's the fix: ```java boolean isAnagram(String a, String b) { if (a.length() != b.length()) return false; char[] first = a.toCharArray(
+
+*Judge:* The opening falsely claims the arrays remain unsorted because Arrays.sort returns void, contradicting Java's in-place behavior and the final explanation. The actual equality diagnosis and supplied code are correct.
 
 **DTECH-007** — Technical interview — 4.0 — major_reasoning_error
 
@@ -385,6 +410,14 @@ Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the
 
 *Judge:* The claimed O(log n) per insertion ignores merging k existing intervals. With ordinary balanced-tree deletions this takes O((k+1) log n); a logarithmic amortized bound needs explicit qualification.
 
+**DCC-006** — Call Center — 4.0 — unsupported_policy_claim, important_question_unanswered
+
+> Q: I'm calling for my mom, it's her account, she's right here but she can't really hear on the phone. Can you reset her password and send the link to my email instead?
+>
+> A: I can help with the reset. Since she's right there, can she confirm her name, date of birth, and the email on the account for me?
+
+*Judge:* Invents a name/date-of-birth/email verification procedure without supporting policy and leaves the central request to send the reset link to a third party’s email unanswered.
+
 ## 8. Final regression set and supplementary sets
 
 * Final set (1,038 items, objective read, aggregate only, not judged) — kept build `aq2-final-fix13`, one pass, no
@@ -407,28 +440,28 @@ Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the
   has no verifier). Seminar: 5 of 5 (fix11 3 of 5, fix6 4 of 5).
 * supp-quant (32), arithmetic validators: main 25 of 32; later builds 28–31 of 32 (fix6 31, fix10 29, fix12 30) —
   the same code path since I2, the spread is sampling.
-* Not judged under charter v2 because the account quota ran out at 12:26 UTC: supp-behavior, the blind A/B fix6 vs
-  fix11, fix10, 2 dev Seminar rows of fix12, and about 45% of the starting baseline (dev 159 of 360, holdout 68 of
-  270 missing). They are queued, in that priority, in the judge chain armed for the 02:00 UTC batch.
+* Judged on 2026-10-02: the 2 dev Seminar rows of fix12 and the whole starting baseline (dev 159, holdout 68 rows
+  that were missing). Still in the queue behind the decisions, in this order: the claim pass on its edited rows
+  (draft against shown), supp-behavior, the candidates' app rows (reported only), the blind A/B fix6 vs fix11, fix10.
 
 ## 9. Remaining architectural weaknesses (stop condition B)
 
 **How far failures explain the gap** (`astra/headroom.mjs`, kept build, from the existing judgments). Each answer is
 put in one class by its flags; "if fixed" is the set's mean if that class scored like the clean answers.
 
-| | dev (358) | holdout (270) |
+| | dev (360) | holdout (270) |
 |---|---:|---:|
-| mean | 8.49 | 8.43 |
-| clean answers (no flagged failure): share, mean | 78%, 9.23 | 78%, 9.23 |
-| clean answers at 9.5 or above | 128 of 280 | 95 of 210 |
-| if the generator's own errors were fixed (item 2) | 8.70 | 8.57 |
-| if unsupported company / policy / research claims were (item 4) | 8.63 | 8.69 |
-| if "no stored answer" answers were (item 1) | 8.82 | 8.74 |
-| if missed-evidence answers were (item 5) | 8.53 | 8.53 |
+| mean | 8.54 | 8.47 |
+| clean answers (no flagged failure): share, mean | 79%, 9.28 | 78%, 9.26 |
+| clean answers at 9.5 or above | 132 of 283 | 99 of 211 |
+| if the generator's own errors were fixed (item 2) | 8.75 | 8.61 |
+| if unsupported company / policy / research claims were (item 4) | 8.69 | 8.73 |
+| if "no stored answer" answers were (item 1) | 8.88 | 8.76 |
+| if missed-evidence answers were (item 5) | 8.59 | 8.57 |
 
-Clean mean per mode (dev / holdout): General 9.21 / 9.28 · Sales 8.83 / 9.10 · Recruiting 9.41 / 9.27 · Team Meet
-9.35 / 9.40 · Looking for work 9.20 / 9.19 · Lecture 9.47 / 9.41 · Technical interview 9.55 / 9.26 · Seminar 9.37 /
-9.21 · Call Center 8.54 / 8.94. That is the ceiling of fixing failures. What the judge takes off a clean answer is
+Clean mean per mode (dev / holdout): General 9.24 / 9.33 · Sales 9.00 / 9.10 · Recruiting 9.41 / 9.27 · Team Meet
+9.39 / 9.44 · Looking for work 9.25 / 9.19 · Lecture 9.53 / 9.49 · Technical interview 9.55 / 9.26 · Seminar 9.42 /
+9.30 · Call Center 8.54 / 8.94. That is the ceiling of fixing failures. What the judge takes off a clean answer is
 intent fulfilment and direct usefulness (7.5–7.8 on the answers under 9.5, in every mode; correctness and grounding
 are 9.0–9.3): right and grounded, but not fully what was asked. Its suggested improvements are item-specific; the one
 rule-shaped pattern among them, refinement follow-ups, is fixed in I26.
@@ -445,9 +478,10 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
 2. *(measured after this list was written)* **The generator runs with its reasoning switched off on every turn**
    (`thinking: disabled`, for a fast first word). With reasoning on at low effort the complexity question every
    build got wrong is right in 4 of 5 samples (0 of 5 off). Cost, measured with streaming on 30 Technical interview
-   and Lecture prompts: first answer token 0.78 s → 2.22 s at the median, p95 1.0 s → 6.6 s. The judged comparison
-   (80 rows each way) is queued for the 02:00 UTC batch. If it is large, reasoning on for TYPED Technical interview
-   and Lecture turns is the cheapest fix for item 2 — a routing decision, because of the delay.
+   and Lecture prompts: first answer token 0.78 s → 2.22 s at the median, p95 1.0 s → 6.6 s. Judged on 2026-10-02
+   (section 0): on typed turns only it did not clear its rule (dev +0.18 ±0.25); on every turn it reads +0.45
+   (±0.42) on dev and +0.42 (±0.61) on holdout with hard fails 14 → 9 and 12 → 6. It is the cheapest lever for
+   item 2 and a routing decision, because of the delay.
 2. **The generator's own reasoning errors** (arithmetic, complexity, a wrong trace): 15 of the 38 dev hard fails
    and 7 of the 31 on holdout, mostly Technical interview and Lecture. A second look by the same model did not find them and a larger
    model of the same family scored no better. Proposal: code execution that gates the answer (the module exists but
@@ -459,20 +493,25 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
    the answer as "generic procedure — confirm" in the UI instead of in the words.
 5. **A conflict inside the material** is found by the list step and surfaced about half the time. Proposal: carry
    the conflict out of the pass as its own chip next to the answer.
-6. **Measurement.** Per-mode differences under about ±0.5 on 30–40 items are not results. The judge stopped mid-batch on
-   `insufficient_user_quota` ("user quota is not enough") — the AgentRouter account's own quota, a different error
-   from the 402 that ends a ration batch. Whether it refreshes with the next batch is not known; the 02:00 UTC chain
-   is armed and simply waits if it does not. Retrieval
-   was lexical in every run (no embedder weights in the worktrees), on both sides of every comparison.
+6. **Measurement.** Per-mode differences under about ±0.5 on 30–40 items are not results: on 2026-10-02 four
+   changes each read +0.15 to +0.42 with fewer hard fails, and none could be told from zero. A change of that size
+   needs about four times the items per mode, or several samples per item, to be decided either way. The judge is
+   rationed (two batches a day, one shared pool) and was unavailable from 2026-10-01 12:26 UTC to 2026-10-02
+   11:02 UTC. Retrieval was lexical in every run (no embedder weights in the worktrees), on both sides of every
+   comparison.
 
 ## 10. Recommended next step
 
-1. Decide the swap behaviour (item 3) and whether +0.41 on holdout is worth it; then review and land
-   `fix/aq-astra-i5` (`f0c3a263`). Kill switch: `NATIVELY_CLAIM_VERIFIER=0`.
-2. Build the personal answer bank (item 1) — the only change on the list that moves Looking for work toward 9.
-3. Make code verification gate the coding answer (item 2).
-4. Check the AgentRouter account quota: if the 02:00 UTC chain cannot start, it needs topping up before the rest
-   of the starting baseline (and supp-behavior, the A/B, fix10) can be judged.
+1. Decide the swap behaviour (item 3) and whether +0.55 on holdout against the start (+0.45 against fix6) is worth
+   it; then review and land `fix/aq-astra-i5` (`e000db4a`). Kill switch: `NATIVELY_CLAIM_VERIFIER=0`.
+2. Decide whether Technical interview and Lecture answers may start about a second later in exchange for the
+   generator reasoning first (section 0). If yes for typed turns only, `fix/aq-astra-i7` is built and ran clean in
+   the app; its code comment and commit message still cite the withdrawn judge and must be rewritten first. If yes
+   for heard turns too, that is a one-line gate change and needs its own app run.
+3. Build the personal answer bank (item 1) — the only change on the list that moves Looking for work toward 9.
+4. Make code verification gate the coding answer (item 2).
+5. Before another round of small changes: a larger dev set per mode, or several samples per item, so that a gain of
+   +0.3 can be decided (item 6). Without it the loop cannot tell such a change from none.
 
 ## 11. Completion report (project format)
 
@@ -495,7 +534,7 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
 * Existing platform implementations reviewed: none are touched; the two call sites are shared code.
 * Affected flows: live "what to answer" and typed chat in the seven verified modes. Impact radius: the two call
   sites and the renderer's existing replace-after-stream handler (unchanged).
-* Potential regressions: the text swap after streaming and +0.45–0.65 s to the settled answer; deflection on
+* Potential regressions: the text swap after streaming and +0.5–0.7 s to the settled answer; deflection on
   questions with no stored answer (section 9).
 
 ### Validation
@@ -515,5 +554,7 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
 `node astra/final-report.mjs --suffix -c2 …` · `node tools/iterations-qa.mjs`.
 
 ### Remaining risks
-Windows not executed; packaged build not validated; holdout confirms the bundle, not each part; the starting
-baseline under charter v2 is partial; the final regression run for fix12 is not finished at the time of writing.
+Windows not executed; packaged build not validated; holdout confirms the bundle, not each part; the final
+regression set (1,038 items) was read objectively and is not judged; the unit-test line above is fix12's
+(`f0c3a263`) — fix13's own run (`e000db4a`) is in `docs/ITERATIONS-ASTRA.md` under I26, with one failing test that
+is described there. Nothing from the 2026-10-02 round is in the kept build.

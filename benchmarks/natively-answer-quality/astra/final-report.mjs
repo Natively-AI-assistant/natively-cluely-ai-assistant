@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadRun } from './judge.mjs';
 import { answerOf } from './envelope.mjs';
 import { validate } from '../validators/index.mjs';
+import { readJsonl } from './store.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -24,7 +25,7 @@ const NAME = { general: 'General', sales: 'Sales', recruiting: 'Recruiting', 'te
 const judged = (set, run) => {
   const f = path.join(HERE, 'out', `${set}${sfx}`, `${run}.jsonl`);
   const last = {};
-  if (fs.existsSync(f)) for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l) continue; const j = JSON.parse(l); if (j.ok && (j.repeat ?? 0) === 0) last[j.benchmark_id] = j; }
+  for (const j of readJsonl(f)) if (j.ok && (j.repeat ?? 0) === 0) last[j.benchmark_id] = j;
   return last;
 };
 const mean = (x) => (x.length ? x.reduce((a, b) => a + b, 0) / x.length : NaN);
