@@ -4,7 +4,7 @@ Status 2026-10-01 14:55 UTC. Generator: deepseek-flash. Judge: gpt-6-astra throu
 `c725615a54f6` (claim kinds), calibration 25 of 25. Every score in this report is under charter v2; nothing from
 charter v1 is mixed in. Holdout is reported in aggregate only.
 
-## 0. Status on 2026-10-02 05:20 UTC — what is waiting, and on what
+## 0. Status on 2026-10-02 05:14 UTC — what is waiting, and on what
 
 Nothing in sections 1–11 has changed since 2026-10-01 14:55 UTC: no new gpt-6-astra score exists. The judge has not
 answered since 2026-10-01 12:26 UTC. There are now two AgentRouter keys with account quota (`AGENTROUTER_API_KEY`,
