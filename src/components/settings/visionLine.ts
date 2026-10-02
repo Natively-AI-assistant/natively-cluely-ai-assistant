@@ -39,6 +39,10 @@ export function visionAnswerInForce(state: VisionModelState): boolean {
  * afterwards is a newer one (the model was picked and tested in the background).
  * Without that the line went on saying "Could not test just now" over an answer
  * it now had.
+ *
+ * Not covered: a model the provider's own list answers for keeps that source
+ * after a passed test, so a test that settles while this window is not looking
+ * (no "Checking…" seen) leaves the note up until the row is clicked again.
  */
 export function visionStatesShown(
     states: Record<string, VisionModelState | null>,
@@ -51,4 +55,23 @@ export function visionStatesShown(
         if (s && !s.checking && s.auto.source !== 'test') out[id] = { ...s, inconclusive: true };
     }
     return out;
+}
+
+/**
+ * The same rule, for the note itself: which ids are still "could not finish"
+ * after main's answers were read again. Laying the note over the states only
+ * hid it — a tested answer that later stopped applying (a self-hosted
+ * provider's address changed) brought the old note back. Returns the same set
+ * when nothing is dropped, so a state setter can bail out.
+ */
+export function visionNotesKept(
+    inconclusive: ReadonlySet<string>,
+    states: Record<string, VisionModelState | null>,
+): ReadonlySet<string> {
+    let kept: Set<string> | null = null;
+    for (const id of inconclusive) {
+        const s = states[id];
+        if (s && (s.checking || s.auto.source === 'test')) (kept ??= new Set(inconclusive)).delete(id);
+    }
+    return kept ?? inconclusive;
 }

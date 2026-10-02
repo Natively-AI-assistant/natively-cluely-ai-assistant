@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import type { VisionModelState } from '../../types/electron';
-import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown } from './visionLine';
+import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown, visionNotesKept } from './visionLine';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, ImageOff, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
@@ -1725,7 +1725,11 @@ export function useVisionStates(ids: readonly string[], active: boolean) {
         const mine = ++seq.current;
         try {
             const result = await window.electronAPI?.getVisionModelStates?.(key ? key.split('\n') : []);
-            if (mine === seq.current && result?.states) setStates(result.states);
+            if (mine === seq.current && result?.states) {
+                const fresh = result.states;
+                setStates(fresh);
+                setInconclusive(prev => visionNotesKept(prev, fresh));
+            }
         } catch { /* the rows simply show no control */ }
     }, [key]);
     useEffect(() => {

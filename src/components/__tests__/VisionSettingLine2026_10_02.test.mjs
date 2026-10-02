@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown } from '../settings/visionLine.ts';
+import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown, visionNotesKept } from '../settings/visionLine.ts';
 import { ES_GENERATED } from '../../i18n.es.generated.ts';
 import { RU_GENERATED } from '../../i18n.ru.generated.ts';
 import { RU_GENERATED2 } from '../../i18n.ru.generated2.ts';
@@ -120,9 +120,21 @@ describe('a test that could not finish', () => {
         assert.equal(visionStatesShown({}, noted).m, undefined);
     });
 
-    test('the list uses it', () => {
+    // Hiding the note is not enough: a tested answer that later stopped applying
+    // (a self-hosted provider's address changed) would bring the old note back.
+    test('the note is dropped for good once a test runs again or settles', () => {
+        const both = new Set(['m', 'n']);
+        assert.deepEqual([...visionNotesKept(both, { m: state(auto('yes', 'test')), n: state(auto('unknown', null)) })], ['n']);
+        assert.deepEqual([...visionNotesKept(both, { m: state({ ...auto('unknown', null), checking: true }), n: state(auto('no', 'provider')) })], ['n']);
+        assert.equal(visionNotesKept(both, { m: state(auto('unknown', null)), n: state(auto('yes', 'names')) }), both);   // same set: nothing to re-render
+        assert.equal(visionNotesKept(both, { m: null }), both);       // a row without a control, a row not in this read
+        assert.equal(both.size, 2);                                    // the set it was given is not written to
+    });
+
+    test('the list uses both', () => {
         const src = readFileSync(join(here, '..', 'settings', 'AIProvidersSettings.tsx'), 'utf8');
         assert.match(src, /const shown = useMemo\(\(\) => visionStatesShown\(states, inconclusive\), \[states, inconclusive\]\);/);
+        assert.match(src, /if \(mine === seq\.current && result\?\.states\) \{\s*const fresh = result\.states;\s*setStates\(fresh\);\s*setInconclusive\(prev => visionNotesKept\(prev, fresh\)\);/);
     });
 });
 
