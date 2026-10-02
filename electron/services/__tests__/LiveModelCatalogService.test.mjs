@@ -122,4 +122,56 @@ describe('LiveModelCatalogService', () => {
     // Preserves existing cache
     assert.deepEqual(mockCm.getCloudFetchedModels('openai'), oldModels);
   });
+
+  test('credential rotation does not reuse old in-flight request and discards old results', async () => {
+    const mockCm = new MockCredentialsManager();
+    mockCm.credentials.apiKeys.openai = 'old-key';
+
+    let resolveOldFetch;
+    let oldFetchStarted = false;
+    let newFetchStarted = false;
+
+    const mockFetcher = async (provider, apiKey) => {
+      if (apiKey === 'old-key') {
+        oldFetchStarted = true;
+        return new Promise((resolve) => {
+          resolveOldFetch = () => resolve([{ id: 'old-model', label: 'Old Model' }]);
+        });
+      }
+      if (apiKey === 'new-key') {
+        newFetchStarted = true;
+        return [{ id: 'new-model', label: 'New Model' }];
+      }
+      return [];
+    };
+
+    const service = new LiveModelCatalogService({
+      credentialsManager: mockCm,
+      fetcher: mockFetcher,
+    });
+
+    // Start fetch with old-key
+    const oldPromise = service.refreshProvider('openai', true);
+    assert.equal(oldFetchStarted, true);
+
+    // User updates key to new-key
+    mockCm.credentials.apiKeys.openai = 'new-key';
+
+    // Forced refresh for new key should NOT reuse old-key's in-flight request
+    const newPromise = service.refreshProvider('openai', true);
+    assert.equal(newFetchStarted, true);
+
+    const newResult = await newPromise;
+    assert.equal(newResult.success, true);
+    assert.equal(newResult.models[0].id, 'new-model');
+    assert.equal(mockCm.getCloudFetchedModels('openai')[0].id, 'new-model');
+
+    // Now complete the old fetch
+    resolveOldFetch();
+    const oldResult = await oldPromise;
+    // Old fetch must fail/abort writing because credentials changed
+    assert.equal(oldResult.success, false);
+    // Crucial: Cache must still contain new-model, NOT overwritten by old-model
+    assert.equal(mockCm.getCloudFetchedModels('openai')[0].id, 'new-model');
+  });
 });

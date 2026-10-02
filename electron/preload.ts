@@ -262,6 +262,7 @@ interface ElectronAPI {
     hasAgentRouterKey?: boolean;
     disabledProviders?: string[];
     cloudEnabledModels?: Record<string, string[]>;
+    cloudFetchedModels?: Record<string, { id: string; label: string }[]>;
     hasNativelyKey: boolean;
     googleServiceAccountPath: string | null;
     sttProvider: string;

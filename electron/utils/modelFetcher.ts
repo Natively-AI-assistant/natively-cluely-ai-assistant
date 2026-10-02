@@ -243,7 +243,7 @@ async function fetchNvidiaNimModels(apiKey: string): Promise<ProviderModel[]> {
 export function filterOpenAIModels(models: any[]): ProviderModel[] {
     const excludePatterns = [
         'embedding', 'whisper', 'tts', 'dall-e', 'realtime', 'audio',
-        'babbage', 'davinci', 'moderation', 'canary'
+        'babbage', 'davinci', 'moderation', 'canary', 'instruct'
     ];
     const filtered = (models || []).filter((m: any) => {
         const id = (m?.id || '').toLowerCase();

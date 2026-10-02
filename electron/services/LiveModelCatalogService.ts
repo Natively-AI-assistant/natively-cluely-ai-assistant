@@ -32,6 +32,7 @@ export class LiveModelCatalogService {
     private fetcher: (provider: any, apiKey: string) => Promise<ProviderModel[]>;
     private onUpdated?: (provider: string, models: ProviderModel[]) => void;
     private inFlight = new Map<string, Promise<{ success: boolean; models: ProviderModel[]; error?: string }>>();
+    private inFlightKey = new Map<string, string>();
 
     constructor(options?: LiveModelCatalogOptions) {
         this.credentialsManager = options?.credentialsManager;
@@ -111,9 +112,10 @@ export class LiveModelCatalogService {
         const key = this.getApiKeyForProvider(provider)?.trim();
 
         if (!key) {
+            cm.setCloudFetchedModels?.(provider, [], 0);
             return {
                 success: false,
-                models: cm.getCloudFetchedModels?.(provider) || [],
+                models: [],
                 error: `No API key available for provider ${provider}`,
             };
         }
@@ -125,14 +127,25 @@ export class LiveModelCatalogService {
             };
         }
 
-        // Deduplicate in-flight requests for the same provider
-        if (this.inFlight.has(provider)) {
+        // Deduplicate in-flight requests for the same provider ONLY when not forcing and key matches
+        if (!force && this.inFlight.has(provider) && this.inFlightKey.get(provider) === key) {
             return this.inFlight.get(provider)!;
         }
 
         const task = (async () => {
             try {
                 const models = await this.fetcher(provider, key);
+
+                // Verify that credential hasn't rotated or cleared during the in-flight network call
+                const currentKey = this.getApiKeyForProvider(provider)?.trim();
+                if (currentKey !== key) {
+                    return {
+                        success: false,
+                        models: cm.getCloudFetchedModels?.(provider) || [],
+                        error: 'Credential changed while request was in-flight',
+                    };
+                }
+
                 if (Array.isArray(models) && models.length > 0) {
                     const formatted = models.map((m: any) => ({
                         id: m.id,
@@ -167,11 +180,15 @@ export class LiveModelCatalogService {
                     error: error?.message || 'Failed to refresh provider models',
                 };
             } finally {
-                this.inFlight.delete(provider);
+                if (this.inFlightKey.get(provider) === key) {
+                    this.inFlight.delete(provider);
+                    this.inFlightKey.delete(provider);
+                }
             }
         })();
 
         this.inFlight.set(provider, task);
+        this.inFlightKey.set(provider, key);
         return task;
     }
 
