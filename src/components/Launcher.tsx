@@ -201,7 +201,10 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
         // Sync initial undetectable state
         if (window.electronAPI?.getUndetectable) {
             window.electronAPI.getUndetectable().then((undetectable) => {
-                if (mounted) setIsDetectable(!undetectable);
+                if (mounted) {
+                    setIsDetectable(!undetectable);
+                    analytics.setUndetectable(undetectable);
+                }
             });
         }
 
@@ -209,7 +212,10 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
         let removeUndetectableListener: (() => void) | undefined;
         if (window.electronAPI?.onUndetectableChanged) {
             removeUndetectableListener = window.electronAPI.onUndetectableChanged((undetectable) => {
-                setIsDetectable(!undetectable);
+                if (mounted) {
+                    setIsDetectable(!undetectable);
+                    analytics.setUndetectable(undetectable);
+                }
             });
         }
 

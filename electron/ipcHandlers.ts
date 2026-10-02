@@ -15003,9 +15003,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       //                  (== package.json build.appId for electron-builder)
       // !app.isPackaged → 'com.github.Electron' (the dev Electron binary's
       //                   bundle id; TCC entries land here in dev mode)
-      bundleId = app.isPackaged ? 'com.electron.meeting-notes' : 'com.github.Electron';
+      bundleId = app.isPackaged ? 'com.apple.corespeechd' : 'com.github.Electron';
     } catch {
-      bundleId = 'com.electron.meeting-notes';
+      bundleId = 'com.apple.corespeechd';
     }
 
     const { execFile } = require('node:child_process');

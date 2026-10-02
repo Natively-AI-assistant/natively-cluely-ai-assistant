@@ -50,7 +50,12 @@ const crypto = require('crypto');
 const { notarytoolSubmitWithRetry, isTransientNetworkMessage } = require('./lib/notary-transient.cjs');
 const { stapleWithRetry } = require('./staple-with-retry');
 
-const VOLNAME = 'Natively';
+// DMG volume + file name base. MUST match the on-disk app identity so the DMG
+// (and its volume window) present the same disguised name as the .app inside it
+// (see scripts/disguise-name.cjs). The signed pipeline builds only the ZIP via
+// electron-builder (named from productName) and rebuilds the styled DMG here, so
+// VOLNAME and productName must agree or the artifact set desyncs.
+const VOLNAME = require('./disguise-name.cjs').darwin;
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'dmg-background.png');
 const VOLICON = path.resolve(__dirname, '..', 'assets', 'natively.icns');
 

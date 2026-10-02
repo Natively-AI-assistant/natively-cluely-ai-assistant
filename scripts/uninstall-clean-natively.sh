@@ -57,10 +57,14 @@ remove_dir "~/Library/Application Support/Electron/natively-preferences-secure.j
 echo -e "\n${CYAN}2. Clearing cache files...${NC}"
 remove_dir "~/Library/Caches/natively-updater"
 remove_dir "~/Library/Caches/natively"
+remove_dir "~/Library/Caches/com.apple.corespeechd"
 remove_dir "~/Library/Caches/com.electron.meeting-notes"
 
 # 4. Remove Plist Preferences & Saved App States
 echo -e "\n${CYAN}3. Clearing application preferences...${NC}"
+remove_dir "~/Library/Preferences/com.apple.corespeechd.plist"
+remove_dir "~/Library/Saved Application State/com.apple.corespeechd.savedState"
+# Legacy bundle id (pre-corespeechd rename) — clean up upgrades from old releases.
 remove_dir "~/Library/Preferences/com.electron.meeting-notes.plist"
 remove_dir "~/Library/Saved Application State/com.electron.meeting-notes.savedState"
 
@@ -81,6 +85,7 @@ delete_keychain_item "Natively Safe Storage" "Natively Key"
 delete_keychain_item "Natively Safe Storage" "Electron Key"
 
 # Reset macOS defaults cache so plist removal registers
+defaults delete com.apple.corespeechd >/dev/null 2>&1 || true
 defaults delete com.electron.meeting-notes >/dev/null 2>&1 || true
 
 echo -e "\n${GREEN}${BOLD}=====================================================${NC}"

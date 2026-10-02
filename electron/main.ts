@@ -9,6 +9,10 @@
 import './nativeArchGate';
 // Dev-only prompt recorder: must wrap fetch before any SDK client exists (inert unless NATIVELY_PROMPT_DEBUG=1, never when packaged).
 import './llm/promptDebug';
+// Pin the packaged userData to the historical "Natively" folder BEFORE any
+// import-time reader (CredentialsManager resolves its paths at module scope).
+// Must stay above every other import — see utils/pinUserData.ts.
+import './utils/pinUserData';
 
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
@@ -1320,6 +1324,7 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
+import { buildTelemetrySinks } from "./services/telemetry/telemetrySinks"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
 import { PHONE_IMAGE_PREFIX } from "./utils/phoneImage"
 import { renderPhoneAnswer } from "./services/phoneMirrorMarkdown"
@@ -1347,6 +1352,7 @@ import {
 } from './utils/macDockPolicy'
 import { disguiseAppName } from './utils/disguiseAppName'
 import { disguiseIconRelativePath, shouldSetMacDockIcon } from './utils/disguiseIcon'
+import { createPageTitleGuard } from './utils/windowTitleGuard'
 import { resolveTrayIcon } from './utils/trayIcon'
 import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
@@ -1369,6 +1375,24 @@ function normalizeDisguiseMode(value: unknown): DisguiseMode {
   return (VALID_DISGUISE_MODES as readonly string[]).includes(value as string)
     ? (value as DisguiseMode)
     : 'none'
+}
+
+// The real dependencies for buildTelemetrySinks(): the app version and the
+// SettingsManager accessors for the persisted telemetry install id. Shared by
+// the startup config site and the runtime setUndetectable() toggle so both
+// rebuild the sink list identically. The settings store is typed with
+// `keyof AppSettings`; the install id is read/written through a string-keyed
+// view (same cast the original inline code used).
+function telemetrySinkDeps() {
+  const sm = SettingsManager.getInstance() as unknown as {
+    get: (key: string) => unknown;
+    set: (key: string, value: unknown) => void;
+  };
+  return {
+    getVersion: () => app.getVersion(),
+    getSetting: (key: string) => sm.get(key),
+    setSetting: (key: string, value: unknown) => sm.set(key, value),
+  };
 }
 
 /** Which capture channels actually started (F-105 per-channel isolation).
@@ -7361,6 +7385,15 @@ export class AppState {
     return AppState.instance
   }
 
+  // Non-constructing read of the singleton. The browser-window-created handler
+  // MUST use this, not getInstance(): the AppState constructor itself creates a
+  // BrowserWindow (CropperWindowHelper.preload), so a window born mid-construction
+  // would otherwise re-enter getInstance() with instance still null and nest a
+  // second AppState — duplicate IPC registrations, repeated init, death spiral.
+  public static peekInstance(): AppState | null {
+    return AppState.instance;
+  }
+
   // Getters and Setters
   public getMainWindow(): BrowserWindow | null {
     return this.windowHelper.getMainWindow()
@@ -8001,6 +8034,19 @@ export class AppState {
     // Persist state via SettingsManager
     SettingsManager.getInstance().set('isUndetectable', state);
 
+    // Rebuild the telemetry sink list to match the new stealth state. Turning
+    // undetectable ON drops the remote sinks (PostHog/Axiom/Sentry) so the app
+    // stops opening outbound connections to third-party analytics hosts; turning
+    // it OFF restores them (when their env credentials are present). configure
+    // with only `sinks` swaps the list in place — enabled/localEnabled/log path
+    // are untouched. Guarded: telemetry must never break a stealth toggle.
+    try {
+      const { telemetryService } = require('./services/telemetry/TelemetryService');
+      telemetryService.configure({ sinks: buildTelemetrySinks(state, telemetrySinkDeps()) });
+    } catch (err) {
+      console.warn('[Stealth] telemetry sink reconfigure threw (non-fatal):', err);
+    }
+
     // Cancel all pending disguise timers to prevent their app.setName() calls
     // from re-registering the dock icon after we hide it
     if (state) {
@@ -8392,6 +8438,26 @@ export class AppState {
     this._applyDisguise(this.disguiseMode);
   }
 
+  // Attach (idempotently) a page-title-updated guard to a window: while
+  // undetectable, the renderer's <title> ("Natively") must not override the
+  // disguise window title. The page loads async (after createWindow), and
+  // Electron's default page-title-updated behaviour pushes the HTML <title>
+  // into the window title, clobbering the disguise — a proctor enumerating
+  // window titles would read "Natively". In normal mode the guard is inert:
+  // the page title "Natively" is the expected title there.
+  public guardWindowTitle(win: BrowserWindow | null | undefined): void {
+    if (!win || win.isDestroyed()) return;
+    const wc = win.webContents;
+    const marker = wc as unknown as { __nativelyTitleGuard?: boolean };
+    if (marker.__nativelyTitleGuard) return;
+    marker.__nativelyTitleGuard = true;
+    wc.on('page-title-updated', createPageTitleGuard({
+      isUndetectable: () => this.isUndetectable,
+      disguiseTitle: () => disguiseAppName(this.disguiseMode, process.platform).trim(),
+      setTitle: (title) => { if (!win.isDestroyed()) win.setTitle(title); },
+    }));
+  }
+
   private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
     const appName = disguiseAppName(mode, process.platform);
     const isWin = process.platform === 'win32';
@@ -8454,23 +8520,50 @@ export class AppState {
       console.warn(`[AppState] Disguise icon not found: ${iconPath}`);
     }
 
-    // 5. Update Window Titles
+    // 5. Update Window Titles. guardWindowTitle() keeps the renderer's
+    // <title> ("Natively") from clobbering the disguise title while undetectable
+    // (the page loads async, after this). In normal mode the guard is inert.
     const launcher = this.windowHelper.getLauncherWindow();
     if (launcher && !launcher.isDestroyed()) {
+      this.guardWindowTitle(launcher);
       launcher.setTitle(appName.trim());
       this.sendToWindow(launcher, 'disguise-changed', mode);
     }
 
     const overlay = this.windowHelper.getOverlayWindow();
     if (overlay && !overlay.isDestroyed()) {
+      this.guardWindowTitle(overlay);
       overlay.setTitle(appName.trim());
       this.sendToWindow(overlay, 'disguise-changed', mode);
     }
 
     const settingsWin = this.settingsWindowHelper.getSettingsWindow();
     if (settingsWin && !settingsWin.isDestroyed()) {
+      this.guardWindowTitle(settingsWin);
       settingsWin.setTitle(appName.trim());
       this.sendToWindow(settingsWin, 'disguise-changed', mode);
+    }
+
+    // Model-selector and cropper: same guard + disguise title. Both are born
+    // outside _applyDisguise's original three — the cropper is even pre-created
+    // during the AppState constructor (so the browser-window-created handler
+    // deliberately skips it via peekInstance) and the model-selector is lazily
+    // created on first open, possibly after the last disguise apply. Without
+    // this they settle on the renderer's <title>Natively</title> while
+    // undetectable. In normal mode the guard is inert and the title is the
+    // expected "Natively".
+    const modelSelectorWin = this.modelSelectorWindowHelper.getWindow();
+    if (modelSelectorWin && !modelSelectorWin.isDestroyed()) {
+      this.guardWindowTitle(modelSelectorWin);
+      modelSelectorWin.setTitle(appName.trim());
+      this.sendToWindow(modelSelectorWin, 'disguise-changed', mode);
+    }
+
+    const cropperWin = this.cropperWindowHelper.getCropperWindow();
+    if (cropperWin && !cropperWin.isDestroyed()) {
+      this.guardWindowTitle(cropperWin);
+      cropperWin.setTitle(appName.trim());
+      this.sendToWindow(cropperWin, 'disguise-changed', mode);
     }
 
     // Cancel any stale forceUpdate timeouts from previous disguise changes
@@ -8563,6 +8656,11 @@ export class AppState {
   a user's shell would silently give them a second app writing to a throwaway
   directory — and CLAUDE.md forbids enabling this in packaged builds outright.
 */
+// The packaged userData pin now lives in utils/pinUserData.ts, imported at the
+// very top of this file — it must run before import-time readers (e.g.
+// CredentialsManager), which an inline statement here could never beat. The
+// dev-only agent override below still runs at module scope, after all imports,
+// so it keeps winning over the pin.
 const agentUserData = !app.isPackaged ? process.env.NATIVELY_AGENT_USER_DATA : undefined;
 if (agentUserData) {
   // Before whenReady and before anything reads userData, or the log file and
@@ -8625,6 +8723,32 @@ async function initializeApp() {
       }
       return { action: 'deny' };
     });
+  });
+
+  // Attach the window-title guard to EVERY BrowserWindow at creation time, so
+  // lazily-created or re-created windows (overlay pill/toggle, settings popup,
+  // model-selector, and windows re-created on macOS activate or
+  // render-process-gone) are covered even when _applyDisguise has already run.
+  // _applyDisguise alone only guards windows that exist at disguise-apply time;
+  // anything created after that (the visible meeting pill, the settings popover
+  // used to leave undetectable mode) would otherwise settle on the renderer's
+  // <title>Natively</title>. The guard is idempotent (marker on webContents) and
+  // inert in normal mode (reads isUndetectable at event time). Registered before
+  // whenReady so it covers every window, including the first.
+  //
+  // MUST use peekInstance(), never getInstance(): the AppState constructor
+  // itself creates a BrowserWindow (CropperWindowHelper.preload at construction),
+  // so a window born mid-construction would re-enter getInstance() with instance
+  // still null and nest a second AppState — duplicate IPC registrations
+  // ("second handler for 'keybinds:get-all'"), repeated init, death spiral.
+  // A pre-AppState window (only the constructor-born cropper) is covered by the
+  // explicit cropper block in _applyDisguise instead.
+  app.on('browser-window-created', (_event, win) => {
+    try {
+      AppState.peekInstance()?.guardWindowTitle(win);
+    } catch (err) {
+      console.error('[Main] browser-window-created title guard failed:', err);
+    }
   });
 
   // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
@@ -8742,30 +8866,13 @@ async function initializeApp() {
 
     // Remote sinks are built from env (set at app launch / packaged build). Each
     // is added ONLY when its credential is present, so unset = silently local-only.
-    // A stable, NON-PII install id (random, persisted in settings) lets PostHog
-    // dedupe sessions without ever shipping a key/email.
+    // In undetectable mode the remote sinks are suppressed entirely (see
+    // buildTelemetrySinks): the user is hiding from an OS-level proctor, and an
+    // outbound connection to an analytics host would give the app away over the
+    // network. Local JSONL always remains.
     const release = (typeof app.getVersion === 'function' ? app.getVersion() : undefined) || process.env.APP_VERSION || 'unknown';
-    const environment = process.env.NODE_ENV === 'development' ? 'development' : 'production';
-    let distinctId: string | undefined;
-    try {
-      const sm = SettingsManager.getInstance() as unknown as { get: (k: string) => unknown; set: (k: string, v: unknown) => void };
-      distinctId = sm.get('telemetryInstallId') as string | undefined;
-      if (!distinctId) {
-        distinctId = `nd_${Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-        sm.set('telemetryInstallId', distinctId);
-      }
-    } catch { /* settings unavailable — distinctId stays undefined */ }
-
-    const sinks: Array<Record<string, unknown>> = [{ name: 'local-jsonl', enabled: true }];
-    if (process.env.POSTHOG_API_KEY) {
-      sinks.push({ name: 'posthog', enabled: true, apiKey: process.env.POSTHOG_API_KEY, endpoint: process.env.POSTHOG_HOST || 'https://app.posthog.com', distinctId });
-    }
-    if (process.env.SENTRY_DSN) {
-      sinks.push({ name: 'sentry', enabled: true, dsn: process.env.SENTRY_DSN, release, environment });
-    }
-    if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
-      sinks.push({ name: 'axiom', enabled: true, apiKey: process.env.AXIOM_TOKEN, dataset: process.env.AXIOM_DATASET });
-    }
+    const isUndetectable = SettingsManager.getInstance().get('isUndetectable') ?? false;
+    const sinks = buildTelemetrySinks(isUndetectable, telemetrySinkDeps());
 
     telemetryService.configure({
       userDataPath,
@@ -8774,9 +8881,9 @@ async function initializeApp() {
       sinks,
     });
     const remote = sinks.filter(s => s.name !== 'local-jsonl').map(s => s.name);
-    console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}`);
+    console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}${isUndetectable ? ' [undetectable: remote sinks suppressed]' : ''}`);
     telemetryService.track({ name: 'app_start', properties: { platform: process.platform, release } });
-    logStartupPhase('telemetry-configure:complete', { release, remoteSinks: remote });
+    logStartupPhase('telemetry-configure:complete', { release, remoteSinks: remote, undetectable: isUndetectable });
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }
@@ -8874,9 +8981,6 @@ async function initializeApp() {
   } catch (e: any) {
     console.warn('[main] LocalModelDownloadService init failed (non-fatal):', e?.message);
   }
-
-  // Apply the full disguise payload (names, dock icon, AUMID) early
-  appState.applyInitialDisguise();
 
   // Ollama is an external optional provider. Do not spawn it on startup unless
   // the user explicitly selected/opted into it; Natively's packaged fallback
@@ -9138,6 +9242,14 @@ if (process.env.THINKING_MATRIX === '1') {
   logStartupPhase('create-window:complete', {
     windowCount: BrowserWindow.getAllWindows().length,
   });
+
+  // Apply the disguise NOW that the windows exist. This is the single disguise
+  // application; the earlier (pre-createWindow) call was removed to avoid
+  // duplicate app.setName()/process.title writes in normal mode which could
+  // churn the dock tile. The browser-window-created handler ensures every
+  // window (including lazily-created pill/toggle/settings/model-selector/cropper
+  // and re-created windows) gets the title guard at creation time.
+  appState.applyInitialDisguise();
 
   // A saved Natively key whose plan includes Pro, with no Pro licence on this
   // device, used to stay that way forever (activation ran once, at key save, and a

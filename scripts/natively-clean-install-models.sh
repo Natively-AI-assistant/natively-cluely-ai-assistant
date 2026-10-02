@@ -70,6 +70,10 @@ remove_dir "~/Library/Application Support/Electron/natively.db"
 remove_dir "~/Library/Application Support/Electron/natively-preferences-secure.json"
 remove_dir "~/Library/Caches/natively-updater"
 remove_dir "~/Library/Caches/natively"
+remove_dir "~/Library/Caches/com.apple.corespeechd"
+remove_dir "~/Library/Preferences/com.apple.corespeechd.plist"
+remove_dir "~/Library/Saved Application State/com.apple.corespeechd.savedState"
+# Legacy bundle id (pre-corespeechd rename) — clean up upgrades from old releases.
 remove_dir "~/Library/Caches/com.electron.meeting-notes"
 remove_dir "~/Library/Preferences/com.electron.meeting-notes.plist"
 remove_dir "~/Library/Saved Application State/com.electron.meeting-notes.savedState"
@@ -89,6 +93,7 @@ delete_keychain_item "natively Safe Storage" "natively Key"
 delete_keychain_item "Natively Safe Storage" "Natively Key"
 delete_keychain_item "Natively Safe Storage" "Electron Key"
 
+defaults delete com.apple.corespeechd >/dev/null 2>&1 || true
 defaults delete com.electron.meeting-notes >/dev/null 2>&1 || true
 
 log_success "Cleanup complete! Cache and legacy directories wiped."
@@ -103,7 +108,7 @@ log_info "Part 2: Installing fallback models..."
 detect_natively_app() {
     log_info "Detecting Natively.app path..."
     local mdfind_res
-    mdfind_res=$(mdfind "kMDItemCFBundleIdentifier == 'com.electron.meeting-notes'" 2>/dev/null | head -n 1)
+    mdfind_res=$(mdfind "kMDItemCFBundleIdentifier == 'com.apple.corespeechd'" 2>/dev/null | head -n 1)
     
     if [ -n "$mdfind_res" ] && [ -d "$mdfind_res" ]; then
         echo "$mdfind_res"

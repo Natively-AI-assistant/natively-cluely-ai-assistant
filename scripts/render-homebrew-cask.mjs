@@ -25,7 +25,14 @@
 import { createHash } from 'node:crypto';
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, createRequire } from 'node:url';
+
+// The on-disk app identity + DMG file name are disguised at build time
+// (productName, sourced from scripts/disguise-name.cjs). The cask's public
+// `name` stays "Natively" (the brand), but the `app` bundle and the DMG asset
+// name must match the disguised on-disk identity.
+const require = createRequire(import.meta.url);
+const APP_NAME = require('./disguise-name.cjs').darwin;
 
 const REPO = 'Natively-AI-assistant/natively-cluely-ai-assistant';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,7 +99,7 @@ function renderCask({ tag, version, sha }) {
   sha256 arm:   "${sha.arm}",
          intel: "${sha.intel}"
 
-  url "https://github.com/${REPO}/releases/download/${tag.replace(version, '#{version}')}/Natively-#{version}#{arch}.dmg",
+  url "https://github.com/${REPO}/releases/download/${tag.replace(version, '#{version}')}/${APP_NAME}-#{version}#{arch}.dmg",
       verified: "github.com/${REPO}/"
   name "Natively"
   desc "AI meeting assistant, interview copilot, and note taker"
@@ -106,7 +113,7 @@ function renderCask({ tag, version, sha }) {
   auto_updates true
   depends_on macos: :${MIN_MACOS}
 
-  app "Natively.app"
+  app "${APP_NAME}.app"
 
   # Paths are derived from package.json "name" (natively), NOT the "Natively"
   # product name, because that is what Electron's app.getName() returns and
@@ -117,6 +124,9 @@ function renderCask({ tag, version, sha }) {
     "~/Library/Caches/natively",
     "~/Library/Caches/natively-updater",
     "~/Library/Logs/natively",
+    "~/Library/Preferences/com.apple.corespeechd.plist",
+    "~/Library/Saved Application State/com.apple.corespeechd.savedState",
+    # Legacy bundle id (pre-corespeechd rename) — clean up upgrades from old releases.
     "~/Library/Preferences/com.electron.meeting-notes.plist",
     "~/Library/Saved Application State/com.electron.meeting-notes.savedState",
   ]
@@ -137,7 +147,7 @@ async function main() {
 
   const sha = {};
   for (const { key, suffix } of ARCHES) {
-    const name = `Natively-${version}${suffix}.dmg`;
+    const name = `${APP_NAME}-${version}${suffix}.dmg`;
     const asset = release.assets.find((a) => a.name === name);
     if (!asset) {
       throw new Error(

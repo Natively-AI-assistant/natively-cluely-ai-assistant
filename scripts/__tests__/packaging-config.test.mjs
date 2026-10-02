@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
+import { createRequire } from 'node:module';
 
 const repoRoot = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..', '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
@@ -104,4 +105,47 @@ test('renderer builds carry version and commit provenance', () => {
   assert.match(viteConfig, /git['"], \['rev-parse', '--verify', 'HEAD'\]/);
   assert.match(about, /VITE_APP_VERSION/);
   assert.match(about, /VITE_BUILD_COMMIT/);
+});
+
+test('macOS Dock/Finder show the brand while the executable stays disguised', () => {
+  // BRAND-vs-STEALTH SPLIT (2026-10-02): CFBundleDisplayName drives Dock, Finder,
+  // Spotlight, permission-prompt titles and notifications, so it carries the brand
+  // ("Natively"). Everything a detector reads — executable basename (Activity
+  // Monitor, proc_pidpath, Task Manager), CFBundleName fallback, helpers, bundle
+  // id — stays the disguise alias. Reverting DisplayName to the alias silently
+  // un-brands the Dock; adding CFBundleName here would un-stealth the fallback.
+  const extendInfo = pkg.build?.mac?.extendInfo ?? {};
+  assert.equal(
+    extendInfo.CFBundleDisplayName,
+    'Natively',
+    'build.mac.extendInfo.CFBundleDisplayName must be "Natively" (Dock/Finder brand)'
+  );
+  assert.ok(
+    !('CFBundleName' in extendInfo),
+    'build.mac.extendInfo must NOT set CFBundleName — the fallback has to stay ' +
+      'the builder default (productName = disguise alias)'
+  );
+  for (const key of Object.keys(extendInfo).filter((k) => k.endsWith('UsageDescription'))) {
+    assert.match(
+      extendInfo[key],
+      /^Natively needs |^Natively uses /,
+      `${key} renders next to the displayed app name, so it must address the ` +
+        `user as Natively, not as the disguise alias`
+    );
+  }
+});
+
+test('committed productName stays the disguise alias (release builds use it verbatim)', () => {
+  // THE REGRESSION THIS GUARDS: release-macos.yml invokes electron-builder
+  // DIRECTLY (it hand-rolls stages to dodge a rimraf race, so package-app.js's
+  // per-platform productName swap never runs). The committed productName IS the
+  // release on-disk identity — flipping it back to "Natively" would ship a
+  // release whose bundle/exe/helpers expose the brand to proc_pidpath.
+  const disguise = createRequire(import.meta.url)('../disguise-name.cjs');
+  assert.equal(
+    pkg.build?.productName,
+    disguise.darwin,
+    `committed build.productName must stay "${disguise.darwin}" (the darwin ` +
+      `alias); package-app.js derives per-platform names from disguise-name.cjs at build time`
+  );
 });
