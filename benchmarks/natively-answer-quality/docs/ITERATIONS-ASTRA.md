@@ -1825,3 +1825,61 @@ The weights are removed from the worktree afterwards so later benchmark runs sta
 * The claim pass is not touched for speed: it adds 0.5–0.7 s to the settled answer and is worth +1.14 (dev) and
   +1.68 (holdout) on the answers it edits. That trade is already on Evin's list.
 
+## Speed: the wait before the request, traced to two causes — measured, nothing changed yet (14:48Z)
+
+Two app runs of the kept build (`e000db4a`) on the three slow modes (dev, 120 rows, 0 failed), `MEASURE_LATENCY=true`.
+
+**The benchmark never had the default embedder.** `resources/models/Xenova/multilingual-e5-small/onnx/model_quantized.onnx`
+(the bundled default since 2026-09-22, fetched by `scripts/download-models.js`) is missing from the worktrees and
+from the main checkout. In every earlier run the app logged `Local query embed failed`, profile search came back
+with `questionEmbedded: false` and no node over the threshold, and the engine seeded three generic profile entries
+instead. Run `aq2-dev-emb1` (other local models copied in from the main checkout) still had it: 72 load failures,
+340 failed embedding batches, 27 minutes. A copy of the same model was already on this machine (an earlier
+embedding experiment under the app-support folder; config and tokenizer identical); with it copied in, run
+`aq2-dev-emb2` has 0 embedder failures, `questionEmbedded: true`, "Found 8 relevant nodes", and takes 8 minutes.
+Nothing was downloaded. The copied weights, the build output and the app data are removed again.
+**Consequence for the quality numbers:** every profile-backed turn in the report was answered from a degraded
+profile lookup that a packaged install does not have. The 120 `emb2` answers are being judged against the kept
+build's to size that.
+
+**The wait is real with the embedder working** (same rows; wait before the request, p50 / p90):
+
+| heard turn | no weights (`fix11`) | embedder failing (`emb1`) | embedder working (`emb2`) |
+|---|---:|---:|---:|
+| no profile, no reference (10) | 6 / 16 ms | 9 / 16 ms | 10 / 20 ms |
+| reference file (28) | 200 / 613 ms | 185 / 224 ms | 179 / 220 ms |
+| profile (37) | 395 / 668 ms | 332 / 523 ms | 334 / 540 ms |
+| profile and reference file (18) | 589 / 1,254 ms | 424 / 797 ms | 302 / 426 ms |
+| typed (27) | 9 / 409 ms | 9 / 363 ms | 7 / 26 ms |
+
+**Where it goes** — the app's own traces (`PI LATENCY TRACE`, `[LATENCY]`, `[V3]` lines), `emb2`:
+* The click handler and the engine up to its "request started" mark take 5 ms at the median (34 ms at p95). The
+  wait is after that mark and before the network request.
+* **Cause 1 — profile turns: the V3 prompt builder's own retrieval.** `buildV3Prompt` is awaited after the mark.
+  Its `retrievalMs` on heard turns with profile sources: 359 ms p50, 477 p90 (36 turns); with profile and files 273 /
+  390 (18). The same sources and the same 20 candidates on TYPED turns: 9 ms p50, 16 p90. Heard turns pass
+  `rerankSurface: 'live'` and reach the profile through the hybrid retriever with the bundled cross-encoder rerank
+  allowed (`ms-marco-MiniLM-L-6-v2`, measured in `docs/reranker-benchmark-2026-09-04.md` at 211 ms); the retriever
+  escalates to it when its confidence is low and awaits it under a 1,200 ms budget. That is a deliberate trade
+  written into the code, not a defect: taking it off the critical path changes which passages are sent.
+* **Cause 2 — reference-file turns: retrieval done twice, the second one thrown away.** After V3 has composed the
+  prompt, `WhatToAnswerLLM` still builds the legacy packet, including the legacy mode-reference retrieval
+  (its "stage 3": over 50 ms on 25 of 95 heard turns, p90 181 ms, max 294 ms). When a V3 prompt is present that
+  packet is discarded — the code's own comment says so — and V3's retrieval for the same turn took 0 ms. What
+  survives of the legacy result is one thing: whether `'reference_files'` is declared as a data scope of the request.
+  The typed path declares the scopes the V3 prompt actually packs (`packedDataScopes`); the heard path does not use
+  them.
+* The model's own first token (first word minus the wait) is 0.9–1.15 s in these two runs against 0.65–0.85 s in
+  the morning run: time of day, the same on every row.
+
+**What can be done, and under which rule.**
+* Cause 2 can be removed without changing the prompt: on a V3-owned heard turn, skip the legacy reference retrieval
+  and declare the scopes V3 packed. Expected: about 180 ms off the first word on heard turns with a reference file
+  (46 of 93 heard rows here). Rule (a)–(d) above applies, plus one more because the scope declaration changes
+  source: the declared scopes must be shown, row by row, to be the scopes of what is sent. It touches the
+  provider-data-scope gate, so it is built on a branch with its tests and shown to Evin before anything lands.
+* Cause 1 is a behaviour change either way (no rerank on live turns, or reranking in the background and using the
+  result only if it arrives in time, or starting the profile retrieval when the question is transcribed rather than
+  at the press). The last one keeps the prompt identical when the press comes after the retrieval has finished. It
+  goes to Evin with the numbers.
+
