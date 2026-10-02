@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Check, Cloud, Terminal, Server, Plus } from 'lucide-react';
-import { getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId, isModelAllowed } from '../../utils/modelUtils';
 import { useT } from '../../i18n';
 import { ProviderMark } from './ProviderMark';
 
@@ -59,19 +59,70 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                 }
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: prov }));
+                    const fetched = creds?.cloudFetchedModels?.[prov];
+                    if (Array.isArray(fetched) && fetched.length > 0) {
+                        fetched.forEach((m: { id: string; label: string }) => {
+                            cModels.push({ id: m.id, name: m.label || m.id, desc: `${prov.charAt(0).toUpperCase() + prov.slice(1)} • Live`, provider: prov });
+                        });
+                    } else {
+                        cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: prov }));
+                    }
                     const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm)) {
+                    if (pm && !cModels.some(m => m.id === pm)) {
                         cModels.push({ id: pm, name: prettifyModelId(pm), desc: `${prov.charAt(0).toUpperCase() + prov.slice(1)} • Preferred`, provider: prov });
                     }
                 }
-                setCloudModels(cModels);
+                const disabled = new Set(creds?.disabledProviders || []);
+                const allowLists: Record<string, string[]> = creds?.cloudEnabledModels || {};
+                const visibleCloudModels = cModels.filter(m => {
+                    if (disabled.has(m.provider)) return false;
+                    return isModelAllowed(m.provider, m.id, allowLists[m.provider] || []);
+                });
+                setCloudModels(visibleCloudModels);
             } catch (e) {
                 console.error("Failed to load models:", e);
             }
         };
         loadData();
     }, [isOpen]);
+
+    useEffect(() => {
+        const unsub = window.electronAPI?.onLiveCatalogUpdated?.(() => {
+            // Re-fetch credentials & models
+            window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
+                if (!creds) return;
+                const cModels: { id: string; name: string; desc: string; provider: string }[] = [];
+                if (creds?.hasNativelyKey) {
+                    cModels.push({ id: 'natively', name: 'Natively API', desc: t('Managed AI • Fast execution'), provider: 'natively' });
+                }
+                for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
+                    if (!cfg.hasKeyCheck(creds)) continue;
+                    const fetched = creds?.cloudFetchedModels?.[prov];
+                    if (Array.isArray(fetched) && fetched.length > 0) {
+                        fetched.forEach((m: { id: string; label: string }) => {
+                            cModels.push({ id: m.id, name: m.label || m.id, desc: `${prov.charAt(0).toUpperCase() + prov.slice(1)} • Live`, provider: prov });
+                        });
+                    } else {
+                        cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: prov }));
+                    }
+                    const pm = creds?.[cfg.pmKey];
+                    if (pm && !cModels.some(m => m.id === pm)) {
+                        cModels.push({ id: pm, name: prettifyModelId(pm), desc: `${prov.charAt(0).toUpperCase() + prov.slice(1)} • Preferred`, provider: prov });
+                    }
+                }
+                const disabled = new Set(creds?.disabledProviders || []);
+                const allowLists: Record<string, string[]> = creds?.cloudEnabledModels || {};
+                const visibleCloudModels = cModels.filter(m => {
+                    if (disabled.has(m.provider)) return false;
+                    return isModelAllowed(m.provider, m.id, allowLists[m.provider] || []);
+                });
+                setCloudModels(visibleCloudModels);
+            }).catch(() => {});
+        });
+        return () => {
+            unsub?.();
+        };
+    }, []);
 
     const handleSelect = (model: string) => {
         // For custom/local, we might need to pass an ID or specific format
