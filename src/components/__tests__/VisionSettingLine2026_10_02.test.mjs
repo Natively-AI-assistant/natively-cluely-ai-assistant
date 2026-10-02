@@ -129,8 +129,8 @@ describe('the line\'s motion (source)', () => {
 
     test('the answer and the test label swap, keyed by what they say', () => {
         assert.match(detail, /const auto = visionAutoText\(state, t\);/);
-        assert.match(detail, /<span aria-hidden="true"><Presence kind="text" id=\{auto\}>\{auto\}<\/Presence><\/span>/);
-        assert.match(detail, /<Presence kind="text" id=\{tested \? 'again' : 'now'\}>/);
+        assert.match(detail, /<span aria-hidden="true"><Presence kind="text" id=\{auto\} ready=\{motionReady\}>\{auto\}<\/Presence><\/span>/);
+        assert.match(detail, /<Presence kind="text" id=\{tested \? 'again' : 'now'\} ready=\{motionReady\}>/);
     });
 
     test('a screen reader is given the whole sentence, apart from the pieces that move', () => {
@@ -162,7 +162,7 @@ describe('the line\'s motion (source)', () => {
     });
 
     test('the glyph cross-fades between yes, no and a running test', () => {
-        assert.match(button, /<Presence kind="icon" id=\{state\.checking \? 'checking' : state\.reads === 'no' \? 'no' : 'yes'\} slotClassName="aip-vision-glyph">/);
+        assert.match(button, /<Presence kind="icon" id=\{state\.checking \? 'checking' : state\.reads === 'no' \? 'no' : 'yes'\} slotClassName="aip-vision-glyph" ready=\{motionReady\}>/);
         assert.match(rule('.aip-vision-glyph'), /width:12px; height:12px/);
         // the wrapper sits between the button and its svg now
         assert.match(css, /\.aip-vision-btn\[data-reads='unknown'\] svg \{ opacity:0\.5; \}/);
@@ -195,6 +195,19 @@ describe('the line\'s motion (source)', () => {
         assert.match(open, /width var\(--aip-dur-travel\)/);                    // opens slower than it closes
         assert.match(rule('.aip-vision-test'), /width var\(--aip-dur-state\)/);
         assert.doesNotMatch(rule('.aip-vision-result'), /gap/);                // the gap lives inside the place
+    });
+
+    // Measured on a 300-model list (2026-10-02): with a motion piece mounted for
+    // every row, opening the list went from about 200ms to about 300ms.
+    test('only a row whose line has been opened pays for motion', () => {
+        const hook = src.slice(src.indexOf('function useVisionRowMotion'), src.indexOf('export const AipVisionButton'));
+        assert.match(hook, /const paneReady = React\.useContext\(SettingsMotionReady\);/);
+        assert.match(hook, /const \[opened, setOpened\] = useState\(open\);\s*if \(open && !opened\) setOpened\(true\);\s*return paneReady && opened;/);
+        assert.match(button, /const motionReady = useVisionRowMotion\(open\);/);
+        assert.match(detail, /const motionReady = useVisionRowMotion\(open\);/);
+        const presences = [...button.matchAll(/<Presence [^>]*>/g), ...detail.matchAll(/<Presence [^>]*>/g)].map((m) => m[0]);
+        assert.equal(presences.length, 3);   // the glyph, the answer, the test label
+        for (const tag of presences) assert.match(tag, / ready=\{motionReady\}>$/, `always-on motion in a row: ${tag}`);
     });
 
     test('the summary\'s default name swaps when the default moves, and still truncates', () => {

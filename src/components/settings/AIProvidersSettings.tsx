@@ -1755,11 +1755,27 @@ export function useVisionStates(ids: readonly string[], active: boolean) {
     return { states: shown, set, retest };
 }
 
+/**
+ * Motion for one model row's glyph and line, on from the first time that row's
+ * line is opened. A gateway lists hundreds of models, and every motion piece
+ * costs a little to mount and again on each re-render: with them on for every
+ * row, a 300-model list took half as long again to open. A row nobody has opened
+ * has next to nothing to animate — a test is started from its open line — so it
+ * draws plain. The pane's own readiness (SettingsMotionReady) still applies.
+ */
+function useVisionRowMotion(open: boolean): boolean {
+    const paneReady = React.useContext(SettingsMotionReady);
+    const [opened, setOpened] = useState(open);
+    if (open && !opened) setOpened(true);
+    return paneReady && opened;
+}
+
 /** The glyph at the end of a model row: does it read images, and did the user decide that. */
 export const AipVisionButton: React.FC<{
     state: VisionModelState; open: boolean; onClick: () => void; controls: string;
 }> = ({ state, open, onClick, controls }) => {
     const t = useT();
+    const motionReady = useVisionRowMotion(open);
     const answer = state.reads === 'yes' ? t('Reads images') : state.reads === 'no' ? t('Does not read images') : t('Not known whether it reads images');
     return (
         <button
@@ -1773,7 +1789,7 @@ export const AipVisionButton: React.FC<{
             title={state.setting !== 'auto' ? `${answer} · ${t('set by you')}` : answer}
             onClick={onClick}
         >
-            <Presence kind="icon" id={state.checking ? 'checking' : state.reads === 'no' ? 'no' : 'yes'} slotClassName="aip-vision-glyph">
+            <Presence kind="icon" id={state.checking ? 'checking' : state.reads === 'no' ? 'no' : 'yes'} slotClassName="aip-vision-glyph" ready={motionReady}>
                 {state.checking
                     ? <Loader2 size={12} strokeWidth={1.75} className="aip-spinner" aria-hidden="true" />
                     : state.reads === 'no'
@@ -1790,6 +1806,7 @@ export const AipVisionDetail: React.FC<{
     onSet: (setting: VisionSetting) => void; onRetest: () => void;
 }> = ({ id, state, open, onSet, onRetest }) => {
     const t = useT();
+    const motionReady = useVisionRowMotion(open);
     const choices: Array<{ value: VisionSetting; label: string; title: string }> = [
         { value: 'auto', label: t('Auto'), title: t('Let Natively work it out') },
         { value: 'on', label: t('On'), title: t('Always send this model screenshots') },
@@ -1855,7 +1872,7 @@ export const AipVisionDetail: React.FC<{
                             <span className="aip-vision-would" data-open={onAuto ? 'false' : 'true'} aria-hidden="true">
                                 <span>{`${t('Auto would say')}: `}</span>
                             </span>
-                            <span aria-hidden="true"><Presence kind="text" id={auto}>{auto}</Presence></span>
+                            <span aria-hidden="true"><Presence kind="text" id={auto} ready={motionReady}>{auto}</Presence></span>
                         </span>
                         {/* Only on Auto, and only where a test can run: On and Off are the
                             user's own answer, and a test would send an image they may have
@@ -1872,7 +1889,7 @@ export const AipVisionDetail: React.FC<{
                                     title={t('Send this model a test image now and see whether it can read it')}
                                     onClick={() => { if (onAuto) onRetest(); }}
                                 >
-                                    <Presence kind="text" id={tested ? 'again' : 'now'}>
+                                    <Presence kind="text" id={tested ? 'again' : 'now'} ready={motionReady}>
                                         {tested ? t('Test again') : t('Test now')}
                                     </Presence>
                                 </button>
