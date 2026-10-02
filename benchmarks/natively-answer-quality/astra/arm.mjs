@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Arm a ration batch: wait for the judge probe to pass, run the queue, write the report — in its OWN session
 // (detached), so it outlives the terminal that started it. One light node process chain; HTTP only.
-//   node astra/arm.mjs <tag> [--not-before 2026-10-01T10:55:00Z] [--wait-ms 20000000] [--concurrency 8]
+//   node astra/arm.mjs <tag> [--not-before 2026-10-01T10:55:00Z] [--wait-ms 20000000] [--concurrency 8] [--after-pid N]
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +27,10 @@ const run = (argv, out) => new Promise((resolve) => {
   const stdio = out ? ['ignore', fs.openSync(out, 'w'), fs.openSync(out, 'a')] : ['ignore', 'inherit', 'inherit'];
   spawn(process.execPath, argv, { cwd: ROOT, stdio }).on('close', (code) => resolve(code));
 });
+// --after-pid N: start only once process N has ended (an earlier chain), so two chains never judge at the same time.
+const afterPid = Number(opt('after-pid', 0));
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+if (afterPid && alive(afterPid)) { console.log(`${new Date().toISOString()} waiting for chain ${afterPid} to end`); while (alive(afterPid)) await new Promise((r) => setTimeout(r, 30000)); }
 const notBefore = opt('not-before') ? Date.parse(opt('not-before')) : 0;
 // Short sleeps against the wall clock: one long timer runs late when the machine sleeps.
 if (notBefore > Date.now()) { console.log(`${new Date().toISOString()} sleeping until ${opt('not-before')}`); while (Date.now() < notBefore) await new Promise((r) => setTimeout(r, 30000)); }

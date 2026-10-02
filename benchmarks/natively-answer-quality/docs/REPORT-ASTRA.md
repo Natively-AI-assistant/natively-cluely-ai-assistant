@@ -4,6 +4,34 @@ Status 2026-10-01 14:55 UTC. Generator: deepseek-flash. Judge: gpt-6-astra throu
 `c725615a54f6` (claim kinds), calibration 25 of 25. Every score in this report is under charter v2; nothing from
 charter v1 is mixed in. Holdout is reported in aggregate only.
 
+## 0. Status on 2026-10-02 02:25 UTC — what is waiting, and on what
+
+Nothing in sections 1–11 has changed since 2026-10-01 14:55 UTC: no new gpt-6-astra score exists. The judge account
+has answered `insufficient_user_quota` since 2026-10-01 12:26 UTC, and the 02:00 UTC ration batch of 2026-10-02 did
+not bring it back (probed 02:22 UTC, HTTP 403). **The AgentRouter account needs a top-up before anything below can
+be decided.** A detached chain keeps probing every 10 minutes for two days and runs the queue on its own the moment
+the account answers (`astra/out/logs/batch-0200.log`, then `batch-next.log`; verdicts: `node astra/decide.mjs`).
+
+A second judge (Fable) was tried for about an hour on 2026-10-02 at Evin's request and withdrawn at his request.
+Its scores are in the repository as a record (`abs-*-f1`, `*.judged-fable.jsonl`); none is used in this report and no
+decision rests on them.
+
+**Candidates built or prepared, none in the kept build, all waiting for gpt-6-astra** (rules written beforehand in
+`docs/ITERATIONS-ASTRA.md`; the queue judges them first):
+
+| candidate | where | what it changes | what is known without a judge |
+|---|---|---|---|
+| Reasoning before a typed answer in Technical interview and Lecture (I28) | app `3b0c1a4f`, branch `fix/aq-astra-i7` | DeepSeek `thinking: enabled`, effort low, on typed turns of those two modes; every other turn is unchanged | in the app: 52 of 52 typed turns reason, 0 of 88 heard turns; 0 failed or empty; no extra requests; first word on typed turns 0.70 s → 1.67 s (dev) and 0.81 s → 1.72 s (holdout) at the median, 5.4–6.3 s at p95, one turn 10.5 s |
+| Looking for work: the claim pass's rule for a reply left unanswered | app `c399f399`, branch `fix/aq-astra-i6` | nearest documented facts plus one forward sentence, instead of a holding line | replay on 40 dev drafts: holding lines 6 → 1; app rows exist (`aq2-dev-fix14`, `aq2-holdout-fix14`) |
+| Call Center and Sales, heard turn with no company document | same branch | one notice stating the short reply shape; only when no document truly exists | replay, heard dev turns: verification asks 4 → 0 and replies naming the check 6 → 11 of 17 (Call Center); preambles 5 → 1 of 14 (Sales) |
+
+Also queued: fix13's 27 re-run rows against fix12's, the rest of the Starting column, the claim pass measured on
+the same rows (streamed draft against shown answer, `tools/edit-pairs.mjs`), supp-behavior, the blind pairwise set.
+
+**For Evin, beyond the open decisions in section 10:** whether heard turns in Technical interview and Lecture
+should reason too. The reasoning replays on all turns are queued as evidence; the cost is known (first word about
+1.4 s later at the median on those prompts, 6.6 s at p95).
+
 ## 1. Outcome
 
 * **Kept build: `fix13` = app commit `e000db4a` on branch `fix/aq-astra-i5`. Not landed on main.** fix13 is fix12
