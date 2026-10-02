@@ -1094,4 +1094,8 @@ export const JA_GENERATED: Record<string, string> = {
     "Test again": "再テスト",
     "Test now": "今すぐテスト",
     "Could not test just now · try again later": "今はテストできませんでした · 後でもう一度お試しください",
+    // The model list's pill column and summary (2026-10-02): these three were English in every language.
+    "Set default": "デフォルトに設定",
+    "default": "デフォルト",
+    "Use this model by default for this provider": "このプロバイダーでこのモデルをデフォルトにする",
 };

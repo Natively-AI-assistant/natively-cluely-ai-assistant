@@ -570,4 +570,8 @@ export const RU_GENERATED: Record<string, string> = {
     "Test again": "Проверить снова",
     "Test now": "Проверить сейчас",
     "Could not test just now · try again later": "Сейчас проверить не удалось · попробуйте позже",
+    // The model list's pill column and summary (2026-10-02): these three were English in every language.
+    "Set default": "Сделать основной",
+    "default": "по умолчанию",
+    "Use this model by default for this provider": "Использовать эту модель по умолчанию для этого провайдера",
 };

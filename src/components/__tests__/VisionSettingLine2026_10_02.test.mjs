@@ -19,6 +19,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown } from '../settings/visionLine.ts';
+import { ES_GENERATED } from '../../i18n.es.generated.ts';
+import { RU_GENERATED } from '../../i18n.ru.generated.ts';
+import { RU_GENERATED2 } from '../../i18n.ru.generated2.ts';
+import { ZH_GENERATED } from '../../i18n.zh.generated.ts';
+import { JA_GENERATED } from '../../i18n.ja.generated.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const t = (s) => s;
@@ -327,4 +332,38 @@ describe('the pill column (source)', () => {
         assert.match(line, /gap:12px 6px/);               // a wrapped line keeps the 34px pitch
         assert.match(rule('.aip-default-slot > .aip-row-actions'), /display:flex/);
     });
+});
+
+// A string with no entry falls back to English without a sound. "Checking…" was
+// English in Spanish and Chinese; "Set default" and the summary's "default" were
+// English in every language, in a column whose other two labels were translated.
+describe('every string of the line and the pill column is translated', () => {
+    const src = readFileSync(join(here, '..', 'settings', 'AIProvidersSettings.tsx'), 'utf8');
+    const line = readFileSync(join(here, '..', 'settings', 'visionLine.ts'), 'utf8');
+    const said = (text) => [...text.matchAll(/\bt\('((?:[^'\\]|\\.)*)'\)/g)].map((m) => m[1]);
+    const keys = [...new Set([
+        ...said(line),
+        ...said(src.slice(src.indexOf('export const AipVisionButton'), src.indexOf('export interface AipModelEntry'))),
+        'Default', 'Set default', 'default', 'Use this model by default for this provider',
+    ])];
+    const languages = {
+        es: ES_GENERATED, ru: { ...RU_GENERATED, ...RU_GENERATED2 }, zh: ZH_GENERATED, ja: JA_GENERATED,
+    };
+    // The same word in that language.
+    const same = { es: new Set(['Auto', 'No']) };
+
+    test('the strings were found', () => {
+        assert.ok(keys.length >= 25, `only ${keys.length} strings found`);
+        for (const k of ['Checking…', 'Auto would say', 'Test again', 'Test now', 'Reads images', 'set by you']) assert.ok(keys.includes(k), `${k} was not found in the source`);
+        for (const k of ['Set default', 'default']) assert.ok(src.includes(`t('${k}')`), `${k} is no longer said`);
+    });
+
+    for (const [lang, dict] of Object.entries(languages)) {
+        test(`in ${lang}`, () => {
+            const missing = keys.filter((k) => typeof dict[k] !== 'string' || !dict[k].trim());
+            assert.deepEqual(missing, [], `no ${lang} entry`);
+            const english = keys.filter((k) => dict[k] === k && !same[lang]?.has(k));
+            assert.deepEqual(english, [], `left in English in ${lang}`);
+        });
+    }
 });

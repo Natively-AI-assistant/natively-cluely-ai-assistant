@@ -160,7 +160,7 @@ export const ES_GENERATED: Record<string, string> = {
     "Check your internet connection or download the update manually from GitHub.": "Check your internet connection or download the update manually from GitHub.",
     "Checking": "Checking",
     "Checking for Ollama...": "Checking for Ollama...",
-    "Checking…": "Checking…",
+    "Checking…": "Comprobando…",
     "Chinese": "Chinese",
     "Choose the engine that transcribes audio to text.": "Elige el motor que transcribe audio a texto.",
     "Chrome Web Store (Recommended)": "Chrome Web Store (Recommended)",
@@ -1109,4 +1109,8 @@ export const ES_GENERATED: Record<string, string> = {
     "Test again": "Probar de nuevo",
     "Test now": "Probar ahora",
     "Could not test just now · try again later": "No se pudo probar ahora · inténtalo más tarde",
+    // The model list's pill column and summary (2026-10-02): these three were English in every language.
+    "Set default": "Predeterminar",
+    "default": "predeterminado",
+    "Use this model by default for this provider": "Usar este modelo por defecto con este proveedor",
 };
