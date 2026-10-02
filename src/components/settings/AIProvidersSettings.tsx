@@ -1833,12 +1833,35 @@ export const AipVisionDetail: React.FC<{
         observer?.observe(seg);
         return () => observer?.disconnect();
     }, [open, state.setting, labelsKey]);
+    // Opened on the last rows in view of a scrolling list, the line landed under
+    // the fold: the glyph lit up and nothing else seemed to happen. So while the
+    // line opens, the list follows it frame by frame and the two arrive together
+    // ("nearest": a line already in view moves nothing). Only for an opening the
+    // user just asked for — a row that comes back already open, when a filter is
+    // cleared, must not pull the list to itself.
+    const lineRef = useRef<HTMLDivElement>(null);
+    const wasOpen = useRef(open);
+    useEffect(() => {
+        const opening = open && !wasOpen.current;
+        wasOpen.current = open;
+        const line = lineRef.current;
+        if (!opening || !line) return;
+        // A little past the reveal's opening time (--aip-dur-travel, 220ms).
+        const until = performance.now() + 280;
+        let frame = 0;
+        const follow = () => {
+            line.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            if (performance.now() < until) frame = requestAnimationFrame(follow);
+        };
+        frame = requestAnimationFrame(follow);
+        return () => cancelAnimationFrame(frame);
+    }, [open]);
     const auto = visionAutoText(state, t);
     const status = visionStatusText(state, t);
     const onAuto = state.setting === 'auto';
     const tested = state.auto.source === 'test';
     return (
-        <div className="aip-reveal aip-reveal--line" data-open={open ? 'true' : 'false'} id={id}>
+        <div ref={lineRef} className="aip-reveal aip-reveal--line" data-open={open ? 'true' : 'false'} id={id}>
             <div>
                 <div className="aip-vision-detail" role="group" aria-label={t('Reads images')}>
                     <span className="aip-vision-label">{t('Reads images')}</span>

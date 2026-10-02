@@ -92,9 +92,21 @@ describe('the control (source)', () => {
     });
 
     test('the pill is measured only while the line is open', () => {
-        const effect = detail.slice(detail.indexOf('useLayoutEffect('), detail.indexOf('<div className="aip-reveal '));
+        const effect = detail.slice(detail.indexOf('useLayoutEffect('), detail.indexOf('className="aip-reveal '));
         assert.match(effect, /if \(!open \|\| !seg\) return;/);
         assert.match(effect, /\}, \[open, state\.setting, labelsKey\]\);/);
+    });
+
+    // Measured in a 216px list of 17 rows (2026-10-02): the line of the last row
+    // in view opened with 27 of its 34px under the fold, and the list did not move.
+    test('a line that opens under the fold is followed into view, and only when it was just opened', () => {
+        const effect = detail.slice(detail.indexOf('const lineRef'), detail.indexOf('const auto = visionAutoText'));
+        assert.match(effect, /const wasOpen = useRef\(open\);/);
+        assert.match(effect, /const opening = open && !wasOpen\.current;\s*wasOpen\.current = open;/);
+        assert.match(effect, /if \(!opening \|\| !line\) return;/);
+        assert.match(effect, /line\.scrollIntoView\(\{ block: 'nearest', inline: 'nearest' \}\);/);
+        assert.match(effect, /return \(\) => cancelAnimationFrame\(frame\);\s*\}, \[open\]\);/);
+        assert.match(detail, /<div ref=\{lineRef\} className="aip-reveal aip-reveal--line"/);
     });
 
     test('closed lines keep their buttons out of the tab order', () => {
@@ -120,7 +132,7 @@ describe('the line\'s motion (source)', () => {
     };
 
     test('the line settles in like the list it sits in, and reduced motion drops the travel', () => {
-        assert.match(detail, /<div className="aip-reveal aip-reveal--line" data-open=/);
+        assert.match(detail, /<div ref=\{lineRef\} className="aip-reveal aip-reveal--line" data-open=/);
         assert.match(css, /\.aip-reveal--row > div > \*,\n\.aip-reveal--line > div > \* \{\n    opacity:0; transform: translateY\(-4px\);/);
         assert.match(css, /\.aip-reveal--line\[data-open='true'\] > div > \* \{\n    opacity:1; transform:none;/);
         const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
