@@ -35,6 +35,7 @@ export class LiveModelCatalogService {
     private inFlightKey = new Map<string, string>();
     private inFlightSeq = new Map<string, number>();
     private requestSeq = new Map<string, number>();
+    private lastCommittedSeq = new Map<string, number>();
 
     constructor(options?: LiveModelCatalogOptions) {
         this.credentialsManager = options?.credentialsManager;
@@ -114,7 +115,9 @@ export class LiveModelCatalogService {
         const key = this.getApiKeyForProvider(provider)?.trim();
 
         if (!key) {
-            this.requestSeq.set(provider, (this.requestSeq.get(provider) || 0) + 1);
+            const nextSeq = (this.requestSeq.get(provider) || 0) + 1;
+            this.requestSeq.set(provider, nextSeq);
+            this.lastCommittedSeq.set(provider, nextSeq);
             cm.setCloudFetchedModels?.(provider, [], 0);
             return {
                 success: false,
@@ -152,12 +155,12 @@ export class LiveModelCatalogService {
                     };
                 }
 
-                // Verify that a newer refresh has not started/completed (distinguish overlapping requests)
-                if (this.requestSeq.get(provider) !== seq) {
+                // If a newer request has already committed its catalog, do not overwrite it with older data
+                if (seq < (this.lastCommittedSeq.get(provider) || 0)) {
                     return {
                         success: false,
                         models: cm.getCloudFetchedModels?.(provider) || [],
-                        error: 'Superseded by a newer refresh request',
+                        error: 'Superseded by a newer committed catalog',
                     };
                 }
 
@@ -166,6 +169,7 @@ export class LiveModelCatalogService {
                         id: m.id,
                         label: m.label || m.id,
                     }));
+                    this.lastCommittedSeq.set(provider, seq);
                     cm.setCloudFetchedModels?.(provider, formatted, Date.now());
                     if (this.onUpdated) {
                         try {
