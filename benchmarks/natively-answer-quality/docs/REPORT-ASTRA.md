@@ -23,8 +23,8 @@ All four point the same way and none can be told from zero on 40 items a mode (s
 stay unmerged. The kept build is unchanged: **fix13 (`e000db4a`)**, and its own re-run rows are now judged
 (against fix12: dev +1.13 ±0.79 on 17 rows, holdout +1.07 ±1.62 on 10 rows; kept).
 
-**Reasoning is the one lever with a consistent signal, and it is Evin's decision, not a rule's.** Reported only —
-none of these lines changes a verdict:
+**Reasoning was the one lever with a consistent signal. Evin decided against it on 2026-10-02 (about 13:50 UTC):
+the point of Natively is to answer fast. It is not built.** The quality reads, reported only:
 
 | Technical interview + Lecture, reasoning at low effort | rows | off | on | gain (95 %) | hard fails |
 |---|---:|---:|---:|---:|---:|
@@ -33,9 +33,11 @@ none of these lines changes a verdict:
 | every turn, dev | 80 | 8.40 | 8.85 | +0.45 (±0.42) | 14 → 9 |
 | every turn, holdout | 60 | 8.31 | 8.72 | +0.42 (±0.61) | 12 → 6 |
 
-The cost is measured: on typed turns in the app the first word arrives at 1.67 s instead of 0.70 s at the median (5.4–6.3 s
-at p95, one turn 10.5 s); on the replay prompts 2.22 s instead of 0.78 s at the median and 6.6 s instead of 1.0 s at p95. Heard turns
-are the live conversation, where that delay costs most and where most of the gain is.
+The cost, measured on 431 prompts through AgentRouter's DeepSeek route (off / low effort / default effort): first
+answer token at 1.17 / 2.49 / 3.69 s at the median and 2.23 / 5.76 / 8.04 s at p95; on hard questions 1.24 / 3.12 /
+4.46 s; the first word is later than 2 s on 8 % / 69 % / 92 % of turns; output tokens 95 / 405 / 660. The same
+prompt answers 1.31 s later at the median and 4.82 s at p95 with low-effort reasoning. In the app on the direct
+route the typed-turn first word moved from 0.70 s to 1.67 s. `fix/aq-astra-i7` stays unmerged.
 
 **The starting baseline is now judged in full**, so the headline no longer rests on a partial comparison: dev
 7.76 → 8.54 (+0.78 ±0.22), hard fails 89 → 37 of 360; holdout 7.92 → 8.47 (+0.55 ±0.25), hard fails 61 → 31 of 270.
@@ -549,10 +551,7 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
 
 1. Decide the swap behaviour (item 3) and whether +0.55 on holdout against the start (+0.45 against fix6) is worth
    it; then review and land `fix/aq-astra-i5` (`e000db4a`). Kill switch: `NATIVELY_CLAIM_VERIFIER=0`.
-2. Decide whether Technical interview and Lecture answers may start about a second later in exchange for the
-   generator reasoning first (section 0). If yes for typed turns only, `fix/aq-astra-i7` is built and ran clean in
-   the app; its code comment and commit message still cite the withdrawn judge and must be rewritten first. If yes
-   for heard turns too, that is a one-line gate change and needs its own app run.
+2. Reasoning before the answer: decided against by Evin (section 0). Nothing to do; the branch stays unmerged.
 3. Build the personal answer bank (item 1) — the only change on the list that moves Looking for work toward 9.
 4. Make code verification gate the coding answer (item 2).
 5. Before another round of small changes: a larger dev set per mode, or several samples per item, so that a gain of

@@ -1741,3 +1741,48 @@ prompt); the notice touched 66 rows, 49 carried base's answer.
 * This closes the line of work the four dev verdicts opened: every prompt-level candidate has now been tested
   under a rule written beforehand, and none passed it.
 
+## Reasoning: what it costs in time, measured on a bigger sample — and Evin's decision: not built (13:58Z)
+
+Asked at 13:05Z whether to build reasoning for Technical interview and Lecture, Evin asked first for the cost on a
+bigger sample through the AgentRouter key ("what would be the tfft, total time, also on difficult questions,
+screenshot analysis"), and at about 13:50Z decided: "i dont [think] thinking is benefitting, the point of natively
+is to answer fast, so continue optimising the system". **Reasoning is not built. `fix/aq-astra-i7` stays unmerged.**
+
+**The measurement** (`tools/latency-reasoning.mjs`, results in `results/latency/reason-ar-text.jsonl`): 431 recorded
+prompts from the dev, holdout and final runs (36 per mode, 12 per difficulty; 90 each for Technical interview and
+Lecture), each sent three ways back to back in a random order to DeepSeek through AgentRouter
+(`deepseek-v4-flash`, `/v1/messages`, streaming — the app's AgentRouter route), on `AGENTROUTER_API_KEY_1`.
+1,296 calls, 1 without answer text. These are AgentRouter times: the app's direct DeepSeek route is faster in
+absolute terms (first word 0.85–0.9 s at the median in the app runs); the differences are what carries over.
+
+| | first answer token p50 / p90 / p95 | total p50 / p95 | first word later than 2 s / 3 s / 5 s | output tokens |
+|---|---:|---:|---:|---:|
+| reasoning off (today) | 1.17 / 1.84 / 2.23 s | 1.81 / 3.02 s | 8 % / 1 % / 0 % | 95 |
+| on, low effort | 2.49 / 4.75 / 5.76 s | 2.96 / 6.31 s | 69 % / 38 % / 8 % | 405 |
+| on, default effort | 3.69 / 6.32 / 8.04 s | 4.05 / 8.77 s | 92 % / 66 % / 24 % | 660 |
+
+Same prompt, with reasoning minus without: the first answer token comes 1.31 s later at the median and 4.82 s at
+p95 at low effort (output tokens ×4.3), 2.42 s and 6.81 s at default effort (×6.9).
+
+| first answer token p50 / p95 | off | low | default |
+|---|---:|---:|---:|
+| easy (144) | 1.14 / 2.09 s | 2.01 / 4.50 s | 2.99 / 5.67 s |
+| normal (144) | 1.12 / 1.94 s | 2.65 / 5.25 s | 3.87 / 7.77 s |
+| hard (143) | 1.24 / 2.54 s | 3.12 / 7.24 s | 4.46 / 9.84 s |
+| Technical interview (90) | 1.17 / 1.94 s | 2.49 / 7.44 s | 3.74 / 9.01 s |
+| Lecture (89) | 1.14 / 2.30 s | 2.93 / 5.53 s | 3.67 / 6.27 s |
+| Looking for work (36) | 1.19 / 2.90 s | 3.43 / 5.98 s | 4.68 / 12.89 s |
+| prompt of 30k characters and over (77) | 1.17 / 2.14 s | 2.61 / 9.05 s | 4.19 / 12.06 s |
+
+Heard and typed prompts cost the same (heard 1.17 → 2.54 s, typed 1.13 → 2.46 s at low effort).
+
+* **The effort control on this route.** Checked on 18 prompts with seven request shapes: `output_config:
+  {effort: "low"}` is the only field that shortens the reasoning (543 output tokens against 780–980 for the
+  others); `reasoning_effort: "low"`, which the direct DeepSeek API honours, is ignored on the Anthropic-format route.
+* **Screenshots.** 24 screens were rendered (code, traces, slides, tables; `tools/latency-screens.mjs`, the app's
+  own screenshot prompt) and the model was shown to read them on this route (4 of 4 named what was on the screen
+  with the image, 0 of 4 without). Only two were timed before the decision made the run moot: 10.3 s to the first
+  answer token at low effort on both. Two rows, not a result. The run was stopped; no further calls were billed.
+* The earlier quality reads stand as measured (every turn: dev +0.45 ±0.42, holdout +0.42 ±0.61, hard fails 14 → 9
+  and 12 → 6). The decision is that this is not worth a first word that is more than twice as late.
+
