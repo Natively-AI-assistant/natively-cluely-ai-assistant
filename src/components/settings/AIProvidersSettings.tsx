@@ -1020,8 +1020,9 @@ export const AIP_CSS = `
 .aip-reveal[data-instant='true'] > div > * { transition: none !important; }
 
 /* Content motion, scoped to the model list, a card's rows, and the line under a
-   model row (--line) — AipSelect's listbox is a menu and keeps the bare clip. The transform CANNOT go on ".aip-reveal > div": that element carries
-   the overflow:hidden, so transforming it would move the clip box with the content and
+   model row (--line) — AipSelect's listbox is a menu and keeps the bare clip.
+   The transform CANNOT go on ".aip-reveal > div": that element carries the
+   overflow:hidden, so transforming it would move the clip box with the content and
    the panel would overlap the trigger. It goes on its single child, inside the clip.
    -4px means the content settles DOWNWARD, travelling with the clip edge rather than
    against it — the panel hangs below the trigger, so it should read as drawn out of it.
