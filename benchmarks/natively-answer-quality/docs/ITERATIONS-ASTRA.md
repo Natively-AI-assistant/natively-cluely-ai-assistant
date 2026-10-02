@@ -1583,3 +1583,36 @@ Same-answer rows scored differently inside a pair: 0.
   the same batch, same key, without a second calibration. The step that was judging "reasoning on all turns" was
   left to finish what it had in flight.
 
+## After the verdicts: the Starting column, and whether reasoning can be gated narrowly (2026-10-02 12:06Z)
+
+* **Starting column judged in full** (159 dev + 68 holdout judgments, 0 failures, 0 model mismatches). Main as it
+  was → kept build, every item on both sides: dev 7.76 → 8.54, +0.78 (±0.22), hard fails 89 → 37 of 360; holdout
+  7.92 → 8.47, +0.55 (±0.25), hard fails 61 → 31 of 270. Per mode, no line is down with its interval excluding 0
+  (holdout Team Meet −0.18 ±0.61, Lecture −0.07 ±0.59). Report sections 0, 1, 3–7, 9 and 10 rebuilt from
+  `astra/final-report.mjs` and `astra/paired.mjs`.
+* **Reasoning on every Technical interview + Lecture turn** (reported only, the heard-turn question): dev 8.40 →
+  8.85, +0.45 (±0.42), hard fails 14 → 9, 65 rows moved; holdout 8.31 → 8.72, +0.42 (±0.61), 12 → 6. On dev it
+  repairs 8 hard fails (an LRU cache, three complexity answers, "why a heap", a system-design answer, two that are
+  re-rolls of an invented personal claim) and makes 3 new ones (a debugging answer, a streaming-windows answer, a
+  "what can I skip" answer). Large swings on few rows: that is why the interval is wide.
+* **Question asked: can the delay be kept off most turns by reasoning only where it helps?** Looked at on dev, by
+  signals the app already computes — no judge call, nothing tuned:
+
+  | Technical interview, dev | rows | gain with reasoning | hard fails |
+  |---|---:|---:|---:|
+  | the app's coding classifier fires (`coding_contract_active`) | 15 | +0.34 | 3 → 2 |
+  | it does not fire | 25 | +0.72 | 8 → 5 |
+  | heard | 29 | +0.56 | 9 → 6 |
+  | typed | 11 | +0.64 | 2 → 1 |
+
+  Lecture: heard +0.26 (1 → 0), typed +0.37 (2 → 2). By question category the gain sits in groups of 2–5 rows
+  (complexity +1.77 on 5, system design +2.07 on 2, trade-offs +2.80 on 2; debugging −0.67 on 4, theory −1.72 on
+  2). **No existing signal separates the turns reasoning helps from the ones it does not; the gain is larger outside
+  the coding classifier than inside it.** A narrower gate would have to be fitted to a handful of rows, which is
+  fitting noise. Not built. The only gate the data supports is the mode itself (Technical interview, where 11 of the
+  14 dev hard fails are), and that is the product decision already written for Evin: about a second on the first
+  word of every turn in that mode.
+* **Where the loop stands.** Under the written rules nothing from this round is built. The remaining levers are the
+  ones in the report's section 9, and none of them is another prompt rule. A further round of small changes cannot
+  be decided on 40 items a mode (four results of +0.15 to +0.42 today, none separable from 0).
+
