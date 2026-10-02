@@ -1096,3 +1096,30 @@ Positive but interval includes 0 → not promoted; fix13 stays the kept build an
 * Plan (`astra/queue-f.mjs`, decisions first): the three replay pairs (base, then variant) → the kept build on dev
   (aq2-dev-fix13c, 360) and its fix13-vs-fix12 rows → the same on holdout → fix6 on holdout and dev → reported-only
   sets. `AQ_JUDGE=fable node astra/decide.mjs` applies the rules written on 2026-10-01 unchanged.
+
+### Fable verdicts on the three prepared changes (dev replay pairs, 00:00Z 2026-10-02) — rule applied as written
+| change | base | variant | gain (95%) | hard fails | verdict |
+|---|---:|---:|---:|---:|---|
+| Looking for work — fallback rule reworded (v2) | 7.50 | 7.81 | +0.30 (±0.26) | 4 → 3 | BUILD (at the threshold) |
+| Call Center — "no policy on file", heard turns | 7.70 | 7.77 | +0.07 (±0.22) | 5 → 4 | DO NOT BUILD |
+| Sales — "how to say it", heard turns | 8.08 | 8.08 | +0.00 (±0.10) | 0 → 0 | DO NOT BUILD |
+
+40 of 40 rows judged on both sides of each pair; same-answer rows scored differently: 0.
+* **Call Center:** one capped answer repaired (DCC-032 4.0 → 7.9, an invented policy gone), but the "check how … is
+  handled and come back to you" line reads as an agent unsure of their own process (DCC-004 9.1 → 8.3) and repeats
+  across turns of one call (DCC-033 8.8 → 7.8). The uniform shape I flagged as the open risk is what the judge
+  marked down.
+* **Sales:** small gains where a preamble went (DSALES-002 8.2 → 8.9, DSALES-005 6.6 → 7.4) cancelled by a direct
+  yes/no question bounced into discovery (DSALES-006 7.9 → 6.3, important_question_unanswered).
+* **Looking for work:** gains where a holding line or a deflection was replaced (DJOB-032 4.9 → 8.9, DJOB-024
+  4.3 → 6.1, DJOB-016 6.2 → 7.4, DJOB-013 7.0 → 8.2); small losses on four answers that were fine (−0.3 to −0.9).
+  The conditional sentence is still read as a dodge when it follows a recital of the résumé ("Facing that kind of
+  situation, I'd…", 6.1), and one edit introduced a false detail (DJOB-037: "a contract" for a role the résumé does
+  not mark as one, 3.8). So the gain is real on this sample but thin: it goes to app runs and a holdout read under
+  the fix14 promotion rule, not straight into the kept build.
+* aq-fix2 `2a2caed0`: the composer notice and its tests are deleted (composer byte-identical to e000db4a); the
+  candidate is the Looking-for-work rule alone. App runs started 00:01Z: `aq2-dev-fix14`, `aq2-holdout-fix14`
+  (Looking for work only, guarded by when-quiet and the stall watchdog).
+* First reading of the Fable scale: stricter at the top. Best of the 40 Looking-for-work replies 9.44; "No material
+  issue" still comes with a concrete nit and 9.3–9.4. A 9.5 mode mean is further away under this judge than under
+  gpt-6-astra; the agreement table on the kept build's dev rows will say by how much.
