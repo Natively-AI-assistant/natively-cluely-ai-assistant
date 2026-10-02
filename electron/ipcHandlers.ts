@@ -1,6 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
+import { repairCapReached, endsInsideFence } from './llm/repairCap';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, nativeImage, shell, systemPreferences } from 'electron';
@@ -39,7 +40,7 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
-import { resolveDiagramTurn, v3DiagramTurn, withDiagramContract, withDiagramTurnBlock, type DiagramTurn } from './llm/diagramPromptSignals';
+import { resolveDiagramTurn, v3DiagramTurn, withDiagramContract, withDiagramTurnBlock, withMeetingSpeechForDiagramTurn, liveQuestionWantsADrawing, spokenRouteCarriesContract, DIAGRAM_SPEECH_WINDOW_SECONDS, type DiagramTurn } from './llm/diagramPromptSignals';
 import { registerDiagramIpc, broadcastDiagramsEnabled } from './services/diagram/diagramIpc';
 import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
@@ -1681,7 +1682,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       message: string,
       imagePaths?: string[],
       context?: string,
-      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; surface?: 'live' | 'chat' },
+      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; surface?: 'live' | 'chat'; liveQuestion?: boolean },
     ): Promise<null> => {
       let myController: AbortController | null = null;
       let _manualFgToken: string | null = null;
@@ -4496,8 +4497,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         // docs/answer-pipeline-rebuild/02_STATUS.md Phase 4 for the full writeup.
         // Diagram turn on the legacy path (V3 off, or V3 fell through): the same
         // resolver, the same contract. A caller that owns its own prompt
-        // (skipSystemPrompt) gets neither the contract nor the design block.
-        const legacyDiagramTurn: DiagramTurn | null = options?.skipSystemPrompt ? null : (() => {
+        // (skipSystemPrompt) gets neither the contract nor the design block —
+        // unless it is the overlay's spoken question (`liveQuestion`): that is
+        // a turn of THIS session like any other, so "add a cache" said aloud
+        // reaches the design on the table. (The other caller-owned prompt is a
+        // question about a PAST meeting: the live session's design is not its.)
+        const callerOwnedLiveQuestion = options?.skipSystemPrompt === true && options?.liveQuestion === true;
+        // (…when the transport will put the contract on it: see spokenRouteCarriesContract.)
+        const liveQuestionDraws = callerOwnedLiveQuestion && spokenRouteCarriesContract();
+        const legacyDiagramTurn: DiagramTurn | null = (options?.skipSystemPrompt && !liveQuestionDraws) ? null : (() => {
           try {
             const im = appState.getIntelligenceManager?.();
             const turn = resolveDiagramTurn({
@@ -4513,7 +4521,20 @@ export function initializeIpcHandlers(appState: AppState): void {
             return turn;
           } catch { return null; }
         })();
-        if (legacyDiagramTurn?.turnBlock) context = withDiagramTurnBlock(context, legacyDiagramTurn);
+        // Always, not only when a design is attached: a chart turn with a
+        // missing input carries its "say what is missing" note here too.
+        if (legacyDiagramTurn) context = withDiagramTurnBlock(context, legacyDiagramTurn) || context;
+        // "Draw what we discussed", said aloud: the spoken question's prompt
+        // holds at most the last 100 seconds of the meeting (the snapshot added
+        // above, and not on every turn), so a drawing OF the conversation had
+        // little or nothing to be drawn from. It is handed what was said in the
+        // last ten minutes, from the durable transcript — the rolling window
+        // getFormattedContext reads is evicted after three. (Only that route,
+        // only a drawing of the conversation, and only where the transcript
+        // may be sent at all.)
+        if (callerOwnedLiveQuestion && legacyDiagramTurn) {
+          context = withMeetingSpeechForDiagramTurn(context, legacyDiagramTurn, () => appState.getIntelligenceManager?.()?.getFormattedSpeech?.(DIAGRAM_SPEECH_WINDOW_SECONDS), message) || context;
+        }
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
           : resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({
@@ -4608,6 +4629,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               // every mode read inside streamChat after an await resolved the
               // LIVE singleton instead.
               pinnedModeId: manualActiveMode?.id ?? null,
+              // The spoken question's prompt is composed by the transport: hand
+              // it this turn's diagram decision, made with the session's design.
+              ...(callerOwnedLiveQuestion ? { diagramSignals: legacyDiagramTurn?.signals ?? null } : {}),
               // Surface-scoped (Phase 9, 2026-07-14): the referent hint must come
               // from THIS manual-chat conversation's own last answer, never a
               // WTA/phone-mirror turn that happened to write the shared
@@ -5243,9 +5267,10 @@ export function initializeIpcHandlers(appState: AppState): void {
                     stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
                     firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => repaired.length >= 5,
-                    shouldAbort: () => repaired.length > 1200,
+                    shouldAbort: () => repairCapReached(repaired, 1200),
                     onToken: (tok: string) => { repaired += tok; },
                   });
+                  if (endsInsideFence(repaired)) repaired = ''; // half a block is not a repair (repairCap.ts)
                   const repairedTrim = repaired.trim();
                   if (repairedTrim.length >= 5) {
                     const reCheck = validateProfileEvidence({ answer: repairedTrim, plan: answerPlan, evidence, profileAvailable, candidateDirected: true });
@@ -5466,11 +5491,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                     stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal)) as AsyncGenerator<string>,
                     firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                     isUsefulYet: () => regen.trim().length >= 5,
-                    shouldAbort: () => regen.length > 1800,
+                    shouldAbort: () => repairCapReached(regen, 1800),
                     onToken: (tok: string) => { regen += tok; },
                     onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
                   });
-                  const regenTrim = regen.trim();
+                  if (endsInsideFence(regen)) regen = ''; // half a block is not an answer (repairCap.ts)
+                const regenTrim = regen.trim();
                   if (regenTrim.length >= 5 && !detectAssistantVoiceMisfire(regenTrim).isMisfire) regenerated = regenTrim;
                 } catch (regenErr: any) {
                   console.warn('[ProfileIntelligence] misfire regeneration skipped:', regenErr?.message);
@@ -6282,12 +6308,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // contract — don't stack the legacy template suffix on it.
                     const _regenBase = resolveManualChatBasePrompt(llmHelper, undefined, answerSurface);
                     const _regenBaseIsV2 = _regenBase !== CHAT_MODE_PROMPT;
+                    // The regenerated answer is for the same turn: one that was
+                    // asked to draw is still asked to draw. On a v2 base the
+                    // contract is composed INSIDE the builder — appended after
+                    // it, LLMHelper no longer recognised the prompt as v2 and
+                    // could stack the legacy mode suffix on top.
+                    const _regenBaseForTurn = _regenBaseIsV2 && legacyDiagramTurn?.signals
+                      ? resolveManualChatBasePrompt(llmHelper, undefined, answerSurface, legacyDiagramTurn)
+                      : _regenBase;
                     regenSystemPrompt = appendCustomModeSystemPromptLayer({
-                      baseSystemPrompt: _regenBase,
+                      baseSystemPrompt: _regenBaseForTurn,
                       modePromptSuffix: _regenBaseIsV2 ? undefined : _mm.getActiveModeSystemPromptSuffix?.(manualActiveMode?.id ?? undefined),
                       pinnedInstructions: _mm.getActiveModePinnedInstructions?.(answerPlan.answerType, manualActiveMode?.id ?? undefined),
                       isActiveCustomMode: manualActiveMode?.isCustom === true || _mm.isCustomMode?.(manualActiveMode),
                     });
+                    // (The legacy base never knew about diagrams: there the contract is appended.)
+                    if (!_regenBaseIsV2) regenSystemPrompt = withDiagramContract(regenSystemPrompt, legacyDiagramTurn, { surface: answerSurface });
                   } catch { regenSystemPrompt = undefined; }
                   await raceStreamWithDeadline({
                       observe: secondaryStreamObserver('regeneration'),
@@ -6301,13 +6337,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                     stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, strictPrompt, regenAbort.signal, undefined, regenSystemPrompt)) as AsyncGenerator<string>,
                     firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => regen.length >= 8,
-                    shouldAbort: () => regen.length > 2000,
+                    shouldAbort: () => repairCapReached(regen, 2000),
                     onToken: (tok: string) => { regen += tok; },
                     onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
                   });
                 } catch (regenErr: any) {
                   console.warn('[DocGrounded] regeneration failed (non-fatal):', regenErr?.message || regenErr);
                 }
+                if (endsInsideFence(regen)) regen = ''; // half a block is not an answer (repairCap.ts)
                 const regenTrim = regen.trim();
                 // For false_refusal regen, also reject if the model still refuses
                 // after the synthesis-focused prompt — treat it as a true not-found
@@ -16118,6 +16155,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     // question mid-stream would leave the old generator running forever,
     // its late chunks bleeding into whatever answer is on screen by then.
     abortPriorRAGQueriesOfClass((key) => key.startsWith('live-'));
+
+    // A turn that asks for a DRAWING — a new one, or a change to the one on
+    // the table — is not a meeting-search question: this route has a prompt of
+    // its own and no diagram contract, so the answer would come back as prose
+    // with no card. The chat path the renderer falls back to carries the
+    // contract. (After the supersession above: a search answer still streaming
+    // must be stopped whichever route this turn takes.)
+    //
+    // Only a drawing. A QUESTION stays with the meeting's evidence even when
+    // it names a part of the design ("what did John say about the API
+    // gateway?"), and so does a visual nobody asked for.
+    try {
+      if (liveQuestionWantsADrawing(resolveDiagramTurn({ question: query, activeDesign: appState.getIntelligenceManager?.()?.getActiveDesign?.() ?? null, speculative: true }))) {
+        return { fallback: true };
+      }
+    } catch { /* the search answers */ }
     const abortController = new AbortController();
     // Date.now() alone collides when two queries fire in the same ms — the
     // second `set` would overwrite the first AbortController, the first
@@ -19066,6 +19119,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               question: message,
               answerType: phoneRouteOptions?.answerType as any,
               activeDesign: intelligenceManager.getActiveDesign?.() ?? null,
+              // The mode this question was asked in, not whatever is active by
+              // the time it is answered (same pin the planner uses above).
+              pinnedModeId: phonePinnedModeId ?? undefined,
               hasVisualContext: phoneImagePaths.length > 0,
             });
             if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
@@ -19081,7 +19137,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           resolveManualChatBasePrompt(llmHelper, signals, surface, phoneDiagramTurn);
         // The design on the table joins this turn's context (a follow-up typed
         // on the phone refines the design drawn on the desktop).
-        if (phoneDiagramTurn?.turnBlock) context = withDiagramTurnBlock(context, phoneDiagramTurn);
+        if (phoneDiagramTurn) context = withDiagramTurnBlock(context, phoneDiagramTurn) || context;
         const stream = llmHelper.streamChat(message, phoneImagePaths.length ? phoneImagePaths : undefined, context, phoneBasePrompt(resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message }), 'live'), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;

@@ -543,7 +543,7 @@ interface ElectronAPI {
   /** The repaired block drew: record it where the broken one was recorded. */
   acceptDiagramRepair: (payload: { originalSource: string; repairedSource: string }) => Promise<boolean>;
   /** Save a diagram the renderer produced (svg text, base64 png, or Mermaid source). */
-  exportDiagram: (payload: { format: 'svg' | 'png' | 'mmd'; data: string; name?: string }) => Promise<{ saved: boolean; canceled?: boolean; fileName?: string; silent?: boolean; error?: string }>;
+  exportDiagram: (payload: { format: 'svg' | 'png' | 'mmd' | 'json' | 'csv'; data: string; name?: string }) => Promise<{ saved: boolean; canceled?: boolean; fileName?: string; silent?: boolean; error?: string }>;
   /** The main process asks this window to draw a diagram for the phone. */
   onDiagramRenderRequest: (callback: (request: { requestId: string; key: string; source: string }) => void) => () => void;
   sendDiagramRenderResult: (result: { requestId: string; key: string; ok: boolean; svg?: string }) => void;
@@ -800,7 +800,7 @@ interface ElectronAPI {
     message: string,
     imagePaths?: string[],
     context?: string,
-    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; liveQuestion?: boolean },
   ) => Promise<void>;
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void;
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void;
@@ -2113,7 +2113,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   repairDiagram: (payload: { requestId: string; source: string; diagnostic?: string; stage?: string; manual?: boolean }) => ipcRenderer.invoke('diagram:repair', payload),
   cancelDiagramRepair: (requestId: string) => ipcRenderer.invoke('diagram:repair-cancel', requestId),
   acceptDiagramRepair: (payload: { originalSource: string; repairedSource: string }) => ipcRenderer.invoke('diagram:repair-accepted', payload),
-  exportDiagram: (payload: { format: 'svg' | 'png' | 'mmd'; data: string; name?: string }) => ipcRenderer.invoke('diagram:export', payload),
+  exportDiagram: (payload: { format: 'svg' | 'png' | 'mmd' | 'json' | 'csv'; data: string; name?: string }) => ipcRenderer.invoke('diagram:export', payload),
   onDiagramRenderRequest: (callback: (request: { requestId: string; key: string; source: string }) => void) => {
     const subscription = (_e: any, request: any) => callback(request);
     ipcRenderer.on('diagram:render-request', subscription);
@@ -2427,7 +2427,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     message: string,
     imagePaths?: string[],
     context?: string,
-    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; liveQuestion?: boolean },
   ) => ipcRenderer.invoke('gemini-chat-stream', message, imagePaths, context, options),
 
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => {

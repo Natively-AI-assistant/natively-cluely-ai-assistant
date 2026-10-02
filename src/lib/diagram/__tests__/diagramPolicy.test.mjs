@@ -14,6 +14,8 @@ import {
   renameReservedFlowchartIds,
   RESERVED_FLOWCHART_IDS,
 } from '../diagramPolicy.mjs';
+import { VISUAL_CATALOG, VISUAL_VIEWS, visualKind, fenceTagForView } from '../visualCatalog.mjs';
+import { compileVisualSource } from '../visualArtifact.mjs';
 import { DIAGRAM_EXAMPLES, selectDiagramExamples, renderDiagramExamplesBlock, DIAGRAM_EXAMPLE_TOKEN_BUDGET } from '../diagramExamples.mjs';
 
 const FLOW = 'flowchart LR\n    client["Client"] -->|"HTTPS"| api["API Service"]\n    api --> db[("Store")]';
@@ -37,7 +39,8 @@ describe('checkDiagramSource — supported families', () => {
   });
 
   test('other families are rejected with a readable reason', () => {
-    for (const source of ['pie title Pets\n    "Dogs" : 3', 'gantt\n    title A', 'mindmap\n  root', 'architecture-beta\n    group api', 'C4Context\n  title x', 'just some prose']) {
+    // Numeric Mermaid families are refused on purpose: numbers go through `natively-chart`.
+    for (const source of ['pie title Pets\n    "Dogs" : 3', 'xychart-beta\n    bar [1, 2]', 'quadrantChart\n    title x', 'sankey-beta\nA,B,1', 'journey\n    title x', 'architecture-beta\n    group api', 'C4Context\n  title x', 'just some prose']) {
       const r = checkDiagramSource(source);
       assert.equal(r.ok, false, source);
       assert.equal(r.rejection, 'unsupported_type');
@@ -96,7 +99,7 @@ describe('checkDiagramSource — active or remote content is rejected', () => {
   const rejected = {
     'http image shape': 'flowchart LR\n    a@{ img: "https://example.com/x.png" } --> b',
     'icon shape': 'flowchart LR\n    a@{ icon: "fa:user" } --> b',
-    'remote url in label': 'flowchart LR\n    a["see https://example.com"] --> b',
+    'remote url in a style': 'flowchart LR\n    a --> b\n    style a fill:url(https://example.com/x.svg#p)',
     'javascript url': 'flowchart LR\n    a["javascript:alert(1)"] --> b',
     'data url': 'flowchart LR\n    a["data:text/html;base64,AAAA"] --> b',
     'css url()': 'flowchart LR\n    a --> b\n    style a fill:url(x)',
@@ -209,29 +212,81 @@ describe('small helpers', () => {
 });
 
 describe('curated examples', () => {
-  test('there are six, with unique ids and every required field', () => {
-    assert.equal(DIAGRAM_EXAMPLES.length, 6);
-    assert.equal(new Set(DIAGRAM_EXAMPLES.map((e) => e.id)).size, 6);
+  // The six system-design entries the library started with, and the catalog
+  // entries added for the nine meeting modes (version 2).
+  const ORIGINAL = DIAGRAM_EXAMPLES.filter((e) => !e.modes);
+  const CATALOG = DIAGRAM_EXAMPLES.filter((e) => e.modes);
+
+  test('six system-design entries and sixteen catalog entries, with unique ids and every required field', () => {
+    assert.equal(ORIGINAL.length, 6);
+    assert.equal(CATALOG.length, 16);
+    assert.equal(new Set(DIAGRAM_EXAMPLES.map((e) => e.id)).size, DIAGRAM_EXAMPLES.length);
     for (const e of DIAGRAM_EXAMPLES) {
-      for (const field of ['id', 'view', 'question', 'rationale', 'mermaid']) assert.ok(e[field], `${e.id}.${field}`);
+      for (const field of ['id', 'view', 'question', 'rationale']) assert.ok(e[field], `${e.id}.${field}`);
+      assert.ok(e.mermaid || e.body, `${e.id} has no content`);
       assert.ok(Array.isArray(e.constraints) && Array.isArray(e.assumptions) && e.topics.length > 0, e.id);
+      assert.ok(VISUAL_CATALOG[e.view], `${e.id}: "${e.view}" is not a view in the capability registry`);
     }
   });
 
-  test('every example passes policy and stays inside the size the contract asks for', () => {
-    for (const e of DIAGRAM_EXAMPLES) {
+  test('every Mermaid example passes policy and stays inside the size the contract asks for', () => {
+    for (const e of DIAGRAM_EXAMPLES.filter((x) => !x.fence || x.fence === 'mermaid')) {
       const r = checkDiagramSource(e.mermaid);
       assert.equal(r.ok, true, `${e.id}: ${r.rejection}`);
+      // Gantt gets its "today" line removed and nothing else is ever touched.
       assert.deepEqual(r.neutralised, [], `${e.id} carries config or interaction`);
       assert.ok(r.complexity.nodes <= 12 && r.complexity.edges <= 20, `${e.id}: ${JSON.stringify(r.complexity)}`);
+      assert.equal(visualKind(e.view).renderer, 'mermaid', `${e.id} is Mermaid but its view is not drawn by Mermaid`);
     }
   });
 
-  test('no example presents an invented number as a requirement', () => {
-    for (const e of DIAGRAM_EXAMPLES) {
+  test('every chart and notation example is accepted by the adapter that will draw it', () => {
+    const payloads = DIAGRAM_EXAMPLES.filter((e) => e.fence === 'natively-chart' || e.fence === 'natively-diagram');
+    assert.ok(payloads.length >= 6);
+    for (const e of payloads) {
+      const compiled = compileVisualSource(e.fence === 'natively-chart' ? 'chart' : 'notation', e.body);
+      assert.equal(compiled.ok, true, `${e.id}: ${compiled.message}`);
+      assert.equal(fenceTagForView(e.view), e.fence, `${e.id} is written in the wrong block for its view`);
+    }
+    for (const e of DIAGRAM_EXAMPLES.filter((x) => x.fence === 'table')) {
+      assert.match(e.body, /^\|.+\|\n\| ?-{3}/, `${e.id} is not a Markdown table`);
+      assert.equal(visualKind(e.view).renderer, 'table');
+    }
+  });
+
+  test('a chart example only uses numbers its own question states', () => {
+    // Examples teach representation. A number in a reference payload that the
+    // reference question never gave would teach a model to make numbers up.
+    for (const e of DIAGRAM_EXAMPLES.filter((x) => x.fence === 'natively-chart')) {
+      const question = e.question.replace(/,/g, '');
+      const numbers = [...e.body.matchAll(/(?<![\w."])\d+(?:\.\d+)?(?![\w"])/g)].map((m) => m[0]).filter((n) => Number(n) >= 10);
+      for (const n of numbers) assert.ok(question.includes(n), `${e.id}: ${n} is in the payload but not in the question`);
+    }
+  });
+
+  test('no original example presents an invented number as a requirement', () => {
+    for (const e of ORIGINAL) {
       for (const c of e.constraints) assert.ok(!/\d{2,}/.test(c), `${e.id} constraint carries a number: ${c}`);
       for (const a of e.assumptions) assert.match(a, /^Assumed:|^Traffic|^Assumed/, `${e.id} assumption is not labelled: ${a}`);
     }
+  });
+
+  test('every built-in mode and every catalog view has at least one example', () => {
+    for (const mode of ['general', 'looking-for-work', 'technical-interview', 'sales', 'recruiting', 'team-meet', 'lecture', 'seminar', 'call-center']) {
+      assert.ok(CATALOG.some((e) => e.modes.includes(mode)), `no catalog example for ${mode}`);
+    }
+    for (const view of VISUAL_VIEWS) assert.ok(DIAGRAM_EXAMPLES.some((e) => e.view === view), `no example for the "${view}" view`);
+  });
+
+  test('a catalog view takes examples of its own view only', () => {
+    assert.deepEqual(selectDiagramExamples({ question: 'Model customers and orders', view: 'er', mode: 'technical-interview' }).map((e) => e.id), ['er-customer-order']);
+    assert.deepEqual(selectDiagramExamples({ question: 'What would revenue look like at 5% monthly growth?', view: 'chart', chartIntent: 'forecast', mode: 'sales' }).map((e) => e.id), ['chart-forecast-net-growth']);
+    assert.deepEqual(selectDiagramExamples({ question: 'Where are deals dropping out?', view: 'chart', chartIntent: 'funnel', mode: 'sales' }).map((e) => e.id), ['chart-stage-counts']);
+    assert.deepEqual(selectDiagramExamples({ question: 'Show when it pays back', view: 'chart', chartIntent: 'breakeven', mode: 'sales' }).map((e) => e.id), ['chart-break-even']);
+    assert.deepEqual(selectDiagramExamples({ question: 'Walk me through diagnosing this issue', view: 'decision', mode: 'call-center' }).map((e) => e.id), ['decision-troubleshooting']);
+    // An order-related ER question never borrows the order-lifecycle STATE example, and the reverse.
+    assert.ok(selectDiagramExamples({ question: 'Model the order tables', view: 'er' }).every((e) => e.view === 'er'));
+    assert.ok(selectDiagramExamples({ question: 'Design an orders service for customers', view: 'architecture' }).every((e) => e.view === 'architecture' || e.view === 'flowchart'));
   });
 
   test('the selector picks by topic and view, one by default, never more than two', () => {
@@ -357,5 +412,52 @@ describe('Mermaid keywords used as node ids', () => {
 
   test('the keyword list is what the contract warns the model about', () => {
     for (const word of ['graph', 'end', 'subgraph', 'class', 'style', 'click', 'call']) assert.ok(RESERVED_FLOWCHART_IDS.includes(word), word);
+  });
+});
+
+describe('final review (2026-10-02): what the last pass found in the policy', () => {
+  test('a node CALLED link, click or style is a node, even with an address in its label', () => {
+    for (const source of [
+      'flowchart LR\n    link["Short link https://sho.rt/abc"] --> db[("Links DB")]',
+      'flowchart LR\n    client["Browser"] --> link\n    link("Redirect to https://example.com/long") --> db',
+      'flowchart LR\n    click["Click event wss://stream.example.com"] --> q["Queue"]',
+      'flowchart LR\n    style["Style service https://cdn.example.com"] --> api["API"]',
+    ]) {
+      assert.equal(checkDiagramSource(source).ok, true, source);
+    }
+  });
+
+  test('…and a real click, link or style statement with an address is still refused', () => {
+    for (const source of [
+      'flowchart LR\n    a["A"] --> b["B"]\n    click a href "https://evil.example/x"',
+      'flowchart LR\n    a["A"] --> b["B"]\n    click a "https://evil.example/x" _blank',
+      'flowchart LR\n    a["A"] --> b["B"]\n    style a fill:url(https://evil.example/x.png)',
+      'sequenceDiagram\n    participant A\n    link A: Dashboard @ https://evil.example\n    A->>A: hi',
+    ]) {
+      const result = checkDiagramSource(source);
+      // Either refused outright or the statement is removed before drawing: never kept.
+      assert.ok(!result.ok || !/evil\.example/.test(result.source), source);
+    }
+  });
+
+  test('rendered SVG: an address hidden behind CSS escapes or image-set() is not let through', () => {
+    const wrap = (style) => `<svg xmlns="http://www.w3.org/2000/svg"><style>${style}</style><rect width="1" height="1"/></svg>`;
+    for (const style of [
+      '.a{fill:\\75rl(http://evil.example/x)}',
+      '.a{fill:\\75 rl(http://evil.example/x)}',
+      '.a{background:image-set("http://evil.example/x" 1x)}',
+      '.a{background:-webkit-image-set("http://evil.example/x" 1x)}',
+      '.a{background:\\000075\\000072\\00006c(//evil.example/x)}',
+      '@\\69mport "http://evil.example/x.css";',
+      '.a{behavior:\\65xpression(alert(1))}',
+      '.a{fill:u\\rl(http://evil.example/x)}',
+    ]) {
+      assert.equal(isSafeDiagramSvg(wrap(style)), false, style);
+    }
+    assert.equal(isSafeDiagramSvg('<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill:\\75rl(http://evil.example/x)" width="1" height="1"/></svg>'), false);
+    // What a drawing's own style looks like stays fine.
+    for (const style of ['.node rect{fill:#eef;stroke:#333}', '.edge{marker-end:url(#arrow)}', '.label{font-family:"trebuchet ms",verdana,arial,sans-serif}', '.a::after{content:"\\201C"}']) {
+      assert.equal(isSafeDiagramSvg(wrap(style)), true, style);
+    }
   });
 });

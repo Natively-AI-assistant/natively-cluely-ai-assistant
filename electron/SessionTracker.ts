@@ -305,6 +305,8 @@ export class SessionTracker {
     clearSessionContext(): void {
         this.contextItems = [];
         this.activeDesign.clear();
+        this.pendingDiagramRepairs = [];
+        this.lastRepairedAnswer = null;
         this.detectedCodingQuestion = null;
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
@@ -417,6 +419,14 @@ export class SessionTracker {
         // lastCommittedAttemptBySurface above).
         identity?: TurnIdentity,
     ): boolean {
+        // A diagram of this answer that the overlay already repaired (the
+        // repair can land while the answer is still streaming, before any of
+        // it is recorded here) is recorded repaired.
+        {
+            const before = text;
+            text = this.withPendingDiagramRepairs(text);
+            this.lastRepairedAnswer = text !== before ? { before: stripGistTrailer(before), after: stripGistTrailer(text) } : null;
+        }
         console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only', surface: surface ?? 'unspecified' });
 
         // TurnIdentity write guard — checked FIRST, before any other filter
@@ -690,6 +700,18 @@ export class SessionTracker {
     }
 
     /**
+     * What people SAID in the last `lastSeconds`, formatted like
+     * getFormattedContext, read from the durable transcript. getFormattedContext
+     * reads the rolling window, which is evicted after three minutes whatever
+     * is asked for: "draw what we discussed" was handed at most three minutes
+     * of a meeting however long the window it asked for. Speech only — the
+     * assistant's own suggestions are not something anyone described.
+     */
+    getFormattedSpeech(lastSeconds: number = 600): string {
+        return this.formatContextItems(this.getDurableContext(lastSeconds).filter((item) => item.role !== 'assistant'));
+    }
+
+    /**
      * Formatted context including rolling interim interviewer speech.
      */
     getFormattedContextWithInterim(lastSeconds: number = 120): string {
@@ -824,9 +846,23 @@ export class SessionTracker {
         try { this.activeDesign.noteDesignQuestion(question); } catch { /* hint only */ }
     }
 
+    /**
+     * Says what the turn being answered is: a follow-up on the design (keep it
+     * in focus through the answer), or not one (`false`: forget a mark left by
+     * a follow-up that was never answered).
+     */
+    touchActiveDesign(followsUp: boolean = true): void {
+        try {
+            if (followsUp) this.activeDesign.touch();
+            else this.activeDesign.untouch();
+        } catch { /* hint only */ }
+    }
+
     /** Drop the design (a new meeting must not inherit the previous one's). */
     clearActiveDesign(): void {
         this.activeDesign.clear();
+        this.pendingDiagramRepairs = [];
+        this.lastRepairedAnswer = null;
     }
 
     /**
@@ -862,7 +898,45 @@ export class SessionTracker {
         for (const h of this.assistantResponseHistory.slice(-4)) {
             h.text = swap(h.text) as string;
         }
+        // The overlay accepts a repair when its card draws — which can be while
+        // the answer is still streaming, before any of it has been recorded.
+        // Nothing matched then, and the broken source was recorded afterwards
+        // (as the saved answer AND as the design on the table). It is kept for
+        // a short while and applied to what is recorded next.
+        if (!changed) this.rememberPendingDiagramRepair(originalSource, repairedSource);
         return changed;
+    }
+
+    private pendingDiagramRepairs: Array<{ original: string; repaired: string; at: number }> = [];
+    /** The last answer a pending repair was applied to, as written and as recorded (for the usage log's copy). */
+    private lastRepairedAnswer: { before: string; after: string } | null = null;
+    private static readonly PENDING_DIAGRAM_REPAIR_TTL_MS = 5 * 60 * 1000;
+    private static readonly PENDING_DIAGRAM_REPAIR_MAX = 8;
+
+    private rememberPendingDiagramRepair(original: string, repaired: string): void {
+        if (typeof original !== 'string' || typeof repaired !== 'string' || !original.trim() || original === repaired) return;
+        this.pendingDiagramRepairs = this.pendingDiagramRepairs.filter((r) => r.original !== original);
+        this.pendingDiagramRepairs.push({ original, repaired, at: Date.now() });
+        while (this.pendingDiagramRepairs.length > SessionTracker.PENDING_DIAGRAM_REPAIR_MAX) this.pendingDiagramRepairs.shift();
+    }
+
+    /** An answer about to be recorded, with any diagram the overlay already repaired swapped in (exact source only). */
+    private withPendingDiagramRepairs(text: string): string {
+        if (typeof text !== 'string' || this.pendingDiagramRepairs.length === 0) return text;
+        const cutoff = Date.now() - SessionTracker.PENDING_DIAGRAM_REPAIR_TTL_MS;
+        this.pendingDiagramRepairs = this.pendingDiagramRepairs.filter((r) => r.at >= cutoff);
+        let out = text;
+        try {
+            for (const repair of [...this.pendingDiagramRepairs]) {
+                const next = replaceMermaidSource(out, repair.original, repair.repaired);
+                if (next !== out) {
+                    out = next;
+                    // Spent: one repair belongs to one answer.
+                    this.pendingDiagramRepairs = this.pendingDiagramRepairs.filter((r) => r !== repair);
+                }
+            }
+        } catch { /* the answer is recorded as written */ }
+        return out;
     }
 
     pushUsage(entry: any): void {
@@ -871,6 +945,11 @@ export class SessionTracker {
         const stored = entry && typeof entry.answer === 'string'
             ? { ...entry, answer: stripGistTrailer(entry.answer) }
             : entry;
+        // (The usage entry is written after the assistant message; a repair
+        // spent there is found here through the message it was applied to.)
+        if (stored && typeof stored.answer === 'string' && this.lastRepairedAnswer && stored.answer === this.lastRepairedAnswer.before) {
+            stored.answer = this.lastRepairedAnswer.after;
+        }
         this.fullUsage.push(stored);
         this.capUsageArray();
     }
@@ -909,6 +988,8 @@ export class SessionTracker {
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
         this.activeDesign.clear();
+        this.pendingDiagramRepairs = [];
+        this.lastRepairedAnswer = null;
         this.sessionEpoch++;
         this.contextEpoch++;
     }

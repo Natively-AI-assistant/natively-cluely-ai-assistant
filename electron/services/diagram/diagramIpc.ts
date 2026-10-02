@@ -25,8 +25,8 @@ import {
   DIAGRAM_REPAIR_LIMITS,
 } from '../../../src/lib/diagram/diagramRepair.mjs';
 import { checkDiagramSource, DIAGRAM_LIMITS } from '../../../src/lib/diagram/diagramPolicy.mjs';
-import { safeDiagramFileStem, diagramExportBytes, DIAGRAM_EXPORT_FILTERS } from './diagramExport';
-import { isSystemDesignDiagramsEnabled } from '../../llm/diagramPromptSignals';
+import { safeDiagramFileStem, uniqueDiagramFileName, diagramExportBytes, DIAGRAM_EXPORT_FILTERS, isDiagramExportFormat, saveDialogPlacement } from './diagramExport';
+import { isSystemDesignDiagramsEnabled, activeDesignShareable } from '../../llm/diagramPromptSignals';
 import { nativePromptsBlocked } from '../stealthPromptGate';
 import { PhoneMirrorService } from '../PhoneMirrorService';
 import { setPhoneDiagramProvider } from '../phoneMirrorMarkdown';
@@ -51,14 +51,13 @@ export function broadcastDiagramsEnabled(): void {
 
 /** A path in `dir` that does not exist yet: "name.ext", then "name (2).ext", … */
 function uniquePath(dir: string, stem: string, ext: string): string {
-  let candidate = path.join(dir, `${stem}.${ext}`);
-  for (let n = 2; n < 500 && fs.existsSync(candidate); n += 1) {
-    candidate = path.join(dir, `${stem} (${n}).${ext}`);
-  }
-  return candidate;
+  return path.join(dir, uniqueDiagramFileName(stem, ext, (name) => fs.existsSync(path.join(dir, name))));
 }
 
 let phoneBroker: PhoneDiagramBroker | null = null;
+
+/** Repair calls that may run at the same time, across both windows. */
+const MAX_CONCURRENT_REPAIRS = 3;
 
 export function registerDiagramIpc(appState: AppState, safeHandle: SafeHandle): void {
   const windows = () => {
@@ -91,6 +90,9 @@ export function registerDiagramIpc(appState: AppState, safeHandle: SafeHandle): 
     if (!request) return { ok: false, reason: 'not_repairable' };
     const key = `${event.sender.id}:${requestId}`;
     if (inFlight.has(key)) return { ok: false, reason: 'in_flight' };
+    // The request id is the page's to choose, so it cannot be what bounds how
+    // many model calls run at once.
+    if (inFlight.size >= MAX_CONCURRENT_REPAIRS) return { ok: false, reason: 'rate_limited' };
     const allowed = budget.take(source, { manual: p.manual === true });
     if (!allowed.allowed) return { ok: false, reason: allowed.reason };
 
@@ -100,10 +102,15 @@ export function registerDiagramIpc(appState: AppState, safeHandle: SafeHandle): 
     try {
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       if (!llmHelper) return { ok: false, reason: 'unavailable' };
+      // A diagram is something the assistant wrote about the conversation:
+      // transcript-scope data, like the design handed back on a follow-up
+      // (activeDesignShareable). With that scope withheld it goes to a model on
+      // this device or to none.
+      if (!activeDesignShareable() && (llmHelper as any).isUsingOllama?.() !== true) return { ok: false, reason: 'unavailable' };
       // The user's currently selected provider and model: the same route that
       // wrote the diagram. No mode prompt, no knowledge injection, no
       // transcript, no screenshot — the diagram and the parser message only.
-      const stream = llmHelper.streamChat(request.user, undefined, undefined, request.system, true, true, [], controller.signal);
+      const stream = llmHelper.streamChat(request.user, undefined, undefined, request.system, true, true, ['transcript'], controller.signal);
       let out = '';
       for await (const chunk of stream) {
         out += chunk;
@@ -152,7 +159,7 @@ export function registerDiagramIpc(appState: AppState, safeHandle: SafeHandle): 
   safeHandle('diagram:export', async (event, payload: unknown) => {
     if (!fromAppWindow(event)) return { saved: false, error: 'forbidden' };
     const p = (payload ?? {}) as { format?: unknown; data?: unknown; name?: unknown };
-    const format = p.format === 'svg' || p.format === 'png' || p.format === 'mmd' ? p.format : null;
+    const format = isDiagramExportFormat(p.format) ? p.format : null;
     const bytes = format ? diagramExportBytes(format, p.data) : null;
     if (!format || !bytes) return { saved: false, error: 'invalid' };
     const stem = safeDiagramFileStem(p.name);
@@ -162,14 +169,38 @@ export function registerDiagramIpc(appState: AppState, safeHandle: SafeHandle): 
       if (nativePromptsBlocked(() => appState.getUndetectable())) {
         // A save dialog is its own OS window and would show in a screen share
         // (see stealthPromptGate). In Undetectable mode the file goes straight
-        // to Downloads under a name that does not overwrite anything.
-        target = uniquePath(downloads, stem, format);
+        // to Downloads under a name that does not overwrite anything: opened
+        // exclusively ('wx'), so a file that appeared since the name was chosen
+        // is not replaced — the next free name is tried instead.
+        for (let attempt = 0; ; attempt += 1) {
+          target = uniquePath(downloads, stem, format);
+          try {
+            await fs.promises.writeFile(target, bytes, { flag: 'wx' });
+            break;
+          } catch (err: any) {
+            if (err?.code !== 'EEXIST' || attempt >= 4) throw err;
+          }
+        }
+        return { saved: true, fileName: path.basename(target), silent: true };
       } else {
-        const result = await dialog.showSaveDialog({
+        const options = {
           title: 'Save diagram',
           defaultPath: path.join(downloads, `${stem}.${format}`),
           filters: [DIAGRAM_EXPORT_FILTERS[format]],
-        });
+        };
+        // The overlay never takes focus, so a dialog opened plainly from it
+        // opens behind whatever the user has in front (see saveDialogPlacement).
+        const placement = saveDialogPlacement(process.platform);
+        let owner: BrowserWindow | null = null;
+        if (placement === 'own-by-sender') {
+          try {
+            const win = BrowserWindow.fromWebContents(event.sender);
+            owner = win && !win.isDestroyed() ? win : null;
+          } catch { owner = null; }
+        } else if (placement === 'activate-app') {
+          try { app.focus({ steal: true }); } catch { /* the dialog still opens */ }
+        }
+        const result = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
         if (result.canceled || !result.filePath) return { saved: false, canceled: true };
         target = path.extname(result.filePath) ? result.filePath : `${result.filePath}.${format}`;
       }
@@ -184,8 +215,8 @@ export function registerDiagramIpc(appState: AppState, safeHandle: SafeHandle): 
   // ── Phone Mirror ──────────────────────────────────────────────────────────
   if (!phoneBroker) {
     phoneBroker = new PhoneDiagramBroker({
-      pickTarget: () => {
-        const win = windows()[0];
+      pickTarget: (tried = []) => {
+        const win = windows().find((w) => !tried.includes(w.webContents.id));
         if (!win) return null;
         const wc = win.webContents;
         return { id: wc.id, send: (channel, data) => wc.send(channel, data) };

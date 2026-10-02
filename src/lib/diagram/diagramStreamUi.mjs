@@ -21,14 +21,30 @@
 //      version stays visible. Decided from content (shared component names),
 //      so a fresh, unrelated design never shows the old one as "updating".
 
-import { designOverlap, SAME_DESIGN_OVERLAP } from './activeDesign.mjs';
-import { designVocabulary } from './diagramRequest.mjs';
+import { designOverlap, SAME_DESIGN_OVERLAP, artifactVocabulary } from './activeDesign.mjs';
+import { isVisualBlock, mentionsVisualTag, VISUAL_FENCE_LANGS } from './fencedBlocks.mjs';
 
-// An opening fence line that already reads "mermaid" (the newline may not have
-// arrived yet). Backtick or tilde, any indentation.
-const MERMAID_OPENING_RE = /(?:^|\n) *(?:`{3,}|~{3,})mermaid\b/i;
-// A fence line still being typed whose tag so far is a prefix of "mermaid".
-const MERMAID_PREFIX_TAIL_RE = /^ *(?:`{3,}|~{3,})(m|me|mer|merm|merma|mermai|mermaid)$/i;
+// "Mermaid" in the names below is historical: every function here treats the
+// three visual fence tags alike (mermaid, natively-chart, natively-diagram).
+const VISUAL_TAGS = Object.keys(VISUAL_FENCE_LANGS);
+
+// An opening fence line that already reads a visual tag (the newline may not
+// have arrived yet). Backtick or tilde, any indentation.
+//
+// Every gate here reads a fence line the way the scanner does (fencedBlocks:
+// leading spaces, an optional list marker, spaces before the tag, any case).
+// They used to be stricter than it, each in its own way: "``` mermaid" was a
+// diagram to the scanner with no live card, "```Mermaid" got the wide row and
+// no card, and "```mermaid " showed an empty code card first.
+const FENCE_LEAD = String.raw` *(?:(?:[-*+]|\d{1,9}[.)]) +)?(?:\`{3,}|~{3,})[ \t\u00a0]*`;
+const MERMAID_OPENING_RE = new RegExp(String.raw`(?:^|\n)${FENCE_LEAD}(?:mermaid|natively-chart|natively-diagram)(?![\w-])`, 'i');
+// A fence line still being typed: its tag so far, and whatever follows it.
+const FENCE_TAIL_TAG_RE = new RegExp(String.raw`^${FENCE_LEAD}([a-z-]+)([^\n]*)$`, 'i');
+
+const isVisualTagPrefix = (tag) => {
+  const t = String(tag || '').toLowerCase();
+  return t.length > 0 && VISUAL_TAGS.some((full) => full.startsWith(t));
+};
 
 /** Has a Mermaid fence started opening in this (arrived) text? */
 export function hasOpeningMermaidFence(text) {
@@ -36,8 +52,8 @@ export function hasOpeningMermaidFence(text) {
 }
 
 // A fence line at the very end of a streaming text that could still be turning
-// into "```mermaid" ("```m", "```merm").
-const MERMAID_TAIL_RE = /(?:^|\n) *(?:`{3,}|~{3,})m[a-z]*$/i;
+// into a visual tag ("```m", "```merm", "```nativ").
+const MERMAID_TAIL_RE = new RegExp(String.raw`(?:^|\n)${FENCE_LEAD}([a-z-]+)$`, 'i');
 
 /**
  * Cheap pre-check before running the fence scanner: could this answer hold a
@@ -45,8 +61,10 @@ const MERMAID_TAIL_RE = /(?:^|\n) *(?:`{3,}|~{3,})m[a-z]*$/i;
  */
 export function mayHoldMermaidFence(text, streaming = false) {
   if (typeof text !== 'string' || !text) return false;
-  if (text.indexOf('mermaid') !== -1) return true;
-  return streaming === true && MERMAID_TAIL_RE.test(text.slice(-48));
+  if (mentionsVisualTag(text)) return true;
+  if (streaming !== true) return false;
+  const tail = MERMAID_TAIL_RE.exec(text.slice(-48));
+  return Boolean(tail) && isVisualTagPrefix(tail[1]);
 }
 
 /**
@@ -67,7 +85,14 @@ export function shouldUseStreamingDiagramUi(token, previousText = '') {
  * code block and then change into a diagram.
  */
 export function isMermaidOpeningTail(tail) {
-  return Boolean(tail && tail.kind === 'opening-fence' && MERMAID_PREFIX_TAIL_RE.test(tail.text));
+  if (!tail || tail.kind !== 'opening-fence') return false;
+  const m = FENCE_TAIL_TAG_RE.exec(tail.text);
+  if (!m) return false;
+  // Still typing the tag: hidden while it could become a visual one.
+  if (m[2] === '') return isVisualTagPrefix(m[1]);
+  // The tag is finished and the line is not ("```mermaid ", "```mermaid\r",
+  // "```mermaid title"): hidden when the tag IS a visual one.
+  return /^\s/.test(m[2]) && VISUAL_TAGS.includes(m[1].toLowerCase());
 }
 
 /**
@@ -81,7 +106,7 @@ export function isMermaidOpeningTail(tail) {
 export function fastForwardDiagramReveal(blocks, revealedLen, arrivedLen) {
   if (!Array.isArray(blocks) || !Number.isFinite(revealedLen) || !Number.isFinite(arrivedLen)) return revealedLen;
   for (const block of blocks) {
-    if (block.kind !== 'mermaid') continue;
+    if (!isVisualBlock(block)) continue;
     if (revealedLen >= block.start && revealedLen < block.end) {
       return Math.max(revealedLen, Math.min(block.end, arrivedLen));
     }
@@ -93,7 +118,7 @@ export function fastForwardDiagramReveal(blocks, revealedLen, arrivedLen) {
 export function completedDiagramCount(blocks) {
   if (!Array.isArray(blocks)) return 0;
   let n = 0;
-  for (const b of blocks) if (b.kind === 'mermaid' && b.closed) n += 1;
+  for (const b of blocks) if (isVisualBlock(b) && b.closed) n += 1;
   return n;
 }
 
@@ -104,7 +129,7 @@ export function completedDiagramCount(blocks) {
  */
 export function previousVersionFor(partialSource, previousSource) {
   if (!previousSource || !partialSource) return undefined;
-  if (designVocabulary(partialSource).size < 2) return undefined;
+  if (artifactVocabulary(partialSource).size < 2) return undefined;
   return designOverlap(partialSource, previousSource) >= SAME_DESIGN_OVERLAP ? previousSource : undefined;
 }
 

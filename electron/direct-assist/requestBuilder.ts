@@ -517,6 +517,10 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
     requestedLanguage,
     requestedFormat,
     maxContextChars,
+    // What the system prompt may use: the 1,000-token reserve above is part of
+    // the model's input, not extra room.
+    modelInputChars: Math.max(MIN_MAX_CONTEXT_CHARS, (capabilities.maxContextTokens - capabilities.outputBudgetTokens) * 4),
+    smallModel: capabilities.tier === 'local-small',
   });
 }
 
@@ -616,6 +620,17 @@ function directAssistDiagramsEnabled(): boolean {
   }
 }
 
+/** Will the conversation history reach this provider (transcript scope, Settings > AI Providers > Privacy)? */
+function directAssistHistoryShareable(provider: string): boolean {
+  if (provider === 'ollama') return true;
+  try {
+    const { readProviderScopePolicy, isScopeDenied } = require('../context-intelligence/policies/provider-scope-policy');
+    return !isScopeDenied('transcript', readProviderScopePolicy());
+  } catch {
+    return true;
+  }
+}
+
 function diagramModules() {
   return {
     ...(require('../../src/lib/diagram/diagramRequest.mjs') as typeof import('../../src/lib/diagram/diagramRequest.mjs')),
@@ -635,12 +650,20 @@ function resolveDirectAssistDiagram(request: DirectAssistRequest, history: reado
   try {
     if (!directAssistDiagramsEnabled()) return { contractSignals: null, designBlock: '' };
     const { resolveDiagramRequest, diagramPromptSignals, renderDiagramTurnBlock, activeDesignFromHistory } = diagramModules();
-    const question = request.source === 'screenshot' && request.transcript
-      ? `${request.currentRequest}\n${request.transcript}`
-      : request.currentRequest;
+    // The request, and only the request. The transcript that rides a
+    // screenshot is what was said in the room: "honestly I would not draw that
+    // conclusion yet" is not an instruction to this app.
+    const question = request.currentRequest;
     // Only history that survived trimming: a design the model cannot see must
     // not be referred to as "the design on the table".
-    const activeDesign = activeDesignFromHistory(history.map((turn) => ({ role: turn.role, content: turn.content })));
+    // And only a design the provider will actually be sent. The history block
+    // (and the design block with it) is transcript-scope data: with that scope
+    // withheld from a cloud provider it is stripped before dispatch, and a
+    // contract saying "the design is in <active_design>" would point at nothing.
+    // A model on this device is sent everything.
+    const activeDesign = directAssistHistoryShareable(request.selection.provider)
+      ? activeDesignFromHistory(history.map((turn) => ({ role: turn.role, content: turn.content })))
+      : null;
     const diagramRequest = resolveDiagramRequest({
       question,
       activeDesign,
@@ -1007,12 +1030,29 @@ export function prepareDirectAssistPrompt(input: DirectAssistRequestInput | Dire
   // The diagram contract for THIS turn, decided against the history that
   // actually survived the fitting above (same input renderUserPrompt used).
   const diagram = resolveDirectAssistDiagram(request, parts.history);
+  // The contract is optional; the answer is not. It is added in the form that
+  // fits what is left of the model's input — the full one, the short one a
+  // small model gets, or none — and never makes a turn that fitted fail.
+  // (An 8k local model with a full prompt used to throw CONTEXT_TOO_LARGE on
+  // "design a URL shortener" and answer "what is a CDN?" fine.)
+  const systemPrompt = (() => {
+    if (!diagram.contractSignals) return DIRECT_ASSIST_SYSTEM_PROMPT;
+    // 8: the dispatcher estimates the two prompts' tokens separately, each
+    // rounded up (LLMHelper's CONTEXT_TOO_LARGE check).
+    const room = Number.isFinite(request.modelInputChars)
+      ? Number(request.modelInputChars) - userPrompt.length - 8
+      : Number.POSITIVE_INFINITY;
+    const tiers: Array<'cloud' | 'local'> = request.smallModel ? ['local'] : ['cloud', 'local'];
+    for (const tier of tiers) {
+      const withContract = diagramModules().appendDiagramContract(DIRECT_ASSIST_SYSTEM_PROMPT, diagram.contractSignals, { surface: 'live', tier });
+      if (withContract.length <= room) return withContract;
+    }
+    return DIRECT_ASSIST_SYSTEM_PROMPT;
+  })();
 
   return Object.freeze({
     request,
-    systemPrompt: diagram.contractSignals
-      ? diagramModules().appendDiagramContract(DIRECT_ASSIST_SYSTEM_PROMPT, diagram.contractSignals, { surface: 'live' })
-      : DIRECT_ASSIST_SYSTEM_PROMPT,
+    systemPrompt,
     userPrompt,
     imagePaths: request.imagePaths,
     // Off the SURVIVING history, not request.history: the loop above may have

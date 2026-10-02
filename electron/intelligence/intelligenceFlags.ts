@@ -566,7 +566,7 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   diagramIntelligence: { env: 'NATIVELY_DIAGRAM_INTELLIGENCE', setting: 'diagramIntelligenceEnabled', default: false },
   // DEFAULT ON, a plain literal (never isInternalDevTestContext — dev/test must
   // exercise what ships). Kill switch: NATIVELY_SYSTEM_DESIGN_DIAGRAMS=0 or
-  // Settings > Intelligence > "Design diagrams".
+  // Settings > Intelligence > "Diagrams and charts".
   systemDesignDiagrams: { env: 'NATIVELY_SYSTEM_DESIGN_DIAGRAMS', setting: 'systemDesignDiagramsEnabled', default: true },
   hindsightMemory: { env: 'NATIVELY_HINDSIGHT_MEMORY', setting: 'hindsightMemoryEnabled', default: false },
   hindsightLiveRecall: { env: 'NATIVELY_HINDSIGHT_LIVE_RECALL', setting: 'hindsightLiveRecallEnabled', default: false },

@@ -5,8 +5,11 @@ export interface ProseBlock {
   text: string;
 }
 
+export type VisualBlockKind = 'mermaid' | 'chart' | 'notation';
+
 export interface FenceBlock {
-  kind: 'code' | 'mermaid';
+  /** 'mermaid' | 'chart' | 'notation' are visual artifacts; 'code' is everything else. */
+  kind: 'code' | VisualBlockKind;
   /** First word of the info string, lower-cased ('' when untagged). */
   lang: string;
   info: string;
@@ -21,7 +24,7 @@ export interface FenceBlock {
   closed: boolean;
   /** Ordinal among all fences of the answer. Stable as the answer grows. */
   fenceIndex: number;
-  /** Ordinal among Mermaid fences (-1 for ordinary code). */
+  /** Ordinal among the answer's visual blocks of every kind (-1 for ordinary code). */
   diagramIndex: number;
 }
 
@@ -51,6 +54,13 @@ export function createFencedBlockTracker(): {
   reset(): void;
 };
 
+export const VISUAL_FENCE_LANGS: Readonly<Record<string, VisualBlockKind>>;
+export const VISUAL_BLOCK_KINDS: readonly VisualBlockKind[];
+export const VISUAL_FENCE_TAG: Readonly<Record<VisualBlockKind, string>>;
+export function isVisualBlock(block: { kind: string } | null | undefined): boolean;
+export function mentionsVisualTag(text: unknown): boolean;
+export function hasVisualFence(text: string, options?: { final?: boolean }): boolean;
+export function extractVisualBlocks(text: string, options?: { final?: boolean }): FenceBlock[];
 export function hasMermaidFence(text: string, options?: { final?: boolean }): boolean;
 export function extractMermaidBlocks(text: string, options?: { final?: boolean }): FenceBlock[];
 export function stripMermaidBlocks(text: string): string;

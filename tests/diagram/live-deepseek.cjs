@@ -212,7 +212,8 @@ const SCENARIOS = [
     ],
   },
   { id: 'L3', mode: 'technical-interview', expect: 'diagram', steps: [['wta', 'Design a real-time chat system like WhatsApp for 50 million daily users.']] },
-  { id: 'L4', mode: 'technical-interview', expect: 'diagram', steps: [['wta', 'Walk me through the request flow when a user logs in with Google OAuth, between the browser, our backend and Google.']] },
+  // A "walk me through" question that does not ask for a picture: drawing is the model's call.
+  { id: 'L4', mode: 'technical-interview', expect: 'diagram', optional: true, steps: [['wta', 'Walk me through the request flow when a user logs in with Google OAuth, between the browser, our backend and Google.']] },
   { id: 'L5', mode: 'technical-interview', expect: 'diagram', steps: [['wta', "What states does an order go through from checkout to delivery, and what moves it between them? Draw it as a state diagram."]] },
   { id: 'L6', mode: 'technical-interview', expect: 'diagram', steps: [['manual', 'Design a rate limiter for a public API.']] },
   { id: 'L7', mode: 'general', expect: 'diagram', steps: [['wta', 'Can you sketch the architecture for a file upload pipeline with virus scanning and thumbnails?']] },
@@ -222,12 +223,55 @@ const SCENARIOS = [
   { id: 'C1', mode: 'technical-interview', expect: 'none', steps: [['wta', 'Write a function to solve two sum.']] },
   { id: 'C2', mode: 'technical-interview', expect: 'none', steps: [['wta', 'What is a hash table and when would you use one?']] },
   { id: 'C3', mode: 'looking-for-work', expect: 'none', steps: [['wta', 'Tell me about a time you disagreed with a teammate.']] },
-].filter((s) => !ONLY || ONLY.split(',').some((o) => s.id === o));
+];
+
+// ── the nine-mode catalog, live ─────────────────────────────────────────────
+//
+// `seed` is what was said before the question (the evidence a visual may use).
+// `judge` decides from the committed answer whether the model did the right
+// thing — including the cases where the right thing is NOT to draw.
+const CATALOG_SCENARIOS = [
+  {
+    id: 'M1', mode: 'sales', seed: ['We are at ten thousand dollars a month in revenue right now.'],
+    steps: [
+      ['wta', 'What would revenue look like at 5% monthly growth over the next three months?', 'forecast'],
+      ['wta', 'Make it 3%', 'update'],
+      // Shorten the answer that holds the 3% chart: its numbers must not move.
+      ['refine', 'shorten', 'refine'],
+      ['wta', 'Why is the last month higher?', 'explain'],
+    ],
+  },
+  { id: 'M2', mode: 'sales', seed: [], steps: [['wta', 'What would revenue look like at 5% monthly growth?', 'no-baseline']] },
+  { id: 'M3', mode: 'sales', seed: ['Of the 200 leads we created in Q3, 120 were qualified, 60 got a proposal and 22 closed.'], steps: [['wta', 'Where are deals dropping out?', 'funnel']] },
+  { id: 'M4', mode: 'sales', seed: ['Setup costs twelve thousand dollars and it saves us about twenty-five hundred dollars a month.'], steps: [['wta', 'Show the expected savings and break-even over eight months.', 'breakeven']] },
+  { id: 'M5', mode: 'technical-interview', seed: [], steps: [['wta', 'Model users, orders, and payments.', 'er']] },
+  { id: 'M6', mode: 'technical-interview', seed: [], steps: [['wta', 'Design the objects for a parking lot.', 'class']] },
+  { id: 'M7', mode: 'lecture', seed: [], steps: [['wta', 'Construct the DFA over the alphabet a and b that accepts strings ending in ab.', 'dfa']] },
+  { id: 'M8', mode: 'lecture', seed: [], steps: [['wta', 'Draw customers and orders in Chen notation: one customer places many orders, and every order has a customer.', 'chen']] },
+  { id: 'M9', mode: 'call-center', seed: ['My router keeps dropping the connection since this morning.', 'The internet light is blinking orange and I already restarted it once.'], steps: [['wta', 'Walk me through diagnosing this issue.', 'decision']] },
+  { id: 'M10', mode: 'recruiting', seed: ['The role needs Kubernetes in production, experience leading a team, and on-call experience.', 'I ran a forty node Kubernetes cluster for two years and I mentored two engineers.'], steps: [['wta', "Map this candidate's experience to the role.", 'matrix']] },
+  { id: 'M11', mode: 'looking-for-work', seed: [], steps: [['wta', 'Summarize my career progression.', 'no-evidence']] },
+  { id: 'M12', mode: 'team-meet', seed: ['The orders API is blocked by the schema migration.', 'Mobile checkout is waiting on the orders API.', 'The checkout design is done and ready.'], steps: [['wta', 'Show which work blocks which.', 'dependency']] },
+  { id: 'M13', mode: 'general', seed: ['For this year engineering gets 420 thousand dollars, design 120 thousand, marketing 210 thousand and support 90 thousand.'], steps: [['wta', 'Show how the budget is split.', 'breakdown']] },
+  { id: 'M14', mode: 'seminar', seed: [], steps: [['wta', 'Draw the method described in this paper.', 'no-evidence']] },
+  { id: 'M15', mode: 'general', seed: ['We talked about pricing, about onboarding, and about the launch email.', 'The risks were slow adoption and support load.'], steps: [['wta', 'Organize the ideas we discussed.', 'mindmap']] },
+  { id: 'M16', mode: 'team-meet', seed: ['Beta goes out on October 12th, the public launch is November 2nd, and the review is on November 16th.'], steps: [['wta', 'Show release milestones.', 'timeline']] },
+  { id: 'N1', mode: 'sales', seed: [], steps: [['wta', 'How do I handle the pricing objection in one sentence?', 'control']] },
+  { id: 'N2', mode: 'call-center', seed: [], steps: [['wta', 'What is your return policy for opened items?', 'control']] },
+  { id: 'N3', mode: 'lecture', seed: [], steps: [['wta', 'What is gradient descent?', 'control']] },
+];
+
+const SUITE = arg('suite', 'all');
+const selected = (list) => list.filter((s) => !ONLY || ONLY.split(',').some((o) => s.id === o));
+const RUN = [...(SUITE === 'catalog' ? [] : selected(SCENARIOS)), ...(SUITE === 'design' ? [] : selected(CATALOG_SCENARIOS))];
 
 (async () => {
   const lib = (name) => import(pathToFileURL(path.join(root, 'src/lib/diagram', name)).href);
-  const { parseFencedBlocks } = await lib('fencedBlocks.mjs');
+  const { parseFencedBlocks, isVisualBlock } = await lib('fencedBlocks.mjs');
   const { checkDiagramSource } = await lib('diagramPolicy.mjs');
+  const { compileVisualSource } = await lib('visualArtifact.mjs');
+  const { analyseErDiagram, describeErDiagram } = await lib('erSemantics.mjs');
+  const { validateAutomaton, automatonAccepts } = await lib('automaton.mjs');
 
   /** Arrival time (ms) of the character at `offset` in the token stream. */
   const arrivalOf = (tokens, offset) => {
@@ -244,15 +288,34 @@ const SCENARIOS = [
     const blocks = parseFencedBlocks(result.answer, { final: true }).blocks || parseFencedBlocks(result.answer, { final: true });
     const list = Array.isArray(blocks) ? blocks : [];
     const mermaid = list.filter((b) => b.kind === 'mermaid');
+    const payloads = list.filter((b) => b.kind === 'chart' || b.kind === 'notation');
     const code = list.filter((b) => b.kind === 'code');
     const prose = list.filter((b) => b.kind === 'prose').map((b) => result.answer.slice(b.start, b.end)).join(' ');
     const streamed = result.tokens.map((t) => t[1]).join('');
     const streamBlocks = (() => {
       const parsed = parseFencedBlocks(streamed, { final: true });
       const arr = Array.isArray(parsed) ? parsed : parsed.blocks || [];
-      return arr.filter((b) => b.kind === 'mermaid');
+      return arr.filter(isVisualBlock);
     })();
     return {
+      // Chart and notation blocks, compiled by the same adapters the app draws with.
+      payloadBlocks: payloads.map((b) => {
+        const compiled = compileVisualSource(b.kind, b.source);
+        return {
+          kind: b.kind,
+          closed: b.closed,
+          ok: compiled.ok,
+          label: compiled.ok ? compiled.label : null,
+          view: compiled.ok ? compiled.view : null,
+          badges: compiled.ok ? compiled.badges : [],
+          table: compiled.ok && compiled.table ? compiled.table : null,
+          notes: compiled.ok ? compiled.notes : [],
+          refused: compiled.ok ? null : { code: compiled.code, message: compiled.message, missing: compiled.missing || [] },
+          source: b.source,
+        };
+      }),
+      hasMarkdownTable: /^\|.+\|\s*\n\|\s*:?-{3,}/m.test(prose),
+      visualBlockCount: mermaid.length + payloads.length,
       mermaidBlocks: mermaid.map((b) => {
         const verdict = checkDiagramSource(b.source);
         return {
@@ -275,25 +338,83 @@ const SCENARIOS = [
       // When the diagram's closing fence reached the overlay (it can draw from here).
       diagramCompleteMs: streamBlocks.length && streamBlocks[0].closed ? arrivalOf(result.tokens, streamBlocks[0].end) : null,
       streamedEqualsCommitted: streamed.trim() === result.answer.trim(),
-      providerCalls: result.calls.length,
+      providerCalls: result.calls.filter((c) => c.model).length,
       // Contract occurrences in the request that produced the answer (0 or 1 expected).
-      contractSent: result.calls.length ? result.calls[0].contract : 0,
-      systemChars: result.calls.length ? result.calls[0].systemChars : 0,
+      // The model call (a local-model availability probe can precede it on the wire).
+      contractSent: (result.calls.find((c) => c.model) || { contract: 0 }).contract,
+      systemChars: (result.calls.find((c) => c.model) || { systemChars: 0 }).systemChars,
     };
   }
 
   const records = [];
   out(`##### live diagram check · model=${MODEL} · V3=${process.env.NATIVELY_CONTEXT_INTELLIGENCE_V3}`);
-  for (const sc of SCENARIOS) {
+  // What "the right thing" is for a catalog turn, judged from the committed answer.
+  const tableValues = (a) => (a.payloadBlocks[0] && a.payloadBlocks[0].table ? a.payloadBlocks[0].table.rows.flat().filter((v) => typeof v === 'number') : []);
+  const has = (list, wanted) => wanted.every((w) => list.some((v) => Math.abs(v - w) < 0.005));
+  const JUDGES = {
+    forecast: (a) => (a.payloadBlocks[0]?.ok && a.payloadBlocks[0].label === 'Forecast' && has(tableValues(a), [10000, 10500, 11025, 11576.25]) ? [true, 'forecast chart, computed 10,500 / 11,025 / 11,576.25'] : [false, `wanted the computed forecast: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),
+    update: (a) => (a.payloadBlocks[0]?.ok && has(tableValues(a), [10300, 10609, 10927.27]) ? [true, 'updated to 3%: 10,300 / 10,609 / 10,927.27'] : [false, `wanted the 3% forecast: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),
+    explain: (a) => (a.visualBlockCount === 0 ? [true, 'prose, no new chart'] : [false, 'redrew on a question']),
+    refine: (a, prev) => (a.payloadBlocks[0]?.ok && prev && a.payloadBlocks[0].source.trim() === prev.trim() ? [true, 'prose shortened, chart unchanged'] : [false, 'the chart changed or was dropped']),
+    'no-baseline': (a) => (a.visualBlockCount === 0 ? [true, 'no chart: the baseline was never given'] : a.payloadBlocks[0] && !a.payloadBlocks[0].ok ? [true, `chart refused locally: ${a.payloadBlocks[0].refused.message}`] : [false, `drew a forecast from an invented baseline (stamped ${JSON.stringify(a.payloadBlocks[0]?.badges)}): ${JSON.stringify(tableValues(a).slice(0, 4))}`]),
+    funnel: (a) => (a.payloadBlocks[0]?.ok && has(tableValues(a), [200, 120, 60, 22]) ? [true, `stage counts 200 / 120 / 60 / 22${a.payloadBlocks[0].notes.length ? ` (${a.payloadBlocks[0].notes[0]})` : ''}`] : [false, `wanted the stated counts: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),
+    breakeven: (a) => (a.payloadBlocks[0]?.ok && has(tableValues(a), [-12000, 500]) ? [true, `break-even computed (${a.payloadBlocks[0].notes.find((n) => /Paid back/.test(n)) || 'no outcome note'})`] : [false, `wanted the break-even calculation: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),
+    er: (a) => {
+      const b = a.mermaidBlocks[0];
+      if (!b || b.type !== 'er' || !b.ok) return [false, `wanted an erDiagram, got ${b ? b.type : 'no diagram'}`];
+      const er = analyseErDiagram(b.source);
+      return [er.relationships.length >= 2, `${er.entities.length} entities, ${er.relationships.length} relationships. ${describeErDiagram(er).slice(0, 150)}${er.notes.length ? ` · NOTE ${er.notes[0]}` : ''}`];
+    },
+    class: (a) => (a.mermaidBlocks[0]?.type === 'class' && a.mermaidBlocks[0].ok ? [true, `classDiagram, relations: ${(a.mermaidBlocks[0].source.match(/<\|--|<\|\.\.|\*--|o--|-->/g) || []).join(' ')}`] : [false, `wanted a classDiagram, got ${a.mermaidBlocks[0]?.type || 'none'}`]),
+    dfa: (a) => {
+      const b = a.payloadBlocks[0];
+      if (!b || !b.ok || b.view !== 'automaton') return [false, `wanted an automaton: ${JSON.stringify(b?.refused || b?.view || 'no block')}`];
+      const checked = validateAutomaton(JSON.parse(b.source));
+      const good = ['ab', 'aab', 'bab', 'abab'].every((w) => automatonAccepts(checked.model, [...w])) && ['', 'a', 'b', 'ba', 'abb', 'aba'].every((w) => !automatonAccepts(checked.model, [...w]));
+      return [good && checked.model.type === 'dfa', `${checked.model.type.toUpperCase()} with ${checked.model.states.length} states; accepts exactly the strings ending in ab: ${good}`];
+    },
+    chen: (a) => (a.payloadBlocks[0]?.ok && a.payloadBlocks[0].view === 'chen' ? [true, `Chen model drawn${a.payloadBlocks[0].notes.length ? ` · ${a.payloadBlocks[0].notes[0]}` : ''}`] : [false, `wanted a Chen model: ${JSON.stringify(a.payloadBlocks[0]?.refused || a.mermaidBlocks[0]?.type || 'no block')}`]),
+    decision: (a) => (a.mermaidBlocks[0]?.ok && /\{[^}]+\}/.test(a.mermaidBlocks[0].source) && /-->\|/.test(a.mermaidBlocks[0].source) ? [true, 'decision tree with labelled branches'] : [false, 'no decision tree with labelled branches']),
+    matrix: (a, _prev, answer) => (a.hasMarkdownTable && /unknown/i.test(answer) ? [true, 'evidence table, with "unknown" where nothing was said'] : [false, a.hasMarkdownTable ? 'a table, but nothing marked unknown (on-call was never discussed)' : 'no table']),
+    'no-evidence': (a, _prev, answer) => {
+      const invented = a.mermaidBlocks.some((b) => /\b(?:19|20)\d{2}\b|Acme|Globex/.test(b.source)) || a.payloadBlocks.length > 0;
+      return [!invented, invented ? 'drew from facts that were never given' : a.visualBlockCount === 0 ? `nothing drawn; it said: ${answer.replace(/\s+/g, ' ').slice(0, 110)}` : 'drew only a labelled outline'];
+    },
+    dependency: (a) => (a.mermaidBlocks[0]?.ok && /-->\|"?\w/.test(a.mermaidBlocks[0].source) && /schema/i.test(a.mermaidBlocks[0].source) ? [true, 'dependency map with labelled arrows, from what was said'] : [false, 'no labelled dependency map']),
+    breakdown: (a) => (a.payloadBlocks[0]?.ok && has(tableValues(a).map((v) => (v >= 1000 ? v / 1000 : v)), [420, 120, 210, 90]) ? [true, `budget chart (${a.payloadBlocks[0].label}) with the four stated amounts`] : [false, `wanted the stated amounts: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),
+    mindmap: (a) => (a.mermaidBlocks[0]?.type === 'mindmap' && a.mermaidBlocks[0].ok ? [true, 'mind map of the ideas raised'] : [false, `wanted a mind map, got ${a.mermaidBlocks[0]?.type || 'none'}`]),
+    timeline: (a) => (a.mermaidBlocks[0]?.ok && ['timeline', 'gantt'].includes(a.mermaidBlocks[0].type) ? [true, `${a.mermaidBlocks[0].type} with the stated dates`] : [false, `wanted a timeline, got ${a.mermaidBlocks[0]?.type || 'none'}`]),
+    control: (a) => (a.visualBlockCount === 0 && !a.hasMarkdownTable ? [true, 'answered in words'] : [false, 'drew something for a question that wanted words']),
+  };
+
+  let previousPayload = null;
+  for (const sc of RUN) {
     setMode(sc.mode);
     const ctx = newSession();
+    for (const line of sc.seed || []) ctx.session.addTranscript({ speaker: 'system', text: line, timestamp: Date.now() - 5000, final: true });
     for (let i = 0; i < sc.steps.length; i += 1) {
       const [kind, question, label] = sc.steps[i];
       const id = sc.steps.length > 1 ? `${sc.id}.${i + 1}` : sc.id;
       const result = await turn(ctx, kind, question, undefined);
       const a = analyse(result);
       const design = ctx.session.getActiveDesign ? ctx.session.getActiveDesign() : null;
+      const judge = JUDGES[label];
+      // The original system-design scenarios: a first design is a system-design
+      // diagram (never a catalog visual: "Design Twitter's home timeline" once
+      // came back as a Mermaid timeline), and a control draws nothing.
+      const designVerdict = () => {
+        if (sc.expect === 'none') return a.visualBlockCount === 0 ? [true, 'answered without a visual'] : [false, 'drew something for a control question'];
+        if (i > 0 || !String(sc.expect).startsWith('diagram')) return null;
+        const first = a.mermaidBlocks[0];
+        if (!first) return sc.optional ? null : [false, 'no diagram'];
+        return [first.ok && ['flowchart', 'sequence', 'state'].includes(first.type) && a.payloadBlocks.length === 0, `a ${first.type} diagram (${first.nodes} nodes, ${first.edges} connections)`];
+      };
+      const verdict = sc.seed !== undefined ? (judge ? judge(a, previousPayload, result.answer) : null) : designVerdict();
+      if (a.payloadBlocks[0] && label !== 'refine') previousPayload = a.payloadBlocks[0].source;
       records.push({
+        verdict: verdict ? { pass: verdict[0], note: verdict[1] } : null,
+        // What was said before the question (shown by live-record.mjs).
+        seed: i === 0 && Array.isArray(sc.seed) ? sc.seed : [],
         id, scenario: sc.id, mode: sc.mode, route: kind, label: label || (sc.expect === 'none' ? 'control' : 'create'), expect: sc.expect,
         question, answer: result.answer, tokens: result.tokens, totalMs: result.totalMs, errors: result.errors,
         analysis: a,
@@ -301,8 +422,13 @@ const SCENARIOS = [
         // Prompt sizes only — the prompts themselves stay out of the record.
         calls: result.calls.map((c) => ({ ...c })),
       });
-      const blocks = a.mermaidBlocks.map((b) => `${b.type || '?'} ${b.ok ? 'ok' : `REJECTED:${b.rejection}`} ${b.nodes}n/${b.edges}e @${b.startsAtChar}`).join(' | ') || 'no diagram';
-      out(`\n${id.padEnd(5)} [${kind}${label ? `:${label}` : ''}] ${JSON.stringify(question.slice(0, 70))}`);
+      const blocks = [
+        ...a.mermaidBlocks.map((b) => `${b.type || '?'} ${b.ok ? 'ok' : `REJECTED:${b.rejection}`} ${b.nodes}n/${b.edges}e @${b.startsAtChar}`),
+        ...a.payloadBlocks.map((b) => (b.ok ? `${b.kind}:${b.label}${b.badges.length ? ` [${b.badges.join(',')}]` : ''}` : `${b.kind} REFUSED:${b.refused.code}`)),
+        ...(a.hasMarkdownTable ? ['markdown table'] : []),
+      ].join(' | ') || 'no visual';
+      out(`\n${id.padEnd(5)} [${sc.mode}] [${kind}${label ? `:${label}` : ''}] ${JSON.stringify(question.slice(0, 70))}`);
+      if (verdict) out(`      ${verdict[0] ? 'PASS' : 'FAIL'}  ${verdict[1]}`);
       out(`      ${blocks}${a.codeBlocks.length ? `  + code(${a.codeBlocks.join(',')})` : ''}`);
       const wireNote = result.calls.map((c) => `${c.model || c.host}${c.thinking ? ` thinking:${c.thinking}` : ''} ${c.status} contract×${c.contract}${c.examples ? ` ex×${c.examples}` : ''}${c.activeDesign ? ' +design' : ''} sys=${c.systemChars}`).join(' ; ');
       out(`      wire: ${wireNote || 'no request'}`);
@@ -353,6 +479,12 @@ const SCENARIOS = [
         analysis: analyse(fabricated), activeDesign: null, calls: wire.slice(before).map((c) => ({ ...c })), repairedFrom: broken,
       });
     }
+  }
+
+  const judged = records.filter((r) => r.verdict);
+  if (judged.length) {
+    const failed = judged.filter((r) => !r.verdict.pass);
+    out(`\n##### live: ${judged.length - failed.length}/${judged.length} judged turns did the right thing${failed.length ? `  NOT: ${failed.map((r) => r.id).join(', ')}` : ''}`);
   }
 
   const file = path.join(OUT_DIR, 'live-answers.json');

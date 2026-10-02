@@ -17,8 +17,9 @@
 import { Marked, type Tokens } from 'marked';
 import { STREAMING_MATH_EXTENSIONS } from '../../src/lib/streamingMarkdown';
 import { splitGistLine, splitGistLineStreaming } from '../../src/lib/displayMarkup';
-import { extractMermaidBlocks } from '../../src/lib/diagram/fencedBlocks.mjs';
-import { checkDiagramSource, diagramSourceKey, diagramCardLabel } from '../../src/lib/diagram/diagramPolicy.mjs';
+import { extractVisualBlocks, mentionsVisualTag } from '../../src/lib/diagram/fencedBlocks.mjs';
+import { checkDiagramSource, diagramSourceKey, diagramCardLabel, isPlaceholderDiagram } from '../../src/lib/diagram/diagramPolicy.mjs';
+import { compileVisualSource, PHONE_VISUAL_COLORS } from '../../src/lib/diagram/visualArtifact.mjs';
 
 /**
  * Where a diagram's picture comes from. The main process cannot run Mermaid
@@ -45,6 +46,8 @@ export function setPhoneDiagramProvider(provider: PhoneDiagramProvider | null): 
 
 /** Sources of the Mermaid blocks that are COMPLETE in the answer being rendered. */
 let completeDiagramSources: Set<string> | null = null;
+/** The answer being rendered is still arriving (an unfinished block may yet finish). */
+let renderingStream = false;
 const normSource = (v: string): string => String(v ?? '').replace(/\r\n?/g, '\n').trim();
 
 const IMG_DATA_URL = /^data:image\/svg\+xml;charset=utf-8,[A-Za-z0-9%._~!*'()-]+$/;
@@ -70,6 +73,12 @@ function diagramHtml(text: string, info: string): string | null {
   const complete = completeDiagramSources?.has(source) === true;
   const sourceBlock = codeBlockHtml('mermaid', text);
   if (!complete) {
+    // A FINISHED answer whose block never closed was cut off: say so and show
+    // what there is. (It used to say "Generating diagram…" for good.)
+    if (!renderingStream) {
+      return `<figure class="diagram is-failed"><div class="diagram-view"><div class="diagram-note">The diagram was cut off before it finished. What arrived is below.</div></div>`
+        + `<details class="diagram-source" open><summary>Mermaid source</summary>${sourceBlock}</details></figure>`;
+    }
     // Still arriving: no key, no request. Nothing is drawn from a partial block.
     return `<figure class="diagram is-pending"><div class="diagram-view"><div class="diagram-note">Generating diagram…</div></div>`
       + `<details class="diagram-source"><summary>Mermaid source</summary>${sourceBlock}</details></figure>`;
@@ -79,6 +88,8 @@ function diagramHtml(text: string, info: string): string | null {
     return `<figure class="diagram is-failed"><div class="diagram-view"><div class="diagram-note">${escapeHtml(policy.message || 'This diagram could not be drawn.')}</div></div>`
       + `<details class="diagram-source" open><summary>Mermaid source</summary>${sourceBlock}</details></figure>`;
   }
+  // Only placeholders ("Method (unknown)"): the sentence beside it says the same.
+  if (isPlaceholderDiagram(source, policy.type ?? undefined)) return '';
   const key = diagramSourceKey(source);
   const label = escapeHtml(diagramCardLabel(policy.view));
   const image = provider.lookup(key);
@@ -96,11 +107,100 @@ function diagramHtml(text: string, info: string): string | null {
     open = ' open';
   } else {
     provider.request(key, source);
-    view = `<div class="diagram-note">Drawing diagram…</div>`;
+    // The request can fail on the spot (no window to draw with). The phone was
+    // told before this markup exists, so it must not be told "drawing".
+    if (provider.failed(key)) {
+      view = `<div class="diagram-note">This diagram could not be drawn here. Its source is below.</div>`;
+      state = 'is-failed';
+      open = ' open';
+    } else {
+      view = `<div class="diagram-note">Drawing diagram…</div>`;
+    }
   }
   return `<figure class="diagram ${state}" data-diagram="${escapeHtml(key)}" data-label="${label}">`
     + `<div class="diagram-view">${view}</div>`
     + `<details class="diagram-source"${open}><summary>Mermaid source</summary>${sourceBlock}</details></figure>`;
+}
+
+/** A small data table (a chart's values, an automaton's transition table) as HTML. */
+function tableHtml(table: { columns: string[]; rows: Array<Array<string | number>> } | null): string {
+  if (!table || table.columns.length === 0) return '';
+  const head = table.columns.map((c) => `<th>${escapeHtml(String(c))}</th>`).join('');
+  const body = table.rows
+    .slice(0, 80)
+    .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell === null || cell === undefined ? '' : String(cell))}</td>`).join('')}</tr>`)
+    .join('');
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function notesHtml(lines: string[]): string {
+  const kept = lines.filter(Boolean).slice(0, 8);
+  return kept.length ? `<ul class="diagram-notes">${kept.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : '';
+}
+
+/**
+ * A chart (`natively-chart`) or a notation diagram (`natively-diagram`) as the
+ * phone shows it. Charts and Chen ER are drawn right here — the adapters are
+ * pure, so the main process needs no window for them. An automaton compiles to
+ * Mermaid source this app wrote, which goes to the same broker as a model's
+ * Mermaid. Under every picture is the readable form of the same thing: the
+ * data table, the assumptions, and what is unknown.
+ */
+function visualHtml(kind: 'chart' | 'notation', text: string, info: string): string | null {
+  const provider = diagramProvider;
+  if (!provider || !provider.enabled()) return null;
+  if (/\bsource\b/i.test(info.replace(/^\s*\S+/, ''))) return null;
+  const source = normSource(text);
+  const tag = kind === 'chart' ? 'natively-chart' : 'natively-diagram';
+  const summary = kind === 'chart' ? 'Data' : 'Details';
+  const sourceBlock = codeBlockHtml(tag, text);
+  if (completeDiagramSources?.has(source) !== true) {
+    if (!renderingStream) {
+      return `<figure class="diagram is-failed"><div class="diagram-view"><div class="diagram-note">${kind === 'chart' ? 'The chart was cut off before it finished.' : 'The diagram was cut off before it finished.'}</div></div>`
+        + `<details class="diagram-source" open><summary>${summary}</summary>${sourceBlock}</details></figure>`;
+    }
+    return `<figure class="diagram is-pending"><div class="diagram-view"><div class="diagram-note">${kind === 'chart' ? 'Generating chart…' : 'Generating diagram…'}</div></div></figure>`;
+  }
+  const compiled = compileVisualSource(kind, source, PHONE_VISUAL_COLORS);
+  if (!compiled.ok) {
+    const missing = Array.isArray(compiled.missing) && compiled.missing.length ? ` Needed: ${compiled.missing.join(', ')}.` : '';
+    return `<figure class="diagram is-failed"><div class="diagram-view"><div class="diagram-note">${escapeHtml(compiled.message + missing)}</div></div>`
+      + `<details class="diagram-source"><summary>Source</summary>${sourceBlock}</details></figure>`;
+  }
+  const label = escapeHtml(compiled.label);
+  const alt = escapeHtml(compiled.description || compiled.label);
+  const details = `${tableHtml(compiled.table)}${notesHtml([...compiled.badges.map((b) => `Status: ${b}`), ...compiled.assumptions, ...compiled.sources.map((src) => `Source: ${src}`), ...compiled.notes])}`;
+  let view: string;
+  let state = 'is-ready';
+  let key = '';
+  if (compiled.renderer === 'svg') {
+    const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(compiled.svg)}`;
+    if (!IMG_DATA_URL.test(url)) return null;
+    view = `<img class="diagram-img" alt="${alt}" src="${url}" />`;
+  } else {
+    // Mermaid source written by this app (never the model's text) for the broker.
+    key = diagramSourceKey(compiled.mermaid);
+    const image = provider.lookup(key);
+    if (image && IMG_DATA_URL.test(image)) {
+      view = `<img class="diagram-img" alt="${alt}" src="${image}" />`;
+    } else if (provider.failed(key)) {
+      view = `<div class="diagram-note">This diagram could not be drawn here. Its details are below.</div>`;
+      state = 'is-failed';
+    } else {
+      provider.request(key, compiled.mermaid);
+      if (provider.failed(key)) {
+        view = `<div class="diagram-note">This diagram could not be drawn here. Its details are below.</div>`;
+        state = 'is-failed';
+      } else {
+        view = `<div class="diagram-note">Drawing diagram…</div>`;
+        state = 'is-pending';
+      }
+    }
+  }
+  return `<figure class="diagram ${state}"${key ? ` data-diagram="${escapeHtml(key)}"` : ''} data-label="${label}">`
+    + `<div class="diagram-view">${view}</div>`
+    + (details ? `<details class="diagram-source"${state === 'is-failed' ? ' open' : ''}><summary>${summary}</summary>${details}</details>` : '')
+    + `</figure>`;
 }
 
 export interface PhoneRenderedAnswer {
@@ -145,7 +245,11 @@ const phoneMarked = new Marked({
       const language = info.split(/\s+/)[0].toLowerCase();
       if (language === 'mermaid') {
         const diagram = diagramHtml(text, info);
-        if (diagram) return diagram;
+        // '' is an answer too: a placeholder-only diagram shows nothing at all.
+        if (diagram !== null) return diagram;
+      } else if (language === 'natively-chart' || language === 'natively-diagram') {
+        const visual = visualHtml(language === 'natively-chart' ? 'chart' : 'notation', text, info);
+        if (visual) return visual;
       }
       return codeBlockHtml(language, text);
     },
@@ -163,12 +267,14 @@ export function renderPhoneAnswer(markdown: string, opts: { streaming?: boolean 
   // not mistaken for one (marked alone treats an open fence as a finished block).
   let body: string;
   try {
-    completeDiagramSources = split.body.includes('mermaid')
-      ? new Set(extractMermaidBlocks(split.body, { final: !opts.streaming }).filter((b) => b.closed).map((b) => normSource(b.source)))
+    renderingStream = opts.streaming === true;
+    completeDiagramSources = mentionsVisualTag(split.body)
+      ? new Set(extractVisualBlocks(split.body, { final: !opts.streaming }).filter((b) => b.closed).map((b) => normSource(b.source)))
       : null;
     body = phoneMarked.parse(split.body, { async: false }) as string;
   } finally {
     completeDiagramSources = null;
+    renderingStream = false;
   }
   // Wide tables scroll sideways inside the card instead of widening the page.
   // Safe to match on the tag: raw HTML was escaped, so <table> is marked's own.

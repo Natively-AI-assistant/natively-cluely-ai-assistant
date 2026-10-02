@@ -157,6 +157,16 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       `.edgeLabel rect, .labelBkg { fill: ${colors.nodeFill}; opacity: 1; }`,
       `.edgeLabel { background-color: ${colors.nodeFill}; }`,
       '.node rect, .cluster rect, rect.actor, .note rect { rx: 6px; ry: 6px; }',
+      // Mind map: the root is drawn in the same quiet fill as every other node
+      // (Mermaid's default gives it a saturated fill with dark text).
+      `.section-root rect, .section-root path, .section-root circle, .section-root polygon { fill: ${colors.groupFill}; stroke: ${colors.stroke}; }`,
+      `.section-root text, .mindmap-node text { fill: ${colors.text}; }`,
+      // Data model: the crow's-foot ends ARE the notation, so the relationship
+      // line is drawn in the text colour and a little heavier than a box edge
+      // (seen in the overlay: at the scale a tall model is shown, a hairline
+      // in the border colour made "one" and "many" hard to tell apart).
+      `.relationshipLine, .er.relationshipLine { stroke: ${colors.text}; stroke-width: 1.4px; }`,
+      `.marker.er path, .marker.er circle, marker[id*="ONLY_ONE"] path, marker[id*="ZERO_OR"] path, marker[id*="ONE_OR_MORE"] path, marker[id*="ZERO_OR"] circle { stroke: ${colors.text}; }`,
     ].join(' '),
     fontFamily: DIAGRAM_FONT_FAMILY,
     // SVG <text> labels, not HTML in <foreignObject>: keeps the output
@@ -182,6 +192,10 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       diagramMarginY: 8,
     },
     state: { useMaxWidth: false, padding: 6 },
+    mindmap: { useMaxWidth: false, padding: 8 },
+    timeline: { useMaxWidth: false },
+    // A Gantt chart is as wide as it is told to be; the card is about this wide.
+    gantt: { useMaxWidth: false, useWidth: 720, barHeight: 18, barGap: 5, topPadding: 44, leftPadding: 96, rightPadding: 16, fontSize: 11, sectionFontSize: 11, gridLineStartPadding: 30, axisFormat: '%b %e' },
     class: { useMaxWidth: false, htmlLabels: false },
     er: { useMaxWidth: false },
     themeVariables: {
@@ -199,6 +213,10 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       tertiaryTextColor: colors.text,
       tertiaryBorderColor: colors.stroke,
       lineColor: colors.stroke,
+      // Data model attribute rows: the same two quiet fills as everything else
+      // (this Mermaid reads rowOdd / rowEven; its defaults are near-black bands).
+      rowOdd: colors.nodeFill,
+      rowEven: colors.groupFill,
       textColor: colors.text,
       mainBkg: colors.nodeFill,
       nodeBorder: colors.stroke,
@@ -234,6 +252,30 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       classText: colors.text,
       attributeBackgroundColorOdd: colors.nodeFill,
       attributeBackgroundColorEven: colors.groupFill,
+      // Mind map and timeline sections take their colours from this scale. One
+      // neutral fill for all of them: the hierarchy is carried by position and
+      // lines, and a rainbow would suggest categories that are not there.
+      ...Object.fromEntries(Array.from({ length: 12 }, (_v, i) => [`cScale${i}`, colors.nodeFill])),
+      ...Object.fromEntries(Array.from({ length: 12 }, (_v, i) => [`cScaleLabel${i}`, colors.text])),
+      ...Object.fromEntries(Array.from({ length: 12 }, (_v, i) => [`cScaleInv${i}`, colors.stroke])),
+      // Gantt
+      sectionBkgColor: colors.groupFill,
+      altSectionBkgColor: 'transparent',
+      sectionBkgColor2: colors.groupFill,
+      taskBkgColor: colors.nodeFill,
+      taskBorderColor: colors.stroke,
+      taskTextColor: colors.text,
+      taskTextLightColor: colors.text,
+      taskTextDarkColor: colors.text,
+      taskTextOutsideColor: colors.text,
+      activeTaskBkgColor: colors.accent,
+      activeTaskBorderColor: colors.stroke,
+      doneTaskBkgColor: colors.groupFill,
+      doneTaskBorderColor: colors.stroke,
+      critBkgColor: colors.nodeFill,
+      critBorderColor: colors.accent,
+      gridColor: colors.stroke,
+      todayLineColor: colors.accent,
     },
   });
   initialisedThemeKey = key;
@@ -244,9 +286,25 @@ function boundDiagnostic(err: unknown): string {
   return raw.replace(/\s+$/g, '').slice(0, DIAGNOSTIC_MAX_CHARS);
 }
 
+/** A lone surrogate half (an emoji cut in two) is not text: show the replacement character. */
+function wellFormedText(text: string): string {
+  return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD');
+}
+
+/** Does this text parse as an XML document? (An <img> shows nothing for one that does not.) */
+function isWellFormedXml(xml: string): boolean {
+  if (typeof DOMParser === 'undefined') return true;
+  try {
+    const doc = new DOMParser().parseFromString(xml, 'image/svg+xml');
+    return doc.getElementsByTagName('parsererror').length === 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Sanitise Mermaid's SVG and verify nothing in it can load or run. */
-export function sanitiseDiagramSvg(svg: string): { ok: true; svg: string } | { ok: false; reason: string } {
-  const clean = DOMPurify.sanitize(svg, {
+export function sanitiseDiagramSvg(svg: string): { ok: true; svg: string } | { ok: false; reason: string; malformed?: boolean } {
+  const sanitised = DOMPurify.sanitize(svg, {
     USE_PROFILES: { svg: true, svgFilters: true },
     // <style> carries Mermaid's own generated CSS; it is checked below.
     ADD_TAGS: ['style'],
@@ -254,7 +312,13 @@ export function sanitiseDiagramSvg(svg: string): { ok: true; svg: string } | { o
     FORBID_ATTR: ['href', 'xlink:href', 'onload', 'onerror', 'onclick'],
     RETURN_TRUSTED_TYPE: false,
   }) as string;
+  // The sanitiser serialises as HTML, which writes a no-break space as
+  // `&nbsp;` — an entity an SVG document does not define. The drawing is shown
+  // as an image, i.e. parsed as XML, where that one entity made the whole image
+  // fail to load ("wait 10 ms" with a no-break space was enough).
+  const clean = wellFormedText(String(sanitised || '').replace(/&nbsp;/g, '&#160;'));
   if (!clean || !/^\s*<svg[\s>]/i.test(clean)) return { ok: false, reason: 'sanitiser removed the drawing' };
+  if (!isWellFormedXml(clean)) return { ok: false, reason: 'drawing is not well-formed XML', malformed: true };
   // The same text check the main process applies before an SVG leaves for the phone.
   if (!isSafeDiagramSvg(clean)) return { ok: false, reason: 'drawing contains an external or active reference, or is too large' };
   return { ok: true, svg: clean };
@@ -328,7 +392,9 @@ async function renderNow(source: string, colors: DiagramThemeColors): Promise<Di
 
   const safe = sanitiseDiagramSvg(rawSvg);
   if (!safe.ok) {
-    return { ok: false, stage: 'output', code: 'unsafe_output', message: 'The diagram was blocked because it is not safe to display.', diagnostic: safe.reason };
+    return safe.malformed
+      ? { ok: false, stage: 'output', code: 'malformed_output', message: 'The diagram could not be shown.', diagnostic: safe.reason }
+      : { ok: false, stage: 'output', code: 'unsafe_output', message: 'The diagram was blocked because it is not safe to display.', diagnostic: safe.reason };
   }
   const size = readSvgSize(safe.svg);
   if (!size.width || !size.height) {
@@ -348,6 +414,9 @@ async function renderNow(source: string, colors: DiagramThemeColors): Promise<Di
 }
 
 function remember(key: string, result: DiagramRenderResult): void {
+  // A renderer that failed to LOAD says nothing about this diagram: the next
+  // attempt may succeed (loadMermaid forgets a failed import for that reason).
+  if (!result.ok && result.stage === 'load') return;
   cache.delete(key);
   cache.set(key, result);
   while (cache.size > CACHE_MAX_ENTRIES) {
@@ -374,19 +443,24 @@ export function renderDiagram(source: string, colors: DiagramThemeColors): Promi
   const pending = inflight.get(key);
   if (pending) return pending;
 
-  const work = renderChain.then(() => renderNow(source, colors));
+  // The wait is counted from when THIS diagram's turn comes, not from when it
+  // joined the queue: with several cards waiting, the later ones used to time
+  // out before Mermaid had even started on them.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let giveUp: (result: DiagramRenderResult) => void = () => undefined;
+  const gaveUp = new Promise<DiagramRenderResult>((resolve) => {
+    giveUp = resolve;
+  });
+  const work = renderChain.then(() => {
+    timer = setTimeout(
+      () => giveUp({ ok: false, stage: 'timeout', code: 'timeout', message: 'Drawing the diagram took too long.' }),
+      RENDER_WAIT_MS,
+    );
+    return renderNow(source, colors);
+  });
   renderChain = work.catch(() => undefined);
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const waited = Promise.race<DiagramRenderResult>([
-    work,
-    new Promise<DiagramRenderResult>((resolve) => {
-      timer = setTimeout(
-        () => resolve({ ok: false, stage: 'timeout', code: 'timeout', message: 'Drawing the diagram took too long.' }),
-        RENDER_WAIT_MS,
-      );
-    }),
-  ])
+  const waited = Promise.race<DiagramRenderResult>([work, gaveUp])
     .catch((err): DiagramRenderResult => ({ ok: false, stage: 'render', code: 'layout', message: 'The diagram could not be laid out.', diagnostic: boundDiagnostic(err) }))
     .finally(() => {
       if (timer) clearTimeout(timer);
@@ -405,7 +479,20 @@ export function clearDiagramRenderCache(): void {
   inflight.clear();
 }
 
-/** An <img>-ready URL for a rendered SVG. No object URL to revoke. */
+/**
+ * A drawing that finished after its caller stopped waiting (stage 'timeout'),
+ * or undefined while it is still being drawn. Resolves from the cache.
+ */
+export function whenDiagramRendered(source: string, colors: DiagramThemeColors): Promise<DiagramRenderResult | undefined> {
+  const key = diagramCacheKey(source, colors);
+  return renderChain.then(() => cache.get(key));
+}
+
+/**
+ * An <img>-ready URL for a rendered SVG. No object URL to revoke. Total: it is
+ * called during render, and `encodeURIComponent` throws on a lone surrogate
+ * (a label that ended in half an emoji took the whole window down).
+ */
 export function svgToDataUrl(svg: string): string {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(wellFormedText(svg))}`;
 }

@@ -35,6 +35,14 @@ export function installStub(options) {
         }
       : {}),
     platform: 'darwin',
+    // A test sets window.__repairWith to the source a "model" answers with.
+    repairDiagram: (payload) => {
+      window.__calls.push('repairDiagram');
+      window.__repairRequests = [...(window.__repairRequests || []), payload];
+      const fixed = window.__repairWith;
+      if (!fixed) return Promise.resolve(undefined);
+      return new Promise((resolve) => setTimeout(() => resolve({ ok: true, source: fixed }), window.__repairDelayMs || 40));
+    },
   };
   window.electronAPI = new Proxy(
     {},

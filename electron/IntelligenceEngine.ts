@@ -3,6 +3,7 @@
 // Extracted from IntelligenceManager to decouple LLM logic from state management.
 
 import type { SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
+import { repairCapReached, endsInsideFence } from './llm/repairCap';
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -329,15 +330,43 @@ export class IntelligenceEngine extends EventEmitter {
                 firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, opts.turnKey),
                 interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                 isUsefulYet: () => out.trim().length >= 5,
-                shouldAbort: () => out.length > 1800 || opts.signal.aborted || opts.isSuperseded(),
+                shouldAbort: () => repairCapReached(out, 1800) || opts.signal.aborted || opts.isSuperseded(),
                 onToken: (tok: string) => { out += tok; },
             });
         } catch { /* keep whatever streamed */ }
-        const text = cleanAnswerArtifacts(out.trim());
+        // Half a block is not a usable answer (see repairCap.ts).
+        const text = endsInsideFence(out) ? '' : cleanAnswerArtifacts(out.trim());
         if (text.length < 5 || IntelligenceEngine.isNonAnswerSentinel(text) || isLeakedAnswerArtifact(text)) return null;
         try { if (detectAssistantVoiceMisfire(text).isMisfire) return null; } catch { /* detector is best-effort */ }
         console.log('[IntelligenceEngine] regenerated a usable answer', { reason: opts.reason, chars: text.length });
         return text;
+    }
+
+    /**
+     * The base prompt for a repair of a turn that was asked to draw: the same
+     * v2 prompt with the turn's diagram contract composed INSIDE the builder.
+     * (Appended after it, LLMHelper no longer recognised the prompt as v2 and
+     * could stack the legacy mode suffix on top.) Unchanged when the turn has
+     * no diagram signals or there is no v2 base.
+     */
+    private repairBaseForDiagramTurn(v2Base: string | null, turn: import('./llm/diagramPromptSignals').DiagramTurn | null | undefined): string | null {
+        if (!v2Base || !turn?.signals) return v2Base;
+        try {
+            const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+            return resolveV2SystemPrompt({ action: 'answer', surface: 'live', tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()), diagram: turn.signals }) ?? v2Base;
+        } catch {
+            return v2Base;
+        }
+    }
+
+    /** The legacy (pre-v2) base never knew about diagrams: there the contract is appended. */
+    private withLegacyDiagramContract(prompt: string | undefined, turn: import('./llm/diagramPromptSignals').DiagramTurn | null | undefined): string | undefined {
+        if (prompt === undefined) return prompt;
+        try {
+            return (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals')).withDiagramContract(prompt, turn, { surface: 'live' });
+        } catch {
+            return prompt;
+        }
     }
 
     private repairFirstUsefulMs(minMs: number = 7000, turnKey?: object): number {
@@ -441,6 +470,12 @@ export class IntelligenceEngine extends EventEmitter {
     // the first final turn while questionLedgerShadow is enabled.
     private questionLedgerShadow: import('./llm/questionLedger').QuestionLedger | null = null;
     private speculativeText: string | null = null;
+    /**
+     * What the newest speculative run would have told the session about the
+     * design it resolved (a fresh design's question, or that it follows up on
+     * the one on the table). Applied only if that run is adopted.
+     */
+    private speculativeDesignNote: { question: string } | { followUp: true } | null = null;
     /**
      * A speculative prefetch that COMPLETED before anything adopted it. A
      * speculative stream never renders (the judge may still say no), so its
@@ -728,8 +763,28 @@ export class IntelligenceEngine extends EventEmitter {
         // is pure and called from many places). One reader, registered here, so
         // every planner call routes a design follow-up the same way.
         try {
-            (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals'))
-                .registerActiveDesignProvider(() => this.session.getActiveDesign());
+            const dps = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+            dps.registerActiveDesignProvider(() => this.session.getActiveDesign());
+            dps.registerActiveDesignToucher((followsUp) => this.session.touchActiveDesign(followsUp));
+            // What was SAID so far, so a forecast whose starting value nobody
+            // stated is asked for instead of drawn on an invented number.
+            //  - the durable transcript: the live context window is evicted
+            //    after three minutes, and "nobody stated it" has to mean more
+            //    than "not in the last three minutes";
+            //  - what people said, not what the assistant suggested: a number
+            //    a model made up earlier is not a number anyone stated;
+            //  - nothing when the transcript may not be sent to the provider:
+            //    the model must not be told "it was stated" about text it
+            //    cannot see. (The text itself never leaves this process either
+            //    way — it is only matched against, locally.)
+            dps.registerConversationTextProvider(() => {
+                if (!dps.activeDesignShareable()) return undefined;
+                return this.session.getDurableContext(7200)
+                    .filter((item) => item.role !== 'assistant')
+                    .slice(-400)
+                    .map((item) => item.text)
+                    .join('\n');
+            });
         } catch { /* routing aid only */ }
         this.initializeLLMs();
 
@@ -972,6 +1027,12 @@ export class IntelligenceEngine extends EventEmitter {
             modeTemplateType: this.currentDynamicActionTemplateType,
             modeId: this.currentDynamicActionModeId,
             sessionId: this.currentSessionId,
+            // With the switch off no card offers a drawing (see DynamicActionDetector).
+            visualsEnabled: (() => {
+                try {
+                    return (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals')).isSystemDesignDiagramsEnabled();
+                } catch { return true; }
+            })(),
         });
 
         // The store dedupes within the per-session store, so each emitted action
@@ -1408,6 +1469,14 @@ export class IntelligenceEngine extends EventEmitter {
             console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);
             this.emit('suggested_answer_token', text, finished.question, finished.confidence, generationId);
         }
+        // The prefetch said nothing to the session about the design it drew (it
+        // might have been discarded). It is the answer now, so say it now:
+        // otherwise an adopted design of a rate limiter was recorded as
+        // version 2 of whatever was on the table.
+        const designNote = this.speculativeDesignNote;
+        this.speculativeDesignNote = null;
+        if (designNote && 'question' in designNote) this.session.noteDesignQuestion(designNote.question);
+        else if (designNote) this.session.touchActiveDesign();
         this.session.addAssistantMessage(text, finished.writeDecision, 'what_to_answer');
         if (finished.writeDecision?.policy !== 'do_not_store') {
             this.session.pushUsage({ type: 'assist', timestamp: Date.now(), question: finished.question, answer: text });
@@ -3823,11 +3892,20 @@ export class IntelligenceEngine extends EventEmitter {
                         // Accepting the system-design action card is a design ask
                         // even when the heard line alone would not route as one.
                         forceDesign: dps.isSystemDesignActionInstruction(options?.promptInstruction),
+                        // An accepted visual action card ("Map the workflow") is the request.
+                        actionInstruction: options?.promptInstruction,
                         hasVisualContext: (imagePaths?.length ?? 0) > 0 || Boolean(options?.domContext) || Boolean(options?.screenContext),
+                        speculative: isSpeculative,
                     });
                     // A speculative prefetch may be discarded; only a real run
-                    // says what the next design was drawn for.
-                    if (!isSpeculative && turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+                    // says what the next design was drawn for. If the prefetch
+                    // is adopted, the same note is applied then (see
+                    // speculativeDesignNote).
+                    const isCreate = turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId;
+                    const isFollowUp = turn.request.enabled && turn.request.attachActiveDesign && Boolean(turn.request.parentArtifactId);
+                    if (isSpeculative) {
+                        this.speculativeDesignNote = isCreate ? { question: answerPlan.question } : isFollowUp ? { followUp: true } : null;
+                    } else if (isCreate) {
                         this.session.noteDesignQuestion(answerPlan.question);
                     }
                     return turn;
@@ -5312,12 +5390,13 @@ export class IntelligenceEngine extends EventEmitter {
                             firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                             interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                             isUsefulYet: () => scaffoldRepaired.length >= 5,
-                            shouldAbort: () => scaffoldRepaired.length > 1800
+                            shouldAbort: () => repairCapReached(scaffoldRepaired, 1800)
                                 || whatToAnswerCancellationToken.signal.aborted
                                 || isWtaSuperseded(),
                             onToken: (tok: string) => { scaffoldRepaired += tok; },
                         });
                     } catch { /* keep original fullAnswer on repair failure */ }
+                    if (endsInsideFence(scaffoldRepaired)) scaffoldRepaired = ''; // half a block is not a repair (repairCap.ts)
                     const scaffoldRepairedTrim = scaffoldRepaired.trim();
                     if (scaffoldRepairedTrim.length >= 5 && this.currentGenerationId === generationId) {
                         // Re-check the regeneration didn't reintroduce contamination
@@ -5617,11 +5696,12 @@ export class IntelligenceEngine extends EventEmitter {
                                     const { resolveV2SystemPrompt: _rv2, v2TierForPromptTier: _rtier } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
                                     const _repairV2Base = _rv2({ action: 'answer', surface: 'live', tier: _rtier(this.llmHelper.getPromptTier?.()) });
                                     wtaRepairSystemPrompt = appendCustomModeSystemPromptLayer({
-                                        baseSystemPrompt: _repairV2Base ?? HARD_SYSTEM_PROMPT,
+                                        baseSystemPrompt: this.repairBaseForDiagramTurn(_repairV2Base, wtaDiagramTurn) ?? HARD_SYSTEM_PROMPT,
                                         modePromptSuffix: _repairV2Base ? undefined : mm.getActiveModeSystemPromptSuffix?.(_activeModeRow?.id),
                                         pinnedInstructions: mm.getActiveModePinnedInstructions?.(answerPlan.answerType, _activeModeRow?.id),
                                         isActiveCustomMode: isCustomMode(_activeModeRow),
                                     });
+                                    if (!_repairV2Base) wtaRepairSystemPrompt = this.withLegacyDiagramContract(wtaRepairSystemPrompt, wtaDiagramTurn);
                                 } catch { wtaRepairSystemPrompt = undefined; }
                                 let repaired = '';
                                 try {
@@ -5639,12 +5719,13 @@ export class IntelligenceEngine extends EventEmitter {
                                         firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                         interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                                         isUsefulYet: () => repaired.trim().length >= 5,
-                                        shouldAbort: () => repaired.length > 1800
+                                        shouldAbort: () => repairCapReached(repaired, 1800)
                                             || whatToAnswerCancellationToken.signal.aborted
                                             || isWtaSuperseded(),
                                         onToken: (tok: string) => { repaired += tok; },
                                     });
                                 } catch { /* keep partial repaired */ }
+                                if (endsInsideFence(repaired)) repaired = ''; // half a block is not a repair (repairCap.ts)
                                 const repairedTrim = cleanAnswerArtifacts(repaired.trim());
                                 // Whole-answer artifact re-check (found 2026-07-19, see
                                 // isLeakedAnswerArtifact's doc comment): cleanAnswerArtifacts
@@ -5855,12 +5936,13 @@ export class IntelligenceEngine extends EventEmitter {
                                 ) as AsyncGenerator<string>,
                                 firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                 isUsefulYet: () => repaired.length >= 5,
-                                shouldAbort: () => repaired.length > 1200
+                                shouldAbort: () => repairCapReached(repaired, 1200)
                                     || whatToAnswerCancellationToken.signal.aborted
                                     || isWtaSuperseded(),
                                 onToken: (tok: string) => { repaired += tok; },
                             });
                         } catch { /* keep partial repaired */ }
+                        if (endsInsideFence(repaired)) repaired = ''; // half a block is not a repair (repairCap.ts)
                         const repairedTrim = repaired.trim();
                         if (repairedTrim.length >= 5) {
                             const reCheck = validateProfileEvidence({
@@ -6501,13 +6583,14 @@ export class IntelligenceEngine extends EventEmitter {
                                     ) as AsyncGenerator<string>,
                                     firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                     isUsefulYet: () => repaired.length >= 5,
-                                    shouldAbort: () => repaired.length > 1200
+                                    shouldAbort: () => repairCapReached(repaired, 1200)
                                         || whatToAnswerCancellationToken.signal.aborted
                                         || isWtaSuperseded(),
                                     onToken: (tok: string) => { repaired += tok; },
                                 });
                             } catch { /* keep original fullAnswer on repair failure */ }
-                            const repairedTrim = repaired.trim();
+                            if (endsInsideFence(repaired)) repaired = ''; // half a block is not a repair (repairCap.ts)
+                        const repairedTrim = repaired.trim();
                             if (repairedTrim.length >= 5 && this.currentGenerationId === generationId) {
                                 const reCheck = await checkAnswerRelevance(relevanceQuestion, repairedTrim);
                                 // Whole-answer artifact re-check (found 2026-07-19, see
@@ -6668,7 +6751,19 @@ export class IntelligenceEngine extends EventEmitter {
                     // lets compressToSpeakable's existing generic strip run.
                     SCAFFOLD_LABEL_RE.lastIndex = 0;
                     BOLD_PSEUDO_HEADER_RE.lastIndex = 0;
-                    if (SCAFFOLD_LABEL_RE.test(cleaned) || BOLD_PSEUDO_HEADER_RE.test(cleaned)) {
+                    // A turn that was asked to produce a visual keeps its shape.
+                    // Speakable compression turns a Markdown table into a
+                    // comma-separated sentence — and a comparison or evidence
+                    // table IS the visual for those turns. It streamed
+                    // correctly and was then replaced by the flattened text.
+                    // …when the answer actually has that shape: a table row or a
+                    // fenced block. A visual turn the model answered in labelled
+                    // prose is cleaned like any other answer.
+                    const keepsVisualShape = Boolean(wtaDiagramTurn?.signals)
+                        && wtaDiagramTurn?.request.operation !== 'explain'
+                        && wtaDiagramTurn?.request.output !== 'text-only'
+                        && /^[ \t]*\|.+\|[ \t]*$|^ {0,3}(?:`{3,}|~{3,})/m.test(cleaned);
+                    if (!keepsVisualShape && (SCAFFOLD_LABEL_RE.test(cleaned) || BOLD_PSEUDO_HEADER_RE.test(cleaned))) {
                         const speakable = compressToSpeakable(cleaned);
                         if (speakable.trim().length >= 40) cleaned = speakable;
                     }
@@ -7316,8 +7411,10 @@ export class IntelligenceEngine extends EventEmitter {
                     const dps = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
                     if (!dps.isSystemDesignDiagramsEnabled()) return null;
                     const refine = require('../src/lib/diagram/diagramRefine.mjs') as typeof import('../src/lib/diagram/diagramRefine.mjs');
-                    const { hasMermaidFence } = require('../src/lib/diagram/fencedBlocks.mjs') as typeof import('../src/lib/diagram/fencedBlocks.mjs');
-                    if (!hasMermaidFence(lastMsg) || refine.refinementTouchesDesign(String(refinementRequest || ''))) return null;
+                    // Any visual block: a chart's numbers and a schema's notation
+                    // are exactly what a rewording must leave alone.
+                    const { hasVisualFence } = require('../src/lib/diagram/fencedBlocks.mjs') as typeof import('../src/lib/diagram/fencedBlocks.mjs');
+                    if (!hasVisualFence(lastMsg) || refine.refinementTouchesDesign(String(refinementRequest || ''))) return null;
                     return refine;
                 } catch { return null; }
             })();
@@ -7326,7 +7423,7 @@ export class IntelligenceEngine extends EventEmitter {
             let fullRefined = "";
             const followUpOptions = {
                 ...(followUpContractRule ? { contractRule: followUpContractRule } : {}),
-                ...(keepDiagram ? { diagramRule: keepDiagram.REFINE_DIAGRAM_RULE } : {}),
+                ...(keepDiagram ? { diagramRule: keepDiagram.refineRuleFor(lastMsg) || keepDiagram.REFINE_DIAGRAM_RULE } : {}),
             };
             const stream = this.followUpLLM.generateStream(
                 lastMsg,
@@ -8009,7 +8106,12 @@ export class IntelligenceEngine extends EventEmitter {
             // on the table ⇒ null ⇒ brainstorm exactly as before.
             const brainstormDiagramTurn = (() => {
                 try {
-                    return (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals')).alternativeDesignTurn(this.session.getActiveDesign());
+                    return (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals')).alternativeDesignTurn(
+                        this.session.getActiveDesign(),
+                        // A screenshot, or a problem that is not this design (a
+                        // coding question on screen), is what the press is about.
+                        { problem: resolvedProblem ?? null, otherSubject: Boolean(imagePaths && imagePaths.length > 0) },
+                    );
                 } catch { return null; }
             })();
             const stream = this.brainstormLLM.generateStream(context, imagePaths, brainstormV3 ?? undefined, brainstormDiagramTurn);

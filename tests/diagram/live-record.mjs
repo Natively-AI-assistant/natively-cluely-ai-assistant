@@ -1,6 +1,12 @@
 // Screen recording of real model answers playing in the REAL overlay.
 //
 //   node tests/diagram/live-record.mjs [--in=<dir with live-answers.json>] --out=<dir> [--ids=L2.1,L2.2,…]
+//   node tests/diagram/live-record.mjs [--in=…] --out=<dir> --plan=catalog
+//
+// `--plan=catalog` records the nine-mode catalog: one clip per mode (a fresh
+// overlay each, so every mode starts with an empty conversation), written as
+// clip-NN-<mode>.webm with a clips.json that says how much page-load to trim
+// from the start of each. Joining the clips is left to the caller.
 //
 // What the video is: the overlay component (NativelyInterface, headless
 // Chromium, electronAPI stubbed) receiving token streams that were recorded
@@ -19,6 +25,25 @@ const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) || `--$
 const IN_DIR = resolve(arg('in', join(tmpdir(), 'natively-diagram-live')));
 const OUT_DIR = resolve(arg('out', join(tmpdir(), 'natively-diagram-live', 'video')));
 const IDS = arg('ids', 'L2.1,L2.2,L2.3,L2.4,L3,L5,L9,C1').split(',');
+const PLAN = arg('plan', '');
+
+// The catalog plan: which recorded turns play in which mode's clip, and the
+// card controls shown once after a turn (`after`).
+const MODE_NAMES = {
+  general: 'General', 'looking-for-work': 'Looking for work', 'technical-interview': 'Technical Interview', sales: 'Sales',
+  recruiting: 'Recruiting', 'team-meet': 'Team Meet', lecture: 'Lecture', seminar: 'Seminar', 'call-center': 'Call Center',
+};
+const CATALOG_PLAN = [
+  { mode: 'sales', ids: ['M1.1', 'M1.2', 'M1.3', 'M1.4', 'M2', 'M3', 'M4'], after: { 'M1.1': 'data-tab' } },
+  { mode: 'technical-interview', ids: ['M5', 'M6', 'L8', 'C1'], after: { M5: 'zoom' } },
+  { mode: 'lecture', ids: ['M7', 'M8', 'N3'], after: { M7: 'source-tab' } },
+  { mode: 'call-center', ids: ['M9', 'N2'] },
+  { mode: 'recruiting', ids: ['M10'] },
+  { mode: 'looking-for-work', ids: ['M11'] },
+  { mode: 'team-meet', ids: ['M12', 'M16'] },
+  { mode: 'general', ids: ['M13', 'M15'] },
+  { mode: 'seminar', ids: ['M14'] },
+];
 const file = join(IN_DIR, 'live-answers.json');
 if (!existsSync(file)) {
   console.log(`skipped: no ${file} (run live-deepseek.cjs first)`);
@@ -44,16 +69,20 @@ function installCaption(model) {
     '<span id="rec-kind" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9aa1ad;white-space:nowrap;"></span>',
     '<span id="rec-clock" style="margin-left:auto;font:600 13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9ced8;white-space:nowrap;"></span>',
     '</div>',
+    '<div id="rec-earlier" style="margin-top:3px;font-size:12px;color:#aab0bb;display:none;"></div>',
     '<div id="rec-question" style="margin-top:3px;font-size:15px;font-weight:600;"></div>',
     `<div style="margin-top:5px;font-size:11px;color:#8b919c;">Real ${model} answer, recorded live and replayed at the speed it arrived. Overlay component in a test browser, not the app window.</div>`,
   ].join('');
   document.body.appendChild(strip);
   window.__rec = {
     timer: null,
-    set(kind, question) {
+    set(kind, question, earlier) {
       document.getElementById('rec-kind').textContent = kind;
       document.getElementById('rec-question').textContent = question;
       document.getElementById('rec-clock').textContent = '';
+      const said = document.getElementById('rec-earlier');
+      said.textContent = earlier ? `Said earlier in the meeting: ${earlier}` : '';
+      said.style.display = earlier ? 'block' : 'none';
     },
     start() {
       const t0 = performance.now();
@@ -70,10 +99,13 @@ function installCaption(model) {
 }
 
 /** Ask → wait the model's real time to first token → stream at its real pace → settle. */
-async function play(page, record) {
-  const kind = { create: 'They ask', update: 'Follow-up', explain: 'Follow-up', view: 'Follow-up', refine: 'You press Shorten', control: 'They ask' }[record.label] || 'They ask';
-  await page.evaluate(({ kind, question }) => window.__rec.set(kind, question), { kind, question: record.route === 'refine' ? 'Shorten' : record.question });
-  await sleep(900);
+async function play(page, record, modeName = '') {
+  const what = { create: 'They ask', update: 'Follow-up', explain: 'Follow-up', view: 'Follow-up', refine: 'You press Shorten', control: 'They ask' }[record.label] || 'Question';
+  const kind = modeName ? `${modeName} mode · ${what}` : what;
+  const earlier = Array.isArray(record.seed) && record.seed.length ? record.seed.map((line) => `“${line}”`).join(' ') : '';
+  await page.evaluate(({ kind, question, earlier }) => window.__rec.set(kind, question, earlier), { kind, question: record.route === 'refine' ? 'Shorten' : record.question, earlier });
+  // Long enough to read what was said before the question.
+  await sleep(earlier ? 900 + Math.min(2600, earlier.length * 22) : 900);
   return page.evaluate(
     async ({ tokens, answer, refine }) => {
       for (const row of document.querySelectorAll('.ai-response-card')) row.setAttribute('data-rec-seen', '1');
@@ -109,7 +141,66 @@ async function play(page, record) {
   );
 }
 
+/** The card's own controls, shown once after a turn. */
+async function showControls(page, which) {
+  const card = page.locator('figure.diagram-card').last();
+  if (which === 'data-tab' || which === 'source-tab') {
+    await card.getByRole('tab', { name: which === 'data-tab' ? 'Data' : 'Source' }).click();
+    await sleep(2600);
+    await card.getByRole('tab', { name: which === 'data-tab' ? 'Chart' : 'Diagram' }).click();
+    await sleep(900);
+  } else if (which === 'zoom') {
+    await card.getByRole('button', { name: 'Zoom in' }).click();
+    await sleep(500);
+    await card.getByRole('button', { name: 'Zoom in' }).click();
+    await sleep(1800);
+    await card.getByRole('button', { name: 'Fit to card' }).click();
+    await sleep(1000);
+  }
+}
+
+/** One clip per mode, each in a fresh overlay. */
+async function recordCatalog() {
+  const { writeFileSync } = await import('node:fs');
+  const harness = await startOverlayHarness();
+  const clips = [];
+  try {
+    for (let g = 0; g < CATALOG_PLAN.length; g += 1) {
+      const group = CATALOG_PLAN[g];
+      const turns = group.ids.map((id) => recording.records.find((r) => r.id === id)).filter((r) => r && r.tokens.length);
+      if (!turns.length) continue;
+      const dir = join(OUT_DIR, `raw-${String(g + 1).padStart(2, '0')}`);
+      mkdirSync(dir, { recursive: true });
+      const opened = Date.now();
+      const overlay = await harness.openOverlay({ recordVideoDir: dir, width: 760, height: 940, model: recording.model });
+      const { page } = overlay;
+      await page.evaluate(installCaption, recording.model);
+      const trim = (Date.now() - opened) / 1000 + 0.3;
+      await sleep(500);
+      for (const record of turns) {
+        const r = await play(page, record, MODE_NAMES[group.mode] || group.mode);
+        console.log(`${group.mode.padEnd(20)} ${record.id.padEnd(6)} ${String(record.label).padEnd(12)} played in ${r.totalMs} ms`);
+        await sleep(2400);
+        if (group.after && group.after[record.id]) await showControls(page, group.after[record.id]);
+      }
+      await sleep(600);
+      const video = page.video();
+      await overlay.context.close();
+      const from = video ? await video.path() : '';
+      if (!from || !existsSync(from)) throw new Error(`no video for ${group.mode}`);
+      const name = `clip-${String(g + 1).padStart(2, '0')}-${group.mode}.webm`;
+      renameSync(from, join(OUT_DIR, name));
+      clips.push({ file: name, mode: group.mode, trimStartSeconds: Number(trim.toFixed(1)), turns: turns.map((t) => t.id) });
+    }
+  } finally {
+    await harness.close();
+  }
+  writeFileSync(join(OUT_DIR, 'clips.json'), JSON.stringify(clips, null, 1));
+  console.log(`clips: ${join(OUT_DIR, 'clips.json')}`);
+}
+
 async function main() {
+  if (PLAN === 'catalog') return recordCatalog();
   const harness = await startOverlayHarness();
   let videoPath = '';
   try {

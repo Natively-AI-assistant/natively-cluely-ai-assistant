@@ -8,20 +8,40 @@ import { svgToDataUrl, renderDiagram, loadMermaid } from './mermaidRenderer';
 import { exportPixelSize } from './diagramViewport.mjs';
 import { isRepairableStage } from './diagramRepair.mjs';
 import { diagramTimings } from './diagramTimings.mjs';
+import { PHONE_VISUAL_COLORS } from './visualArtifact.mjs';
 
 // ── feature switch ──────────────────────────────────────────────────────────
 //
 // One value for the whole window, fetched once and kept current by the main
-// process's broadcast. Until the first answer arrives it is ON (the default),
-// so a diagram already on screen does not flash as a code block at startup.
+// process's broadcast. Until the first answer arrives it is what this window
+// was last told — ON when it was never told (the default) — so a diagram
+// already on screen does not flash as a code block at startup.
 
-let enabledValue = true;
+// The last value this window was told, kept across launches. A user who has
+// the switch OFF otherwise saw cards (and a Mermaid load) on every start until
+// the main process answered. No stored value ⇒ the default, ON.
+const ENABLED_STORAGE_KEY = 'natively.diagramsEnabled';
+function readStoredEnabled(): boolean {
+  try {
+    return typeof window === 'undefined' || window.localStorage.getItem(ENABLED_STORAGE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+function storeEnabled(value: boolean): void {
+  try {
+    window.localStorage.setItem(ENABLED_STORAGE_KEY, value ? '1' : '0');
+  } catch { /* a hint for the next launch, nothing more */ }
+}
+
+let enabledValue = readStoredEnabled();
 let enabledLoaded = false;
 const enabledSubscribers = new Set<(value: boolean) => void>();
 let unsubscribeEnabled: (() => void) | null = null;
 
 function setEnabled(value: boolean): void {
   enabledLoaded = true;
+  storeEnabled(value);
   if (enabledValue === value) return;
   enabledValue = value;
   enabledSubscribers.forEach((fn) => fn(value));
@@ -34,7 +54,13 @@ function ensureEnabledSubscription(): void {
   if (!enabledLoaded) {
     api?.getDiagramsEnabled?.()
       .then((value) => setEnabled(value !== false))
-      .catch(() => { /* keep the default */ });
+      .catch(() => {
+        // Keep what this window has, and ask again the next time anything
+        // reads the switch: one failed read must not leave a window on a
+        // remembered value until somebody toggles the setting.
+        try { unsubscribeEnabled?.(); } catch { /* nothing to undo */ }
+        unsubscribeEnabled = null;
+      });
   }
 }
 
@@ -105,15 +131,7 @@ export function diagramColorsFor(element: Element | null): DiagramThemeColors {
 }
 
 /** The fixed light palette used for the phone (its card is white in both themes). */
-export const PHONE_DIAGRAM_COLORS: DiagramThemeColors = Object.freeze({
-  text: '#111827',
-  muted: '#4b5563',
-  nodeFill: '#f3f4f6',
-  stroke: '#6b7280',
-  groupFill: '#f9fafb',
-  accent: '#2563eb',
-  dark: false,
-});
+export const PHONE_DIAGRAM_COLORS: DiagramThemeColors = PHONE_VISUAL_COLORS;
 
 // ── warm-up + phone render host ─────────────────────────────────────────────
 
@@ -169,7 +187,7 @@ export function useDiagramRenderHost(): void {
 
 // ── export ──────────────────────────────────────────────────────────────────
 
-export type DiagramExportFormat = 'svg' | 'png' | 'mmd';
+export type DiagramExportFormat = 'svg' | 'png' | 'mmd' | 'json' | 'csv';
 export interface DiagramExportResult {
   saved: boolean;
   canceled?: boolean;
@@ -222,6 +240,8 @@ export async function exportDiagram(input: {
   format: DiagramExportFormat;
   name: string;
   source: string;
+  /** The text of a 'json' or 'csv' export. */
+  text?: string;
   svg?: string;
   width?: number;
   height?: number;
@@ -230,6 +250,10 @@ export async function exportDiagram(input: {
   let data: string;
   if (input.format === 'mmd') {
     data = input.source;
+  } else if (input.format === 'json' || input.format === 'csv') {
+    // A chart's or notation model's own text, prepared by its adapter.
+    if (!input.text) return { saved: false, error: 'not_available' };
+    data = input.text;
   } else if (!input.svg) {
     return { saved: false, error: 'not_rendered' };
   } else if (input.format === 'svg') {
@@ -239,7 +263,7 @@ export async function exportDiagram(input: {
   }
   const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
   if (api?.exportDiagram) return api.exportDiagram({ format: input.format, data, name: input.name });
-  const mime = input.format === 'svg' ? 'image/svg+xml' : input.format === 'png' ? 'image/png' : 'text/plain';
+  const mime = input.format === 'svg' ? 'image/svg+xml' : input.format === 'png' ? 'image/png' : input.format === 'json' ? 'application/json' : input.format === 'csv' ? 'text/csv' : 'text/plain';
   browserDownload(`${input.name || 'diagram'}.${input.format}`, mime, data, input.format === 'png');
   return { saved: true };
 }
@@ -254,6 +278,8 @@ export async function exportDiagram(input: {
 const autoRepairTried = new Set<string>();
 const repairsInFlight = new Set<string>();
 let repairSeq = 0;
+/** requestId → that request's cancel (see cancelAllDiagramRepairs). */
+const repairCancels = new Map<string, () => void>();
 
 export type DiagramRepairOutcome = { ok: true; source: string } | { ok: false; reason: string };
 
@@ -289,8 +315,12 @@ export function requestDiagramRepair(input: { source: string; diagnostic?: strin
     if (cancelled || !repairsInFlight.has(requestId)) return;
     cancelled = true;
     repairsInFlight.delete(requestId);
+    repairCancels.delete(requestId);
     void api.cancelDiagramRepair?.(requestId).catch(() => undefined);
   };
+  // Registered so "stop everything" marks THIS request cancelled too: a result
+  // that raced Stop used to be applied as if nothing had been stopped.
+  repairCancels.set(requestId, cancel);
   const result = api
     .repairDiagram({ requestId, source: input.source, diagnostic: input.diagnostic, stage: input.stage, manual: input.manual === true })
     .then((outcome): DiagramRepairOutcome => {
@@ -302,6 +332,7 @@ export function requestDiagramRepair(input: { source: string; diagnostic?: strin
     .catch((): DiagramRepairOutcome => ({ ok: false, reason: cancelled ? 'cancelled' : 'provider_error' }))
     .finally(() => {
       repairsInFlight.delete(requestId);
+      repairCancels.delete(requestId);
     });
   return { cancel, result };
 }
@@ -309,6 +340,9 @@ export function requestDiagramRepair(input: { source: string; diagnostic?: strin
 /** Stop every repair this window started (Stop pressed, session reset, meeting end). */
 export function cancelAllDiagramRepairs(): void {
   const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
+  // Each request's own cancel: it marks the request cancelled, so a result
+  // already on its way back is discarded instead of applied.
+  for (const cancel of [...repairCancels.values()]) cancel();
   for (const requestId of [...repairsInFlight]) {
     repairsInFlight.delete(requestId);
     void api?.cancelDiagramRepair?.(requestId).catch(() => undefined);

@@ -80,7 +80,7 @@ const FLAG_META: Record<string, { label: string; desc: string; group: FlagGroup 
   // diagram contract in the answer prompt and the Mermaid renderer — so there is no
   // "renderer on, generator off" state. Call sites: electron/llm/diagramPromptSignals.ts
   // (every prompt path) and src/lib/diagram/diagramRuntime.ts (every surface that draws).
-  systemDesignDiagrams: { label: 'Design diagrams', desc: 'Draws a diagram in system-design answers. Off shows Mermaid as code.', group: 'notes' },
+  systemDesignDiagrams: { label: 'Diagrams and charts', desc: 'Draws diagrams and charts in answers when they help. Off shows them as code.', group: 'notes' },
   // inMeetingSearchV2 / lectureIntelligenceV2 / diagramIntelligence removed (2026-09-25),
   // together with the "Try it" section that was their ONLY caller in the app: those three
   // flags gate nothing but the search-in-meeting / generate-lecture-notes /

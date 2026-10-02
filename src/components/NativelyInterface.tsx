@@ -359,7 +359,7 @@ import { useT } from '../i18n';
 // a diagram card. Mermaid itself is loaded on demand inside mermaidRenderer —
 // none of these imports pull it into this chunk.
 import { DiagramArtifact } from './diagram/DiagramArtifact';
-import { parseFencedBlocks, createFencedBlockTracker, replaceMermaidSource, type FenceBlock } from '../lib/diagram/fencedBlocks.mjs';
+import { parseFencedBlocks, createFencedBlockTracker, replaceMermaidSource, isVisualBlock, mentionsVisualTag, type FenceBlock } from '../lib/diagram/fencedBlocks.mjs';
 import {
   shouldUseStreamingDiagramUi,
   hasOpeningMermaidFence,
@@ -5842,7 +5842,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // burst of tokens landing in one tick showed up all at once regardless of
   // how well-paced the prose path was. Called from revealTick, so it's
   // already coalesced to at most once per frame.
-  const commitRevealedCodeText = useCallback((msgId: string, revealedText: string) => {
+  // Diagram repairs accepted in this window: broken source → the source that
+  // draws. The stream keeps committing text from refs that still hold what the
+  // model wrote (the paced prefix, then the sealed text), so a repair written
+  // only into React state was overwritten by the very next reveal tick and the
+  // card fell back to "syntax error" with its one repair already spent.
+  // Applied wherever streamed text is committed; the refs stay untouched so the
+  // pacer's offsets keep meaning what they meant.
+  const diagramRepairsRef = useRef<Map<string, string>>(new Map());
+  const withDiagramRepairs = useCallback((text: string): string => {
+    const repairs = diagramRepairsRef.current;
+    if (repairs.size === 0 || typeof text !== 'string' || !mentionsVisualTag(text)) return text;
+    let out = text;
+    for (const [original, repaired] of repairs) out = replaceMermaidSource(out, original, repaired);
+    return out;
+  }, []);
+
+  const commitRevealedCodeText = useCallback((msgId: string, rawRevealedText: string) => {
+    const revealedText = withDiagramRepairs(rawRevealedText);
     setMessages((prev) => {
       const idx = prev.findLastIndex((m) => m.id === msgId);
       if (idx === -1) return prev;
@@ -5852,7 +5869,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       updated[idx] = { ...row, text: revealedText, isStreaming: true };
       return updated;
     });
-  }, []);
+  }, [withDiagramRepairs]);
 
   // revealTick: self-rescheduling rAF loop that paces the reveal via the
   // deterministic tickPacer state machine (src/lib/textRevealPacing.mjs —
@@ -5889,7 +5906,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (direct?.completed && direct.placeholderId === pending.msgId) {
       activeDirectAssistRef.current = null;
     }
-    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
   }, []);
 
   const revealTick = useCallback((ts: number) => {
@@ -5919,7 +5936,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // after it resumes at the normal pace. The decision itself is the pure,
     // tested fastForwardDiagramReveal; this only applies it. Ordinary code
     // blocks are untouched and keep their per-line reveal.
-    if (streamingRenderModeRef.current === 'react-code' && fullText.includes('mermaid') && diagramsEnabledNow()) {
+    if (streamingRenderModeRef.current === 'react-code' && mentionsVisualTag(fullText) && diagramsEnabledNow()) {
       const parse = diagramRevealTrackerRef.current.update(fullText);
       const completeNow = completedDiagramCount(parse.blocks);
       if (completeNow > diagramBlocksCompleteRef.current) {
@@ -6138,7 +6155,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (direct?.completed && direct.placeholderId === pending.msgId) {
         activeDirectAssistRef.current = null;
       }
-      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
     }, safetyNetMs);
     if (!reuseMsgId) {
       setMessages((prev) => prepareIntelligenceStreamPlaceholderMessages(prev, intent, msgId));
@@ -6192,7 +6209,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (direct?.completed && direct.placeholderId === pending.msgId) {
         activeDirectAssistRef.current = null;
       }
-      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
     }, safetyNetMs);
     ensureRevealTicker(msgId);
   }, [ensureRevealTicker, computeSafetyNetMs]);
@@ -6256,7 +6273,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           const idx = prev.findLastIndex((m) => m.id === prevId);
           if (idx !== -1) {
             const updated = [...prev];
-            updated[idx] = { ...updated[idx], text: prevText, isStreaming: false };
+            // (A diagram repaired during the stream stays repaired: see withDiagramRepairs.)
+            updated[idx] = { ...updated[idx], text: withDiagramRepairs(prevText), isStreaming: false };
             return updated;
           }
           return prev;
@@ -6292,14 +6310,30 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (streamingRenderModeRef.current !== 'react-code' && diagramsEnabledNow() && hasOpeningMermaidFence(streamingTextRef.current + token)) {
         warmDiagramRenderer();
       }
+      const flippedMidStream = streamingRenderModeRef.current !== 'react-code' && streamingMsgIdRef.current !== null;
       streamingRenderModeRef.current = 'react-code';
       if (streamingRafRef.current !== null) {
         cancelAnimationFrame(streamingRafRef.current);
         streamingRafRef.current = null;
       }
-      if (streamingNodeRef.current) {
+      // The imperative node held everything revealed so far, and React state
+      // held nothing (it is not written during imperative streaming). Wiping
+      // the node therefore left the row on its empty state — the "Thinking…"
+      // label, over text that had been on screen — until the next reveal
+      // advance, which can be a sentence hold away. What was revealed is
+      // handed to React in the same breath.
+      const revealedAtFlip = flippedMidStream && streamingMsgIdRef.current !== null
+        ? streamingTextRef.current.slice(0, revealPacerRef.current.revealedLen)
+        : '';
+      // …and the node is wiped only when nothing is handed over. With text to
+      // hand over, the wipe is synchronous and React's commit is not: under
+      // load a frame was painted in between, with the row empty (seen once in
+      // ten runs of the overlay check). React removes this node whole when the
+      // row re-renders under its other key, so it keeps what it shows until then.
+      if (streamingNodeRef.current && !revealedAtFlip) {
         streamingNodeRef.current.innerHTML = '';
       }
+      if (revealedAtFlip && streamingMsgIdRef.current !== null) commitRevealedCodeText(streamingMsgIdRef.current, revealedAtFlip);
     }
 
     streamingTextRef.current += token;
@@ -6466,7 +6500,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Keep eagerCodeExpansionHoldRef until the finalized React row mounts; the
     // visibility scanner clears it as soon as it sees a real [data-code-msg].
     // NOT wrapped in startTransition — ordering must hold.
-    setMessages((prev) => commitStreamingFlush(prev, msgId, text));
+    setMessages((prev) => commitStreamingFlush(prev, msgId, withDiagramRepairs(text)));
   }, []);
 
   const tryBeginOverlayAction = useCallback((actionKey: string): boolean => {
@@ -6963,8 +6997,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             finalizeImperativeStreamMessages(prev, {
               msgId: streamingMsgId,
               intent,
-              bufferedText,
-              finalText: text,
+              // The authoritative final text is the model's text as it was
+              // written: a block that was repaired while it streamed is broken
+              // again in it. Committed as is, the card fell back to "syntax
+              // error" with its one automatic repair already spent.
+              bufferedText: withDiagramRepairs(bufferedText),
+              finalText: withDiagramRepairs(text),
             }),
           );
           return;
@@ -8250,7 +8288,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               : -1;
           const target = idx !== -1 ? prev[idx] : prev[prev.length - 1];
           if (target && target.role === 'system') {
-            const text = finalText || target.text || pendingTextSnapshot;
+            const text = withDiagramRepairs(finalText || target.text || pendingTextSnapshot);
             if (!text) return prev;
             const isCode =
               text.includes('```') || text.includes('def ') || text.includes('function ');
@@ -8781,7 +8819,10 @@ Provide only the answer, nothing else.`;
             question,
             currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
             prompt,
-            { skipSystemPrompt: true },
+            // `liveQuestion`: a turn of this session (unlike a question about a
+            // past meeting), so main decides the diagram contract for it with
+            // the design that is on the table.
+            { skipSystemPrompt: true, liveQuestion: true },
           );
         } catch (err) {
           // R-17: a throw from invoke() never reaches the main process, so no
@@ -9058,7 +9099,7 @@ Provide only the answer, nothing else.`;
       latestId = m.id;
       if (m.isStreaming) {
         if (lastValidSource) previous = { beforeMsgId: m.id, source: lastValidSource };
-      } else if (m.text.includes('mermaid')) {
+      } else if (mentionsVisualTag(m.text)) {
         const found = latestDiagramInAnswer(m.text);
         if (found) lastValidSource = found.source;
       }
@@ -9073,10 +9114,19 @@ Provide only the answer, nothing else.`;
   // see the diagram that is actually on screen. Stable identity ([]): the
   // card's memo comparator and the row renderer both depend on it.
   const handleDiagramRepaired = useCallback((originalSource: string, repairedSource: string) => {
+    // Remembered for the text still to be committed by the running stream.
+    const repairs = diagramRepairsRef.current;
+    repairs.delete(originalSource);
+    repairs.set(originalSource, repairedSource);
+    while (repairs.size > 24) {
+      const oldest = repairs.keys().next().value;
+      if (oldest === undefined) break;
+      repairs.delete(oldest);
+    }
     setMessages((prev) => {
       let changed = false;
       const next = prev.map((m) => {
-        if (m.role !== 'system' || !m.text.includes('mermaid')) return m;
+        if (m.role !== 'system' || !mentionsVisualTag(m.text)) return m;
         const text = replaceMermaidSource(m.text, originalSource, repairedSource);
         if (text === m.text) return m;
         changed = true;
@@ -9087,7 +9137,7 @@ Provide only the answer, nothing else.`;
     // Direct Assist's history is this surface's conversation state: the next
     // follow-up must start from the diagram that works, not the broken one.
     directAssistHistoryRef.current = directAssistHistoryRef.current.map((turn) =>
-      turn.role === 'assistant' && turn.content.includes('mermaid')
+      turn.role === 'assistant' && mentionsVisualTag(turn.content)
         ? { ...turn, content: replaceMermaidSource(turn.content, originalSource, repairedSource) }
         : turn,
     );
@@ -9134,11 +9184,25 @@ Provide only the answer, nothing else.`;
       // hand off to, and is safe to leave permanently true afterwards: once
       // the paced text contains a fence it never loses it (reveal only
       // grows forward).
+      // A drawing is on its way: the ARRIVED text holds a visual fence the paced
+      // text has not reached yet. Its lead is prose, and it was on screen as
+      // formatted Markdown a frame ago (the imperative path). It goes straight
+      // to the Markdown renderer the finished answer uses — the raw-text
+      // branch below showed it as literal "**"/"#"/"-" until the reveal caught
+      // up with the fence, then formatted it again.
+      const preFenceDiagramStream =
+        msg.id === streamingMsgIdRef.current &&
+        streamingRenderModeRef.current === 'react-code' &&
+        diagramsEnabled &&
+        msg.role === 'system' &&
+        Boolean(msg.text) &&
+        !msg.isCode &&
+        hasOpeningMermaidFence(streamingTextRef.current);
       const isActiveReactCodeStream =
         msg.id === streamingMsgIdRef.current &&
         streamingRenderModeRef.current === 'react-code' &&
         // …or a tilde-fenced diagram, which has no backtick fence at all.
-        (msg.isCode || msg.text.includes('```') || hasOpeningMermaidFence(msg.text));
+        (msg.isCode || msg.text.includes('```') || hasOpeningMermaidFence(msg.text) || preFenceDiagramStream);
       if (msg.isStreaming && msg.role === 'system' && !msg.isNegotiationCoaching && !isActiveReactCodeStream) {
         // React-code pre-fence gap: streamingRenderModeRef already flipped to
         // 'react-code' (the raw arrived text has a fence) but the paced
@@ -9305,7 +9369,7 @@ Provide only the answer, nothing else.`;
       // Code-containing messages get special styling
       // We split by code blocks to keep the "Code Solution" UI intact for the code parts
       // But use ReactMarkdown for the text parts around it
-      if (msg.isCode || (msg.role === 'system' && (msg.text.includes('```') || hasOpeningMermaidFence(msg.text)))) {
+      if (msg.isCode || (msg.role === 'system' && (msg.text.includes('```') || hasOpeningMermaidFence(msg.text) || preFenceDiagramStream))) {
         // Teleprompter gist on CODE answers (live report 2026-08-23:
         // "[[GIST]] Use a hash map for O(n) lookup" painted literally): this
         // branch returned before the gist split below ever ran, so every
@@ -9403,7 +9467,7 @@ Provide only the answer, nothing else.`;
           ? parseFencedBlocks(codeGistBody, { final: !msg.isStreaming })
           : null;
         const hasDiagram = Boolean(diagramParse && (
-          diagramParse.blocks.some((b) => b.kind === 'mermaid')
+          diagramParse.blocks.some(isVisualBlock)
           || (msg.isStreaming && isMermaidOpeningTail(diagramParse.tail))
         ));
         const renderedParts: React.ReactNode[] = [];
@@ -9420,11 +9484,14 @@ Provide only the answer, nothing else.`;
               return;
             }
             const fence = block as FenceBlock;
-            if (fence.kind === 'mermaid') {
+            if (isVisualBlock(fence)) {
               const before = previousDiagramRef.current;
               renderedParts.push(
                 <DiagramArtifact
                   key={`d${fence.diagramIndex}`}
+                  // What the block is written in decides what draws it: Mermaid,
+                  // the chart adapter, or a notation adapter.
+                  kind={fence.kind as 'mermaid' | 'chart' | 'notation'}
                   artifactId={`${msg.id}:d${fence.diagramIndex}`}
                   turnId={msg.id}
                   source={fence.source}
@@ -9468,8 +9535,25 @@ Provide only the answer, nothing else.`;
             renderedParts.push(renderFencePart(diagramParse.tail.text.trimStart(), 'tail'));
           }
         } else {
+          // Keys match the diagram path above (p<block>, c<fence>), so a code
+          // card or a paragraph already on screen is not torn down and rebuilt
+          // when a visual fence shows up later in the same answer.
+          let blockOrdinal = 0;
+          let fenceOrdinal = 0;
           parts.forEach((part, i) => {
-            renderedParts.push(part.startsWith('```') ? renderFencePart(part, i) : renderProsePart(part, i));
+            if (!part) {
+              // An empty piece of the split (an answer that opens with a
+              // fence): rendered as it always was, and not counted.
+              renderedParts.push(renderProsePart(part, `e${i}`));
+              return;
+            }
+            if (part.startsWith('```')) {
+              renderedParts.push(renderFencePart(part, `c${fenceOrdinal}`));
+              fenceOrdinal += 1;
+            } else {
+              renderedParts.push(renderProsePart(part, `p${blockOrdinal}`));
+            }
+            blockOrdinal += 1;
           });
         }
         return (

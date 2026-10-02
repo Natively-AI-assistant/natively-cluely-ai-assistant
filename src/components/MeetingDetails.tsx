@@ -199,7 +199,7 @@ function extractCodeBlock(body: string): { lang: string; code: string } | null {
     const m = matches[0];
     if (trimmed.replace(m[0], '').trim().length > 0) return null; // prose outside fence
     // A diagram is not a code hero: let the markdown renderer hand it to the diagram card.
-    if ((m[1] || '').toLowerCase() === 'mermaid') return null;
+    if (['mermaid', 'natively-chart', 'natively-diagram'].includes((m[1] || '').toLowerCase())) return null;
     return { lang: m[1] || '', code: m[2].replace(/\n$/, '') };
 }
 

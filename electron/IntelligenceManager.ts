@@ -176,6 +176,11 @@ export class IntelligenceManager extends EventEmitter {
         return this.session.getFormattedContext(lastSeconds);
     }
 
+    /** What people said in the last `lastSeconds`, from the durable transcript (see SessionTracker). */
+    getFormattedSpeech(lastSeconds: number = 600): string {
+        return this.session.getFormattedSpeech(lastSeconds);
+    }
+
     getLastInterviewerTurn(): string | null {
         return this.session.getLastInterviewerTurn();
     }

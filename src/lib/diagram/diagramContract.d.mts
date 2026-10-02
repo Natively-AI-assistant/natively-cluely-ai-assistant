@@ -17,9 +17,25 @@ export interface DiagramPromptSignals {
   depth: 'brief' | 'detailed';
   /** Ids from diagramExamples.mjs (0–2). */
   exampleIds: string[];
+  /** The built-in mode, present only when that mode adds a note for visuals. */
+  mode?: string;
+  /** For view 'chart': what the chart is for. */
+  chartIntent?: string;
+  /** A calculation input stated neither in the request nor in the conversation. */
+  missingInput?: 'baseline' | 'rate' | 'period' | 'amounts';
+  /** One of the four original views drawn for something that is not a system design. */
+  general?: boolean;
+  /** Nobody asked for the visual: the task implied it in this mode. */
+  contextual?: boolean;
+  /** How a follow-up refers to the artifact on the table. */
+  followUp?: 'strong' | 'weak';
+  layout?: 'lanes' | 'tree';
+  ofChart?: boolean;
 }
 
 export interface ActiveDesignForPrompt {
+  /** 'mermaid' | 'chart' | 'notation': which fence tag the source is quoted with. */
+  artifact?: string;
   source?: string;
   view?: string;
   version?: number;
@@ -35,6 +51,8 @@ export function renderDiagramContract(
   signals: DiagramPromptSignals | null | undefined,
   options?: { tier?: 'cloud' | 'local'; surface?: 'live' | 'chat' },
 ): string;
+/** The table the app computed from a chart payload, as text for the model ('' when there is none or it is too large). */
+export function chartValuesBlock(source: string): string;
 export function renderDiagramTurnBlock(request: DiagramRequest | null | undefined, activeDesign: ActiveDesignForPrompt | null | undefined): string;
 export function renderDiagramTurnNote(signals: DiagramPromptSignals | null | undefined): string;
 export function hasDiagramContract(prompt: string | null | undefined): boolean;

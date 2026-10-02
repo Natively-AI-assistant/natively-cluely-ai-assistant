@@ -469,6 +469,164 @@ window.__card = {
     s = await run(() => ({ chunks: [...document.querySelectorAll('#md2 .md-chunk')].map((n) => n.textContent), figures: document.querySelectorAll('#md2 figure').length }));
     check('an answer without a diagram is one untouched chunk', s.chunks.length === 1 && s.chunks[0] === 'No diagram here, just `code`.' && s.figures === 0, JSON.stringify(s));
 
+    // ── charts and notation diagrams (the same card, a different adapter) ───
+    console.log('charts and notation diagrams');
+    const FORECAST = JSON.stringify({ v: 1, type: 'line', title: 'Monthly revenue at 5% net growth', x: { label: 'Month' }, y: { label: 'Revenue', unit: 'USD' }, compute: { kind: 'compound_growth', baseline: 10000, ratePercent: 5, period: 'month', periods: 3 }, assumptions: ['Net growth stays at 5% every month'] });
+    const FORECAST_3 = FORECAST.replace('"ratePercent":5', '"ratePercent":3').replace('at 5% net', 'at 3% net');
+    const extra = (slot) =>
+      run((sl) => {
+        const fig = document.getElementById(sl).querySelector('figure.diagram-card');
+        return {
+          kind: fig.getAttribute('data-diagram-kind'),
+          missing: fig.getAttribute('data-diagram-missing'),
+          tabs: [...fig.querySelectorAll('[role=tab]')].map((t) => t.textContent),
+          table: fig.querySelector('.diagram-card__table') ? fig.querySelector('.diagram-card__table').innerText.replace(/\s+/g, ' ').trim() : null,
+          notes: [...fig.querySelectorAll('.diagram-card__notes li')].map((n) => n.textContent),
+          exportButtons: [...fig.querySelectorAll('.diagram-card__export button')].map((b) => b.textContent),
+          copyTitle: fig.querySelector('.diagram-card__actions button[title^="Cop"]')?.getAttribute('title'),
+        };
+      }, slot);
+
+    const repairsBeforeCharts = (await calls()).repair.length;
+    await render('chart', { kind: 'chart', artifactId: 'm9:d0', source: FORECAST.slice(0, 80), complete: false, streaming: true, allowAutoRepair: true });
+    s = await settle('chart', 'generating');
+    let x = await extra('chart');
+    check('an open chart block shows "Generating chart…", under a Chart / Data pair of tabs', /Generating chart…/.test(s.text) && s.label === 'Chart' && JSON.stringify(x.tabs) === '["Chart","Data"]' && x.kind === 'chart', JSON.stringify({ text: s.text, x }));
+    check('…and nothing is drawn or validated from a partial payload', !s.hasImg && !/could not be read|needs/.test(s.text), s.text);
+
+    await render('chart', { kind: 'chart', artifactId: 'm9:d0', source: FORECAST, complete: true, streaming: true, allowAutoRepair: true, description: 'A scenario at 5%.' });
+    s = await settle('chart', 'img');
+    x = await extra('chart');
+    check('the chart is drawn when its block completes', s.imgLoaded && s.state === 'ready', JSON.stringify({ state: s.state, timedOut: s.timedOut }));
+    check('it is titled for what it is: a forecast', s.label === 'Forecast', s.label);
+    check('the image is the chart the payload describes, with computed values and a scenario label', s.imgSvg.includes('data-visual="chart:line"') && s.imgSvg.includes('>11,576.25<') && s.imgSvg.includes('>Scenario<'), s.imgSvg.slice(0, 200));
+    check('the alt text says what it shows, exactly', s.imgAlt === 'Forecast. Line chart: Monthly revenue at 5% net growth. Revenue goes from 10,000 USD to 11,576.25 USD at Month 3. Scenario.', s.imgAlt);
+    check('what it rests on is listed under the drawing, without repeating the line already in the image', x.notes.length === 1 && x.notes[0] === 'Net growth stays at 5% every month', JSON.stringify(x.notes));
+    check('nothing is injected as markup: an <img> with an SVG data URL', s.imgSrcHead.startsWith('data:image/svg+xml') && s.svgInDom === 0, s.imgSrcHead);
+    check('a valid chart never asks a model for a repair', (await calls()).repair.length === repairsBeforeCharts);
+
+    await click('chart', 'Data');
+    s = await settle('chart', 'ready');
+    x = await extra('chart');
+    check('the Data tab shows the same numbers as a table', x.table === 'Month Revenue (USD) Now 10,000 Month 1 10,500 Month 2 11,025 Month 3 11,576.25', x.table);
+    check('…and the payload, indented', s.source && s.source.includes('"compute": {\n    "kind": "compound_growth"'), String(s.source).slice(0, 160));
+    await click('chart', 'Chart');
+    await settle('chart', 'img');
+
+    await run(() => { window.__card.calls.export.length = 0; });
+    await click('chart', 'Export');
+    x = await extra('chart');
+    check('a chart exports as SVG, PNG, CSV and JSON — and is never offered as Mermaid', JSON.stringify(x.exportButtons) === '["SVG","PNG","CSV","JSON"]', JSON.stringify(x.exportButtons));
+    await click('chart', 'CSV');
+    await new Promise((r) => setTimeout(r, 150));
+    await click('chart', 'Export');
+    await click('chart', 'JSON');
+    await new Promise((r) => setTimeout(r, 150));
+    const chartExports = (await calls()).export;
+    check('the CSV is the data table', chartExports[0]?.format === 'csv' && chartExports[0].head.startsWith('Month,Revenue (USD)'), JSON.stringify(chartExports[0]));
+    check('the JSON is the inputs as written, with what was computed beside them', chartExports[1]?.format === 'json' && chartExports[1].head.startsWith('{\n  "v": 1,\n  "type": "line"') && chartExports[1].length > FORECAST.length, JSON.stringify(chartExports[1]));
+    check('the file is named after the chart', chartExports[0]?.name === 'monthly-revenue-at-5-net-growth', chartExports[0]?.name);
+    check('Copy copies the data, and says so', x.copyTitle === 'Copy data', x.copyTitle);
+
+    // An update: the previous version stays until the new one has drawn.
+    // A new answer is a new card (as in the overlay, where each answer is its own row).
+    await run(() => window.__card.unmount('chart'));
+    await render('chart', { kind: 'chart', artifactId: 'm10:d0', source: FORECAST_3.slice(0, 120), complete: false, streaming: true, previousSource: FORECAST });
+    await new Promise((r) => setTimeout(r, 250));
+    s = await settle('chart', 'generating');
+    check('while an update is written, the previous chart stays on screen, marked as updating', s.hasImg && s.previous && /Updating diagram…/.test(s.text) && s.imgSvg.includes('>11,576.25<'), JSON.stringify({ hasImg: s.hasImg, previous: s.previous, text: s.text }));
+    // The moment the new block closes, the previous drawing must still be up:
+    // it used to drop to a bare "Drawing…" box between the two.
+    const gapProbe = await run(async (props) => {
+      const seen = [];
+      const host = document.getElementById('chart');
+      const sample = () => seen.push(Boolean(host.querySelector('img.diagram-card__img')));
+      window.__card.render('chart', props);
+      for (let i = 0; i < 12; i += 1) {
+        await new Promise((r) => requestAnimationFrame(r));
+        sample();
+      }
+      return seen;
+    }, { kind: 'chart', artifactId: 'm10:d0', source: FORECAST_3, complete: true, streaming: false, previousSource: FORECAST });
+    check('there is a drawing on screen in every frame between the old chart and the new one', gapProbe.every(Boolean), JSON.stringify(gapProbe));
+    s = await settle('chart', 'img');
+    check('"make it 3%" redraws from the changed input alone', s.imgLoaded && !s.previous && s.imgSvg.includes('>10,927.27<') && !s.imgSvg.includes('>11,576.25<'), s.imgSvg.slice(0, 120));
+
+    // Missing input: a readable reason, never a made-up chart, never a model repair.
+    const beforeRepairs = (await calls()).repair.length;
+    await render('nobase', { kind: 'chart', artifactId: 'm11:d0', source: JSON.stringify({ v: 1, type: 'line', compute: { kind: 'compound_growth', ratePercent: 5, period: 'month', periods: 3 } }), complete: true, streaming: false, allowAutoRepair: true });
+    s = await settle('nobase', 'error');
+    x = await extra('nobase');
+    check('a forecast with no starting value says what it needs instead of drawing', s.state === 'error' && /This forecast needs a starting value\./.test(s.text) && !s.hasImg && x.missing === 'a starting value', JSON.stringify({ text: s.text, x }));
+    check('…with no automatic repair and no "Try to fix": a model could only invent the number', (await calls()).repair.length === beforeRepairs && !s.fixButton, JSON.stringify({ repairs: (await calls()).repair.length, fix: s.fixButton }));
+    check('…and the payload is one tap away', /View source/.test(s.text));
+
+    await render('hostile', { kind: 'chart', artifactId: 'm12:d0', source: JSON.stringify({ v: 1, type: 'bar', title: '"><script>window.__pwned = 1</script>', x: { values: ['<img src=x onerror="window.__pwned=1">', 'b'] }, sources: ['</li><script>window.__pwned=1</script>'], series: [{ name: '<b>S</b>', status: 'observed', values: [1, 2] }] }), complete: true, streaming: false });
+    s = await settle('hostile', 'img');
+    check('labels written by a model are drawn as text and run nothing', s.imgLoaded && s.svgInDom === 0 && (await run(() => window.__pwned === undefined)) && !(await run(() => Boolean(document.querySelector('#hostile script, #hostile img[src="x"]')))), JSON.stringify({ state: s.state }));
+
+    // Chen: drawn by the local adapter, with what was not stated listed.
+    const CHEN_SPEC = JSON.stringify({ kind: 'chen-er', title: 'Orders', entities: [{ name: 'Order', attributes: [{ name: 'order_id', key: true }] }, { name: 'Line Item', weak: true, attributes: [{ name: 'line_no', partialKey: true }] }, { name: 'Product', attributes: [{ name: 'sku', key: true }] }], relationships: [{ name: 'contains', identifying: true, participants: [{ entity: 'Order', cardinality: '1', participation: 'partial' }, { entity: 'Line Item', cardinality: 'N' }] }, { name: 'refers to', participants: [{ entity: 'Line Item', cardinality: 'N', participation: 'total' }, { entity: 'Product', cardinality: '1' }] }] });
+    await render('chen', { kind: 'notation', artifactId: 'm13:d0', source: CHEN_SPEC, complete: true, streaming: false });
+    s = await settle('chen', 'img');
+    x = await extra('chen');
+    check('a Chen model is drawn with its real symbols', s.imgLoaded && s.label === 'ER diagram (Chen)' && s.imgSvg.includes('chen-weak') && s.imgSvg.includes('chen-identifying') && s.imgSvg.includes('chen-partial-key-underline'), JSON.stringify({ label: s.label, state: s.state }));
+    check('a constraint nobody stated is listed under the drawing, not drawn', x.notes.some((n) => /^Not stated, so not drawn: Whether every Product takes part/.test(n)), JSON.stringify(x.notes));
+    check('it exports as SVG, PNG and JSON (its model), under Diagram / Source tabs', JSON.stringify(x.tabs) === '["Diagram","Source"]' && x.copyTitle === 'Copy source', JSON.stringify(x));
+    await click('chen', 'Export');
+    check('…never as Mermaid', JSON.stringify((await extra('chen')).exportButtons) === '["SVG","PNG","JSON"]', JSON.stringify((await extra('chen')).exportButtons));
+
+    await render('chenbad', { kind: 'notation', artifactId: 'm14:d0', source: JSON.stringify({ kind: 'chen-er', entities: [{ name: 'Dependent', weak: true }, 'Employee'], relationships: [{ name: 'has', participants: ['Employee', 'Dependent'] }] }), complete: true, streaming: false, allowAutoRepair: true });
+    s = await settle('chenbad', 'error');
+    check('a model that contradicts itself is refused with the reason', /"Dependent" is a weak entity but has no identifying relationship to an owner\./.test(s.text) && !s.fixButton, s.text);
+
+    // An automaton: validated, then drawn through Mermaid from source this app wrote.
+    const DFA_SPEC = JSON.stringify({ kind: 'automaton', type: 'dfa', title: 'Ends in ab', alphabet: ['a', 'b'], states: ['q0', 'q1', 'q2'], start: 'q0', accepting: ['q2'], transitions: [{ from: 'q0', symbol: 'a', to: 'q1' }, { from: 'q0', symbol: 'b', to: 'q0' }, { from: 'q1', symbol: 'a', to: 'q1' }, { from: 'q1', symbol: 'b', to: 'q2' }, { from: 'q2', symbol: 'a', to: 'q1' }, { from: 'q2', symbol: 'b', to: 'q0' }] });
+    await render('dfa', { kind: 'notation', artifactId: 'm15:d0', source: DFA_SPEC, complete: true, streaming: false });
+    s = await settle('dfa', 'img');
+    check('a DFA is drawn, titled DFA, and described in words', s.imgLoaded && s.label === 'DFA' && /^DFA\. Deterministic finite automaton over \{a, b\}/.test(s.imgAlt) && ['q0', 'q1', 'q2'].every((q) => s.imgSvg.includes(`>${q}<`)), JSON.stringify({ label: s.label, alt: s.imgAlt.slice(0, 80), state: s.state }));
+    await click('dfa', 'Source');
+    x = await extra('dfa');
+    check('its Source tab holds the transition table and the model — not Mermaid', x.table === 'State a b → q0 q1 q0 q1 q1 q2 * q2 q1 q0' && (await settle('dfa', 'ready')).source.includes('"kind": "automaton"'), x.table);
+    await render('nfa-as-dfa', { kind: 'notation', artifactId: 'm16:d0', source: DFA_SPEC.replace('{"from":"q0","symbol":"b","to":"q0"}', '{"from":"q0","symbol":"a","to":"q2"}'), complete: true, streaming: false, allowAutoRepair: true });
+    s = await settle('nfa-as-dfa', 'error');
+    check('an automaton that is not deterministic is not drawn as a DFA', /more than one target, so this is not a DFA/.test(s.text) && !s.hasImg, s.text);
+
+    // A crow's-foot ER (Mermaid) is read back in words and checked for the solid-line slip.
+    await render('er', { artifactId: 'm17:d0', source: 'erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    ORDER {\n        int order_id PK\n        int customer_id FK\n    }', complete: true, streaming: false, description: 'Customers place orders.' });
+    s = await settle('er', 'img');
+    x = await extra('er');
+    check('an ER diagram is read back in both directions in its alt text', s.imgAlt === 'Data model. Customers place orders. Each ORDER relates to exactly one CUSTOMER; each CUSTOMER relates to zero or many ORDER (places).', s.imgAlt);
+    check('a solid line on a child with its own key is pointed out under the drawing', x.notes.length === 1 && /non-identifying: a dashed line/.test(x.notes[0]), JSON.stringify(x.notes));
+
+    // Saved answers: the wrapper hands each block to the card with its kind.
+    await run((answer) => window.__card.renderMarkdown('md-chart', { text: answer }), `Scenario.\n\n\`\`\`natively-chart\n${FORECAST}\n\`\`\`\n\nRests on one assumption.`);
+    await new Promise((r) => setTimeout(r, 400));
+    const md = await run(() => {
+      const host = document.getElementById('md-chart');
+      const fig = host.querySelector('figure.diagram-card');
+      return { kind: fig?.getAttribute('data-diagram-kind'), chunks: [...host.querySelectorAll('.md-chunk')].map((n) => n.textContent.trim()), label: fig?.querySelector('.diagram-card__label')?.textContent, raw: /natively-chart/.test(host.innerText) };
+    });
+    check('a saved answer shows its chart as a card, between its own prose, with no raw payload', md.kind === 'chart' && md.label === 'Forecast' && md.chunks.length === 2 && md.chunks[0] === 'Scenario.' && !md.raw, JSON.stringify(md));
+    // A diagram made only of placeholders is not drawn at all.
+    const PLACEHOLDER = 'flowchart TD\n    paper["Paper (not retrieved)"] -->|"steps unknown"| method["Method (unknown)"]\n    method --> inputs["Inputs (unknown)"]';
+    await render('gap', { artifactId: 'm18:d0', source: PLACEHOLDER.slice(0, 40), complete: false, streaming: true, allowAutoRepair: true });
+    s = await settle('gap', 'generating');
+    check('while it is still arriving it is a card like any other', /Generating diagram…/.test(s.text), s.text);
+    const repairsBeforeGap = (await calls()).repair.length;
+    await render('gap', { artifactId: 'm18:d0', source: PLACEHOLDER, complete: true, streaming: false, allowAutoRepair: true });
+    await new Promise((r) => setTimeout(r, 500));
+    const gap = await run(() => ({ figures: document.querySelectorAll('#gap figure.diagram-card').length, text: document.getElementById('gap').innerText.trim() }));
+    check('once complete, a placeholder-only diagram leaves nothing on screen', gap.figures === 0 && gap.text === '', JSON.stringify(gap));
+    check('…and asks nothing of a model', (await calls()).repair.length === repairsBeforeGap);
+    await render('gap-source', { artifactId: 'm19:d0', source: PLACEHOLDER, info: 'mermaid source', complete: true, streaming: false });
+    s = await settle('gap-source', 'ready');
+    check('asked for as source, the text is still given', s.source && s.source.includes('Paper (not retrieved)'), String(s.source).slice(0, 80));
+    await render('gap-real', { artifactId: 'm20:d0', source: 'flowchart LR\n    api["API"] --> auth["Auth (unknown)"]', complete: true, streaming: false });
+    s = await settle('gap-real', 'img');
+    check('one real node keeps the drawing', s.imgLoaded, JSON.stringify({ state: s.state }));
+    for (const slot of ['chart', 'nobase', 'hostile', 'chen', 'chenbad', 'dfa', 'nfa-as-dfa', 'er', 'md-chart', 'gap', 'gap-source', 'gap-real']) await run((sl) => window.__card.unmount(sl), slot);
+
     // ── 10. reduced motion ──────────────────────────────────────────────────
     console.log('reduced motion');
     const normal = await run(() => getComputedStyle(document.querySelector('#a figure.diagram-card')).transitionDuration);

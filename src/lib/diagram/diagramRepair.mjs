@@ -12,7 +12,9 @@
 // Budget (createRepairBudget): one automatic attempt per diagram source, and a
 // cap per time window across all diagrams, so a bad run of answers cannot turn
 // into a stream of paid calls. A manual "Try to fix" press is the user's own
-// decision: it bypasses the per-diagram cap and still counts against nothing.
+// decision: it bypasses the per-diagram cap. It has a (generous) window cap of
+// its own, because "manual" is a flag the page sets, not something the main
+// process can see for itself.
 
 import { parseFencedBlocks } from './fencedBlocks.mjs';
 import { checkDiagramSource } from './diagramPolicy.mjs';
@@ -22,6 +24,7 @@ export const DIAGRAM_REPAIR_LIMITS = Object.freeze({
   maxDiagnosticChars: 600,
   automaticPerSource: 1,
   automaticPerWindow: 6,
+  manualPerWindow: 20,
   windowMs: 10 * 60 * 1000,
 });
 
@@ -126,10 +129,13 @@ export function createRepairBudget(options = {}) {
   const perSource = new Map();
   /** @type {number[]} */
   let recent = [];
+  /** @type {number[]} */
+  let recentManual = [];
 
   function prune() {
     const cutoff = now() - limits.windowMs;
     recent = recent.filter((t) => t > cutoff);
+    recentManual = recentManual.filter((t) => t > cutoff);
     // The per-source map only has to outlive the window.
     if (perSource.size > 200) perSource.clear();
   }
@@ -143,7 +149,11 @@ export function createRepairBudget(options = {}) {
      */
     take(source, opts = {}) {
       prune();
-      if (opts.manual === true) return { allowed: true };
+      if (opts.manual === true) {
+        if (recentManual.length >= limits.manualPerWindow) return { allowed: false, reason: 'rate_limited' };
+        recentManual.push(now());
+        return { allowed: true };
+      }
       const key = hashSource(source);
       if ((perSource.get(key) || 0) >= limits.automaticPerSource) return { allowed: false, reason: 'already_tried' };
       if (recent.length >= limits.automaticPerWindow) return { allowed: false, reason: 'rate_limited' };

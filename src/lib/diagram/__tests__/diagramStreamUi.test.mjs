@@ -159,3 +159,40 @@ describe('mayHoldMermaidFence', () => {
     assert.equal(mayHoldMermaidFence('', true), false);
   });
 });
+
+// Found in review (2026-10-01): the gates in front of the scanner were each
+// stricter than it in a different way.
+describe('every gate reads a fence line the way the scanner does', async () => {
+  const { parseFencedBlocks, isVisualBlock, mentionsVisualTag } = await import('../fencedBlocks.mjs');
+  const { mayHoldMermaidFence } = await import('../diagramStreamUi.mjs');
+  const B = 'flowchart LR\n    a --> b';
+  const OPENINGS = [
+    ['```mermaid', '```'], ['``` mermaid', '```'], ['~~~ mermaid', '~~~'], ['```Mermaid', '```'], ['~~~mermaid', '~~~'],
+    ['   ```mermaid', '   ```'], ['1. ```mermaid', '   ```'], ['- ```natively-chart', '  ```'], ['```mermaid title', '```'], ['````natively-diagram', '````'],
+  ];
+
+  test('what the scanner calls a visual block, every gate lets through', () => {
+    for (const [open, close] of OPENINGS) {
+      const text = `Lead.\n\n${open}\n${B}\n${close}\nTail.`;
+      assert.equal(parseFencedBlocks(text, { final: true }).blocks.filter(isVisualBlock).length, 1, `scanner: ${open}`);
+      assert.equal(hasOpeningMermaidFence(text), true, `opening: ${open}`);
+      assert.equal(mentionsVisualTag(text), true, `mentions: ${open}`);
+      assert.equal(mayHoldMermaidFence(text, false), true, `mayHold: ${open}`);
+      assert.equal(shouldUseStreamingDiagramUi(open.slice(-3), `Lead.\n\n${open.slice(0, -3)}`), true, `stream: ${open}`);
+    }
+  });
+
+  test('a fence line whose tag is finished stays hidden while the line is not', () => {
+    for (const tail of ['```m', '```merm', '```mermaid', '```mermaid ', '```mermaid\r', '```mermaid source', '``` merm', '~~~ natively-ch', '1. ```merm']) {
+      assert.equal(isMermaidOpeningTail({ kind: 'opening-fence', text: tail }), true, JSON.stringify(tail));
+    }
+    for (const tail of ['```', '```python', '```python ', '```js title', '```mermaidx', '```mermaid-like ']) {
+      assert.equal(isMermaidOpeningTail({ kind: 'opening-fence', text: tail }), false, JSON.stringify(tail));
+    }
+  });
+
+  test('prose that only talks about fences does not look like one', () => {
+    assert.equal(hasOpeningMermaidFence('Use a mermaid block, three backticks then the word.'), false);
+    assert.equal(hasOpeningMermaidFence('1. mermaid is a tool\n2. so is graphviz'), false);
+  });
+});

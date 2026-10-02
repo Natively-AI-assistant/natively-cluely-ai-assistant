@@ -416,6 +416,13 @@ export class ModesManager {
             const instance = ModesManager.instance;
             registerUserInstructionProvider((pinnedModeId) =>
                 instance.getScopedInstructionText('dsa_question_answer', pinnedModeId));
+            // The visual resolver asks which built-in mode a turn runs in (it
+            // decides whether a task that merely implies a chart or a diagram
+            // gets one). Answered from the mode's TEMPLATE, never its name.
+            try {
+                const { registerVisualModeProvider, visualModeOf } = require('../llm/diagramPromptSignals') as typeof import('../llm/diagramPromptSignals');
+                registerVisualModeProvider((pinnedModeId) => visualModeOf(instance.resolveMode(pinnedModeId)));
+            } catch { /* visuals then stay explicit-only; never blocks startup */ }
             // Establish the app defaults ONCE, here rather than at a startup
             // hook: the database opens lazily, and every entry point that can
             // read a mode goes through this accessor. Doing it anywhere else

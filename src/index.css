@@ -2843,6 +2843,55 @@ body {
     transition: none;
   }
 }
+/* Chart / notation cards: the data behind the picture, and what it rests on. */
+.diagram-card__data {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.diagram-card__table-wrap {
+  overflow-x: auto;
+  padding: 8px 12px 0;
+}
+
+.diagram-card__table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.diagram-card__table th,
+.diagram-card__table td {
+  padding: 3px 12px 3px 0;
+  text-align: right;
+  font-weight: 400;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.diagram-card__table thead th {
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.diagram-card__table th:first-child {
+  text-align: left;
+}
+
+.diagram-card__notes {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 9px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  opacity: 0.72;
+}
+
+.diagram-card__notes li {
+  margin: 0;
+  padding: 0;
+}
+
 /* @diagram-card:end */
 
 .overlay-chip-surface {

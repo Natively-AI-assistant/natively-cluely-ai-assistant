@@ -1,7 +1,8 @@
 // Fenced-block scanner shared by every surface that shows an AI answer.
 //
 // One answer is Markdown that may hold prose, ordinary code fences and
-// explicitly tagged ```mermaid fences. The live overlay sees that text grow a
+// explicitly tagged visual fences (```mermaid, ```natively-chart,
+// ```natively-diagram). The live overlay sees that text grow a
 // provider chunk at a time, so a fence marker, its language tag or its closing
 // fence can each be cut anywhere. This module answers, for any prefix of an
 // answer: which blocks exist, which are complete, and what tail is still
@@ -20,20 +21,51 @@
 //   - any amount of leading spaces opens a fence (answers put fences under
 //     list items; a 4-space "indented code block" holding a literal fence line
 //     does not occur in model output);
+//   - a fence on a list item's own line ("1. ```bash") opens a block, as it
+//     does in CommonMark. (It used to be read as prose — and then its CLOSING
+//     fence was read as an opening one, which swallowed every block after it,
+//     a diagram included.)
 //   - a fence inside a blockquote ("> ```") is left as prose.
 //
 // A line only counts once it is complete (its newline has arrived) unless the
 // caller says the text is final. That is what stops a half-arrived "```" from
 // being read as a closing fence one token early.
 
-/** Language tags that mean "this fence is a Mermaid diagram". Explicit only. */
-const MERMAID_LANGS = new Set(['mermaid']);
+/**
+ * Language tags that mean "this fence is a visual artifact", and which kind.
+ * Explicit tags only: an untagged or differently tagged block is ordinary code,
+ * whatever it contains.
+ *
+ *   mermaid            Mermaid source (drawn by the bundled Mermaid)
+ *   natively-chart     a chart payload (chartSpec.mjs)
+ *   natively-diagram   a notation model: Chen ER, a formal automaton
+ */
+export const VISUAL_FENCE_LANGS = Object.freeze({ mermaid: 'mermaid', 'natively-chart': 'chart', 'natively-diagram': 'notation' });
+/** Block kinds that are drawn as a card rather than shown as code. */
+export const VISUAL_BLOCK_KINDS = Object.freeze(['mermaid', 'chart', 'notation']);
+/** The tag a block of a given visual kind is written with. */
+export const VISUAL_FENCE_TAG = Object.freeze({ mermaid: 'mermaid', chart: 'natively-chart', notation: 'natively-diagram' });
 
-const OPEN_RE = /^( *)(`{3,}|~{3,})([^\n]*)$/;
+/** Is this parsed block a visual artifact (of any kind)? */
+export function isVisualBlock(block) {
+  return Boolean(block) && (block.kind === 'mermaid' || block.kind === 'chart' || block.kind === 'notation');
+}
+
+/** Cheap text check: does this text name any visual fence tag at all? */
+export function mentionsVisualTag(text) {
+  // Any case: the scanner lower-cases a fence's language, so "```Mermaid" is a
+  // diagram to it and must be one to every gate in front of it.
+  return typeof text === 'string' && VISUAL_TAG_ANYWHERE_RE.test(text);
+}
+const VISUAL_TAG_ANYWHERE_RE = /mermaid|natively-chart|natively-diagram/i;
+
+// Leading spaces, then optionally one list marker ("- ", "1. ", "2) ").
+const OPEN_RE = /^( *(?:(?:[-*+]|\d{1,9}[.)]) +)?)(`{3,}|~{3,})([^\n]*)$/;
 
 function stripLineEnding(line) {
   if (line.endsWith('\r\n')) return line.slice(0, -2);
-  if (line.endsWith('\n')) return line.slice(0, -1);
+  // (A lone "\r" too: a final text that ends "```\r" has closed its block.)
+  if (line.endsWith('\n') || line.endsWith('\r')) return line.slice(0, -1);
   return line;
 }
 
@@ -46,7 +78,12 @@ function matchOpeningFence(lineBody) {
   // (otherwise "```js```" on one line would open a block).
   if (marker[0] === '`' && info.includes('`')) return null;
   const lang = (info.split(/\s+/)[0] || '').toLowerCase();
-  return { indent: m[1].length, char: marker[0], len: marker.length, info, lang };
+  const listed = /\S/.test(m[1]);
+  // On a list item's line a fence carries at most a language: "1. ```bash".
+  // "- ``` opens a code block" is a sentence about fences, and read as an
+  // opening fence it swallowed everything up to the next one.
+  if (listed && /\s/.test(info)) return null;
+  return { indent: m[1].length, char: marker[0], len: marker.length, info, lang, listed };
 }
 
 function isClosingFence(lineBody, fence) {
@@ -92,7 +129,7 @@ function couldBecomeClosingFence(partial, fence) {
  *  - 'prose': ordinary text.
  */
 function classifyPartialOutside(partial) {
-  if (/^ *(`{3,}|~{3,})/.test(partial)) {
+  if (/^ *(?:(?:[-*+]|\d{1,9}[.)]) +)?(`{3,}|~{3,})/.test(partial)) {
     const m = OPEN_RE.exec(partial);
     if (m && !(m[2][0] === '`' && m[3].includes('`'))) return 'opening-fence';
     return 'prose';
@@ -101,15 +138,29 @@ function classifyPartialOutside(partial) {
   return 'prose';
 }
 
-function removeIndent(content, indent) {
+function removeIndent(content, indent, listed = false) {
   if (!indent) return content;
+  if (listed) {
+    // Under a list marker the content may be indented to the item's text or
+    // not at all. Only what EVERY line shares is the item's indentation; the
+    // rest is the block's own (a mind map is nothing but indentation).
+    let shared = indent;
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      shared = Math.min(shared, line.length - line.trimStart().length);
+      if (shared === 0) return content;
+    }
+    return content.replace(new RegExp(`^ {${shared}}`, 'gm'), '');
+  }
   const re = new RegExp(`^ {1,${indent}}`, 'gm');
   return content.replace(re, '');
 }
 
 function kindForLang(lang) {
-  return MERMAID_LANGS.has(lang) ? 'mermaid' : 'code';
+  return Object.prototype.hasOwnProperty.call(VISUAL_FENCE_LANGS, lang) ? VISUAL_FENCE_LANGS[lang] : 'code';
 }
+
+const isVisualKind = (kind) => kind === 'mermaid' || kind === 'chart' || kind === 'notation';
 
 function newState() {
   return {
@@ -152,7 +203,7 @@ function fenceBlock(state, fence, contentEnd, end, closed) {
     start: fence.start,
     end,
     contentStart: fence.contentStart,
-    source: removeIndent(trimmed, fence.indent),
+    source: removeIndent(trimmed, fence.indent, fence.listed === true),
     closed,
     fenceIndex: fence.fenceIndex,
     diagramIndex: fence.diagramIndex,
@@ -185,10 +236,11 @@ function settleCompleteLines(state) {
           start: lineStart,
           contentStart: lineEnd,
           fenceIndex: state.fenceCount,
-          diagramIndex: kind === 'mermaid' ? state.mermaidCount : -1,
+          // The ordinal among the answer's visual blocks, of every kind.
+          diagramIndex: isVisualKind(kind) ? state.mermaidCount : -1,
         };
         state.fenceCount += 1;
-        if (kind === 'mermaid') state.mermaidCount += 1;
+        if (isVisualKind(kind)) state.mermaidCount += 1;
       }
     }
     state.offset = lineEnd;
@@ -249,7 +301,7 @@ function snapshot(state, final) {
           source: '',
           closed: false,
           fenceIndex: state.fenceCount,
-          diagramIndex: kind === 'mermaid' ? state.mermaidCount : -1,
+          diagramIndex: isVisualKind(kind) ? state.mermaidCount : -1,
         });
         return { blocks, tail, final: true };
       }
@@ -325,6 +377,18 @@ export function extractMermaidBlocks(text, options = {}) {
   return parseFencedBlocks(text, options).blocks.filter((b) => b.kind === 'mermaid');
 }
 
+/** True when the text holds (or is in the middle of opening) a visual block of any kind. */
+export function hasVisualFence(text, options = {}) {
+  if (!mentionsVisualTag(text)) return false;
+  return parseFencedBlocks(text, options).blocks.some(isVisualBlock);
+}
+
+/** The visual blocks of an answer (Mermaid, chart, notation), in order. */
+export function extractVisualBlocks(text, options = {}) {
+  if (!mentionsVisualTag(text)) return [];
+  return parseFencedBlocks(text, options).blocks.filter(isVisualBlock);
+}
+
 /** The answer with every Mermaid fence removed (prose and ordinary code kept). */
 export function stripMermaidBlocks(text) {
   const { blocks } = parseFencedBlocks(text, { final: true });
@@ -345,8 +409,18 @@ export function replaceMermaidBlock(text, diagramIndex, newSource) {
   const target = blocks.find((b) => b.kind === 'mermaid' && b.diagramIndex === diagramIndex);
   if (!target) return text;
   const fence = target.fenceChar.repeat(target.fenceLength);
-  const body = String(newSource).replace(/\s+$/, '');
-  const replacement = `${fence}mermaid\n${body}\n${fence}\n`;
+  // The opening line is kept exactly as written — its indentation (a block
+  // under a list item stays under it) and its info words ("mermaid source").
+  const opening = text.slice(target.start, target.contentStart);
+  const indent = /^[ \t]*/.exec(opening)[0];
+  const openLine = /\n$/.test(opening) ? opening : `${opening}\n`;
+  const body = String(newSource)
+    .replace(/\r\n?/g, '\n')
+    .replace(/\s+$/, '')
+    .split('\n')
+    .map((line) => (line ? indent + line : line))
+    .join('\n');
+  const replacement = `${openLine}${body}\n${indent}${fence}\n`;
   const after = text.slice(target.end);
   return text.slice(0, target.start) + (after ? replacement : replacement.replace(/\n$/, '')) + after;
 }

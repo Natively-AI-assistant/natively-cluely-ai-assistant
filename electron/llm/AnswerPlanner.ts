@@ -452,7 +452,7 @@ Follow-up Points:
 // owns the shape of a design answer (approach → Mermaid → brief explanation).
 // The seven-section template above would contradict it from the user message,
 // so the plan's template defers instead of restating a second shape.
-const SYSTEM_DESIGN_DIAGRAM_TEMPLATE = `Follow the diagram contract in the system prompt: the approach and its assumptions first, then the diagram, then a brief explanation of components, data flow, scaling, failure handling and tradeoffs. Do not use the fixed section headings unless the user asked for a detailed design.`;
+const SYSTEM_DESIGN_DIAGRAM_TEMPLATE = `Follow the diagram contract in the system prompt: the approach and its assumptions first, then the diagram if the contract asks for one, then a brief explanation of components, data flow, scaling, failure handling and tradeoffs. When the contract says not to draw, or there is no contract, answer in words only. Do not use the fixed section headings unless the user asked for a detailed design.`;
 
 // Routes a design follow-up may be re-routed FROM (see planAnswer).
 const DESIGN_FOLLOW_UP_REROUTABLE: ReadonlySet<AnswerType> = new Set<AnswerType>([
@@ -2092,6 +2092,21 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     try {
       const { isDesignFollowUpTurn } = require('./diagramPromptSignals') as typeof import('./diagramPromptSignals');
       if (isDesignFollowUpTurn(question, answerType)) answerType = 'system_design_answer';
+    } catch { /* routing only; the keyword verdict stands */ }
+  }
+
+  // VISUAL TURN ON A CODING ROUTE (2026-10-01, nine-mode catalog). "Model users,
+  // orders and payments" and "add a status column to orders" trip the same
+  // keyword patterns ("model", "column", "add"). When the shared visual
+  // resolver has claimed the turn for an ER diagram, a chart or a timeline and
+  // no code was asked for, the coding route would stream, validate and verify a
+  // diagram as code. It moves to the neutral meeting route — NOT to
+  // system_design_answer: a data model or a forecast is not a system design.
+  if (!docGroundedEnforcementActive && (answerType === 'coding_question_answer' || answerType === 'dsa_question_answer')) {
+    try {
+      const { visualTurnRoute } = require('./diagramPromptSignals') as typeof import('./diagramPromptSignals');
+      const route = visualTurnRoute(question, answerType);
+      if (route === 'general_meeting_answer') answerType = 'general_meeting_answer';
     } catch { /* routing only; the keyword verdict stands */ }
   }
 

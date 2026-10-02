@@ -66,7 +66,7 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
     </motion.div>
 );
 
-const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
+const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean; isLatest?: boolean }> = ({ content, isStreaming, isLatest }) => {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = async () => {
@@ -94,7 +94,9 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                 <DiagramAwareMarkdown
                     text={content}
                     streaming={Boolean(isStreaming)}
-                    allowAutoRepair
+                    // Only the answer just given may be repaired by itself (one model
+                    // call); an older answer in the thread keeps its "Try to fix" button.
+                    allowAutoRepair={Boolean(isLatest)}
                     renderMarkdown={(chunk, key) => <React.Fragment key={key}>{chunk}</React.Fragment>}
                 />
             </div>
@@ -506,7 +508,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                             {messages.map((msg) => (
                                 msg.role === 'user'
                                     ? <UserMessage key={msg.id} content={msg.content} />
-                                    : <AssistantMessage key={msg.id} content={msg.content} isStreaming={msg.isStreaming} />
+                                    : <AssistantMessage key={msg.id} content={msg.content} isStreaming={msg.isStreaming} isLatest={msg.id === messages[messages.length - 1]?.id} />
                             ))}
 
                             {chatState === 'waiting_for_llm' && <TypingIndicator />}

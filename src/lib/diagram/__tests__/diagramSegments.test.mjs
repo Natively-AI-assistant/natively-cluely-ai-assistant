@@ -84,3 +84,31 @@ describe('splitAnswerForDiagrams', () => {
     assert.equal(parts[0].info, 'mermaid source');
   });
 });
+
+// Found in review (2026-10-01): the chat overlays showed fence fragments while
+// a diagram streamed.
+describe('while a diagram is streaming, no fence fragment is handed to Markdown', () => {
+  const B = 'flowchart LR\n    a --> b';
+  const shape = (text) => splitAnswerForDiagrams(text, { streaming: true }).map((s) => (s.type === 'diagram' ? `card:${s.complete}` : `md:${s.text}`));
+
+  test('the backticks that are closing the block are held back', () => {
+    for (const tail of ['\n`', '\n``', '\n```']) {
+      assert.deepEqual(shape(`Lead.\n\n\`\`\`mermaid\n${B}${tail}`), ['md:Lead.\n\n', 'card:false'], JSON.stringify(tail));
+    }
+    assert.deepEqual(shape(`Lead.\n\n\`\`\`mermaid\n${B}\n\`\`\`\nAfter`), ['md:Lead.\n\n', 'card:true', 'md:After']);
+  });
+
+  test('a fence line turning into a visual tag is not part of the only Markdown piece', () => {
+    assert.deepEqual(shape('Lead.\n```merm'), ['md:Lead.\n']);
+    assert.deepEqual(shape('Lead.\n```mermaid '), ['md:Lead.\n']);
+    assert.deepEqual(shape('Lead.\n``` natively-ch'), ['md:Lead.\n']);
+    // An ordinary code fence opening is shown as it always was.
+    assert.deepEqual(shape('Lead.\n```py'), ['md:Lead.\n```py']);
+  });
+
+  test('the closing backticks of an ordinary code block are still Markdown\'s', () => {
+    const segs = splitAnswerForDiagrams(`\`\`\`mermaid\n${B}\n\`\`\`\n\n\`\`\`ts\nconst x = 1;\n\`\``, { streaming: true });
+    assert.equal(segs[segs.length - 1].type, 'markdown');
+    assert.ok(segs[segs.length - 1].text.endsWith('``'));
+  });
+});

@@ -804,6 +804,9 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       }
       .content .diagram-source > summary::-webkit-details-marker { display: none; }
       .content .diagram-source[open] > summary { margin-bottom: 2px; }
+      /* What sits under a chart: its values, assumptions and sources. */
+      .content .diagram-notes { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; opacity: 0.85; }
+      .content .diagram-notes li { margin: 2px 0; }
       .content pre .hl-c { color: #6b7d99; font-style: italic; }
       .content pre .hl-s { color: #a3e9b6; }
       .content pre .hl-k { color: #c8a8ff; }

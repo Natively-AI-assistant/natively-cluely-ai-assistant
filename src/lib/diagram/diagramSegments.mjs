@@ -10,7 +10,7 @@
 // untouched Markdown chunk — so a list or a code block that spans the chunk
 // keeps its numbering and structure.
 
-import { parseFencedBlocks } from './fencedBlocks.mjs';
+import { parseFencedBlocks, isVisualBlock } from './fencedBlocks.mjs';
 import { isMermaidOpeningTail, describeDiagramFromLead, mayHoldMermaidFence } from './diagramStreamUi.mjs';
 
 /**
@@ -18,7 +18,7 @@ import { isMermaidOpeningTail, describeDiagramFromLead, mayHoldMermaidFence } fr
  * @param {{ streaming?: boolean }} [options]
  * @returns {Array<
  *   | { type: 'markdown', key: string, text: string }
- *   | { type: 'diagram', key: string, diagramIndex: number, source: string, info: string, complete: boolean, description: string }
+ *   | { type: 'diagram', artifact: 'mermaid' | 'chart' | 'notation', key: string, diagramIndex: number, source: string, info: string, complete: boolean, description: string }
  * >}
  */
 export function splitAnswerForDiagrams(text, options = {}) {
@@ -32,7 +32,7 @@ export function splitAnswerForDiagrams(text, options = {}) {
   }
 
   const parse = parseFencedBlocks(body, { final: !streaming });
-  const hasDiagram = parse.blocks.some((b) => b.kind === 'mermaid');
+  const hasDiagram = parse.blocks.some(isVisualBlock);
   const hiddenTail = streaming && isMermaidOpeningTail(parse.tail);
   if (!hasDiagram && !hiddenTail) return [{ type: 'markdown', key: 'm0', text: body }];
 
@@ -54,10 +54,12 @@ export function splitAnswerForDiagrams(text, options = {}) {
   };
 
   for (const block of parse.blocks) {
-    if (block.kind === 'mermaid') {
+    if (isVisualBlock(block)) {
       flush();
       out.push({
         type: 'diagram',
+        // 'mermaid' | 'chart' | 'notation': which renderer the card uses.
+        artifact: block.kind,
         key: `d${block.diagramIndex}`,
         diagramIndex: block.diagramIndex,
         source: block.source,
@@ -73,8 +75,11 @@ export function splitAnswerForDiagrams(text, options = {}) {
   }
   // The unsettled tail of a streaming answer belongs to the Markdown after the
   // last block — unless it is a fence line turning into ```mermaid, which
-  // stays hidden until it is a block.
-  if (streaming && parse.tail.kind !== 'none' && !hiddenTail) {
+  // stays hidden until it is a block, or the backticks that are closing a
+  // drawing (they used to appear under the card as a stray "```").
+  const lastBlock = parse.blocks[parse.blocks.length - 1];
+  const closingAVisual = parse.tail.kind === 'maybe-closing-fence' && isVisualBlock(lastBlock);
+  if (streaming && parse.tail.kind !== 'none' && !hiddenTail && !closingAVisual) {
     if (chunkStart === -1) chunkStart = body.length - parse.tail.text.length;
     chunkEnd = body.length;
   }

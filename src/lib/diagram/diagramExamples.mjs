@@ -13,9 +13,20 @@
 //      the exact Mermaid version the app ships, and checked against
 //      diagramPolicy, so an example that does not draw fails the suite.
 //
+// Since version 2 the library also covers the nine meeting modes: ER and class
+// diagrams, charts, timelines, schedules, decision trees and the two notation
+// models. Those entries add:
+//   fence       'mermaid' (default) | 'natively-chart' | 'natively-diagram' | 'table'
+//   body        the block content for a non-Mermaid entry (`mermaid` holds it otherwise)
+//   modes       built-in modes the example is most at home in (a tie-breaker only)
+//   chartIntent for a chart: forecast | breakeven | funnel | trend | …
+// Every entry is still checked by the suite: Mermaid ones are drawn with the
+// pinned Mermaid, chart and notation ones are compiled by the local adapters.
+// The numbers in a chart example are hypothetical on purpose, and say so.
+//
 // Entry fields:
 //   id          stable identifier
-//   view        'architecture' | 'sequence' | 'flowchart' | 'state'
+//   view        'architecture' | 'sequence' | 'flowchart' | 'state' | … (see visualCatalog.mjs)
 //   topics      lower-case words/phrases used by the local selector
 //   question    the question this answers
 //   constraints what the asker stated
@@ -23,10 +34,14 @@
 //   rationale   one or two sentences on why the diagram has this shape
 //   mermaid     the diagram source
 
-export const DIAGRAM_EXAMPLES_VERSION = 1;
+export const DIAGRAM_EXAMPLES_VERSION = 3;
 
 /** Rough ceiling for all examples attached to one request (~4 chars/token). */
 export const DIAGRAM_EXAMPLE_TOKEN_BUDGET = 800;
+
+// Payload examples are written compactly: they cost tokens in a prompt, and a
+// model copies the form it is shown.
+const json = (value) => JSON.stringify(value);
 
 export const DIAGRAM_EXAMPLES = Object.freeze([
   {
@@ -161,6 +176,360 @@ export const DIAGRAM_EXAMPLES = Object.freeze([
       '    Refunded --> [*]',
     ].join('\n'),
   },
+
+  // ── version 2: the wider catalog ──────────────────────────────────────────
+  {
+    id: 'er-customer-order',
+    view: 'er',
+    modes: ['technical-interview', 'team-meet', 'lecture'],
+    topics: ['customer', 'customers', 'order', 'orders', 'users', 'payments', 'data model', 'schema', 'tables', 'entities'],
+    question: 'Model customers and their orders.',
+    constraints: ['A customer can have no orders yet', 'Every order belongs to one customer'],
+    assumptions: ['Order has its own key, so it only refers to the customer'],
+    rationale:
+      'The marker beside CUSTOMER says how many customers one order has (exactly one); the marker beside ORDER says how many orders one customer has (zero or many). The line is dashed because an order is identified by its own key, not by the customer.',
+    mermaid: [
+      'erDiagram',
+      '    CUSTOMER ||..o{ ORDER : places',
+      '    CUSTOMER {',
+      '        int customer_id PK',
+      '        string name',
+      '    }',
+      '    ORDER {',
+      '        int order_id PK',
+      '        int customer_id FK',
+      '        decimal total',
+      '    }',
+    ].join('\n'),
+  },
+  {
+    id: 'class-parking-lot',
+    view: 'class',
+    modes: ['technical-interview', 'lecture'],
+    topics: ['parking lot', 'objects', 'classes', 'object model', 'inheritance', 'elevator', 'vending machine', 'library'],
+    question: 'Design the objects for a parking lot.',
+    constraints: ['Several levels, each with spots', 'Spots come in more than one size'],
+    assumptions: ['One vehicle per spot'],
+    rationale:
+      'A level cannot exist without its lot, so that is composition; a lot merely holds spots, which is aggregation; spot sizes are subclasses. Each symbol sits at the end it describes.',
+    mermaid: [
+      'classDiagram',
+      '    class ParkingLot {',
+      '        +park(Vehicle v) Ticket',
+      '    }',
+      '    class Level',
+      '    class Spot {',
+      '        <<abstract>>',
+      '        +isFree() bool',
+      '    }',
+      '    class CompactSpot',
+      '    class Vehicle',
+      '    ParkingLot "1" *-- "1..*" Level',
+      '    Level "1" o-- "0..*" Spot',
+      '    Spot <|-- CompactSpot',
+      '    Spot "0..1" --> "0..1" Vehicle : holds',
+    ].join('\n'),
+  },
+  {
+    id: 'chart-forecast-net-growth',
+    view: 'chart',
+    chartIntent: 'forecast',
+    fence: 'natively-chart',
+    modes: ['sales', 'general', 'team-meet'],
+    topics: ['revenue', 'growth', 'forecast', 'projection', 'monthly', 'mrr', 'arr', 'billings'],
+    question: 'Assume billings are €48,200 a month now. Show the next four months at 2% net monthly growth.',
+    constraints: ['Starting value, rate, period and horizon were all stated'],
+    assumptions: ['Hypothetical inputs given by the asker'],
+    rationale:
+      'The payload carries the inputs only; the app computes the values, so they cannot be mistyped. The title names the scenario, and no computed number is repeated in the prose.',
+    body: json({
+        v: 1,
+        type: 'line',
+        title: 'Monthly billings at 2% net growth',
+        x: { label: 'Month' },
+        y: { label: 'Billings', unit: 'EUR' },
+        compute: { kind: 'compound_growth', baseline: 48200, ratePercent: 2, period: 'month', periods: 4 },
+        assumptions: ['Net growth stays at 2% every month'],
+    }),
+  },
+  {
+    id: 'chart-break-even',
+    view: 'chart',
+    chartIntent: 'breakeven',
+    fence: 'natively-chart',
+    modes: ['sales'],
+    topics: ['savings', 'break even', 'breakeven', 'payback', 'cost', 'roi'],
+    question: 'It costs $12,000 to set up and saves $2,500 a month. Show when it pays for itself over eight months.',
+    constraints: ['Cost, saving and horizon were all stated'],
+    assumptions: ['The saving is the same every month'],
+    rationale: 'A cumulative line that starts below zero shows the pay-back point directly. The saving is a saving, not revenue.',
+    body: json({
+        v: 1,
+        type: 'line',
+        title: 'Cumulative net saving',
+        y: { label: 'Net position', unit: 'USD' },
+        compute: { kind: 'break_even', initialCost: 12000, periodSaving: 2500, period: 'month', periods: 8 },
+        assumptions: ['The saving is constant at 2,500 a month'],
+    }),
+  },
+  {
+    id: 'chart-stage-counts',
+    view: 'chart',
+    chartIntent: 'funnel',
+    fence: 'natively-chart',
+    modes: ['sales', 'recruiting'],
+    topics: ['pipeline', 'funnel', 'stages', 'conversion', 'deals', 'candidates', 'dropping'],
+    question: 'Of the 200 leads created in Q3, 120 were qualified, 60 got a proposal and 22 closed. Where do they drop out?',
+    constraints: ['One cohort: leads created in Q3', 'A count for every stage'],
+    assumptions: [],
+    rationale: 'Stage counts of one cohort, in order. The app works out the step-to-step rates; the payload only names the cohort and where the counts came from.',
+    body: json({
+        v: 1,
+        type: 'funnel',
+        title: 'Q3 leads by stage',
+        status: 'observed',
+        cohort: 'leads created in Q3',
+        sources: ['counts stated in the meeting'],
+        stages: [
+          { label: 'Leads', value: 200 },
+          { label: 'Qualified', value: 120 },
+          { label: 'Proposal', value: 60 },
+          { label: 'Closed', value: 22 },
+        ],
+    }),
+  },
+  {
+    id: 'chart-observed-trend',
+    view: 'chart',
+    chartIntent: 'trend',
+    fence: 'natively-chart',
+    modes: ['team-meet', 'call-center', 'general'],
+    topics: ['trend', 'metric', 'changed', 'over time', 'weekly', 'tickets', 'incidents', 'sprint'],
+    question: 'Open tickets were 120, 134, 150 and 141 over the last four weeks, and week three of the export is missing. Plot it.',
+    constraints: ['Four weekly observations, one of them missing'],
+    assumptions: [],
+    rationale: 'Real observations over ordered time are a line. The missing week is null, which draws as a gap rather than a zero.',
+    body: json({
+        v: 1,
+        type: 'line',
+        title: 'Open tickets by week',
+        x: { label: 'Week', kind: 'time', values: ['W1', 'W2', 'W3', 'W4', 'W5'] },
+        y: { label: 'Open tickets' },
+        series: [{ name: 'Open tickets', status: 'observed', values: [120, 134, null, 150, 141], source: 'support dashboard export shared in the meeting' }],
+    }),
+  },
+  {
+    id: 'decision-troubleshooting',
+    view: 'decision',
+    modes: ['call-center', 'sales', 'general'],
+    topics: ['troubleshoot', 'diagnose', 'diagnosing', 'issue', 'refund', 'eligibility', 'objection', 'decision tree'],
+    question: 'Walk me through diagnosing a router that keeps dropping the connection.',
+    constraints: ['Steps come from the support runbook'],
+    assumptions: [],
+    rationale: 'Each diamond is one check with labelled answers, and every path ends in an outcome. A check the runbook does not cover is marked, not invented.',
+    mermaid: [
+      'flowchart TD',
+      '    start(["Connection drops"]) --> lights{"Internet light on?"}',
+      '    lights -->|"no"| cable{"Cable seated?"}',
+      '    lights -->|"yes"| devices{"All devices affected?"}',
+      '    cable -->|"no"| reseat["Reseat the cable"]',
+      '    cable -->|"yes"| outage["Check for an area outage"]',
+      '    devices -->|"yes"| reboot["Restart the router"]',
+      '    devices -->|"no"| single["Device issue (not covered)"]',
+      '    reseat --> resolved(["Resolved or escalate"])',
+      '    reboot --> resolved',
+      '    outage --> resolved',
+    ].join('\n'),
+  },
+  {
+    id: 'timeline-career',
+    view: 'timeline',
+    modes: ['looking-for-work', 'recruiting', 'general'],
+    topics: ['career', 'progression', 'history', 'milestones', 'chronology', 'timeline', 'events'],
+    question: 'Summarize my career progression.',
+    constraints: ['Dates and roles as written in the résumé'],
+    assumptions: [],
+    rationale: 'Only dated facts from the résumé, in order. Nothing is inferred about why a move happened.',
+    mermaid: [
+      'timeline',
+      '    title Career so far',
+      '    2018 : Junior engineer at Acme',
+      '    2020 : Senior engineer at Acme',
+      '         : Led the billing rewrite',
+      '    2023 : Staff engineer at Globex',
+    ].join('\n'),
+  },
+  {
+    id: 'gantt-rollout',
+    view: 'gantt',
+    modes: ['sales', 'team-meet', 'seminar', 'looking-for-work', 'recruiting'],
+    topics: ['rollout', 'implementation', 'schedule', 'plan', 'release', 'phases', 'gantt', 'preparation'],
+    question: 'Show the rollout: a one-week pilot from October 5th, then a two-week rollout, then a review.',
+    constraints: ['Start date and durations were stated'],
+    assumptions: [],
+    rationale: 'Real dates and durations make a schedule. Tasks that follow each other use `after`, so one date drives the rest.',
+    mermaid: [
+      'gantt',
+      '    title Rollout',
+      '    dateFormat YYYY-MM-DD',
+      '    section Pilot',
+      '    Pilot team :p1, 2026-10-05, 5d',
+      '    section Rollout',
+      '    All teams :r1, after p1, 10d',
+      '    Review :milestone, after r1, 0d',
+    ].join('\n'),
+  },
+  {
+    id: 'mindmap-topics',
+    view: 'mindmap',
+    modes: ['lecture', 'general', 'seminar'],
+    topics: ['concepts', 'ideas', 'topics', 'organize', 'mind map', 'notes', 'framework'],
+    question: 'Organize the ideas we covered on database indexing.',
+    constraints: ['Only topics that were raised'],
+    assumptions: [],
+    rationale: 'A mind map shows what belongs under what. Plain text nodes, three levels at most.',
+    mermaid: [
+      'mindmap',
+      '  Database indexing',
+      '    Structures',
+      '      B-tree',
+      '      Hash index',
+      '    Costs',
+      '      Slower writes',
+      '      Extra storage',
+      '    When to use',
+      '      Selective filters',
+    ].join('\n'),
+  },
+  {
+    id: 'dependency-blockers',
+    view: 'dependency',
+    modes: ['team-meet', 'seminar', 'general', 'lecture'],
+    topics: ['blocks', 'blocked', 'blocking', 'dependencies', 'depends', 'prerequisites', 'waiting'],
+    question: 'Show which work blocks which.',
+    constraints: ['Blockers as stated in the stand-up'],
+    assumptions: [],
+    rationale: 'Every arrow is labelled and they all read the same way: the thing at the tail must finish first. A blocker and a plain prerequisite are different labels.',
+    mermaid: [
+      'flowchart LR',
+      '    schema["Schema migration"] -->|"blocks"| api["Orders API"]',
+      '    api -->|"blocks"| mobile["Mobile checkout"]',
+      '    design["Checkout design"] -->|"needs"| mobile',
+      '    api -->|"blocks (unconfirmed)"| reports["Reports"]',
+    ].join('\n'),
+  },
+  {
+    id: 'responsibility-buying',
+    view: 'responsibility',
+    modes: ['sales', 'call-center', 'recruiting', 'team-meet', 'general'],
+    topics: ['who', 'owns', 'approves', 'involved', 'buying', 'stakeholders', 'escalation', 'handles', 'interviews', 'responsible'],
+    question: 'Map who is involved in buying.',
+    constraints: ['Roles as the customer described them'],
+    assumptions: [],
+    rationale: 'Each arrow says what the relation is. Who signs is unknown, so that is what the node says.',
+    mermaid: [
+      'flowchart TD',
+      '    champion["Ops lead (champion)"] -->|"recommends to"| director["Operations director"]',
+      '    director -->|"approves budget"| finance["Finance"]',
+      '    security["Security team"] -->|"reviews"| director',
+      '    signer["Signer: unknown"] -.->|"signs (not stated)"| finance',
+    ].join('\n'),
+  },
+  {
+    id: 'matrix-requirements-evidence',
+    view: 'matrix',
+    fence: 'table',
+    modes: ['recruiting', 'looking-for-work', 'seminar', 'general', 'team-meet'],
+    topics: ['requirements', 'experience', 'evidence', 'candidate', 'role', 'skills', 'compare', 'options', 'offers', 'baselines'],
+    question: "Map this candidate's experience to the role.",
+    constraints: ['Requirements from the job description', 'Evidence from the CV and this interview'],
+    assumptions: [],
+    rationale: 'One row per requirement, with where the evidence is. A requirement nobody has evidence for is "unknown", not a gap in the person.',
+    body: [
+      '| Requirement | Evidence | Status | Source |',
+      '| --- | --- | --- | --- |',
+      '| Kubernetes in production | Ran a 40-node cluster for two years | supported | CV, interview |',
+      '| Led a team | Mentored two engineers | partial | interview |',
+      '| On-call experience | Not discussed yet | unknown | none yet |',
+    ].join('\n'),
+  },
+  {
+    id: 'process-research-method',
+    view: 'flowchart',
+    modes: ['seminar', 'lecture', 'looking-for-work', 'recruiting', 'general', 'sales', 'call-center'],
+    topics: ['method', 'workflow', 'process', 'protocol', 'stages', 'steps', 'pipeline', 'procedure', 'approved'],
+    question: 'Draw the method described in this paper.',
+    constraints: ['Stages as the paper describes them'],
+    assumptions: [],
+    rationale: 'Steps in order, with the one decision as a diamond. A stage the source does not detail says so in its label instead of being filled in.',
+    mermaid: [
+      'flowchart TD',
+      '    collect["Collect the corpus"] --> clean["Filter and deduplicate"]',
+      '    clean --> split["Split train and test"]',
+      '    split --> train["Train the model"]',
+      '    train --> evalq{"Meets the baseline?"}',
+      '    evalq -->|"yes"| report["Report results"]',
+      '    evalq -->|"no"| tune["Tune (details not given)"]',
+      '    tune --> train',
+    ].join('\n'),
+  },
+  {
+    id: 'chen-customer-order',
+    view: 'chen',
+    fence: 'natively-diagram',
+    modes: ['lecture', 'technical-interview'],
+    topics: ['chen', 'er', 'entity', 'relationship', 'weak entity', 'participation'],
+    question: 'Draw customers and orders in Chen notation.',
+    constraints: ['One customer places many orders', 'Every order has a customer'],
+    assumptions: [],
+    rationale:
+      'Cardinality belongs to each participant. Whether every customer must have an order was not stated, so that participation is left out and shows as open.',
+    body: json({
+        kind: 'chen-er',
+        title: 'Customers and orders',
+        entities: [
+          { name: 'Customer', attributes: [{ name: 'customer_id', key: true }, { name: 'name' }] },
+          { name: 'Order', attributes: [{ name: 'order_id', key: true }, { name: 'total' }] },
+        ],
+        relationships: [
+          {
+            name: 'places',
+            participants: [
+              { entity: 'Customer', cardinality: '1' },
+              { entity: 'Order', cardinality: 'N', participation: 'total' },
+            ],
+          },
+        ],
+    }),
+  },
+  {
+    id: 'automaton-ends-in-ab',
+    view: 'automaton',
+    fence: 'natively-diagram',
+    modes: ['lecture', 'technical-interview'],
+    topics: ['dfa', 'nfa', 'automaton', 'automata', 'language', 'strings', 'accept', 'regular'],
+    question: 'Construct a DFA over {a, b} that accepts strings ending in ab.',
+    constraints: ['Alphabet {a, b}', 'Deterministic'],
+    assumptions: [],
+    rationale: 'Each state remembers how much of "ab" has just been read. Every state has a move on every symbol, so the transition function is complete.',
+    body: json({
+        kind: 'automaton',
+        type: 'dfa',
+        title: 'Ends in ab',
+        alphabet: ['a', 'b'],
+        states: ['q0', 'q1', 'q2'],
+        start: 'q0',
+        accepting: ['q2'],
+        transitions: [
+          { from: 'q0', symbol: 'a', to: 'q1' },
+          { from: 'q0', symbol: 'b', to: 'q0' },
+          { from: 'q1', symbol: 'a', to: 'q1' },
+          { from: 'q1', symbol: 'b', to: 'q2' },
+          { from: 'q2', symbol: 'a', to: 'q1' },
+          { from: 'q2', symbol: 'b', to: 'q0' },
+        ],
+    }),
+  },
 ]);
 
 function estimateTokens(text) {
@@ -173,15 +542,36 @@ export function renderDiagramExample(example) {
   if (example.constraints?.length) lines.push(`Stated constraints: ${example.constraints.join('; ')}`);
   if (example.assumptions?.length) lines.push(`Assumptions: ${example.assumptions.join('; ')}`);
   lines.push(`Why this shape: ${example.rationale}`);
-  lines.push('```mermaid', example.mermaid, '```');
+  const fence = example.fence || 'mermaid';
+  // A table example is written as the table itself: that is what the answer holds.
+  if (fence === 'table') lines.push(example.body);
+  else lines.push(`\`\`\`${fence}`, example.body ?? example.mermaid, '```');
   return lines.join('\n');
 }
 
-function scoreExample(example, question, view) {
+/** The four original views share examples with each other and with nothing else. */
+const LEGACY_EXAMPLE_VIEWS = new Set(['architecture', 'sequence', 'flowchart', 'state']);
+
+function scoreExample(example, question, view, mode, chartIntent) {
   let score = 0;
-  // Architecture and flowchart share a Mermaid family; treat them as near.
   if (view && example.view === view) score += 3;
+  // Architecture and flowchart share a Mermaid family; treat them as near.
   else if (view && ((view === 'flowchart' && example.view === 'architecture') || (view === 'architecture' && example.view === 'flowchart'))) score += 1;
+  // Any other view takes examples of its own view only: an ER question never
+  // gets an architecture as its reference, whatever words they share.
+  else if (view) return 0;
+  // Version-2 entries (they carry `modes`) are for the catalog; a system-design
+  // turn with no mode keeps the examples it always had.
+  if (example.modes && LEGACY_EXAMPLE_VIEWS.has(example.view) && !mode) return 0;
+  // A chart reference teaches ONE kind of chart. A breakdown, a quadrant or a
+  // function plot is not taught by a forecast (every intent without its own
+  // example used to get the forecast one, numbers and all).
+  if (example.view === 'chart' && chartIntent) {
+    const wanted = chartIntent === 'generic' || chartIntent === 'comparison' ? 'trend' : chartIntent;
+    if (example.chartIntent !== wanted) return 0;
+    score += 4;
+  }
+  if (mode && Array.isArray(example.modes) && example.modes.includes(mode)) score += 2;
   const q = ` ${String(question || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
   for (const topic of example.topics) {
     if (q.includes(` ${topic} `) || (topic.includes(' ') && q.includes(topic))) score += topic.includes(' ') ? 3 : 2;
@@ -192,7 +582,7 @@ function scoreExample(example, question, view) {
 /**
  * Pick 0–2 examples for a request.
  *
- * @param {{ question?: string, view?: string, max?: number, tokenBudget?: number }} input
+ * @param {{ question?: string, view?: string, mode?: string, chartIntent?: string, max?: number, tokenBudget?: number }} input
  * @returns {Array<typeof DIAGRAM_EXAMPLES[number]>}
  */
 export function selectDiagramExamples(input = {}) {
@@ -202,7 +592,7 @@ export function selectDiagramExamples(input = {}) {
   const ranked = DIAGRAM_EXAMPLES.map((example, index) => ({
     example,
     index,
-    score: scoreExample(example, input.question, input.view),
+    score: scoreExample(example, input.question, input.view, input.mode, input.chartIntent),
   }))
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index);
@@ -230,6 +620,7 @@ export function renderDiagramExamplesBlock(examples) {
   return [
     'DIAGRAM REFERENCE (style only):',
     'These show the size, naming and labelling to aim for. They are NOT facts about this conversation, this company or this system. Design for the actual question and its stated constraints; do not copy an architecture from a reference.',
+    ...(examples.some((e) => e.fence && e.fence !== 'mermaid') ? ['Any number, name or date inside a reference is made up for the reference. Never reuse one as if it were this conversation\'s.'] : []),
     '',
     body,
   ].join('\n');

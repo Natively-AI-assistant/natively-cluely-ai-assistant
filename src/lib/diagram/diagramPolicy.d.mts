@@ -36,6 +36,8 @@ export function renameReservedFlowchartIds(source: string): { text: string; rena
 export function describeDiagramRejection(code: string): string;
 export function detectDiagramType(source: string): { type: string | null; view: string | null; header: string };
 export function estimateDiagramComplexity(source: string, type?: string | null): DiagramComplexity;
+/** True when a flowchart, timeline or mind map holds only placeholder labels ("unknown", "not provided"). */
+export function isPlaceholderDiagram(source: string | null | undefined, type?: string): boolean;
 export function checkDiagramSource(
   source: string,
   options?: { limits?: Partial<{ maxSourceChars: number; maxLines: number; maxNodes: number; maxEdges: number }>; allowedTypes?: readonly string[] },

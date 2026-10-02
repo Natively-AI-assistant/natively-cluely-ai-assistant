@@ -36,8 +36,12 @@ export const DiagramAwareMarkdown: React.FC<DiagramAwareMarkdownProps> = ({
   const instanceId = useId();
   const segments = useMemo(() => (enabled ? splitAnswerForDiagrams(text, { streaming }) : null), [enabled, text, streaming]);
 
-  if (!segments || (segments.length === 1 && segments[0].type === 'markdown')) {
-    return <>{renderMarkdown(text, 'm0')}</>;
+  if (!segments) return <>{renderMarkdown(text, 'm0')}</>;
+  // One Markdown piece is the whole answer — except while a fence line is
+  // still turning into a visual tag, when the piece ends before that line.
+  // (Rendering `text` here showed the half-typed "```merm".)
+  if (segments.length === 1 && segments[0].type === 'markdown') {
+    return <>{renderMarkdown(segments[0].text, 'm0')}</>;
   }
   return (
     <>
@@ -48,6 +52,7 @@ export const DiagramAwareMarkdown: React.FC<DiagramAwareMarkdownProps> = ({
           <DiagramArtifact
             key={segment.key}
             artifactId={`${instanceId}:${segment.key}`}
+            kind={segment.artifact}
             source={segment.source}
             info={segment.info}
             complete={segment.complete}

@@ -618,6 +618,22 @@ export interface StreamOutcome {
   reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
 }
 
+/**
+ * The diagram contract on a system prompt that is about to be replaced, ready
+ * to append to its replacement ('' when there is none).
+ *
+ * The knowledge intercept swaps the whole system prompt for the persona's. A
+ * turn that had been told to draw ("draw a timeline of my career", asked from
+ * the phone) then kept its <active_design> block in the context and lost the
+ * contract that says what to do with it. Plain text match on the contract's
+ * own tags: this file must not import the shared .mjs modules statically.
+ */
+export function carriedDiagramContract(replaced: string | null | undefined): string {
+  if (typeof replaced !== 'string') return '';
+  const block = /<diagram_contract>[\s\S]*?<\/diagram_contract>/.exec(replaced);
+  return block ? `\n\n${block[0]}` : '';
+}
+
 export class LLMHelper {
   // ── Provider clients ────────────────────────────────────────────────────
   //
@@ -1013,8 +1029,25 @@ export class LLMHelper {
     // to do.
     const original = String(args[0] ?? '');
     const cap = LLMHelper.REPLAYED_ANSWER_PROMPT_MAX_CHARS;
+    // The design this turn is about sits at the END of the answer prompt, so a
+    // plain head-cut dropped exactly the artifact the repair has to keep. It is
+    // carried across the cut, whole (a block the cut would split is moved, not
+    // left as half a block and a copy).
+    let head = original.slice(0, cap);
+    let keptDesign = '';
+    if (original.length > cap) {
+      const from = Math.max(0, cap - 16000);
+      const block = /<active_design\b[\s\S]*?<\/active_design>/.exec(original.slice(from));
+      if (block) {
+        const startsAt = from + block.index;
+        if (startsAt + block[0].length > cap) {
+          if (startsAt < cap) head = original.slice(0, startsAt);
+          keptDesign = `\n\n${block[0]}`;
+        }
+      }
+    }
     const inherited = original.length > cap
-      ? `${original.slice(0, cap)}\n\n[...answer context truncated for the repair pass...]`
+      ? `${head}\n\n[...answer context truncated for the repair pass...]${keptDesign}`
       : original;
     const message = `${inherited}\n\n---\n${repairMessage}`;
     const replayed = [...args] as Parameters<LLMHelper['streamChat']>;
@@ -4635,7 +4668,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             // The persona block carries the voice instruction and stays dominant
             // by recency. Keep both LLMHelper override sites identical.
             if (knowledgeResult.systemPromptInjection) {
+              // The diagram contract the caller put on the prompt being replaced
+              // is carried over (see carriedDiagramContract): the turn block that
+              // goes with it is still in the context. Appended on its own line:
+              // the assignment below is matched literally by a source test.
+              const carriedContract = carriedDiagramContract(systemPromptOverride);
               systemPromptOverride = `${CORE_IDENTITY}\n${EXECUTION_CONTRACT}\n\n${knowledgeResult.systemPromptInjection}`;
+              if (carriedContract) systemPromptOverride += carriedContract;
             }
             // Inject knowledge context
             if (knowledgeResult.contextBlock) {
@@ -4725,8 +4764,10 @@ try {
             // sees a design on the table — fresh design asks only.
             diagram: (() => {
               try {
-                const { resolveDiagramTurn } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
-                return resolveDiagramTurn({ question: message, answerType: routeOptions?.answerType, activeDesign: null, hasVisualContext: (imagePaths?.length ?? 0) > 0 }).signals;
+                const { selfComposedDiagramSignals } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                // A caller with a session has already decided, design on the table included.
+                if (routeOptions && routeOptions.diagramSignals !== undefined) return routeOptions.diagramSignals as ReturnType<typeof selfComposedDiagramSignals>;
+                return selfComposedDiagramSignals(message, routeOptions?.answerType, (imagePaths?.length ?? 0) > 0);
               } catch { return null; }
             })(),
           }) ?? systemPromptOverride;
@@ -9551,8 +9592,10 @@ let isMultimodal = !!(imagePaths?.length);
             // sees a design on the table — fresh design asks only.
             diagram: (() => {
               try {
-                const { resolveDiagramTurn } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
-                return resolveDiagramTurn({ question: message, answerType: routeOptions?.answerType, activeDesign: null, hasVisualContext: (imagePaths?.length ?? 0) > 0 }).signals;
+                const { selfComposedDiagramSignals } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                // A caller with a session has already decided, design on the table included.
+                if (routeOptions && routeOptions.diagramSignals !== undefined) return routeOptions.diagramSignals as ReturnType<typeof selfComposedDiagramSignals>;
+                return selfComposedDiagramSignals(message, routeOptions?.answerType, (imagePaths?.length ?? 0) > 0);
               } catch { return null; }
             })(),
           }) ?? systemPromptOverride;
@@ -9737,7 +9780,12 @@ let isMultimodal = !!(imagePaths?.length);
             // NUMBERS DISCIPLINE / anti-fabrication rules survive the override
             // of HARD_SYSTEM_PROMPT; the persona injection stays dominant by
             // recency. Identical to the non-streaming override site above.
+            // The turn's diagram contract is carried across the replacement
+            // (see carriedDiagramContract), on its own line: the assignment
+            // below is matched literally by a source test.
+            const carriedContract = carriedDiagramContract(systemPromptOverride);
             systemPromptOverride = `${CORE_IDENTITY}\n${EXECUTION_CONTRACT}\n\n${knowledgeResult.systemPromptInjection}`;
+            if (carriedContract) systemPromptOverride += carriedContract;
           }
           // Inject knowledge context
           if (knowledgeResult.contextBlock) {

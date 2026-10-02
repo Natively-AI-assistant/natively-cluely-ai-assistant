@@ -31,8 +31,12 @@ export interface PhoneDiagramRenderTarget {
 }
 
 export interface PhoneDiagramBrokerDeps {
-  /** An app window that can render (launcher first, then overlay), or null. */
-  pickTarget(): PhoneDiagramRenderTarget | null;
+  /**
+   * An app window that can render (launcher first, then overlay), or null.
+   * `tried` holds the ids already asked for this diagram: a window that did
+   * not answer is not asked again, the next one is.
+   */
+  pickTarget(tried?: readonly number[]): PhoneDiagramRenderTarget | null;
   /** Called when a diagram finishes (drawn or failed), so the phone can be told. */
   onSettled(key: string, dataUrl: string | null): void;
   now?: () => number;
@@ -45,6 +49,9 @@ interface Pending {
   targetId: number;
   timer: unknown;
 }
+
+/** Windows asked for one diagram before it is given up on (launcher, overlay). */
+const MAX_TARGETS_PER_DIAGRAM = 2;
 
 export function phoneDiagramDataUrl(svg: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -102,25 +109,37 @@ export class PhoneDiagramBroker {
       this.fail(key);
       return;
     }
-    const target = this.deps.pickTarget();
-    if (!target) return; // no window to draw with; the phone keeps the source view
+    this.ask(key, source, []);
+  }
+
+  /**
+   * Ask the next window that has not been tried. With none left the diagram
+   * FAILS — it used to stay pending for ever, so with the app windows closed
+   * the phone showed "Drawing diagram…" and never the source.
+   */
+  private ask(key: string, source: string, tried: readonly number[]): void {
+    const target = tried.length < MAX_TARGETS_PER_DIAGRAM ? this.deps.pickTarget(tried) : null;
+    if (!target || tried.includes(target.id)) {
+      this.fail(key);
+      return;
+    }
+    const next = [...tried, target.id];
     this.seq += 1;
     const requestId = `pd-${this.seq}`;
-    const timer = this.setTimer(() => {
+    const giveUpOnThisWindow = () => {
       if (!this.pending.has(requestId)) return;
       this.pending.delete(requestId);
       this.pendingByKey.delete(key);
-      this.fail(key);
-    }, PHONE_DIAGRAM_TIMEOUT_MS);
+      this.ask(key, source, next);
+    };
+    const timer = this.setTimer(giveUpOnThisWindow, PHONE_DIAGRAM_TIMEOUT_MS);
     this.pending.set(requestId, { key, targetId: target.id, timer });
     this.pendingByKey.set(key, requestId);
     try {
       target.send('diagram:render-request', { requestId, key, source });
     } catch {
       this.clearTimer(timer);
-      this.pending.delete(requestId);
-      this.pendingByKey.delete(key);
-      this.fail(key);
+      giveUpOnThisWindow();
     }
   }
 

@@ -487,7 +487,7 @@ export interface ElectronAPI {
   /** The repaired block drew: record it where the broken one was recorded. */
   acceptDiagramRepair?: (payload: { originalSource: string; repairedSource: string }) => Promise<boolean>
   /** Save a diagram the renderer produced (svg text, base64 png, or Mermaid source). */
-  exportDiagram?: (payload: { format: 'svg' | 'png' | 'mmd'; data: string; name?: string }) => Promise<{ saved: boolean; canceled?: boolean; fileName?: string; silent?: boolean; error?: string }>
+  exportDiagram?: (payload: { format: 'svg' | 'png' | 'mmd' | 'json' | 'csv'; data: string; name?: string }) => Promise<{ saved: boolean; canceled?: boolean; fileName?: string; silent?: boolean; error?: string }>
   /** The main process asks this window to draw a diagram for the phone. */
   onDiagramRenderRequest?: (callback: (request: { requestId: string; key: string; source: string }) => void) => () => void
   sendDiagramRenderResult?: (result: { requestId: string; key: string; ok: boolean; svg?: string }) => void
@@ -792,7 +792,7 @@ export interface ElectronAPI {
   onSessionReset: (callback: () => void) => () => void;
 
   // Streaming listeners
-  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => Promise<void>
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, liveQuestion?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void
   onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;

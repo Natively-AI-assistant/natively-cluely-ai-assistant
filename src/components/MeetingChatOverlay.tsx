@@ -100,7 +100,7 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
     </motion.div>
 );
 
-const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
+const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean; isLatest?: boolean }> = ({ content, isStreaming, isLatest }) => {
     // Teleprompter gist: answers can end with a [[GIST]] line. The marker line
     // is still split off so it never shows as text, but this chat does not
     // render it — no gist chip here, and no copy button, by owner request.
@@ -121,7 +121,9 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                     <DiagramAwareMarkdown
                       text={gistBody}
                       streaming={Boolean(isStreaming)}
-                      allowAutoRepair
+                      // Only the answer just given may be repaired by itself (one model
+                      // call); an older answer in the thread keeps its "Try to fix" button.
+                      allowAutoRepair={Boolean(isLatest)}
                       renderMarkdown={(chunk, key) => (
                     <ReactMarkdown
                         key={key}
@@ -613,7 +615,7 @@ ${contextString}`;
                             {messages.map((msg) => (
                                 msg.role === 'user'
                                     ? <UserMessage key={msg.id} content={msg.content} />
-                                    : <AssistantMessage key={msg.id} content={msg.content} isStreaming={msg.isStreaming} />
+                                    : <AssistantMessage key={msg.id} content={msg.content} isStreaming={msg.isStreaming} isLatest={msg.id === messages[messages.length - 1]?.id} />
                             ))}
 
                             {chatState === 'waiting_for_llm' && <TypingIndicator />}

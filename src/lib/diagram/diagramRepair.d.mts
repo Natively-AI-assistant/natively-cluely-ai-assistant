@@ -3,6 +3,7 @@ export const DIAGRAM_REPAIR_LIMITS: Readonly<{
   maxDiagnosticChars: number;
   automaticPerSource: number;
   automaticPerWindow: number;
+  manualPerWindow: number;
   windowMs: number;
 }>;
 export const REPAIRABLE_STAGES: readonly string[];

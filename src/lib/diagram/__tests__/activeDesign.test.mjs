@@ -76,18 +76,21 @@ describe('active design state', () => {
   test('an explanation or a code answer keeps the design as it is', () => {
     const s = createActiveDesignState();
     const v1 = s.observeAnswer(answer('First.', NOTIFY_V1));
+    // "Why do we need the queue?" — a turn about the design, answered in prose.
+    s.touch();
     s.observeAnswer('The queue decouples producers from a slow provider.');
-    assert.deepEqual(s.get(), v1, 'a prose answer changes nothing');
+    assert.deepEqual({ ...s.get(), updatedAt: v1.updatedAt }, v1, 'an explanation of the design changes nothing');
     s.observeAnswer('```ts\nexport async function worker() {}\n```');
     // Same design, same version — only the focus moved to the code.
-    assert.deepEqual({ ...s.get(), foreground: true }, v1);
+    assert.deepEqual({ ...s.get(), foreground: true, updatedAt: v1.updatedAt }, v1);
   });
 
   test('a code answer after the design moves focus off it; a new diagram brings it back', () => {
     const s = createActiveDesignState();
     assert.equal(s.observeAnswer(answer('First.', NOTIFY_V1)).foreground, true);
+    s.touch();
     s.observeAnswer('The queue decouples producers.');
-    assert.equal(s.get().foreground, true, 'prose does not move focus');
+    assert.equal(s.get().foreground, true, 'an answer ABOUT the design does not move focus');
     s.observeAnswer('Here is the worker:\n\n```ts\nexport async function worker() {}\n```');
     assert.equal(s.get().foreground, false);
     assert.equal(s.get().source, NOTIFY_V1, 'the design itself is still on the table');
@@ -168,9 +171,19 @@ describe('active design state', () => {
 
 describe('helpers', () => {
   test('latestDiagramInAnswer picks the last valid closed block', () => {
-    const text = `${fence(NOTIFY_V1)}\n\nthen\n\n${fence(NOTIFY_SEQ)}\n\nand code\n\n\`\`\`ts\nconst x = 1;\n\`\`\``;
-    assert.equal(latestDiagramInAnswer(text).view, 'sequence');
+    const code = '```ts\nconst x = 1;\n```';
+    assert.equal(latestDiagramInAnswer(`${fence(NOTIFY_SEQ)}\n\nand code\n\n${code}`).view, 'sequence');
+    assert.equal(latestDiagramInAnswer(`${fence(NOTIFY_SEQ)}\n\nthen\n\n${fence(NOTIFY_V1)}`).view, 'architecture');
     assert.equal(latestDiagramInAnswer('no diagram'), null);
+  });
+
+  // Found in review: the supplementary view replaced the system as the design
+  // on the table, so "add Redis" afterwards edited a sequence diagram.
+  test('an answer that draws the system and then a view of it is about the system', () => {
+    const text = `${fence(NOTIFY_V1)}\n\nAnd the call order:\n\n${fence(NOTIFY_SEQ)}`;
+    const found = latestDiagramInAnswer(text);
+    assert.equal(found.view, 'architecture');
+    assert.equal(found.source, NOTIFY_V1);
   });
 
   test('designOverlap is high for versions of one design and low across designs', () => {
@@ -194,5 +207,136 @@ describe('helpers', () => {
     assert.equal(activeDesignFromHistory([...turns, { role: 'assistant', text: '```ts\nconst x = 1;\n```' }]).foreground, false);
     assert.equal(activeDesignFromHistory([{ role: 'assistant', text: 'nothing' }]), null);
     assert.equal(activeDesignFromHistory(null), null);
+  });
+});
+
+// Found in review: one diagram stayed "in focus" until a code answer or thirty
+// minutes passed, and claimed most of what was said in between.
+describe('focus follows the conversation', () => {
+  const design = () => {
+    const s = createActiveDesignState();
+    s.observeAnswer(answer('First.', NOTIFY_V1));
+    return s;
+  };
+
+  test('an answer to a turn that was not about the design moves focus off it', () => {
+    const s = design();
+    s.observeAnswer('I led a team of four for two years.');
+    assert.equal(s.get().foreground, false);
+    assert.equal(s.get().source, NOTIFY_V1, 'it is still on the table, to be named');
+  });
+
+  test('a run of follow-ups keeps it in focus, turn after turn', () => {
+    const s = design();
+    for (const reply of ['The queue absorbs bursts.', 'Retries are capped at five.', 'The log is append-only.']) {
+      s.touch();
+      s.observeAnswer(reply);
+      assert.equal(s.get().foreground, true);
+    }
+    s.observeAnswer('Sure, Tuesday works.');
+    assert.equal(s.get().foreground, false);
+  });
+
+  test('a touch is spent by the answer it was for', () => {
+    const s = design();
+    s.touch();
+    s.observeAnswer('About the queue.');
+    s.observeAnswer('About something else.');
+    assert.equal(s.get().foreground, false);
+  });
+
+  test('a discussion of the design keeps it from expiring; silence about it does not', () => {
+    let clock = 0;
+    const s = createActiveDesignState({ now: () => clock, ttlMs: 30 * 60 * 1000 });
+    s.observeAnswer(answer('First.', NOTIFY_V1));
+    for (let minute = 5; minute <= 60; minute += 5) {
+      clock = minute * 60 * 1000;
+      s.touch();
+      s.observeAnswer('Still about the design.');
+    }
+    assert.ok(s.get(), 'an hour of follow-ups, and it is still there');
+    clock += 31 * 60 * 1000;
+    assert.equal(s.get(), null);
+  });
+
+  test('a design that was asked for and not drawn leaves no question behind', () => {
+    const s = design();
+    s.noteDesignQuestion('Design a chat system');
+    s.observeAnswer('Stopped before anything was drawn.');
+    // The next drawing shares the first design's words: it is version 2 of it,
+    // not a new design "drawn for: Design a chat system".
+    const next = s.observeAnswer(answer('With a dead-letter queue.', NOTIFY_V2));
+    assert.equal(next.lineageId, 'design-1');
+    assert.equal(next.version, 2);
+    assert.notEqual(next.question, 'Design a chat system');
+  });
+
+  test('a follow-up drops a question noted for a fresh design', () => {
+    const s = design();
+    s.noteDesignQuestion('Design a chat system');
+    s.touch();
+    const next = s.observeAnswer(answer('With a dead-letter queue.', NOTIFY_V2));
+    assert.equal(next.version, 2);
+    assert.equal(next.lineageId, 'design-1');
+  });
+
+  test('one shared word does not make two diagrams one design', () => {
+    const a = 'flowchart LR\n    web["Web App"] --> gw["Gateway"]';
+    const b = 'flowchart LR\n    gw["Gateway"] --> ledger["Ledger"]';
+    const s = createActiveDesignState();
+    s.observeAnswer(answer('One.', a));
+    const next = s.observeAnswer(answer('Two.', b));
+    assert.equal(next.lineageId, 'design-2');
+    assert.equal(next.version, 1);
+  });
+});
+
+// Second review (2026-10-02): focus is decided by evidence, not by one flag.
+describe('focus: what the answer says is evidence too', async () => {
+  const { answerIsAbout } = await import('../activeDesign.mjs');
+  const ORDERS = 'flowchart LR\n    client["Client"] --> gateway["API Gateway"]\n    gateway --> orders["Order Service"]\n    orders --> queue["Notification Queue"]\n    queue --> email["Email Worker"]';
+  const drawn = () => {
+    const s = createActiveDesignState();
+    s.observeAnswer(`The design.\n\n\`\`\`mermaid\n${ORDERS}\n\`\`\``);
+    return s;
+  };
+
+  test('an answer that talks about the drawing\'s own parts keeps it in focus, whatever the question was', () => {
+    const s = drawn();
+    s.observeAnswer('The API gateway authenticates the request and hands it to the order service, which writes the order and drops a message on the notification queue.');
+    assert.equal(s.get().foreground, true);
+    s.observeAnswer('The role is hybrid, three days a week in the office.');
+    assert.equal(s.get().foreground, false);
+  });
+
+  test('two everyday words are not "about the drawing"', () => {
+    assert.equal(answerIsAbout('Your order shipped, and the email went out this morning.', ORDERS), false);
+    assert.equal(answerIsAbout('The notification queue feeds the email worker.', ORDERS), true);
+    assert.equal(answerIsAbout('', ORDERS), false);
+  });
+
+  test('a follow-up that was resolved and never answered does not mark the next answer', () => {
+    const s = drawn();
+    s.touch();
+    s.untouch();
+    s.observeAnswer('The role is hybrid, three days a week in the office.');
+    assert.equal(s.get().foreground, false);
+  });
+
+  test('a mark is for the answer that follows its turn, not for one minutes later', () => {
+    let clock = 1_000;
+    const s = createActiveDesignState({ now: () => clock });
+    s.observeAnswer(`The design.\n\n\`\`\`mermaid\n${ORDERS}\n\`\`\``);
+    s.touch();
+    clock += 10 * 60 * 1000;
+    s.observeAnswer('The role is hybrid, three days a week in the office.');
+    assert.equal(s.get().foreground, false);
+  });
+
+  test('only what the assistant wrote can be the design derived from history', () => {
+    const pasted = `Here is ours:\n\n\`\`\`mermaid\n${ORDERS}\n\`\`\``;
+    assert.equal(activeDesignFromHistory([{ role: 'human', content: pasted }]), null);
+    assert.equal(activeDesignFromHistory([{ role: 'user', content: pasted }]), null);
+    assert.equal(activeDesignFromHistory([{ role: 'assistant', content: pasted }]).view, 'architecture');
   });
 });

@@ -308,3 +308,63 @@ describe('helpers', () => {
     assert.equal(replaceMermaidBlock('plain', 0, 'flowchart TD'), 'plain');
   });
 });
+
+// Found in review (2026-10-01): "1. ```bash" was prose, so its closing fence
+// opened a block that swallowed the diagram after it.
+describe('a fence on a list item\'s own line', () => {
+  const B = 'flowchart LR\n    a --> b';
+
+  test('opens a block, and the diagram after it is still a diagram', () => {
+    const text = `Steps:\n\n1. \`\`\`bash\n   npm install\n   \`\`\`\n2. Then draw:\n\n\`\`\`mermaid\n${B}\n\`\`\`\n`;
+    const { blocks } = parseFencedBlocks(text, { final: true });
+    assert.deepEqual(blocks.map((b) => b.kind), ['prose', 'code', 'prose', 'mermaid']);
+    assert.equal(blocks[1].source, 'npm install');
+    assert.equal(blocks[1].closed, true);
+    assert.equal(blocks[3].source, B);
+  });
+
+  test('bullets and "2)" markers too; the incremental tracker agrees with a fresh parse', () => {
+    for (const marker of ['- ', '* ', '+ ', '2) ', '10. ']) {
+      const text = `${marker}\`\`\`sh\n${' '.repeat(marker.length)}ls\n${' '.repeat(marker.length)}\`\`\`\n\n\`\`\`mermaid\n${B}\n\`\`\`\n`;
+      const fresh = parseFencedBlocks(text, { final: true }).blocks.map((b) => `${b.kind}:${b.closed}`);
+      assert.ok(fresh.includes('mermaid:true'), marker);
+      const tracker = createFencedBlockTracker();
+      for (let i = 3; i < text.length; i += 3) tracker.update(text.slice(0, i));
+      const settled = tracker.update(text, { final: true });
+      assert.deepEqual(settled.blocks.map((b) => `${b.kind}:${b.closed}`), fresh, marker);
+    }
+  });
+
+  test('a list item that only mentions backticks in its text is prose', () => {
+    const { blocks } = parseFencedBlocks('1. Use ``` to open a block\n2. Done\n', { final: true });
+    assert.deepEqual(blocks.map((b) => b.kind), ['prose']);
+  });
+
+  test('a tag in any case is the same tag', () => {
+    const { blocks } = parseFencedBlocks(`\`\`\`Mermaid\n${B}\n\`\`\`\n`, { final: true });
+    assert.equal(blocks[0].kind, 'mermaid');
+  });
+});
+
+// Second review (2026-10-02): what the list-item fence rule got wrong.
+describe('a fence on a list item\'s line, second pass', () => {
+  const B = 'flowchart LR\n    a --> b';
+
+  test('a bullet that talks about fences is a sentence, and the diagram after it is still a diagram', () => {
+    const { blocks } = parseFencedBlocks(`- \`\`\` opens a code block\n- so does ~~~\n\n\`\`\`mermaid\n${B}\n\`\`\`\n`, { final: true });
+    assert.deepEqual(blocks.map((b) => b.kind), ['prose', 'mermaid']);
+  });
+
+  test('content under a list marker keeps its own indentation (a mind map is nothing else)', () => {
+    const flat = parseFencedBlocks('1. ```mermaid\nmindmap\n root\n  A\n  B\n```\n', { final: true }).blocks.find((b) => b.kind === 'mermaid');
+    assert.equal(flat.source, 'mindmap\n root\n  A\n  B');
+    const indented = parseFencedBlocks('1. ```mermaid\n   mindmap\n     root\n       A\n   ```\n', { final: true }).blocks.find((b) => b.kind === 'mermaid');
+    assert.equal(indented.source, 'mindmap\n  root\n    A');
+    assert.equal(indented.closed, true);
+  });
+
+  test('a final text that ends in a carriage return has closed its block', () => {
+    const { blocks } = parseFencedBlocks(`x\n\n\`\`\`mermaid\n${B}\n\`\`\`\r`, { final: true });
+    assert.equal(blocks.find((b) => b.kind === 'mermaid').closed, true);
+  });
+});

@@ -28,7 +28,7 @@ const dist = (p) => pathToFileURL(path.resolve(__dirname, '../../../dist-electro
 const { PhoneDiagramBroker, PHONE_DIAGRAM_TIMEOUT_MS, PHONE_DIAGRAM_CACHE_MAX, phoneDiagramDataUrl } = await import(dist('services/diagram/PhoneDiagramBroker.js'));
 const { renderPhoneAnswer, setPhoneDiagramProvider } = await import(dist('services/phoneMirrorMarkdown.js'));
 const { PHONE_MIRROR_HTML } = await import(dist('services/phoneMirrorClient.js'));
-const { safeDiagramFileStem, diagramExportBytes } = await import(dist('services/diagram/diagramExport.js'));
+const { safeDiagramFileStem, uniqueDiagramFileName, diagramExportBytes } = await import(dist('services/diagram/diagramExport.js'));
 const { SessionTracker } = await import(dist('SessionTracker.js'));
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="10" height="10"><path d="M0 0L10 10"/><text>Queue</text></svg>';
@@ -141,12 +141,73 @@ describe('PhoneDiagramBroker', () => {
     assert.equal(h.sent.length, 2);
   });
 
-  test('no window to draw with: nothing is sent and nothing is marked failed', () => {
+  // Found in review: this used to leave the diagram pending for ever, so the
+  // phone showed "Drawing diagram…" and never the source.
+  test('no window to draw with: the diagram fails, and the phone shows its source', () => {
     const settled = [];
     const broker = new PhoneDiagramBroker({ pickTarget: () => null, onSettled: (k, d) => settled.push([k, d]) });
-    broker.request(broker.key(SOURCE), SOURCE);
+    const key = broker.key(SOURCE);
+    broker.request(key, SOURCE);
+    assert.deepEqual(settled, [[key, null]]);
+    assert.equal(broker.failed(key), true);
+    setPhoneDiagramProvider({ enabled: () => true, lookup: (k) => broker.lookup(k), failed: (k) => broker.failed(k), request: (k, src) => broker.request(k, src) });
+    try {
+      const { html } = renderPhoneAnswer(fence(SOURCE));
+      assert.match(html, /class="diagram is-failed"/);
+      assert.doesNotMatch(html, /Drawing diagram/);
+    } finally {
+      setPhoneDiagramProvider(null);
+    }
+  });
+
+  test('a diagram that fails on the spot is never announced as "drawing"', () => {
+    const fresh = 'flowchart LR\n    fresh["Fresh node"] --> other["Other node"]';
+    const broker = new PhoneDiagramBroker({ pickTarget: () => null, onSettled: () => undefined });
+    setPhoneDiagramProvider({ enabled: () => true, lookup: (k) => broker.lookup(k), failed: (k) => broker.failed(k), request: (k, src) => broker.request(k, src) });
+    try {
+      const { html } = renderPhoneAnswer(fence(fresh));
+      assert.match(html, /class="diagram is-failed"/);
+      assert.match(html, /<details class="diagram-source" open>/);
+      assert.doesNotMatch(html, /Drawing diagram/);
+    } finally {
+      setPhoneDiagramProvider(null);
+    }
+  });
+
+  test('a window that does not answer: the other window is asked, then it fails', () => {
+    const sent = [];
+    const settled = [];
+    const timers = [];
+    const asked = [];
+    const broker = new PhoneDiagramBroker({
+      pickTarget: (tried = []) => {
+        asked.push([...tried]);
+        const id = [7, 9].find((candidate) => !tried.includes(candidate));
+        return id === undefined ? null : { id, send: (channel, payload) => sent.push({ id, channel, payload }) };
+      },
+      onSettled: (key, dataUrl) => settled.push({ key, dataUrl }),
+      setTimer: (fn, ms) => { const t = { fn, ms, cleared: false }; timers.push(t); return t; },
+      clearTimer: (t) => { t.cleared = true; },
+    });
+    const key = broker.key(SOURCE);
+    broker.request(key, SOURCE);
+    assert.deepEqual(sent.map((m) => m.id), [7]);
+    timers[0].fn(); // the launcher never answered
+    assert.deepEqual(sent.map((m) => m.id), [7, 9], 'the overlay is asked next');
     assert.equal(settled.length, 0);
-    assert.equal(broker.failed(broker.key(SOURCE)), false);
+    // A late answer from the first window is not accepted for the second request.
+    assert.equal(broker.receive(7, { requestId: sent[1].payload.requestId, key, ok: true, svg: SVG }), false);
+    assert.equal(broker.receive(9, { requestId: sent[1].payload.requestId, key, ok: true, svg: SVG }), true);
+    assert.equal(settled.length, 1);
+    assert.ok(broker.lookup(key));
+
+    const other = 'flowchart LR\n    lonely["Lonely"] --> gone["Gone"]';
+    const otherKey = broker.key(other);
+    broker.request(otherKey, other);
+    timers[2].fn();
+    timers[3].fn(); // neither window answered
+    assert.equal(broker.failed(otherKey), true);
+    assert.equal(sent.length, 4, 'two windows, and no third try');
   });
 
   test('the cache is bounded', () => {
@@ -282,9 +343,30 @@ describe('export payload validation', () => {
     assert.equal(safeDiagramFileStem('name. '), 'name');
     assert.equal(safeDiagramFileStem('CON'), 'diagram-CON');
     assert.equal(safeDiagramFileStem('lpt1'), 'diagram-lpt1');
+    // Found in review: a device name is reserved with any extension.
+    for (const name of ['con.v2', 'NUL.txt', 'LPT1.final', 'COM0', 'CONIN$', 'conout$', 'aux.backup.2', 'COM\u00b9']) {
+      assert.match(safeDiagramFileStem(name), /^diagram-/, name);
+    }
+    assert.equal(safeDiagramFileStem('console'), 'console');
+    assert.equal(safeDiagramFileStem('contract.v2'), 'contract.v2');
+    // No hidden file on macOS, no trailing dot or space for Windows to drop.
+    assert.equal(safeDiagramFileStem('.env'), 'env');
+    assert.equal(safeDiagramFileStem(' ..hidden. '), 'hidden');
+    assert.doesNotMatch(safeDiagramFileStem(`${'x'.repeat(59)}. tail`), /[. ]$/);
     assert.equal(safeDiagramFileStem(''), 'diagram');
     assert.equal(safeDiagramFileStem(undefined), 'diagram');
     assert.ok(safeDiagramFileStem('x'.repeat(300)).length <= 60);
+  });
+
+  test('a silent save never reuses a name that exists', () => {
+    const taken = new Set(['a.svg']);
+    assert.equal(uniqueDiagramFileName('a', 'svg', (n) => taken.has(n)), 'a (2).svg');
+    assert.equal(uniqueDiagramFileName('b', 'svg', (n) => taken.has(n)), 'b.svg');
+    // Hundreds of copies: the old loop gave up and returned a name that existed.
+    const many = new Set(['a.svg', ...Array.from({ length: 600 }, (_v, i) => `a (${i + 2}).svg`)]);
+    const name = uniqueDiagramFileName('a', 'svg', (n) => many.has(n), () => 1_700_000_000_000);
+    assert.equal(many.has(name), false);
+    assert.match(name, /^a [a-z0-9]+\.svg$/);
   });
 
   test('SVG: only an inert drawing is written', () => {

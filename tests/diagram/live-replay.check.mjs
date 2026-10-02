@@ -19,6 +19,7 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { snapshot, startOverlayHarness } from './overlayHarness.mjs';
+import { isPlaceholderDiagram } from '../../src/lib/diagram/diagramPolicy.mjs';
 
 const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) || `--${k}=${d}`).slice(k.length + 3);
 // Default: where live-deepseek.cjs writes when it is given no --out.
@@ -142,12 +143,19 @@ async function main() {
         console.log('  (no token stream recorded for this route — skipped)');
         continue;
       }
-      const expected = record.analysis.mermaidBlocks.length;
+      // What should be on screen: every Mermaid block that is more than a
+      // placeholder and every chart or notation block that passed its own
+      // checks, drawn; a refused chart as a card that says what it needs.
+      const mermaid = record.analysis.mermaidBlocks.filter((b) => !isPlaceholderDiagram(b.source));
+      const payloads = record.analysis.payloadBlocks || [];
+      const refused = payloads.filter((b) => !b.ok).length;
+      const expected = mermaid.length + payloads.length - refused;
       const r = await replay(overlay.page, record);
       const tokenBase = record.tokens[0][0];
       const fenceAt = record.analysis.diagramCompleteMs === null ? null : record.analysis.diagramCompleteMs - tokenBase;
+      if (refused > 0) check(`${refused} refused chart(s) shown as a card with the reason, not drawn`, r.final.cards === expected + refused && r.final.states.filter((st) => st === 'error').length === refused && r.errorText.every((t) => /needs|does not say|could not/i.test(t)), JSON.stringify({ ...r.final, text: undefined, errorText: r.errorText }));
       if (expected > 0) {
-        check(`${expected} diagram card(s), all drawn by Mermaid`, r.final.cards === expected && r.final.drawn === expected, JSON.stringify({ ...r.final, text: undefined, errorText: r.errorText }));
+        check(`${expected} visual card(s), all drawn`, r.final.cards === expected + refused && r.final.drawn === expected, JSON.stringify({ ...r.final, text: undefined, errorText: r.errorText }));
         check('no repair was needed', r.repairs === 0, `repairs=${r.repairs}`);
         // Not asserted against the END of the stream: a fast model finishes the
         // whole answer within a second or two of its first token, so "before the
@@ -156,17 +164,18 @@ async function main() {
         // after the block's closing fence arrived.
         const afterFence = fenceAt === null || r.marks.cardDrawn === null ? null : r.marks.cardDrawn - fenceAt;
         check('drawn within 2.5 s of its closing fence arriving', r.marks.cardDrawn !== null && (afterFence === null || afterFence < 2500), JSON.stringify({ afterFence, ...r.marks }));
-        check('no raw Mermaid fence on screen', !/```/.test(r.final.text));
-      } else {
+        check('no raw fence or payload on screen', !/```|"compute"\s*:|"kind"\s*:\s*"(?:chen-er|automaton)"/.test(r.final.text));
+      } else if (refused === 0) {
         check('no diagram card', r.final.cards === 0, JSON.stringify({ ...r.final, text: undefined }));
       }
+      if (record.verdict) check(`live verdict: ${record.verdict.note.slice(0, 90)}`, record.verdict.pass === true, record.verdict.note);
       if (record.analysis.codeBlocks.length) check('the code block is still a code card', r.final.codeCards >= 1, `codeCards=${r.final.codeCards}`);
       check('the overlay does not scroll sideways', r.scrollX <= 0, `scrollX=${r.scrollX}`);
       check('no page errors', overlay.errors.length === 0, overlay.errors.join(' | '));
       rows.push({
         id: record.id,
         label: record.label,
-        type: record.analysis.mermaidBlocks.map((b) => b.type).join('+') || '—',
+        type: [...mermaid.map((b) => b.type), ...payloads.map((b) => (b.ok ? String(b.label).toLowerCase() : 'refused'))].join('+') || '—',
         firstTokenMs: record.analysis.firstTokenMs,
         fenceToDrawnMs: fenceAt === null || r.marks.cardDrawn === null ? null : Math.round(r.marks.cardDrawn - fenceAt),
         beforeStreamEnd: r.marks.cardDrawn !== null && r.marks.cardDrawn < r.marks.streamEnd,
@@ -195,7 +204,11 @@ async function main() {
     console.log(`\n${failures.length} check(s) failed.`);
     process.exit(1);
   }
-  console.log('\nAll recorded live diagrams were drawn.');
+  const drawnRows = rows.filter((r) => r.drawn > 0 && r.fenceToDrawnMs !== null && r.fenceToDrawnMs >= 0);
+  const pct = (list, p) => { const sorted = [...list].sort((a, b) => a - b); return sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null; };
+  console.log(`\nfence→drawn over ${drawnRows.length} first drawings: p50 ${pct(drawnRows.map((r) => r.fenceToDrawnMs), 0.5)} ms · p95 ${pct(drawnRows.map((r) => r.fenceToDrawnMs), 0.95)} ms`);
+  console.log(`visual on screen (from the question): p50 ${pct(drawnRows.map((r) => r.drawnAtMs), 0.5)} ms · p95 ${pct(drawnRows.map((r) => r.drawnAtMs), 0.95)} ms`);
+  console.log('\nAll recorded live visuals were drawn.');
 }
 
 main().catch((err) => {
