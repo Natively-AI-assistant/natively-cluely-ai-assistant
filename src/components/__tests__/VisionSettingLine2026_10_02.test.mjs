@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { visionAutoText, visionStatusText, visionAnswerInForce } from '../settings/visionLine.ts';
+import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown } from '../settings/visionLine.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const t = (s) => s;
@@ -77,6 +77,47 @@ describe('which status is the answer in force', () => {
     test('"Auto would say" under the user\'s own On or Off is not', () => {
         assert.equal(visionAnswerInForce(state({ setting: 'off', reads: 'no', source: 'override', auto: { reads: 'yes', source: 'test' } })), false);
         assert.equal(visionAnswerInForce(state({ setting: 'on', reads: 'yes', source: 'override', auto: { reads: 'no', source: 'test' } })), false);
+    });
+});
+
+// "Test again" could not finish (no credit, rate limit, provider down). Main
+// re-reads every state on any change and knows nothing of that, so the list
+// remembers it — until it stops being true.
+describe('a test that could not finish', () => {
+    const noted = new Set(['m']);
+    const said = (s) => visionAutoText(visionStatesShown({ m: s }, noted).m, t);
+
+    test('the line says so, and keeps saying so across main\'s re-reads', () => {
+        // main forgot the old result, so Auto is back to what it knew without a test
+        assert.equal(said(state(auto('unknown', null))), 'Could not test just now · try again later');
+        assert.equal(said(state(auto('yes', 'provider'))), 'Could not test just now · try again later');
+        assert.equal(said(state(auto('no', 'names'))), 'Could not test just now · try again later');
+    });
+
+    test('a test running again outranks it', () => {
+        assert.equal(said(state({ ...auto('unknown', null), checking: true })), 'Checking…');
+    });
+
+    test('a test that settles afterwards replaces it', () => {
+        // the model was picked, and its background test answered
+        assert.equal(said(state(auto('yes', 'test'))), 'Yes · tested');
+        assert.equal(said(state(auto('no', 'test'))), 'No · tested');
+        assert.equal(visionAnswerInForce(visionStatesShown({ m: state(auto('yes', 'test')) }, noted).m), true);
+    });
+
+    test('other rows, rows without a control, and an empty note are left alone', () => {
+        const states = { m: state(auto('unknown', null)), other: state(auto('yes', 'names')), custom: null };
+        const shown = visionStatesShown(states, noted);
+        assert.equal(shown.other, states.other);
+        assert.equal(shown.custom, null);
+        assert.equal(states.m.inconclusive, undefined);   // main's own answer is not written to
+        assert.equal(visionStatesShown(states, new Set()), states);
+        assert.equal(visionStatesShown({}, noted).m, undefined);
+    });
+
+    test('the list uses it', () => {
+        const src = readFileSync(join(here, '..', 'settings', 'AIProvidersSettings.tsx'), 'utf8');
+        assert.match(src, /const shown = useMemo\(\(\) => visionStatesShown\(states, inconclusive\), \[states, inconclusive\]\);/);
     });
 });
 
