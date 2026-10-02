@@ -39,6 +39,7 @@ describe('OpenAI Model Filtering', () => {
       { id: 'gpt-4o-realtime-preview' },
       { id: 'gpt-4o-audio-preview' },
       { id: 'babbage-002' },
+      { id: 'gpt-3.5-turbo-instruct' },
     ];
 
     const filtered = filterOpenAIModels(raw);
@@ -59,6 +60,7 @@ describe('OpenAI Model Filtering', () => {
     assert.ok(!ids.includes('dall-e-3'), 'should exclude dall-e');
     assert.ok(!ids.includes('gpt-4o-realtime-preview'), 'should exclude realtime');
     assert.ok(!ids.includes('gpt-4o-audio-preview'), 'should exclude audio');
+    assert.ok(!ids.includes('gpt-3.5-turbo-instruct'), 'should exclude instruct completion models');
   });
 });
 

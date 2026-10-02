@@ -580,7 +580,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         win.webContents.send('models-catalog-updated', { provider, models });
       }
     });
-    broadcastCredentialsChanged();
   };
 
   try {
@@ -12697,6 +12696,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         ninerouterPreferredModel: creds.ninerouterPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
+        cloudFetchedModels: CredentialsManager.getInstance().getAllCloudFetchedModels(),
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
