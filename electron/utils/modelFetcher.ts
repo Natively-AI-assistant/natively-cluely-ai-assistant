@@ -240,23 +240,18 @@ async function fetchNvidiaNimModels(apiKey: string): Promise<ProviderModel[]> {
 
 // ─── OpenAI ──────────────────────────────────────────────────────────────────
 
-async function fetchOpenAIModels(apiKey: string): Promise<ProviderModel[]> {
-    const response = await axios.get('https://api.openai.com/v1/models', {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        timeout: 15000,
-    });
-
-    const models: any[] = response.data?.data || [];
-
-    // Only include: gpt-4o series, gpt-5.x+, o1, o3, o4 series
-    const filtered = models.filter((m: any) => {
-        const id = (m.id || '').toLowerCase();
-        // Include gpt-4o variants
-        if (id.includes('gpt-4o')) return true;
-        // Include gpt-5 and above
-        if (/gpt-[5-9]/.test(id)) return true;
-        // Include o1/o3/o4 reasoning models (but not audio/realtime variants)
-        if (/^o[134]/.test(id) && !id.includes('audio') && !id.includes('realtime')) return true;
+export function filterOpenAIModels(models: any[]): ProviderModel[] {
+    const excludePatterns = [
+        'embedding', 'whisper', 'tts', 'dall-e', 'realtime', 'audio',
+        'babbage', 'davinci', 'moderation', 'canary'
+    ];
+    const filtered = (models || []).filter((m: any) => {
+        const id = (m?.id || '').toLowerCase();
+        if (!id) return false;
+        if (excludePatterns.some(p => id.includes(p))) return false;
+        // Include chat models: gpt-4*, gpt-5*, gpt-6*, chatgpt-*, o1*, o2*, o3*, o4*, etc.
+        if (id.includes('gpt-') || id.startsWith('chatgpt-')) return true;
+        if (/^o\d+/.test(id)) return true;
         return false;
     });
 
@@ -265,7 +260,33 @@ async function fetchOpenAIModels(apiKey: string): Promise<ProviderModel[]> {
         .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+async function fetchOpenAIModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get('https://api.openai.com/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        timeout: 15000,
+    });
+
+    return filterOpenAIModels(response.data?.data || []);
+}
+
 // ─── Groq ────────────────────────────────────────────────────────────────────
+
+export function filterGroqModels(models: any[]): ProviderModel[] {
+    const excludePatterns = [
+        'whisper', 'distil', 'guard', 'tool-use',
+        'vision-preview', 'tts', 'playai', 'speech', 'embedding',
+    ];
+
+    const filtered = (models || []).filter((m: any) => {
+        const id = (m?.id || '').toLowerCase();
+        if (!id) return false;
+        return !excludePatterns.some(p => id.includes(p));
+    });
+
+    return filtered
+        .map((m: any) => ({ id: m.id, label: m.id }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+}
 
 async function fetchGroqModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get('https://api.groq.com/openai/v1/models', {
@@ -273,22 +294,7 @@ async function fetchGroqModels(apiKey: string): Promise<ProviderModel[]> {
         timeout: 15000,
     });
 
-    const models: any[] = response.data?.data || [];
-
-    // Only include text/chat models — exclude everything non-chat
-    const excludePatterns = [
-        'whisper', 'distil', 'guard', 'tool-use',
-        'vision-preview', 'tts', 'playai', 'speech',
-    ];
-
-    const filtered = models.filter((m: any) => {
-        const id = (m.id || '').toLowerCase();
-        return !excludePatterns.some(p => id.includes(p));
-    });
-
-    return filtered
-        .map((m: any) => ({ id: m.id, label: m.id }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+    return filterGroqModels(response.data?.data || []);
 }
 
 // ─── Anthropic ───────────────────────────────────────────────────────────────
@@ -480,34 +486,23 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
 
 // ─── Gemini ──────────────────────────────────────────────────────────────────
 
-async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
-    const response = await axios.get(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
-        {
-            timeout: 15000,
-        }
-    );
-
-    const models: any[] = response.data?.models || [];
-
-    // Only include Gemini 2.5+ models (gemini-2.5-*, gemini-3-*, etc.)
-    // Must support generateContent
+export function filterGeminiModels(models: any[]): ProviderModel[] {
     const excludePatterns = ['nano', 'custom', 'computer-use', 'banana', 'tts', 'embedding', 'aqa', 'vision'];
 
-    const filtered = models.filter((m: any) => {
-        const name = (m.name || '').toLowerCase();
-        const displayName = (m.displayName || '').toLowerCase();
+    const filtered = (models || []).filter((m: any) => {
+        const name = (m?.name || '').toLowerCase();
+        const displayName = (m?.displayName || '').toLowerCase();
         const combined = name + ' ' + displayName;
 
         // Must support generateContent
-        const supportsChat = m.supportedGenerationMethods?.includes('generateContent');
+        const supportsChat = m?.supportedGenerationMethods?.includes('generateContent');
         if (!supportsChat) return false;
 
         // Must NOT match any exclude patterns
         if (excludePatterns.some(p => combined.includes(p))) return false;
 
-        // Match gemini-2.5, gemini-3, gemini-4, etc. (version 2.5 and above)
-        return /gemini-([3-9]|2\.5)/.test(combined);
+        // Match gemini-1.5, gemini-2, gemini-2.5, gemini-3, gemini-4, etc.
+        return /gemini-(1\.5|[2-9])/.test(combined);
     });
 
     return filtered
@@ -517,3 +512,15 @@ async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
         })
         .sort((a, b) => a.label.localeCompare(b.label));
 }
+
+async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+        {
+            timeout: 15000,
+        }
+    );
+
+    return filterGeminiModels(response.data?.models || []);
+}
+
