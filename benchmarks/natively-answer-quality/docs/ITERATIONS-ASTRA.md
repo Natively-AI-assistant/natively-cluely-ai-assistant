@@ -1536,3 +1536,50 @@ to write a rule for, and 7 dev rows cannot show one either way. No change. The w
 (section 9, item 5) is the generator not raising the conflict in the first place (the row that fails both), which
 is the "conflict chip" proposal, not the claim pass.
 
+## The 11:00 UTC batch, 2026-10-02 — gpt-6-astra answers again; the four prepared changes: none is built (11:51Z)
+
+**The judge.** Probe OK at 11:02Z on `AGENTROUTER_API_KEY` (returned model `gpt-6-astra`, no mismatch). The armed
+chain started the queue at 11:03Z; at 11:06Z another session's build took free disk from 5.7 GB to 0.29 GB and the
+disk guard stopped the calibration at 14 of 25 (nothing lost, nothing half-written). The guard now holds calls for
+up to 20 minutes through a dip instead of ending the batch (`cf49cafa`); restarted 11:08Z. **Calibration 25 of 25**
+at 11:14Z. No hand-over to the second key in any step log, so every judgment of this batch so far is from the key
+that was calibrated. 422 calls by 11:50Z, every one answered by `gpt-6-astra`, 0 model mismatches; 128 of them on a
+route that refuses temperature 0 (default temperature), as on 10-01.
+
+**The rules, written before any of these rows had a score** (dev replay pair: gain ≥ +0.3, 95 % interval excludes
+0, hard fails not up, over all rows of the mode; holdout only confirms a pass):
+
+| change | rows | base | variant | gain (95 %) | hard fails | rows that moved | verdict |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Reasoning on typed Technical interview + Lecture turns (i7, `3b0c1a4f`) | 80 | 8.40 | 8.58 | +0.18 (±0.25) | 14 → 13 | 24 | **DO NOT BUILD** — gain under +0.3; interval includes 0 |
+| Looking for work, fallback rule v2 (i6, `c399f399`) | 40 | 7.98 | 8.13 | +0.15 (±0.33) | 7 → 6 | 24 | **DO NOT BUILD** — gain under +0.3; interval includes 0 |
+| Call Center, "no policy on file" notice, heard turns (i6) | 40 | 7.47 | 7.89 | +0.42 (±0.48) | 9 → 7 | 17 | **DO NOT BUILD** — interval includes 0 |
+| Sales, reply-shape notice, heard turns (i6) | 40 | 8.12 | 8.43 | +0.31 (±0.36) | 4 → 1 | 14 | **DO NOT BUILD** — interval includes 0 |
+
+Same-answer rows scored differently inside a pair: 0.
+
+* **Nothing is built and nothing is promoted. The kept build stays fix13 (`e000db4a`).** Branches
+  `fix/aq-astra-i6` and `fix/aq-astra-i7` stay as they are, unmerged.
+* **Holdout for reasoning is not a confirmation.** The holdout pair reads 8.31 → 8.63, +0.33 (±0.31), hard fails
+  12 → 9, which would pass the holdout rule — but that rule confirms a dev pass, and there is none. Recorded, not
+  used. (`astra/decide.mjs` printed "CONFIRMED" for it regardless of the dev verdict; it now prints "NOT APPLIED".)
+* **Reported next to the rule, not instead of it.** The typed rows alone: dev 8.48 → 8.95, +0.47 (±0.63), hard
+  fails 4 → 3, n 31; holdout 8.11 → 9.05, +0.93 (±0.84), hard fails 4 → 1, n 21. Reasoning on all turns, holdout:
+  8.31 → 8.72, +0.42 (±0.61), hard fails 12 → 6 (dev: 70 of 80 judged so far). These go to Evin as a product
+  decision with the measured cost (first answer token on typed turns 0.70 s → 1.67 s at the median in the app);
+  they do not change the verdict.
+* **What the four results have in common.** Each is positive, each has fewer hard fails, none clears its interval.
+  With 40 items per mode and 14–31 of them changed, a real gain of +0.2 to +0.4 cannot be told from 0 — the limit
+  already written in the report (section 9, item 6). That is a statement about the measurement, not a reason to
+  read the rule differently: under the rule, these are four changes that did not show a gain.
+* **The Sales rule-5 question** (one validator flip on a row the notice does not touch) is moot: Sales has no BUILD.
+* **fix13 against fix12 on the rows it re-ran** (the refinement notice, already in the kept build): dev 8.39 → 9.52,
+  +1.13 (±0.79), hard fails 1 → 0, 17 rows; holdout 7.85 → 8.92, +1.07 (±1.62), hard fails 1 → 1, 10 rows. KEEP.
+* **Kept build, now judged in full** (`aq2-dev-fix13c` 360 rows, `aq2-holdout-fix13c` 270 rows): dev 8.54, holdout
+  8.47. Clean answers (no flagged failure): 283 of 360 at 9.28 on dev, 211 of 270 at 9.26 on holdout.
+* **Queue reordered at 11:49Z** (`78edef09`): the candidates' app rows (fix14, fix15, fix16) and reasoning on all
+  turns can no longer change a decision, so they were moved behind what the final report needs — the Starting
+  column (159 dev + 68 holdout judgments), the claim pass draft/shown, supp-behavior. Restarted from that tier in
+  the same batch, same key, without a second calibration. The step that was judging "reasoning on all turns" was
+  left to finish what it had in flight.
+
