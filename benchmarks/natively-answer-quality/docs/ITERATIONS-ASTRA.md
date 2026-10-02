@@ -1311,3 +1311,26 @@ The app sends `thinking: disabled` on every DeepSeek turn. Same 80 recorded dev 
   pair → Looking for work → Call Center → Sales → the candidates' app rows → Starting-column gaps → draft/shown
   pairs → the rest. The probe still fails at 01:01Z (account quota); if it has not come back by the end of the
   wait, nothing can be judged and the account needs a top-up.
+
+### fix15 (I28, reasoning on typed Technical interview / Lecture turns) in the app — objective checks, no judge (01:30Z)
+aq-fix2 3b0c1a4f, runs `aq2-dev-fix15` (80 rows) and `aq2-holdout-fix15` (60 rows), against the kept build's rows for
+the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Holdout: aggregates only.
+| | dev | holdout |
+|---|---|---|
+| typed rows sending `thinking: enabled` | 31 of 31 | 21 of 21 |
+| heard rows sending it | 0 of 49 | 0 of 39 |
+| failed rows / empty answers | 0 / 0 | 0 / 0 |
+| requests per typed turn | 1 on all 31 (kept build: same) | 1 on 20, 2 on 1 (kept build: same) |
+| typed first token, p50 / p95 / max | 1.67 s / 5.39 s / 5.51 s (kept: 0.70 / 1.17 / 1.41) | 1.72 s / 6.34 s / 10.49 s (kept: 0.81 / 1.15 / 1.17) |
+| typed total, p50 / p95 | 2.30 s / 6.06 s (kept: 1.39 / 2.77) | 2.52 s / 7.54 s (kept: 1.43 / 2.62) |
+| heard first token, p50 | 0.99 s (kept: 1.03) | 0.86 s (kept: 0.96) |
+| deterministic validators | 2 of 2 pass, as before | none apply; 0 verdicts changed |
+* Wiring is as built: only typed turns of the two modes reason; heard turns are untouched in request and in latency.
+* No turn was hedged or failed over: request counts equal the kept build's. One typed turn took 10.5 s to its first
+  token; without the 12 s allowance the parallel retry would have fired at 4.8 s and the turn would have been
+  abandoned at 8 s.
+* The wire capture stores `thinking` but not `reasoning_effort`; that the effort sent is `low` is shown by the unit
+  test over the compiled stream method, not by these rows.
+* The validators say nothing here (they cover 2 of 140 rows). Whether the answers are better is the judge's question:
+  the two replay pairs and these app rows are queued for gpt-6-astra. fix15 is a candidate until then.
+* App stopped through its launcher, build output deleted (5.2 GB free).
