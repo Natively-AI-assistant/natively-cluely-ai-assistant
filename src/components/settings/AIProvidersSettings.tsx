@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import type { VisionModelState } from '../../types/electron';
-import { visionStatusText, visionAnswerInForce } from './visionLine';
+import { visionAutoText, visionStatusText, visionAnswerInForce } from './visionLine';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, ImageOff, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
@@ -871,9 +871,33 @@ export const AIP_CSS = `
 .aip-vision-label { font-size:11px; color: var(--aip-secondary); margin-right:2px; }
 /* Secondary while it is only what Auto WOULD say, or not an answer yet; primary
    once it is the answer in force — the one thing on this line worth reading. */
-.aip-vision-status { font-size:10.5px; color: var(--aip-secondary); text-align:right;
+.aip-vision-status { display:flex; align-items:flex-start; justify-content:flex-end;
+                     font-size:10.5px; color: var(--aip-secondary); text-align:right;
                      transition: color var(--aip-dur-state) var(--aip-ease-out); }
 .aip-vision-status[data-answer='true'] { color: var(--aip-primary); }
+/* "Auto would say:" in front of the answer, under the user's own On or Off. It is
+   a place too, and it TRADES with the test button's place below: as one closes
+   the other opens on the same clock and the same curve, so mid-way the line is
+   never wider than at either end. When the two were timed apart (the words
+   swapped out over 150ms while the button's place was already opening), a long
+   translation overflowed for a moment: the line wrapped to two rows and every
+   model row below it jumped down and back. So its two width timings are the
+   test place's two, crossed — keep them in step (VisionSettingLine test).
+   A column going 0fr to 1fr, not a width: the words are as wide as the language. */
+.aip-vision-would {
+    display:grid; grid-template-columns:0fr; flex-shrink:0;
+    opacity:0; visibility:hidden;
+    transition: grid-template-columns var(--aip-dur-travel) var(--aip-ease-out),
+                opacity var(--aip-dur-press) var(--aip-ease-out),
+                visibility 0s linear var(--aip-dur-travel);
+}
+.aip-vision-would > span { min-width:0; overflow:hidden; white-space:pre; }
+.aip-vision-would[data-open='true'] {
+    grid-template-columns:1fr; opacity:1; visibility:inherit;
+    transition: grid-template-columns var(--aip-dur-state) var(--aip-ease-out) 50ms,
+                opacity var(--aip-dur-state) var(--aip-ease-out) 110ms,
+                visibility 0s;
+}
 /* The result and its test button travel together. When a long translation does
    not fit beside the control, BOTH drop to a second line and stay at the right
    edge — the button alone used to land at the left, under the label. */
@@ -1792,6 +1816,7 @@ export const AipVisionDetail: React.FC<{
         observer?.observe(seg);
         return () => observer?.disconnect();
     }, [open, state.setting, labelsKey]);
+    const auto = visionAutoText(state, t);
     const status = visionStatusText(state, t);
     const onAuto = state.setting === 'auto';
     const tested = state.auto.source === 'test';
@@ -1823,8 +1848,14 @@ export const AipVisionDetail: React.FC<{
                         ))}
                     </div>
                     <div className="aip-vision-result">
-                        <span className="aip-vision-status" aria-live="polite" data-answer={visionAnswerInForce(state) ? 'true' : 'false'}>
-                            <Presence kind="text" id={status}>{status}</Presence>
+                        <span className="aip-vision-status" data-answer={visionAnswerInForce(state) ? 'true' : 'false'}>
+                            {/* What a screen reader hears: the whole sentence, apart from
+                                the pieces below, which move and are for the eye only. */}
+                            <span className="sr-only" aria-live="polite">{status}</span>
+                            <span className="aip-vision-would" data-open={onAuto ? 'false' : 'true'} aria-hidden="true">
+                                <span>{`${t('Auto would say')}: `}</span>
+                            </span>
+                            <span aria-hidden="true"><Presence kind="text" id={auto}>{auto}</Presence></span>
                         </span>
                         {/* Only on Auto, and only where a test can run: On and Off are the
                             user's own answer, and a test would send an image they may have

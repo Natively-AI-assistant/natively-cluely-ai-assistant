@@ -127,10 +127,38 @@ describe('the line\'s motion (source)', () => {
         assert.match(reduced, /\.aip-root \.aip-reveal--line > div > \* \{ transform: none !important; \}/);
     });
 
-    test('the status and the test label swap, keyed by what they say', () => {
-        assert.match(detail, /aria-live="polite"[\s\S]{0,160}<Presence kind="text" id=\{status\}>\{status\}<\/Presence>/);
-        assert.match(detail, /const status = visionStatusText\(state, t\);/);
+    test('the answer and the test label swap, keyed by what they say', () => {
+        assert.match(detail, /const auto = visionAutoText\(state, t\);/);
+        assert.match(detail, /<span aria-hidden="true"><Presence kind="text" id=\{auto\}>\{auto\}<\/Presence><\/span>/);
         assert.match(detail, /<Presence kind="text" id=\{tested \? 'again' : 'now'\}>/);
+    });
+
+    test('a screen reader is given the whole sentence, apart from the pieces that move', () => {
+        assert.match(detail, /const status = visionStatusText\(state, t\);/);
+        assert.match(detail, /<span className="sr-only" aria-live="polite">\{status\}<\/span>/);
+        assert.equal((detail.match(/aria-live=/g) || []).length, 1);
+        assert.match(detail, /<span className="aip-vision-would" data-open=\{onAuto \? 'false' : 'true'\} aria-hidden="true">\s*<span>\{`\$\{t\('Auto would say'\)\}: `\}<\/span>/);
+    });
+
+    // In Russian the line holds "Auto would say: No · tested" OR "No · tested" and
+    // the test button, not both. Timed apart, the two overlapped for a moment, the
+    // line wrapped to two rows and every row below it jumped down and back.
+    test('"Auto would say" and the test button trade places on one clock', () => {
+        const timing = (ruleText, property) => {
+            const m = ruleText.match(new RegExp(`${property} ([^,;]+)[,;]`));
+            assert.ok(m, `no ${property} timing in: ${ruleText}`);
+            return m[1].trim();
+        };
+        const wouldClosed = rule('.aip-vision-would'), wouldOpen = rule(".aip-vision-would[data-open='true']");
+        const placeClosed = rule('.aip-vision-test'), placeOpen = rule(".aip-vision-test[data-open='true']");
+        // back to Auto: the words close exactly as the button's place opens
+        assert.equal(timing(wouldClosed, 'grid-template-columns'), timing(placeOpen, 'width'));
+        // On or Off: the words open exactly as the button's place closes
+        assert.equal(timing(wouldOpen, 'grid-template-columns'), timing(placeClosed, 'width'));
+        assert.match(wouldClosed, /grid-template-columns:0fr/);
+        assert.match(wouldOpen, /grid-template-columns:1fr/);
+        assert.match(wouldOpen, /visibility:inherit/);
+        assert.match(rule('.aip-vision-would > span'), /min-width:0; overflow:hidden; white-space:pre/);
     });
 
     test('the glyph cross-fades between yes, no and a running test', () => {
