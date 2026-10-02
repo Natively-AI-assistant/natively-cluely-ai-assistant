@@ -1921,3 +1921,42 @@ directly (the wait on profile turns with and without the rerank). The quality si
 embedder, judged at the next batch; holdout after that, in aggregate. Whether to stop awaiting the rerank on heard
 turns is Evin's decision: it changes which profile passages are sent.
 
+## Speed: the bundled rerank switched off — the wait goes, and the passages sent change on 5 of 93 rows (15:30Z)
+
+`aq2-dev-emb4`: the kept build, embedder working, `NATIVELY_RAG_LOCAL_RERANK=0` (the flag's own switch; no code
+change), same three modes, 120 dev rows, 0 failed, 0 embedder failures. Against `aq2-dev-emb2` (rerank on):
+
+| wait before the request, p50 / p90 / p95 | rerank on | rerank off |
+|---|---:|---:|
+| every heard turn (93) | 200 / 437 / 495 ms | 16 / 37 / 178 ms |
+| heard, with a profile (55) | 302 / 487 / 543 ms | 20 / 94 / 209 ms |
+| heard, reference file only (28) | 179 / 220 / 221 ms | 12 / 20 / 26 ms |
+| heard, neither (10) | 10 / 20 / 20 ms | 13 / 27 / 27 ms |
+| typed (27) | 7 / 26 / 29 ms | 8 / 24 / 27 ms |
+
+V3's profile retrieval on heard turns: 296–359 ms → 3 ms at the median.
+
+* **Both waits were the rerank.** The reference-file wait went too (179 → 12 ms): the legacy retrieval that
+  `WhatToAnswerLLM` runs and then discards on a V3 turn was awaiting the same reranker. "Cause 2" as written above
+  (a second retrieval thrown away) is true, but what made it cost 180 ms was this.
+* **What the rerank changes in the prompt** (`tools/prompt-diff.mjs`, per-run ids replaced, retrieved passages
+  only — a later turn's transcript evidence quotes the app's own earlier replies and differs by sampling): of the
+  93 rows that carry retrieved passages, the passages differ on **5** (3 + 2, all heard turns with a profile);
+  on the 28 heard reference-only rows and on every typed row they are identical. So on 88 of 93 rows the wait
+  bought the same prompt.
+* **It is on for users.** `ragLocalRerank` and `ragSpeculativeRerank` (rerank on the live path) have been
+  production-default ON since 2026-08-30; the flag's own comment calls the live one the highest-risk promotion of
+  that batch and says the packaged soak test was not run.
+* **First-word totals of the two runs are not comparable**: DeepSeek was slow during `emb4` (model part 1.1–1.5 s
+  at the median, p90 up to 16 s, against about 0.95 s in `emb2`). The wait before the request does not depend on
+  the provider; that is the number to read.
+* **Quality side, queued for the 02:00 UTC batch** (chain `b0200` armed 15:30Z, calibration first): `emb2`'s 50
+  unjudged rows and `emb4`'s 120, then `emb4` − `emb2` paired on the same items. With 5 rows of 93 changed, the
+  expected difference is the noise of a re-run; the pair is read as "no loss visible", not as a test that could
+  prove equality. The judge queue's long reported-only tail (the rest of the pairwise set, fix10, five replays,
+  about 1,300 calls) now runs only with `--all`.
+* **This is a behaviour change, so it is Evin's decision** — it alters the passages on about one heard profile turn
+  in ten (5 of 55). Nothing is built. The narrow form of the change: do not await the bundled reranker on heard
+  turns (a reranker the user selected in Settings still runs); typed chat unchanged.
+* App stopped through its launcher; build output, app data and the copied weights removed (14.3 GB free).
+

@@ -4,7 +4,7 @@ Status 2026-10-02 12:04 UTC. Generator: deepseek-flash. Judge: gpt-6-astra throu
 `c725615a54f6` (claim kinds), calibration 25 of 25. Every score in this report is under charter v2; nothing from
 charter v1 is mixed in. Holdout is reported in aggregate only.
 
-## 0. Status on 2026-10-02 12:04 UTC — what was decided today, and what is still being judged
+## 0. Status on 2026-10-02 15:30 UTC — what was decided today, and what is still being judged
 
 gpt-6-astra answered again at 11:02 UTC (key `AGENTROUTER_API_KEY`; calibration 25 of 25; every call answered by
 `gpt-6-astra`, 0 model mismatches). The decisions were judged first.
@@ -71,6 +71,20 @@ score did not repeat.
 
 **Left in the judge queue, none of it able to change a decision:** the rest of the blind pairwise set (fix6 against
 fix11, 276 of 360 done), fix10, and five reported-only replays. They are not armed for the 02:00 UTC batch.
+
+**Speed (Evin, 2026-10-02: "the point of natively is to answer fast").** On heard turns the app waits before it
+sends the request: 200 ms at the median and 437 ms at p90 across heard turns in Looking for work, Technical
+interview and Seminar; 302 / 487 ms when a profile is loaded; typed turns 7 ms. The app's own stage trace puts it
+on one step, the bundled cross-encoder rerank (250 ms p50, 405 p90, on 30 of 38 lookups that reach its gate),
+which has been on by default for users since 2026-08-30. With it switched off through its own setting the wait is
+16 / 37 ms, and the retrieved passages sent to the model are identical on 88 of the 93 rows that carry any. The
+judged comparison is queued for the 02:00 UTC batch. Stopping the wait on heard turns is a behaviour change and
+waits for Evin; nothing is built. Details: `docs/ITERATIONS-ASTRA.md`, the "Speed" sections.
+
+**A caveat on every run in this report, checked and found harmless.** The default local embedder's weights were
+missing from the benchmark worktrees (and from the main checkout), so profile lookups ran degraded in every run.
+With the embedder working, the same 70 judged dev rows read 7.97 → 7.73 (−0.24 ±0.36): no gain, so the
+profile-backed modes' numbers are not understated.
 
 **The laptop's disk.** Free space fell to 0.29 GB at 11:06 UTC while another session was building, and stopped the
 first calibration. The judge now holds its calls through such a dip and its files survive a write cut short

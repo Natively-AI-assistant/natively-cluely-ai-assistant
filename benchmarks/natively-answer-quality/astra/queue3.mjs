@@ -49,6 +49,9 @@ const TIERS = [
   // The kept build as one run per split (fix12c + fix13's re-run rows): what every candidate's app rows are paired
   // with. Every answer in them was judged in the tier above or earlier, so this costs no judge call.
   [J('dev-c2-fix13c', 'abs-dev-c2', 'aq2-dev-fix13c'), J('holdout-c2-fix13c', 'abs-holdout-c2', 'aq2-holdout-fix13c')],
+  // 2026-10-02, speed: the kept build run with the embedder working, with the bundled rerank on (emb2) and off
+  // (emb4), same dev rows. The pair says what the awaited rerank is worth in answer quality.
+  [J('dev-c2-emb2', 'abs-dev-c2', 'aq2-dev-emb2'), J('dev-c2-emb4', 'abs-dev-c2', 'aq2-dev-emb4')],
   // Reasoning: the build (fix15) reasons on TYPED turns only, so the deciding variant is the typed-only set — heard
   // rows carry the reasoning-off answer (no judge call, a difference of exactly 0). The all-turns sets come later
   // and are reported only: they are the evidence for the heard-turn question, which is Evin's to decide.
@@ -74,10 +77,15 @@ const TIERS = [
   // Call Center + Sales app rows of the i6 candidate (c399f399), run ahead of the verdict; reported only
   // (no part's replay pair says BUILD).
   [J('dev-c2-fix16', 'abs-dev-c2', 'aq2-dev-fix16'), J('holdout-c2-fix16', 'abs-holdout-c2', 'aq2-holdout-fix16')],
+];
+// Reported only, and about 1,300 judge calls: the rest of the blind pairwise set, fix10, five replays. They change
+// no decision and are billed to the same balance as everything else, so they run only with --all.
+const EXTRA = [
   [['ab-c2-fix6-vs-fix11', ['astra/ab.mjs', '--set', 'ab-c2-dev-fix6-vs-fix11', '--a', 'results/aq2-dev-fix6', '--b', 'results/aq2-dev-fix11', '--concurrency', C], 'results/aq2-dev-fix11']],
   [J('dev-c2-fix10', 'abs-dev-c2', 'aq2-dev-fix10'), J('holdout-c2-fix10', 'abs-holdout-c2', 'aq2-holdout-fix10')],
   [R('think-off-rest', 'think-off-rest', D), R('think-low-rest', 'think-low-rest', D), R('lfw-bridge-v1', 'lfw-bridge-v1', D), R('ccfin-nopolicy-v1c', 'ccfin-nopolicy-v1c', D), R('salesfin-shape-v1c', 'salesfin-shape-v1c', D)],
 ];
+if (args.includes('--all')) TIERS.push(...EXTRA);
 
 const logDir = path.join(HERE, 'out', 'logs');
 fs.mkdirSync(logDir, { recursive: true });
