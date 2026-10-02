@@ -1230,3 +1230,34 @@ The app sends `thinking: disabled` on every DeepSeek turn. Same 80 recorded dev 
   confirmed, I28 is built for TYPED turns of those two modes on DeepSeek models (the user typed and is waiting for a
   written answer); the heard turns, where a first word at 2 s instead of 0.8 s is a product trade, are put to Evin
   with these numbers. If not confirmed, nothing is built.
+
+### Reasoning lever CONFIRMED on holdout; I28 built for typed turns (aq-fix2 3b0c1a4f, branch `fix/aq-astra-i7`)
+| holdout, 60 Technical interview + Lecture prompts | n | off | low | change (95%) | hard fails |
+|---|---:|---:|---:|---:|---:|
+| Technical interview | 30 | 8.16 | 8.97 | +0.82 (±0.64) | 5 → 0 |
+| Lecture | 30 | 8.54 | 8.90 | +0.36 (±0.80) | 3 → 0 |
+| typed | 21 | 8.19 | 9.04 | +0.85 (±0.74) | 3 → 0 |
+| heard | 39 | 8.43 | 8.88 | +0.45 (±0.68) | 5 → 0 |
+| all | 60 | 8.35 | 8.94 | +0.59 (±0.51) | 8 → 0 |
+* The rule is met (positive, interval excludes 0, hard fails 8 → 0). Where the off answer had a hard fail the gain
+  is +4.36 (8 rows); where it had none, +0.01 (52 rows): reasoning repairs wrong answers and leaves right ones alone.
+* Total time on these prompts: 1.37 s → 2.84 s at the median, 2.3 s → 8.5 s at p95; 1 of 60 reasoning replies came
+  back empty at a 6,000-token cap (the app's cap is 8,192).
+* **Built (I28):** `electron/llm/answerReasoning.ts` — a typed question in Technical interview or Lecture sends
+  `thinking: enabled, reasoning_effort: low` on DeepSeek; every other turn is byte-identical. The selected-provider
+  turn adds 12 s to the first-token budget on those turns (default 8 s, parallel retry at 60%): without it a
+  request that is still reasoning would be hedged or failed over as a stalled one. Kill switch
+  `NATIVELY_ANSWER_REASONING=0`. Heard turns are not changed: +0.45–0.48 is on offer there for about 1.4 s more to
+  the first word (p95 6.6 s) — Evin's decision.
+* Tests: `npm run typecheck:electron` clean; llm suite 5,689 tests, 0 fail (28 skipped) with the new file's 17 —
+  including the real compiled stream method over a recording stub (request carries the fields; reasoning chunks are
+  never yielded); intelligence suite 2,807 / 0 fail; the three services suites that drive the DeepSeek stream
+  111 / 0 fail.
+* **What the app run is for, written before it starts (01:05Z).** The effect was measured on identical prompts
+  on both sets; an app re-run resamples every draft and cannot measure it better. The run (dev and holdout,
+  Technical interview + Lecture) has to show: (1) wiring — every typed row of those modes carries
+  `thinking: enabled`, no heard row does; (2) nothing breaks — 0 failed rows, no empty answers, no more requests
+  per turn than the kept build (a hedge would show as an extra request); (3) latency on the typed rows, first token
+  and total, against the kept build; (4) the judged typed rows are not below the kept build's: fix15 is promoted if
+  the typed-row change is positive on holdout with hard fails not up, and positive on dev. If (1)–(3) fail it is
+  fixed or reverted; if (4) fails it stays a candidate.
