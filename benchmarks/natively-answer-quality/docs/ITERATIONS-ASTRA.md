@@ -1312,7 +1312,7 @@ The app sends `thinking: disabled` on every DeepSeek turn. Same 80 recorded dev 
   pairs → the rest. The probe still fails at 01:01Z (account quota); if it has not come back by the end of the
   wait, nothing can be judged and the account needs a top-up.
 
-### fix15 (I28, reasoning on typed Technical interview / Lecture turns) in the app — objective checks, no judge (01:30Z)
+### fix15 (I28, reasoning on typed Technical interview / Lecture turns) in the app — objective checks, no judge (01:28Z)
 aq-fix2 3b0c1a4f, runs `aq2-dev-fix15` (80 rows) and `aq2-holdout-fix15` (60 rows), against the kept build's rows for
 the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Holdout: aggregates only.
 | | dev | holdout |
