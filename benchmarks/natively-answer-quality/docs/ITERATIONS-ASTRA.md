@@ -1718,3 +1718,26 @@ pair's spread: about ±0.40 on the decision half and ±0.31 on the confirmation 
 * Judge: gpt-6-astra, charter `c725615a54f6`, this batch (calibrated 25 of 25 at 11:14Z on the key in use). A
   judgment answered by the other key is not used until that key is calibrated. Aggregates only.
 
+## I29 result — the decision half passes, the confirmation half does not: the Call Center notice is not promoted (13:42Z)
+
+`node astra/enlarged-cc.mjs` (one run, 13:04Z–13:41Z). 494 judgments, 0 failed, all answered by `gpt-6-astra` on the
+calibrated key, 0 model mismatches, no hand-over to the second key. Generation: 115 of 116 rows (one has no recorded
+prompt); the notice touched 66 rows, 49 carried base's answer.
+
+| half | rows | rows the notice touches | samples | base | with the notice | gain (95 %) | hard fails, all judged answers | rule | verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---|
+| decision | 47 | 31 | 3 | 7.70 | 8.37 | +0.67 (±0.42) | 23 → 6 | ≥ +0.3, interval excludes 0, hard fails not up | **PASS** |
+| confirmation | 68 | 35 | 3 | 7.99 | 8.17 | +0.18 (±0.25) | 20 → 12 | > 0, interval excludes 0, hard fails not up | **FAIL** — interval includes 0 |
+
+* **Under the rule written at 13:01Z the notice is not promoted.** Both halves had to pass. One run was allowed and
+  it has been used: no second wording, no re-run, no pooling.
+* What the two halves do agree on: fewer hard fails (23 → 6 and 20 → 12 over all judged answers of each arm). What
+  they do not agree on is the score: +0.67 on one half, +0.18 on the other, and the second cannot be told from 0.
+  The halves differ in make-up (decision 42 heard of 47 rows and 31 touched; confirmation 49 heard of 68 and 35
+  touched, 19 typed rows the notice never reaches), which lowers the confirmation half's ceiling but does not
+  explain a gain a quarter the size.
+* The kept build is unchanged (fix13, `e000db4a`). `fix/aq-astra-i6` stays unmerged. The final set's Call Center
+  rows are now judged and are no longer part of the unjudged regression read; the other eight modes are untouched.
+* This closes the line of work the four dev verdicts opened: every prompt-level candidate has now been tested
+  under a rule written beforehand, and none passed it.
+

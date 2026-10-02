@@ -55,9 +55,20 @@ They agree with the verdicts: nothing clears its interval, and the Sales notice 
 second row is the caution for every other line: the same code, sampled again, moved by half a point and from 4 to
 10 hard fails on 39 holdout rows.
 
-**Still being judged at 12:44 UTC, none of it able to change a decision:** the blind pairwise set (fix6 against
-fix11), fix10, and five reported-only replays. If the ration pool ends first, the rest waits for a chain armed for
-the 02:00 UTC batch.
+**One more test of the Call Center notice, on items the judge had never seen (I29, 13:42 UTC).** At Evin's
+"continue iterations" the one candidate a larger set could decide was tested once more: the final set's 116 Call
+Center rows, split into two halves, three samples per touched row, rule written before any answer was generated.
+
+| half | rows | base | with the notice | gain (95 %) | hard fails | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| decision | 47 | 7.70 | 8.37 | +0.67 (±0.42) | 23 → 6 | pass |
+| confirmation | 68 | 7.99 | 8.17 | +0.18 (±0.25) | 20 → 12 | fail — interval includes 0 |
+
+Both halves had to pass, so the notice is not promoted. It lowers hard fails on both halves; its effect on the
+score did not repeat.
+
+**Left in the judge queue, none of it able to change a decision:** the rest of the blind pairwise set (fix6 against
+fix11, 276 of 360 done), fix10, and five reported-only replays. They are not armed for the 02:00 UTC batch.
 
 **The laptop's disk.** Free space fell to 0.29 GB at 11:06 UTC while another session was building, and stopped the
 first calibration. The judge now holds its calls through such a dip and its files survive a write cut short
@@ -99,7 +110,7 @@ eight modes are fix11's runs and judgments (`tools/compose-run.mjs`, runs `aq2-*
 
 ## 2. Iterations: attempted, kept, reverted
 
-46 changes were tried; 26 are in the kept build, 20 were rejected, taken back or not built. Every one is described, with its
+46 changes were tried (one of them, the Call Center notice, twice); 26 are in the kept build, 20 were rejected, taken back or not built. Every one is described, with its
 evidence, in `docs/ITERATIONS-ASTRA.md`; every dev question with each run's answer is in `docs/ITERATIONS-QA.md`.
 
 **In the kept build (26):** I1 small corpus read whole · I2 hidden arithmetic scratch block · I3 the user's own
