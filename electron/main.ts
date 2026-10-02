@@ -9612,6 +9612,18 @@ if (process.env.THINKING_MATRIX === '1') {
 
   logStartupPhase('initializeApp:complete');
 
+  // Synchronize Live Model Catalog across configured AI providers in background
+  setTimeout(() => {
+    try {
+      const { LiveModelCatalogService } = require('./services/LiveModelCatalogService');
+      LiveModelCatalogService.getInstance().refreshAllConfiguredProviders().catch((err: any) => {
+        console.warn('[Main] Background live model catalog refresh encountered error:', err?.message);
+      });
+    } catch (e: any) {
+      console.warn('[Main] Could not initiate background live model catalog refresh:', e?.message);
+    }
+  }, 15000);
+
   maybeForceDevPermissionBanner(appState);
 
   // Note: We do NOT force dock show here anymore, respecting stealth mode.
