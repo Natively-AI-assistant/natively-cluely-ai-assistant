@@ -1411,3 +1411,28 @@ the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Hol
 * Queue: the fix13c composites are judged right after fix13's rows (cache hits only: every answer in them is
   already judged or is one of fix13's 27), and the fix16 rows go in a tier of their own after the fix15 / fix14 app
   rows.
+
+### "use agent router api for benchmark also, use deepseek" — Evin, 04:52Z; measured before acting (04:58Z 2026-10-02)
+Read as: the GENERATOR (the model under test) through AgentRouter with DeepSeek, as the judge already goes through
+AgentRouter. The judge stays gpt-6-astra. Nothing was switched yet; what was measured first:
+* `deepseek-v4-flash` on AgentRouter (`/v1/messages`, thinking disabled) answers on `AGENTROUTER_API_KEY_1` now
+  (HTTP 200, model field `deepseek-v4-flash`); on `AGENTROUTER_API_KEY` it gets the same 403
+  `insufficient_user_quota` as the judge — the account balance gates DeepSeek too.
+* **It is paid from the same balance the judge uses.** The key's usage counter
+  (`/v1/dashboard/billing/usage`, `total_usage`) moved 0.0236 → 0.912 on 5 small calls (160 input + 687 output
+  tokens) and 0.912 → 3.633 on one input-heavy call (6,782 input + 7 output): about 0.40 per 1,000 input tokens
+  and 1.2 per 1,000 output tokens, in the counter's units.
+* In the same units the first key stopped at 20,013 used, after roughly 6,500 judgments: about 3 per judgment. A
+  benchmark row (answer prompt of several thousand tokens, plus the claim pass on most turns) comes to roughly 3–4.
+  So **one generated row on AgentRouter costs about as much as one judgment**, from the balance the judge needs;
+  a 630-row dev + holdout run is about 2,400 units, the price of about 780 judgments. The second key's remaining
+  balance is not visible through the API (the subscription endpoint shows the token's limit, not the account's).
+* The direct DeepSeek account is available with USD 63.39 left; the benchmark's rows cost it cents.
+* None of the candidate app builds (e000db4a, c399f399, 3b0c1a4f) contains the AgentRouter provider (main's
+  6e98b1ec): an app run through it needs main merged into the build under test, and a new baseline on that route,
+  because every judged row and base replay so far is direct `deepseek-flash` — rows from another route are a new
+  series and are never paired with them.
+* Where it fits without touching the app: new replay pairs (both arms on the same route). Reasoning variants cannot
+  move: the Anthropic-format route has no `reasoning_effort`.
+* The fix16 run stays on direct DeepSeek (a run is one route). Waiting for Evin's choice of which balance pays for
+  generation before any generation load goes on the second key.
