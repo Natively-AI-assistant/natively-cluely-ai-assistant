@@ -1436,3 +1436,50 @@ AgentRouter. The judge stays gpt-6-astra. Nothing was switched yet; what was mea
   move: the Anthropic-format route has no `reasoning_effort`.
 * The fix16 run stays on direct DeepSeek (a run is one route). Waiting for Evin's choice of which balance pays for
   generation before any generation load goes on the second key.
+
+### Generator stays on direct DeepSeek — Evin's choice, 05:05Z; the first key was replaced, 05:10Z
+* Asked with the measurements above, Evin chose "Keep direct DeepSeek": answers keep coming from the direct DeepSeek
+  key and the AgentRouter balances are kept for the judge. No AgentRouter generation path was added to the harness.
+* Evin then replaced `AGENTROUTER_API_KEY` with a new key ("so you have two paid api keys"). Probe at 05:12Z: both
+  keys list `gpt-6-astra`, neither says `insufficient_user_quota` any more, and both answer the chat probe with 402
+  "Budget pool quota has been exhausted" — the batch pool, on two different accounts at once, so it is shared and
+  not per account. Nothing can be judged before 11:00Z; no top-up is needed any more. The armed chain (pid 32411)
+  is probing with the two-key client.
+
+### fix16 in the app (Call Center + Sales notices, aq-fix2 c399f399) — objective checks, no judge (05:13Z 2026-10-02)
+Runs `aq2-dev-fix16` (80 rows) and `aq2-holdout-fix16` (60 rows), direct DeepSeek, against the kept build's rows for
+the same items (fix13c composites). Holdout: aggregates only. Tools: `tools/nodoc-wiring.mjs` (new),
+`tools/validators-paired.mjs`, `tools/refine-check.mjs`, the patterns of `tools/nodoc-shape.mjs`.
+| | dev | holdout |
+|---|---|---|
+| failed rows / empty answers | 0 / 0 | 0 / 0 (the run stopped once at 16 rows and resumed; no row lost) |
+| Call Center heard turns with the notice in the prompt | 17 of 30 | 14 of 23 |
+| Sales heard turns with the notice | 14 of 28 | 12 of 21 |
+| typed turns with a notice | 0 of 22 | 0 of 16 |
+| a turn carrying the other mode's notice | 0 | 0 |
+| typed refinement requests met | 2 of 2 | none in these modes |
+| deterministic validators (kept → fix16) | 3 → 2 of 3 | 1 → 1 of 1 |
+* **The gate fires in the app on exactly the turns the replay touched**: dev Call Center 17 of 17 and Sales 14 of 14
+  are the same items as the heard-only replay variants, none more, none fewer. This is the claim the replay could
+  not make ("same turns" was shown offline; that the built gate selects them was not).
+* Shape counts on the rows that carry the notice, kept build → fix16 (the replay's instrument):
+  | | dev | holdout |
+  |---|---|---|
+  | Call Center: asks for a verification detail | 7 → 1 of 17 | 3 → 1 of 14 |
+  | Call Center: states the limit plainly | 2 → 7 | 2 → 7 |
+  | Call Center: names what will be checked | 1 → 7 | 1 → 7 |
+  | Call Center: median words | 51 → 46 | 53 → 52 |
+  | Sales: preamble about not answering | 8 → 1 of 14 | 2 → 0 of 12 |
+  | Sales: says what it will confirm | 4 → 11 | 1 → 4 |
+  | Sales: median words | 54 → 52 | 57 → 50 |
+  The model follows the notice in the app as it did in the replay. Whether the replies are better is the judge's
+  question; these counts are the notice's own phrases and prove only that it was followed.
+* **The one validator that changed is not on a notice row.** DSALES-026 (heard; the item has a price sheet, so the
+  gate correctly stays shut — the notice is not in its prompt): the streamed draft passes ("it's on a sheet that
+  ran through the end of last year"), and the claim pass's edit of the shown answer drops the out-of-date note, so
+  the shown answer fails `source_conflict`. Same claim pass as the kept build, a different sample: this is the
+  known weakness "a conflict in the material is surfaced about half the time" (report section 9, item 5), not an
+  effect of this change. Rule 5 of the fix14 promotion rule ("validators not worse") reads 3 → 2 on dev as written;
+  it is recorded as such and goes to Evin with this explanation if Sales gets a BUILD verdict — the rule is not
+  re-worded here.
+* App stopped through its launcher; build output deleted (5.2 GB free).
