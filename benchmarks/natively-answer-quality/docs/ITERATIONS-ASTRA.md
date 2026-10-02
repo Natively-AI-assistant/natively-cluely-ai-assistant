@@ -1668,3 +1668,53 @@ verdict, so none of this enters a rule.
 * supp-behavior (72 items), judged: fix6 8.11 → fix11 8.33, +0.23 (±0.37), hard fails 17 → 11. The 10 Seminar rows
   fix12 re-ran: 9.21 → 9.34, +0.13 (±0.29), 0 hard fails on either side.
 
+## I29 — one more test of the Call Center notice, on items the judge has never seen. Written 13:01Z, before any answer of it is generated
+
+Evin, after the verdicts and after being told the loop would stop: "continue iteartions" (twice). The four dev
+verdicts stand. This is a new test with its own rule, not a second reading of the failed pair, and it is run once.
+
+**Which candidate, and why only one.** Chosen by whether more items could decide it under the unchanged gain rule
+(at least +0.3 on all rows of the mode):
+* Looking for work, fallback rule: +0.15 on dev. Under +0.3 at any sample size. Dropped.
+* Sales notice: negative in the app (−0.09 dev, −0.20 holdout). Dropped.
+* Reasoning in Technical interview and Lecture: nothing is built without Evin's answer on the delay. Asked today.
+* **Call Center "no policy on file" notice, heard turns:** +0.42 (±0.48) on the dev pair, +0.57 and +0.46 on the app
+  rows, hard fails down on all three. The one a larger set can decide.
+
+**The items.** The final set's Call Center rows as the kept build ran them (`aq2-final-fix13`, `e000db4a`, 116 rows).
+The final set has never been judged. From now on its Call Center rows are a test set; the other eight modes stay
+the unjudged regression read. Split by `tools/final-split.mjs` — whole conversations to one half, assignment by a
+hash of the conversation id (`dataset/final-split-call-center.json`):
+
+| half | rows | heard | typed | rows the notice touches | prompt not recorded |
+|---|---:|---:|---:|---:|---:|
+| decision | 48 | 42 | 6 | 31 | 1 |
+| confirmation | 68 | 49 | 19 | 35 | 0 |
+
+The row without a recorded prompt cannot be replayed and is left out of both arms. Holdout is not used: its Call
+Center app rows were already read for this candidate (+0.46 ±0.80).
+
+**The arms** — the recipe of the dev pair, on the kept build's recorded prompts. Base: the prompt replayed to the
+generator, then the kept build's claim pass (`_claimVerifier-fix12`). Variant: the same with the notice of
+`tools/variants/cc-nopolicy-v1h.mjs` (heard turns, no document), then the same claim pass. A row the notice does
+not touch carries base's answer: judged once, a difference of exactly 0.
+
+**Three samples per touched row, each arm** (generation and claim pass each time). Reason, measured today: the same
+code sampled twice differs by ±0.5 on 40–50 rows (fix15's heard rows), so one sample per row is mostly sampling
+noise. An item's difference is the mean of its three (variant sample s − base sample s). Projected from the dev
+pair's spread: about ±0.40 on the decision half and ±0.31 on the confirmation half, against ±0.53 with one sample.
+
+**Rules.**
+* Decision half, all its rows (untouched rows count as 0): mean item difference at least +0.3; 95 % interval over
+  items excludes 0; hard fails, summed over every judged answer of each arm, not up.
+* Confirmation half — judged only if the decision half passes: mean item difference above 0; interval excludes 0;
+  hard fails not up.
+* One run. No second wording, no re-run, no pooling with the dev pair or the app rows. If the decision half fails,
+  the notice is dropped for good and the confirmation half stays unjudged.
+* If both pass, the notice is a candidate for the kept build as a Call Center-only change (the Call Center part of
+  `c399f399`; its wiring in the app is already shown by `aq2-*-fix16`: the notice on exactly the heard no-document
+  turns, 0 failed rows). The kept build changes only after that part is cut onto `fix/aq-astra-i5` with its tests,
+  type check and an app read of the Call Center rows; landing on main stays Evin's decision.
+* Judge: gpt-6-astra, charter `c725615a54f6`, this batch (calibrated 25 of 25 at 11:14Z on the key in use). A
+  judgment answered by the other key is not used until that key is calibrated. Aggregates only.
+
