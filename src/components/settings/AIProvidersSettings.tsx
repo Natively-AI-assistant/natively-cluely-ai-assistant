@@ -851,10 +851,13 @@ export const AIP_CSS = `
     border-radius:9999px; background: var(--aip-accent);
 }
 /* 27px = the row's 8px inset + the 11px tick + its 8px gap: the line starts
-   under the model's NAME, so it reads as belonging to that row. */
+   under the model's NAME, so it reads as belonging to that row.
+   6px above and below a 22px control = the 34px of a model row, so the test
+   button sits as far from the pill above it as that pill does from the next.
+   The 12px row gap keeps that pitch when a long translation wraps the line. */
 .aip-vision-detail {
-    display:flex; align-items:center; gap:6px; flex-wrap:wrap;
-    padding:2px 6px 8px 27px;
+    display:flex; align-items:center; gap:12px 6px; flex-wrap:wrap;
+    padding:6px 6px 6px 27px;
 }
 .aip-vision-label { font-size:11px; color: var(--aip-secondary); margin-right:2px; }
 /* Secondary while it is only what Auto WOULD say, or not an answer yet; primary
@@ -1007,9 +1010,34 @@ export const AIP_CSS = `
       needs measurement and JS, and the two rows are usually not both on screen —
       it would animate a trip through blank space or off the edge entirely.
       ────────────────────────────────────────────────────────────────────────── */
+/* ── The right-hand column of a model list: the default mark, "Set default", and
+      the test button on the line under a row. They stack in one column, so they
+      are ONE box — same height, same width, same corners, same type. The width is
+      that of the widest label in the current language, measured once per list
+      (AipModelList) and handed down as --aip-col-w; sized each to its own word,
+      the three ended at three different left edges. 82px covers English until
+      the measurement lands, and a use outside a list. ── */
 .aip-default-slot {
     display:flex; justify-content:flex-end; align-items:center;
-    min-width:82px;   /* holds "Set default" (the wider of the two) without reflow */
+    min-width: var(--aip-col-w, 82px);
+}
+.aip-col-pill { min-width: var(--aip-col-w, 82px); }
+/* As a plain block the wrapper set its button on a text baseline: 1.6px below
+   the centre of the row, and so below the mark and the test button. */
+.aip-default-slot > .aip-row-actions { display:flex; }
+/* Never seen: the column's labels at their natural width, for the measurement. */
+.aip-col-sizer { height:0; overflow:hidden; visibility:hidden; white-space:nowrap; pointer-events:none; }
+/* The default is one model picked out of many, so it wears what "the picked one"
+   wears everywhere in this pane: the raised pill of the provider tabs and of
+   Auto / On / Off. The box is the small button's own, so it cannot drift from
+   "Set default" beside it. No dot: a dot is a status lamp, and this is not a status. */
+.aip-default-mark {
+    display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box;
+    height:22px; padding:0 8px; border-radius: var(--aip-r-md);
+    font-size:10.5px; font-weight:500; line-height:1; white-space:nowrap; cursor:default;
+    color: var(--aip-hero); background: var(--aip-pill-bg);
+    border:1px solid var(--aip-pill-border);
+    box-shadow: var(--aip-pill-lift), var(--aip-pill-shadow);
 }
 /* Lands rather than appears. Scale from 0.94, not from 0 — nothing in the real
    world arrives from nothing — and ease-out rather than the spring, whose
@@ -1766,7 +1794,7 @@ export const AipVisionDetail: React.FC<{
                             <button
                                 type="button"
                                 tabIndex={open ? 0 : -1}
-                                className="aip-btn aip-btn-sm"
+                                className="aip-btn aip-btn-sm aip-col-pill"
                                 disabled={state.checking}
                                 title={t('Send this model a test image now and see whether it can read it')}
                                 onClick={onRetest}
@@ -1894,6 +1922,34 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     const idRef = useRef(`aip-models-${Math.random().toString(36).slice(2, 9)}`);
     const panelId = `${idRef.current}-panel`;
 
+    // The pill column (.aip-col-pill): every label this list can put in it, laid
+    // out unseen at its natural width; the widest sets the column. Measured while
+    // the list is open and before paint, so the pills never resize in view.
+    const colLabels = [
+        t('Default'),
+        ...(onSetDefault ? [t('Set default')] : []),
+        ...(visionControl ? [t('Test again'), t('Test now')] : []),
+    ];
+    const colKey = colLabels.join('\n');
+    const colSizerRef = useRef<HTMLDivElement>(null);
+    const [colWidth, setColWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        const sizer = colSizerRef.current;
+        if (!open || !sizer) return;
+        const labels = Array.from(sizer.children) as HTMLElement[];
+        const measure = () => {
+            const widest = Math.max(0, ...labels.map(el => el.offsetWidth));
+            // offsetWidth rounds to a whole pixel; the extra one keeps the floor
+            // above the widest label's real width, so all of them land on it.
+            if (widest > 0) setColWidth(widest + 1);
+        };
+        measure();
+        // A late font swap changes every label's width.
+        const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+        labels.forEach(el => observer?.observe(el));
+        return () => observer?.disconnect();
+    }, [open, colKey]);
+
     // Opt-in inverts the empty case: nothing is on until it is listed.
     const isOn = (id: string) => pickOnly ? id === defaultId : optIn ? enabled.includes(id) : (enabled.length === 0 || enabled.includes(id));
     const enabledCount = (!optIn && enabled.length === 0) ? models.length : enabled.length;
@@ -1986,7 +2042,17 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                 after the trigger it belongs to. */}
             <div className="aip-reveal aip-reveal--models w-full basis-full order-4" data-open={open ? 'true' : 'false'}>
                 <div>
-                    <div id={panelId} role="group" aria-label={pickOnly ? t('Models') : t('Models shown in the picker')} className="pt-2" onKeyDown={onListKeyDown}>
+                    <div
+                        id={panelId}
+                        role="group"
+                        aria-label={pickOnly ? t('Models') : t('Models shown in the picker')}
+                        className="pt-2"
+                        onKeyDown={onListKeyDown}
+                        style={colWidth ? { ['--aip-col-w' as string]: `${colWidth}px` } as React.CSSProperties : undefined}
+                    >
+                        <div ref={colSizerRef} className="aip-col-sizer" aria-hidden="true">
+                            {colLabels.map((label, i) => <span key={i} className="aip-btn aip-btn-sm">{label}</span>)}
+                        </div>
                         <div className="flex items-center gap-2 mb-2">
                         {showFilterBar && (
                             <>
@@ -2116,13 +2182,12 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                                 onClick={() => setVisionOpenId(cur => cur === m.id ? null : m.id)}
                                             />
                                         )}
-                                        {/* One fixed-width slot for both states. The badge is an
-                                            18px pill and the button is a wider 22px control, so
-                                            without a reserved slot every row's right edge would
-                                            shift as the default moves between rows. */}
+                                        {/* One slot for both states, as wide as the list's pill
+                                            column: the mark and the button are the same box, so
+                                            nothing in the row moves as the default changes rows. */}
                                         <div className="aip-default-slot shrink-0">
                                             {isDefault ? (
-                                                <AipBadge tone="neutral" label={t('Default')} className="aip-default-mark" />
+                                                <span className="aip-default-mark aip-col-pill">{t('Default')}</span>
                                             ) : onSetDefault && (
                                                 // 0.5 opacity at rest, not 0: an action that is invisible
                                                 // until hover is unreachable by keyboard and touch.
@@ -2130,7 +2195,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                                     <button
                                                         type="button"
                                                         onClick={() => onSetDefault(m.id)}
-                                                        className="aip-btn aip-btn-sm"
+                                                        className="aip-btn aip-btn-sm aip-col-pill"
                                                         title={t('Use this model by default for this provider')}
                                                     >
                                                         {t('Set default')}

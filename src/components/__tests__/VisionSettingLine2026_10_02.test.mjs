@@ -103,3 +103,64 @@ describe('the control (source)', () => {
         for (const b of buttons) assert.match(b, /tabIndex=\{open \? 0 : -1\}/);
     });
 });
+
+// The right-hand column of a model list: the default mark, "Set default", and the
+// test button on the line under a row. They stack, so they are one box.
+describe('the pill column (source)', () => {
+    const src = readFileSync(join(here, '..', 'settings', 'AIProvidersSettings.tsx'), 'utf8');
+    const css = src.slice(src.indexOf('const AIP_CSS'), src.indexOf('export const AipBadge'));
+    const list = src.slice(src.indexOf('export const AipModelList'));
+    const detail = src.slice(src.indexOf('export const AipVisionDetail'), src.indexOf('export interface AipModelEntry'));
+    const rule = (selector) => {
+        const at = css.indexOf(`\n${selector} {`);
+        assert.ok(at >= 0, `no rule for ${selector}`);
+        return css.slice(at, css.indexOf('}', at));
+    };
+
+    test('all three are in the column', () => {
+        assert.match(list, /<span className="aip-default-mark aip-col-pill">\{t\('Default'\)\}<\/span>/);
+        assert.match(list, /className="aip-btn aip-btn-sm aip-col-pill"[\s\S]{0,400}\{t\('Set default'\)\}/);
+        assert.match(detail, /className="aip-btn aip-btn-sm aip-col-pill"[\s\S]{0,400}t\('Test again'\)/);
+    });
+
+    test('the default mark has no dot and is not the status badge', () => {
+        assert.doesNotMatch(list, /<AipBadge[^>]*label=\{t\('Default'\)\}/);
+        assert.doesNotMatch(rule('.aip-default-mark'), /text-transform/);
+    });
+
+    test('the mark is the small button\'s box', () => {
+        const mark = rule('.aip-default-mark'), small = rule('.aip-btn-sm'), button = rule('.aip-btn');
+        for (const decl of ['height:22px', 'padding:0 8px', 'font-size:10.5px']) {
+            assert.ok(small.includes(decl), `.aip-btn-sm lost ${decl}`);
+            assert.ok(mark.includes(decl), `.aip-default-mark lacks ${decl}`);
+        }
+        for (const decl of ['border-radius: var(--aip-r-md)', 'font-weight:500', 'line-height:1']) {
+            assert.ok(button.includes(decl), `.aip-btn lost ${decl}`);
+            assert.ok(mark.includes(decl), `.aip-default-mark lacks ${decl}`);
+        }
+        assert.match(mark, /border:1px solid/);
+    });
+
+    test('the slot and the pills take one measured width', () => {
+        assert.match(rule('.aip-default-slot'), /min-width: var\(--aip-col-w, 82px\)/);
+        assert.match(rule('.aip-col-pill'), /min-width: var\(--aip-col-w, 82px\)/);
+        assert.match(list, /\['--aip-col-w' as string\]: `\$\{colWidth\}px`/);
+    });
+
+    test('the measurement covers every label the list can show, and runs only while open', () => {
+        const labels = list.slice(list.indexOf('const colLabels = ['), list.indexOf('const colKey'));
+        for (const l of ['Default', 'Set default', 'Test again', 'Test now']) assert.ok(labels.includes(`t('${l}')`), `${l} is not measured`);
+        const effect = list.slice(list.indexOf('const colSizerRef'), list.indexOf('// Opt-in inverts'));
+        assert.match(effect, /if \(!open \|\| !sizer\) return;/);
+        assert.match(effect, /\}, \[open, colKey\]\);/);
+        assert.match(list, /className="aip-col-sizer" aria-hidden="true"/);
+    });
+
+    test('the line under a row is one row tall, so the column keeps its pitch', () => {
+        assert.match(rule('.aip-model-row'), /min-height:34px/);
+        const line = rule('.aip-vision-detail');
+        assert.match(line, /padding:6px 6px 6px 27px/);   // 6 + 22 + 6 = 34
+        assert.match(line, /gap:12px 6px/);               // a wrapped line keeps the 34px pitch
+        assert.match(rule('.aip-default-slot > .aip-row-actions'), /display:flex/);
+    });
+});
