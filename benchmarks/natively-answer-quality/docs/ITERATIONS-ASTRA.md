@@ -1356,7 +1356,7 @@ the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Hol
   that comparison cannot come back incomplete; every queued run's id equals its directory name, so the renamed out
   files are the ones the readers open.
 
-### Reasoning turns and the output cap — checked 01:36Z, nothing to change
+### Reasoning turns and the output cap — checked 01:33Z, nothing to change
 * Reasoning and answer share `max_tokens` (8,192 in the app). Across the 420 reasoning replays the completion size is
   407–490 tokens at the median, 955–1,907 at p95, 3,393 at most: the cap is not near.
 * The one empty reply (1 of 420; holdout, a heard prompt) was not a cap stop: 111 completion tokens, 573 characters
