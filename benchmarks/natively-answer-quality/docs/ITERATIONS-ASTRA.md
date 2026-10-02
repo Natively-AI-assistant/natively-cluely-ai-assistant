@@ -1640,3 +1640,31 @@ work heard (+1.43 ±0.71, 24) and Team Meet heard (+0.51 ±0.53, 15); Recruiting
   more against 4 better; on holdout +0.05 (±0.48) over 23. If none of those 55 edits were made the dev mean would
   move by about +0.035 — not a lever, and not decidable at this sample size. No change.
 
+## The candidates' app rows and supp-behavior, judged — reported only (12:44Z)
+
+`node astra/promote.mjs` (aggregates; paired by item with the kept build's rows, `aq2-*-fix13c`). No part has a BUILD
+verdict, so none of this enters a rule.
+
+| candidate in the app | dev: kept → candidate | gain (95 %) | hard fails | holdout: kept → candidate | gain (95 %) | hard fails |
+|---|---:|---:|---:|---:|---:|---:|
+| fix15, typed Technical interview + Lecture rows (reasoning), 31 / 21 | 8.83 → 9.30 | +0.47 (±0.51) | 3 → 1 | 8.53 → 8.86 | +0.33 (±0.73) | 2 → 2 |
+| fix15, heard rows — unchanged code, a second sample, 49 / 39 | 8.38 → 8.43 | +0.05 (±0.52) | 10 → 9 | 8.69 → 8.16 | −0.53 (±0.71) | 4 → 10 |
+| fix14, Looking for work, 40 / 30 | 7.92 → 8.14 | +0.22 (±0.36) | 7 → 7 | 7.74 → 8.11 | +0.37 (±0.44) | 7 → 5 |
+| fix16, Call Center, 40 / 30 | 7.63 → 8.19 | +0.57 (±0.62) | 7 → 4 | 7.93 → 8.39 | +0.46 (±0.80) | 5 → 2 |
+| fix16, Sales, 40 / 30 | 8.44 → 8.35 | −0.09 (±0.66) | 3 → 5 | 8.49 → 8.29 | −0.20 (±0.69) | 3 → 3 |
+
+* "Question left unanswered" flags: Looking for work 8 → 4 (dev), 3 → 4 (holdout); Call Center 8 → 3, 1 → 1; Sales
+  4 → 2, 2 → 2.
+* **The heard rows of fix15 are the noise floor of an app comparison.** Same code as the kept build on those turns,
+  a new sample: −0.53 (±0.71) on holdout with hard fails 4 → 10. An app-row difference of half a point on 30–40
+  rows is what resampling alone produces; the replay pairs (unchanged rows carried, a difference of exactly 0) are
+  the cleaner instrument, and they are the ones the rules used.
+* **The Sales notice does not hold up in the app** (−0.09 dev, −0.20 holdout, hard fails 3 → 5 on dev), after
+  +0.31 (±0.36) on the replay pair. Had it been built on the replay's direction alone it would have been a
+  mistake; the interval rule is what kept it out.
+* Call Center and Looking for work read positive on every set (replay dev, app dev, app holdout) with fewer hard
+  fails, and clear no interval on any of them. They stay unbuilt under the rule; they are the first things to test
+  again if the dev set per mode is enlarged (report section 10, item 5).
+* supp-behavior (72 items), judged: fix6 8.11 → fix11 8.33, +0.23 (±0.37), hard fails 17 → 11. The 10 Seminar rows
+  fix12 re-ran: 9.21 → 9.34, +0.13 (±0.29), 0 hard fails on either side.
+

@@ -40,9 +40,24 @@ are the live conversation, where that delay costs most and where most of the gai
 **The starting baseline is now judged in full**, so the headline no longer rests on a partial comparison: dev
 7.76 → 8.54 (+0.78 ±0.22), hard fails 89 → 37 of 360; holdout 7.92 → 8.47 (+0.55 ±0.25), hard fails 61 → 31 of 270.
 
-**Still being judged in this batch, none of it able to change a decision:** the claim pass on the rows it edited
-(streamed draft against shown answer), supp-behavior, then the candidates' app rows (reported only), the blind
-pairwise set and fix10. The queue stops when the ration pool does and resumes at the next batch (02:00 UTC).
+**The candidates' app rows, judged later in the same batch and reported only** (each candidate build against the
+kept build, paired by item; a different generation sample on every row, so these are noisier than the replay pairs):
+
+| candidate in the app | dev: gain (95 %) | hard fails | holdout: gain (95 %) | hard fails |
+|---|---:|---:|---:|---:|
+| Reasoning, the typed Technical interview + Lecture rows (31 / 21) | +0.47 (±0.51) | 3 → 1 | +0.33 (±0.73) | 2 → 2 |
+| the same build's heard rows — unchanged code, a second sample (49 / 39) | +0.05 (±0.52) | 10 → 9 | −0.53 (±0.71) | 4 → 10 |
+| Looking for work, fallback rule (40 / 30) | +0.22 (±0.36) | 7 → 7 | +0.37 (±0.44) | 7 → 5 |
+| Call Center notice (40 / 30) | +0.57 (±0.62) | 7 → 4 | +0.46 (±0.80) | 5 → 2 |
+| Sales notice (40 / 30) | −0.09 (±0.66) | 3 → 5 | −0.20 (±0.69) | 3 → 3 |
+
+They agree with the verdicts: nothing clears its interval, and the Sales notice reads negative in the app. The
+second row is the caution for every other line: the same code, sampled again, moved by half a point and from 4 to
+10 hard fails on 39 holdout rows.
+
+**Still being judged at 12:44 UTC, none of it able to change a decision:** the blind pairwise set (fix6 against
+fix11), fix10, and five reported-only replays. If the ration pool ends first, the rest waits for a chain armed for
+the 02:00 UTC batch.
 
 **The laptop's disk.** Free space fell to 0.29 GB at 11:06 UTC while another session was building, and stopped the
 first calibration. The judge now holds its calls through such a dip and its files survive a write cut short
@@ -453,13 +468,15 @@ Time to first word: unchanged (against fix6: dev 854 → 875 ms, holdout 779 →
   was met 2 of 8 times on dev in the main-code run, 1 of 8 in fix11 and 8 of 8 in fix13; on holdout 2 of 6 in fix11
   and 4 of 4 (the ones that get the notice) in fix13; on the final set 5 of 9 in fix6 and 9 of 9 in fix13. "Shorter" now returns a median 52% of the previous reply's
   words (92–96% before).
-* supp-behavior (72): fix12 validators 8 of 9 (fix6 8 of 9). The one failure is an unedited Lecture answer (Lecture
+* supp-behavior (72), judged 2026-10-02: fix6 8.11 → fix11 8.33, +0.23 (±0.37), hard fails 17 → 11; the 10 Seminar
+  rows fix12 re-ran: 9.21 → 9.34, +0.13 (±0.29), no hard fail on either side. Validators: fix12 8 of 9 (fix6 8 of 9). The one failure is an unedited Lecture answer (Lecture
   has no verifier). Seminar: 5 of 5 (fix11 3 of 5, fix6 4 of 5).
 * supp-quant (32), arithmetic validators: main 25 of 32; later builds 28–31 of 32 (fix6 31, fix10 29, fix12 30) —
   the same code path since I2, the spread is sampling.
-* Judged on 2026-10-02: the 2 dev Seminar rows of fix12 and the whole starting baseline (dev 159, holdout 68 rows
-  that were missing). Still in the queue behind the decisions, in this order: the claim pass on its edited rows
-  (draft against shown), supp-behavior, the candidates' app rows (reported only), the blind A/B fix6 vs fix11, fix10.
+* Judged on 2026-10-02: the 2 dev Seminar rows of fix12, the whole starting baseline (dev 159, holdout 68 rows that
+  were missing), the claim pass on its edited rows (section 5), supp-behavior, and the candidates' app rows
+  (section 0, reported only). In the queue behind them: the blind A/B fix6 vs fix11, fix10, five reported-only
+  replays.
 
 ## 9. Remaining architectural weaknesses (stop condition B)
 
