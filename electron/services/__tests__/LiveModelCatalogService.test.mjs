@@ -174,4 +174,51 @@ describe('LiveModelCatalogService', () => {
     // Crucial: Cache must still contain new-model, NOT overwritten by old-model
     assert.equal(mockCm.getCloudFetchedModels('openai')[0].id, 'new-model');
   });
+
+  test('overlapping forced refreshes: older slow request does not overwrite newer catalog', async () => {
+    const mockCm = new MockCredentialsManager();
+    mockCm.credentials.apiKeys.openai = 'same-key';
+
+    let resolveFirstFetch;
+    let callCount = 0;
+
+    const mockFetcher = async (provider, apiKey) => {
+      callCount++;
+      if (callCount === 1) {
+        return new Promise((resolve) => {
+          resolveFirstFetch = () => resolve([{ id: 'first-model-slow', label: 'First Model' }]);
+        });
+      }
+      if (callCount === 2) {
+        return [{ id: 'second-model-fast', label: 'Second Model' }];
+      }
+      return [];
+    };
+
+    const service = new LiveModelCatalogService({
+      credentialsManager: mockCm,
+      fetcher: mockFetcher,
+    });
+
+    // Start 1st forced refresh (slow)
+    const firstPromise = service.refreshProvider('openai', true);
+
+    // Start 2nd forced refresh (fast) while 1st is still in flight
+    const secondPromise = service.refreshProvider('openai', true);
+
+    // 2nd finishes first
+    const secondResult = await secondPromise;
+    assert.equal(secondResult.success, true);
+    assert.equal(secondResult.models[0].id, 'second-model-fast');
+    assert.equal(mockCm.getCloudFetchedModels('openai')[0].id, 'second-model-fast');
+
+    // Now 1st finishes later
+    resolveFirstFetch();
+    const firstResult = await firstPromise;
+    assert.equal(firstResult.success, false);
+    assert.equal(firstResult.error, 'Superseded by a newer refresh request');
+
+    // The cache must NOT be overwritten with first-model-slow!
+    assert.equal(mockCm.getCloudFetchedModels('openai')[0].id, 'second-model-fast');
+  });
 });

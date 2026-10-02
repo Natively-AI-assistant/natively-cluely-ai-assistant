@@ -33,6 +33,8 @@ export class LiveModelCatalogService {
     private onUpdated?: (provider: string, models: ProviderModel[]) => void;
     private inFlight = new Map<string, Promise<{ success: boolean; models: ProviderModel[]; error?: string }>>();
     private inFlightKey = new Map<string, string>();
+    private inFlightSeq = new Map<string, number>();
+    private requestSeq = new Map<string, number>();
 
     constructor(options?: LiveModelCatalogOptions) {
         this.credentialsManager = options?.credentialsManager;
@@ -112,6 +114,7 @@ export class LiveModelCatalogService {
         const key = this.getApiKeyForProvider(provider)?.trim();
 
         if (!key) {
+            this.requestSeq.set(provider, (this.requestSeq.get(provider) || 0) + 1);
             cm.setCloudFetchedModels?.(provider, [], 0);
             return {
                 success: false,
@@ -132,6 +135,9 @@ export class LiveModelCatalogService {
             return this.inFlight.get(provider)!;
         }
 
+        const seq = (this.requestSeq.get(provider) || 0) + 1;
+        this.requestSeq.set(provider, seq);
+
         const task = (async () => {
             try {
                 const models = await this.fetcher(provider, key);
@@ -143,6 +149,15 @@ export class LiveModelCatalogService {
                         success: false,
                         models: cm.getCloudFetchedModels?.(provider) || [],
                         error: 'Credential changed while request was in-flight',
+                    };
+                }
+
+                // Verify that a newer refresh has not started/completed (distinguish overlapping requests)
+                if (this.requestSeq.get(provider) !== seq) {
+                    return {
+                        success: false,
+                        models: cm.getCloudFetchedModels?.(provider) || [],
+                        error: 'Superseded by a newer refresh request',
                     };
                 }
 
@@ -180,15 +195,17 @@ export class LiveModelCatalogService {
                     error: error?.message || 'Failed to refresh provider models',
                 };
             } finally {
-                if (this.inFlightKey.get(provider) === key) {
+                if (this.inFlightSeq.get(provider) === seq) {
                     this.inFlight.delete(provider);
                     this.inFlightKey.delete(provider);
+                    this.inFlightSeq.delete(provider);
                 }
             }
         })();
 
         this.inFlight.set(provider, task);
         this.inFlightKey.set(provider, key);
+        this.inFlightSeq.set(provider, seq);
         return task;
     }
 
