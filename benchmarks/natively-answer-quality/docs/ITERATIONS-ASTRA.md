@@ -1261,3 +1261,21 @@ The app sends `thinking: disabled` on every DeepSeek turn. Same 80 recorded dev 
   and total, against the kept build; (4) the judged typed rows are not below the kept build's: fix15 is promoted if
   the typed-row change is positive on holdout with hard fails not up, and positive on dev. If (1)–(3) fail it is
   fixed or reverted; if (4) fails it stays a candidate.
+
+### The reference build (fix6) against the kept build under Fable — the mean gain is NOT confirmed, the hard-fail cut is
+| | fix6 | kept build (fix13) | change (95%) | hard fails |
+|---|---:|---:|---:|---:|
+| holdout (270), Fable | 8.28 | 8.35 | +0.07 (±0.14) | 24 → 13 |
+| dev (360), Fable | 8.34 | 8.29 | −0.05 (±0.12) | 28 → 23 |
+| holdout, gpt-6-astra (fix6 → fix12) | 8.02 | 8.43 | +0.41 (±0.23) | 60 → 31 |
+| dev, gpt-6-astra (fix6 → fix12) | 8.24 | 8.49 | +0.25 (±0.18) | 66 → 38 |
+
+* Both judges see the claim pass roughly halve hard fails on holdout. They disagree on what that is worth on the
+  mean: gpt-6-astra caps an invented claim more often (60 hard fails on fix6 against Fable's 24) and so rewards its
+  removal; Fable marks the thinner reply that is left about as low as the claim it replaced. Same-draft pairs say
+  the same thing (dev +0.10, 31 → 12; holdout +0.52, 25 → 6 on the edited rows only).
+* What this changes: nothing in the build — hard-fail reduction ranks first and holds under both judges. What it
+  changes in the report: "holdout +0.41" is one judge's reading; under the other the kept build is mean-neutral
+  against fix6 with half the hard fails, for +0.45–0.7 s to the settled answer and a text swap on a fifth of turns.
+  Per mode on holdout under Fable no difference is outside its interval; Sales is the lowest at −0.22 (±0.38).
+* Reported only: the Call Center and Sales notices on typed turns too — +0.10 (±0.36) and +0.08 (±0.19). Not built.
