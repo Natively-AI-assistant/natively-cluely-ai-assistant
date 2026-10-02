@@ -1518,3 +1518,21 @@ the same items (fix13c composites). Holdout: aggregates only. Tools: `tools/nodo
   answered from the cache, 0 network calls (its 2 unjudged Seminar rows are tier 1's).
 * The armed chain (pid 32411) starts `queue3.mjs` as a new process, so it runs this code at 11:00Z.
 
+## Does the claim pass remove a conflict note the draft had? Counted on the existing rows (2026-10-02 09:10Z)
+
+No judge, no generation: the objective validators applied to the streamed draft and to the shown answer of the
+same row.
+
+| run | conflict rows | edited by the claim pass | pass both | draft passes, shown fails | fail both |
+|---|---:|---:|---:|---:|---:|
+| kept build, dev (`aq2-dev-fix13c`) | 7 | 3 | 6 | 0 | 1 |
+| fix11, dev | 7 | 4 | 6 | 0 | 1 |
+| fix16, dev (Call Center + Sales only) | 2 | 2 | 1 | 1 | 0 |
+| kept build, holdout | 1 | 0 | 1 | 0 | 0 |
+
+Across the kept build and fix11 the pass edited 7 conflict answers and removed the note from none; fix16's one
+flip (DSALES-026, logged above) is the only one in any run. One in nine edited conflict answers is not a pattern
+to write a rule for, and 7 dev rows cannot show one either way. No change. The weakness as written in the report
+(section 9, item 5) is the generator not raising the conflict in the first place (the row that fails both), which
+is the "conflict chip" proposal, not the claim pass.
+
