@@ -8,12 +8,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mean, median, pct, CRITICAL_FLAGS } from './score.mjs';
+import { readJsonl } from './store.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
 const list = (v) => (v ? String(v).split(',').filter(Boolean) : []);
-const readJsonl = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
 const f2 = (x) => (x == null ? '-' : x.toFixed(2));
 const MODES = ['general', 'sales', 'recruiting', 'team-meet', 'looking-for-work', 'lecture', 'technical-interview', 'seminar', 'call-center'];
 const out = { absolute: {}, pairwise: {}, integrity: { calls: 0, mismatches: 0, returned_models: {} } };

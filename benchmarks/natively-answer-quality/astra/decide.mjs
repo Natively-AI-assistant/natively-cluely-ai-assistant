@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readJsonl } from './store.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GAIN = 0.3;
@@ -18,10 +19,7 @@ const JUDGED = FABLE ? '.judged-fable.jsonl' : '.judged.jsonl';
 function load(f) {
   const p = path.join(ROOT, f);
   const by = {};
-  if (!fs.existsSync(p)) return by;
-  for (const l of fs.readFileSync(p, 'utf8').split('\n')) {
-    if (!l) continue;
-    const j = JSON.parse(l);
+  for (const j of readJsonl(p)) {
     if (!j.ok || !j.official || (j.repeat ?? 0) !== 0 || (j.k ?? 0) !== 0) continue;
     by[j.benchmark_id] = { s: j.official.overall, hf: !!j.official.hard_fail };
   }

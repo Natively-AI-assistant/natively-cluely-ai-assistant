@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { freeDiskMb, DISK_FLOOR_MB } from './client.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -78,6 +79,7 @@ const TIERS = [
 const logDir = path.join(HERE, 'out', 'logs');
 fs.mkdirSync(logDir, { recursive: true });
 let rationed = false;
+let diskFull = false;
 const summary = { started_at: new Date().toISOString(), steps: [] };
 
 function runStep([name, argv, needs]) {
@@ -88,12 +90,12 @@ function runStep([name, argv, needs]) {
     log.write(`\n=== ${name} ${new Date().toISOString()}\n`);
     console.log(`${new Date().toISOString().slice(11, 19)} start ${name}`);
     const child = spawn(process.execPath, argv, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
-    const watch = (buf) => { const s = String(buf); log.write(s); if (/402 ration exhausted|account quota exhausted/.test(s)) rationed = true; };
+    const watch = (buf) => { const s = String(buf); log.write(s); if (/402 ration exhausted|account quota exhausted|disk nearly full/.test(s)) rationed = true; if (/disk nearly full/.test(s)) diskFull = true; };
     child.stdout.on('data', watch);
     child.stderr.on('data', watch);
     child.on('close', (code) => {
       const ms = Date.now() - t0;
-      console.log(`${new Date().toISOString().slice(11, 19)} done  ${name} exit ${code} in ${Math.round(ms / 1000)} s${rationed ? ' (ration hit)' : ''}`);
+      console.log(`${new Date().toISOString().slice(11, 19)} done  ${name} exit ${code} in ${Math.round(ms / 1000)} s${diskFull ? ' (disk full)' : rationed ? ' (ration hit)' : ''}`);
       summary.steps.push({ name, exit: code, seconds: Math.round(ms / 1000), rationed });
       log.end();
       resolve();
@@ -101,9 +103,23 @@ function runStep([name, argv, needs]) {
   });
 }
 
+// A judgment that cannot be saved is a ration call spent for nothing (the client refuses to call below the floor).
+// Wait for space before a tier rather than give the batch up at once: the disk is shared with other work.
+async function diskReady() {
+  const until = Date.now() + Number(opt('disk-wait-min', 30)) * 60000;
+  let said = false;
+  while (freeDiskMb() < DISK_FLOOR_MB) {
+    if (!said) { console.log(`disk nearly full (${Math.round(freeDiskMb())} MB free, floor ${DISK_FLOOR_MB} MB) — waiting for space`); said = true; }
+    if (Date.now() > until) return false;
+    await new Promise((r) => setTimeout(r, 30000));
+  }
+  return true;
+}
+
 const fromTier = Number(opt('from-tier', 0));
 for (let t = fromTier; t < TIERS.length; t++) {
-  if (rationed) { console.log(`ration spent — tier ${t} and later wait for the next batch`); break; }
+  if (!rationed && !(await diskReady())) { rationed = true; diskFull = true; }
+  if (rationed) { console.log(`${diskFull ? 'disk nearly full' : 'ration spent'} — tier ${t} and later wait for the next batch`); break; }
   console.log(`\n--- tier ${t}: ${TIERS[t].map((s) => s[0]).join(', ')}`);
   await Promise.all(TIERS[t].map(runStep));
   if (t === 0 && summary.steps.find((s) => s.name === 'calibrate')?.exit !== 0) { console.log('calibration did not pass — stopping'); break; }
@@ -117,6 +133,7 @@ for (const [script, file] of [['astra/decide.mjs', 'decide.md'], ['astra/promote
   });
 }
 summary.finished_at = new Date().toISOString();
-summary.rationed = rationed;
+summary.rationed = rationed && !diskFull;
+summary.disk_full = diskFull;
 fs.writeFileSync(path.join(logDir, `queue3-${summary.started_at.replace(/[:.]/g, '-')}.json`), JSON.stringify(summary, null, 2));
-console.log(`\nqueue3 ${rationed ? 'stopped at the ration' : 'done'} ${summary.finished_at}`);
+console.log(`\nqueue3 ${diskFull ? 'stopped: disk nearly full' : rationed ? 'stopped at the ration' : 'done'} ${summary.finished_at}`);

@@ -13,14 +13,14 @@
 //     and tools/refine-check.mjs.
 // Aggregates only: nothing here prints a row or an id, so it is safe for holdout.
 //   node astra/promote.mjs [--root <harness dir>]
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readJsonl } from './store.mjs';
 
 // --root <dir>: read another harness tree (the test uses a made-up one).
 const rootArg = process.argv.indexOf('--root');
 const ROOT = rootArg >= 0 ? path.resolve(process.argv[rootArg + 1]) : path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const jl = (f) => (fs.existsSync(path.join(ROOT, f)) ? fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+const jl = (f) => readJsonl(path.join(ROOT, f));
 function judged(f) {
   const by = {};
   for (const j of jl(f)) {

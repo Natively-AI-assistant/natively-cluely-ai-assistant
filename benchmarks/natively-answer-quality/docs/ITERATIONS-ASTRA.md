@@ -1483,3 +1483,38 @@ the same items (fix13c composites). Holdout: aggregates only. Tools: `tools/nodo
   it is recorded as such and goes to Evin with this explanation if Sales gets a BUILD verdict — the rule is not
   re-worded here.
 * App stopped through its launcher; build output deleted (5.2 GB free).
+
+## The disk was full two hours before the batch — the judge's files made safe against it (2026-10-02 09:09Z)
+
+* **Measured 09:02Z:** data volume 0.83 GB free, 100 % used; swap 6.2 of 7.2 GB. Free space was 5.2 GB at 05:00Z.
+  Not this loop's files: harness results 259 MB, judge output 19 MB, scratchpad 12 MB. What is on the disk and
+  idle: `dist-electron` in the main checkout (1.3 GB, built 02:36Z by another session) and in the
+  `nightly-judge-gate` worktree (1.3 GB); `.agent` app data from 25–27 September in the main checkout (1.0 GB),
+  `meeting-overlay-memory` (1.1 GB) and `auto-answer-live` (0.85 GB); a staged ChatGPT app update in the user
+  cache (about 1.1 GB, written 05:53Z). None of it is this loop's, so none of it was deleted — listed for Evin.
+  The one thing that was this loop's, `aq-fix2/.agent/userdata` (67 MB, left by the fix16 run, ignored, no open
+  file), is deleted. Free space at 09:08Z: 2.7 GB (the other 1.8 GB came back on its own; it moves by gigabytes
+  within minutes).
+* **Why it matters for the batch.** The judge wrote its cache with a plain whole-file write and its output with a
+  plain append, and every reader parsed every line. A write cut short by a full disk would leave half a cache
+  file or half a line, and every later run of that step — and `decide.mjs`, `promote.mjs`, `report.mjs` — would
+  stop on `JSON.parse`. Calls already answered would be lost with it: ration spent, nothing saved.
+* **Change (harness only, no judge behaviour changed):**
+  * `astra/store.mjs`: `readJsonl` skips a line that does not parse and says how many on stderr (which lands in
+    `decide.md` / `promote.md`); `readJsonOrNull` reads a cut-short cache file as not cached; `writeAtomic` writes
+    through a temp file and a rename; `appendLine` starts a fresh line when the file does not end in one.
+  * `astra/client.mjs`: before each judge call, free space on the harness volume is read (`fs.statfsSync`); under
+    300 MB (`AQ_DISK_FLOOR_MB`) no call is sent and the client prints `disk nearly full (N MB free) … — stopping
+    new judge calls`. A save that fails (`saved()` in `astra/judge.mjs`) does the same instead of ending the step
+    with the calls in flight lost.
+  * `astra/queue3.mjs`: stops on that line as it does on the ration, and before each tier waits up to 30 minutes
+    (`--disk-wait-min`) for space rather than give the batch up at once. The summary records `disk_full` apart
+    from `rationed`.
+  * Inputs the batch does not write (run files, replay answer files, `mapping.json`) are still read strictly.
+* **Checks:** `node --test astra/store.test.mjs astra/client-keys.test.mjs astra/promote.test.mjs` → 21/21 (5 new
+  in `store.test.mjs`, 1 new in `client-keys.test.mjs`: under the floor no request is sent and the queue's stop
+  regex, read from its source, matches the line). `decide.mjs` and `promote.mjs` print the same as before the
+  change on the real tree. Cache-hit path offline with the network refused: `aq2-dev-fix12`, 38 of 38 judged rows
+  answered from the cache, 0 network calls (its 2 unjudged Seminar rows are tier 1's).
+* The armed chain (pid 32411) starts `queue3.mjs` as a new process, so it runs this code at 11:00Z.
+

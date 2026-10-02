@@ -24,13 +24,14 @@ const QUEUE_STOP = new RegExp(stopLiteral[1]);
 
 let seq = 0;
 /** A fresh client (its own module state) over the given keys, probe record and per-key answers. */
-async function client({ keys = { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY_1: KEY_B }, probeKeyVar = 'AGENTROUTER_API_KEY', answer }) {
+async function client({ keys = { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY_1: KEY_B }, probeKeyVar = 'AGENTROUTER_API_KEY', answer, diskFloorMb = null }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aq-client-keys-'));
   fs.copyFileSync(path.join(HERE, 'client.mjs'), path.join(dir, 'client.mjs'));
   fs.writeFileSync(path.join(dir, 'probe-result.json'), JSON.stringify({ ok: true, model_listed: true, requested_model: 'gpt-6-astra', key_var: probeKeyVar, unsupported_params: [], token_param: 'max_tokens' }));
   const envFile = path.join(dir, 'env');
   fs.writeFileSync(envFile, Object.entries(keys).map(([k, v]) => `${k}=${v}`).join('\n') + '\nOTHER=1\n');
   process.env.NATIVELY_ENV_FILE = envFile;
+  if (diskFloorMb != null) process.env.AQ_DISK_FLOOR_MB = String(diskFloorMb);
   const calls = [];
   const lines = [];
   const realFetch = globalThis.fetch; const realError = console.error;
@@ -42,7 +43,7 @@ async function client({ keys = { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY
   };
   console.error = (...x) => { lines.push(x.join(' ')); };
   const m = await import(`${pathToFileURL(path.join(dir, 'client.mjs')).href}?case=${++seq}`);
-  const restore = () => { globalThis.fetch = realFetch; console.error = realError; delete process.env.NATIVELY_ENV_FILE; fs.rmSync(dir, { recursive: true, force: true }); };
+  const restore = () => { globalThis.fetch = realFetch; console.error = realError; delete process.env.NATIVELY_ENV_FILE; delete process.env.AQ_DISK_FLOOR_MB; fs.rmSync(dir, { recursive: true, force: true }); };
   return { m, calls, lines, restore };
 }
 const MSG = [{ role: 'user', content: 'x' }];
@@ -143,5 +144,29 @@ test('one key in the env file: as before, the first refusal stops new calls', as
     await d.m.chat(MSG);
     assert.deepEqual(d.calls, ['A']);
     assert.match(d.m.RATIONED, /402 ration exhausted/);
+  } finally { d.restore(); }
+});
+
+test('less free disk than the floor: no request is sent, and the queue sees its stop line', async () => {
+  // A floor no volume can meet stands in for a full disk.
+  const c = await client({ diskFloorMb: 1e15, answer: () => OK_200 });
+  try {
+    assert.ok(c.m.freeDiskMb() > 0);
+    const r = await c.m.chat(MSG);
+    assert.equal(r.ok, false);
+    assert.equal(r.rationed, true);
+    assert.equal(r.status, null, 'not reported as a 402');
+    assert.equal(c.calls.length, 0, 'a judgment that could not be saved is not asked for');
+    assert.match(c.m.RATIONED, /^disk nearly full \(\d+ MB free\)/);
+    assert.equal(c.lines.length, 1);
+    assert.ok(QUEUE_STOP.test(c.lines[0]));
+    await c.m.chat(MSG);
+    assert.equal(c.lines.length, 1, 'said once');
+  } finally { c.restore(); }
+  // With the default floor and room on the disk, calls go through as before.
+  const d = await client({ answer: () => OK_200 });
+  try {
+    assert.equal(d.m.DISK_FLOOR_MB, 300);
+    if (d.m.freeDiskMb() >= 300) assert.equal((await d.m.chat(MSG)).ok, true);
   } finally { d.restore(); }
 });

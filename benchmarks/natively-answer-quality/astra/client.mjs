@@ -192,11 +192,24 @@ export async function rawCall(method, route, body, { timeoutMs = 120000, keyInde
 /** Set once AgentRouter answers 402 (GPT ration batch exhausted): every later call fails fast, so a run stops
  *  spending and resumes from the cache in the next batch (02:00 / 11:00 UTC). */
 export let RATIONED = null;
+/** A judgment that cannot be saved is a ration call spent for nothing: below this much free space on the volume the
+ *  harness writes to, no new call starts (2026-10-02 09:02Z: 0.8 GB free, 100 % full, two hours before a batch). */
+export const DISK_FLOOR_MB = Number(process.env.AQ_DISK_FLOOR_MB ?? 300);
+export function freeDiskMb() {
+  try { const s = fs.statfsSync(HERE); return (Number(s.bavail) * Number(s.bsize)) / 1048576; } catch { return Infinity; }
+}
+/** Stop new judge calls for a reason that is not the ration. queue3.mjs stops on the same line. */
+export function stopNewCalls(reason) {
+  if (RATIONED) return;
+  RATIONED = `${reason} at ${new Date().toISOString()}`;
+  console.error(`[astra] ${RATIONED} — stopping new judge calls`);
+}
 /** Set once a route rejects temperature=0 (spec §19: drop only the rejected optional parameter). */
 export let TEMPERATURE_REJECTED = false;
 export async function chat(messages, { maxTokens = 4000, temperature = 0, retries = 5, timeoutMs = 180000 } = {}) {
   if (JUDGE === 'fable') return chatFable(messages, { retries: Math.min(retries, 3), timeoutMs: Math.max(timeoutMs, 300000) });
-  if (RATIONED) return { ok: false, rationed: true, status: 402, error: RATIONED, requested_model: JUDGE_MODEL, attempts: 0, at: new Date().toISOString() };
+  if (!RATIONED) { const mb = freeDiskMb(); if (mb < DISK_FLOOR_MB) stopNewCalls(`disk nearly full (${Math.round(mb)} MB free)`); }
+  if (RATIONED) return { ok: false, rationed: true, status: RATIONED.startsWith('disk') ? null : 402, error: RATIONED, requested_model: JUDGE_MODEL, attempts: 0, at: new Date().toISOString() };
   const probe = assertProbeOk();
   const unsupported = new Set(probe.unsupported_params ?? []);
   const body = { model: JUDGE_MODEL, messages, stream: false };

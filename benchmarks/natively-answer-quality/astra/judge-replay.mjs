@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { limiter, assertProbeOk, JUDGED_SUFFIX } from './client.mjs';
-import { loadRun, judgeRow } from './judge.mjs';
+import { loadRun, judgeRow, saved } from './judge.mjs';
+import { readJsonl, appendLine } from './store.mjs';
 import { mean } from './score.mjs';
 import { samplePerMode } from './sample.mjs';
 
@@ -26,14 +27,14 @@ if (opt('sample')) {
 }
 const cacheDir = path.join(HERE, 'cache'); fs.mkdirSync(cacheDir, { recursive: true });
 const outFile = replayFile.replace(/\.jsonl$/, JUDGED_SUFFIX);
-const done = new Set(fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.k}`) : []);
+const done = new Set(readJsonl(outFile).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.k}`));
 const lim = limiter(Number(opt('concurrency', 6)));
 await Promise.all(recs.filter((r) => !done.has(`${r.id}#${r.k}`)).map((r) => lim(async () => {
   const row = { ...run.rowsById[r.id], rendered_answer: r.answer, raw_answer: r.answer };
   const j = await judgeRow({ run, row, repeat: 0, cacheDir });
-  fs.appendFileSync(outFile, JSON.stringify({ ...j, k: r.k, variant: r.variant }) + '\n');
+  saved(() => appendLine(outFile, { ...j, k: r.k, variant: r.variant }));
 })));
-const J = fs.readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((j) => j.ok && recs.some((r) => r.id === j.benchmark_id && r.k === j.k));
+const J = readJsonl(outFile).filter((j) => j.ok && recs.some((r) => r.id === j.benchmark_id && r.k === j.k));
 const by = {};
 for (const j of J) (by[j.benchmark_id] ??= []).push(j.official.overall);
 // --aggregate: the total only (holdout replays are read in aggregate, also in the step's log file).

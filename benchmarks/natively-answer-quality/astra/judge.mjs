@@ -9,7 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { chat, limiter, JUDGE_KEY, assertProbeOk, scrub } from './client.mjs';
+import { chat, limiter, JUDGE_KEY, assertProbeOk, scrub, stopNewCalls } from './client.mjs';
+import { readJsonl, readJsonOrNull, writeAtomic, appendLine } from './store.mjs';
 import { buildEnvelope, answerOf } from './envelope.mjs';
 import { officialScore, DIMENSIONS, FLAGS } from './score.mjs';
 import { validate } from '../validators/index.mjs';
@@ -20,7 +21,11 @@ const ROOT = path.join(HERE, '..');
 export const CHARTER = fs.readFileSync(path.join(HERE, 'CHARTER.md'), 'utf8');
 export const CHARTER_VERSION = crypto.createHash('sha256').update(CHARTER).digest('hex').slice(0, 12);
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
-const readJsonl = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+/** Save a judgment (cache file or output line). A failed write — a full disk — stops new judge calls instead of
+ *  ending the step with the calls in flight lost; what was not saved is judged again in the next batch. */
+export function saved(write) {
+  try { write(); return true; } catch (e) { stopNewCalls(`disk nearly full (a judgment could not be saved: ${e.code ?? 'write failed'})`); return false; }
+}
 
 const VERDICTS = new Set(['excellent', 'good', 'mixed', 'poor', 'hard_fail']);
 export function stripFence(t) {
@@ -73,11 +78,12 @@ export async function judgeRow({ run, row, repeat = 0, cacheDir }) {
   const env = buildEnvelope({ item, ds: run.ds, answer, rowsById: run.rowsById, validator: validator.verdict === 'n/a' ? null : validator, generatedAt: row.started_at ?? null });
   const key = sha([CHARTER_VERSION, JUDGE_KEY, item.mode, item.question, env.text, answer, repeat].join('\u0000'));
   const cf = path.join(cacheDir, key + '.json');
-  if (fs.existsSync(cf)) return { ...JSON.parse(fs.readFileSync(cf, 'utf8')), cached: true };
+  const hit = readJsonOrNull(cf); // a cache file cut short reads as not cached
+  if (hit) return { ...hit, cached: true };
   const res = await judgeOnce(CHARTER, env.text);
   const out = { key, charter_version: CHARTER_VERSION, benchmark_id: row.benchmark_id, mode: item.mode, repeat, validator, ...res };
   if (res.ok) out.official = officialScore(res.judgment, item.mode, validator);
-  if (res.ok) fs.writeFileSync(cf, JSON.stringify(out)); // failures are never cached
+  if (res.ok) saved(() => writeAtomic(cf, JSON.stringify(out))); // failures are never cached
   return out;
 }
 
@@ -114,7 +120,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     let n = 0, fail = 0, mismatch = 0;
     await Promise.all(todo.map(([row, k]) => lim(async () => {
       const j = await judgeRow({ run, row, repeat: k, cacheDir });
-      fs.appendFileSync(outFile, JSON.stringify(j) + '\n');
+      saved(() => appendLine(outFile, j));
       n++; if (!j.ok) fail++; if (j.calls?.some((c) => c.model_mismatch)) mismatch++;
       if (n % 20 === 0 || !j.ok) console.log(`  ${n}/${todo.length} ${j.ok ? '' : 'FAIL ' + row.benchmark_id + ' ' + j.error}`);
     })));
