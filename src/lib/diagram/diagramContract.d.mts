@@ -38,6 +38,10 @@ export interface DiagramPromptSignals {
   undecided?: boolean;
   /** With `undecided`: the drawing on the table is no longer what the conversation is on. */
   away?: boolean;
+  /** With `undecided`, on a request to draw: the view of the drawing in focus that it may be a change to. */
+  tableView?: DiagramView;
+  /** With `tableView`: the request names a kind of drawing. */
+  kindNamed?: boolean;
 }
 
 export interface ActiveDesignForPrompt {
@@ -68,3 +72,6 @@ export function appendDiagramContract(
   signals: DiagramPromptSignals | null | undefined,
   options?: { tier?: 'cloud' | 'local'; surface?: 'live' | 'chat' },
 ): string;
+
+/** A decision the four-language rules made on weak evidence, which the model is asked to make instead; null otherwise. */
+export function decidedOnWeakEvidence(request: import('./diagramRequest.mjs').DiagramRequest | null | undefined): 'follow-up' | 'drawing' | null;

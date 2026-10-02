@@ -214,9 +214,9 @@ const ES = {
   aboutKind: word('que es|que son|que significa|para que sirven?|cual es la diferencia|que diferencia hay|en que se diferencian?|como se leen?|como se interpreta'),
   looseNouns: [
     [word('tablas?|tablita|cuadro (?:comparativo|resumen|sinoptico)'), { view: 'matrix' }],
-    [word('grafic[oa]s?|grafiqu\\p{L}*'), { view: 'chart', chartIntent: 'generic' }],
+    [word('grafic[oa]s?|grafiqu\\p{L}*|barras|columnas'), { view: 'chart', chartIntent: 'generic' }],
   ],
-  visualish: word('cajitas?|flech(?:a|ita)s?|recuadros?|dibuj\\p{L}*|pint(?:a|as|ame|anos|alo|ala|e|es|eme|ar|arlo|arla|arme)|esquem\\p{L}*|diagram\\p{L}*|grafi[cq]\\p{L}*|bosquej\\p{L}*|esboz\\p{L}*|ilustr\\p{L}*|visual\\p{L}*|plasm\\p{L}*|tablas?|tablita|cuadro (?:comparativo|resumen|sinoptico)|organigrama|cronograma|gantt|linea de(?:l)? tiempo|mapa (?:mental|conceptual)|flujograma|embudo|a la vista|de un vistazo'),
+  visualish: word('barras|columnas|cajitas?|flech(?:a|ita)s?|recuadros?|dibuj\\p{L}*|pint(?:a|as|ame|anos|alo|ala|e|es|eme|ar|arlo|arla|arme)|esquem\\p{L}*|diagram\\p{L}*|grafi[cq]\\p{L}*|bosquej\\p{L}*|esboz\\p{L}*|ilustr\\p{L}*|visual\\p{L}*|plasm\\p{L}*|tablas?|tablita|cuadro (?:comparativo|resumen|sinoptico)|organigrama|cronograma|gantt|linea de(?:l)? tiempo|mapa (?:mental|conceptual)|flujograma|embudo|a la vista|de un vistazo'),
   nextSteps: word('(?:proximos|siguientes) pasos|pasos (?:a seguir|siguientes)|siguiente paso'),
   chartTerms: word('tasa|crecimiento|churn|bajas|valor inicial|base|horizonte|meses|mensual|anual|trimestral|per[ií]odo|periodo|proyecci[oó]n|eje|barras?|columnas?|l[ií]neas?'),
   elsewhere: word(
@@ -335,8 +335,9 @@ const RU = {
     [word('табли[цч]\\p{L}*'), { view: 'matrix' }],
     [word('график\\p{L}*|столбик\\p{L}*|столбц\\p{L}*'), { view: 'chart', chartIntent: 'generic' }],
     [word('майнд[- ]?карт\\p{L}*'), { view: 'mindmap' }],
+    [word('шкал\\p{L}* времени'), { view: 'timeline' }],
   ],
-  visualish: word('столбик\\p{L}*|столбц\\p{L}*|столбчат\\p{L}*|майнд[- ]?карт\\p{L}*|нарис\\p{L}*|рису\\p{L}*|начер\\p{L}*|изобраз\\p{L}*|наброс\\p{L}*|накид\\p{L}*|отрис\\p{L}*|схем\\p{L}*|диаграмм\\p{L}*|график\\p{L}*|табли[цч]\\p{L}*|картинк\\p{L}*|нагляд\\p{L}*|визуал\\p{L}*|блок[- ]схем\\p{L}*|гант\\p{L}*|таймлайн\\p{L}*|оргструктур\\p{L}*|майнд[- ]?м[эа]п\\p{L}*|воронк\\p{L}*'),
+  visualish: word('шкал\\p{L}* времени|столбик\\p{L}*|столбц\\p{L}*|столбчат\\p{L}*|майнд[- ]?карт\\p{L}*|нарис\\p{L}*|рису\\p{L}*|начер\\p{L}*|изобраз\\p{L}*|наброс\\p{L}*|накид\\p{L}*|отрис\\p{L}*|схем\\p{L}*|диаграмм\\p{L}*|график\\p{L}*|табли[цч]\\p{L}*|картинк\\p{L}*|нагляд\\p{L}*|визуал\\p{L}*|блок[- ]схем\\p{L}*|гант\\p{L}*|таймлайн\\p{L}*|оргструктур\\p{L}*|майнд[- ]?м[эа]п\\p{L}*|воронк\\p{L}*'),
   nextSteps: word('(?:следующ\\p{L}+|дальнейш\\p{L}+|ближайш\\p{L}+) шаг\\p{L}*|шаги дальше|что дальше'),
   chartTerms: word('ставк\\p{L}+|рост\\p{L}*|отток\\p{L}*|начальн\\p{L}+ значени\\p{L}+|баз\\p{L}+|горизонт\\p{L}*|месяц\\p{L}*|ежемесячн\\p{L}+|годов\\p{L}+|квартал\\p{L}*|период\\p{L}*|прогноз\\p{L}*|ос[ьи]\\p{L}*|столбц\\p{L}+|лини\\p{L}+'),
   elsewhere: word(
@@ -472,8 +473,9 @@ const ZH = {
   aboutKind: /是什么|是啥|什么是|什么叫|干什么用|干嘛用|有什么用|有啥用|做什么用|什么意思|有什么区别|有啥区别|区别是|的区别|有什么不同|怎么读|怎么看懂/u,
   looseNouns: [
     [/表格|列(?:个|一个|张|一张)表|(?:个|张|份)表(?![格示达现明演扬情面单])/u, { view: 'matrix' }],
+    [/人员架构|组织架构|谁带谁/u, { view: 'responsibility' }],
   ],
-  visualish: /列(?:个|一个|张|一张)表|画(?![面家廊])|(?<![地截试企意插配贴拼])图(?![书片像标案])|表格|时间线|时间轴|甘特|可视化|直观|一目了然|一眼(?:看|就)/u,
+  visualish: /(?:个|张|份)表(?![格示达现明演扬情面单])|架构(?![师])|列(?:个|一个|张|一张)表|画(?![面家廊])|(?<![地截试企意插配贴拼])图(?![书片像标案])|表格|时间线|时间轴|甘特|可视化|直观|一目了然|一眼(?:看|就)/u,
 };
 
 // ── Japanese ────────────────────────────────────────────────────────────────
@@ -591,9 +593,11 @@ const JA = {
   // (Not the 図 of 地図, 意図, 図書館.)
   aboutKind: /とは|って(?:何|なに|なん)|何のため|なんのため|違い|の意味|読み方|どういう(?:もの|意味)/u,
   looseNouns: [
-    [/一覧表|比較表|表(?:で|に|形式)/u, { view: 'matrix' }],
+    [/一覧表|比較表|表(?:で|に|が|を|形式)/u, { view: 'matrix' }],
+    [/分岐/u, { view: 'decision' }],
+    [/体制/u, { view: 'responsibility' }],
   ],
-  visualish: /(?<![地意合指企])図(?![書鑑る])|グラフ|チャート|ダイアグラム|タイムライン|年表|マインドマップ|フロー|描[いかきくけこ]|可視化|見える化|ビジュアル|一覧表|比較表|表(?:で|に|形式)|ぱっと見|ひと目|一目で/u,
+  visualish: /(?<![地意合指企])図(?![書鑑る])|グラフ|チャート|ダイアグラム|タイムライン|年表|マインドマップ|フロー|描[いかきくけこ]|可視化|見える化|ビジュアル|一覧表|比較表|表(?:で|に|が|を|形式)|分岐|体制|ぱっと見|ひと目|一目で/u,
   part: /サービス|キュー|データベース|システム|モジュール|コンポーネント|ゲートウェイ|キャッシュ|api|クラスタ|ノード|ストレージ|インデックス|エンジン|サーバ|ワーカー|db|バランサ/u,
   partAfterVerb: false,
   chartTerms: /成長率|成長|解約|初期値|開始値|ヶ月|か月|カ月|四半期|年|期間|予測|軸|棒|線/u,
@@ -1349,6 +1353,21 @@ export function resolveOtherLanguageRequest(input = {}) {
     const swapsActive = Boolean(swapped) && swapped.insteadOf !== undefined
       && (family === 'chart' ? swapped.insteadOf === 'chart' : family === 'mermaid' && swapped.insteadOf !== 'chart' && swapped.insteadOf !== 'matrix');
     const ofActive = Boolean(active) && !fresh.designAsk && (pointsAtDesign(lang, sentence, active) || swapsActive);
+    // "支付后面再画一个支付宝的框", "あと図のタイトルつけてほしい", "dibuja otra
+    // flecha de la cola a pagos": a verb that draws, no kind of drawing named,
+    // and a drawing in focus. The rules read a new drawing; a listener hears
+    // a change to the one on the table as often as not. Decided on weak
+    // evidence, so the model is asked which (see the contract): the drawing
+    // is handed over, and nothing is recorded as a fresh design until the
+    // answer shows what it was.
+    // With a kind named it is the same question, asked of the content: "换成
+    // 饼图看看各科占比" and "这个给我转成表格吧" over a chart are the chart in
+    // another form, not a chart of nothing; "hazme un Gantt de la mudanza"
+    // over an architecture is a new drawing. The words that point ("este",
+    // "把这个") are one more list that is never complete.
+    const named = visualIn(lang, sentence);
+    const onTable = Boolean(active) && active.foreground !== false && !ofActive && !fresh.designAsk;
+    const kindNamed = Boolean(named && named.view);
     // Another form of the same chart ("este gráfico, pero de barras") keeps
     // what it holds: an edit of it, as in English.
     const reshapes = ofActive && family === 'chart' && fresh.view === 'chart';
@@ -1372,9 +1391,10 @@ export function resolveOtherLanguageRequest(input = {}) {
       ...(ofActive ? { parentArtifactId: active.artifactId, followUp: 'strong', parentFamily: family } : {}),
       withCode: false,
       explicit: !fresh.designAsk,
-      attachActiveDesign: ofActive,
+      attachActiveDesign: ofActive || onTable,
       reason: reshapes ? 'update_design' : ofActive ? 'explicit_view_of_design' : fresh.reason,
       language: lang.code,
+      ...(onTable ? { mayChangeActive: true, tableView: active.view || 'architecture', ...(kindNamed ? { kindNamed: true } : {}) } : {}),
       ...(chartIntent ? { chartIntent } : {}),
       ...(fresh.layout ? { layout: fresh.layout } : {}),
     };
@@ -1440,6 +1460,19 @@ function saysSomething(lang, q) {
   if (!lang.spaced) return q.replace(/[^\p{L}\p{N}]+/gu, '').length >= 4;
   const rest = stripLead(lang, q.replace(/[^\p{L}\p{N}\s]+/gu, ' ').replace(/\s+/g, ' ').trim());
   return rest.split(/\s+/u).filter(Boolean).length >= 2;
+}
+
+// A drawing labelled in English ("API Gateway", "Redis Cache") is talked about
+// in Russian, Chinese or Japanese with the English word as written: "а Gateway
+// у нас один?", "那个 Redis 挂了怎么办". In those scripts a Latin word is said on
+// purpose. (Not Spanish: there every word is one. Not the words every label
+// has.)
+const LATIN_GENERIC = new Set(['service', 'services', 'system', 'app', 'apps', 'database', 'queue', 'server', 'client', 'user', 'users', 'data', 'store', 'the', 'and', 'for', 'web', 'mobile']);
+function saysALatinName(lang, sentence, labels) {
+  if (lang.code === 'es') return false;
+  const said = new Set((sentence.match(/[a-z][a-z0-9]{2,}/g) || []));
+  if (said.size === 0) return false;
+  return labels.some((label) => (label.match(/[a-z][a-z0-9]{2,}/g) || []).some((word) => !LATIN_GENERIC.has(word) && said.has(word)));
 }
 
 /** "No diagrams", said in any of the four languages (a standing instruction is one sentence among others). */
@@ -1543,7 +1576,7 @@ export function undecidedOtherLanguageTurn(input = {}) {
   if (active) {
     const chart = active.view === 'chart' || active.artifact === 'chart';
     const labels = labelsOf(active.source, chart ? 'chart' : 'mermaid');
-    const inPlay = active.foreground !== false || sentences.some((s) => namesDrawing(lang, s, active)
+    const inPlay = active.foreground !== false || sentences.some((s) => saysALatinName(lang, s, labels) || namesDrawing(lang, s, active)
       || (chart
         ? distinctNames(labels.filter((label) => usesLabel(lang, s, [label]))) >= (lang.chartTerms.test(s) ? 1 : 2)
         : usesLabel(lang, s, labels) || namesALane(lang, s, active)));

@@ -54,6 +54,32 @@ export function wantsDetailedDesign(question) {
  * @param {import('./diagramRequest.mjs').DiagramRequest} request
  * @param {{ question?: string | null, maxExamples?: number }} [options]
  */
+/**
+ * A decision the four-language rules made on weak evidence, which the model
+ * that answers is asked to make instead:
+ *
+ *   'follow-up'  a turn attached to the drawing on the table. Whether it asks
+ *                for a change or asks a question is read from a verb at the
+ *                head of a clause, and on unseen sentences that reading is
+ *                wrong about one time in seven — whether the turn names the
+ *                drawing ("al esquema de antes añádele…" read as a question)
+ *                or not. With weak evidence the attachment itself is in doubt
+ *                too.
+ *   'drawing'    a request to draw made while a drawing is in focus that the
+ *                sentence does not point at: a new drawing, or that one —
+ *                changed, or in the form named ("换成饼图", "转成表格").
+ *
+ * The request itself is unchanged — it stays enabled, with the rules' reading
+ * as its operation, so every route and the session behave as they did. Only
+ * the texts built from it are conditional.
+ */
+export function decidedOnWeakEvidence(request) {
+  if (!request || !request.enabled || !request.language) return null;
+  if (request.mayChangeActive === true && request.operation === 'create' && !request.parentArtifactId) return 'drawing';
+  if (request.parentArtifactId && (request.followUp === 'weak' || request.followUp === 'strong') && (request.operation === 'update' || request.operation === 'explain') && request.output !== 'diagram-only' && request.output !== 'source-only') return 'follow-up';
+  return null;
+}
+
 export function diagramPromptSignals(request, options = {}) {
   if (!request) return null;
   if (!request.enabled) {
@@ -115,6 +141,21 @@ export function diagramPromptSignals(request, options = {}) {
   //  - `ofChart`: a table that is the chart on the table, as numbers.
   if (request.view === 'flowchart' && (request.layout === 'lanes' || request.layout === 'tree')) signals.layout = request.layout;
   if (request.view === 'matrix' && request.parentArtifactId && request.parentFamily === 'chart') signals.ofChart = true;
+  // Decided on weak evidence: the same signals, made conditional.
+  const weak = decidedOnWeakEvidence(request);
+  if (weak === 'follow-up') {
+    signals.operation = 'update';
+    signals.output = 'text-and-diagram';
+    signals.exampleIds = [];
+    delete signals.followUp;
+    signals.undecided = true;
+  } else if (weak === 'drawing') {
+    const json = visualKind(request.view).renderer === 'chart' || visualKind(request.view).renderer === 'notation';
+    if (!json) signals.exampleIds = [];
+    signals.undecided = true;
+    signals.tableView = request.tableView || 'architecture';
+    if (request.kindNamed === true) signals.kindNamed = true;
+  }
   return signals;
 }
 
@@ -242,6 +283,64 @@ function undecidedBody(signals, tier, surface) {
   const kind = kindFor(signals);
   const tag = fenceTagForView(signals.view);
   const block = tag ? `\`${tag}\` block` : 'table';
+
+  // A request to draw, with a drawing in focus that it may be a change to.
+  if (signals.tableView && !signals.hasParent) {
+    const table = { view: signals.tableView, operation: 'update', output: 'text-and-diagram', basis: 'proposed-design', withCode: false, hasParent: true, depth: 'brief', exampleIds: [] };
+    if (signals.mode) table.mode = signals.mode;
+    if (signals.tableView === 'chart') table.chartIntent = 'generic';
+    if (signals.tableView === 'flowchart') table.general = true;
+    const tableLegacy = isLegacyView(table.view) && table.general !== true;
+    const thing = tableLegacy ? 'design' : visualKind(table.view).name;
+    const fresh = { ...decided };
+    delete fresh.tableView;
+    delete fresh.kindNamed;
+    const make = coreBody({ ...fresh, operation: 'create' }, tier, surface);
+    // What "the one on the table" means when a kind is named: the same kind
+    // (a pie of the chart, the flow redrawn) is a change to it; another kind
+    // (the chart as a table, the design as a sequence) is that content in the
+    // form named.
+    const family = (view) => (view === 'chart' ? 'chart' : view === 'matrix' ? 'table' : view === 'chen' || view === 'automaton' ? 'notation' : 'mermaid');
+    const sameKind = signals.view === table.view || (family(signals.view) === 'chart' && family(table.view) === 'chart');
+    const ofIt = { ...fresh, operation: 'create', hasParent: true, exampleIds: [] };
+    if (signals.view === 'matrix' && family(table.view) === 'chart') ofIt.ofChart = true;
+    const change = signals.kindNamed && !sameKind ? coreBody(ofIt, tier, surface) : coreBody(table, tier, surface);
+    if (signals.kindNamed) {
+      const what = isLegacyView(signals.view) && signals.general !== true ? 'a diagram' : `${kind.article} ${kind.name}`;
+      if (tier === 'local') {
+        return `This turn asks for ${what}, and a drawing is already in <active_design>. If it asks for what that drawing shows — in this form, or changed: ${change}
+If it says what to draw and that is something else: ${make}
+If nothing is asked to be drawn now, ignore this note and <active_design>, answer as you normally would, and output no block. Start with the answer; never write out how you decided.`;
+      }
+      return `The ${thing} already on the table is given in <active_design> in the turn. This turn asks for ${what}, and the app could not tell from its words whether that is of what is on the table or of something else. Read the turn, in whatever language it is said, and do exactly one of three things.
+
+IF IT ASKS FOR WHAT IS ON THE TABLE — in the form it names, or changed — and names no other subject ("make it a pie chart", "turn this into a table", "as a sequence diagram"). Then:
+${change}
+
+IF IT SAYS WHAT TO DRAW, AND THAT IS SOMETHING ELSE. Then:
+${make}
+
+OTHERWISE — nothing is asked to be drawn now: a remark about drawing, a drawing somebody else made or the speaker will make — this contract and <active_design> do not exist for this turn: answer as you normally would, output no block, and take nothing from the drawing.
+
+When the turn names only a form and no subject, the subject is what is on the table. Start with the answer itself: never write out which of these it is, or how you decided.`;
+    }
+    if (tier === 'local') {
+      return `A drawing is asked for, and one is already in <active_design>. If what is asked belongs in that drawing (another box, an arrow, a label, a title): ${change}
+If it is a drawing of something else: ${make}
+If nothing is asked to be drawn now, ignore this note and <active_design>, answer as you normally would, and output no block. Start with the answer; never write out how you decided.`;
+    }
+    return `The ${thing} already on the table is given in <active_design> in the turn. This turn asks for something to be drawn, and the app could not tell from its words whether that is a change to this drawing or a new drawing of something else. Read the turn, in whatever language it is said, and do exactly one of three things.
+
+IF WHAT IT ASKS FOR BELONGS IN THE DRAWING ON THE TABLE — another box, an arrow, a line, a label, a title, a colour, a part of the same system or process. Then:
+${change}
+
+IF IT ASKS FOR A DRAWING OF SOMETHING ELSE. Then:
+${make}
+
+OTHERWISE — nothing is asked to be drawn now: a remark about drawing, a drawing somebody else made or the speaker will make — this contract and <active_design> do not exist for this turn: answer as you normally would, output no block, and take nothing from the drawing.
+
+When you cannot tell a change from a new drawing, it is a change to the one on the table. Start with the answer itself: never write out which of these it is, or how you decided.`;
+  }
 
   // The drawing on the table, and a turn that may be about it.
   if (signals.hasParent && signals.operation === 'update') {
@@ -685,15 +784,16 @@ export function renderDiagramTurnBlock(request, activeDesign) {
   const noun = activeDesign.artifact === 'chart' ? 'chart' : activeDesign.artifact === 'notation' ? 'diagram' : 'design';
   // (An undecided turn may be an edit of it: "do not redraw it" would forbid
   // exactly that.)
-  const note = request.enabled
+  const open = Boolean(request.undecided) || decidedOnWeakEvidence(request) !== null;
+  const note = request.enabled && !open
     ? `This is the ${noun} currently on the table. It is the starting point for this turn, as the diagram contract describes.`
-    : request.undecided
+    : open
     ? `This is the ${noun} currently on the table. It is here only in case this turn asks to change it or asks about it: whether it does is for you to decide, as the diagram contract describes. When the turn is about anything else, answer as if this block were not here, and use nothing from it.`
     : `This is the ${noun} currently on the table. The request refers to it: keep ${noun === 'chart' ? 'its names and numbers' : 'component names'} consistent with it. Do not redraw it.`;
   // What the app computed from a chart, for the turns that state its values:
   // a question about it, a table of it, a request that only refers to it. (Not
   // an edit: those values are about to change, and must not be quoted.)
-  const values = activeDesign.artifact === 'chart' && (request.operation === 'explain' || request.view === 'matrix' || !request.enabled)
+  const values = activeDesign.artifact === 'chart' && (request.operation === 'explain' || request.view === 'matrix' || !request.enabled || open)
     ? chartValuesBlock(clamped.text)
     : '';
   // A fence that no line of the source can close: one backtick longer than

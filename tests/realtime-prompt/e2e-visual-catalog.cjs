@@ -532,6 +532,24 @@ const notCoding = (c) => !/<coding_contract>/.test(c.system) && !/verification_s
     r = await ask(c20f, 'Мне бы табличку: Постгрес против Монги — транзакции, масштабирование, стоимость поддержки.');
     check('V20', 'a table that may be asked for: the conditional contract for a comparison, no drawing attached', r.calls.length === 1 && contracts(r.sent) === 1 && /whether one is being ASKED FOR/.test(contractOf(r.sent)) && /Markdown table/.test(contractOf(r.sent)) && blocks(r.sent) === 0, `calls=${r.calls.length} contracts=${contracts(r.sent)} · ${contractOf(r.sent).slice(0, 200)}`);
     check('V20', 'the table the model answered with reaches the user as a table', String(r.returned || '').includes('| --- | --- | --- |'), String(r.returned).slice(0, 200));
+    // A decision the rules made on weak evidence: the route, the persona and the mark stay the rules'; the contract is conditional.
+    {
+      const first = makeEngine([`Вот схема.\n\n${fence('mermaid', RIDES)}\n\nПоездки ходят в платежи.`]);
+      await ask(first, 'Спроектируй сервис проката велосипедов');
+      const second = makeEngine([`Добавляю антифрод.\n\n${fence('mermaid', RIDES_2)}\n\nПлатежи теперь проверяются.`], first.session);
+      r = await ask(second, 'Добавь антифрод после платёжного сервиса');
+      check('V20', 'a weak follow-up the rules read as an edit: the three-way contract once, with the update body in it, and the drawing once', r.calls.length === 1 && contracts(r.sent) === 1 && /could not tell from the words of this turn/.test(contractOf(r.sent)) && /This turn changes the design already on the table/.test(contractOf(r.sent)) && blocks(r.sent) === 1, `calls=${r.calls.length} contracts=${contracts(r.sent)} blocks=${blocks(r.sent)} · ${contractOf(r.sent).slice(0, 140)}`);
+      check('V20', 'on the persona a diagram turn has', action(r.sent) === 'answer', action(r.sent));
+      design = second.session.getActiveDesign();
+      check('V20', 'recorded as version 2 of the same design', design && design.version === 2 && design.source === RIDES_2 && /\.v1$/.test(String(design.parentArtifactId || '')), JSON.stringify(design));
+      // A request to draw, no kind named, with the drawing in focus: handed the drawing; an answer that changes it is version 3, not a new design.
+      const RIDES_3 = `${RIDES_2}\n    fraud --> audit["Журнал проверок"]`;
+      const third = makeEngine([`Рисую ещё блок.\n\n${fence('mermaid', RIDES_3)}\n\nАнтифрод пишет в журнал.`], second.session);
+      r = await ask(third, 'нарисуй ещё один блок после антифрода, журнал проверок');
+      check('V20', 'a request to draw while the drawing is in focus: "a change to it, or a new drawing", with the drawing', contracts(r.sent) === 1 && /IF WHAT IT ASKS FOR BELONGS IN THE DRAWING ON THE TABLE/.test(contractOf(r.sent)) && /IF IT ASKS FOR A DRAWING OF SOMETHING ELSE/.test(contractOf(r.sent)) && blocks(r.sent) === 1, `contracts=${contracts(r.sent)} blocks=${blocks(r.sent)} · ${contractOf(r.sent).slice(0, 160)}`);
+      design = third.session.getActiveDesign();
+      check('V20', 'the model changed the drawing: version 3 of the same design, not a new one', design && design.version === 3 && design.source === RIDES_3, JSON.stringify(design));
+    }
     // The manual answer (the typed question's engine route) carries the same.
     const c20g = makeEngine([`Коротко так.\n\n${TABLE}\n\nПостгрес проще в поддержке.`]);
     const typed = await c20g.engine.runManualAnswer('Мне бы табличку: Постгрес против Монги — транзакции, масштабирование, стоимость поддержки.');

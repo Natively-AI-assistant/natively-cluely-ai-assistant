@@ -680,14 +680,14 @@ app window's; the token times are the provider's on that day.
 | Command | What it runs |
 | --- | --- |
 | `npm run test:diagram` | the pure modules, the main-process tests, and the wiring and render checks below (not card, overlay or live) |
-| `npm run test:lib` | pure modules (1,092 tests under `src/lib/diagram`): parser (incl. random chunk partitions), policy, resolver, contract, examples, active design, repair, refine, viewport, stream decisions, timings — and for the catalog: `chartCompute` (the fixtures above, rounding, every refusal), `chartSpec` (statuses, corrections, limits, CSV), `notation` (Chen, automata, crow's-foot reading), `visualCatalog` (every catalog request in every mode, negatives, system-design asks, missing inputs, contract text and budget), `visualBlocks` (the three fence tags through the stream parser) |
+| `npm run test:lib` | pure modules (1,105 tests under `src/lib/diagram`): parser (incl. random chunk partitions), policy, resolver, contract, examples, active design, repair, refine, viewport, stream decisions, timings — and for the catalog: `chartCompute` (the fixtures above, rounding, every refusal), `chartSpec` (statuses, corrections, limits, CSV), `notation` (Chen, automata, crow's-foot reading), `visualCatalog` (every catalog request in every mode, negatives, system-design asks, missing inputs, contract text and budget), `visualBlocks` (the three fence tags through the stream parser) |
 | `node --test electron/services/__tests__/VisualCatalogWiring2026_10_01.test.mjs` | built bundles: mode identity from the template, one contract per request in every mode persona, planner route, session artifact, the conversation reader, Phone Mirror (charts and Chen drawn in main), JSON/CSV export, action offers |
 | `node --test electron/services/__tests__/DiagramReviewFixes2026_10_01.test.mjs` | built bundles, one block per defect found in the 2026-10-01 review: focus and the toucher, coding questions after a design, action cards, Brainstorm, fence-aware repair caps, the final clean-up, the knowledge intercept, long-prompt replay, Direct Assist (request-only decision, small-model budget, withheld history), warn-once |
-| `npm run test:diagram:wiring` | real engine + planner + composer, provider stubbed, V3 on and off: the dispatched prompt per route. `e2e-diagram.cjs` (system design, 78 checks) and `e2e-visual-catalog.cjs` (catalog, 153 checks: forecast → “make it 3%” → explain → refine, missing baseline, per-mode requests, custom modes, Direct Assist, feature off, and V20: a turn the four-language rules cannot place) |
+| `npm run test:diagram:wiring` | real engine + planner + composer, provider stubbed, V3 on and off: the dispatched prompt per route. `e2e-diagram.cjs` (system design, 78 checks) and `e2e-visual-catalog.cjs` (catalog, 158 checks: forecast → “make it 3%” → explain → refine, missing baseline, per-mode requests, custom modes, Direct Assist, feature off, and V20: a turn the four-language rules cannot place) |
 | `npm run test:diagram:render` | the renderer in real Chromium with the pinned Mermaid: every Mermaid example, the new families and their fix-ups, the refused families, chart and Chen SVG as images |
 | `npm run test:diagram:card` | the card component in real Chromium (92 checks): streaming, fit, zoom, export, theme, repair, updates — and chart, Chen, DFA and ER cards: Chart/Data tabs, the data table, CSV/JSON export, missing input with no repair, hostile labels, placeholder-only diagrams |
 | `npm run test:diagram:overlay` | the real overlay component (Vite dev server + Playwright Chromium, `electronAPI` stubbed, 64 checks): a streamed answer draws its card mid-stream, final-text replacement, discard, cut-off, code and mixed answers, a chart then its update, a refused chart, Chen, DFA, chart beside code, placeholder-only diagram, feature off. Needs a Playwright Chromium on the machine; exits 2 when there is none |
-| `npm run test:diagram:live` | **opt-in, calls a real model** (needs `DEEPSEEK_API_KEY` in `.env`; not part of `test:diagram`). The real engine and the real `LLMHelper` ask DeepSeek the system-design set (12 questions, 3 follow-ups, a refinement, 3 controls, one repair) the catalog set (`--suite=catalog`: 16 scenarios across all nine modes with what was said beforehand, 3 controls) and the undecided set (`--suite=undecided`: 11 steps in Spanish, Russian, Chinese and Japanese that the rules cannot place), and **judges each turn from the committed answer** — the computed values, the stage counts, whether the DFA accepts exactly the right strings, whether nothing was drawn when nothing should be. Every token is recorded with its arrival time, then replayed into the real overlay to prove each visual is drawn. Prints the timing table above |
+| `npm run test:diagram:live` | **opt-in, calls a real model** (needs `DEEPSEEK_API_KEY` in `.env`; not part of `test:diagram`). The real engine and the real `LLMHelper` ask DeepSeek the system-design set (12 questions, 3 follow-ups, a refinement, 3 controls, one repair) the catalog set (`--suite=catalog`: 16 scenarios across all nine modes with what was said beforehand, 3 controls) and the undecided set (`--suite=undecided`: 17 steps in Spanish, Russian, Chinese and Japanese that the rules cannot place or place on weak evidence), and **judges each turn from the committed answer** — the computed values, the stage counts, whether the DFA accepts exactly the right strings, whether nothing was drawn when nothing should be. Every token is recorded with its arrival time, then replayed into the real overlay to prove each visual is drawn. Prints the timing table above |
 
 ## Limits
 
@@ -898,6 +898,9 @@ The same, for Spanish, Russian, Chinese and Japanese together (`diagramRequestI1
 | …the same 220 sentences on the rules as committed before that whole round (`db008cb2`) | 220 | the same 8 of 88 | 60 of 132 (45.5%) | — |
 | 6 — the rules alone, after the fixes that followed the fifth (a third author, another domain; requests asked to say what to draw) | 220 | 7 of 88 (8.0%); two would have drawn | 43 of 132 (32.6%), and 9 more decided as the wrong thing (the kind of drawing, an edit read as a question) | none over 100 ms |
 | …the same 220 sentences with the model reading what the rules cannot place ([below](#a-model-reads-the-turns-the-rules-cannot-place-2026-10-02)) | 220 | 3 of 88 drew (3.4%): two of them the rules' own decisions | 16 of 132 not acted on by the strict automatic score (12.1%); 13 after reading the answers | — |
+| 7 — the rules alone, on drawings labelled in ENGLISH, as a model labels them (a fourth author, another domain) | 220 | 5 of 88 (5.7%); two would have drawn | **72 of 132 (54.5%)** | none over 100 ms |
+| …the same 220 sentences with the model, as committed in `a932d217` | 220 | 1 of 88 drew: the rules' own decision | 21 of 132 not acted on by the strict score (15.9%) | — |
+| …and with the rules' weak decisions handed to the model too ([below](#the-rules-weak-decisions-and-drawings-labelled-in-english-2026-10-02)) | 220 | 2 of 88 drew (one the rules' own; one on a path the change does not touch) | 17 of 132 (12.9%) | — |
 
 Read it as: **on English sentences it has never seen, the rules wrongly draw
 or attach to about 1 ordinary line in 40–50, and miss about 1 real request or
@@ -1397,7 +1400,8 @@ Every four-language set so far has had its fixtures labelled in the language
 of its sentences, so every table above overstates how often the rules — which
 match labels in the turn's language — recognise a follow-up in real use. It
 was found by running the real engine, not by a blind set, and it shaped two
-decisions below. The next blind set needs drawings labelled in English.
+decisions below. The seventh blind set has drawings labelled in English: on
+it the rules alone miss 54.5% (the next section).
 
 **What it is.** No second call. When neither set of rules can place a turn in
 one of the four languages, and a drawing is plausibly in play, the turn is
@@ -1525,10 +1529,11 @@ a week"): 17 of 290 across the six sets in the final configuration, counted by
 a detector that flags about 1 in 40 of the same kind of turn with no contract
 at all. Focus ends with the first or second answer that is not about the
 drawing, so this is the turn or two after a drawing, not the rest of the
-meeting. No
-clear difference was found in answers given in the wrong language, or in a model
-thinking aloud, between the same turns with and without the contract (both
-happen on 1 to 5 answers in a hundred either way).
+meeting. A model
+thinking aloud happens on about 1 answer in a hundred with or without the
+contract. Answers in the wrong language looked no different on these runs;
+pooled with the seventh set they do (2.8% without the contract, 4.2% with it:
+see the next section).
 
 **Not known.**
 
@@ -1536,10 +1541,158 @@ happen on 1 to 5 answers in a hundred either way).
   (it gets a much shorter conditional contract, never run), are untested.
 - The scratch harness used for the 220 sentences is not in the repository; the
   real-engine suite is.
-- Everything said about the four languages rests on fixtures labelled in
-  those languages. A blind set with English-labelled drawings has not been
-  written.
-- Decisions the rules make with weak evidence are still theirs. Handing those
-  to the model too is the obvious next step, and needs its own blind set.
-- Windows: nothing here is platform-specific, and none of it has run there.
+- Everything measured in this section rests on fixtures labelled in the
+  language of their sentences; the next section measures drawings labelled in
+  English, and hands the rules' weak decisions to the model.
+- Windows: nothing here is platform-specific. The diagram steps have since run
+  on a `windows-latest` CI runner (the next section); nobody has used it there.
+
+### The rules' weak decisions, and drawings labelled in English (2026-10-02)
+
+Two things the section above left open: the decisions the rules DO make in
+the four languages were the largest remaining source of error, and no blind
+set had drawings labelled the way a model labels them. Both were done
+together, in an order chosen so that each number means one thing.
+
+**The order.** A seventh set of 220 sentences was written blind, with its
+three drawings labelled in English and its sentences in Spanish, Russian,
+Chinese and Japanese (`tests/diagram/i18n-heldout-7-2026-10-02.mjs`, frozen as
+`ae19d844…7a29`). The change below was written, as a patch that was not
+applied, before that file existed. The set was run once on the code as
+committed (`a932d217`), the patch was applied, and the set was run once more.
+
+**What the English labels do to the rules.** Alone, the rules miss 72 of the
+132 real requests and follow-ups: 54.5%, against 32.6% on the sixth set, whose
+drawings were labelled in the language of its sentences. Not all of that is
+the labels — a new author and a new domain came with them. Where nothing is
+on the table, and labels cannot matter, the rules miss 18 of 40 (45%, against
+33% on the sixth set); where a drawing is on the table they miss 54 of 92
+(59%, against 33%). So the set is harder throughout, and harder again by about
+as much where the labels come in. The earlier four-language tables overstate
+the rules on follow-ups by something of that order; this is not a clean
+measure of it. With the model reading what the rules cannot place (as
+committed), 111 of 132 are acted on by the strict score: the misses land on
+the model, and it handles most of them.
+
+**What was handed over** (four languages only; English is unchanged, row for
+row):
+
+- *A follow-up the rules attach to the drawing.* Whether it asks for a change
+  or asks a question is read from a verb at the head of a clause, and on
+  unseen sentences that reading is wrong about one time in seven: "oye que el
+  escaneo también debería mandar eventos a notificaciones, conecta esas dos"
+  read as a question and answered in prose; "…届かない感じですか" read as an edit
+  and redrawn. The request is unchanged — it stays enabled, with the rules'
+  reading as its operation, so the route, the persona, the spoken-question
+  diversion and the mark on the session are what they were. Only the contract
+  is the three-way one: a change, a question, or neither.
+  (`decidedOnWeakEvidence` in `diagramContract.mjs`.)
+- *A request to draw made while a drawing is in focus that the sentence does
+  not point at.* "支付后面再画一个支付宝微信的框" was read as a new drawing and
+  got one, of nothing. The drawing is handed over and the contract asks: a
+  change to the one on the table, a drawing of something else, or nothing to
+  draw. Nothing is recorded as a fresh design for such a turn
+  (`turnStartsAFreshDesign`); the answer's own content says which it was.
+- *Out of focus, a part named by its English label as written*, in a sentence
+  of another script ("а Gateway у нас один?", "那个 Redis 挂了怎么办").
+
+| On the 220 sentences of the seventh set | Rules alone | With the model, as committed (`a932d217`) | With the weak decisions handed over (written before the set) |
+| --- | --- | --- | --- |
+| Real requests and follow-ups (132) acted on, strict score | 60 decided (7 as the wrong thing) | 111 (84.1%) | **115 (87.1%)** |
+| Ordinary talk (88) that drew | 2 would | 1 | 2 (the second is on the undecided path, which the change does not touch: the same prompt drew in one run and not in the other) |
+
+On the turns the change is about, across all six earlier sets: 346 weak
+follow-ups the rules had decided went from 338 acted on to 344, and of 5
+must-not turns among them from 4 left alone to 5. No edit was lost; two
+questions were redrawn.
+
+**Changed after that second run, and therefore not blind.** Three things the
+seventh set showed, each the same question asked of one more decision:
+
+- *The operation of a follow-up that NAMES the drawing* ("al esquema de antes
+  añádele un servicio de autenticación", "さっきの図に凡例をつけといて": read as
+  questions). Handed over like the others.
+- *A named kind while a drawing is in focus* ("换成饼图看看各科占比" and "这个给
+  我转成表格吧" over a chart: read as a chart and a table of nothing). Handed
+  the drawing, with: what is on the table in the form named, something else,
+  or nothing.
+- *Six requests that never reached the model*, for a visual named in words the
+  hand-over lexicon did not know ("pásamelo a barras", "на шкале времени",
+  "整一个表", "人员架构", "表がほしい", "分岐で整理"). It did not know five on
+  the sixth set either; this list does not converge any more than the rules
+  did, and a request with no visual word in it is still not handed over.
+
+On the same 220 sentences afterwards: **125 of 132** by the strict score, 2 of
+88 drew. Of the seven, five are answers that ask for the facts the drawing
+needs ("the plan we just discussed", with no conversation in the harness); one
+is a correct pie of the chart that the scorer cannot match (a pie has no axis
+to compare); and one is the model's own deviation — bars sorted as asked, and
+the chart's English categories rewritten in Spanish, which nobody asked for
+and the contract forbids. Across the seven sets, the 96 turns these two changes touch went
+from 89 acted on to 94.
+
+**In the real engine** (`--suite=undecided`, now 17 steps): a Chinese design,
+then "支付后面再画一个…框" (version 2 of the same design), "刚才那个架构图里再加
+一个推荐服务" (version 3), "画个时序图解释一下TCP三次握手" (a new sequence
+diagram, not a change to the design); a chart from numbers in the sentence,
+then "这个给我转成表格吧" (a table with the chart's own numbers). Sixteen pass.
+The seventeenth is "надо бы как-нибудь нарисовать схему всего этого хозяйства"
+— it draws in some runs, as noted above.
+
+One thing the engine showed that the harness could not: when the rules read a
+four-language edit, the planner routes the turn as a system design, and asked
+again with that route the English rules take the route's word for it — so the
+contract that went out was the decided one. That reading is now marked as the
+same weak decision (`resolveDiagramRequest`), and V20 in the engine harness
+checks the contract on the wire.
+
+**What CI found** (the first run of `build-smoke.yml` with the diagram steps,
+on `macos-latest` and `windows-latest`): the engine wiring (78/78 and 153/153,
+both routes) and the render checks passed on both. Three things failed, on
+both unless said:
+
+- A long run of digits was slow: `PERCENT_RE` had no anchor, so 16,000 digits
+  were scanned again from every digit (0.2 s on a laptop, 0.56 s on a runner,
+  over the test's 400 ms). Fixed: 2 ms on 60,000 digits.
+- The card check for reduced motion assumed the machine's own preference was
+  "none"; both runners report reduced motion. The check now sets both.
+- Windows only: the card check for a narrow layout read the drawing 250 ms
+  after resizing, before it had refitted. It now waits for the refit. This was
+  the check's haste, as far as can be told from a log: nobody has looked at a
+  narrow card on Windows.
+
+The card steps are `continue-on-error`, so the job page showed them green
+while the log said "2 check(s) failed": read the log, not the tick.
+
+The second run, on the commit with those three fixes (`a39d9acb`), read from
+the logs: on `windows-latest` and on `macos-latest` alike, engine wiring 78/78
+and 153/153 on both routes, "All diagram render checks passed", "All diagram
+card checks passed", and the long-input test passing. The job is still red on
+both, for two tests this feature does not own: the Trial Policy "Codex route"
+test (both), and "hand-overs stay instant" in the onboarding ads (Windows).
+What is in this section after that commit — the weak decisions — has not run
+on either runner.
+
+**Answers in the wrong language.** Counted over every run above: 10 of 355
+answers with no contract (2.8%), 35 of 837 with one (4.2%). On the seventh set
+the same prompts gave 3 of 194 in one run and 11 of 201 in the next, so the
+run-to-run swing is as large as the difference — but the direction is
+consistent, the contract is 1,350 tokens of English, and the answers are real:
+a Japanese remark about muting Slack answered in English, a Chinese question
+about two steps of a flowchart answered in Hindi (the app's language
+instruction names Hindi as its example). The app's own instruction ("answer in
+the language of the user's last message; if unclear, English") is the only
+thing holding this, with or without a drawing. Treat it as a probable cost of
+the contract, not as noise. Nothing was retuned for it.
+
+**Still not known.**
+
+- One model. Any local model, and every provider but DeepSeek, are untested.
+- The last three changes are measured only on sentences that had been seen.
+- A four-language turn that the keyword planner calls a coding question is
+  not read by these rules at all, on any path.
+- "Add a cache in front of the database" after the conversation has moved on
+  still edits the old drawing (the English rules do the same).
+- Windows: the diagram steps have run on a `windows-latest` runner. Nobody has
+  used the feature on a Windows machine.
 

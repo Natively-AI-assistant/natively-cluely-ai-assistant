@@ -49,7 +49,7 @@
  * @property {{ needed: string[], inRequest: string[] }} [inputs]  what a calculation needs, and which of those the request itself states
  */
 
-import { resolveOtherLanguageRequest, undecidedOtherLanguageTurn, saysNoDrawing } from './diagramRequestI18n.mjs';
+import { resolveOtherLanguageRequest, undecidedOtherLanguageTurn, saysNoDrawing, detectRequestLanguage } from './diagramRequestI18n.mjs';
 
 const DISABLED = Object.freeze({
   enabled: false,
@@ -1990,6 +1990,15 @@ function detectBasis(q) {
  */
 export function resolveDiagramRequest(input = {}) {
   const whole = resolveCore(input);
+  // The planner routes a turn as a system design when the four-language rules
+  // read an edit of the design on the table; asked again with that route, the
+  // English rules cannot read the words and take the route's word for it. It
+  // is the same decision, made on the same weak evidence, so it is marked as
+  // one: the contract built from it asks the model (see decidedOnWeakEvidence).
+  if (whole.enabled && whole.parentArtifactId && whole.followUp === 'weak' && input.answerType === 'system_design_answer' && (whole.reason === 'update_design' || whole.reason === 'explain_design')) {
+    const language = detectRequestLanguage(input.question);
+    if (language) return describeVisual({ ...whole, language }, input);
+  }
   if (!whole.enabled && (whole.reason === 'unrelated_turn' || whole.reason === 'not_a_diagram_turn')) {
     const heard = resolveBySentence(input);
     if (heard) return describeVisual(heard.request, { ...input, question: heard.sentence });

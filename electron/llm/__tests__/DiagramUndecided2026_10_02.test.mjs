@@ -17,6 +17,10 @@
 //   - Its answer is tidied like any other unless it holds a drawing.
 //   - The privacy scope holds: a drawing that may not go to the provider is
 //     not handed over, undecided or not.
+//   - A decision the rules made on weak evidence (a follow-up; a request to
+//     draw while a drawing is in focus) keeps its route, its persona and its
+//     mark on the session — the rules' reading — and only its contract is
+//     conditional.
 //
 // Needs `npm run build:electron` (dist-electron).
 
@@ -100,10 +104,10 @@ describe('an undecided turn in the main process', () => {
 
   test('the engine and the What-to-Answer fallback switch persona only for a decided turn', () => {
     const engine = fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8');
-    assert.match(engine, /const _liveDiagram = Boolean\(wtaDiagramTurn\?\.signals\) && wtaDiagramTurn\?\.signals\?\.undecided !== true;/);
+    assert.match(engine, /const _liveDiagram = Boolean\(wtaDiagramTurn\?\.signals\) && wtaDiagramTurn\?\.request\.enabled === true;/);
     assert.match(engine, /\.\.\.\(_liveDiagram \? \{ action: 'answer' as const \} : \{\}\),\s*\n\s*\.\.\.\(wtaDiagramTurn\?\.signals \? \{ diagram: wtaDiagramTurn\.signals \} : \{\}\),/);
     const wta = fs.readFileSync(path.join(root, 'electron/llm/WhatToAnswerLLM.ts'), 'utf8');
-    assert.match(wta, /diagramTurn\.signals\.undecided === true \? \{\} : \{ action: 'answer' as const \}/);
+    assert.match(wta, /diagramTurn\.request\.enabled \? \{ action: 'answer' as const \} : \{\}/);
   });
 
   test('a prompt the composer did not build gets the same contract, once', () => {
@@ -128,8 +132,9 @@ describe('an undecided turn in the main process', () => {
     assert.equal(dps.undecidedTurnAnsweredInWords(t, 'Антифрод лучше поставить перед платёжным сервисом.'), true);
     assert.equal(dps.undecidedTurnAnsweredInWords(t, 'Добавляю.\n\n```mermaid\nflowchart LR\n a --> b\n```\n'), false);
     assert.equal(dps.undecidedTurnAnsweredInWords(t, '| A | B |\n| --- | --- |\n| 1 | 2 |'), false);
-    // A decided turn is never "answered in words" for this purpose, and a plain turn has no signals at all.
-    assert.equal(dps.undecidedTurnAnsweredInWords(turn('Добавь кэш перед базой велосипедов и станций.', { activeDesign: DESIGN }), 'prose'), false);
+    // A turn the rules are sure of is never "answered in words" for this purpose, and a plain turn has no signals at all.
+    assert.equal(dps.undecidedTurnAnsweredInWords(turn('Спроектируй сервис проката велосипедов'), 'prose'), false);
+    assert.equal(dps.undecidedTurnAnsweredInWords(turn('Add a cache in front of the payment service.', { activeDesign: { ...DESIGN, source: 'flowchart LR\n a["API Gateway"] --> b["Payment Service"]' } }), 'prose'), false);
     assert.equal(dps.undecidedTurnAnsweredInWords(turn('Во сколько завтра встреча?'), 'prose'), false);
     assert.equal(dps.undecidedTurnAnsweredInWords(null, 'prose'), false);
   });
@@ -138,6 +143,58 @@ describe('an undecided turn in the main process', () => {
     assert.equal(turn(FRESH, { userInstructions: 'No diagrams, ever.' }).signals, null);
     assert.equal(turn(FRESH, { featureEnabled: false }).signals, null);
     assert.equal(turn(EDIT, { activeDesign: DESIGN, featureEnabled: false }).turnBlock, '');
+  });
+});
+
+describe('a decision the rules made on weak evidence', () => {
+  const WEAK_EDIT = 'Добавь кэш перед базой велосипедов и станций.';
+  const DRAW_IN_FOCUS = 'нарисуй ещё один блок после оплаты, антифрод';
+
+  test('a follow-up keeps the rules\' reading for everything but the contract', () => {
+    const t = turn(WEAK_EDIT, { activeDesign: DESIGN });
+    assert.deepEqual([t.request.enabled, t.request.operation, t.request.followUp], [true, 'update', 'weak']);
+    assert.equal(t.signals.undecided, true);
+    assert.match(t.turnBlock, /for you to decide/);
+    // Routed and marked exactly as before: a design follow-up, a drawing wanted on the spoken route.
+    dps.registerActiveDesignProvider(() => DESIGN);
+    try {
+      assert.equal(dps.isDesignFollowUpTurn(WEAK_EDIT, 'general_meeting_answer'), true);
+      assert.equal(dps.visualTurnRoute(WEAK_EDIT, 'general_meeting_answer'), 'system_design_answer');
+      // (A turn the keyword planner calls coding is not read by the four-language rules at all: unchanged.)
+      assert.equal(dps.visualTurnRoute(WEAK_EDIT, 'coding_question_answer'), null);
+    } finally {
+      dps.registerActiveDesignProvider(null);
+    }
+    assert.equal(dps.liveQuestionWantsADrawing(t), dps.spokenRouteCarriesContract());
+    assert.equal(dps.turnStartsAFreshDesign(t), false);
+    // The contract: once, conditional, on the persona a decided diagram turn has.
+    const prompt = buildSystemPromptV2({ mode: 'general', action: 'answer', tier: 'cloud', surface: 'live', diagram: t.signals });
+    assert.equal(count(prompt, '<diagram_contract>'), 1);
+    assert.match(prompt, /could not tell from the words of this turn/);
+    // Answered in words (the model judged it was not a change): tidied like any answer.
+    assert.equal(dps.undecidedTurnAnsweredInWords(t, 'Кэш тут не нужен.'), true);
+  });
+
+  test('a request to draw while a drawing is in focus is not recorded as a fresh design', () => {
+    const t = turn(DRAW_IN_FOCUS, { activeDesign: DESIGN });
+    assert.deepEqual([t.request.enabled, t.request.operation, t.request.mayChangeActive], [true, 'create', true]);
+    assert.equal(t.signals.undecided, true);
+    assert.equal(t.signals.tableView, 'architecture');
+    assert.equal(dps.turnStartsAFreshDesign(t), false);
+    assert.ok(t.turnBlock.includes('Платёжный сервис'), 'the drawing is handed over');
+    // With nothing on the table the same words are a fresh request, as before.
+    const fresh = turn(DRAW_IN_FOCUS);
+    assert.equal(fresh.signals.undecided, undefined);
+    assert.equal(dps.turnStartsAFreshDesign(fresh), true);
+    assert.equal(fresh.turnBlock, '');
+  });
+
+  test('every place that records a fresh design asks the same question', () => {
+    const engine = fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8');
+    const ipc = fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8');
+    assert.equal(count(engine, 'turnStartsAFreshDesign(turn)'), 2);
+    assert.equal(count(ipc, 'turnStartsAFreshDesign(turn)'), 3);
+    assert.equal(count(engine + ipc, "turn.request.operation === 'create' && !turn.request.parentArtifactId"), 0);
   });
 });
 

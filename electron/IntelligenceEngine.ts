@@ -3909,7 +3909,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // says what the next design was drawn for. If the prefetch
                     // is adopted, the same note is applied then (see
                     // speculativeDesignNote).
-                    const isCreate = turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId;
+                    const isCreate = dps.turnStartsAFreshDesign(turn);
                     const isFollowUp = turn.request.enabled && turn.request.attachActiveDesign && Boolean(turn.request.parentArtifactId);
                     if (isSpeculative) {
                         // (An undecided turn that was handed the design: see activeDesign.consider.)
@@ -4245,7 +4245,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 // answer is still the words to say; the contract it
                                 // carries states its own precedence for the turn that
                                 // does.
-                                const _liveDiagram = Boolean(wtaDiagramTurn?.signals) && wtaDiagramTurn?.signals?.undecided !== true;
+                                const _liveDiagram = Boolean(wtaDiagramTurn?.signals) && wtaDiagramTurn?.request.enabled === true;
                                 const _base = resolveV2SystemPrompt({
                                     action: (_liveCoding || _explanatoryMode) ? 'answer' : 'what_to_say',
                                     // The live overlay: whatever General answers,
@@ -7854,7 +7854,7 @@ export class IntelligenceEngine extends EventEmitter {
                         activeDesign: this.session.getActiveDesign(),
                         pinnedModeId: activeModeInfo?.id,
                     });
-                    if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+                    if (dps.turnStartsAFreshDesign(turn)) {
                         this.session.noteDesignQuestion(question);
                     }
                     return turn;

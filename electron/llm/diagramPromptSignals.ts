@@ -504,6 +504,17 @@ export function alternativeDesignTurn(
 }
 
 /**
+ * Does this turn start a fresh design, for the session's record of what the
+ * next drawing was drawn for? A request to draw made while a drawing is in
+ * focus, with no kind named, may be a change to that drawing: nothing is
+ * recorded for it, and the answer's own content says which it was.
+ */
+export function turnStartsAFreshDesign(turn: DiagramTurn | null | undefined): boolean {
+  const request = turn?.request;
+  return Boolean(request && request.enabled && request.operation === 'create' && !request.parentArtifactId && request.mayChangeActive !== true);
+}
+
+/**
  * An undecided turn whose answer holds no drawing and no table.
  *
  * The rules could not place the turn (Spanish, Russian, Chinese, Japanese),

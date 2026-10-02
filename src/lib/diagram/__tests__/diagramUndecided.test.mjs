@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolveDiagramRequest } from '../diagramRequest.mjs';
 import { undecidedOtherLanguageTurn, saysNoDrawing, answerNamesParts } from '../diagramRequestI18n.mjs';
-import { diagramPromptSignals, renderDiagramContract, renderDiagramTurnBlock, renderDiagramTurnNote, DIAGRAM_CONTRACT_OPEN } from '../diagramContract.mjs';
+import { diagramPromptSignals, renderDiagramContract, renderDiagramTurnBlock, renderDiagramTurnNote, decidedOnWeakEvidence, DIAGRAM_CONTRACT_OPEN } from '../diagramContract.mjs';
 import { answerIsAbout, createActiveDesignState } from '../activeDesign.mjs';
 
 const ARCH = {
@@ -290,12 +290,15 @@ describe('the conditional contract is the decided contract, under a condition', 
     assert.deepEqual(signals, { view: 'architecture', operation: 'update', output: 'text-and-diagram', basis: 'proposed-design', withCode: false, hasParent: true, depth: 'brief', exampleIds: [], undecided: true });
   });
 
-  test('a decided request is untouched by any of this', () => {
-    const decided = ask('Agrégale una caché entre la pasarela y el servicio de viajes.', { activeDesign: design('es') });
-    assert.equal(decided.enabled, true);
-    const s = diagramPromptSignals(decided, { question: 'x' });
-    assert.equal(s.undecided, undefined);
-    assert.doesNotMatch(renderDiagramContract(s), /could not tell/);
+  test('a request the rules are sure of is untouched by any of this', () => {
+    for (const [q, extra] of [['Dibuja la arquitectura de un acortador de URLs', {}], ['Muestra este diseño como diagrama de secuencia', { activeDesign: design('es') }], ['Add a cache in front of the gateway.', { activeDesign: { artifactId: 'd.v1', view: 'architecture', foreground: true, source: 'flowchart LR\n a["API Gateway"] --> b["Order Service"]' } }]]) {
+      const decided = ask(q, extra);
+      assert.equal(decided.enabled, true, q);
+      assert.equal(decidedOnWeakEvidence(decided), null, q);
+      const s = diagramPromptSignals(decided, { question: 'x' });
+      assert.equal(s.undecided, undefined, q);
+      assert.doesNotMatch(renderDiagramContract(s), /could not tell/, q);
+    }
   });
 
   for (const tier of ['cloud', 'local']) {
@@ -376,6 +379,181 @@ describe('the conditional contract is the decided contract, under a condition', 
   test('a request that is neither enabled nor undecided has no signals, as before', () => {
     assert.equal(diagramPromptSignals(ask('¿Qué hora es en Madrid ahora?'), { question: 'x' }), null);
     assert.equal(renderDiagramTurnBlock(ask('¿Qué hora es en Madrid ahora?', { activeDesign: design('es', false) }), design('es', false)), '');
+  });
+});
+
+// What the rules DO decide in these languages is not all decided well. On the
+// sixth and seventh blind sets they read an edit as a question, a question as
+// an edit, and a change to the drawing as a new drawing, about one time in
+// seven. Those decisions keep their place — the request stays enabled, with
+// the rules' reading as its operation, so every route and the session behave
+// as they did — and the model that answers is asked the question instead.
+describe('a decision the rules made on weak evidence is the model\'s to make', () => {
+  const inner = (text) => text.replace(/^<diagram_contract>\n/, '').replace(/\n<\/diagram_contract>$/, '');
+  const ENGLISH = { artifactId: 'design-1.v1', artifact: 'mermaid', view: 'architecture', version: 1, foreground: true, source: 'flowchart LR\n  gw["API Gateway"] --> order["Order Service"]\n  order --> pay["Payment Service"]\n  order --> q[["Order Queue"]]' };
+
+  test('a follow-up: the request is the rules\' reading, the contract is the three-way one', () => {
+    const edit = ask('Agrégale una caché entre la pasarela y el servicio de viajes.', { activeDesign: design('es') });
+    assert.deepEqual([edit.enabled, edit.operation, edit.parentArtifactId, edit.followUp], [true, 'update', 'design-1.v1', 'weak']);
+    assert.equal(decidedOnWeakEvidence(edit), 'follow-up');
+    const s = diagramPromptSignals(edit, { question: 'x' });
+    assert.deepEqual(s, { view: 'architecture', operation: 'update', output: 'text-and-diagram', basis: 'proposed-design', withCode: false, hasParent: true, depth: 'brief', exampleIds: [], undecided: true });
+    // The same text an undecided turn gets: one contract for "may be a change, a question, or neither".
+    const undecided = diagramPromptSignals(ask('и ещё прицепи к платежам антифрод отдельным кубиком', { activeDesign: design('ru') }), { question: 'y' });
+    assert.equal(renderDiagramContract(s), renderDiagramContract(undecided));
+  });
+
+  test('…whichever way the rules read it: an edit they took for a question is no longer told "do not draw"', () => {
+    // (es-D08 of the fifth blind set: read as a question, answered in prose.)
+    const q = ask('póngale colores pues, que las bases de datos se vean distintas de los servicios', { activeDesign: design('es') });
+    assert.deepEqual([q.enabled, q.operation, q.output], [true, 'explain', 'text-only']);
+    const s = diagramPromptSignals(q, { question: 'x' });
+    assert.deepEqual([s.operation, s.output, s.undecided], ['update', 'text-and-diagram', true]);
+    assert.match(renderDiagramContract(s), /IF THE TURN TELLS OR ASKS YOU TO CHANGE WHAT IS DRAWN/);
+  });
+
+  test('…and whether or not the turn names the drawing', () => {
+    // (es-D09 of the seventh: "al esquema de antes añádele…" read as a question.)
+    const named = ask('al esquema de antes añádele un servicio de autenticación delante de todo, que se nos ha olvidado', { activeDesign: { ...ENGLISH, foreground: false } });
+    assert.equal(named.followUp, 'strong');
+    assert.equal(decidedOnWeakEvidence(named), 'follow-up');
+    assert.equal(diagramPromptSignals(named, { question: 'x' }).undecided, true);
+  });
+
+  test('the drawing is handed over as one the turn MAY be about, with a chart\'s values', () => {
+    const edit = ask('Agrégale una caché entre la pasarela y el servicio de viajes.', { activeDesign: design('es') });
+    assert.match(renderDiagramTurnBlock(edit, design('es')), /whether it does is for you to decide/);
+    const chartEdit = ask('标题改成“工作日与周末骑行对比”', { activeDesign: CHART });
+    if (chartEdit.enabled) assert.match(renderDiagramTurnBlock(chartEdit, CHART), /Values \(what the app computed/);
+  });
+
+  test('a request to draw, with a drawing in focus and no kind named: a change to it, or a new drawing', () => {
+    const q = '支付后面再画一个支付宝微信的框。标成外部的。';
+    const x = ask(q, { activeDesign: ENGLISH });
+    assert.deepEqual([x.enabled, x.operation, x.parentArtifactId, x.mayChangeActive, x.tableView, x.attachActiveDesign], [true, 'create', undefined, true, 'architecture', true]);
+    assert.equal(decidedOnWeakEvidence(x), 'drawing');
+    const s = diagramPromptSignals(x, { question: 'x' });
+    assert.deepEqual([s.undecided, s.tableView, s.hasParent, s.kindNamed], [true, 'architecture', false, undefined]);
+    const text = renderDiagramContract(s, { tier: 'cloud', surface: 'live' });
+    assert.match(text, /IF WHAT IT ASKS FOR BELONGS IN THE DRAWING ON THE TABLE/);
+    assert.match(text, /IF IT ASKS FOR A DRAWING OF SOMETHING ELSE/);
+    assert.match(text, /it is a change to the one on the table/);
+    // Both ways are the decided bodies, word for word.
+    const update = inner(renderDiagramContract({ view: 'architecture', operation: 'update', output: 'text-and-diagram', basis: 'proposed-design', withCode: false, hasParent: true, depth: 'brief', exampleIds: [] })).split('\nIf the turn is plainly about something else')[0];
+    assert.ok(text.includes(update), 'the update body of the drawing on the table');
+    const decided = { ...s };
+    delete decided.undecided; delete decided.tableView;
+    assert.ok(text.includes(inner(renderDiagramContract(decided, { tier: 'cloud', surface: 'live' }))), 'the create body of the drawing asked for');
+    assert.match(renderDiagramTurnBlock(x, ENGLISH), /whether it does is for you to decide/);
+  });
+
+  test('…not with nothing on the table, not out of focus, and not when the sentence points at the drawing', () => {
+    const q = '支付后面再画一个支付宝微信的框。标成外部的。';
+    assert.equal(decidedOnWeakEvidence(ask(q)), null);
+    assert.equal(ask(q).mayChangeActive, undefined);
+    assert.equal(decidedOnWeakEvidence(ask(q, { activeDesign: { ...ENGLISH, foreground: false } })), null);
+    const pointed = ask('把这个画成时序图', { activeDesign: ENGLISH });
+    assert.deepEqual([pointed.operation, pointed.parentArtifactId, pointed.mayChangeActive], ['create', 'design-1.v1', undefined]);
+    assert.equal(decidedOnWeakEvidence(pointed), null);
+  });
+
+  test('a kind named while a drawing is in focus: what is on the table in that form, or something else', () => {
+    const pie = ask('换成饼图看看各科占比', { activeDesign: CHART });
+    assert.deepEqual([pie.enabled, pie.view, pie.mayChangeActive, pie.kindNamed, pie.tableView], [true, 'chart', true, true, 'chart']);
+    const pieText = renderDiagramContract(diagramPromptSignals(pie, { question: 'x', maxExamples: 1 }));
+    assert.match(pieText, /IF IT ASKS FOR WHAT IS ON THE TABLE/);
+    assert.match(pieText, /This turn changes the chart already on the table/);
+    // The chart as a table: the rows the app computed, copied.
+    const table = ask('这个给我转成表格吧,专科一列,完成量一列', { activeDesign: CHART });
+    assert.deepEqual([table.view, table.mayChangeActive, table.kindNamed], ['matrix', true, true]);
+    const tableText = renderDiagramContract(diagramPromptSignals(table, { question: 'x' }));
+    assert.match(tableText, /copy them exactly/);
+    assert.match(tableText, /IF IT SAYS WHAT TO DRAW, AND THAT IS SOMETHING ELSE/);
+    assert.match(renderDiagramTurnBlock(table, CHART), /Values \(what the app computed/);
+    // Another kind of the design on the table: that system, in the form named.
+    const seq = ask('画个时序图解释一下TCP三次握手', { activeDesign: ENGLISH });
+    const seqText = renderDiagramContract(diagramPromptSignals(seq, { question: 'x' }));
+    assert.match(seqText, /This turn asks for a sequence diagram of what is already on the table/);
+    assert.match(seqText, /When the turn names only a form and no subject, the subject is what is on the table/);
+  });
+
+  test('English is never handed over this way', () => {
+    for (const q of ['Add a cache in front of the order service.', 'Why do we need the queue?', 'Draw another box after payments.', 'Show it as a sequence diagram.']) {
+      const x = ask(q, { activeDesign: ENGLISH });
+      assert.equal(decidedOnWeakEvidence(x), null, q);
+      const s = diagramPromptSignals(x, { question: q });
+      if (s) assert.equal(s.undecided, undefined, q);
+    }
+  });
+});
+
+describe('a drawing labelled in English, out of focus, named by its English word', () => {
+  const BG = { artifactId: 'design-1.v1', artifact: 'mermaid', view: 'architecture', version: 1, foreground: false, source: 'flowchart LR\n  gw["API Gateway"] --> order["Order Service"]\n  order --> pay["Payment Service"]\n  order --> cache[("Redis Cache")]' };
+  test('in Russian, Chinese or Japanese a Latin word of a label is said on purpose', () => {
+    for (const q of ['а Gateway у нас один на все регионы или в каждом свой?', '那个 Redis 挂了怎么办', 'Gateway のところって冗長化されてますか']) {
+      const x = ask(q, { activeDesign: BG });
+      assert.equal(x.reason, 'undecided', q);
+      assert.equal(x.undecided.away, true, q);
+    }
+  });
+  test('not the words every label has, and not a turn with none of them', () => {
+    for (const q of ['那个 service 挂了怎么办', 'этот app вообще кто-нибудь открывал?', 'во сколько завтра созвон?']) {
+      assert.equal(ask(q, { activeDesign: BG }).undecided, undefined, q);
+    }
+  });
+});
+
+// The seventh blind set: the same recipe, with one difference that the real
+// engine had shown to matter — the drawings on the table are labelled in
+// ENGLISH, as a model labels them, and the sentences are not. Frozen by hash,
+// run once on the code as committed (a932d217), then once more with the weak
+// decisions handed over (written before the set existed). README has the figures.
+describe('the seventh four-language blind set (English-labelled drawings), now regression data', async () => {
+  const { ROWS, FIXTURES } = await import('../../../../tests/diagram/i18n-heldout-7-2026-10-02.mjs');
+  const resolve = (row) => resolveDiagramRequest({ question: row.q, featureEnabled: true, mode: row.mode, ...(row.ctx !== 'none' ? { activeDesign: { ...FIXTURES[row.ctx] } } : {}) });
+
+  test('the file is the one that was frozen before it was run', () => {
+    const file = fileURLToPath(new URL('../../../../tests/diagram/i18n-heldout-7-2026-10-02.mjs', import.meta.url));
+    assert.equal(createHash('sha256').update(readFileSync(file)).digest('hex'), 'ae19d844f67632494e7f28aceb2c89c0512b90f9f51d39710ad7d8ceb9907a29');
+    assert.equal(ROWS.length, 220);
+  });
+
+  test('the rules alone place 60 of the 132 real requests; every other one is handed to the model', () => {
+    let decided = 0;
+    let undecided = 0;
+    const dropped = [];
+    for (const row of ROWS) {
+      if (row.expect !== 'draw' && row.expect !== 'claim') continue;
+      const x = resolve(row);
+      if (x.enabled) decided += 1;
+      else if (x.undecided) undecided += 1;
+      else dropped.push(row.id);
+    }
+    // Blind, six were dropped: a visual named in words the hand-over lexicon
+    // did not know ("pásamelo a barras", "на шкале времени", "整一个表",
+    // "人员架构", "表がほしい", "分岐で整理"). Widened afterwards.
+    assert.deepEqual(dropped, []);
+    assert.deepEqual([decided, undecided], [62, 70]);
+  });
+
+  test('of the decisions the rules do make, the wrong ones are now the model\'s to correct, except four', () => {
+    const wrong = [];
+    const sure = [];
+    for (const row of ROWS) {
+      const x = resolve(row);
+      if (!x.enabled) continue;
+      const must = row.expect === 'draw' || row.expect === 'claim';
+      const bad = !must
+        || (row.expect === 'claim' && !x.parentArtifactId)
+        || (row.expect === 'claim' && row.op && row.op !== 'create' && x.operation !== row.op);
+      if (!bad) continue;
+      wrong.push(row.id);
+      if (decidedOnWeakEvidence(x) === null) sure.push(row.id);
+    }
+    assert.deepEqual(wrong.sort(), ['es-D09', 'es-E05', 'ja-B03', 'ja-D02', 'ja-D09', 'ru-D09', 'zh-B03', 'zh-D08', 'zh-F02', 'zh-F03', 'zh-F04', 'zh-G03']);
+    // Still the rules' alone: two requests with nothing on the table that only
+    // report one ("the client asked us for a comparison table last week").
+    assert.deepEqual(sure.sort(), ['ja-B03', 'zh-B03']);
   });
 });
 

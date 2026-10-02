@@ -40,7 +40,7 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
-import { resolveDiagramTurn, v3DiagramTurn, withDiagramContract, withDiagramTurnBlock, withMeetingSpeechForDiagramTurn, liveQuestionWantsADrawing, spokenRouteCarriesContract, undecidedTurnAnsweredInWords, DIAGRAM_SPEECH_WINDOW_SECONDS, type DiagramTurn } from './llm/diagramPromptSignals';
+import { resolveDiagramTurn, v3DiagramTurn, withDiagramContract, withDiagramTurnBlock, withMeetingSpeechForDiagramTurn, liveQuestionWantsADrawing, spokenRouteCarriesContract, undecidedTurnAnsweredInWords, turnStartsAFreshDesign, DIAGRAM_SPEECH_WINDOW_SECONDS, type DiagramTurn } from './llm/diagramPromptSignals';
 import { registerDiagramIpc, broadcastDiagramsEnabled } from './services/diagram/diagramIpc';
 import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
@@ -2103,7 +2103,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   pinnedModeId: modeInfo?.id ?? undefined,
                   hasVisualContext: (imagePaths?.length ?? 0) > 0,
                 });
-                if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+                if (turnStartsAFreshDesign(turn)) {
                   im?.noteDesignQuestion?.(v3Question);
                 }
                 return turn;
@@ -4515,7 +4515,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               pinnedModeId: manualActiveMode?.id ?? undefined,
               hasVisualContext: (imagePaths?.length ?? 0) > 0,
             });
-            if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+            if (turnStartsAFreshDesign(turn)) {
               im?.noteDesignQuestion?.(message);
             }
             return turn;
@@ -19126,7 +19126,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               pinnedModeId: phonePinnedModeId ?? undefined,
               hasVisualContext: phoneImagePaths.length > 0,
             });
-            if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+            if (turnStartsAFreshDesign(turn)) {
               intelligenceManager.noteDesignQuestion?.(message);
             }
             return turn;

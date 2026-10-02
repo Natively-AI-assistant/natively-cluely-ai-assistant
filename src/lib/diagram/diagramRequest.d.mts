@@ -57,6 +57,15 @@ export interface DiagramRequest {
   /** The kind of artifact this one is drawn FROM ("show the chart as a table"). */
   parentFamily?: string | null;
   /**
+   * A fresh request made while a drawing is in focus, with no kind of drawing
+   * named (Spanish, Russian, Chinese, Japanese): it may be a change to that
+   * drawing. `tableView` is the view of the drawing on the table.
+   */
+  mayChangeActive?: boolean;
+  tableView?: DiagramView;
+  /** With `mayChangeActive`: the request names a kind of drawing ("as a table", "a pie chart"). */
+  kindNamed?: boolean;
+  /**
    * Set only on a request that is NOT enabled: the rules could not place the
    * turn (Spanish, Russian, Chinese, Japanese), and this is the request it
    * would be if it is one. The contract built from it asks the model that

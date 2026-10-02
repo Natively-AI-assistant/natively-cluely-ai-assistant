@@ -807,7 +807,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                 // 'answer' — and it carries the diagram contract.
                 // (An undecided turn keeps 'what_to_say': most of them ask
                 // for no drawing. See the engine's V3 persona.)
-                ...(diagramTurn?.signals ? { ...(diagramTurn.signals.undecided === true ? {} : { action: 'answer' as const }), diagram: diagramTurn.signals } : {}),
+                ...(diagramTurn?.signals ? { ...(diagramTurn.request.enabled ? { action: 'answer' as const } : {}), diagram: diagramTurn.signals } : {}),
             });
             // Flag-off fallback: the legacy constants never knew about diagrams,
             // so the shared contract is appended (a v2 base already carries it;

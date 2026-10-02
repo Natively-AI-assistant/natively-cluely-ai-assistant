@@ -291,6 +291,25 @@ const UNDECIDED_SCENARIOS = [
   },
   { id: 'U5', mode: 'team-meet', seed: [], steps: [['wta', 'надо бы как-нибудь нарисовать схему всего этого хозяйства, а то новички путаются', 'u-none']] },
   { id: 'U6', mode: 'general', seed: [], steps: [['wta', 'parce, hágame un favor y me pinta ahí cómo va el flujo de aprobación de un crédito, desde que el cliente lo pide hasta que se desembolsa', 'u-draw']] },
+  // Decisions the rules make on weak evidence, handed to the model as well:
+  // a request to draw while a drawing is in focus (a change to it, or a new
+  // drawing), an edit that names the drawing, a named kind of what is there.
+  {
+    id: 'U7', mode: 'technical-interview', seed: [],
+    steps: [
+      ['wta', '设计一个在线书店的系统架构', 'u-draw'],
+      ['wta', '支付后面再画一个支付宝和微信的框，标成外部的', 'u-same-design'],
+      ['wta', '刚才那个架构图里再加一个推荐服务，接到网关后面', 'u-same-design'],
+      ['wta', '画个时序图解释一下TCP三次握手', 'u-new-sequence'],
+    ],
+  },
+  {
+    id: 'U8', mode: 'sales', seed: [],
+    steps: [
+      ['wta', '用柱状图画一下上季度各专科的完成量：全科1240，皮肤科860，儿科430，心理610', 'u-draw'],
+      ['wta', '这个给我转成表格吧，专科一列，完成量一列', 'u-table'],
+    ],
+  },
 ];
 
 const SUITE = arg('suite', 'all');
@@ -395,6 +414,10 @@ const RUN = [
     'u-draw': (a) => (a.mermaidBlocks.some((b) => b.ok) || a.payloadBlocks.some((b) => b.ok) || a.hasMarkdownTable ? [true, 'drew what was asked for'] : [false, 'no drawing for a request']),
     'u-update': (a) => (a.mermaidBlocks.some((b) => b.ok && b.nodes >= 3) ? [true, 'the drawing came back changed, whole'] : [false, 'no updated drawing for a change']),
     'u-none': (a) => (a.visualBlockCount === 0 && !a.hasMarkdownTable ? [true, 'answered in words'] : [false, 'drew on a turn that asked for nothing']),
+    // The drawing on the table came back changed (the session says it is the next version of the same design).
+    'u-same-design': (a, prev, answer, design) => (a.mermaidBlocks.some((b) => b.ok) && design && design.version >= 2 ? [true, `the design on the table, changed: version ${design.version}`] : [false, `wanted the next version of the design on the table: ${JSON.stringify(design ? { version: design.version, view: design.view } : null)}`]),
+    'u-new-sequence': (a, prev, answer, design) => (a.mermaidBlocks[0]?.ok && a.mermaidBlocks[0].type === 'sequence' && design && design.version === 1 ? [true, 'a new sequence diagram, not a change to the design'] : [false, `wanted a new sequence diagram: ${a.mermaidBlocks[0]?.type || 'no diagram'}, version ${design ? design.version : '—'}`]),
+    'u-table': (a, prev, answer) => (a.hasMarkdownTable && ['1240', '860', '430', '610'].every((n) => String(answer).replace(/,/g, '').includes(n)) ? [true, 'the chart\'s own numbers, as a table'] : [false, a.hasMarkdownTable ? 'a table, without the chart\'s numbers' : 'no table of the chart']),
     refine: (a, prev) => (a.payloadBlocks[0]?.ok && prev && a.payloadBlocks[0].source.trim() === prev.trim() ? [true, 'prose shortened, chart unchanged'] : [false, 'the chart changed or was dropped']),
     'no-baseline': (a) => (a.visualBlockCount === 0 ? [true, 'no chart: the baseline was never given'] : a.payloadBlocks[0] && !a.payloadBlocks[0].ok ? [true, `chart refused locally: ${a.payloadBlocks[0].refused.message}`] : [false, `drew a forecast from an invented baseline (stamped ${JSON.stringify(a.payloadBlocks[0]?.badges)}): ${JSON.stringify(tableValues(a).slice(0, 4))}`]),
     funnel: (a) => (a.payloadBlocks[0]?.ok && has(tableValues(a), [200, 120, 60, 22]) ? [true, `stage counts 200 / 120 / 60 / 22${a.payloadBlocks[0].notes.length ? ` (${a.payloadBlocks[0].notes[0]})` : ''}`] : [false, `wanted the stated counts: ${JSON.stringify(a.payloadBlocks[0]?.refused || tableValues(a))}`]),
@@ -449,7 +472,7 @@ const RUN = [
         if (!first) return sc.optional ? null : [false, 'no diagram'];
         return [first.ok && ['flowchart', 'sequence', 'state'].includes(first.type) && a.payloadBlocks.length === 0, `a ${first.type} diagram (${first.nodes} nodes, ${first.edges} connections)`];
       };
-      const verdict = sc.seed !== undefined ? (judge ? judge(a, previousPayload, result.answer) : null) : designVerdict();
+      const verdict = sc.seed !== undefined ? (judge ? judge(a, previousPayload, result.answer, design) : null) : designVerdict();
       if (a.payloadBlocks[0] && label !== 'refine') previousPayload = a.payloadBlocks[0].source;
       records.push({
         verdict: verdict ? { pass: verdict[0], note: verdict[1] } : null,
