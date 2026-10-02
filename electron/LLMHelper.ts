@@ -28,6 +28,7 @@ import { hasOnDeviceScreenText, ON_DEVICE_SCREEN_REFUSED_MESSAGE } from "./conte
 import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionOverride, storedVisionTest, visionWireModel } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
+import { trimUserContentToFit, userContentRoomChars } from "./llm/localContextTrim"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
@@ -624,6 +625,22 @@ export interface StreamOutcome {
   reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
 }
 
+/**
+ * The diagram contract on a system prompt that is about to be replaced, ready
+ * to append to its replacement ('' when there is none).
+ *
+ * The knowledge intercept swaps the whole system prompt for the persona's. A
+ * turn that had been told to draw ("draw a timeline of my career", asked from
+ * the phone) then kept its <active_design> block in the context and lost the
+ * contract that says what to do with it. Plain text match on the contract's
+ * own tags: this file must not import the shared .mjs modules statically.
+ */
+export function carriedDiagramContract(replaced: string | null | undefined): string {
+  if (typeof replaced !== 'string') return '';
+  const block = /<diagram_contract>[\s\S]*?<\/diagram_contract>/.exec(replaced);
+  return block ? `\n\n${block[0]}` : '';
+}
+
 export class LLMHelper {
   // ── Provider clients ────────────────────────────────────────────────────
   //
@@ -1021,8 +1038,25 @@ export class LLMHelper {
     // to do.
     const original = String(args[0] ?? '');
     const cap = LLMHelper.REPLAYED_ANSWER_PROMPT_MAX_CHARS;
+    // The design this turn is about sits at the END of the answer prompt, so a
+    // plain head-cut dropped exactly the artifact the repair has to keep. It is
+    // carried across the cut, whole (a block the cut would split is moved, not
+    // left as half a block and a copy).
+    let head = original.slice(0, cap);
+    let keptDesign = '';
+    if (original.length > cap) {
+      const from = Math.max(0, cap - 16000);
+      const block = /<active_design\b[\s\S]*?<\/active_design>/.exec(original.slice(from));
+      if (block) {
+        const startsAt = from + block.index;
+        if (startsAt + block[0].length > cap) {
+          if (startsAt < cap) head = original.slice(0, startsAt);
+          keptDesign = `\n\n${block[0]}`;
+        }
+      }
+    }
     const inherited = original.length > cap
-      ? `${original.slice(0, cap)}\n\n[...answer context truncated for the repair pass...]`
+      ? `${head}\n\n[...answer context truncated for the repair pass...]${keptDesign}`
       : original;
     const message = `${inherited}\n\n---\n${repairMessage}`;
     const replayed = [...args] as Parameters<LLMHelper['streamChat']>;
@@ -1157,6 +1191,12 @@ export class LLMHelper {
     // V3 renders prior-turn continuity as a labelled prose section rather than
     // as evidence; it is CONVERSATION_STATE data, i.e. transcript scope.
     if (/^# Conversation so far$/m.test(message)) scopes.push('transcript');
+    // The system design on the table is prior assistant output about the
+    // conversation — the same CONVERSATION_STATE class (diagramPromptSignals.ts).
+    if (/<active_design\b/.test(message)) scopes.push('transcript');
+    // What was said in the meeting, handed to a drawing of the conversation
+    // (withMeetingSpeechForDiagramTurn): the transcript itself.
+    if (/<conversation_so_far>/.test(message)) scopes.push('transcript');
     return [...new Set(scopes)];
   }
 
@@ -1192,6 +1232,14 @@ export class LLMHelper {
       scrubbed = scrubbed
         .replace(/<transcript\b[\s\S]*?<\/transcript>\s*/gi, '')
         .replace(/<recent_transcript\b[\s\S]*?<\/recent_transcript>\s*/gi, '')
+        // Defence in depth: the resolver already withholds the design when the
+        // transcript scope is denied; a block that reached here anyway goes too.
+        .replace(/<active_design\b[\s\S]*?<\/active_design>\s*/gi, '')
+        // The same for what was said in the meeting. It is built only where
+        // the transcript may go (activeDesignShareable), which includes "the
+        // model is on this device" — and a local model that turns out to be
+        // unreachable hands the turn to a provider with the block still in it.
+        .replace(/<conversation_so_far>[\s\S]*?<\/conversation_so_far>\s*/gi, '')
         // V3's prior-turn continuity section (CONVERSATION_STATE data). Runs to
         // the next top-level section or tag, both of which the composer emits
         // after a blank line.
@@ -3363,11 +3411,10 @@ export class LLMHelper {
     const cap = Math.floor(maxContextTokens * 0.8);
     const totalFor = (s: string) => caps.promptBudgetTokens + reserved + estimateTokens(s);
     if (totalFor(text) <= cap) return text;
-    const lines = text.split('\n');
-    while (lines.length > 1 && totalFor(lines.join('\n')) > cap) {
-      lines.shift();
-    }
-    return lines.join('\n');
+    // Oldest lines first, as before; the design on the table is kept whole or
+    // left out whole (see localContextTrim). `totalFor(s) <= cap`, solved for
+    // the length of s at four characters to a token.
+    return trimUserContentToFit(text, Math.max(0, Math.floor(cap - caps.promptBudgetTokens - reserved) * 4));
   }
 
   // Trim a transcript array to fit within the active model's prompt budget.
@@ -3416,11 +3463,9 @@ export class LLMHelper {
       let total = estimateTokens(sys) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
         console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
-        const lines = userContent.split('\n');
-        while (lines.length > 1 && (estimateTokens(sys) + estimateTokens(lines.join('\n')) + 2000) > maxCtx) {
-          lines.shift();
-        }
-        userContent = lines.join('\n');
+        // Oldest lines first, as before — but never half of the design on the
+        // table (see localContextTrim).
+        userContent = trimUserContentToFit(userContent, userContentRoomChars(maxCtx, sys));
       }
       const userMessage: any = { role: 'user', content: userContent };
       if (images) userMessage.images = images;
@@ -4706,7 +4751,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             // The persona block carries the voice instruction and stays dominant
             // by recency. Keep both LLMHelper override sites identical.
             if (knowledgeResult.systemPromptInjection) {
+              // The diagram contract the caller put on the prompt being replaced
+              // is carried over (see carriedDiagramContract): the turn block that
+              // goes with it is still in the context. Appended on its own line:
+              // the assignment below is matched literally by a source test.
+              const carriedContract = carriedDiagramContract(systemPromptOverride);
               systemPromptOverride = `${CORE_IDENTITY}\n${EXECUTION_CONTRACT}\n\n${knowledgeResult.systemPromptInjection}`;
+              if (carriedContract) systemPromptOverride += carriedContract;
             }
             // Inject knowledge context
             if (knowledgeResult.contextBlock) {
@@ -4789,6 +4840,18 @@ try {
                 }
                 return resolved;
               } catch { return { codingTask: false }; }
+            })(),
+            // Universal diagram contract, same principle (2026-10-01): a caller
+            // that passed no system prompt still gets the diagram shape for a
+            // design question. This transport has no session, so it never
+            // sees a design on the table — fresh design asks only.
+            diagram: (() => {
+              try {
+                const { selfComposedDiagramSignals } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                // A caller with a session has already decided, design on the table included.
+                if (routeOptions && routeOptions.diagramSignals !== undefined) return routeOptions.diagramSignals as ReturnType<typeof selfComposedDiagramSignals>;
+                return selfComposedDiagramSignals(message, routeOptions?.answerType, (imagePaths?.length ?? 0) > 0);
+              } catch { return null; }
             })(),
           }) ?? systemPromptOverride;
     }
@@ -9698,6 +9761,18 @@ let isMultimodal = !!(imagePaths?.length);
                 return resolved;
               } catch { return { codingTask: false }; }
             })(),
+            // Universal diagram contract, same principle (2026-10-01): a caller
+            // that passed no system prompt still gets the diagram shape for a
+            // design question. This transport has no session, so it never
+            // sees a design on the table — fresh design asks only.
+            diagram: (() => {
+              try {
+                const { selfComposedDiagramSignals } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                // A caller with a session has already decided, design on the table included.
+                if (routeOptions && routeOptions.diagramSignals !== undefined) return routeOptions.diagramSignals as ReturnType<typeof selfComposedDiagramSignals>;
+                return selfComposedDiagramSignals(message, routeOptions?.answerType, (imagePaths?.length ?? 0) > 0);
+              } catch { return null; }
+            })(),
           }) ?? systemPromptOverride;
         }
         callerPassedV2Prompt = isV2ComposedPrompt(systemPromptOverride);
@@ -9880,7 +9955,12 @@ let isMultimodal = !!(imagePaths?.length);
             // NUMBERS DISCIPLINE / anti-fabrication rules survive the override
             // of HARD_SYSTEM_PROMPT; the persona injection stays dominant by
             // recency. Identical to the non-streaming override site above.
+            // The turn's diagram contract is carried across the replacement
+            // (see carriedDiagramContract), on its own line: the assignment
+            // below is matched literally by a source test.
+            const carriedContract = carriedDiagramContract(systemPromptOverride);
             systemPromptOverride = `${CORE_IDENTITY}\n${EXECUTION_CONTRACT}\n\n${knowledgeResult.systemPromptInjection}`;
+            if (carriedContract) systemPromptOverride += carriedContract;
           }
           // Inject knowledge context
           if (knowledgeResult.contextBlock) {
@@ -12970,11 +13050,7 @@ let isMultimodal = !!(imagePaths?.length);
       const total = estimateTokens(systemPrompt) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
         console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
-        const lines = userContent.split('\n');
-        while (lines.length > 1 && (estimateTokens(systemPrompt) + estimateTokens(lines.join('\n')) + 2000) > maxCtx) {
-          lines.shift();
-        }
-        userContent = lines.join('\n');
+        userContent = trimUserContentToFit(userContent, userContentRoomChars(maxCtx, systemPrompt));
       }
     }
 

@@ -348,6 +348,41 @@ jobs:
         if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
         run: npm run test:components
 
+      # Diagrams and charts (docs/diagrams). The feature's unit suite already
+      # runs on both legs through `test:lib` (src/lib/diagram/__tests__ is under
+      # its glob, and that step is enforcing on Windows), and its main-process
+      # tests through `npm test`. These two steps add what neither covers:
+      #
+      #   - the engine harness: the real IntelligenceEngine with a recording
+      #     model, V3 on and off, asserting on the prompt that would leave the
+      #     process (one provider call, the contract once, the design once);
+      #   - the renderer checks: the app's own Mermaid, chart and card code in
+      #     a real Chromium page. On the Windows leg this is the ONLY place the
+      #     drawings are laid out with Windows fonts. Label boxes are sized from
+      #     an estimate of text width (src/lib/diagram/svgText.mjs), and that
+      #     estimate was measured against the macOS system font only.
+      #
+      # UNVERIFIED: neither has ever run on a windows-latest runner. Both are
+      # ADVISORY there until they have been seen green once — the same rule
+      # `npm test` follows above — so a Windows failure is visible without
+      # turning the check red for a cause nobody has looked at yet. The render
+      # step is advisory on macOS too: it holds a time bound ("a large graph
+      # renders within N ms") that was set on a laptop, not on a shared runner.
+      - name: Run diagram engine wiring checks
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode == 'full' }}
+        continue-on-error: ${{ runner.os == 'Windows' }}
+        run: npm run test:diagram:wiring:no-build
+
+      - name: Run diagram render checks (real Chromium, this platform's fonts)
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
+        continue-on-error: true
+        run: npm run test:diagram:render
+
+      - name: Run diagram card checks (real Chromium)
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
+        continue-on-error: true
+        run: npm run test:diagram:card
+
       # Runs on BOTH legs by design. scripts/package-app.js and
       # scripts/run-with-env.mjs exist solely to reconcile /bin/sh and cmd.exe
       # behavior for `npm run dist` and `test:electron`; verifying them on one

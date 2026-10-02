@@ -364,6 +364,24 @@ import DOMPurify from 'dompurify';
 import { normalizeFinalizedMarkdownMath, renderStreamingMarkdown } from '../lib/streamingMarkdown';
 import ReactMarkdown from 'react-markdown';
 import { useT } from '../i18n';
+// System-design diagram artifacts: a ```mermaid block in an answer is drawn as
+// a diagram card. Mermaid itself is loaded on demand inside mermaidRenderer —
+// none of these imports pull it into this chunk.
+import { DiagramArtifact } from './diagram/DiagramArtifact';
+import { parseFencedBlocks, createFencedBlockTracker, replaceMermaidSource, isVisualBlock, mentionsVisualTag, type FenceBlock } from '../lib/diagram/fencedBlocks.mjs';
+import {
+  shouldUseStreamingDiagramUi,
+  hasOpeningMermaidFence,
+  mayHoldMermaidFence,
+  isMermaidOpeningTail,
+  fastForwardDiagramReveal,
+  completedDiagramCount,
+  previousVersionFor,
+  describeDiagramFromLead,
+} from '../lib/diagram/diagramStreamUi.mjs';
+import { latestDiagramInAnswer } from '../lib/diagram/activeDesign.mjs';
+import { diagramTimings } from '../lib/diagram/diagramTimings.mjs';
+import { useDiagramsEnabled, diagramsEnabledNow, cancelAllDiagramRepairs, warmDiagramRenderer, warmDiagramRendererOnIdle } from '../lib/diagram/diagramRuntime';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -1129,11 +1147,20 @@ const MessageRow = React.memo(
           t,
         )
       : null;
-    const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
+    // A tilde-fenced diagram has no backtick fence but is the same wide card.
+    const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```') || hasOpeningMermaidFence(msg.text));
+    // A diagram answer's row spans the full width so the DRAWING can: a
+    // diagram is scaled down to fit its card, and the usual 85% column made
+    // real ones hard to read. Its prose and code keep the 85% measure (the
+    // .diagram-answer-parts rule in index.css), so the text does not reflow at
+    // the moment the block's fence arrives mid-stream.
+    const isDiagramMsg = msg.role === 'system' && hasOpeningMermaidFence(msg.text) && diagramsEnabledNow();
     // bubbleMaxClass: user bubbles are tighter; system + code use the same width.
     const bubbleMaxClass =
       msg.role === 'user'
         ? 'max-w-[72%] px-[13.6px] py-[10.2px]'
+        : isDiagramMsg
+        ? 'w-full max-w-full p-0'
         : msg.role === 'system'
         ? 'max-w-[85%] p-0'
         : 'max-w-[85%] px-4 py-3';
@@ -5613,6 +5640,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ticker inherits that hardening for free, with zero edits to those sites.
   const streamingRafRef    = useRef<number | null>(null);
   const streamingRenderModeRef = useRef<'imperative' | 'react-code'>('imperative');
+  // Diagram artifacts in the live stream. The tracker scans the ARRIVED text
+  // incrementally (once per frame, never per token) so the reveal can be
+  // fast-forwarded through a Mermaid block — see fastForwardDiagramReveal.
+  // Reset per stream, in lockstep with the pacer (ensureRevealTicker).
+  const diagramRevealTrackerRef = useRef(createFencedBlockTracker());
+  const diagramBlocksCompleteRef = useRef(0);
+  // When the current request was accepted (submit / action press), carried
+  // onto the answer row's timing entry once that row has an id.
+  const diagramRequestAtRef = useRef<number | null>(null);
+  // The last valid diagram shown before the row that is streaming now: kept on
+  // screen, dimmed, while an UPDATE of the same design is still being written.
+  const previousDiagramRef = useRef<{ beforeMsgId: string; source: string } | null>(null);
+  // Answers the user stopped: no automatic repair (a paid call) after a Stop.
+  const diagramRepairBlockedRef = useRef<Set<string>>(new Set());
   // RETIRED: used to be scheduleStreamingCodeRender's own rAF handle (a
   // second, UNPACED render loop that wrote streamingTextRef.current — the
   // full raw arrived text, not the reveal-paced prefix — straight into
@@ -5993,7 +6034,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // burst of tokens landing in one tick showed up all at once regardless of
   // how well-paced the prose path was. Called from revealTick, so it's
   // already coalesced to at most once per frame.
-  const commitRevealedCodeText = useCallback((msgId: string, revealedText: string) => {
+  // Diagram repairs accepted in this window: broken source → the source that
+  // draws. The stream keeps committing text from refs that still hold what the
+  // model wrote (the paced prefix, then the sealed text), so a repair written
+  // only into React state was overwritten by the very next reveal tick and the
+  // card fell back to "syntax error" with its one repair already spent.
+  // Applied wherever streamed text is committed; the refs stay untouched so the
+  // pacer's offsets keep meaning what they meant.
+  const diagramRepairsRef = useRef<Map<string, string>>(new Map());
+  const withDiagramRepairs = useCallback((text: string): string => {
+    const repairs = diagramRepairsRef.current;
+    if (repairs.size === 0 || typeof text !== 'string' || !mentionsVisualTag(text)) return text;
+    let out = text;
+    for (const [original, repaired] of repairs) out = replaceMermaidSource(out, original, repaired);
+    return out;
+  }, []);
+
+  const commitRevealedCodeText = useCallback((msgId: string, rawRevealedText: string) => {
+    const revealedText = withDiagramRepairs(rawRevealedText);
     setMessages((prev) => {
       const idx = prev.findLastIndex((m) => m.id === msgId);
       if (idx === -1) return prev;
@@ -6003,7 +6061,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       updated[idx] = { ...row, text: revealedText, isStreaming: true };
       return updated;
     });
-  }, []);
+  }, [withDiagramRepairs]);
 
   // revealTick: self-rescheduling rAF loop that paces the reveal via the
   // deterministic tickPacer state machine (src/lib/textRevealPacing.mjs —
@@ -6021,6 +6079,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // fade-hold path below and the immediate path seal identically — two
   // copies of this teardown would be a latent source of drift.
   const sealPendingStream = useCallback((pending: { msgId: string; intent: string; text: string }) => {
+    diagramTimings.mark(pending.msgId, 'answer_complete', performance.now());
     pendingFinalizeRef.current = null;
     if (pendingFinalizeTimeoutRef.current !== null) {
       clearTimeout(pendingFinalizeTimeoutRef.current);
@@ -6039,7 +6098,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (direct?.completed && direct.placeholderId === pending.msgId) {
       activeDirectAssistRef.current = null;
     }
-    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
   }, []);
 
   const revealTick = useCallback((ts: number) => {
@@ -6061,6 +6120,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const pacer = revealPacerRef.current;
     const prevLen = pacer.revealedLen;
     tickPacer(pacer, fullText, ts, deltaMs, { reducedMotion: prefersReducedMotionRef.current });
+    // ARTIFACT FAST-FORWARD (the one explicit exception to paced reveal).
+    // A Mermaid block is not prose: once the reveal reaches it, the reveal
+    // jumps to the end of what has ARRIVED of that block, so a finished
+    // diagram is never held back behind a slow reveal of its own source.
+    // Order is kept — text before the block was already revealed, and text
+    // after it resumes at the normal pace. The decision itself is the pure,
+    // tested fastForwardDiagramReveal; this only applies it. Ordinary code
+    // blocks are untouched and keep their per-line reveal.
+    if (streamingRenderModeRef.current === 'react-code' && mentionsVisualTag(fullText) && diagramsEnabledNow()) {
+      const parse = diagramRevealTrackerRef.current.update(fullText);
+      const completeNow = completedDiagramCount(parse.blocks);
+      if (completeNow > diagramBlocksCompleteRef.current) {
+        diagramBlocksCompleteRef.current = completeNow;
+        // Receipt of a complete block — distinct from when it becomes visible.
+        diagramTimings.mark(msgId, 'block_complete', ts);
+      }
+      const forwarded = fastForwardDiagramReveal(parse.blocks, pacer.revealedLen, fullText.length);
+      if (forwarded > pacer.revealedLen) {
+        pacer.revealedLen = forwarded;
+        pacer.charBudget = 0;
+      }
+    }
+    if (pacer.revealedLen > 0) diagramTimings.mark(msgId, 'first_text_visible', ts);
     if (pacer.revealedLen !== prevLen) {
       // Record WHEN these characters became visible, before painting — the
       // paint reads this history back to derive each new word's fade offset.
@@ -6172,6 +6254,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // words either a stale (already-expired) timestamp or, worse, a future
       // one — holding real text invisible.
       resetRevealHistory(revealHistoryRef.current);
+      // Diagram scan state is per stream too: block offsets restart at 0.
+      diagramRevealTrackerRef.current.reset();
+      diagramBlocksCompleteRef.current = 0;
+      // Timing marks for this answer row (content-free; see diagramTimings).
+      {
+        const nowMs = performance.now();
+        const acceptedAt = diagramRequestAtRef.current;
+        // A request mark older than two minutes belongs to some earlier press.
+        if (acceptedAt !== null && nowMs - acceptedAt < 120_000) diagramTimings.mark(msgId, 'request_accepted', acceptedAt);
+        diagramRequestAtRef.current = null;
+        diagramTimings.mark(msgId, 'first_token', nowMs);
+      }
       // Same lockstep reason as the history: these are per-stream one-shots.
       // A carried-over gist timestamp would leave the next answer's chip
       // permanently past its animation (or, if the clock ran backwards,
@@ -6221,7 +6315,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const msgId = reuseMsgId ?? genMessageId();
     streamingMsgIdRef.current = msgId;
     streamingIntentRef.current = intent;
-    streamingRenderModeRef.current = 'imperative';
+    // A whole-payload answer that carries a diagram types out through the
+    // React path, so its diagram mounts as a card when the reveal reaches it
+    // instead of showing as raw Mermaid until the row seals.
+    streamingRenderModeRef.current = diagramsEnabledNow() && hasOpeningMermaidFence(text) ? 'react-code' : 'imperative';
     streamingTextRef.current = text; // the whole answer "arrives" as one token
     pendingFinalizeRef.current = { msgId, intent, text };
     if (pendingFinalizeTimeoutRef.current !== null) {
@@ -6250,7 +6347,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (direct?.completed && direct.placeholderId === pending.msgId) {
         activeDirectAssistRef.current = null;
       }
-      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
     }, safetyNetMs);
     if (!reuseMsgId) {
       setMessages((prev) => prepareIntelligenceStreamPlaceholderMessages(prev, intent, msgId));
@@ -6304,7 +6401,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (direct?.completed && direct.placeholderId === pending.msgId) {
         activeDirectAssistRef.current = null;
       }
-      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
     }, safetyNetMs);
     ensureRevealTicker(msgId);
   }, [ensureRevealTicker, computeSafetyNetMs]);
@@ -6368,7 +6465,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           const idx = prev.findLastIndex((m) => m.id === prevId);
           if (idx !== -1) {
             const updated = [...prev];
-            updated[idx] = { ...updated[idx], text: prevText, isStreaming: false };
+            // (A diagram repaired during the stream stays repaired: see withDiagramRepairs.)
+            updated[idx] = { ...updated[idx], text: withDiagramRepairs(prevText), isStreaming: false };
             return updated;
           }
           return prev;
@@ -6383,7 +6481,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       manualWidthOverrideRef.current = null;
     }
 
-    const shouldUseReactCodeUi = shouldUseStreamingCodeUi(intent, token, streamingTextRef.current);
+    // A Mermaid fence switches ANY intent's stream to the React path: the
+    // diagram card is a React component, and a diagram can arrive on any route
+    // (a refinement, a recap, brainstorm) — not only the two intents the code
+    // card's switch is limited to. Content decides, not the action's name.
+    const shouldUseReactCodeUi = shouldUseStreamingCodeUi(intent, token, streamingTextRef.current)
+      || (streamingRenderModeRef.current !== 'react-code'
+        && diagramsEnabledNow()
+        && shouldUseStreamingDiagramUi(token, streamingTextRef.current));
     if (shouldEagerExpandForCodeToken(intent, token, streamingTextRef.current)) {
       eagerCodeExpansionHoldRef.current = true;
       // Respect a manual width pin: don't auto-grow if the user chose a width.
@@ -6392,14 +6497,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
     }
     if (shouldUseReactCodeUi) {
+      // A diagram fence just opened: start loading Mermaid now, so it is ready
+      // by the time the block's closing fence arrives. (A no-op once loaded.)
+      if (streamingRenderModeRef.current !== 'react-code' && diagramsEnabledNow() && hasOpeningMermaidFence(streamingTextRef.current + token)) {
+        warmDiagramRenderer();
+      }
+      const flippedMidStream = streamingRenderModeRef.current !== 'react-code' && streamingMsgIdRef.current !== null;
       streamingRenderModeRef.current = 'react-code';
       if (streamingRafRef.current !== null) {
         cancelAnimationFrame(streamingRafRef.current);
         streamingRafRef.current = null;
       }
-      if (streamingNodeRef.current) {
+      // The imperative node held everything revealed so far, and React state
+      // held nothing (it is not written during imperative streaming). Wiping
+      // the node therefore left the row on its empty state — the "Thinking…"
+      // label, over text that had been on screen — until the next reveal
+      // advance, which can be a sentence hold away. What was revealed is
+      // handed to React in the same breath.
+      const revealedAtFlip = flippedMidStream && streamingMsgIdRef.current !== null
+        ? streamingTextRef.current.slice(0, revealPacerRef.current.revealedLen)
+        : '';
+      // …and the node is wiped only when nothing is handed over. With text to
+      // hand over, the wipe is synchronous and React's commit is not: under
+      // load a frame was painted in between, with the row empty (seen once in
+      // ten runs of the overlay check). React removes this node whole when the
+      // row re-renders under its other key, so it keeps what it shows until then.
+      if (streamingNodeRef.current && !revealedAtFlip) {
         streamingNodeRef.current.innerHTML = '';
       }
+      if (revealedAtFlip && streamingMsgIdRef.current !== null) commitRevealedCodeText(streamingMsgIdRef.current, revealedAtFlip);
     }
 
     streamingTextRef.current += token;
@@ -6566,7 +6692,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Keep eagerCodeExpansionHoldRef until the finalized React row mounts; the
     // visibility scanner clears it as soon as it sees a real [data-code-msg].
     // NOT wrapped in startTransition — ordering must hold.
-    setMessages((prev) => commitStreamingFlush(prev, msgId, text));
+    setMessages((prev) => commitStreamingFlush(prev, msgId, withDiagramRepairs(text)));
   }, []);
 
   const tryBeginOverlayAction = useCallback((actionKey: string): boolean => {
@@ -6986,6 +7112,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistFailure, settleDirectAssistIncomplete]);
 
   const cancelActiveChatStream = useCallback(() => {
+    // Stop also stops diagram repairs: any in flight is cancelled, and the
+    // answer being stopped never starts an automatic one afterwards.
+    cancelAllDiagramRepairs();
+    if (streamingMsgIdRef.current) diagramRepairBlockedRef.current.add(streamingMsgIdRef.current);
+    if (diagramRepairBlockedRef.current.size > 64) diagramRepairBlockedRef.current.clear();
     const direct = activeDirectAssistRef.current;
     if (direct) {
       activeDirectAssistRef.current = null;
@@ -7027,6 +7158,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const resetChatState = useCallback(() => {
     cancelActiveChatStream();
+    diagramRepairBlockedRef.current.clear();
+    previousDiagramRef.current = null;
     setMessages([]);
     answerPanelPinnedRef.current = false;
     setAnswerPanelPinned(false);
@@ -7108,8 +7241,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             finalizeImperativeStreamMessages(prev, {
               msgId: streamingMsgId,
               intent,
-              bufferedText,
-              finalText: text,
+              // The authoritative final text is the model's text as it was
+              // written: a block that was repaired while it streamed is broken
+              // again in it. Committed as is, the card fell back to "syntax
+              // error" with its one automatic repair already spent.
+              bufferedText: withDiagramRepairs(bufferedText),
+              finalText: withDiagramRepairs(text),
             }),
           );
           return;
@@ -7749,6 +7886,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!tryBeginOverlayAction('what_to_say')) {
       // The press was blocked because a prior 'what_to_say' is still streaming.
       // Surface a brief hint instead of silently doing nothing, so a blocked
@@ -8019,6 +8159,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleFollowUp = async (intent: string = 'rephrase') => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     const actionKey = `follow_up:${intent}`;
     if (!tryBeginOverlayAction(actionKey)) return;
     setIsExpanded(true);
@@ -8048,6 +8191,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleRecap = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!tryBeginOverlayAction('recap')) return;
     setIsExpanded(true);
     setIsProcessing(true);
@@ -8194,6 +8340,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleBrainstorm = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!tryBeginOverlayAction('brainstorm')) return;
     legacyIntelligenceTombstonedRef.current = false;
     liveAnswerGenIdRef.current = null;
@@ -8383,7 +8532,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               : -1;
           const target = idx !== -1 ? prev[idx] : prev[prev.length - 1];
           if (target && target.role === 'system') {
-            const text = finalText || target.text || pendingTextSnapshot;
+            const text = withDiagramRepairs(finalText || target.text || pendingTextSnapshot);
             if (!text) return prev;
             const isCode =
               text.includes('```') || text.includes('def ') || text.includes('function ');
@@ -8914,7 +9063,10 @@ Provide only the answer, nothing else.`;
             question,
             currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
             prompt,
-            { skipSystemPrompt: true },
+            // `liveQuestion`: a turn of this session (unlike a question about a
+            // past meeting), so main decides the diagram contract for it with
+            // the design that is on the table.
+            { skipSystemPrompt: true, liveQuestion: true },
           );
         } catch (err) {
           // R-17: a throw from invoke() never reaches the main process, so no
@@ -8976,6 +9128,9 @@ Provide only the answer, nothing else.`;
   }, [inputValue]);
 
   const handleManualSubmit = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!inputValue.trim() && attachedContext.length === 0) return;
 
     const rawUserText = inputValue;
@@ -9166,6 +9321,79 @@ Provide only the answer, nothing else.`;
     resetChatState();
   };
 
+  // ── Diagram artifacts: per-window state the row renderer reads ──────────
+  const diagramsEnabled = useDiagramsEnabled();
+  // The newest answer row. Only it may start an automatic repair.
+  const latestAnswerIdRef = useRef<string | null>(null);
+  // Recomputed when the ROWS change (a row added, or a row's streaming flag
+  // flipping), not when a streaming row's text grows: the signature below has
+  // no text in it, so the reveal's per-frame commits cost nothing here.
+  const diagramRowsSignature = useMemo(
+    () => messages.map((m) => (m.role === 'system' ? `${m.id}:${m.isStreaming ? 1 : 0}` : '')).join('|'),
+    [messages],
+  );
+  const messagesForDiagramsRef = useRef(messages);
+  messagesForDiagramsRef.current = messages;
+  useEffect(() => {
+    let latestId: string | null = null;
+    let lastValidSource: string | null = null;
+    let previous: { beforeMsgId: string; source: string } | null = null;
+    for (const m of messagesForDiagramsRef.current) {
+      if (m.role !== 'system') continue;
+      latestId = m.id;
+      if (m.isStreaming) {
+        if (lastValidSource) previous = { beforeMsgId: m.id, source: lastValidSource };
+      } else if (mentionsVisualTag(m.text)) {
+        const found = latestDiagramInAnswer(m.text);
+        if (found) lastValidSource = found.source;
+      }
+    }
+    latestAnswerIdRef.current = latestId;
+    previousDiagramRef.current = previous;
+  }, [diagramRowsSignature]);
+
+  // A repaired block drew. Put the working source into the answer that held
+  // the broken one — exact-source match only, so it cannot land in another
+  // answer — so copy, export, a reopened meeting and the next follow-up all
+  // see the diagram that is actually on screen. Stable identity ([]): the
+  // card's memo comparator and the row renderer both depend on it.
+  const handleDiagramRepaired = useCallback((originalSource: string, repairedSource: string) => {
+    // Remembered for the text still to be committed by the running stream.
+    const repairs = diagramRepairsRef.current;
+    repairs.delete(originalSource);
+    repairs.set(originalSource, repairedSource);
+    while (repairs.size > 24) {
+      const oldest = repairs.keys().next().value;
+      if (oldest === undefined) break;
+      repairs.delete(oldest);
+    }
+    setMessages((prev) => {
+      let changed = false;
+      const next = prev.map((m) => {
+        if (m.role !== 'system' || !mentionsVisualTag(m.text)) return m;
+        const text = replaceMermaidSource(m.text, originalSource, repairedSource);
+        if (text === m.text) return m;
+        changed = true;
+        return { ...m, text };
+      });
+      return changed ? next : prev;
+    });
+    // Direct Assist's history is this surface's conversation state: the next
+    // follow-up must start from the diagram that works, not the broken one.
+    directAssistHistoryRef.current = directAssistHistoryRef.current.map((turn) =>
+      turn.role === 'assistant' && mentionsVisualTag(turn.content)
+        ? { ...turn, content: replaceMermaidSource(turn.content, originalSource, repairedSource) }
+        : turn,
+    );
+  }, []);
+
+  // The newest answer's diagram changed height on its own (the drawing arrived
+  // after the last text commit): keep following the bottom, exactly as a text
+  // commit would. followStreamBottom honours a scroll-up by the user.
+  const handleDiagramLayout = useCallback(() => {
+    requestAnimationFrame(() => followStreamBottom());
+  }, [followStreamBottom]);
+
   // PERF: useCallback so MessageRow's memo comparator can rely on a stable
   // function identity. Deps are the things the closure actually reads that
   // can change: theme + memoized markdown components + memoized appearance.
@@ -9200,10 +9428,25 @@ Provide only the answer, nothing else.`;
       // hand off to, and is safe to leave permanently true afterwards: once
       // the paced text contains a fence it never loses it (reveal only
       // grows forward).
+      // A drawing is on its way: the ARRIVED text holds a visual fence the paced
+      // text has not reached yet. Its lead is prose, and it was on screen as
+      // formatted Markdown a frame ago (the imperative path). It goes straight
+      // to the Markdown renderer the finished answer uses — the raw-text
+      // branch below showed it as literal "**"/"#"/"-" until the reveal caught
+      // up with the fence, then formatted it again.
+      const preFenceDiagramStream =
+        msg.id === streamingMsgIdRef.current &&
+        streamingRenderModeRef.current === 'react-code' &&
+        diagramsEnabled &&
+        msg.role === 'system' &&
+        Boolean(msg.text) &&
+        !msg.isCode &&
+        hasOpeningMermaidFence(streamingTextRef.current);
       const isActiveReactCodeStream =
         msg.id === streamingMsgIdRef.current &&
         streamingRenderModeRef.current === 'react-code' &&
-        (msg.isCode || msg.text.includes('```'));
+        // …or a tilde-fenced diagram, which has no backtick fence at all.
+        (msg.isCode || msg.text.includes('```') || hasOpeningMermaidFence(msg.text) || preFenceDiagramStream);
       if (msg.isStreaming && msg.role === 'system' && !msg.isNegotiationCoaching && !isActiveReactCodeStream) {
         // React-code pre-fence gap: streamingRenderModeRef already flipped to
         // 'react-code' (the raw arrived text has a fence) but the paced
@@ -9370,7 +9613,7 @@ Provide only the answer, nothing else.`;
       // Code-containing messages get special styling
       // We split by code blocks to keep the "Code Solution" UI intact for the code parts
       // But use ReactMarkdown for the text parts around it
-      if (msg.isCode || (msg.role === 'system' && msg.text.includes('```'))) {
+      if (msg.isCode || (msg.role === 'system' && (msg.text.includes('```') || hasOpeningMermaidFence(msg.text) || preFenceDiagramStream))) {
         // Teleprompter gist on CODE answers (live report 2026-08-23:
         // "[[GIST]] Use a hash map for O(n) lookup" painted literally): this
         // branch returned before the gist split below ever ran, so every
@@ -9378,6 +9621,185 @@ Provide only the answer, nothing else.`;
         // render the same bottom chip the prose surfaces use.
         const { body: codeGistBody, gist: codeGistLine } = splitGistLine(msg.text);
         const parts = codeGistBody.split(/(```[\s\S]*?(?:```|$))/g);
+
+        // One fenced CODE part → the code card. Shared by the code-only path
+        // (the regex split above, unchanged) and the diagram path below.
+        const renderFencePart = (part: string, key: React.Key): React.ReactNode => {
+          // Language class allows +/#/- so c++, objective-c, f# match.
+          const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
+          const lang = match && match[1] ? match[1] : '';
+          // Raw, UNTRIMMED — see below for why the streaming path
+          // must not trim this.
+          const rawCode = match && match[2]
+            ? match[2]
+            : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '');
+          // Still-open fence on a still-streaming row → the
+          // per-completed-line preview (kills the flicker, adds
+          // the per-line reveal fade). Anything else (already
+          // closed, or streaming already ended) → the static,
+          // full-context-highlighted block, same as always.
+          if (isUnclosedCodeFencePart(part) && msg.isStreaming) {
+            // Deliberately NOT .trim()'d: splitStreamingCodeLines
+            // decides "this line is complete" by finding a
+            // trailing \n. Trimming it here would strip the most
+            // recently arrived line's newline the instant it
+            // lands (before the NEXT character confirms there's
+            // more text after it), so that line would render as
+            // the unhighlighted in-progress line for one extra
+            // tick, then flip to highlighted-and-faded-in a tick
+            // late — a small but real one-tick color pop on every
+            // single line. The static HighlightedCode path below
+            // still trims (rawCode.trim()) since a finalized block
+            // should never show a stray trailing blank line.
+            return (
+              <StreamingHighlightedCode
+                key={key}
+                code={rawCode}
+                lang={lang}
+                isLightTheme={isLightTheme}
+                codeTheme={codeTheme}
+                codeBlockClass={codeBlockClass}
+                codeHeaderClass={codeHeaderClass}
+                codeHeaderTextClass={codeHeaderTextClass}
+                codeLineNumberColor={codeLineNumberColor}
+                appearance={appearance}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+                showCodeHeader={showCodeHeader}
+              />
+            );
+          }
+          return (
+            <HighlightedCode
+              key={key}
+              code={rawCode.trim()}
+              lang={lang}
+              isLightTheme={isLightTheme}
+              codeTheme={codeTheme}
+              codeBlockClass={codeBlockClass}
+              codeHeaderClass={codeHeaderClass}
+              codeHeaderTextClass={codeHeaderTextClass}
+              codeLineNumberColor={codeLineNumberColor}
+              appearance={appearance}
+              isModernTheme={isModernTheme}
+              isGlassTheme={isGlassTheme}
+              showCodeHeader={showCodeHeader}
+            />
+          );
+        };
+        // Regular text - Render with Markdown
+        const renderProsePart = (part: string, key: React.Key): React.ReactNode => (
+          <div key={key} className="markdown-content">
+            <ReactMarkdown
+              remarkPlugins={REMARK_PLUGINS}
+              rehypePlugins={REHYPE_PLUGINS}
+              components={mdComponents.codeText}
+            >
+              {normalizeFinalizedMarkdownMath(part)}
+            </ReactMarkdown>
+          </div>
+        );
+
+        // ── Diagram artifacts ────────────────────────────────────────────
+        // A ```mermaid block is drawn as a diagram card. Dispatch is on the
+        // block's own tag — never on the action that produced the answer and
+        // never by guessing at untagged code. The shared fence scanner decides
+        // what is a complete block, so a closing fence that is still arriving
+        // is not mistaken for one. With the feature switched off this path is
+        // skipped and a Mermaid block is the ordinary code card it always was.
+        const diagramParse = diagramsEnabled && mayHoldMermaidFence(codeGistBody, Boolean(msg.isStreaming))
+          ? parseFencedBlocks(codeGistBody, { final: !msg.isStreaming })
+          : null;
+        const hasDiagram = Boolean(diagramParse && (
+          diagramParse.blocks.some(isVisualBlock)
+          || (msg.isStreaming && isMermaidOpeningTail(diagramParse.tail))
+        ));
+        const renderedParts: React.ReactNode[] = [];
+        if (hasDiagram && diagramParse) {
+          // Keys follow each block's own ordinal, so nothing remounts as the
+          // answer grows or when the authoritative final text replaces it.
+          let lead = '';
+          diagramParse.blocks.forEach((block, i) => {
+            if (block.kind === 'prose') {
+              if (block.text.trim()) {
+                renderedParts.push(renderProsePart(block.text, `p${i}`));
+                lead = block.text;
+              }
+              return;
+            }
+            const fence = block as FenceBlock;
+            if (isVisualBlock(fence)) {
+              const before = previousDiagramRef.current;
+              renderedParts.push(
+                <DiagramArtifact
+                  key={`d${fence.diagramIndex}`}
+                  // What the block is written in decides what draws it: Mermaid,
+                  // the chart adapter, or a notation adapter.
+                  kind={fence.kind as 'mermaid' | 'chart' | 'notation'}
+                  artifactId={`${msg.id}:d${fence.diagramIndex}`}
+                  turnId={msg.id}
+                  source={fence.source}
+                  info={fence.info}
+                  complete={fence.closed}
+                  streaming={Boolean(msg.isStreaming)}
+                  description={describeDiagramFromLead(lead)}
+                  // An update still being written keeps the last valid version
+                  // of the SAME design on screen (decided from shared
+                  // component names — a fresh design shows no "previous").
+                  previousSource={!fence.closed && msg.isStreaming && before?.beforeMsgId === msg.id
+                    ? previousVersionFor(fence.source, before.source)
+                    : undefined}
+                  // One bounded automatic repair, for the newest answer only,
+                  // and never after the user pressed Stop on it.
+                  allowAutoRepair={latestAnswerIdRef.current === msg.id && !diagramRepairBlockedRef.current.has(msg.id)}
+                  onRepaired={handleDiagramRepaired}
+                  // Only the newest answer follows the bottom; an older row
+                  // redrawing (a theme change) must not move the scroll.
+                  onLayout={latestAnswerIdRef.current === msg.id ? handleDiagramLayout : undefined}
+                  themeKey={`${isLightTheme ? 'l' : 'd'}:${interfaceTheme ?? 'default'}`}
+                />,
+              );
+              return;
+            }
+            // Ordinary code in a mixed answer keeps the code card. A plain
+            // backtick fence is passed through byte for byte (exactly what the
+            // regex split would have produced); a tilde or indented fence is
+            // normalised to that form.
+            const raw = codeGistBody.slice(fence.start, fence.end);
+            const plain = fence.fenceChar === '`' && fence.fenceLength === 3 && raw.startsWith('```');
+            const part = plain
+              ? (fence.closed ? raw.replace(/\s+$/, '') : raw)
+              : `\`\`\`${fence.lang}\n${fence.source}${fence.closed ? '\n```' : ''}`;
+            renderedParts.push(renderFencePart(part, `c${fence.fenceIndex}`));
+          });
+          // A fence line still being typed: a code fence shows at once, as it
+          // always has; one that is turning into ```mermaid stays hidden so
+          // the card never appears first as an empty code block.
+          if (msg.isStreaming && diagramParse.tail.kind === 'opening-fence' && !isMermaidOpeningTail(diagramParse.tail)) {
+            renderedParts.push(renderFencePart(diagramParse.tail.text.trimStart(), 'tail'));
+          }
+        } else {
+          // Keys match the diagram path above (p<block>, c<fence>), so a code
+          // card or a paragraph already on screen is not torn down and rebuilt
+          // when a visual fence shows up later in the same answer.
+          let blockOrdinal = 0;
+          let fenceOrdinal = 0;
+          parts.forEach((part, i) => {
+            if (!part) {
+              // An empty piece of the split (an answer that opens with a
+              // fence): rendered as it always was, and not counted.
+              renderedParts.push(renderProsePart(part, `e${i}`));
+              return;
+            }
+            if (part.startsWith('```')) {
+              renderedParts.push(renderFencePart(part, `c${fenceOrdinal}`));
+              fenceOrdinal += 1;
+            } else {
+              renderedParts.push(renderProsePart(part, `p${blockOrdinal}`));
+            }
+            blockOrdinal += 1;
+          });
+        }
         return (
           // code-card-mount-in: a one-time cross-fade (@starting-style, see
           // index.css) for the FIRST render of this branch — i.e. exactly
@@ -9392,86 +9814,8 @@ Provide only the answer, nothing else.`;
             {/* Answer cards carry no copy button; the only copy action is
                 the code block's own (CodeBlockChrome, on the headerless dark
                 code theme). */}
-            <div className="space-y-2 text-[14.5px] leading-relaxed">
-              {parts.map((part, i) => {
-                if (part.startsWith('```')) {
-                  // Language class allows +/#/- so c++, objective-c, f# match.
-                  const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
-                  if (match || part.startsWith('```')) {
-                    const lang = match && match[1] ? match[1] : '';
-                    // Raw, UNTRIMMED — see below for why the streaming path
-                    // must not trim this.
-                    const rawCode = match && match[2]
-                      ? match[2]
-                      : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '');
-                    // Still-open fence on a still-streaming row → the
-                    // per-completed-line preview (kills the flicker, adds
-                    // the per-line reveal fade). Anything else (already
-                    // closed, or streaming already ended) → the static,
-                    // full-context-highlighted block, same as always.
-                    if (isUnclosedCodeFencePart(part) && msg.isStreaming) {
-                      // Deliberately NOT .trim()'d: splitStreamingCodeLines
-                      // decides "this line is complete" by finding a
-                      // trailing \n. Trimming it here would strip the most
-                      // recently arrived line's newline the instant it
-                      // lands (before the NEXT character confirms there's
-                      // more text after it), so that line would render as
-                      // the unhighlighted in-progress line for one extra
-                      // tick, then flip to highlighted-and-faded-in a tick
-                      // late — a small but real one-tick color pop on every
-                      // single line. The static HighlightedCode path below
-                      // still trims (rawCode.trim()) since a finalized block
-                      // should never show a stray trailing blank line.
-                      return (
-                        <StreamingHighlightedCode
-                          key={i}
-                          code={rawCode}
-                          lang={lang}
-                          isLightTheme={isLightTheme}
-                          codeTheme={codeTheme}
-                          codeBlockClass={codeBlockClass}
-                          codeHeaderClass={codeHeaderClass}
-                          codeHeaderTextClass={codeHeaderTextClass}
-                          codeLineNumberColor={codeLineNumberColor}
-                          appearance={appearance}
-                          isModernTheme={isModernTheme}
-                          isGlassTheme={isGlassTheme}
-                          showCodeHeader={showCodeHeader}
-                        />
-                      );
-                    }
-                    return (
-                      <HighlightedCode
-                        key={i}
-                        code={rawCode.trim()}
-                        lang={lang}
-                        isLightTheme={isLightTheme}
-                        codeTheme={codeTheme}
-                        codeBlockClass={codeBlockClass}
-                        codeHeaderClass={codeHeaderClass}
-                        codeHeaderTextClass={codeHeaderTextClass}
-                        codeLineNumberColor={codeLineNumberColor}
-                        appearance={appearance}
-                        isModernTheme={isModernTheme}
-                        isGlassTheme={isGlassTheme}
-                        showCodeHeader={showCodeHeader}
-                      />
-                    );
-                  }
-                }
-                // Regular text - Render with Markdown
-                return (
-                  <div key={i} className="markdown-content">
-                    <ReactMarkdown
-                      remarkPlugins={REMARK_PLUGINS}
-                      rehypePlugins={REHYPE_PLUGINS}
-                      components={mdComponents.codeText}
-                    >
-                      {normalizeFinalizedMarkdownMath(part)}
-                    </ReactMarkdown>
-                  </div>
-                );
-              })}
+            <div className={`space-y-2 text-[14.5px] leading-relaxed${hasDiagram ? ' diagram-answer-parts' : ''}`}>
+              {renderedParts}
               {codeGistLine ? <div className="overlay-gist-chip">{codeGistLine}</div> : null}
             </div>
           </div>
@@ -9638,7 +9982,10 @@ Provide only the answer, nothing else.`;
     // across renders and changes only on a language switch, so listing it
     // keeps the thinking label translatable without costing MessageRow its
     // React.memo bailout (which compares this callback by identity).
-    [isLightTheme, mdComponents, appearance, t],
+    // diagramsEnabled: flipping the switch must re-dispatch every row (a
+    // Mermaid block is a diagram card when on, a code card when off).
+    // handleDiagramRepaired is stable ([]).
+    [isLightTheme, mdComponents, appearance, t, diagramsEnabled, handleDiagramRepaired, handleDiagramLayout, interfaceTheme],
   );
 
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render

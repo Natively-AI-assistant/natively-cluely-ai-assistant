@@ -59,6 +59,15 @@ export interface StreamRouteOptions {
    */
   pinnedModeId?: string | null;
   /**
+   * The caller's own diagram decision for a turn whose system prompt the
+   * transport composes itself (a caller that passed none). The transport has
+   * no session, so on its own it only sees a fresh request; a caller that does
+   * have one (the overlay's spoken question) decides with the design on the
+   * table and hands the result over. `null` = decided: no drawing this turn.
+   * Absent → the transport decides from the question alone.
+   */
+  diagramSignals?: unknown;
+  /**
    * True when the current screen is present as browser DOM or OCR text rather
    * than an attached image. WhatToAnswerLLM computes this from the request-
    * scoped screen inputs and threads only the boolean to the transport layer,

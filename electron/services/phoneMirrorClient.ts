@@ -779,6 +779,34 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       }
       .content .codeblock pre::-webkit-scrollbar { display: none; }
       .content .codeblock.streaming .codeblock-head { color: #95aff6; }
+      /* A diagram: the desktop's drawing as an image, on a light card in both
+         themes (it is drawn with a light palette), with its source underneath. */
+      .content .diagram { margin: 10px 0 12px; }
+      .content .diagram-view {
+        border-radius: var(--r-md);
+        background: #ffffff;
+        box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+        padding: 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        text-align: center;
+      }
+      .content .diagram-img { display: inline-block; max-width: 100%; height: auto; vertical-align: top; }
+      .content .diagram.is-wide .diagram-img { max-width: none; }
+      .content .diagram-note { color: #4b5563; font-size: var(--type-caption); padding: 10px 4px; }
+      .content .diagram-source { margin-top: 6px; }
+      .content .diagram-source > summary {
+        color: var(--label-2);
+        font-size: var(--type-caption);
+        padding: 4px 2px;
+        cursor: pointer;
+        list-style: none;
+      }
+      .content .diagram-source > summary::-webkit-details-marker { display: none; }
+      .content .diagram-source[open] > summary { margin-bottom: 2px; }
+      /* What sits under a chart: its values, assumptions and sources. */
+      .content .diagram-notes { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; opacity: 0.85; }
+      .content .diagram-notes li { margin: 2px 0; }
       .content pre .hl-c { color: #6b7d99; font-style: italic; }
       .content pre .hl-s { color: #a3e9b6; }
       .content pre .hl-k { color: #c8a8ff; }
@@ -2005,6 +2033,43 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         }
         // Desktop-rendered code blocks arrive plain; highlight them here with
         // the page's own highlighter, once.
+        // Diagrams the desktop finished drawing after their answer arrived
+        // (the 'diagram' event), by key. Applied to any figure still waiting,
+        // now and whenever an answer body is re-rendered. The picture is only
+        // ever set as an image source, and only from an SVG data URL.
+        var diagramImages = {};
+        function applyDiagrams(scope) {
+          Array.prototype.forEach.call(scope.querySelectorAll('figure.diagram[data-diagram]'), function (fig) {
+            var key = fig.getAttribute('data-diagram') || '';
+            if (!Object.prototype.hasOwnProperty.call(diagramImages, key)) return;
+            var view = fig.querySelector('.diagram-view');
+            if (!view || fig.classList.contains('is-ready')) return;
+            var src = diagramImages[key];
+            view.textContent = '';
+            fig.classList.remove('is-pending');
+            if (src) {
+              var img = document.createElement('img');
+              img.className = 'diagram-img';
+              img.alt = fig.getAttribute('data-label') || 'Diagram';
+              img.src = src;
+              view.appendChild(img);
+              fig.classList.remove('is-failed');
+              fig.classList.add('is-ready');
+            } else {
+              view.appendChild(el('div', 'diagram-note', 'This diagram could not be drawn here. Its source is below.'));
+              fig.classList.add('is-failed');
+              var details = fig.querySelector('details');
+              if (details) details.open = true;
+            }
+          });
+        }
+        function onDiagram(ev) {
+          var key = String(ev.key || '');
+          if (!key) return;
+          var src = typeof ev.src === 'string' && ev.src.indexOf('data:image/svg+xml;charset=utf-8,') === 0 ? ev.src : '';
+          diagramImages[key] = src;
+          applyDiagrams(document);
+        }
         function enhanceCode(scope) {
           Array.prototype.forEach.call(scope.querySelectorAll('.codeblock'), function (block) {
             var code = block.querySelector('pre code');
@@ -2086,6 +2151,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           }
           body.innerHTML = html;
           enhanceCode(body);
+          applyDiagrams(body);
           if (streaming) {
             // Put the caret at the end of the last line of text. Appended to
             // the body it sat on a line of its own below the paragraph. A code
@@ -2691,6 +2757,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             case 'user': onUser(ev); break;
             case 'token': onToken(String(ev.streamId), String(ev.token || '')); break;
             case 'render': onRender(ev); break;
+            case 'diagram': onDiagram(ev); break;
             case 'done': onDone(ev); break;
             case 'error': onStreamError(ev); break;
             case 'assistant': onAssistant(ev); break;

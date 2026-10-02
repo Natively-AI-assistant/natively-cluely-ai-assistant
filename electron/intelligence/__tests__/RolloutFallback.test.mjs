@@ -14,6 +14,9 @@ const DEFAULT_ON_KEYS = new Set([
   // Multi-turn chat history (2026-08-29). Default ON via a plain literal: it guards
   // a regression fix, and a dev/test-only default would pin a behaviour users never get.
   'chatHistoryMultiTurn',
+  // System-design diagram artifacts (2026-10-01). Default ON via a plain literal:
+  // one switch for the prompt contract and the renderer.
+  'systemDesignDiagrams',
   'meetingSummaryV3',
   'meetingModeAutoDetect',
   'followUpDraftV2',

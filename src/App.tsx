@@ -49,6 +49,7 @@ import { GenieModal } from "./components/ui/GenieModal"
 import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
+import { useDiagramRenderHost } from "./lib/diagram/diagramRuntime"
 import { WelcomeFlow } from "./components/onboarding/WelcomeFlow"
 import { shouldShowWelcome, hasOnboardingHistory, WELCOME_SEEN_KEY, LEGACY_PERMS_SHOWN_KEY, ONBOARDING_STATE_KEY } from "./lib/onboarding/welcomeGate.mjs"
 
@@ -95,6 +96,10 @@ function getLauncherIsolation(): LauncherIsolation {
 
 const App: React.FC = () => {
   const isLight = useResolvedTheme() === 'light';
+  // The launcher and the overlay both mount App, and both can be asked by the
+  // main process to draw a diagram for the Phone Mirror (it has no DOM).
+  // Mermaid itself loads only when such a request actually arrives.
+  useDiagramRenderHost();
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';

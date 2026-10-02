@@ -71,6 +71,22 @@ export interface ComposeInput {
    * length, otherwise rendered before — never after — the user's block.
    */
   defaultLengthDirective?: string;
+  /**
+   * A diagram turn (2026-10-01): the persona carries the system-design diagram
+   * contract. Rendered in the user message, after the app's length default and
+   * before the user's instructions:
+   *   - `note` says the contract is in force and that a sentence/word limit
+   *     governs the prose, never the Mermaid block (the permanent "two to four
+   *     sentences" rule sits after the persona and would otherwise win on
+   *     recency);
+   *   - `activeDesignBlock` is the design already on the table, for a turn that
+   *     updates, re-views or explains it. Prior assistant output, so it is
+   *     conversation data: the bridge drops it when the transcript scope is
+   *     withheld.
+   * Also turns the numbered-list line off: a design answer's shape is the
+   * contract's, as a coding answer's is the coding contract's.
+   */
+  diagramTurn?: { note?: string; activeDesignBlock?: string };
   conversationSummary?: string;
   /**
    * TRUE only when `conversationSummary` contains at least one completed
@@ -416,6 +432,16 @@ function listFormLine(d: Readonly<TurnDecision>): string {
     if (line) return line;
   }
   return '';
+}
+
+function renderDiagramTurn(turn: ComposeInput['diagramTurn']): string {
+  if (!turn) return '';
+  const parts: string[] = [];
+  if (turn.note?.trim()) {
+    parts.push(`<presentation_instruction note="Diagram for this turn. Affects layout ONLY.">\n${turn.note.trim()}\n</presentation_instruction>`);
+  }
+  if (turn.activeDesignBlock?.trim()) parts.push(turn.activeDesignBlock.trim());
+  return parts.join('\n\n');
 }
 
 function renderDefaultLength(line: string, userHasInstructions: boolean): string {
@@ -1211,7 +1237,8 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   const defaultLength = input.defaultLengthDirective?.trim() && !userInstructionsOverrideAppLength(userAnalysis)
     ? renderDefaultLength(input.defaultLengthDirective, Boolean(userBlock))
     : '';
-  const listForm = listFormLine(d);
+  const listForm = input.diagramTurn ? '' : listFormLine(d);
+  const diagramTurn = renderDiagramTurn(input.diagramTurn);
 
   const nothingAttachedFastTurn = d.retrievalPlan.path === 'FAST'
     && input.attachedSourceCount === 0 && (input.profileSourceCount ?? 0) === 0
@@ -1358,6 +1385,9 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       ? push('list_form', `<presentation_instruction note="Form for this question. Affects layout ONLY.">\n${listForm}\n</presentation_instruction>`)
       : '',
     defaultLength ? push('default_length', defaultLength) : '',
+    // After the length default on purpose: the note says what that limit does
+    // and does not cover on a diagram turn.
+    diagramTurn ? push('diagram_turn', diagramTurn) : '',
     // LAST in the whole prompt — the strongest position — so nothing the app
     // says can follow, and so contradict, what the user asked for.
     userBlock ? push('user_instructions', userBlock) : '',

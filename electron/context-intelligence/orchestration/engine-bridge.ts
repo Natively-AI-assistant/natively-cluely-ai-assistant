@@ -30,6 +30,7 @@ import {
   filterEvidenceByProviderScopes,
   dataScopesForEvidence,
   isScopeDenied,
+  answeredOnThisDevice,
 } from '../policies/provider-scope-policy';
 import type { AnswerSurface, EvidenceScope } from '../contracts/types';
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
@@ -161,6 +162,12 @@ export interface BridgeInput {
   realtimeInstruction?: string;
   /** The APP's per-turn length default — see ComposeInput.defaultLengthDirective. Never concatenate it onto realtimeInstruction. */
   defaultLengthDirective?: string;
+  /**
+   * A system-design diagram turn — see ComposeInput.diagramTurn. Resolved by the
+   * caller (electron/llm/diagramPromptSignals.ts), like every other prompt
+   * signal: this subsystem does not read the flag registry or the session.
+   */
+  diagramTurn?: { note?: string; activeDesignBlock?: string };
   conversationSummary?: string;
   /**
    * Multi-turn chat history (Settings > Intelligence > Memory > "Chat history").
@@ -562,6 +569,16 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       }) ?? undefined;
     } catch { personaBase = undefined; }
 
+    // The design on the table is prior assistant output — CONVERSATION_STATE
+    // data, the same class as the history block — so it leaves with the
+    // transcript scope or not at all. The note is app text and always rides.
+    // (A model on this device is sent it either way: the same rule the
+    // resolver decided the turn by — see activeDesignShareable.)
+    const diagramDesignAllowed = Boolean(input.diagramTurn?.activeDesignBlock) && (answeredOnThisDevice() || !isScopeDenied('transcript', scopePolicy));
+    const diagramTurn = input.diagramTurn
+      ? { note: input.diagramTurn.note, ...(diagramDesignAllowed ? { activeDesignBlock: input.diagramTurn.activeDesignBlock } : {}) }
+      : undefined;
+
     const composed = composePrompt({
       decision: result.decision,
       policy,
@@ -570,6 +587,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       withheldScopes: [...withheldScopes],
       realtimeInstruction: input.realtimeInstruction,
       defaultLengthDirective: input.defaultLengthDirective,
+      diagramTurn,
       conversationSummary: convoSummary,
       // What-to-answer answers the OTHER person's question: their "I" is theirs.
       heardQuestion: input.surface === 'what-to-answer' && input.questionSpeaker !== 'user',
@@ -596,6 +614,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       dataScopesForEvidence(scopeFilter.evidence.filter((e) => includedIds.has(e.evidenceId))),
     );
     if (convoSummary) packedDataScopes.add('transcript');
+    if (diagramDesignAllowed) packedDataScopes.add('transcript');
     // Declared separately from `transcript`: an audit that asks "did screen
     // content leave the device this turn?" must not have to know that screen
     // text is smuggled inside the conversation summary.

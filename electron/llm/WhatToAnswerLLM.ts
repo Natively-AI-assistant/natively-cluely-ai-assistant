@@ -25,6 +25,7 @@ import type { ActiveModeDocumentGroundingInfo } from "../services/ModesManager";
 import type { ModeRetrievalOptions } from "../services/ModeContextRetriever";
 import { isCodeVerificationEnabled } from "./codeVerification/verificationEnabled";
 import type { WhatToAnswerRequestSnapshot } from "./whatToAnswerRequestSnapshot";
+import { withDiagramContract, withDiagramTurnBlock } from "./diagramPromptSignals";
 
 // Wall-clock budget for the pre-stream mode-context HYBRID retrieval await.
 // The hybrid retriever embeds the live query, and the embedder's own hard
@@ -791,17 +792,34 @@ The user triggered this action with a coding problem on screen and NO new questi
             // the formatting rules v2 replaces. An active SKILL block still
             // appends (skills are orthogonal to the mode/action contracts).
             // Flag off → legacy constants + suffix, byte-for-byte unchanged.
+            // The engine's diagram decision for this turn (system design / an
+            // explicit diagram ask / a follow-up on the design on the table).
+            const diagramTurn = requestSnapshot?.diagramTurn;
+            const v2Tier = v2TierForPromptTier(this.llmHelper.getPromptTier());
             const v2BasePrompt = resolveV2SystemPrompt({
                 action: 'what_to_say',
                 surface: 'live',
-                tier: v2TierForPromptTier(this.llmHelper.getPromptTier()),
+                tier: v2Tier,
                 customInstructions: pinnedModeInstructions || undefined,
                 ...codingSignals,
+                // A diagram turn is an artifact on screen, not words to read
+                // aloud — the same reason the engine's V3 persona switches to
+                // 'answer' — and it carries the diagram contract.
+                // (An undecided turn keeps 'what_to_say': most of them ask
+                // for no drawing. See the engine's V3 persona.)
+                ...(diagramTurn?.signals ? { ...(diagramTurn.request.enabled ? { action: 'answer' as const } : {}), diagram: diagramTurn.signals } : {}),
             });
-            const basePrompt = v2BasePrompt
-                ?? (this.llmHelper.getPromptTier() === 'tiny'
-                    ? TINY_WHAT_TO_ANSWER_PROMPT
-                    : UNIVERSAL_WHAT_TO_ANSWER_PROMPT);
+            // Flag-off fallback: the legacy constants never knew about diagrams,
+            // so the shared contract is appended (a v2 base already carries it;
+            // the helper never adds a second copy).
+            const basePrompt = withDiagramContract(
+                v2BasePrompt
+                    ?? (this.llmHelper.getPromptTier() === 'tiny'
+                        ? TINY_WHAT_TO_ANSWER_PROMPT
+                        : UNIVERSAL_WHAT_TO_ANSWER_PROMPT),
+                diagramTurn,
+                { tier: v2Tier, surface: 'live' },
+            );
 
             const finalPromptOverride = activeSkill
                 ? `${basePrompt}\n\n## ACTIVE SKILL\n${activeSkill.promptBlock}`
@@ -1126,11 +1144,19 @@ The user triggered this action with a coding problem on screen and NO new questi
                 console.warn('[WhatToAnswerLLM] v2 turn envelope skipped (non-fatal):', v2TurnErr?.message);
                 _v2TurnUser = null;
             }
-            const _wtaUserMessage = _v3p?.user ?? _v2TurnUser ?? packet.userMessage;
+            // The V3 composer already rendered the design on the table as its
+            // own section; the v2 envelope and the legacy packet get it appended
+            // (never twice — see withDiagramTurnBlock).
+            const _wtaUserBase = _v3p?.user ?? _v2TurnUser ?? packet.userMessage;
+            const _wtaUserMessage = _v3p ? _wtaUserBase : withDiagramTurnBlock(_wtaUserBase, diagramTurn);
             // PR #429 Bug 003: `_v3p?.system ?? finalPromptOverride` discarded the
             // ACTIVE SKILL block on every V3 turn — finalPromptOverride is its only
             // carrier and V3 is default ON, so `??` never fell through.
-            const _wtaSystemPrompt = composeWtaSystemPrompt(_v3p?.system, finalPromptOverride, activeSkill);
+            let _wtaSystemPrompt = composeWtaSystemPrompt(_v3p?.system, finalPromptOverride, activeSkill);
+            // A V3 system whose persona was null (v2 kill-switch) has no diagram
+            // contract; every other composition already carries exactly one, and
+            // the helper never adds a second.
+            _wtaSystemPrompt = withDiagramContract(_wtaSystemPrompt, diagramTurn, { tier: v2Tier, surface: 'live' });
             if (_v3p) console.log('[WhatToAnswerLLM] V3 prompt in effect (Phase 6 wiring)');
             // INSTRUMENTATION FIX (session C forensics, 2026-08-21): the
             // prompt_assembled trace above describes the V1 packet, which is

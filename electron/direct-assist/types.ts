@@ -171,6 +171,14 @@ export interface DirectAssistRequest {
   readonly requestedLanguage: string | null;
   readonly requestedFormat: string | null;
   readonly maxContextChars: number;
+  /**
+   * Everything the model may be sent, in characters (context window less its
+   * output budget). The user prompt is fitted to `maxContextChars`; what is
+   * left of this is the room the system prompt has.
+   */
+  readonly modelInputChars?: number;
+  /** A small local model: it gets the short form of any optional contract. */
+  readonly smallModel?: boolean;
 }
 
 export interface DirectAssistPreparedPrompt {
