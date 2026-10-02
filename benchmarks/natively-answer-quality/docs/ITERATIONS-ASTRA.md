@@ -1781,8 +1781,8 @@ Heard and typed prompts cost the same (heard 1.17 → 2.54 s, typed 1.13 → 2.4
   others); `reasoning_effort: "low"`, which the direct DeepSeek API honours, is ignored on the Anthropic-format route.
 * **Screenshots.** 24 screens were rendered (code, traces, slides, tables; `tools/latency-screens.mjs`, the app's
   own screenshot prompt) and the model was shown to read them on this route (4 of 4 named what was on the screen
-  with the image, 0 of 4 without). Only two were timed before the decision made the run moot: 10.3 s to the first
-  answer token at low effort on both. Two rows, not a result. The run was stopped; no further calls were billed.
+  with the image, 0 of 4 without). Only two were timed before the decision made the run moot: up to 2.5 s to the
+  first answer token with reasoning off and up to 10.3 s at low effort. Two rows, not a result. The run was stopped; no further calls were billed.
 * The earlier quality reads stand as measured (every turn: dev +0.45 ±0.42, holdout +0.42 ±0.61, hard fails 14 → 9
   and 12 → 6). The decision is that this is not worth a first word that is more than twice as late.
 
