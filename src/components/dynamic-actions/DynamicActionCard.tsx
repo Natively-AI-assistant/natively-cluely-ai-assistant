@@ -140,6 +140,7 @@ interface Props {
   shortcutKeys?: string[]
   /** The shortcut was pressed on this card: its keycap goes down before the card leaves. */
   pressing?: boolean
+  isAccepting?: boolean
   onAccept: (action: DynamicActionPayload) => void
   onDismiss: (actionId: string) => void
   /** The overlay's opacity-scaled chip fill (appearance.chipStyle), as the quick actions use. */
@@ -157,7 +158,7 @@ interface Props {
 // of layout by the bar's AnimatePresence) as the next one rises into the same
 // spot: a crossfade, not a fold and reopen.
 export const DynamicActionCard = forwardRef<HTMLDivElement, Props>(function DynamicActionCard(
-  { action, waiting = 0, shortcutKeys = [], pressing = false, onAccept, onDismiss, surfaceStyle },
+  { action, waiting = 0, shortcutKeys = [], pressing = false, isAccepting = false, onAccept, onDismiss, surfaceStyle },
   ref,
 ) {
   const [busy, setBusy] = useState(false)
@@ -207,9 +208,10 @@ export const DynamicActionCard = forwardRef<HTMLDivElement, Props>(function Dyna
           <button
             type="button"
             className="action-cue-main flex min-w-0 flex-1 items-center gap-2.5 self-stretch pl-3 pr-2 rounded-l-[12px] text-left cursor-pointer bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--overlay-border)]"
+            disabled={busy || isAccepting}
             title={action.description ?? action.label}
             onClick={async () => {
-              if (busy) return
+              if (busy || isAccepting) return
               setBusy(true)
               try {
                 await onAccept(action)
@@ -253,6 +255,7 @@ export const DynamicActionCard = forwardRef<HTMLDivElement, Props>(function Dyna
             )}
             <button
               type="button"
+              disabled={busy || isAccepting}
               onClick={() => onDismiss(action.id)}
               className="action-cue-dismiss absolute inset-0 grid place-items-center rounded-[6px] text-[var(--overlay-text-muted)] hover:text-[var(--overlay-text-primary)] hover:bg-[var(--overlay-icon-hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--overlay-border)]"
               title="Dismiss"

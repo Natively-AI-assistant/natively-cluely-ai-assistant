@@ -179,7 +179,7 @@ function MotionScene() {
         <div className="relative z-10 pt-3">
           <DynamicActionBar
             shortcutKeys={['⌘', '8']}
-            onAcceptAction={(a) => { (window as any).__accepted.push({ id: a.id, t: performance.now() }); }}
+            onAcceptAction={async (a) => { (window as any).__accepted.push({ id: a.id, t: performance.now() }); return true; }}
             surfaceStyle={appearance.chipStyle}
             requestHeightMotion={(growPx, durationMs) => { const call = { growPx, durationMs, t: performance.now(), settledAt: null as number | null }; (window as any).__heightCalls.push(call); return grant ? () => { call.settledAt ??= performance.now(); } : null; }}
           />

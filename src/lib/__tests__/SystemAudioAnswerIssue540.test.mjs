@@ -122,13 +122,13 @@ describe('Issue #540: only user chunks wake the Stop tail waiter', () => {
 
 describe('Issue #540: handleWhatToSay legacy path still lets main extract the question', () => {
   test('generateWhatToSay receives undefined, not a rolling-bar blob', () => {
-    const handleWhatToSayBlock = between(
+    const runWhatToSayBlock = between(
       interfaceSource,
-      'const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {',
-      'const handleClarify = async () => {',
+      'const runWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {',
+      'const handleWhatToSay = async',
     );
-    assert.match(handleWhatToSayBlock, /generateWhatToSay\(\s*undefined,/);
-    assert.doesNotMatch(handleWhatToSayBlock, /generateWhatToSay\(\s*interviewerRequest/);
+    assert.match(runWhatToSayBlock, /generateWhatToSay\(\s*undefined,/);
+    assert.doesNotMatch(runWhatToSayBlock, /generateWhatToSay\(\s*interviewerRequest/);
   });
 });
 

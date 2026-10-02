@@ -95,7 +95,7 @@ test('STT Answer Now awaits finalization, bypasses RAG, and marks image-only tur
 });
 
 test('What-to-Say forwards recent interviewer STT and never auto-captures a page before Direct dispatch', () => {
-  const body = section('const handleWhatToSay = async', 'const handleFollowUp = async');
+  const body = section('const runWhatToSay = async', 'const handleWhatToSay = async');
   const directBranch = body.indexOf('if (directAssistEnabled) {');
   const autoCapture = body.indexOf('phoneMirrorRequestAutoContext');
   assert.ok(directBranch >= 0 && autoCapture > directBranch, 'Direct WTA must precede legacy auto capture');

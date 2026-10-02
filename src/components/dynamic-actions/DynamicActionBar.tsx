@@ -13,7 +13,7 @@ import {
 interface Props {
   // Called when the user accepts (the accept shortcut, or a click). Parent
   // should kick off the live answer stream using action.promptInstruction.
-  onAcceptAction: (action: DynamicActionPayload) => void;
+  onAcceptAction: (action: DynamicActionPayload) => Promise<boolean>;
   // Optional: how long actions stay visible without user interaction (ms).
   // Server side already expires; this is the renderer-side cap.
   staleAfterMs?: number;
@@ -65,6 +65,9 @@ export const DynamicActionBar: React.FC<Props> = ({
   requestHeightMotion,
 }) => {
   const [actions, setActions] = useState<DynamicActionPayload[]>([]);
+  const acceptingRef = useRef<string | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const acceptedIdsRef = useRef(new Set<string>());
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
   const reduceMotion = useReducedMotion() ?? false;
@@ -101,7 +104,7 @@ export const DynamicActionBar: React.FC<Props> = ({
       setActions((prev) => {
         // Dedupe by id (engine has already deduped at backend, but renderer
         // may receive late-arriving duplicates after a window restore).
-        if (prev.some((a) => a.id === action.id)) return prev;
+        if (acceptedIdsRef.current.has(action.id) || prev.some((a) => a.id === action.id)) return prev;
         const now = Date.now();
         const fresh = prev.filter((a) => now - a.createdAt < staleAfterMs);
         // The one on show stays put: a new, higher-priority suggestion must
@@ -116,6 +119,7 @@ export const DynamicActionBar: React.FC<Props> = ({
   );
 
   const dismiss = useCallback((id: string) => {
+    if (acceptingRef.current === id) return;
     markExit([id], 'dismiss');
     setActions((prev) => prev.filter((a) => a.id !== id));
     window.electronAPI?.dismissDynamicAction?.(id).catch(() => {
@@ -124,30 +128,29 @@ export const DynamicActionBar: React.FC<Props> = ({
   }, [markExit]);
 
   const accept = useCallback(
-    (action: DynamicActionPayload, holdMs = 0) => {
-      const remove = () => {
-        markExit([action.id], 'accept');
-        setActions((prev) => prev.filter((a) => a.id !== action.id));
-      };
-      // A click is its own press; the shortcut shows the keycap going down
-      // first. The answer starts NOW either way — only the departure waits.
-      if (holdMs > 0) {
-        window.setTimeout(() => {
-          remove();
-          pressingRef.current = null;
-          setPressingId(null);
-        }, holdMs);
-      } else {
+    async (action: DynamicActionPayload, holdMs = 0) => {
+      if (acceptingRef.current || acceptedIdsRef.current.has(action.id)) return;
+      acceptingRef.current = action.id;
+      setAcceptingId(action.id);
+      try {
+        // Failed capture or a busy answer flow leaves the suggestion retryable.
+        if (!await onAcceptAction(action)) return;
+        acceptedIdsRef.current.add(action.id);
+        const remove = () => {
+          markExit([action.id], 'accept');
+          setActions((prev) => prev.filter((a) => a.id !== action.id));
+        };
+        if (holdMs > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, holdMs));
         remove();
+        await window.electronAPI?.acceptDynamicAction?.(action.id);
+      } catch {
+        /* Parent failures leave the card available; acknowledgement is best effort. */
+      } finally {
+        acceptingRef.current = null;
+        setAcceptingId(null);
+        pressingRef.current = null;
+        setPressingId(null);
       }
-      void (async () => {
-        try {
-          await window.electronAPI?.acceptDynamicAction?.(action.id);
-        } catch {
-          /* swallow — the parent answer flow is the source of truth */
-        }
-        onAcceptAction(action);
-      })();
     },
     [markExit, onAcceptAction],
   );
@@ -183,7 +186,7 @@ export const DynamicActionBar: React.FC<Props> = ({
       const shown = actionsRef.current[0];
       // One press, one answer: a second press during the press beat would
       // accept the same, still-visible card again.
-      if (!shown || pressingRef.current) return;
+      if (!shown || pressingRef.current || acceptingRef.current) return;
       if (reduceRef.current) {
         accept(shown);
         return;
@@ -207,7 +210,7 @@ export const DynamicActionBar: React.FC<Props> = ({
     const t = setInterval(() => {
       const now = Date.now();
       const stale = actionsRef.current
-        .filter((a) => !(now - a.createdAt < staleAfterMs && (a.expiresAt === undefined || now < a.expiresAt)))
+        .filter((a) => a.id !== acceptingRef.current && !(now - a.createdAt < staleAfterMs && (a.expiresAt === undefined || now < a.expiresAt)))
         .map((a) => a.id);
       if (stale.length === 0) return;
       markExit(stale, 'expire');
@@ -268,6 +271,7 @@ export const DynamicActionBar: React.FC<Props> = ({
                 waiting={waiting}
                 shortcutKeys={shortcutKeys}
                 pressing={pressingId === shown.id}
+                isAccepting={acceptingId === shown.id}
                 onAccept={(action) => accept(action)}
                 onDismiss={dismiss}
                 surfaceStyle={surfaceStyle}
