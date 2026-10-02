@@ -1388,3 +1388,26 @@ the same items (`tools/reasoning-check.mjs`, `tools/validators-paired.mjs`). Hol
   from `queue3.mjs`), start on the probe's key and fall back, 8 calls in flight while the first key dies (all 8
   land on the second, none stops the run), neither key in any error text or log line, one key behaves as before.
   Not tested live: a real judgment on the second key (it has not answered yet).
+
+### App rows for the Call Center and Sales notices, run ahead of the verdict (04:41Z 2026-10-02) — no score exists yet
+* Why now: the next batch is the first that can judge anything, and the one after it is 15 hours later. If a pair
+  says BUILD at 11:00Z and the app rows do not exist, that part waits a whole batch for its promotion read. The
+  Looking-for-work part already has its app rows (`aq2-dev-fix14`, `aq2-holdout-fix14`); reasoning has
+  `aq2-*-fix15`. Missing: Call Center and Sales.
+* Runs `aq2-dev-fix16` and `aq2-holdout-fix16`: aq-fix2 `c399f399` (`fix/aq-astra-i6`, all three parts), modes
+  Call Center and Sales only, one app, guarded by when-quiet and the stall watchdog. The parts are independent by
+  mode (the Looking-for-work rule is a per-mode entry in the claim pass; each notice is keyed by its own mode), so
+  a Call Center row from this build is the row a build with only the Call Center part would give.
+* **Nothing about the rules changes.** A part is built only if its dev replay pair says BUILD (gain ≥ +0.3, interval
+  excluding 0, hard fails not up). The app rows of a part that does not get BUILD are not used for anything; they
+  are judged in the same batch only so that no decision waits another 15 hours, and they cannot rescue a part whose
+  pair failed. A part that gets BUILD is then read under the fix14 promotion rule as written at 22:24Z on
+  2026-10-01 (holdout pooled over the built modes positive with the interval excluding 0, hard fails not up, no
+  built mode down by more than 0.4, dev agrees in sign, validators not worse, `important_question_unanswered` not
+  up, typed refinement still met), against the kept build's rows for the same items (the fix13c composites).
+* What the app run itself has to show, without a judge: the notice is in the prompt on the heard turns with no
+  document and on no other turn (typed turns, turns of other modes); no failed or empty rows; validators and typed
+  refinement not worse than the kept build; the counts of `tools/nodoc-shape.mjs` on the heard rows.
+* Queue: the fix13c composites are judged right after fix13's rows (cache hits only: every answer in them is
+  already judged or is one of fix13's 27), and the fix16 rows go in a tier of their own after the fix15 / fix14 app
+  rows.

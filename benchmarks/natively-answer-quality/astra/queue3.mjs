@@ -31,7 +31,9 @@ const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar
 //   then, after the three pairs below: reasoning on ALL turns (dev + holdout) — reported only, Evin's heard question
 //   6-7    Looking for work: lfw-base vs lfw-bridge-v2
 //   8-9    Call Center: ccfin-base vs ccfin-nopolicy-v1h      10-11  Sales: salesfin-base vs salesfin-shape-v1h
-//   12     the app rows of the two candidates: fix15 (reasoning on typed turns) and fix14 (Looking-for-work rule)
+//   12     the app rows of the candidates: fix15 (reasoning on typed turns), fix14 (Looking-for-work rule), then
+//          fix16 (Call Center + Sales notices). Tier numbers below are one or two higher than written here: the
+//          fix13c composites sit after tier 1 and fix16 has a tier of its own.
 //   13     the Starting column — main as it was: ~160 dev and ~68 holdout judgments missing.
 //   14-15  the claim pass on the same rows: draft, then shown (dev and holdout edited rows)
 //   16     supp-behavior for fix11, fix12, fix6.   17  blind pairwise reference-vs-fix11.   18  fix10.
@@ -43,6 +45,9 @@ const D = 'aq2-dev-fix11'; const H = 'aq2-holdout-fix11'; const AGG = ['--aggreg
 const TIERS = [
   [['calibrate', ['astra/calibrate.mjs']]],
   [J('dev-c2-fix13', 'abs-dev-c2', 'aq2-dev-fix13'), J('holdout-c2-fix13', 'abs-holdout-c2', 'aq2-holdout-fix13'), J('dev-c2-fix12', 'abs-dev-c2', 'aq2-dev-fix12')],
+  // The kept build as one run per split (fix12c + fix13's re-run rows): what every candidate's app rows are paired
+  // with. Every answer in them was judged in the tier above or earlier, so this costs no judge call.
+  [J('dev-c2-fix13c', 'abs-dev-c2', 'aq2-dev-fix13c'), J('holdout-c2-fix13c', 'abs-holdout-c2', 'aq2-holdout-fix13c')],
   // Reasoning: the build (fix15) reasons on TYPED turns only, so the deciding variant is the typed-only set — heard
   // rows carry the reasoning-off answer (no judge call, a difference of exactly 0). The all-turns sets come later
   // and are reported only: they are the evidence for the heard-turn question, which is Evin's to decide.
@@ -58,6 +63,9 @@ const TIERS = [
   [R('salesfin-shape-v1h', 'salesfin-shape-v1h', D)],
   [R('think-low-til', 'think-low-til', D), R('think-low-til-hold', 'think-low-til-hold', H, AGG)],
   [J('dev-c2-fix15', 'abs-dev-c2', 'aq2-dev-fix15'), J('holdout-c2-fix15', 'abs-holdout-c2', 'aq2-holdout-fix15'), J('dev-c2-fix14', 'abs-dev-c2', 'aq2-dev-fix14'), J('holdout-c2-fix14', 'abs-holdout-c2', 'aq2-holdout-fix14')],
+  // Call Center + Sales app rows of the i6 candidate (c399f399), run ahead of the verdict; used only for a part
+  // whose replay pair says BUILD.
+  [J('dev-c2-fix16', 'abs-dev-c2', 'aq2-dev-fix16'), J('holdout-c2-fix16', 'abs-holdout-c2', 'aq2-holdout-fix16')],
   [J('dev-c2-cur', 'abs-dev-c2', 'aq2-dev-cur'), J('holdout-c2-cur', 'abs-holdout-c2', 'aq-holdout-fix2')],
   [R('f13dev-draft', 'f13dev-draft', 'aq2-dev-fix13c'), R('f13hold-draft', 'f13hold-draft', 'aq2-holdout-fix13c', AGG)],
   [R('f13dev-shown', 'f13dev-shown', 'aq2-dev-fix13c'), R('f13hold-shown', 'f13hold-shown', 'aq2-holdout-fix13c', AGG)],
