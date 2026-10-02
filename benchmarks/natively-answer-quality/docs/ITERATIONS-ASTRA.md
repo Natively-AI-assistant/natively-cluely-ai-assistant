@@ -1786,3 +1786,42 @@ Heard and typed prompts cost the same (heard 1.17 → 2.54 s, typed 1.13 → 2.4
 * The earlier quality reads stand as measured (every turn: dev +0.45 ±0.42, holdout +0.42 ±0.61, hard fails 14 → 9
   and 12 → 6). The decision is that this is not worth a first word that is more than twice as late.
 
+## Speed: where a heard turn's time goes before the request is sent — measured, and the rule for any change (14:00Z)
+
+Evin's instruction is now speed first ("the point of natively is to answer fast"). Quality is something not to break.
+
+**Found in the existing app runs** (`aq2-dev-fix11`, 360 rows; `request_dispatch_ms` = from the trigger to the moment
+the generator request leaves the app). The model's own first token is about 0.75 s and roughly fixed; what varies is
+the wait before the request is sent, and only on heard turns:
+
+| heard (hotkey) turn | rows | wait before the request p50 / p90 | first word p50 |
+|---|---:|---:|---:|
+| no profile, no reference file | 94 | 7 / 11 ms | about 0.75 s |
+| reference file | 87 | 162 / 312 ms | |
+| profile | 46 | 270 / 636 ms | |
+| profile and reference file | 18 | 589 / 1,254 ms | |
+| every typed turn | 115 | 4 / 16 ms | 0.68 s |
+
+By mode, heard and typed together: Technical interview 421 ms (p90 1,154), Looking for work 367 ms, Seminar 130 ms,
+the other six 6–8 ms. First word: 0.75 s when the request leaves within 50 ms (228 rows), 1.23 s when it waits
+300–600 ms (35 rows), 1.63 s over 600 ms (18 rows).
+
+**What this does not show yet.** The benchmark worktrees have no local model weights (query embedder, reranker,
+intent router: 125 MB, ignored by git, present only in the main checkout), so every run retrieved lexically and the
+wait above is the rig's, not necessarily a user's. In the product the same turn waits on the query embedding with a
+budget of 1.5 s (6 s in document-grounded modes, `WhatToAnswerLLM.ts`). So the first step is a measurement, not a
+change: the kept build (`e000db4a`) run in the app with the weights copied in from the main checkout and
+`MEASURE_LATENCY=true` (the app's own stage breakdown), on the three slow modes (dev, 120 rows) — `aq2-dev-emb1`.
+The weights are removed from the worktree afterwards so later benchmark runs stay comparable with earlier ones.
+
+**The rule for a speed change, written before any is built.**
+* A change that must not alter the answer is kept if, against the kept build on the same rows: (a) the prompt sent
+  (system and messages, from the wire capture) is byte-identical on every row; (b) the wait before the request is
+  lower at p50 and at p95 on heard turns; (c) no failed row; (d) the unit suites pass. No judge is needed: the same
+  prompt gives the same distribution of answers.
+* A change that alters the prompt (less or different retrieval, a different order for cache hits, a shorter reply)
+  is a behaviour change: it needs the judged rule on dev and holdout, and it goes to Evin first (standing
+  constraint from the performance audit of 2026-09-29: no behaviour changes, one fix at a time).
+* The claim pass is not touched for speed: it adds 0.5–0.7 s to the settled answer and is worth +1.14 (dev) and
+  +1.68 (holdout) on the answers it edits. That trade is already on Evin's list.
+
