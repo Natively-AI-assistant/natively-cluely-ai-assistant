@@ -2,6 +2,7 @@
 // Arm a ration batch: wait for the judge probe to pass, run the queue, write the report — in its OWN session
 // (detached), so it outlives the terminal that started it. One light node process chain; HTTP only.
 //   node astra/arm.mjs <tag> [--not-before 2026-10-01T10:55:00Z] [--wait-ms 20000000] [--concurrency 8] [--after-pid N]
+//                            [--from-tier N]  (same batch, same key: skip calibration and the tiers already judged)
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,7 +37,7 @@ const notBefore = opt('not-before') ? Date.parse(opt('not-before')) : 0;
 if (notBefore > Date.now()) { console.log(`${new Date().toISOString()} sleeping until ${opt('not-before')}`); while (Date.now() < notBefore) await new Promise((r) => setTimeout(r, 30000)); }
 console.log(`${new Date().toISOString()} waiting for the batch`);
 const w = await run(['astra/wait-for-batch.mjs', String(opt('wait-ms', '20000000'))]);
-if (w === 0) await run(['astra/queue3.mjs', '--concurrency', String(opt('concurrency', '8'))]);
+if (w === 0) await run(['astra/queue3.mjs', '--concurrency', String(opt('concurrency', '8')), ...(opt('from-tier') ? ['--from-tier', String(opt('from-tier'))] : [])]);
 else console.log(`${new Date().toISOString()} judge still unavailable (exit ${w}) — queue not run`);
 await run(['astra/report.mjs', '--abs', 'abs-dev-c2,abs-holdout-c2,abs-sb-c2', '--ab', 'ab-c2-dev-fix6-vs-fix11', '--worst', '12', '--json', `astra/out/logs/report-after-${tag}.json`], path.join(HERE, 'out', 'logs', `report-after-${tag}.md`));
 console.log(`${new Date().toISOString()} chain ${tag} finished`);

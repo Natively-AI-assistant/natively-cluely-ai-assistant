@@ -62,15 +62,18 @@ const TIERS = [
   [R('ccfin-nopolicy-v1h', 'ccfin-nopolicy-v1h', D)],
   [R('salesfin-base', 'salesfin-base', D)],
   [R('salesfin-shape-v1h', 'salesfin-shape-v1h', D)],
-  [R('think-low-til', 'think-low-til', D), R('think-low-til-hold', 'think-low-til-hold', H, AGG)],
-  [J('dev-c2-fix15', 'abs-dev-c2', 'aq2-dev-fix15'), J('holdout-c2-fix15', 'abs-holdout-c2', 'aq2-holdout-fix15'), J('dev-c2-fix14', 'abs-dev-c2', 'aq2-dev-fix14'), J('holdout-c2-fix14', 'abs-holdout-c2', 'aq2-holdout-fix14')],
-  // Call Center + Sales app rows of the i6 candidate (c399f399), run ahead of the verdict; used only for a part
-  // whose replay pair says BUILD.
-  [J('dev-c2-fix16', 'abs-dev-c2', 'aq2-dev-fix16'), J('holdout-c2-fix16', 'abs-holdout-c2', 'aq2-holdout-fix16')],
   [J('dev-c2-cur', 'abs-dev-c2', 'aq2-dev-cur'), J('holdout-c2-cur', 'abs-holdout-c2', 'aq-holdout-fix2')],
   [R('f13dev-draft', 'f13dev-draft', 'aq2-dev-fix13c'), R('f13hold-draft', 'f13hold-draft', 'aq2-holdout-fix13c', AGG)],
   [R('f13dev-shown', 'f13dev-shown', 'aq2-dev-fix13c'), R('f13hold-shown', 'f13hold-shown', 'aq2-holdout-fix13c', AGG)],
   [J('sb-c2-fix11', 'abs-sb-c2', 'aq2-sb-fix11'), J('sb-c2-fix12', 'abs-sb-c2', 'aq2-sb-fix12'), J('sb-c2-fix6', 'abs-sb-c2', 'aq2-sb-fix6')],
+  // 2026-10-02 11:47Z: all four prepared changes got DO NOT BUILD from their dev pairs, so nothing below can change a
+  // decision any more. The three tiers that follow (reasoning on all turns, the candidates' app rows) are reported
+  // only and were moved behind what the final report needs: the Starting column, the claim pass, supp-behavior.
+  [R('think-low-til', 'think-low-til', D), R('think-low-til-hold', 'think-low-til-hold', H, AGG)],
+  [J('dev-c2-fix15', 'abs-dev-c2', 'aq2-dev-fix15'), J('holdout-c2-fix15', 'abs-holdout-c2', 'aq2-holdout-fix15'), J('dev-c2-fix14', 'abs-dev-c2', 'aq2-dev-fix14'), J('holdout-c2-fix14', 'abs-holdout-c2', 'aq2-holdout-fix14')],
+  // Call Center + Sales app rows of the i6 candidate (c399f399), run ahead of the verdict; reported only
+  // (no part's replay pair says BUILD).
+  [J('dev-c2-fix16', 'abs-dev-c2', 'aq2-dev-fix16'), J('holdout-c2-fix16', 'abs-holdout-c2', 'aq2-holdout-fix16')],
   [['ab-c2-fix6-vs-fix11', ['astra/ab.mjs', '--set', 'ab-c2-dev-fix6-vs-fix11', '--a', 'results/aq2-dev-fix6', '--b', 'results/aq2-dev-fix11', '--concurrency', C], 'results/aq2-dev-fix11']],
   [J('dev-c2-fix10', 'abs-dev-c2', 'aq2-dev-fix10'), J('holdout-c2-fix10', 'abs-holdout-c2', 'aq2-holdout-fix10')],
   [R('think-off-rest', 'think-off-rest', D), R('think-low-rest', 'think-low-rest', D), R('lfw-bridge-v1', 'lfw-bridge-v1', D), R('ccfin-nopolicy-v1c', 'ccfin-nopolicy-v1c', D), R('salesfin-shape-v1c', 'salesfin-shape-v1c', D)],
