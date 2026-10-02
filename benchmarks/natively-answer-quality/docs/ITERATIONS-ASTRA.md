@@ -1857,11 +1857,12 @@ build's to size that.
   wait is after that mark and before the network request.
 * **Cause 1 — profile turns: the V3 prompt builder's own retrieval.** `buildV3Prompt` is awaited after the mark.
   Its `retrievalMs` on heard turns with profile sources: 359 ms p50, 477 p90 (36 turns); with profile and files 273 /
-  390 (18). The same sources and the same 20 candidates on TYPED turns: 9 ms p50, 16 p90. Heard turns pass
-  `rerankSurface: 'live'` and reach the profile through the hybrid retriever with the bundled cross-encoder rerank
-  allowed (`ms-marco-MiniLM-L-6-v2`, measured in `docs/reranker-benchmark-2026-09-04.md` at 211 ms); the retriever
-  escalates to it when its confidence is low and awaits it under a 1,200 ms budget. That is a deliberate trade
-  written into the code, not a defect: taking it off the critical path changes which passages are sent.
+  390 (18). The same sources and the same 20 candidates on TYPED turns: 9 ms p50, 16 p90. Which step inside takes
+  the time is NOT separated yet: the heard path passes `rerankSurface: 'live'` and its profile port calls the hybrid
+  retriever with the bundled cross-encoder rerank allowed (`ms-marco-MiniLM-L-6-v2`, 211 ms in
+  `docs/reranker-benchmark-2026-09-04.md`, awaited under a 1,200 ms budget when retrieval confidence is low), and
+  the query is embedded on the way — but this run's log has no per-stage line for either. The retriever has its own
+  stage trace (`NATIVELY_H4_STAGE_TRACE=1`); the next run turns it on.
 * **Cause 2 — reference-file turns: retrieval done twice, the second one thrown away.** After V3 has composed the
   prompt, `WhatToAnswerLLM` still builds the legacy packet, including the legacy mode-reference retrieval
   (its "stage 3": over 50 ms on 25 of 95 heard turns, p90 181 ms, max 294 ms). When a V3 prompt is present that
@@ -1878,8 +1879,7 @@ build's to size that.
   (46 of 93 heard rows here). Rule (a)–(d) above applies, plus one more because the scope declaration changes
   source: the declared scopes must be shown, row by row, to be the scopes of what is sent. It touches the
   provider-data-scope gate, so it is built on a branch with its tests and shown to Evin before anything lands.
-* Cause 1 is a behaviour change either way (no rerank on live turns, or reranking in the background and using the
-  result only if it arrives in time, or starting the profile retrieval when the question is transcribed rather than
-  at the press). The last one keeps the prompt identical when the press comes after the retrieval has finished. It
-  goes to Evin with the numbers.
+* Cause 1 needs the stage trace before anything is proposed. If the time is a step whose result is used, any
+  change to it is a behaviour change and goes to Evin with the numbers; starting the same retrieval when the
+  question is transcribed, rather than at the press, is the one option that keeps the prompt identical.
 
