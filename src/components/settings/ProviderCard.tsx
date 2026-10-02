@@ -37,6 +37,8 @@ interface ProviderCardProps {
     onSetDefaultModel?: (modelId: string) => void;
     /** True once a catalog has been fetched for this provider; gates auto-discovery. */
     hasCatalog?: boolean;
+    /** Timestamp when this provider's catalog was last fetched. */
+    fetchedAt?: number;
     providerName: string;
     apiKey: string;
     preferredModel?: string;
@@ -80,6 +82,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     modelSaveError,
     onSetDefaultModel,
     hasCatalog,
+    fetchedAt,
     providerName,
     apiKey,
     preferredModel,
@@ -367,6 +370,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             onFirstOpen={() => {
                                 if (hasStoredKey && !hasCatalog) handleFetchModels();
                             }}
+                            lastFetchedAt={fetchedAt}
                         />
                     )}
                 </div>
