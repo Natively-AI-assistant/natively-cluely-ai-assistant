@@ -1253,7 +1253,7 @@ The app sends `thinking: disabled` on every DeepSeek turn. Same 80 recorded dev 
   including the real compiled stream method over a recording stub (request carries the fields; reasoning chunks are
   never yielded); intelligence suite 2,807 / 0 fail; the three services suites that drive the DeepSeek stream
   111 / 0 fail.
-* **What the app run is for, written before it starts (01:05Z).** The effect was measured on identical prompts
+* **What the app run is for, written before it starts (00:54Z).** The effect was measured on identical prompts
   on both sets; an app re-run resamples every draft and cannot measure it better. The run (dev and holdout,
   Technical interview + Lecture) has to show: (1) wiring — every typed row of those modes carries
   `thinking: enabled`, no heard row does; (2) nothing breaks — 0 failed rows, no empty answers, no more requests
