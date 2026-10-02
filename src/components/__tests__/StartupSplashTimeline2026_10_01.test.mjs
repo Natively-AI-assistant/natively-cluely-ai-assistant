@@ -1,23 +1,26 @@
-// Guards the startup splash (2026-10-01): the logo rebuilt in characters, then a
-// ring of characters that leaves the logo and uncovers the launcher behind it.
+// Guards the startup splash (2026-10-01, exit redone 2026-10-02): the logo rebuilt
+// in characters, then one move away from the viewer that lands the launcher.
 //
 // WHY THIS EXISTS. The splash is the one screen every launch shows, and it has
-// already trapped users once ("stuck at logo"). It is a canvas animation in two
-// parts, an intro and a reveal, so four things have to stay true and none of them
-// shows up in a screenshot:
+// already trapped users once ("stuck at logo"). It is a canvas intro followed by
+// an exit made of three Web Animations, so five things have to stay true and none
+// of them shows up in a screenshot:
 //
-//   1. It ends. The intro is at rest before the splash hands over, the hard cap
-//      sits well behind the handover, and the reveal leaves nothing on the canvas.
+//   1. It ends. The intro is at rest before the splash hands over, and the hard
+//      cap sits well behind the handover.
 //   2. Dismissal is a timer, never a frame callback. Chromium stops
 //      requestAnimationFrame for a covered window; a splash that waited for its
 //      last frame would never hand over (LauncherBootRevealNotFrameGated).
-//   3. The reveal is decoration on its own clock. It starts when the splash is
+//   3. The exit is decoration on its own clock. It starts when the splash is
 //      actually being removed (App can hold the splash past the handover for the
 //      welcome gate), nothing waits for it, and App keeps the splash mounted for
 //      exactly as long as it takes.
-//   4. A frame is a pure function of its clocks. A slow boot frame then shortens
-//      the animation instead of stalling it, and the settled frame is reproducible
-//      for reduced motion.
+//   4. The exit keeps its shape: the logo is gone before the black lifts (the logo
+//      only ever exists on black), the launcher lands without overshooting, is
+//      never dimmed or blurred, and nothing is left on it afterwards.
+//   5. Main is told the reveal is over only after the splash has been removed
+//      (LauncherThrottlingRestoredAfterReveal): told earlier, a hidden window
+//      stops its frames with the splash still mounted.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -34,12 +37,14 @@ const app = read('../../App.tsx');
 
 // the farthest a logo cell can sit from the centre, in logo radii: the corner of the mark's box
 const FARTHEST_LOGO_CELL = Math.SQRT2 + 0.1;
-// the default 1200 x 800 window: how far its corners are from the centred logo, in logo radii
-const DEFAULT_CORNER = Math.hypot(600, 400) / ((96 * tl.LOGO_SCALE) / 2);
-// How long App keeps the leaving splash mounted, read from the source so the two cannot drift apart
+// App's layer around the splash, and the launcher's layer
 const splashWrapper = app.slice(app.indexOf('key="startup"'), app.indexOf('<StartupSequence'));
-const [, holdS, fadeS] = splashWrapper.match(/exit=\{\{[^\n]*transition: \{ opacity: \{ delay: ([\d.]+), duration: ([\d.]+) \} \}/) ?? [];
-const appHoldMs = Number(holdS) * 1000, appGoneMs = appHoldMs + Number(fadeS) * 1000;
+const launcherWrapper = app.slice(app.indexOf('key="main"'), app.indexOf('<QueryClientProvider', app.indexOf('key="main"')));
+// How long App takes to drop the splash once the exit has ended, read from the source
+const [, fadeS] = splashWrapper.match(/transition: \{ opacity: \{ delay: EXIT_MS \/ 1000, duration: ([\d.]+) \} \}/) ?? [];
+const appFadeMs = Number(fadeS) * 1000;
+// the exit as the component starts it
+const exitBlock = component.slice(component.indexOf('const isPresent = useIsPresent();'), component.indexOf('useLayoutEffect(() => {'));
 
 describe('the intro', () => {
   test('every logo cell has locked and focused before the handover, and the field has drained by the settle', () => {
@@ -54,13 +59,12 @@ describe('the intro', () => {
     }
   });
 
-  test('the pace slows both parts by one factor and leaves the safety net well clear', () => {
+  test('the pace slows the intro by one factor and leaves the safety net well clear', () => {
     assert.ok(tl.PACE >= 1 && tl.PACE <= 1.5, `pace ${tl.PACE}`);
     assert.equal(tl.animationTime(tl.SPLASH_SETTLE_MS), tl.SETTLE_AT_MS);
     assert.equal(tl.animationTime(tl.SPLASH_DISMISS_MS), tl.HANDOVER_AT_MS);
-    assert.equal(tl.animationTime(tl.EXIT_MS), tl.REVEAL_MS);
     assert.ok(tl.SPLASH_HARD_CAP_MS - tl.SPLASH_DISMISS_MS >= 1000, 'the safety net must not race the normal dismiss');
-    assert.ok(tl.SPLASH_DISMISS_MS + tl.EXIT_MS <= tl.SPLASH_HARD_CAP_MS, 'the reveal fits in front of the hard cap');
+    assert.ok(tl.SPLASH_DISMISS_MS + tl.LANDING.at + tl.LANDING_MS <= tl.SPLASH_HARD_CAP_MS, 'the exit fits in front of the hard cap');
   });
 
   test('the field drifts towards the viewer and never moves away', () => {
@@ -99,104 +103,65 @@ describe('the intro', () => {
   });
 });
 
-describe('the reveal', () => {
-  test('the zoom is one small spring that ends exactly at rest', () => {
-    assert.equal(tl.zoomAt(0), 1, 'no jump when it starts');
-    let max = 0, min = Infinity;
-    for (let e = 0; e <= tl.REVEAL_MS; e++) {
-      const z = tl.zoomAt(e);
-      max = Math.max(max, z);
-      min = Math.min(min, z);
+describe('the exit', () => {
+  test('the logo is gone before the black starts to lift: it only ever exists on black', () => {
+    assert.ok(tl.LOGO_OUT.fadeMs <= tl.LIFT.at, `the logo is still fading (${tl.LOGO_OUT.fadeMs} ms) when the launcher starts to show (${tl.LIFT.at} ms)`);
+    assert.ok(tl.LOGO_OUT.moveMs <= tl.EXIT_MS, 'the logo is still moving when the splash is removed');
+    // ...but not so fast that it reads as a cut
+    assert.ok(tl.LOGO_OUT.fadeMs >= 150);
+  });
+
+  test('the logo falls back, a step and not a zoom', () => {
+    assert.ok(tl.LOGO_OUT.scale < 1, 'the logo moves away from the viewer, the same way the launcher lands');
+    assert.ok(tl.LOGO_OUT.scale >= 0.7, `the logo shrinks to ${tl.LOGO_OUT.scale}`);
+  });
+
+  test('the launcher is already landing when the black starts to lift, and is all but there when it has gone', () => {
+    assert.ok(tl.LANDING.at <= tl.LIFT.at, 'the launcher would show at its starting size, standing still, then jump');
+    assert.ok(tl.landingScale(tl.EXIT_MS - tl.LANDING.at) - 1 <= 0.01, 'the launcher is still visibly moving once it is fully uncovered');
+    assert.equal(tl.EXIT_MS, tl.LIFT.at + tl.LIFT.ms);
+    assert.ok(tl.EXIT_MS <= 700, `the handoff takes ${tl.EXIT_MS} ms`);
+  });
+
+  test('the landing never overshoots and ends exactly at its size', () => {
+    assert.ok(tl.LANDING.from > 1 && tl.LANDING.from <= 1.12, `the launcher starts at ${tl.LANDING.from}: from in front of the viewer, a landing and not a zoom`);
+    assert.equal(tl.landingScale(0), tl.LANDING.from, 'no jump when it starts');
+    let last = tl.LANDING.from;
+    for (let ms = 0; ms <= tl.LANDING_MS + 200; ms++) {
+      const s = tl.landingScale(ms);
+      assert.ok(s <= last + 1e-12, `the launcher grew again at ${ms}`);
+      assert.ok(s >= 1, `the launcher overshot its size at ${ms} (${s})`);
+      last = s;
     }
-    assert.ok(Math.abs(max - (1 + tl.PULSE_AMP)) < 1e-4, `peak ${max}`);
-    assert.ok(tl.PULSE_AMP <= 0.05, 'a nudge, not a bounce');
-    assert.ok(min < 1 && 1 - min < tl.PULSE_AMP * 0.1, `the undershoot is a tenth of the peak at most (${min})`);
-    assert.ok(Math.abs(tl.zoomAt(tl.PULSE_MS - 1) - 1) < 1e-4, 'it eases into rest instead of snapping to it');
-    for (const e of [tl.PULSE_MS, tl.REVEAL_MS, 5000]) assert.equal(tl.zoomAt(e), 1, `still zoomed at ${e}`);
+    assert.ok(tl.landingScale(tl.LANDING_MS - 1) - 1 < 2e-4, 'it eases into rest instead of snapping to it');
+    for (const ms of [tl.LANDING_MS, tl.LANDING_MS + 1, 5000]) assert.equal(tl.landingScale(ms), 1, `still off its size at ${ms}`);
   });
 
-  test('the ring starts from nothing at the logo, only ever travels outwards, and is gone at the end', () => {
-    const reach = tl.revealReach(DEFAULT_CORNER);
-    assert.equal(tl.ringAt(0, reach), null);
-    assert.equal(tl.ringAt(tl.REVEAL_MS, reach), null);
-    assert.equal(tl.ringRadius(0, reach), 0);
-    const peakOf = (e) => {
-      const ring = tl.ringAt(e, reach);
-      let best = 0;
-      for (let d = 0; d <= reach + 2; d += 0.01) best = Math.max(best, ring(d));
-      return best;
-    };
-    let last = 0;
-    for (let e = 20; e < tl.REVEAL_MS; e += 20) {
-      const r = tl.ringRadius(e, reach);
-      assert.ok(r >= last, `the ring moved inwards at ${e}`);
-      assert.ok(peakOf(e) >= 0 && peakOf(e) <= 1);
-      last = r;
-    }
-    assert.ok(peakOf(1) < 0.01, 'it fades in');
-    assert.ok(peakOf(tl.REVEAL_MS - 1) < 0.01, 'it fades out');
-    // the renderer only keeps empty cells within reach + 3 widths; nothing beyond may ever light
-    for (let e = 0; e < tl.REVEAL_MS; e += 10) assert.equal(tl.ringAt(e, reach)?.(reach + 3 * tl.RING_WIDTH + 0.001) ?? 0, 0);
-    assert.match(renderer, /ringMax = reach \+ 3 \* RING_WIDTH/);
+  test('the keyframes are that spring from start to finish, and move the launcher only', () => {
+    const { keyframes, delay, duration } = tl.launcherLanding();
+    assert.equal(delay, tl.LANDING.at);
+    assert.equal(duration, tl.LANDING_MS);
+    assert.equal(keyframes[0].transform, `scale(${tl.LANDING.from.toFixed(5)})`);
+    assert.equal(keyframes.at(-1).transform, 'scale(1.00000)');
+    assert.ok(keyframes.length >= 30, 'too few samples: straight lines between them would show');
+    keyframes.forEach((k, i) => {
+      // never dimmed, never blurred: the launcher arrives as itself
+      assert.deepEqual(Object.keys(k).sort(), ['easing', 'transform']);
+      assert.equal(k.easing, 'linear');
+      assert.equal(k.transform, `scale(${tl.landingScale((i / (keyframes.length - 1)) * duration).toFixed(5)})`);
+    });
   });
 
-  test('the black opens right behind the ring: never ahead of it, never far behind', () => {
-    const reach = tl.revealReach(DEFAULT_CORNER);
-    assert.deepEqual(tl.irisAt(0, reach), { edge: 0, clear: -tl.IRIS_FEATHER }, 'solid black when the reveal starts');
-    let lastEdge = 0;
-    for (let e = 0; e <= tl.REVEAL_MS; e += 10) {
-      const { edge, clear } = tl.irisAt(e, reach), ring = tl.ringRadius(e, reach);
-      assert.ok(edge <= ring, `the black opened ahead of the ring at ${e}`);
-      assert.ok(ring - edge <= tl.IRIS_LAG + 1e-9, `the opening fell behind the ring at ${e}`);
-      assert.ok(edge >= lastEdge, `the opening closed again at ${e}`);
-      assert.ok(Math.abs(edge - clear - tl.IRIS_FEATHER) < 1e-9);
-      lastEdge = edge;
-    }
-    assert.ok(tl.IRIS_LAG < tl.RING_WIDTH, 'the edge must sit inside the ring, so the ring reads as what uncovers the launcher');
+  test('App removes the splash as soon as the exit has ended', () => {
+    assert.ok(Number.isFinite(appFadeMs), 'could not read how App removes the leaving splash');
+    assert.ok(appFadeMs <= 100, 'an invisible splash must not linger over the launcher');
+    assert.match(app, /import \{ EXIT_MS, launcherLanding \} from "\.\/components\/startup\/splashTimeline"/);
   });
 
-  test('the whole window is uncovered by the end, at any window size', () => {
-    for (const corner of [DEFAULT_CORNER, 10, 14, 25]) {
-      const reach = tl.revealReach(corner);
-      assert.ok(tl.irisAt(tl.REVEAL_MS, reach).clear >= corner, `a window ${corner} radii out keeps black corners`);
-      // ...and well before the end: the last third is only the ring fading
-      assert.ok(tl.irisAt(tl.REVEAL_MS * 0.7, reach).clear >= corner * 0.97, `the corners of a window ${corner} radii out open too late`);
-    }
-    assert.match(renderer, /if \(exitT >= 0 && animationTime\(exitT\) >= REVEAL_MS\) return;/, 'nothing may be left on the canvas after the reveal');
-  });
-
-  test('the logo starts to dissolve the moment the ring starts, from the centre outwards, and is gone early', () => {
-    // The black behind the logo opens at once, so a logo that stayed whole would sit on the launcher.
-    assert.equal(tl.logoLetGo(0, 0), 0, 'the dissolve must start with the ring, not after it');
-    assert.equal(tl.logoLetGo(0, 1), 0, 'noise must not delay the very first cell');
-    assert.ok(tl.logoLetGo(0, 0) < tl.logoLetGo(0.5, 0) && tl.logoLetGo(0.5, 0) < tl.logoLetGo(FARTHEST_LOGO_CELL, 0), 'centre first, in the ring\'s wake');
-    for (const dist of [0, 0.5, 1, FARTHEST_LOGO_CELL]) for (const h of [0, 1])
-      assert.ok(tl.logoLetGo(dist, h) + tl.DRAIN_FADE_MS <= tl.REVEAL_MS / 2, 'the logo lingers over the launcher');
-    // ...but not so fast that it reads as a cut: a cell takes a few frames to go
-    assert.ok(tl.DRAIN_FADE_MS >= 120);
-  });
-
-  test('the logo is never left standing on the launcher: it is only as visible as the black behind it', () => {
-    const reach = tl.revealReach(DEFAULT_CORNER);
-    for (const dist of [0, 0.5, 1, FARTHEST_LOGO_CELL]) {
-      assert.equal(tl.irisCover(dist, tl.irisAt(0, reach)), 1, 'the logo is whole when the reveal starts');
-      let last = 1;
-      for (let e = 0; e <= tl.REVEAL_MS; e += 5) {
-        const cover = tl.irisCover(dist, tl.irisAt(e, reach));
-        assert.ok(cover >= 0 && cover <= last, `the logo came back at ${e}`);
-        last = cover;
-      }
-      assert.equal(last, 0);
-    }
-    // the same ramp the backdrop is cut with: linear between `clear` and `edge`
-    assert.equal(tl.irisCover(2, { clear: 2 - tl.IRIS_FEATHER / 2 }), 0.5);
-    assert.match(renderer, /const cover = iris \? irisCover\(k\.dist, iris\) : 1;\s*if \(cover <= 0\) continue;\s*const a = easeOut\(prog\(t, k\.appear, 140\)\) \* cover;/);
-  });
-
-  test('App keeps the leaving splash mounted for exactly the reveal, and no longer', () => {
-    assert.ok(Number.isFinite(appHoldMs) && appHoldMs > 0, 'could not read how long App holds the leaving splash');
-    assert.ok(tl.EXIT_MS <= appHoldMs, `App removes the splash (${appHoldMs} ms) before the reveal is over (${tl.EXIT_MS} ms)`);
-    assert.ok(appGoneMs - tl.EXIT_MS <= 100, 'an invisible splash must not linger over the launcher');
+  test('the reveal is reported to main only after the splash has been removed', () => {
+    // Main restores background throttling on that report. Sent while the splash is
+    // still leaving, a hidden window stops its frames with the splash mounted.
+    assert.ok(tl.LANDING.at + tl.LANDING_MS >= tl.EXIT_MS + appFadeMs + 100, 'the landing ends before the splash is gone');
   });
 });
 
@@ -214,37 +179,45 @@ describe('splash wiring', () => {
     const draw = component.slice(component.indexOf('const draw = () => {'), component.indexOf('const layout = () => {'));
     assert.ok(draw.length > 0);
     assert.doesNotMatch(draw, /onComplete/, 'requestAnimationFrame stops for a covered window: the handover must stay on a timer');
-    assert.doesNotMatch(component, /usePresence|safeToRemove/, 'the reveal must not hold the splash on screen: it only watches useIsPresent');
+    assert.doesNotMatch(component, /usePresence|safeToRemove/, 'the exit must not hold the splash on screen: it only watches useIsPresent');
+    assert.doesNotMatch(exitBlock, /onComplete|\.finished|onfinish/, 'nothing may wait for the exit animations');
     assert.equal(component.match(/onCompleteRef\.current\(\)/g).length, 2, 'only the two timers may dismiss');
   });
 
-  test('the reveal starts when the splash is being removed, not at the handover time', () => {
-    assert.match(component, /const isPresent = useIsPresent\(\);/);
-    assert.match(component, /if \(isPresent \|\| exitAt\.current >= 0\) return;\s*exitAt\.current = performance\.now\(\);/);
-    assert.match(component, /const exitT = reduced \|\| exitAt\.current < 0 \? -1 : now - exitAt\.current;/);
-    assert.match(renderer, /const leaving = exitT >= 0, e = leaving \? Math\.min\(animationTime\(exitT\), REVEAL_MS\) : 0;/);
-    assert.match(renderer, /const ring = leaving \? ringAt\(e, s\.reach\) : null;/, 'a held splash must rest: no ring until it leaves');
-    assert.match(renderer, /const zoom = leaving \? zoomAt\(e\) : 1;/);
+  test('the exit starts when the splash is being removed, not at the handover time, and only once', () => {
+    assert.match(exitBlock, /const isPresent = useIsPresent\(\);/);
+    assert.match(exitBlock, /if \(isPresent \|\| leaving\.current\) return;\s*leaving\.current = true;/);
+    assert.match(exitBlock, /\}, \[isPresent\]\);/);
   });
 
-  test('the canvas owns the backdrop, and the box behind it gets out of the way', () => {
-    assert.match(component, /drawBackdrop\(ctx, scene, exitT\);\s*renderSplash\(ctx, scene, t, exitT\);/);
-    assert.match(component, /box\.style\.background = 'transparent';\s*wake\.current\(\);/, 'the black box behind the canvas would hide the launcher');
-    assert.match(renderer, /ctx\.globalCompositeOperation = 'destination-out';/);
+  test('the exit is transform and opacity on the finished frame, in the order logo then black', () => {
+    // the logo is the canvas, or the plain image when the canvas failed: both leave the same way,
+    // so the launcher never shows standing still at its starting size
+    assert.match(exitBlock, /const box = boxRef\.current, logo = box\?\.firstElementChild;/);
+    assert.match(exitBlock, /logo\.animate\(\[\{ transform: 'scale\(1\)' \}, \{ transform: `scale\(\$\{LOGO_OUT\.scale\}\)` \}\], \{ duration: LOGO_OUT\.moveMs, easing: LOGO_OUT\.moveEase, fill: 'forwards' \}\);/);
+    assert.match(exitBlock, /logo\.animate\(\[\{ opacity: 1 \}, \{ opacity: 0 \}\], \{ duration: LOGO_OUT\.fadeMs, easing: LOGO_OUT\.fadeEase, fill: 'forwards' \}\);/);
+    assert.match(exitBlock, /box\.animate\(\[\{ opacity: 1 \}, \{ opacity: 0 \}\], \{ delay: LIFT\.at, duration: LIFT\.ms, easing: LIFT\.ease, fill: 'forwards' \}\);/);
+    assert.equal(exitBlock.match(/\.animate\(/g).length, 4, 'three animations for the exit, one for the still-frame fade');
+    // anything else (a filter, a redraw per frame) leaves the compositor and stutters while the launcher mounts
+    assert.doesNotMatch(exitBlock, /filter|blur|requestAnimationFrame|renderSplash/);
+    assert.match(renderer, /export function renderSplash\(ctx: CanvasRenderingContext2D, s: SplashScene, T: number\): void/, 'the canvas draws the intro only');
+    assert.doesNotMatch(renderer, /destination-out|exitT/);
   });
 
-  test('the frame loop stops at the settle, runs again only for the reveal, and stops on unmount', () => {
-    assert.match(component, /if \(t < SPLASH_SETTLE_MS \|\| \(exitT >= 0 && exitT < EXIT_MS\)\) raf = requestAnimationFrame\(draw\);/);
-    assert.match(component, /return \(\) => \{\s*wake\.current = \(\) => \{\};\s*resize\.disconnect\(\);\s*if \(raf\) cancelAnimationFrame\(raf\);\s*\};/);
+  test('the frame loop stops at the settle and on unmount', () => {
+    assert.match(component, /renderSplash\(ctx, scene, t\);/);
+    assert.match(component, /if \(t < SPLASH_SETTLE_MS\) raf = requestAnimationFrame\(draw\);/);
+    assert.match(component, /return \(\) => \{\s*resize\.disconnect\(\);\s*if \(raf\) cancelAnimationFrame\(raf\);\s*\};/);
   });
 
-  test('reduced motion shows the settled frame, fades in and out, and draws no reveal', () => {
-    assert.match(component, /t = reduced \? SPLASH_SETTLE_MS : now - startedAt;/);
-    assert.match(component, /const exitT = reduced \|\|/);
+  test('reduced motion shows the settled frame, and it fades in and out without moving', () => {
+    assert.match(component, /const t = reduced \? SPLASH_SETTLE_MS : performance\.now\(\) - startedAt;/);
     // App adds no entrance any more, so without this the still frame would cut in
     assert.match(component, /if \(reduced\) canvas\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\]/, 'reduced motion means gentler, not a hard cut');
-    // ...and on the way out the still frame (or the plain logo) fades itself
-    assert.match(component, /if \(plain \|\| prefersReducedMotion\(\)\) \{[\s\S]*?box\.animate\(\[\{ opacity: 1 \}, \{ opacity: 0 \}\], \{ duration: 300, easing: 'ease-out', fill: 'forwards' \}\);\s*return;/);
+    // ...and on the way out the still frame dissolves instead of moving
+    assert.match(exitBlock, /if \(!logo \|\| prefersReducedMotion\(\)\) \{[\s\S]*?box\.animate\(\[\{ opacity: 1 \}, \{ opacity: 0 \}\], \{ duration: 300, easing: 'ease-out', fill: 'forwards' \}\);\s*return;/);
+    // ...and the launcher does not land: it keeps its plain entrance
+    assert.match(app, /const launcherLands = !cameFromWelcome\.current && !reduceManagerMotion;/);
   });
 
   test('a canvas failure falls back to the plain logo instead of a blank window', () => {
@@ -252,10 +225,11 @@ describe('splash wiring', () => {
     assert.match(component, /plain \? \(\s*<img src=\{appIcon\}/);
   });
 
-  test('a frame depends on its two clocks alone', () => {
+  test('a frame depends on its clock alone, and the timeline stays testable in node', () => {
     for (const [name, src] of [['renderer', renderer], ['timeline', timeline]]) {
       assert.doesNotMatch(src, /Math\.random|Date\.now|performance\.now/, `${name} reads a clock or a random source`);
     }
+    assert.doesNotMatch(timeline, /^import |\bwindow\b|\bdocument\b|sessionStorage|localStorage/m, 'the timeline must stay free of imports and the DOM');
     assert.match(renderer, /const t = Math\.min\(animationTime\(T\), SETTLE_AT_MS\)/, 'a held splash must not change after the settle');
   });
 
@@ -263,7 +237,7 @@ describe('splash wiring', () => {
     // As an h-full block the splash pushed the launcher a window-height down until it
     // unmounted: the splash faded to black and the launcher cut in. Measured in the
     // recording harness: launcher top = 868 px during the fade, 68 px with this.
-    assert.match(splashWrapper, /className="absolute inset-0 z-\[100\]"/, 'in front of the launcher while the ring uncovers it');
+    assert.match(splashWrapper, /className="absolute inset-0 z-\[100\]"/, 'in front of the launcher until the black has lifted');
     assert.doesNotMatch(splashWrapper, /className="h-full w-full"/);
     const container = app.slice(0, app.indexOf('key="startup"'));
     assert.match(container.slice(container.lastIndexOf('<div className=')), /className="[^"]*\brelative\b/, 'absolute inset-0 needs the launcher container to stay positioned');
@@ -271,9 +245,24 @@ describe('splash wiring', () => {
 
   test('App adds no entrance or exit of its own over the splash', () => {
     assert.match(splashWrapper, /initial=\{false\}/, 'a fade-in here sits over the first ripple of characters');
-    assert.doesNotMatch(splashWrapper, /scale/, 'a zoom on the way out reads as a second zoom after the spring');
+    assert.doesNotMatch(splashWrapper, /scale/, 'the splash moves its own logo; a second move here fights it');
     // pointerEvents must not sit behind the delay: the splash is in front of the launcher while it leaves
-    assert.match(splashWrapper, /exit=\{\{ opacity: 0, pointerEvents: "none", transition: \{ opacity: \{ delay/);
+    assert.match(splashWrapper, /exit=\{\{ opacity: 0, pointerEvents: "none", transition: \{ opacity: \{ delay: EXIT_MS \/ 1000,/);
+  });
+
+  test('after the splash the launcher lands as a Web Animation that leaves nothing behind', () => {
+    assert.match(launcherWrapper, /ref=\{launcherLands \? landLauncher : undefined\}/);
+    assert.match(launcherWrapper, /initial=\{launcherLands \? false : \{ opacity: 0, scale: 0\.99, y: 8 \}\}/, 'a second entrance would run under the landing');
+    assert.match(launcherWrapper, /animate=\{launcherLands \? undefined : \{ opacity: 1, scale: 1, y: 0 \}\}/);
+    const land = app.slice(app.indexOf('const landLauncher = useCallback'), app.indexOf('}, [reportRevealComplete]);'));
+    assert.match(land, /if \(!el \|\| launcherLanded\.current\) return;\s*launcherLanded\.current = true;/, 'once: a second ref call must not restart it');
+    // fill backwards holds the starting size under the black; nothing after the end, so no
+    // transform stays on the launcher (it would become the containing block of fixed children)
+    assert.match(land, /el\.animate\(keyframes, \{ delay, duration, fill: 'backwards' \}\)\.finished\.then\(reportRevealComplete, reportRevealComplete\);/);
+    assert.match(land, /if \(typeof el\.animate !== 'function'\) \{\s*reportRevealComplete\(\);\s*return;/, 'main must still hear that the reveal is over');
+    // after the welcome, or with reduced motion, the plain entrance still reports it
+    assert.match(launcherWrapper, /onAnimationComplete=\{reportRevealComplete\}/);
+    assert.match(app, /if \(showWelcome\) cameFromWelcome\.current = true;/);
   });
 
   test('the logo is the corrected equal-stroke mark shared with NativelyLogoMark', () => {

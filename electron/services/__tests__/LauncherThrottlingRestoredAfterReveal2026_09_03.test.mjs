@@ -36,7 +36,9 @@
 // document.hasFocus() for its usage tick.
 //
 // THE FIX, guarded here: the renderer reports the reveal's completion from the
-// launcher entrance animation's own `onAnimationComplete`, and main restores
+// launcher entrance animation's own `onAnimationComplete` (after the splash the
+// entrance is a Web Animation and its `finished` reports it instead; that path
+// is guarded in StartupSplashTimeline2026_10_01), and main restores
 // throttling for that window. Fail-safe: if the signal never arrives,
 // throttling simply stays off and behaviour is what it was before.
 //
