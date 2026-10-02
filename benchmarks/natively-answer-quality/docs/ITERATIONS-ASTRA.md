@@ -1960,3 +1960,21 @@ V3's profile retrieval on heard turns: 296–359 ms → 3 ms at the median.
   turns (a reranker the user selected in Settings still runs); typed chat unchanged.
 * App stopped through its launcher; build output, app data and the copied weights removed (14.3 GB free).
 
+## Speed: three corrections to the above, written 15:34Z before the 02:00 UTC batch
+
+* **The switch did turn the reranker off.** `emb4`'s trace still shows the rerank step being entered (97 times),
+  which needed checking: every one of the 97 exits has `reranked: false`, the step takes 0–1 ms, the reranker
+  model was never loaded and the flag snapshot reads `ragLocalRerank: false`. In `emb3` (on): 31 entered, 27
+  reranked, 250 ms p50. So "identical passages on 88 of 93 rows" compares rerank on with rerank off.
+* **The judged pair `emb4` − `emb2` is reported only.** Both are whole app runs, so all 120 rows are new samples,
+  and a re-run of unchanged code moved by ±0.5 today (fix15's heard rows: −0.53 ±0.71, hard fails 4 → 10). Five
+  changed rows cannot show through that. Whatever the pair reads at 02:00 UTC, it is not evidence of a loss or of
+  a gain from the rerank. The only place an effect can show is the 5 rows whose passages differ, replayed several
+  times each from the two recorded prompts; that is a 30–50 judgment check, run if Evin wants it before deciding.
+* **Rule (a) restated — it could not be met as written.** Two app runs never send byte-identical prompts on every
+  row: a later turn of a conversation carries the app's own earlier replies (27 of 120 rows here), and ids are
+  minted per run. For a change that must not alter the answer, (a) is now: with per-run ids replaced
+  (`tools/prompt-diff.mjs`), the system prompt is identical on every row; the retrieved passages (transcript blocks
+  excluded) are identical on every row; and the whole prompt is identical on the first turn of every conversation.
+  (b)–(d) unchanged.
+
