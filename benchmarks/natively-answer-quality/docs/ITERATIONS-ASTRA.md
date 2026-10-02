@@ -1124,7 +1124,7 @@ Positive but interval includes 0 → not promoted; fix13 stays the kept build an
   issue" still comes with a concrete nit and 9.3–9.4. A 9.5 mode mean is further away under this judge than under
   gpt-6-astra; the agreement table on the kept build's dev rows will say by how much.
 
-### The kept build under the Fable judge, and the two judges compared (00:30Z 2026-10-02)
+### The kept build under the Fable judge, and the two judges compared (00:28Z 2026-10-02)
 | | dev (360) | holdout (270) |
 |---|---:|---:|
 | kept build (fix13), Fable | 8.29, p10 5.63, 23 hard fails | 8.35, p10 5.82, 13 hard fails |
@@ -1151,7 +1151,7 @@ Positive but interval includes 0 → not promoted; fix13 stays the kept build an
   cannot see an effect of this size. For a change that touches only the claim pass, the same-draft comparison is the
   instrument with the power to decide; the app run is for what it alone shows (validators, latency, breakage).
 
-### The claim pass itself, measured without sampling: draft vs shown on the same rows (dev, Fable, 00:35Z)
+### The claim pass itself, measured without sampling: draft vs shown on the same rows (dev, Fable, 00:28Z)
 `tools/edit-pairs.mjs` writes, for every row the pass edited, the streamed draft and the shown answer; both are
 judged against the same recorded conversation. 111 of 360 dev rows were edited.
 | | edits | draft | shown | change (95%) | hard fails |
@@ -1173,7 +1173,7 @@ Looking for work +0.22 (24, 12 → 4), General −0.05 (8), Sales −0.13 (12), 
   one sheet +1.3, two refund rules +1.1); a drafted thank-you cut to 27 words (DSEM-020 9.5 → 7.1); a plan question
   turned back on the interviewer (DJOB-017 8.4 → 5.6).
 
-### Rules written 00:40Z, BEFORE the holdout draft-vs-shown pairs are judged
+### Rules written 00:28Z, BEFORE the holdout draft-vs-shown pairs are judged
 **I27a — typed turns.** The claim pass is switched off on typed turns if, on holdout, the typed edits' change is
 ≤ 0 and the pass removes at most one hard fail there. (Dev: −0.39, 4 → 3.) Otherwise typed keeps it.
 **I27b — a mode's heard turns.** A mode keeps the pass unless dev and holdout BOTH show a negative change AND the
@@ -1186,3 +1186,47 @@ dev gain is at least +0.3 with the interval excluding 0 and hard fails are not u
 gain is positive with the interval excluding 0 and hard fails are not up.
 **Protocol for a change that touches only the claim pass:** same-draft pairs on dev, then on holdout (aggregates
 only), then ONE app regression run for validators, latency and breakage. App re-runs are not used to measure it.
+
+### Holdout draft-vs-shown pairs: the claim pass pays on every surface and mode — I27a and I27b change nothing
+| holdout (66 edited rows of 270) | edits | draft | shown | change (95%) | hard fails |
+|---|---:|---:|---:|---:|---:|
+| all | 66 | 6.69 | 7.21 | +0.52 (±0.45) | 25 → 6 |
+| heard | 52 | 6.87 | 7.31 | +0.44 (±0.41) | 18 → 6 |
+| typed | 14 | 6.02 | 6.85 | +0.83 (±1.51) | 7 → 0 |
+| draft had a hard fail | 25 | 4.36 | 6.36 | +2.00 (±0.71) | 25 → 5 |
+| draft had none | 41 | 8.11 | 7.72 | −0.38 (±0.37) | 0 → 1 |
+* I27a (typed off): not met — holdout typed is positive and removes 7 hard fails. Dev's −0.39 did not hold.
+* I27b (a mode off): not met — every mode's heard change is positive on holdout.
+* What holds on both sets: +1.6 to +2.0 where the draft had a cappable claim, −0.4 to −0.5 where it had none. The
+  claim pass is confirmed by a second judge with no sampling in the comparison; its residual cost is editing drafts
+  that needed no edit (about 0.06–0.10 on the overall mean). The replayed lists do not separate the two groups by
+  kind or count ([self]-only lists: 6 of 21 drafts cappable; lists naming a past fact: 19 of 55), so there is no
+  code-side gate to add.
+
+### I27c (Looking for work: v2 fallback, no conflict step) — same-draft on dev: NOT built
+* The kept build's 40 dev drafts through the fix12 verifier and through `_cv-lfw-i27.mjs`: 7.63 → 7.76,
+  +0.13 (±0.39), hard fails 4 → 3. Under the written rule (+0.3, interval excluding 0): not built.
+* The conflict case moved both ways: DJOB-031 4.7 → 9.6 (no more "given two ways"), DJOB-032 8.9 → 4.7 (this
+  sample's edit hedged on its own). The verifier's own sampling moves one draft by several points (DJOB-032: 5.6
+  shown in the app, 8.9 and 4.7 in two replays), so a single-sample same-draft pair on 40 rows cannot resolve an
+  effect under about ±0.4 either. Looking-for-work wording is at its noise floor; no further wording is tried.
+
+### Reasoning on for the generator (Technical interview + Lecture, dev prompts, Fable) — the first material lever
+The app sends `thinking: disabled` on every DeepSeek turn. Same 80 recorded dev prompts, reasoning off vs
+`thinking: enabled, reasoning_effort: low`, one sample each (two independent generations, so sampling is included):
+| | n | off | low | change (95%) | hard fails |
+|---|---:|---:|---:|---:|---:|
+| Technical interview | 40 | 8.26 | 8.87 | +0.62 (±0.48) | 7 → 2 |
+| Lecture | 40 | 8.66 | 9.11 | +0.44 (±0.45) | 3 → 0 |
+| both, heard | 49 | 8.50 | 8.98 | +0.48 (±0.41) | 6 → 1 |
+| both, typed | 31 | 8.40 | 9.01 | +0.61 (±0.56) | 4 → 1 |
+| both | 80 | 8.46 | 8.99 | +0.53 (±0.33) | 10 → 2 |
+* Largest where an answer has to be worked out: complexity-only +1.3, dry run +1.6, leetcode +1.8, formula +1.0.
+* Cost, measured on the same prompts (2026-10-01): first answer token 0.78 s → 2.22 s at the median, 1.0 s → 6.6 s
+  at p95; total 1.4 s → 2.6–3.3 s. The repo's earlier decision to keep thinking off was measured on a Gemini
+  model with executed LeetCode answers (12 of 12 at budget 0); this is a different model and a different result.
+* **Rule, written before the holdout prompts are replayed:** the lever is confirmed if, on the 60 holdout Technical
+  interview + Lecture prompts, low − off is positive with the interval excluding 0 and hard fails are not up. If
+  confirmed, I28 is built for TYPED turns of those two modes on DeepSeek models (the user typed and is waiting for a
+  written answer); the heard turns, where a first word at 2 s instead of 0.8 s is a product trade, are put to Evin
+  with these numbers. If not confirmed, nothing is built.
