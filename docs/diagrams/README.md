@@ -96,7 +96,10 @@ Rules worth knowing:
   timeline” draw nothing. A visual wanted in a document (“a pie chart in the
   QBR deck”, “in the board pack”) is a remark about the document.
 - **Other languages.** Spanish, Russian, Chinese and Japanese are read by
-  `diagramRequestI18n.mjs`, only where the English rules found nothing.
+  `diagramRequestI18n.mjs`, only where the English rules found nothing. They
+  are much weaker than the English rules: on unseen sentences they miss
+  between a quarter and well over a third of real requests and follow-ups
+  (see “How well the decision rules do”).
 - **Follow-ups need a design on the table.** Without one, “add Redis…” is an
   ordinary turn.
 - **The router's keyword verdict does not override a design follow-up.**
@@ -677,10 +680,10 @@ app window's; the token times are the provider's on that day.
 | Command | What it runs |
 | --- | --- |
 | `npm run test:diagram` | the pure modules, the main-process tests, and the wiring and render checks below (not card, overlay or live) |
-| `npm run test:lib` | pure modules (993 tests under `src/lib/diagram`): parser (incl. random chunk partitions), policy, resolver, contract, examples, active design, repair, refine, viewport, stream decisions, timings — and for the catalog: `chartCompute` (the fixtures above, rounding, every refusal), `chartSpec` (statuses, corrections, limits, CSV), `notation` (Chen, automata, crow's-foot reading), `visualCatalog` (every catalog request in every mode, negatives, system-design asks, missing inputs, contract text and budget), `visualBlocks` (the three fence tags through the stream parser) |
+| `npm run test:lib` | pure modules (1,038 tests under `src/lib/diagram`): parser (incl. random chunk partitions), policy, resolver, contract, examples, active design, repair, refine, viewport, stream decisions, timings — and for the catalog: `chartCompute` (the fixtures above, rounding, every refusal), `chartSpec` (statuses, corrections, limits, CSV), `notation` (Chen, automata, crow's-foot reading), `visualCatalog` (every catalog request in every mode, negatives, system-design asks, missing inputs, contract text and budget), `visualBlocks` (the three fence tags through the stream parser) |
 | `node --test electron/services/__tests__/VisualCatalogWiring2026_10_01.test.mjs` | built bundles: mode identity from the template, one contract per request in every mode persona, planner route, session artifact, the conversation reader, Phone Mirror (charts and Chen drawn in main), JSON/CSV export, action offers |
 | `node --test electron/services/__tests__/DiagramReviewFixes2026_10_01.test.mjs` | built bundles, one block per defect found in the 2026-10-01 review: focus and the toucher, coding questions after a design, action cards, Brainstorm, fence-aware repair caps, the final clean-up, the knowledge intercept, long-prompt replay, Direct Assist (request-only decision, small-model budget, withheld history), warn-once |
-| `npm run test:diagram:wiring` | real engine + planner + composer, provider stubbed, V3 on and off: the dispatched prompt per route. `e2e-diagram.cjs` (system design, 78 checks) and `e2e-visual-catalog.cjs` (catalog, 133 checks: forecast → “make it 3%” → explain → refine, missing baseline, per-mode requests, custom modes, Direct Assist, feature off) |
+| `npm run test:diagram:wiring` | real engine + planner + composer, provider stubbed, V3 on and off: the dispatched prompt per route. `e2e-diagram.cjs` (system design, 78 checks) and `e2e-visual-catalog.cjs` (catalog, 137 checks: forecast → “make it 3%” → explain → refine, missing baseline, per-mode requests, custom modes, Direct Assist, feature off) |
 | `npm run test:diagram:render` | the renderer in real Chromium with the pinned Mermaid: every Mermaid example, the new families and their fix-ups, the refused families, chart and Chen SVG as images |
 | `npm run test:diagram:card` | the card component in real Chromium (92 checks): streaming, fit, zoom, export, theme, repair, updates — and chart, Chen, DFA and ER cards: Chart/Data tabs, the data table, CSV/JSON export, missing input with no repair, hostile labels, placeholder-only diagrams |
 | `npm run test:diagram:overlay` | the real overlay component (Vite dev server + Playwright Chromium, `electronAPI` stubbed, 64 checks): a streamed answer draws its card mid-stream, final-text replacement, discard, cut-off, code and mixed answers, a chart then its update, a refused chart, Chen, DFA, chart beside code, placeholder-only diagram, feature off. Needs a Playwright Chromium on the machine; exits 2 when there is none |
@@ -890,28 +893,50 @@ The same, for Spanish, Russian, Chinese and Japanese together (`diagramRequestI1
 | 2 — after the fixes that followed the first | 424 | 7 of 212 (3.3%); with the drawing's labels quoted, 11 of 212 (5.2%); none would have redrawn | 29 of 200 (14.5%); with labels quoted, 19 of 200 (9.5%) | a long unbroken run of katakana: 240–400 ms |
 | 3 — the last one, after an independent read of the rules had been acted on (a new domain, charts and flowcharts on the table as well) | 220 | 5 of 88 (5.7%); one would have drawn (画重点, “mark the key points”) | 35 of 132 (26.5%) | none over 100 ms |
 | …the same 220 sentences on the rules as they stood before that read | 220 | 12 of 88 (13.6%); two would have drawn | 36 of 132 (27.3%) | — |
+| 4 — after the fixes that followed the third (another new domain, a different author) | 220 | 1 of 88 (1.1%); it drew (负责画原型图, “my job was drawing prototypes”) | 38 of 132 (28.8%) | none over 100 ms |
+| 5 — after the fixes that followed the fourth; a set written to be harder (regional speech, nicknames for parts, edits in the vocabulary of drawing, requests split over two sentences) | 220 | 8 of 88 (9.1%); five drew | 50 of 132 (37.9%), and 8 more attached or drawn as the wrong thing (an edit read as a question, a table of a chart read as an edit of the chart, the wrong kind of diagram) | none over 100 ms |
+| …the same 220 sentences on the rules as committed before that whole round (`db008cb2`) | 220 | the same 8 of 88 | 60 of 132 (45.5%) | — |
 
 Read it as: **on English sentences it has never seen, the rules wrongly draw
 or attach to about 1 ordinary line in 40–50, and miss about 1 real request or
-follow-up in 10. In the four other languages: about 1 in 20–30 wrong (1 in 18
-on the last set), about 1
-in 7–10 missed.** The numbers did not converge to zero and will not: each new
-reviewer brings phrasings and kinds of diagram the rules have not met (the
-fourth measurement was worse than the third because it tested ground the
-earlier ones had not; the third four-language measurement missed one request
-or follow-up in four, on a new domain with speech-style sentences, shortened
-labels and regional verb forms). The last measurement in each table is the figure for
-the rules as they stood before its own fixes; what was fixed after it — in
-English the two sentences that would have redrawn a diagram, in the other
-languages unquoted labels, the Chinese and Japanese past tense and the
-katakana slowness — has not been measured on unseen sentences.
+follow-up in 10. In the four other languages they are wrong on between 1 line
+in 90 and 1 in 11, depending on the set, and miss between a quarter and well
+over a third of real requests and follow-ups: 26.5%, 28.8% and 37.9% on the
+last three unseen sets.** The English numbers did not converge to zero and
+will not: each new reviewer brings phrasings and kinds of diagram the rules
+have not met.
+
+The four-language numbers are not converging at all. Everything changed in
+the round between the two — the misses of the fourth set fixed by pattern
+(about 36 rows, with no change to any earlier sentence), lanes, the Russian
+compound, the Spanish verb-first statement — recovered ten rows on the fifth:
+the same fifth set misses 60 of 132 on the rules before that round and 50
+after. What people actually say —
+nicknames for parts (“платёжка”, “锁控那块”), edits in the vocabulary of
+drawing (“обведи рамкой”, “点線にしといて”, “标一下 MQTT”), regional forms
+(“hágame un favor y me pinta ahí…”, “してくれへん？”), a request split over two
+sentences — is a long tail that hand-written rules in four languages reach one
+pattern at a time. A miss costs an answer in words where a drawing or an
+answer about the drawing was wanted; a wrong draw puts a contract on a turn
+that wanted words, which is why the eight wrong rows of the fifth set were
+fixed and its fifty misses were listed, not chased. **Recognising these turns
+well needs a different mechanism — a model that reads the turn — not more
+rules.** That is a product decision (a second model call, or a conditional
+contract on turns the rules cannot place) and has not been built.
+
+The last measurement in each table is the figure for the rules as they stood
+before its own fixes; what was fixed after it — in English the two sentences
+that would have redrawn a diagram, in the other languages the eight wrong rows
+of the fifth set and “not a chart — a table” — has not been measured on unseen
+sentences.
 
 After each measurement its real defects were fixed and its sentences became
 regression tests (`tests/diagram/heldout-2026-10-02.mjs`,
 `heldout-2-2026-10-02.json`, `heldout-3…` to `heldout-7-2026-10-02.mjs`,
 `i18n-heldout-2026-10-02.mjs`, `i18n-heldout-2-2026-10-02.mjs`,
-`i18n-heldout-3-2026-10-02.mjs`, `i18n-review-2026-10-02.mjs`,
-`review-round2.mjs`: about 4,800 sentences), with the rows that are still not
+`i18n-heldout-3-2026-10-02.mjs`, `i18n-heldout-4-2026-10-02.mjs`,
+`i18n-heldout-5-2026-10-02.mjs`, `i18n-review-2026-10-02.mjs`,
+`review-round2.mjs`: about 5,300 sentences), with the rows that are still not
 met listed by name in `resolverPrecision.test.mjs` and
 `diagramRequestI18n.test.mjs` — as decisions where they are decisions, and as
 known misses where they are misses. On sentences the rules have already seen
@@ -1184,29 +1209,29 @@ a stopped live query sends no completion and no error event, and the overlay
 finalises the old search bubble before it creates the new one — the same path
 a second search question has always taken.
 
-Left as found, and why:
+Left as found at the time (the first five were fixed afterwards: see “The
+items left as found, done” below):
 
-- “Usa el cliente la API actualmente” (a statement with the verb first) is
+- “Usa el cliente la API actualmente” (a statement with the verb first) was
   read as an edit of the design in focus.
-- A Russian label said abbreviated (“медкарт” for “База медицинских карт”) is
-  not recognised; one word of a longer label is deliberately not evidence.
-- The speech block is withheld from a local model too when the transcript may
-  not go to a cloud provider (fail-closed; the same turn's other context does
-  reach the local model).
-- The local-model overflow guard drops lines from the head of the turn and does
-  not know about blocks; an extreme overflow could cut the design block.
-- Direct Assist keeps the design block when the contract did not fit the
-  model's input; the block then refers to a contract that is not there.
+- A Russian label said abbreviated (“медкарт” for “База медицинских карт”) was
+  not recognised.
+- The speech block was withheld from a local model too when the transcript may
+  not go to a cloud provider.
+- The local-model overflow guard dropped lines from the head of the turn and
+  did not know about blocks; an overflow could cut the design block in half.
+- Direct Assist kept the design block when the contract did not fit the
+  model's input; the block then referred to a contract that was not there.
 - If the save dialog itself throws on macOS, the app has already been brought
-  to the front.
+  to the front. (Still so.)
 
 What is still open after these six:
 
 - Nothing has been run on Windows: the save dialog's Windows branch, labels in
   the four scripts with Windows fonts, and everything else in this document.
-- The four-language rules are small, miss about one request or follow-up in
-  four on the last unseen set, and their last fixes are unmeasured (see the
-  tables above). In them, one word shared with a longer label is not
+- The four-language rules are small and missed about one request or follow-up
+  in four on what was then the last unseen set (two later sets: 28.8% and
+  37.9%; see the tables above). In them, one word shared with a longer label is not
   evidence of a follow-up (so “cambia la factura de marzo” never redraws a
   design that has a “Servicio de Facturas”), which also means a part named by
   one word of its two-word label is reached only through a design word, the
@@ -1239,3 +1264,122 @@ Left as it was, on purpose:
   design: answered in words with the design attached, never redrawn. (Not the
   “it” of the weather or the time: “what happens if it rains on the day of the
   offsite?” is nobody's design.)
+
+### The items left as found, done (2026-10-02)
+
+Seven things were still open after the independent read. What was done about
+each, and what is still not known:
+
+**Direct Assist: the design block and its contract go together.** The block
+opens with “the starting point for this turn, as the diagram contract
+describes”. When the contract did not fit the model's input the block was
+sent alone, asking for a redraw with none of the rules a redraw is held to.
+Now the block is left out with it; the drawing is still in the history the
+prompt carries. In practice this is a chart edit on a small local model whose
+prompt is already full: the short chart-edit contract is about 3,100
+characters and such a prompt has about 2,900 left.
+
+**A local model is never sent half of the design.** The overflow guard for a
+model on this device cut lines off the top until the prompt fitted. On a
+diagram turn that reached into `<active_design>`: the opening tag and the
+first nodes gone, the rest kept. `electron/llm/localContextTrim.ts` now does
+the cutting for all three places that trimmed by line (`callOllama`,
+`streamWithOllama`, `fitContextForCurrentModel`): older context first; then the
+oldest of what was said in the meeting, its wrapper and heading kept while any
+of it is left; then the design, whole, with one line in its place saying it
+did not fit; then, as before, from the top. For content with no drawing in it
+the result is the old one, character for character (2,000 random prompts in
+the test). Not run against a real Ollama: none is installed on the machine
+this was written on.
+
+**A model on this device is sent the design and what was said.** The
+transcript scope (Settings › AI Providers › Privacy) says what may go to a
+provider, and the transport already hands a local model everything. The
+diagram code decided earlier and without asking, so with that scope off a
+local model got no design on a follow-up and no speech for “draw what we
+discussed”. `activeDesignShareable()` now also asks whether the selected model
+runs on this device (a probe the engine registers; the V3 composer asks the
+same question). The transport backstop was extended first: a prompt bound for
+a provider loses `<conversation_so_far>` as well as `<active_design>` when the
+scope is off, so a local model that turns out to be unreachable cannot hand
+either to a provider. Seen end to end in the engine harness (V19), V3 on and
+off: a provider gets no design block and no update contract; a local model
+gets both, once each, and the edit is recorded as the next version. One thing
+found on the way and left: on the default (V3) route the transcript EVIDENCE
+is withheld from a local model too when that scope is off — that is the
+privacy pipeline's own rule, not this feature's, and it is unchanged.
+
+**The two sentences that were known wrong.** A Spanish verb first, then who
+does it and what to (“usa el cliente la API”) states what something does; the
+imperative has one object, then a preposition or a measure. A Russian compound
+(“медкарт”, “техподдержка”) names the label whose two neighbouring words it
+runs together.
+
+**Lanes.** Found while testing the above: a lane is a `subgraph`, and nothing
+read its title, so “What does the Support lane do?” over a swimlane diagram was
+an unrelated turn. A lane called a lane (“the Finance lane”, “el carril de
+Soporte”, “дорожка поддержки”, “财务泳道”, “経理のレーン”) is now a part of
+the diagram, in focus or not; a group titled with more than one word is named
+by its title. The department of that name in everyday talk (“who is in finance
+this week?”) is not.
+
+**The four languages.** The fourth measurement (table above) confirmed the
+figure: 38 of 132 real requests and follow-ups missed. The misses fell into
+patterns, and the rules now read each: a request that starts late in a spoken
+sentence (found by a form addressed to the listener: an imperative with
+“me”/“nos” on it, a request frame, “давай …”) — not one that is told or
+reported; what a part of the drawing SHOULD do (“que pagos también mande…”,
+“пусть … пишет в очередь”, “让支付服务往队列里发…”, “…ようにして”); whether the
+design holds up, asked of “this” while it is in focus; a verb of change after
+where it goes (“después del reembolso agregá un paso”); a chart changed by its
+marks (“sort the bars”); Río de la Plata verb forms; Russian “-ка” and
+diminutives; a part named by what is distinctive in its name in Chinese and
+Japanese; a process step named by its words in a what-if; chart categories one
+character long; “the same data as a table”. Each has its opposite in the
+tests (`what the fourth four-language measurement found`).
+
+The fifth measurement was taken after those fixes, on 220 more blind sentences
+written to be harder: 8 of 88 wrong (five drew), 50 of 132 missed. None of the
+eight came from the rules added in this round (the same eight are wrong on the
+rules before it), and no row met before is missed now. The eight were then
+fixed narrowly — a request quoted as something somebody said (“「図で説明して」
+って言われた”), asked of the speaker (“我妈让我给她画个…”), the speaker's own plan
+(“回头我自己用Excel做个柱状图”, “私のほうでまとめて作ります”), 図々しい, a recalled
+figure, who runs a project, one phrase that is in two of a chart's labels —
+each with its opposite in the tests.
+
+One of the eight rows that were attached as the wrong thing was the complaint
+this feature started the day with, said the way people say it: “グラフやなくて表で
+見たいわ、同じ数字で” (not a chart, I want a table, same numbers) edited the
+chart. A visual that is turned down where it stands — “グラフじゃなくて”, “不要
+图表”, “no quiero el gráfico”, “вместо диаграммы” — is now not the one asked
+for: with another named, that one is drawn (a table OF the chart when the
+chart is what is on the table), and “no chart” no longer cancels a turn that
+asks for a table instead. With nothing asked instead it is still “no drawing”.
+
+The other forty-eight misses, and seven rows still met as the wrong thing, are
+listed by id in `diagramRequestI18n.test.mjs` and were left: see the paragraph
+under the tables above for why.
+
+**Windows.** Still not run on a Windows machine, and not yet in CI either.
+What is in place: the feature's unit suite sits under the `test:lib` glob and
+its main-process tests under `npm test`'s, so the Windows leg of
+`build-smoke.yml` will pick them up (`test:lib` is enforcing there, `npm test`
+advisory); and the workflow now also runs the engine harness and the render and
+card checks on both legs. The render check on the Windows leg is the first
+place these drawings would be laid out with Windows fonts. None of it has
+executed: the workflow runs on a pull request, on a push to `main`, or when
+dispatched by hand (`gh workflow run build-smoke.yml --ref <branch>`) — pushing
+the branch alone runs nothing.
+
+Still open:
+
+- Windows: nothing above has been seen running there. The save dialog's
+  Windows branch (including typing a file name into it) needs a person.
+- The four languages miss between a quarter and well over a third of real
+  requests and follow-ups on unseen sentences (the tables above), and more
+  rules do not close it. The fixes made after the fifth measurement are
+  unmeasured.
+- The local-model changes are tested as units and through the engine harness
+  with a model stub, not against a real local model.
+

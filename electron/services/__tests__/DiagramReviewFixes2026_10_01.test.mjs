@@ -354,6 +354,67 @@ describe('Direct Assist', () => {
     assert.equal(count(prepared.systemPrompt, '<diagram_contract>'), 1);
     assert.match(prepared.systemPrompt, /fenced code block tagged `mermaid`|fenced `mermaid` block/);
   });
+
+  // The design block opens with "as the diagram contract describes". Sent
+  // without the contract (a small model whose prompt is already full) it asked
+  // for a redraw with none of the rules a redraw is held to.
+  describe('the design block and its contract go together', () => {
+    const history = [
+      { role: 'user', content: 'Design a URL shortener.' },
+      { role: 'assistant', content: 'Here it is.\n\n```mermaid\nflowchart LR\n  client[Client] --> api[API Gateway]\n  api --> svc[Shortener Service]\n  svc --> db[(Links DB)]\n```' },
+    ];
+    const edit = { source: 'typed', currentRequest: 'Add a cache between the service and the database.', history };
+    const block = '<recent_transcript kind="active_design">';
+
+    test('with room for both, both are sent', () => {
+      const prepared = prepareDirectAssistPrompt({ ...base, ...edit });
+      assert.equal(count(prepared.systemPrompt, '<diagram_contract>'), 1);
+      assert.equal(count(prepared.userPrompt, block), 1);
+    });
+
+    // The case that is reached in practice: a chart edit. Its contract is the
+    // longest the short form gets (about 3,100 characters), and a small model
+    // whose prompt is full has about 2,900 left after Direct Assist's own.
+    const chartHistory = [
+      { role: 'user', content: 'Plot orders by quarter: 10, 20, 30, 40.' },
+      { role: 'assistant', content: 'Here it is.\n\n```natively-chart\n{"v":1,"type":"bar","title":"Orders by quarter","x":{"label":"Quarter","values":["Q1","Q2","Q3","Q4"]},"y":{"label":"Orders"},"series":[{"name":"Orders","values":[10,20,30,40],"status":"illustrative"}]}\n```' },
+    ];
+    const chartEdit = { source: 'typed', currentRequest: 'Change the chart to a line chart.', history: chartHistory };
+
+    test('when the contract does not fit, the block is left out too, and the history it was read from stays', () => {
+      const selection = { provider: 'ollama', model: 'gemma:2b' };
+      const prepared = prepareDirectAssistPrompt({ ...base, ...chartEdit, selection, referenceContext: 'context '.repeat(6000) });
+      assert.equal(count(prepared.systemPrompt, '<diagram_contract>'), 0, 'this prompt is full: no contract');
+      assert.equal(count(prepared.userPrompt, block), 0, 'so no design block either');
+      assert.ok(!/as the diagram contract describes/.test(prepared.userPrompt));
+      assert.ok(prepared.userPrompt.includes('"title":"Orders by quarter"'), 'the chart is still in the history');
+      assert.ok(prepared.systemPrompt.length + prepared.userPrompt.length <= prepared.request.modelInputChars);
+    });
+
+    test('the same edit with room keeps both', () => {
+      const prepared = prepareDirectAssistPrompt({ ...base, ...chartEdit, selection: { provider: 'ollama', model: 'gemma:2b' } });
+      assert.equal(count(prepared.systemPrompt, '<diagram_contract>'), 1);
+      assert.equal(count(prepared.userPrompt, block), 1);
+    });
+
+    test('a diagram edit on the same full model fits, and keeps both', () => {
+      const prepared = prepareDirectAssistPrompt({ ...base, ...edit, selection: { provider: 'ollama', model: 'gemma:2b' }, referenceContext: 'context '.repeat(6000) });
+      assert.equal(count(prepared.systemPrompt, '<diagram_contract>'), 1);
+      assert.equal(count(prepared.userPrompt, block), 1);
+      assert.ok(prepared.systemPrompt.length + prepared.userPrompt.length <= prepared.request.modelInputChars);
+    });
+
+    test('a small local model with room keeps both', () => {
+      const prepared = prepareDirectAssistPrompt({ ...base, ...edit, selection: { provider: 'ollama', model: 'gemma:2b' } });
+      assert.equal(count(prepared.systemPrompt, '<diagram_contract>'), 1);
+      assert.equal(count(prepared.userPrompt, block), 1);
+    });
+
+    test('a turn that only refers to the design keeps its block: that note stands on its own', () => {
+      const prepared = prepareDirectAssistPrompt({ ...base, source: 'typed', currentRequest: 'Write the SQL schema for the Links DB.', history });
+      if (count(prepared.userPrompt, block) === 1) assert.ok(!/as the diagram contract describes/.test(prepared.userPrompt) || count(prepared.systemPrompt, '<diagram_contract>') === 1);
+    });
+  });
 });
 
 // Any failure inside the decision returned "no diagram turn" with no trace —
@@ -835,5 +896,85 @@ describe('a spoken request for a drawing of the conversation is handed the conve
     const fn = src.slice(src.indexOf('export function withMeetingSpeechForDiagramTurn'), src.indexOf('* Put the diagram contract on a system prompt'));
     assert.match(fn, /if \(!activeDesignShareable\(\)\) return base;/);
     assert.ok(fn.indexOf('activeDesignShareable()') < fn.indexOf('formattedContext()'), 'the policy is asked before the transcript is read');
+  });
+});
+
+// The transcript scope says what may go to a PROVIDER. The design on the table
+// and what was said in the meeting were withheld whenever that scope was off —
+// from a model on this device too, which the transport would have sent them.
+describe('a model on this device is sent the design and what was said', async () => {
+  const scope = await import(dist('context-intelligence/policies/provider-scope-policy.js'));
+  const DENY = 'NATIVELY_DENY_PROVIDER_SCOPES';
+  const SAID = '[ME]: the gateway sits in front of two services\n[THEM]: and both write to one orders database';
+  const design = { artifactId: 'a.v1', artifact: 'mermaid', view: 'architecture', version: 1, foreground: true, source: ARCH_SOURCE, question: 'Design a notification service' };
+  const drawTurn = () => dps.resolveDiagramTurn({ question: 'Draw what we discussed', speculative: false, featureEnabled: true });
+  const editTurn = () => dps.resolveDiagramTurn({ question: 'Add a dead letter queue after the delivery worker', activeDesign: design, featureEnabled: true });
+  const withDenied = (fn) => {
+    const before = process.env[DENY];
+    process.env[DENY] = 'transcript';
+    try { return fn(); } finally {
+      if (before === undefined) delete process.env[DENY]; else process.env[DENY] = before;
+      scope.registerOnDeviceModelProbe(null);
+    }
+  };
+
+  test('scope off, a provider answers: neither is built (as before)', () => withDenied(() => {
+    assert.equal(dps.activeDesignShareable(), false);
+    assert.ok(!editTurn().turnBlock);
+    assert.equal(dps.withMeetingSpeechForDiagramTurn('PROMPT', drawTurn(), () => SAID), 'PROMPT');
+  }));
+
+  test('scope off, the model is on this device: both are', () => withDenied(() => {
+    scope.registerOnDeviceModelProbe(() => true);
+    assert.equal(dps.activeDesignShareable(), true);
+    const edit = editTurn();
+    assert.ok(edit.turnBlock && edit.turnBlock.includes('Delivery Worker'), 'the edit is given the design');
+    assert.equal(edit.request.operation, 'update');
+    const out = dps.withMeetingSpeechForDiagramTurn('PROMPT', drawTurn(), () => SAID);
+    assert.ok(out.includes('<conversation_so_far>') && out.includes('one orders database'));
+  }));
+
+  test('the selected model is read live', () => withDenied(() => {
+    let local = true;
+    scope.registerOnDeviceModelProbe(() => local);
+    assert.equal(dps.activeDesignShareable(), true);
+    local = false;
+    assert.equal(dps.activeDesignShareable(), false);
+  }));
+
+  test('an answer that is not a plain yes is a no', () => withDenied(() => {
+    scope.registerOnDeviceModelProbe(() => { throw new Error('no helper'); });
+    assert.equal(dps.activeDesignShareable(), false);
+    scope.registerOnDeviceModelProbe(() => 'ollama');
+    assert.equal(dps.activeDesignShareable(), false);
+    scope.registerOnDeviceModelProbe(null);
+    assert.equal(scope.answeredOnThisDevice(), false);
+  }));
+
+  test('scope on: nothing changes either way', () => {
+    assert.equal(dps.activeDesignShareable(), true);
+    scope.registerOnDeviceModelProbe(() => false);
+    try { assert.equal(dps.activeDesignShareable(), true); } finally { scope.registerOnDeviceModelProbe(null); }
+  });
+
+  // The local model turned out to be unreachable and the turn fell to a
+  // provider: what was built for the local model is taken out again.
+  test('the transport takes the speech block out of a prompt bound for a provider', () => {
+    const h = Object.create(LLMHelper.prototype);
+    const speech = '<conversation_so_far>\nWhat was said in this meeting, most recent last.\n[ME]: the gateway sits in front of two services\n</conversation_so_far>';
+    const message = `Draw what we discussed.\n\n<active_design view="architecture" version="1">\nflowchart LR\n  a --> b\n</active_design>\n\n${speech}`;
+    assert.ok(LLMHelper.prototype.inferEmbeddedMessageScopes.call(h, `Draw it.\n\n${speech}`).includes('transcript'));
+    const stripped = LLMHelper.prototype.stripDeniedScopedBlocksFromMessage.call(h, message, ['transcript']);
+    assert.ok(!/conversation_so_far|two services|active_design|flowchart/.test(stripped), stripped);
+    assert.ok(stripped.includes('Draw what we discussed.'));
+    // …and only then: with the scope allowed the prompt is untouched.
+    assert.equal(LLMHelper.prototype.stripDeniedScopedBlocksFromMessage.call(h, message, []), message);
+  });
+
+  test('the engine says which model answers, and the V3 composer asks the same question', () => {
+    const engine = fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8');
+    assert.match(engine, /registerOnDeviceModelProbe\(\(\) => this\.llmHelper\.isUsingOllama\?\.\(\) === true\)/);
+    const bridge = fs.readFileSync(path.join(root, 'electron/context-intelligence/orchestration/engine-bridge.ts'), 'utf8');
+    assert.match(bridge, /const diagramDesignAllowed = Boolean\(input\.diagramTurn\?\.activeDesignBlock\) && \(answeredOnThisDevice\(\) \|\| !isScopeDenied\('transcript', scopePolicy\)\);/);
   });
 });

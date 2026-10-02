@@ -786,6 +786,13 @@ export class IntelligenceEngine extends EventEmitter {
                     .join('\n');
             });
         } catch { /* routing aid only */ }
+        // "Is this turn answered on this device?", for whatever decides before
+        // the transport whether to build something out of transcript-scope
+        // data (activeDesignShareable). Read live: the selected model changes.
+        try {
+            const scope = require('./context-intelligence/policies/provider-scope-policy') as typeof import('./context-intelligence/policies/provider-scope-policy');
+            scope.registerOnDeviceModelProbe(() => this.llmHelper.isUsingOllama?.() === true);
+        } catch { /* the scope alone decides */ }
         this.initializeLLMs();
 
         // Dedicated channel: LLMHelper invokes this when KnowledgeOrchestrator

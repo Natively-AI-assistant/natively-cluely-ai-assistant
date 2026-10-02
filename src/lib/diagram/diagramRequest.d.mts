@@ -111,3 +111,8 @@ export function viewFromDiagramType(type: string | null | undefined, source?: st
 
 /** The artifact's own multi-word names, lower-cased. */
 export function designLabels(source: string | null | undefined): Set<string>;
+/**
+ * The titles of a diagram's groups or lanes (`subgraph Support`,
+ * `subgraph ops ["Ops Team"]`), as lower-case words.
+ */
+export function designGroups(source: string | null | undefined): Set<string>;

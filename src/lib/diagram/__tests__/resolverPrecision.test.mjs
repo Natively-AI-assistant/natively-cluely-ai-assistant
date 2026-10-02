@@ -1608,3 +1608,47 @@ describe('an edit of a swimlane diagram keeps its lanes (2026-10-02)', () => {
     assert.equal(resolveDiagramRequest({ question: 'Add an approval step after Review', activeDesign: one, answerType: 'general' }).layout, undefined);
   });
 });
+
+// A lane is a `subgraph`, and its title was read by nothing: "What does the
+// Support lane do?" over a swimlane diagram in focus was an unrelated turn.
+describe('a lane or a group of the diagram is one of its parts', async () => {
+  const { designGroups } = await import('../diagramRequest.mjs');
+  const SOURCE = 'flowchart LR\n    subgraph Customer\n        a["Request refund"]\n    end\n    subgraph Support\n        b["Review request"]\n    end\n    subgraph Finance\n        f["Approve over 500"]\n    end\n    a --> b\n    b --> f';
+  const lanes = (foreground) => ({ artifactId: 'design-1.v2', artifact: 'mermaid', view: 'architecture', version: 2, foreground, source: SOURCE, question: 'Draw a swimlane diagram of the refund process' });
+
+  test('the titles are read in each way Mermaid writes them', () => {
+    assert.deepEqual([...designGroups(SOURCE)], ['customer', 'support', 'finance']);
+    assert.deepEqual([...designGroups('flowchart TB\n  subgraph ops ["Ops Team"]\n    a\n  end\n  subgraph "Data Layer"\n    b\n  end\n  subgraph edge[Edge]\n    c\n  end\n  subgraph Customer Support\n    d\n  end')], ['ops team', 'data layer', 'edge', 'customer support']);
+    assert.deepEqual([...designGroups('flowchart LR\n  a --> b')], []);
+  });
+
+  test('called a lane, it is asked about or changed — in focus or not', () => {
+    for (const foreground of [true, false]) {
+      for (const [q, operation] of [
+        ['What does the Support lane do?', 'explain'],
+        ['Add a pay out step to the Finance lane', 'update'],
+        ['Move the review into the Finance lane', 'update'],
+        ['Why is there a lane for Finance?', 'explain'],
+        ["Rename the Customer swimlane to Client", 'update'],
+      ]) {
+        const out = resolve(q, { activeDesign: lanes(foreground) });
+        assert.deepEqual([out.enabled, out.operation, Boolean(out.parentArtifactId)], [true, operation, true], `${foreground ? 'fg' : 'bg'}: ${q}`);
+      }
+    }
+  });
+
+  test('a group named by more than one word is named by its title', () => {
+    const grouped = { ...lanes(false), source: 'flowchart TB\n  subgraph Data Layer\n    db[(Orders)]\n  end\n  subgraph Edge Network\n    cdn[CDN]\n  end\n  cdn --> db' };
+    const out = resolve('Why is the data layer below the edge network?', { activeDesign: grouped });
+    assert.deepEqual([out.enabled, out.operation, Boolean(out.parentArtifactId)], [true, 'explain', true]);
+  });
+
+  test('the department of that name, in everyday talk, is not the lane', () => {
+    for (const foreground of [true, false]) {
+      for (const q of ['Who is in finance this week?', 'How is support doing on tickets?', 'Did the customer sign the contract?', 'Finance wants the numbers by Friday.', 'Which lane should I take on the highway?', 'What is the fast lane for support tickets at other companies?']) {
+        const out = resolve(q, { activeDesign: lanes(foreground) });
+        assert.ok(!out.enabled, `${foreground ? 'fg' : 'bg'}: ${q} → ${out.enabled ? out.operation : 'off'}`);
+      }
+    }
+  });
+});

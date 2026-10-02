@@ -693,6 +693,8 @@ interface MutablePromptParts {
   currentTurnSpeech: string;
   transcript: string;
   meetingTranscript: string;
+  /** The design block is left out: its contract did not fit this model (see prepareDirectAssistPrompt). */
+  omitDesignBlock?: boolean;
 }
 
 function renderUserPrompt(request: DirectAssistRequest, parts: MutablePromptParts): string {
@@ -724,7 +726,7 @@ function renderUserPrompt(request: DirectAssistRequest, parts: MutablePromptPart
     // The design on the table, when this turn updates, re-views or asks about
     // it (see resolveDirectAssistDiagram). Derived from the history that
     // survived, so it disappears with it.
-    parts.history.length ? resolveDirectAssistDiagram(request, parts.history).designBlock : '',
+    parts.history.length && !parts.omitDesignBlock ? resolveDirectAssistDiagram(request, parts.history).designBlock : '',
     parts.transcript ? scopedBlock('transcript', parts.transcript) : '',
     parts.currentTurnSpeech
       ? scopedBlock('transcript', `${DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER}\n${parts.currentTurnSpeech}`)
@@ -1049,6 +1051,19 @@ export function prepareDirectAssistPrompt(input: DirectAssistRequestInput | Dire
     }
     return DIRECT_ASSIST_SYSTEM_PROMPT;
   })();
+  // The contract and the design block go together. The block opens with "the
+  // starting point for this turn, as the diagram contract describes": sent
+  // without the contract it asks for a redraw with none of the rules a redraw
+  // is held to (the whole diagram, every node kept), and what comes back
+  // replaces the design on the table. So when the contract did not fit, the
+  // block is left out too. Nothing is lost by that: the design was read from
+  // the history this prompt still carries, and the turn is answered from it
+  // like any other. (Re-rendering without the block only makes the prompt
+  // shorter, so a turn that fitted still fits.)
+  if (diagram.contractSignals && diagram.designBlock && systemPrompt === DIRECT_ASSIST_SYSTEM_PROMPT) {
+    parts.omitDesignBlock = true;
+    userPrompt = renderUserPrompt(request, parts);
+  }
 
   return Object.freeze({
     request,

@@ -346,16 +346,23 @@ export interface ResolveDiagramTurnInput {
 }
 
 /**
- * May the design on the table be sent to the provider? It is prior assistant
- * output about the conversation — CONVERSATION_STATE data, the transcript
- * scope (Settings > AI Providers > Privacy). When that scope is withheld the
- * design is treated as absent: nothing derived from it leaves the device, and
- * a follow-up like "add Redis" is simply an ordinary turn.
+ * May the design on the table be sent to the model that answers? It is prior
+ * assistant output about the conversation — CONVERSATION_STATE data, the
+ * transcript scope (Settings > AI Providers > Privacy). When that scope is
+ * withheld the design is treated as absent: nothing derived from it leaves the
+ * device, and a follow-up like "add Redis" is simply an ordinary turn.
+ *
+ * A model on this device is sent it either way. The scope is about what goes
+ * to a provider, and the transport already hands a local model everything;
+ * deciding here without asking withheld the design (and, on the spoken route,
+ * what was said in the meeting) from the one model it could safely go to. If
+ * the local model turns out to be unreachable and the turn falls to a
+ * provider, LLMHelper.stripDeniedScopedBlocksFromMessage removes both.
  */
 export function activeDesignShareable(): boolean {
   try {
-    const { readProviderScopePolicy, isScopeDenied } = require('../context-intelligence/policies/provider-scope-policy');
-    return !isScopeDenied('transcript', readProviderScopePolicy());
+    const { readProviderScopePolicy, isScopeDenied, answeredOnThisDevice } = require('../context-intelligence/policies/provider-scope-policy');
+    return answeredOnThisDevice() || !isScopeDenied('transcript', readProviderScopePolicy());
   } catch {
     return true;
   }

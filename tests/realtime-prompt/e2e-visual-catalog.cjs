@@ -60,9 +60,9 @@ const MINDMAP_ANSWER = `Three groups.\n\n${fence('mermaid', 'mindmap\n  Indexing
 const PROSE = 'Happy to help with that. The short answer is that it depends on the plan you are on.';
 const CODING_ANSWER = '## Approach\nUse a hash map.\n\n## Technique\nHashing\n\n## Code\n```python\ndef two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        if target - n in seen:\n            return [seen[target - n], i]\n        seen[n] = i\n```\n\n## Complexity\nO(n) time, O(n) space.';
 
-function makeHelper(queue, captured) {
+function makeHelper(queue, captured, local) {
   const base = {
-    setNegotiationCoachingHandler() {}, isUsingOllama() { return false; }, canUseLocalFallback() { return false; },
+    setNegotiationCoachingHandler() {}, isUsingOllama() { return local === true; }, canUseLocalFallback() { return false; },
     getPromptTier() { return 'cloud'; }, getCapabilities() { return { contextWindow: 128000, supportsVision: true }; },
     fitContextForCurrentModel(x) { return x; }, rememberAnswerCall() {},
     async *streamChat(...args) {
@@ -84,12 +84,12 @@ function setMode(template, custom) {
   return mode;
 }
 
-function makeEngine(answers, session) {
+function makeEngine(answers, session, local) {
   const { IntelligenceEngine } = require(d('IntelligenceEngine.js'));
   const { SessionTracker } = require(d('SessionTracker.js'));
   const captured = [];
   const s = session || new SessionTracker();
-  const engine = new IntelligenceEngine(makeHelper([...answers], captured), s);
+  const engine = new IntelligenceEngine(makeHelper([...answers], captured, local), s);
   const events = { tokens: [], answers: [], refined: [] };
   engine.on('suggested_answer_token', (t) => events.tokens.push(String(t)));
   engine.on('suggested_answer', (a) => events.answers.push(String(a)));
@@ -449,6 +449,35 @@ const notCoding = (c) => !/<coding_contract>/.test(c.system) && !/verification_s
   const c18c = makeEngine([PROSE], c18.session);
   r = await ask(c18c, 'What did Maria say about the refund review?');
   check('V18', 'a question about what was said gets no contract and no design block', contracts(r.sent) === 0 && count(all(r.sent), '<active_design view=') === 0, `contracts=${contracts(r.sent)} blocks=${count(all(r.sent), '<active_design view=')}`);
+
+  // ── V19 ───────────────────────────────────────────────────────────────
+  out('\nV19 Team meet · the transcript may not go to a provider: a provider is not handed the design, a model on this device is');
+  process.env.NATIVELY_DENY_PROVIDER_SCOPES = 'transcript';
+  try {
+    const drawn = `Who does what in a refund.\n\n${fence('mermaid', LANES)}\n\nSupport reviews every request.`;
+    const edited = `Finance now approves the large ones.\n\n${fence('mermaid', LANES_2)}\n\nAnything over 500 goes to Finance.`;
+    const blocks = (c) => count(all(c), '<active_design view=');
+    // A provider answers.
+    const cloud = makeEngine([drawn]);
+    await ask(cloud, 'Draw a swimlane diagram of the refund process');
+    const cloud2 = makeEngine([PROSE], cloud.session);
+    r = await ask(cloud2, 'Add a finance lane that approves anything over 500');
+    check('V19', 'a provider: no design block, and no contract that points at one', r.calls.length === 1 && blocks(r.sent) === 0 && !/already on the table/.test(contractOf(r.sent)) && !all(r.sent).includes('Review request'), `calls=${r.calls.length} blocks=${blocks(r.sent)} contract=${contractOf(r.sent).slice(0, 200)}`);
+    design = cloud2.session.getActiveDesign();
+    check('V19', 'the design on the table is untouched by that turn', design && design.version === 1 && design.source === LANES, JSON.stringify(design));
+    // The same two turns, answered by a model on this device.
+    const local = makeEngine([drawn], undefined, true);
+    await ask(local, 'Draw a swimlane diagram of the refund process');
+    const local2 = makeEngine([edited], local.session, true);
+    r = await ask(local2, 'Add a finance lane that approves anything over 500');
+    check('V19', 'a model on this device: exactly one call, the update contract and the design, once each', r.calls.length === 1 && contracts(r.sent) === 1 && /This turn changes the swimlane diagram already on the table/.test(contractOf(r.sent)) && blocks(r.sent) === 1 && all(r.sent).includes('Review request'), `calls=${r.calls.length} contracts=${contracts(r.sent)} blocks=${blocks(r.sent)}`);
+    design = local2.session.getActiveDesign();
+    check('V19', 'and the edit is recorded as version 2', design && design.version === 2 && design.source === LANES_2, JSON.stringify(design));
+  } finally {
+    delete process.env.NATIVELY_DENY_PROVIDER_SCOPES;
+    // The next engine made by this harness answers on a provider again.
+    makeEngine([PROSE]);
+  }
 
   const failed = results.filter((x) => !x.ok);
   out(`\n##### visual catalog · V3=${V3}: ${results.length - failed.length}/${results.length} passed${failed.length ? `  FAILED: ${failed.map((f) => `${f.scenario}:${f.name}`).join(' | ')}` : ''}`);

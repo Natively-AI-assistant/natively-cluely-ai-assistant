@@ -30,6 +30,7 @@ import {
   filterEvidenceByProviderScopes,
   dataScopesForEvidence,
   isScopeDenied,
+  answeredOnThisDevice,
 } from '../policies/provider-scope-policy';
 import type { AnswerSurface, EvidenceScope } from '../contracts/types';
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
@@ -566,7 +567,9 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // The design on the table is prior assistant output — CONVERSATION_STATE
     // data, the same class as the history block — so it leaves with the
     // transcript scope or not at all. The note is app text and always rides.
-    const diagramDesignAllowed = Boolean(input.diagramTurn?.activeDesignBlock) && !isScopeDenied('transcript', scopePolicy);
+    // (A model on this device is sent it either way: the same rule the
+    // resolver decided the turn by — see activeDesignShareable.)
+    const diagramDesignAllowed = Boolean(input.diagramTurn?.activeDesignBlock) && (answeredOnThisDevice() || !isScopeDenied('transcript', scopePolicy));
     const diagramTurn = input.diagramTurn
       ? { note: input.diagramTurn.note, ...(diagramDesignAllowed ? { activeDesignBlock: input.diagramTurn.activeDesignBlock } : {}) }
       : undefined;

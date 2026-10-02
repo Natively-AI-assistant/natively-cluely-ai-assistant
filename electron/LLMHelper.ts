@@ -27,6 +27,7 @@ import { forgetBreakersOfOtherSelections, orderVisionCandidates } from "./llm/vi
 import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
+import { trimUserContentToFit, userContentRoomChars } from "./llm/localContextTrim"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
@@ -1185,6 +1186,9 @@ export class LLMHelper {
     // The system design on the table is prior assistant output about the
     // conversation — the same CONVERSATION_STATE class (diagramPromptSignals.ts).
     if (/<active_design\b/.test(message)) scopes.push('transcript');
+    // What was said in the meeting, handed to a drawing of the conversation
+    // (withMeetingSpeechForDiagramTurn): the transcript itself.
+    if (/<conversation_so_far>/.test(message)) scopes.push('transcript');
     return [...new Set(scopes)];
   }
 
@@ -1223,6 +1227,11 @@ export class LLMHelper {
         // Defence in depth: the resolver already withholds the design when the
         // transcript scope is denied; a block that reached here anyway goes too.
         .replace(/<active_design\b[\s\S]*?<\/active_design>\s*/gi, '')
+        // The same for what was said in the meeting. It is built only where
+        // the transcript may go (activeDesignShareable), which includes "the
+        // model is on this device" — and a local model that turns out to be
+        // unreachable hands the turn to a provider with the block still in it.
+        .replace(/<conversation_so_far>[\s\S]*?<\/conversation_so_far>\s*/gi, '')
         // V3's prior-turn continuity section (CONVERSATION_STATE data). Runs to
         // the next top-level section or tag, both of which the composer emits
         // after a blank line.
@@ -3329,11 +3338,10 @@ export class LLMHelper {
     const cap = Math.floor(maxContextTokens * 0.8);
     const totalFor = (s: string) => caps.promptBudgetTokens + reserved + estimateTokens(s);
     if (totalFor(text) <= cap) return text;
-    const lines = text.split('\n');
-    while (lines.length > 1 && totalFor(lines.join('\n')) > cap) {
-      lines.shift();
-    }
-    return lines.join('\n');
+    // Oldest lines first, as before; the design on the table is kept whole or
+    // left out whole (see localContextTrim). `totalFor(s) <= cap`, solved for
+    // the length of s at four characters to a token.
+    return trimUserContentToFit(text, Math.max(0, Math.floor(cap - caps.promptBudgetTokens - reserved) * 4));
   }
 
   // Trim a transcript array to fit within the active model's prompt budget.
@@ -3381,11 +3389,9 @@ export class LLMHelper {
       let total = estimateTokens(sys) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
         console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
-        const lines = userContent.split('\n');
-        while (lines.length > 1 && (estimateTokens(sys) + estimateTokens(lines.join('\n')) + 2000) > maxCtx) {
-          lines.shift();
-        }
-        userContent = lines.join('\n');
+        // Oldest lines first, as before — but never half of the design on the
+        // table (see localContextTrim).
+        userContent = trimUserContentToFit(userContent, userContentRoomChars(maxCtx, sys));
       }
       const userMessage: any = { role: 'user', content: userContent };
       if (images) userMessage.images = images;
@@ -12847,11 +12853,7 @@ let isMultimodal = !!(imagePaths?.length);
       const total = estimateTokens(systemPrompt) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
         console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
-        const lines = userContent.split('\n');
-        while (lines.length > 1 && (estimateTokens(systemPrompt) + estimateTokens(lines.join('\n')) + 2000) > maxCtx) {
-          lines.shift();
-        }
-        userContent = lines.join('\n');
+        userContent = trimUserContentToFit(userContent, userContentRoomChars(maxCtx, systemPrompt));
       }
     }
 

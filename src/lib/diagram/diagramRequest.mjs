@@ -1648,6 +1648,46 @@ export function designLabels(source) {
   return out;
 }
 
+/**
+ * The titles of a diagram's groups or lanes (`subgraph Support`, `subgraph ops
+ * ["Ops Team"]`), as lower-case words.
+ */
+export function designGroups(source) {
+  const out = new Set();
+  for (const m of String(source ?? '').slice(0, 12000).matchAll(/(?:^|\n)[ \t]*subgraph[ \t]+(?:[^\s\["\n]+[ \t]*\[[ \t]*"?([^"\]\n]{2,60})"?[ \t]*\]|"([^"\n]{2,60})"|([^\["\n]{2,60}))[ \t]*(?=\n|$)/g)) {
+    const words = String(m[1] || m[2] || m[3] || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
+    if (words.length >= 1 && words.length <= 5) out.add(words.join(' '));
+  }
+  return out;
+}
+
+const LANE_NOUN = '(?:swim ?lanes?|lanes?|columns?|rows?|tracks?|groups?|boxe?s?|sections?|layers?|tiers?)';
+
+/**
+ * Is a lane or a group of the diagram named: by its title when that is more
+ * than one word ("customer support"), or — a one-word title being a
+ * department or a role, an everyday word — when it is called a lane ("the
+ * finance lane", "the lane for support")?
+ */
+function namesLane(q, source) {
+  const groups = designGroups(source);
+  if (groups.size === 0) return false;
+  const flat = ` ${q.replace(/[^a-z0-9]+/g, ' ')} `;
+  for (const group of groups) {
+    if (group.includes(' ')) {
+      if (flat.includes(` ${group} `)) return true;
+      continue;
+    }
+    if (group.length < 3) continue;
+    // ("The fast lane for support tickets" is not the Support lane: the noun
+    // has to be the lane itself — "a lane for support", "the lane called …".)
+    if (new RegExp(` ${group}(?: s)? ${LANE_NOUN} `).test(flat)
+      || new RegExp(` (?:the|a|an|that|this|each|every|another|new|its|their|our) ${LANE_NOUN} (?:for|of) (?:the )?${group} `).test(flat)
+      || new RegExp(` ${LANE_NOUN} (?:called|named|labell?ed|marked|titled) (?:the )?${group} `).test(flat)) return true;
+  }
+  return false;
+}
+
 function namesLabel(q, labels) {
   if (labels.size === 0) return false;
   const flat = ` ${q.replace(/[^a-z0-9]+/g, ' ')} `;
@@ -2209,7 +2249,7 @@ function resolveCore(input) {
   const namesPart = Boolean(active) && namesComponent(q, vocab, { definite: !fg });
   // ("What is an API gateway?" once the conversation has moved on asks about
   // API gateways, not about the one in the design.)
-  const namesPhrase = Boolean(active) && namesLabel(q, designLabels(active.source))
+  const namesPhrase = Boolean(active) && (namesLabel(q, designLabels(active.source)) || namesLane(q, active.source))
     && !(active.foreground === false && /^(?:(?:ok(?:ay)?|so|and|but|wait)[, ]+)*what(?:'s| is| are) (?:an? |meant by )/.test(q));
   const namesValue = family === 'chart' && namesChartValue(q, active.source);
   const pronoun = PRONOUN_RE.test(q
@@ -2279,7 +2319,9 @@ function resolveCore(input) {
   // HOLD music", "put the caller ON HOLD", "I need a COPY of the signed
   // contract", "add a step to the onboarding checklist".
   const editElsewhere = editVerb && !explainForm && !capability && (editGoesElsewhere(lead, vocab)
-    || (editsSomethingElse(lead, vocab, active ? designLabels(active.source) : null) && !anyClause(STRUCTURAL_EDIT_RE) && !scheduleStructural && !(modelView && MODEL_TERM_RE.test(q))));
+    // (A lane of the diagram, called one, is the diagram's: "rename the
+    // Customer swimlane to Client".)
+    || (editsSomethingElse(lead, vocab, active ? designLabels(active.source) : null) && !(active && namesLane(q, active.source)) && !anyClause(STRUCTURAL_EDIT_RE) && !scheduleStructural && !(modelView && MODEL_TERM_RE.test(q))));
   const strong = namesIt || namesValue
     || (((namesPhrase || partInContext) && !editElsewhere) && !personal && !(codingRoute && ALGORITHM_TALK_RE.test(q)));
   // WEAK: nothing names the artifact, but it is what the conversation is on,

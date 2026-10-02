@@ -142,6 +142,36 @@ export function isScopeDenied(scope: ProviderDataScope, policy?: ProviderDataSco
   return policy?.[scope] === false;
 }
 
+// ── a model on this device ───────────────────────────────────────────────────
+//
+// The scopes are about what may be sent to a PROVIDER. A model running on this
+// device is not one: LLMHelper sends a turn whose scope is denied to the local
+// model with everything in it ("denied for cloud; routing to Ollama"). A
+// caller that decides BEFORE the transport whether to build something out of
+// scoped data — the design on the table, what was said in the meeting — asks
+// here, so it does not withhold from a local model what the transport would
+// have sent it.
+//
+// Registered by the engine, read through a globalThis slot: esbuild inlines
+// this module into every entry bundle, so module state would not be shared.
+// Nothing registered means "not known to be local", i.e. the scope decides.
+const ON_DEVICE_MODEL_PROBE_SLOT = '__nativelyOnDeviceModelProbe';
+
+/** Register (or, with null, clear) the reader for "the selected model runs on this device". */
+export function registerOnDeviceModelProbe(probe: (() => boolean) | null): void {
+  (globalThis as any)[ON_DEVICE_MODEL_PROBE_SLOT] = probe ?? undefined;
+}
+
+/** Is the turn answered by a model on this device? False when unknown; never throws. */
+export function answeredOnThisDevice(): boolean {
+  try {
+    const probe = (globalThis as any)[ON_DEVICE_MODEL_PROBE_SLOT] as (() => boolean) | undefined;
+    return typeof probe === 'function' && probe() === true;
+  } catch {
+    return false;
+  }
+}
+
 export interface EvidenceScopeFilterResult {
   /** Evidence the policy permits to leave the process. */
   evidence: EvidenceItem[];
