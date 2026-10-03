@@ -271,3 +271,65 @@ already judged text reuses that judgment). Then one run in the app for confirmat
 7. Time from the last streamed token to the settled text, median, not more than 300 ms above E1's dev run.
 
 **Holdout (aggregates only):** line 5, and hard fails not above E1's 15 by more than 2. A failure at any step: not kept.
+
+### E5 — offline data and verdict (2026-10-03, provisional judge; `replay-claim-pass.mjs`, `replay-judge.mjs effect`)
+
+Both arms through the same harness on the 251 dev + counterfactual turns of the E1 runs that ran the pass (k 2 for
+the outcome mix, k 0 judged). The rebuilt request equals the recorded one on 502 of 502 replays of the 24,000 arm
+and the rebuilt system prompt matches the recorded hash on every row, so the harness sends what the app sent.
+
+| | 24,000 arm | 96,000 arm |
+|---|---:|---:|
+| Mean, 333 rows | 8.29 | 8.50 |
+| Effect of the pass (shown − draft) | −0.21 (±0.13) | +0.01 (±0.09) |
+| Hard fails (drafts: 40) | 33 | 32 |
+| Critical | 19 | 17 |
+| Passes that changed the text | 116 of 251 | 62 of 251 |
+| Finished inside the budget | 100 % | 100 % |
+| Pass time, median / p90 | 1,118 / 1,469 ms | 1,199 / 1,743 ms |
+
+| Rule line (offline) | Measured | Holds |
+|---|---|---|
+| 1. 96,000 − 24,000 on the set's mean ≥ +0.10, interval excludes 0 | +0.21 (±0.14) | yes |
+| 2. Hard fails not above the 24,000 arm's | 33 → 32 | yes |
+| 3. Rows that need no document: not more than 0.15 lower | +0.16 (±0.22) | yes |
+| 4. Finishes inside the budget as often (−3 points at most) | 100 % and 100 % | yes |
+
+The 24,000 arm reproduces what the app did (−0.21 here, −0.23 in the app). Shown the whole prompt, the pass costs
+nothing on the mean and still removes 8 of the drafts' 40 hard fails. **Offline: E5 passes; it goes to the app.**
+
+What is left in the 96,000 arm (`report/replay-edits.mjs e5-whole96 …`, 62 edits): the 9 edits where the pass named
+a CONFLICT cost 2.22 (±1.17) each, 8 of the 9 made the answer worse; the 53 edits where it named none gain 0.42
+(±0.43) and take hard fails from 14 to 5. In those 9 the two "conflicting" sources were a current document and an
+older or informal one ("Version 4.1, effective 1 March 2026 vs Version 3.2, effective 1 February 2025"), and the
+correct answer from the current one was rewritten to "it is given two ways, that needs confirming".
+
+---
+
+## E6 — the claim pass: a current document against an older one is not a conflict
+
+**Rule written before any E6 arm was run (commit time of this section is the record).** This is the redesign Evin
+asked for ("cannot remove a fact the loaded files state"): with the cut lifted (E5), the facts the pass still
+removes from grounded answers are removed by its CONFLICT step.
+
+**Change (wording of the pass's own prompt only; replayed offline with the 96,000 cap).**
+* v1: the CONFLICT line fires only for two sources of equal standing. A current, final, signed or later-dated
+  version against an older, superseded or expired one, a draft or proposal, or an informal note or message is not a
+  conflict: the one that holds is what the material states.
+* v2: v1, and a value the draft took from the older / draft / informal source while the material holds a current
+  one is listed as unsupported and replaced by the current value.
+Each is one replay arm on the dev + counterfactual drafts of the E1 runs, read against the 96,000 arm of E5.
+
+**Rule (dev + counterfactual, paired with the E5 96,000 arm; oracle's `known_conflicts.resolution` splits the rows).**
+
+1. All rows: arm − E5 arm above 0 with a 95 % interval that excludes 0.
+2. Hard fails and critical flags not above the E5 arm's.
+3. Rows whose oracle holds an `unresolved` conflict (the sources really disagree and the answer must say so): not
+   more than 0.3 below the E5 arm, and no new hard fail on them.
+4. Rows whose oracle resolves the conflict (current / final / authoritative wins): not below the E5 arm.
+5. Rows that need no document: not more than 0.15 below the E5 arm.
+If both pass, the one with the higher all-rows mean is taken; within 0.03 of each other, v1 (the smaller change).
+
+**Holdout (aggregates only):** E5 and E6 are confirmed together by one run of the candidate build in the app:
+effect of the pass on the set's mean not below −0.10, hard fails not above E1's 15 by more than 2. If that fails,
+the two are separated by offline replays of the holdout drafts.
