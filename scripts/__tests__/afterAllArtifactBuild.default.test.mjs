@@ -1,11 +1,11 @@
 // Tests for scripts/afterAllArtifactBuild.default.cjs — the DEFAULT (`npm run dist`)
-// build hook that produces the macOS DMG via `hdiutil create` and verifies every
-// packaged artifact still has its Electron runtime.
+// build hook that verifies every packaged artifact still has its Electron runtime.
 //
-// THE BUG THIS GUARDS (v2.9.1): electron-builder's DMG step on macOS 27 shipped an
-// app whose Electron Framework binary was missing, so every launch died at dyld
-// ("Library not loaded: @rpath/Electron Framework…") → "cannot be opened". The hook
-// builds the DMG a different way and fails the build if the binary is absent.
+// THE BUG THIS GUARDS (v2.9.1): electron-builder 26.8.1's DMG step shipped an app
+// whose Electron Framework binary was missing (electron-builder#9706), so every
+// launch died at dyld ("Library not loaded: @rpath/Electron Framework…") → "cannot
+// be opened". electron-builder 26.14.0+ builds the DMG correctly; the hook mounts
+// each DMG it reports and fails the build if the binary is absent.
 //
 // Pure helpers run against real temp-dir fixtures (both platform branches from any
 // host); the hook orchestration runs against injected fakes (no real hdiutil), so
@@ -21,7 +21,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const hook = require('../afterAllArtifactBuild.default.cjs');
-const { macAppProblems, winUnpackedProblems, fsView, runHook, dmgNameFor, WIN_REQUIRED_FILES } = hook;
+const { macAppProblems, winUnpackedProblems, fsView, runHook, dmgArtifacts, dmgLayoutProblems, WIN_REQUIRED_FILES } = hook;
 
 // ---------------------------------------------------------------------------
 // Fixture builders
@@ -136,12 +136,65 @@ test('winUnpackedProblems: no .exe is reported', () => {
 });
 
 // ---------------------------------------------------------------------------
-// dmgNameFor
+// dmgArtifacts
 // ---------------------------------------------------------------------------
 
-test('dmgNameFor matches electron-builder naming per arch', () => {
-  assert.equal(dmgNameFor('mac-arm64', 'corespeechd', '2.9.1'), 'corespeechd-2.9.1-arm64.dmg');
-  assert.equal(dmgNameFor('mac', 'corespeechd', '2.9.1'), 'corespeechd-2.9.1.dmg');
+test('dmgArtifacts picks only the DMGs out of the build result', () => {
+  assert.deepEqual(
+    dmgArtifacts({
+      artifactPaths: [
+        '/out/Natively-2.9.1-arm64.zip',
+        '/out/corespeechd-2.9.1-arm64.dmg',
+        '/out/corespeechd-2.9.1-arm64.dmg.blockmap',
+        '/out/corespeechd-2.9.1-x64.DMG',
+        '/out/latest-mac.yml',
+      ],
+    }),
+    ['/out/corespeechd-2.9.1-arm64.dmg', '/out/corespeechd-2.9.1-x64.DMG']
+  );
+  assert.deepEqual(dmgArtifacts({ artifactPaths: ['/out/audiodg-Setup-2.9.1.exe'] }), []);
+  assert.deepEqual(dmgArtifacts(undefined), []);
+});
+
+// ---------------------------------------------------------------------------
+// dmgLayoutProblems (pure, real fixtures)
+// ---------------------------------------------------------------------------
+
+function mkDmgRoot(root, { dsStore = true, background = '.background.tiff', appsLink = true } = {}) {
+  const mount = path.join(root, 'mount');
+  fs.mkdirSync(path.join(mount, 'corespeechd.app'), { recursive: true });
+  if (dsStore) fs.writeFileSync(path.join(mount, '.DS_Store'), 'x');
+  if (background === '.background') fs.mkdirSync(path.join(mount, '.background'));
+  else if (background) fs.writeFileSync(path.join(mount, background), 'x');
+  if (appsLink) fs.symlinkSync(os.tmpdir(), path.join(mount, 'Applications'));
+  return mount;
+}
+
+test('dmgLayoutProblems: a DMG with its install window has no problems', () => {
+  const root = tmp();
+  assert.deepEqual(dmgLayoutProblems(mkDmgRoot(root), fsView(fs)), []);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('dmgLayoutProblems: a custom picture in a .background folder counts', () => {
+  const root = tmp();
+  assert.deepEqual(dmgLayoutProblems(mkDmgRoot(root, { background: '.background' }), fsView(fs)), []);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('dmgLayoutProblems: a bare hdiutil DMG (no layout, no picture) is reported', () => {
+  const root = tmp();
+  const problems = dmgLayoutProblems(mkDmgRoot(root, { dsStore: false, background: null }), fsView(fs));
+  assert.ok(problems.some((p) => /\.DS_Store/.test(p)), problems.join('; '));
+  assert.ok(problems.some((p) => /background/.test(p)), problems.join('; '));
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('dmgLayoutProblems: a missing Applications link is reported', () => {
+  const root = tmp();
+  const problems = dmgLayoutProblems(mkDmgRoot(root, { appsLink: false }), fsView(fs));
+  assert.ok(problems.some((p) => /Applications link/.test(p)), problems.join('; '));
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -159,45 +212,50 @@ function vfs({ existing = [], sizes = {}, dirs = {} }) {
   };
 }
 
-function healthyMountView(outDir, mount) {
+const ARM_DMG = '/out/corespeechd-2.9.1-arm64.dmg';
+const X64_DMG = '/out/corespeechd-2.9.1-x64.dmg';
+
+function healthyMountView(mount, { layout = true } = {}) {
   const app = `${mount}/corespeechd.app`;
   const fwBin = `${app}/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework`;
   const fwLink = `${app}/Contents/Frameworks/Electron Framework.framework/Electron Framework`;
   const macos = `${app}/Contents/MacOS`;
   return vfs({
-    existing: [fwBin, fwLink, macos],
+    existing: [fwBin, fwLink, macos, ...(layout ? [`${mount}/.DS_Store`] : [])],
     sizes: { [fwBin]: 191000000 },
     dirs: {
-      [`${outDir}/mac-arm64`]: ['corespeechd.app'],
-      [`${outDir}/mac`]: [],
-      [mount]: ['corespeechd.app'],
+      [mount]: layout
+        ? ['.DS_Store', '.background.tiff', 'Applications', 'corespeechd.app']
+        : ['Applications', 'corespeechd.app'],
       [macos]: ['corespeechd'],
     },
   });
 }
 
-function darwinDeps(view, { built = [], mount = '/mnt/corespeechd', codesignOk = true } = {}) {
+function darwinDeps(view, { mount = '/mnt/corespeechd', codesignOk = true, attached = [], warnings = [] } = {}) {
   return {
     platform: 'darwin',
     view,
     outDir: '/out',
-    version: '2.9.1',
-    volname: 'corespeechd',
-    buildDmg: ({ outDmg }) => built.push(outDmg),
-    attach: () => mount,
+    attach: (dmg) => { attached.push(dmg); return mount; },
     detach: () => {},
     verifyCodesign: () => ({ ok: codesignOk, message: codesignOk ? '' : 'a sealed resource is missing or invalid' }),
     log: () => {},
-    warn: () => {},
+    warn: (m) => warnings.push(m),
   };
 }
 
-test('runHook(darwin): healthy staged app → builds + verifies DMG, no throw', async () => {
-  const built = [];
-  const view = healthyMountView('/out', '/mnt/corespeechd');
-  const result = await runHook({ artifactPaths: ['/out/corespeechd-2.9.1-arm64-mac.zip'] }, darwinDeps(view, { built }));
-  assert.deepEqual(built, ['/out/corespeechd-2.9.1-arm64.dmg']);
-  assert.deepEqual(result, ['/out/corespeechd-2.9.1-arm64.dmg']);
+test('runHook(darwin): healthy DMGs → each one mounted + verified, no throw, no warning', async () => {
+  const attached = [];
+  const warnings = [];
+  const view = healthyMountView('/mnt/corespeechd');
+  const result = await runHook(
+    { artifactPaths: ['/out/Natively-2.9.1-arm64.zip', ARM_DMG, `${ARM_DMG}.blockmap`, X64_DMG] },
+    darwinDeps(view, { attached, warnings })
+  );
+  assert.deepEqual(attached, [ARM_DMG, X64_DMG]);
+  assert.deepEqual(result, [ARM_DMG, X64_DMG]);
+  assert.deepEqual(warnings, []);
 });
 
 test('runHook(darwin): DMG missing the framework binary → throws (build fails)', async () => {
@@ -205,36 +263,60 @@ test('runHook(darwin): DMG missing the framework binary → throws (build fails)
   const app = `${mount}/corespeechd.app`;
   // Mounted app has Contents/MacOS but NO framework binary and NO resolving symlink.
   const view = vfs({
-    existing: [`${app}/Contents/MacOS`],
+    existing: [`${app}/Contents/MacOS`, `${mount}/.DS_Store`],
     dirs: {
-      '/out/mac-arm64': ['corespeechd.app'],
-      '/out/mac': [],
-      [mount]: ['corespeechd.app'],
+      [mount]: ['.DS_Store', '.background.tiff', 'Applications', 'corespeechd.app'],
       [`${app}/Contents/MacOS`]: ['corespeechd'],
     },
   });
   await assert.rejects(
-    () => runHook({ artifactPaths: ['/out/x-mac.zip'] }, darwinDeps(view, { mount })),
-    /missing Electron Framework binary|FATAL/
+    () => runHook({ artifactPaths: [ARM_DMG] }, darwinDeps(view, { mount })),
+    /missing Electron Framework binary/
   );
 });
 
 test('runHook(darwin): codesign --verify failure is FATAL (invalid sig SIGTRAPs on macOS 27)', async () => {
-  const view = healthyMountView('/out', '/mnt/corespeechd');
+  const view = healthyMountView('/mnt/corespeechd');
   const deps = darwinDeps(view, { codesignOk: false });
-  await assert.rejects(
-    () => runHook({ artifactPaths: ['/out/x-mac.zip'] }, deps),
-    /codesign --verify failed|FATAL/
-  );
+  await assert.rejects(() => runHook({ artifactPaths: [ARM_DMG] }, deps), /codesign --verify failed/);
 });
 
-test('runHook(darwin): detach runs even when verification throws nothing (cleanup)', async () => {
+test('runHook(darwin): a DMG that cannot be mounted → throws', async () => {
+  const view = healthyMountView('/mnt/corespeechd');
+  const deps = darwinDeps(view);
+  deps.attach = () => { throw new Error('hdiutil: attach failed - image not recognized'); };
+  await assert.rejects(() => runHook({ artifactPaths: [ARM_DMG] }, deps), /could not mount for verification/);
+});
+
+test('runHook(darwin): detach runs after verification (cleanup)', async () => {
   let detached = false;
-  const view = healthyMountView('/out', '/mnt/corespeechd');
+  const view = healthyMountView('/mnt/corespeechd');
   const deps = darwinDeps(view);
   deps.detach = () => { detached = true; };
-  await runHook({ artifactPaths: ['/out/x-mac.zip'] }, deps);
+  await runHook({ artifactPaths: [ARM_DMG] }, deps);
   assert.equal(detached, true);
+});
+
+test('runHook(darwin): DMG without its install window → warns, does not fail the build', async () => {
+  const warnings = [];
+  const view = healthyMountView('/mnt/corespeechd', { layout: false });
+  const result = await runHook({ artifactPaths: [ARM_DMG] }, darwinDeps(view, { warnings }));
+  assert.deepEqual(result, [ARM_DMG]);
+  assert.ok(warnings.some((w) => /install window/.test(w) && /\.DS_Store/.test(w)), warnings.join('; '));
+  assert.ok(warnings.some((w) => /install window/.test(w) && /background/.test(w)), warnings.join('; '));
+});
+
+test('runHook(darwin): no DMG in the build result (e.g. a zip-only run) → warns, nothing mounted', async () => {
+  const attached = [];
+  const warnings = [];
+  const view = healthyMountView('/mnt/corespeechd');
+  const result = await runHook(
+    { artifactPaths: ['/out/Natively-2.9.1-arm64.zip'] },
+    darwinDeps(view, { attached, warnings })
+  );
+  assert.deepEqual(result, []);
+  assert.deepEqual(attached, []);
+  assert.ok(warnings.some((w) => /no macOS DMG/.test(w)), warnings.join('; '));
 });
 
 test('runHook(win32): healthy unpacked → no throw', async () => {
@@ -247,7 +329,7 @@ test('runHook(win32): healthy unpacked → no throw', async () => {
     dirs: { '/out': ['win-unpacked'], [dir]: ['audiodg.exe', 'ffmpeg.dll'] },
   });
   const res = await runHook({ artifactPaths: ['/out/Setup.exe'] }, {
-    platform: 'win32', view, outDir: '/out', version: '2.9.1', volname: 'audiodg', log: () => {}, warn: () => {},
+    platform: 'win32', view, outDir: '/out', log: () => {}, warn: () => {},
   });
   assert.deepEqual(res, []);
 });
@@ -260,7 +342,7 @@ test('runHook(win32): missing runtime DLL → throws', async () => {
   });
   await assert.rejects(
     () => runHook({ artifactPaths: ['/out/Setup.exe'] }, {
-      platform: 'win32', view, outDir: '/out', version: '2.9.1', volname: 'audiodg', log: () => {}, warn: () => {},
+      platform: 'win32', view, outDir: '/out', log: () => {}, warn: () => {},
     }),
     /missing Electron runtime file|FATAL/
   );
@@ -268,7 +350,7 @@ test('runHook(win32): missing runtime DLL → throws', async () => {
 
 test('runHook(linux/other): no-op', async () => {
   const res = await runHook({ artifactPaths: [] }, {
-    platform: 'linux', view: vfs({}), outDir: '/out', version: '2.9.1', volname: 'x', log: () => {}, warn: () => {},
+    platform: 'linux', view: vfs({}), outDir: '/out', log: () => {}, warn: () => {},
   });
   assert.deepEqual(res, []);
 });

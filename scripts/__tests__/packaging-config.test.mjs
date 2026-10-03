@@ -165,3 +165,36 @@ test('committed productName stays the disguise alias (release builds use it verb
       `alias); package-app.js derives per-platform names from disguise-name.cjs at build time`
   );
 });
+
+test('the default mac build makes a DMG, and only on an electron-builder whose DMG step is fixed', () => {
+  // THE REGRESSION THIS GUARDS (v2.9.1): electron-builder 26.8.1's DMG step dropped
+  // the Electron Framework binary from large apps and reported success
+  // (electron-userland/electron-builder#9706). The fix is in the dmg-builder 1.2.3
+  // toolset, first shipped by electron-builder 26.14.0. While that step was broken
+  // the DMG was built by a plain `hdiutil create`, which has no install window
+  // (no background, no icon positions) — so both halves are pinned here: the dmg
+  // target stays on, and the builder stays at or above the fixed version.
+  const targets = pkg.build?.mac?.target ?? [];
+  for (const kind of ['zip', 'dmg']) {
+    const t = targets.find((x) => x.target === kind);
+    assert.ok(t, `build.mac.target must include "${kind}"`);
+    assert.deepEqual([...t.arch].sort(), ['arm64', 'x64'], `mac ${kind} target must build both arches`);
+  }
+
+  const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package-lock.json'), 'utf8'));
+  const locked = lock.packages?.['node_modules/dmg-builder']?.version;
+  assert.ok(locked, 'package-lock.json must pin dmg-builder');
+  const [major, minor] = locked.split('.').map(Number);
+  assert.ok(
+    major > 26 || (major === 26 && minor >= 14),
+    `dmg-builder is locked at ${locked}; the DMG step silently drops files before 26.14.0`
+  );
+});
+
+test('the mac DMG keeps the disguise alias as its file and volume name', () => {
+  // build.mac.artifactName carries the brand for the updater zip; without its own
+  // artifactName the DMG would inherit it, and without a title the mounted volume
+  // would be "<name> <version>". Both resolve from productName, which is the alias.
+  assert.equal(pkg.build?.dmg?.artifactName, '${productName}-${version}-${arch}.${ext}');
+  assert.equal(pkg.build?.dmg?.title, '${productName}');
+});
