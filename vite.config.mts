@@ -98,10 +98,6 @@ export default defineConfig({
                 // which made the ENTRY statically import 382 kB of media
                 // libraries, modulepreloaded by every window. Left unlisted,
                 // they land in whichever dynamic chunk actually pulls them.
-                //
-                // util-vendor is separate for the opposite reason: clsx,
-                // tailwind-merge and cva ARE imported by nearly every
-                // component, so they must not ride along with heavy libs.
                 manualChunks: {
                     'react-vendor': ['react', 'react-dom', 'scheduler'],
                     'animation-vendor': ['framer-motion'],
@@ -118,11 +114,6 @@ export default defineConfig({
                         'katex',
                         'react-syntax-highlighter',
                         'marked',
-                    ],
-                    'util-vendor': [
-                        'tailwind-merge',
-                        'clsx',
-                        'class-variance-authority',
                     ],
                     'data-vendor': [
                         '@tanstack/react-query',
