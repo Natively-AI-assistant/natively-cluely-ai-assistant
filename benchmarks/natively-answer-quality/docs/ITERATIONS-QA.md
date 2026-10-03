@@ -1,6 +1,6 @@
 # Answer-quality iterations — changes, scores, and every dev question with its response per iteration
 
-Generated 2026-10-01T12:52Z by `tools/iterations-qa.mjs` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter); charter v1 `6dd53845a51c` and, from the 11:00 UTC batch of 2026-10-01, charter v2 `c725615a54f6` (claim kinds). Scores under the two charters are not comparable and are shown separately.
+Generated 2026-10-03T06:10Z by `tools/iterations-qa.mjs` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter); charter v1 `6dd53845a51c` and, from the 11:00 UTC batch of 2026-10-01, charter v2 `c725615a54f6` (claim kinds). Scores under the two charters are not comparable and are shown separately.
 
 **Scope.** Only the DEV set (360 questions, 9 modes) is listed per item. The holdout, final and supplementary sets are blind: they are reported in aggregate elsewhere (`docs/ITERATIONS-ASTRA.md`) and never item by item.
 
@@ -10,7 +10,7 @@ Generated 2026-10-01T12:52Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 
 | Run | App commit | Contains | Rows | Judged v1 | Dev mean v1 | Judged v2 | Dev mean v2 |
 |---|---|---|---:|---:|---:|---:|---:|
-| Baseline (`aq2-dev-cur`) | `61bb0956` | main as it was at the start (no change) | 360 | 359 | 7.78 | 201 | 7.73 (partial) |
+| Baseline (`aq2-dev-cur`) | `61bb0956` | main as it was at the start (no change) | 360 | 359 | 7.78 | 360 | 7.76 |
 | fix1 (`aq2-dev-fix1`) | `c3e951f3` | I1 + I2 + I3 + I4 | 360 | — | — | — | — |
 | fix2 (I5) (`aq2-dev-fix2`) | `44418214` | fix1 + I5 | 360 | 360 | 7.86 | — | — |
 | fix3 (`aq2-dev-fix3`) | `2a0fcb62` | fix2 + I6 + I7 | 360 | — | — | — | — |
@@ -22,8 +22,14 @@ Generated 2026-10-01T12:52Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 | fix9 (`aq2-dev-fix9`) | `8e30ca40` | fix8 + I21 + I22 + tidy | 360 | — | — | 360 | 8.37 |
 | fix10 (`aq2-dev-fix10`) | `497c9ba9` | fix9 + claim kinds in the verifier | 360 | — | — | — | — |
 | fix11 (`aq2-dev-fix11`) | `ab264bb3` | fix10 + source-word rail | 360 | — | — | 360 | 8.47 |
-| fix12 (Seminar rows only) (`aq2-dev-fix12`) | `f0c3a263` | fix11 + Seminar study-scope clause; other modes identical to fix11 | 40 | — | — | 38 | 8.95 (partial) |
-| fix13 (refinement conversations only) (`aq2-dev-fix13`) | `e000db4a` | fix12 + I26 refinement notice; every other prompt identical to fix12 | 17 | — | — | — | — |
+| fix12 (Seminar rows only) (`aq2-dev-fix12`) | `f0c3a263` | fix11 + Seminar study-scope clause; other modes identical to fix11 | 40 | — | — | 40 | 8.95 (partial) |
+| fix13 (refinement conversations only) (`aq2-dev-fix13`) | `e000db4a` | fix12 + I26 refinement notice; every other prompt identical to fix12 | 17 | — | — | 17 | 9.52 (partial) |
+| fix14 — candidate, not kept (Looking for work rows only) (`aq2-dev-fix14`) | `c399f399` | fix13 + the claim pass's reworded fallback rule for Looking for work | 40 | — | — | 40 | 8.14 (partial) |
+| fix15 — candidate, not kept (Technical interview + Lecture rows only) (`aq2-dev-fix15`) | `3b0c1a4f` | fix13 + I28 reasoning before a TYPED answer in those two modes | 80 | — | — | 80 | 8.77 (partial) |
+| fix16 — candidate, not kept (Call Center + Sales rows only) (`aq2-dev-fix16`) | `c399f399` | fix13 + the "no policy on file" and reply-shape notices on heard turns with no document | 80 | — | — | 80 | 8.27 (partial) |
+| kept build, local embedder present (speed study) (`aq2-dev-emb2`) | `e000db4a` | fix13 run with the bundled embedder weights copied in; rerank on (the default) | 120 | — | — | 120 | 8.24 (partial) |
+| kept build, rerank on (speed study, not judged) (`aq2-dev-rron1`) | `e000db4a` | fix13, embedder present, bundled rerank awaited as in the product | 120 | — | — | — | — |
+| kept build, rerank off (speed study, not judged) (`aq2-dev-rroff1`) | `e000db4a` | fix13, embedder present, NATIVELY_RAG_LOCAL_RERANK=0 — measured only, not adopted (Evin: keep as today) | 120 | — | — | — | — |
 
 ## 2. Judged score per mode
 
@@ -44,18 +50,18 @@ Generated 2026-10-01T12:52Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 
 **Charter v2 (claim kinds)**
 
-| Mode | fix6 mean (hard fails) | fix9 mean (hard fails) | fix11 mean (hard fails) |
-|---|---:|---:|---:|
-| Call Center | 7.29 (12/40) | 7.11 (11/40) | 7.62 (7/40) |
-| General | 8.68 (3/40) | 8.51 (3/40) | 8.57 (4/40) |
-| Lecture | 9.01 (3/40) | 8.80 (4/40) | 8.71 (5/40) |
-| Looking for work | 7.40 (16/40) | 8.12 (4/40) | 7.88 (7/40) |
-| Recruiting | 8.73 (5/40) | 8.81 (2/40) | 9.01 (1/40) |
-| Sales | 7.82 (9/40) | 7.86 (7/40) | 8.31 (3/40) |
-| Seminar | 8.67 (3/40) | 8.85 (1/40) | 8.76 (2/40) |
-| Team Meet | 8.56 (5/40) | 8.97 (1/40) | 9.12 (1/40) |
-| Technical Interview | 8.01 (10/40) | 8.34 (7/40) | 8.21 (9/40) |
-| **All** | 8.24 (66/360) | 8.37 (40/360) | 8.47 (39/360) |
+| Mode | Baseline mean (hard fails) | fix6 mean (hard fails) | fix9 mean (hard fails) | fix11 mean (hard fails) |
+|---|---:|---:|---:|---:|
+| Call Center | 6.56 (17/40) | 7.29 (12/40) | 7.11 (11/40) | 7.62 (7/40) |
+| General | 7.88 (11/40) | 8.68 (3/40) | 8.51 (3/40) | 8.57 (4/40) |
+| Lecture | 8.81 (3/40) | 9.01 (3/40) | 8.80 (4/40) | 8.71 (5/40) |
+| Looking for work | 6.81 (19/40) | 7.40 (16/40) | 8.12 (4/40) | 7.88 (7/40) |
+| Recruiting | 8.34 (3/40) | 8.73 (5/40) | 8.81 (2/40) | 9.01 (1/40) |
+| Sales | 6.89 (17/40) | 7.82 (9/40) | 7.86 (7/40) | 8.31 (3/40) |
+| Seminar | 8.66 (4/40) | 8.67 (3/40) | 8.85 (1/40) | 8.76 (2/40) |
+| Team Meet | 8.38 (6/40) | 8.56 (5/40) | 8.97 (1/40) | 9.12 (1/40) |
+| Technical Interview | 7.50 (9/40) | 8.01 (10/40) | 8.34 (7/40) | 8.21 (9/40) |
+| **All** | 7.76 (89/360) | 8.24 (66/360) | 8.37 (40/360) | 8.47 (39/360) |
 
 A run missing from a table is not fully judged under that charter (300 of 360 answers or more). Never compare a v1 number with a v2 number.
 
@@ -259,7 +265,7 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 - **Why:** Asked whether the extra foraging helped honeybee colonies, the draft said "We didn't measure anything about colonies or nests" — what the paper supports — and the verifier removed it as an unsupported denial. One supp-behavior validator failed because of it (2 of 6 replays pass), which is why fix11 was not promoted despite its holdout gain.
 - **Change:** A study's scope is closed: in Seminar, that the study did not measure, test or include something the material never mentions is supported. No other mode's prompt changes. A wider exemption for any honest limit ("I can't confirm a credit on this call") in every mode was built first (e7325287) and taken back.
 - **Evidence:** Replay: the validator passes 6 of 6 with the clause. The wider exemption halved the limits removed (19 → 10 of 41 drafts) but the judge scored its 44 target drafts −0.02 (±0.24): it prefers the reply without the hedge.
-- **Decision:** Built; Seminar rows re-run in the app; decision pending its judge read.
+- **Decision:** Kept: fix12 was promoted on its own holdout read.
 
 ### I26 — A typed "shorter" / "simpler" / "another one" revises the previous reply
 
@@ -267,7 +273,7 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 - **Why:** Typed refinement follow-ups came back as near-copies: "shorter" after a 50-word reply returned 49 words, after 112 words 97–101; "simpler please" 129–146 words for 132. Objectively, a "shorter" request was met 0 of 4 times on dev in the main-code run and in fix11 (0 of 3 on holdout). The resolver marks the turn a rephrasing request but nothing tells the model that the PREVIOUS REPLY is what to change, or by how much.
 - **Change:** The prompt composer adds a notice on those turns (typed only, resolver-marked, previous reply of 8+ words and no code): it names the last reply and its length and gives a budget — half the words for shorter, 70% for simpler, "a DIFFERENT one" for another one. Every other prompt is byte-identical.
 - **Evidence:** In the app: dev 8 of 8 refinement requests met (fix11: 1 of 8), "shorter" at a median 52% of the previous reply; holdout 4 of 4. No failed rows, validators unchanged.
-- **Decision:** Kept on the objective rule written before the runs. Not judged yet (the judge account ran out of quota).
+- **Decision:** Kept on the objective rule written before the runs. Judged 2026-10-02 against fix12 on the rows it re-ran: dev +1.13 (±0.79, 17 rows), holdout +1.07 (±1.62, 10 rows).
 
 ### Tried and rejected (not built, or reverted)
 
@@ -287,6 +293,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 - **I23 "what to say instead" rules for Looking for work:** +0.13 (±0.44); the judge capped the reframed motives too.
 - **I24 verifier stops after "UNSUPPORTED: none":** no latency gain (the cost is the round trip).
 - **A bigger generator (deepseek-v4-pro):** 7.61 vs 7.80 on the same prompts, more hard fails.
+- **I28 reasoning before a typed answer in Technical interview and Lecture (3b0c1a4f, fix15):** dev pair +0.18 (±0.25): rule not met. On every turn it read +0.45 / +0.42 with hard fails 14 → 9 and 12 → 6, at 1.3 s more to the first word (4.8 s at p95). Evin, 2026-10-02: not built — the point of Natively is to answer fast.
+- **Looking for work: the claim pass's fallback rule reworded (c399f399, fix14):** dev pair +0.15 (±0.33): rule not met.
+- **Call Center: "no policy on file" notice on heard turns (c399f399, fix16; re-tested as I29):** dev pair +0.42 (±0.48): rule not met. I29, on the final set's 116 Call Center rows in two halves, three samples per row: decision half +0.67 (±0.42) passed, confirmation half +0.18 (±0.25) failed. Not promoted.
+- **Sales: reply-shape notice on heard turns (c399f399, fix16):** dev pair +0.31 (±0.36): rule not met; in the app −0.09 dev, −0.20 holdout.
+- **Speed: stop awaiting the bundled rerank on heard turns:** measured: heard first word 1.08 s → 0.81 s, retrieved passages identical on 89 of 93 rows. Evin, 2026-10-03: keep as today.
+- **Speed: drop the legacy reference lookup that a V3 turn runs and discards:** about 0.19 s on heard turns with a reference file; touches the data-scope declaration. Evin, 2026-10-03: leave everything as it is. Not built.
 
 ### Harness-only changes that affect scores
 
@@ -310,6 +322,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can help with that. Can you give me the order number or the email address you used to place the order, so I can pull it up and check the return options for that doorbell camera?
 
 *Judge (v1): 10.0. No material issue; the response gathers order details and moves toward checking return options without promising eligibility, refunds, or timelines.*
+
+*Judge (v2): 10.0. No material issue. The reply gathers relevant order details and moves toward checking return options without asserting eligibility, policy, or refund authority.*
 
 **fix1**
 
@@ -367,6 +381,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The response appropriately gathers order details without asserting a return policy, refund entitlement, or timeline.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I'll check whether a return or refund is available for the doorbell camera and whether that can be done on this call.
+
+*Judge (v2): 8.3. The response safely avoids invented policies but merely promises to check; it gathers no order details and gives the customer no concrete next step.*
+
 ---
 
 #### DCC-002 — refund
@@ -388,6 +408,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* verify first, then check refund policy
 
 *Judge (v1): 8.9. The lengthy recital of contradictory internal policy puts avoidable complexity in front of an upset customer, and the verification/checking plan is repeated.*
+
+*Judge (v2): 9.0. The policy conflict is handled correctly, but quoting both rules and repeating verification makes the response longer and more process-focused than this frustrated customer needs.*
 
 **fix1**
 
@@ -457,6 +479,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.8 — important_question_unanswered. It correctly identifies the refund-policy conflict but leaves refund-to-card and same-day timing unaddressed. It also does not clearly commit to checking the current Knowledge Base before determining eligibility.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can help with that, and I'm sorry the charge caught you off guard. Before I can look at the account I need to verify you, so can you give me the date of birth on the account and the billing ZIP code?
+> 
+> On the refund itself, the policy I have in front of me is version 3.1, which is out of date, so I want to confirm the current rule rather than quote you the wrong one. What I can tell you is that annual plans are refundable within a window after the renewal charge, and your charge was three weeks ago, so you may well be inside it. I can't promise the money back on your card today or an email before you hang up until I've verified you and checked the current policy, but once I have, I'll tell you exactly what I can do and get the confirmation to you.
+>
+> *Summary chip:* verify first, then confirm refund rule
+
+*Judge (v2): 6.9 — reference_conflict_ignored. It declares v3.1 outdated without evidence and asserts annual-plan refundability despite the contradictory FAQ. Planning to check current policy is sensible, but does not justify that assurance. Verification and limits on timing promises are appropriate.*
+
 ---
 
 #### DCC-003 — shipping_issue
@@ -472,6 +504,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm sorry, that's frustrating. Since tracking shows it delivered, the first step is to give it 48 hours in case the carrier left it somewhere unexpected or it turns up. If it still hasn't shown up by then, I'll open a carrier trace on my end. Can you confirm the shipping address on the order so I can pull it up?
 
 *Judge (v1): 8.0. The reply risks restarting the 48-hour wait instead of checking elapsed time since Monday. Its shipping-address lookup assumption is unsupported, and collecting that address would not satisfy the required identity verification.*
+
+*Judge (v2): 7.0 — missed_available_evidence. It implies a future 48-hour wait without accounting for Monday’s delivery. The shipping-address request also does not initiate the handbook’s required identity verification, though it does not explicitly claim to replace it.*
 
 **fix1**
 
@@ -551,6 +585,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.2. The 48-hour wait isn’t anchored to Monday’s delivered scan, potentially implying an unnecessary new wait. Standard-shipping terms are irrelevant to a package already marked delivered and make the reply longer and less reassuring.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I'm sorry, that's frustrating. Before I look into it, I need to verify the account. Can you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app?
+
+*Judge (v2): 8.1 — missed_available_evidence. The verification request accurately follows policy, but the reply stops there without explaining the available missing-delivery process: wait 48 hours, then open a carrier trace.*
+
 ---
 
 #### DCC-004 — guarantee_demand
@@ -566,6 +606,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't guarantee a Friday delivery, and I won't promise a date I can't control. What I can do is check stock and the fastest shipping option to your address right now, and if it can't land before Friday morning, I'll tell you straight away so you have time to look at another option. Can I get your order number and the delivery ZIP code?
 
 *Judge (v1): 9.7. The response is immediately usable and avoids unsupported delivery promises. However, “I won't promise a date I can't control” sounds slightly defensive rather than acknowledging the customer's inspection deadline.*
+
+*Judge (v2): 9.7. No material issue. The phrase 'I won't promise a date I can't control' is slightly defensive, and the response could acknowledge the inspection urgency more warmly.*
 
 **fix1**
 
@@ -623,6 +665,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.2. The response appropriately avoids a guarantee and requests useful details, but “check how this is handled” is vague. It also loosely reframes arrival before Friday as Friday-morning arrival.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can't guarantee a Friday morning arrival, so I won't promise a date I can't stand behind. What I can do is check the fastest delivery option available to you and whether anything can be expedited, then confirm the earliest date in writing before you commit. Can I get your order or case number so I can look that up?
+
+*Judge (v2): 9.3. “Confirm the earliest date in writing before you commit” sounds firmer than an estimate and assumes a pending commitment. A brief acknowledgment of the inspection deadline would also improve empathy.*
+
 ---
 
 #### DCC-005 — login_problem
@@ -638,6 +686,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm sorry, that's frustrating. Let's get you back in. First, are you typing the password into the app or the website, and is it the same one you saved in your password manager? If you can, try typing it into a plain text field so we can see exactly what's being entered, then tell me what happens when you submit it.
 
 *Judge (v1): 4.0 — major_reasoning_error. Asking the customer to type their password into a plain-text field “so we can see” risks exposing credentials. The subsequent instruction to submit it is ambiguous and could encourage sending the password through an inappropriate channel.*
+
+*Judge (v2): 4.0 — major_reasoning_error. The central troubleshooting instruction risks exposing the password in plain text, with wording implying the agent should see it. Asking the customer to submit from that field is also confusing.*
 
 **fix1**
 
@@ -695,6 +745,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.1. The reply is speakable and appropriately empathetic, but overstates what error wording and response timing can establish. They do not necessarily distinguish incorrect credentials from account lockout.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I'm sorry, that's frustrating when you know the password is right. Let's narrow it down: is it saying the password is incorrect, or is it saying the account is locked or something else? And are you typing it on the app or on the website?
+
+*Judge (v2): 9.3. The error-message question partly repeats what the customer already reported. Clarifying the platform is useful, but the reply offers no immediate password-entry check.*
+
 ---
 
 #### DCC-006 — password_reset
@@ -710,6 +766,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can help with the reset, but I can't send a password reset link to a different email than the one on the account. That's to protect her account. Since she's right there with you, I can verify her identity with her directly, and then we'll send the reset to the email we have on file. Can you put her on so I can ask her a couple of quick questions?
 
 *Judge (v1): 4.0 — unsupported_policy_claim. Invents a registered-email-only reset policy and a direct-question verification process, then promises a reset. Asking the mother to take the call also disregards her stated hearing difficulty.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim, unsafe_commitment. Invents a registered-email-only reset rule and verification through quick questions, then promises a reset. Asking the mother to come on the phone also fails to accommodate the stated hearing difficulty.*
 
 **fix1**
 
@@ -765,6 +823,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — unsupported_policy_claim, important_question_unanswered. Invents a name/date-of-birth/email verification procedure without supporting policy and leaves the central request to send the reset link to a third party’s email unanswered.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I can help with the password reset. Let me check how this is handled when the account holder is on the call but can't hear, and whether the reset can be done on this call. Let me look into what's possible here.
+
+*Judge (v2): 8.9. Appropriately avoids inventing policy, but repeats the deferral and never explicitly addresses the central request to send the reset link to the caller’s email.*
+
 ---
 
 #### DCC-007 — shipping_issue
@@ -780,6 +844,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I hear you, and I'm sorry this has been sitting still for nine days. Let me pull up the tracking and the carrier scan history on my end right now, and I'll open a trace with the carrier from our side. Once I see where it last scanned, I'll tell you exactly what's happening and what we're doing next.
 
 *Judge (v1): 4.0 — unsupported_policy_claim. Promises a carrier-trace procedure without supporting evidence and guarantees an exact explanation that scan history may not provide. Responsibility remains implicit rather than clearly addressed.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim. Promises a carrier trace without evidence that this procedure is available and guarantees an exact explanation from scan history. It does not clearly distinguish unknown shipping responsibility from ownership of the customer's follow-up.*
 
 **fix1**
 
@@ -835,6 +901,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.1 — important_question_unanswered. The tracking check is a reasonable first step, but the response leaves responsibility and the runaround unaddressed. Promising to explain exactly what is happening also overstates what unchanged tracking may establish.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I hear you, and I'm sorry this has been sitting still for nine days. I can't confirm where the package is right now, so let me pull up the tracking and the carrier scan history and see what actually happened after it left us. Then I'll tell you who's responsible and what we can do for you today.
+
+*Judge (v2): 8.6. It offers a reasonable initial check but postpones responsibility without clearly owning the follow-up or acknowledging the runaround. Missing tracking scans also do not establish that the parcel has physically sat still.*
+
 ---
 
 #### DCC-008 — escalation
@@ -852,6 +924,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* escalate after first-line checks fail
 
 *Judge (v1): 4.0 — unsupported_policy_claim. It presents first-line checks, symptom confirmation, and trying a documented fix as required escalation steps, although no company policy or case details were supplied. The gist reinforces that unqualified rule.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim. Plausible general troubleshooting advice is presented as the applicable escalation procedure, including prerequisites and an instruction to try a documented fix first, despite no company policy or case details being available.*
 
 **fix1**
 
@@ -911,6 +985,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.5. The reply mainly defers and asks for context. It gives no provisional escalation guidance and offers to check queue-specific rules without establishing access to them.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Let me confirm the exact triggers rather than guess. In general, escalation tends to make sense when the issue needs access or permissions the agent doesn't have, when it's a suspected bug or outage, or when the customer's already been through the standard steps and it's still unresolved. Can you tell me which of those this call matches?
+
+*Judge (v2): 9.4. The general criteria are useful and appropriately qualified. Minor weakness: “Let me confirm” suggests verification without identifying a source, and the follow-up limits the agent to the listed categories.*
+
 ---
 
 #### DCC-009 — escalation
@@ -926,6 +1006,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have anything in front of me about your billing dispute experience, so I can't tell you what your record shows. What I can say is that when I handle a dispute, I start with the customer's account and the charge in question, confirm what they expected versus what posted, and work from there. If you want, tell me the specifics of what he's asking and I'll help you frame it.
 
 *Judge (v1): 7.1. The private acknowledgment of missing history is acceptable, but the answer stops short of clear customer reassurance. Its unmarked shift to “when I handle a dispute” also makes the intended speaker unclear.*
+
+*Judge (v2): 6.9. Acknowledging missing experience is appropriate privately, and the review process is sensible. However, it leaves the reassurance to the user to formulate. “When I handle a dispute” also blurs the assistant’s voice with the agent’s supposed experience.*
 
 **fix1**
 
@@ -983,6 +1065,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.1 — insufficient_answer. Acknowledging unavailable history is appropriate in this private reply, but stopping there leaves the agent without any usable reassurance for the customer.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I can't tell you what your experience is there. What I can say is how I'd handle one: I'd pull up the account, walk through the charges line by line, and get to a clear answer on what's owed and why. If you want, tell me the specifics and I'll help you frame it.
+
+*Judge (v2): 8.7. The process advice is useful and avoids fabrication, but the blunt opening and offer to help later fall short of a concrete reassurance the agent can use with the customer.*
+
 ---
 
 #### DCC-010 — data_privacy
@@ -998,6 +1086,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > No, nobody here can see inside your home. Your cameras stream to your account, and our team can't pull up that live video. What we can see is your device status and connection health, so if something's not working I can check that. Can you tell me what you're seeing on your end?
 
 *Judge (v1): 4.0 — unsupported_company_claim, unsupported_policy_claim. It invents a categorical privacy guarantee, denies employee access to live video, and asserts device-telemetry visibility without evidence. The closing troubleshooting question also diverts from the customer's privacy concern.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. It invents categorical assurances that employees cannot view camera feeds and claims access to device diagnostics without supporting evidence. The troubleshooting question also redirects away from the customer's privacy concern.*
 
 **fix1**
 
@@ -1057,6 +1147,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — unsupported_company_claim. The categorical denial invents a consequential privacy assurance: no evidence establishes whether company employees can access live camera feeds. The follow-up question does not repair that unsupported claim.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I can't tell you what anyone here can see right now, so let me check how that's handled and come back to you. In the meantime, can you tell me what you're seeing on your end, is there a device or a user on the account you don't recognize?
+
+*Judge (v2): 8.9. "I can't tell you what anyone here can see" sounds withholding and may heighten privacy fears. The unfamiliar-device question pivots to suspected account compromise without any indication that this prompted the customer's concern.*
+
 ---
 
 #### DCC-011 — data_privacy
@@ -1072,6 +1168,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't delete recordings on this call, and I don't have anything here that tells me how your recordings are handled or what the deletion process is. What I can do is get this to the right team so it's handled properly. Can you confirm the address the recordings are tied to, and whether you're the account holder?
 
 *Judge (v1): 4.0 — unsupported_policy_claim, ai_epistemic_leak. It invents a no-deletion-on-call limitation, escalation capability, and verification steps despite having no relevant policy. It also exposes missing-reference information in customer-facing speech.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim, ai_epistemic_leak. The answer asserts that on-call deletion is impossible without evidence, introduces unsupported address/account-holder verification, and exposes missing documentation rather than expressing uncertainty naturally.*
 
 **fix1**
 
@@ -1129,6 +1227,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — unsupported_policy_claim, important_question_unanswered. It introduces an unsupported account/address-based retrieval step and leaves immediate, comprehensive deletion unaddressed. Although it does not explicitly promise deletion, it also does not clarify that feasibility needs checking.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I can help with that. First, can you confirm the account or address those recordings are linked to, so I'm pulling up the correct records?
+
+*Judge (v2): 4.0 — unsupported_policy_claim, important_question_unanswered. It introduces an unsupported account/address confirmation and records-lookup procedure, while leaving unanswered whether every recording can be deleted during this call.*
+
 ---
 
 #### DCC-012 — unsupported_request
@@ -1144,6 +1248,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't log into your camera or any of your accounts, so I'm not able to check on your dog for you. What I can do is help with the camera itself, so if you tell me the app or brand and what you're seeing when you try to open the live view, I'll walk you through getting it working from your phone.
 
 *Judge (v1): 4.0 — unsupported_company_claim. It states an unverified account-access limitation as fact and assumes the live view needs fixing, although the customer only asked someone to check on the dog.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. The blanket claim that the agent cannot access any customer accounts is unsupported. The otherwise useful reply also pivots to fixing live view without establishing that anything is malfunctioning.*
 
 **fix1**
 
@@ -1201,6 +1307,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. The troubleshooting question slightly presumes an app or live-view problem, although the customer has only said they are stuck at work.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I can't check on your dog for you. Is the camera showing as online in your app right now?
+
+*Judge (v2): 9.0. The refusal is blunt, and the online-status question only indirectly addresses the customer's goal. It would be more reassuring and useful to explicitly offer help checking the feed themselves.*
+
 ---
 
 #### DCC-013 — unsupported_request
@@ -1216,6 +1328,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't shut off a camera or give out an owner's name, and I'd tell him that plainly. What I can do is take his details and the camera's location, and pass it to the team that handles these requests. If he wants to involve police, that's his call, and we'll cooperate with whatever they send us.
 
 *Judge (v1): 4.0 — unsupported_policy_claim, unsafe_commitment. Invents an escalation team and intake procedure, then promises cooperation with whatever police send. No company guidance supports these commitments, and the reply offers little acknowledgment of the customer's privacy concern.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim, unsafe_commitment. It assumes an established complaint-handling team and escalation process, then promises cooperation with whatever police send without evidence of company authority or applicable safeguards. It also barely acknowledges the caller's privacy concern.*
 
 **fix1**
 
@@ -1273,6 +1387,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 6.3 — important_question_unanswered. The answer avoids unsupported promises but never addresses either demand or the police threat. Its third-person wording and repeated contact-detail collection leave the agent without a clear customer-facing reply.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I'd tell him plainly that I can't shut off a neighbor's camera or hand over an owner's name, and I'd take his details and the camera's location so I can check how these requests are handled and come back to him. If he wants to involve the police, that's his call.
+
+*Judge (v2): 8.8. The advice sets sensible boundaries and proposes checking the actual process, but omits acknowledgment of the privacy concern. The police sentence is blunt and offers little help de-escalating the caller.*
+
 ---
 
 #### DCC-014 — subscription_cancel
@@ -1288,6 +1408,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I hear you, and I won't try to sell you anything. Let me pull up your account so I can start the cancellation. Can you confirm the email address or account number on the account?
 
 *Judge (v1): 4.0 — unsupported_policy_claim. The acknowledgement is appropriate, but the answer invents an email/account-number confirmation workflow for initiating cancellation without any supplied company procedure.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim. The acknowledgment is appropriate, but email-or-account-number confirmation is introduced as a cancellation intake step without any supplied procedure supporting it. The response does avoid promising completion today.*
 
 **fix1**
 
@@ -1345,6 +1467,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — unsupported_policy_claim. The answer invents mandatory account verification and specific identity fields without policy evidence. It appropriately avoids a sales pitch, but its central next step may misrepresent the company’s process.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I hear you, and I won't pitch you anything. I can't confirm on this call whether a cancellation can take effect today or whether any refund or credit would apply, so let me check both of those for you. Can I ask what's prompted this, so I can note it accurately?
+
+*Judge (v2): 8.0. The refund discussion and question about leaving add friction when the customer wants immediate cancellation without a pitch. Saying confirmation is unavailable “on this call” also introduces an unnecessary limitation.*
+
 ---
 
 #### DCC-015 — subscription_cancel
@@ -1360,6 +1488,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't authorize a discount on this call, so let me check what retention options are available for her account and confirm the right process before I offer anything. In the meantime, can you tell me what she's asking for specifically?
 
 *Judge (v1): 6.9. The response appropriately avoids approving an unsupported discount, but blurs roles by promising to check the account and offer something itself. It asks about the customer's request rather than the policy needed to establish the agent's authority.*
+
+*Judge (v2): 7.1. It appropriately avoids promising a discount, but blurs roles by saying the copilot will check the account and make the offer. It does not clearly explain what determines whether the agent may offer one.*
 
 **fix1**
 
@@ -1417,6 +1547,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.5. It appropriately avoids inventing discount authority, but merely promises a later check instead of giving the agent an immediate decision rule or actionable advice.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Let me check what retention offers are available on her account and whether it needs a supervisor's approval, then I'll come back to you with the options.
+
+*Judge (v2): 6.9. It avoids inventing a discount but substitutes a promise to investigate for actionable guidance to the agent. It also implies account access and follow-up capability that are not established.*
+
 ---
 
 #### DCC-016 — duplicate_charge
@@ -1432,6 +1568,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can help with that. First I need to verify the account, so could you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card, or the 6-digit Support PIN from Settings > Support in the app?
 
 *Judge (v1): 8.6. Verification is policy-compliant, but the reply provides no charge-specific explanation or billing-console next step and omits the documented pending-authorization possibility and 3–5 days timeframe.*
+
+*Judge (v2): 8.5 — missed_available_evidence. The verification request is accurate and immediately usable, but it omits the available duplicate-charge explanation, billing-console check, and pending-authorization timeline.*
 
 **fix1**
 
@@ -1493,6 +1631,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.6 — missed_available_evidence. The verification request is accurate and appropriate, but the answer omits the available duplicate-charge explanation: one charge could be a pending authorization that drops off within 3–5 business days.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can help with that. Before I look at the account, I need to verify you first. Can you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app?
+
+*Judge (v2): 8.6 — missed_available_evidence. The verification request correctly follows policy, but the response omits the available duplicate-charge explanation: one charge may be a pending authorization that drops off within 3–5 business days.*
+
 ---
 
 #### DCC-017 — duplicate_charge
@@ -1508,6 +1652,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Let me pull up your account and look at those charges with you. The two 12.99 charges on the 3rd usually mean a duplicate or a second subscription on the same card, and the 29.99 on the 5th could be an add-on or a separate plan. Can you confirm the last four digits of the card and the email on the account so I can see exactly what's billing?
 
 *Judge (v1): 4.0 — unsupported_policy_claim, important_question_unanswered. Invents a verification step requiring card digits and account email, speculates about billing causes, and leaves the customer's explicit refund request unaddressed.*
+
+*Judge (v2): 4.0 — unsupported_company_claim, unsupported_policy_claim, important_question_unanswered. Claims an unsupported usual explanation for the repeated charges, invents a card/email verification step, and leaves the refund request unaddressed.*
 
 **fix1**
 
@@ -1563,6 +1709,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.0. The reply avoids invented charge explanations and refund promises, but doesn't distinguish possible duplicate billing from the unrecognized charge or explicitly acknowledge the refund request. The email/account-number question also assumes an unstated lookup process.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Thanks for flagging those, the two 12.99 charges on the 3rd and the 29.99 on the 5th. I'll check how those are handled and come back to you. In the meantime, does the 29.99 on the 5th show any description next to it, like a name or a short label?
+
+*Judge (v2): 8.4 — important_question_unanswered. The question about the $29.99 description is useful, but the response ignores the explicit refund request and gives only a vague deferral for the two $12.99 charges.*
+
 ---
 
 #### DCC-018 — policy_restriction
@@ -1580,6 +1732,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Once that's done, I'll pull up the account's credit history and the notes from your call last Tuesday and see exactly what was approved. I can't apply a credit until I've confirmed it's there and that it's eligible, so let's start with the verification.
 
 *Judge (v1): 7.9 — missed_available_evidence. Correctly verifies identity and avoids promising $50, but omits the explicit up-to-$20, one-per-12-month goodwill limit, leaving the central authority mismatch unexplained.*
+
+*Judge (v2): 7.7 — missed_available_evidence. Verification and record checks are appropriate, but the answer omits the explicit goodwill limit. It leaves unclear that finding a prior $50 approval would not itself establish Tier 1 authority to apply it.*
 
 **fix1**
 
@@ -1639,6 +1793,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.2. The reply repeats the account-review step and leaves the next step unclear if the notes confirm a $50 promise beyond the agent's authority.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I'm sorry it didn't land. I can't apply a credit just on the note, so let me check the account's credit history and what was logged from that call. Before I go further, I do need to verify you on the account: can you give me the full name on the account plus two of the email address on file, the last four digits of the card, or the six-digit Support PIN from the app?
+
+*Judge (v2): 8.1. The reply correctly requests verification and checks credit history, but omits the supplied $20/12-month goodwill limit, leaving the customer's demand for $50 only vaguely addressed.*
+
 ---
 
 #### DCC-019 — manager_request
@@ -1654,6 +1814,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I understand you want to speak with a manager. I'm not able to bring one onto this call right now, but I can escalate this for you. Before I do, can you tell me what's gone wrong so I can pass along the full picture?
 
 *Judge (v1): 4.0 — unsupported_company_claim, unsupported_policy_claim. Invents that a manager cannot join the call and promises an escalation without supporting evidence about availability or procedures, potentially obstructing the customer's request.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. The response invents that a manager cannot join the call. It then redirects the customer to explain the issue before escalation rather than checking whether the requested manager is available.*
 
 **fix1**
 
@@ -1709,6 +1871,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.9. Asking for an explanation “before” involving a manager can sound like a barrier to escalation. Offering to resolve it personally also slightly redirects the customer’s explicit request.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I understand you want to speak with a manager. Whether a manager is available to take this call can't be confirmed right now, so let me check on that and come back to you. In the meantime, can you tell me what's gone wrong so I can start looking into it?
+
+*Judge (v2): 8.9. The availability disclaimer is awkward and unnecessarily cautious. The troubleshooting question may feel like friction after a direct escalation request, although it does not make escalation conditional.*
+
 ---
 
 #### DCC-020 — call_closing
@@ -1724,6 +1892,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Perfect, glad the camera's back up. Before I let you go, is the picture staying steady now, or did it drop out again at any point? If it's holding, you're all set, and good luck to your son at the semifinal.
 
 *Judge (v1): 9.4. The additional stability question unnecessarily reopens troubleshooting after the customer confirms resolution and signals the call is finished, especially given their earlier time pressure.*
+
+*Judge (v2): 9.1. The extra picture-stability question reopens troubleshooting after the customer indicates everything is resolved, despite their stated time pressure.*
 
 **fix1**
 
@@ -1781,6 +1951,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.1. It reopens troubleshooting and suggests another minute of waiting after the customer signals resolution, despite their time pressure. It misses an opportunity for a brief, warm goodbye acknowledging the semifinal.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Perfect, glad the camera's back. Before you go, is everything else working the way it should, or is there anything still off that we didn't get to? If not, you're all set.
+
+*Judge (v2): 9.1. The extra diagnostic question reopens a call the customer has already signaled is finished, despite their time pressure. A simple warm goodbye would better fit the moment.*
+
 ---
 
 #### DCC-021 — call_closing
@@ -1796,6 +1972,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Thanks for your patience today. I've confirmed the replacement is on the way, and your ticket number is on the confirmation going to you now. Once it arrives, you'll get a short survey about this call, and any feedback there helps us a lot.
 
 *Judge (v1): 4.0 — unsupported_company_claim, important_question_unanswered. It invents a confirmation being sent immediately and a survey triggered by its arrival, while never supplying the requested ticket number or a placeholder.*
+
+*Judge (v2): 4.0 — unsupported_company_claim, important_question_unanswered. It invents a confirmation being sent now and a survey trigger, while never actually giving the ticket number or including a placeholder for it.*
 
 **fix1**
 
@@ -1853,6 +2031,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.4 — insufficient_answer. It announces confirmation and ticket delivery rather than clearly completing them with a ticket-number placeholder. It also assumes post-call survey timing and places another closing sentence after the requested final survey mention.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Glad that's sorted for you. Let me confirm the replacement is on its way and get you your ticket number. You'll get a short survey after we hang up. Anything else before I let you go?
+
+*Judge (v2): 7.4 — insufficient_answer. It postpones the replacement confirmation rather than delivering it, omits a ticket-number placeholder, and asserts unsupported survey timing. The survey also isn't the final part of the close.*
+
 ---
 
 #### DCC-022 — unrelated_question
@@ -1868,6 +2052,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm based in the Philippines, so I'm working remotely with the team here. Happy to talk through how that works for coverage and handoffs if that's useful. What's the issue you're running into today?
 
 *Judge (v1): 4.3 — unsupported_personal_claim. The reply invents a Philippines location and remote work arrangement without permitted evidence. The offer to explain coverage and handoffs is also poorly matched to the customer's concern.*
+
+*Judge (v2): 4.1 — unsupported_personal_claim. The response invents a Philippines location and remote-working arrangement without permitted evidence. Discussing coverage and handoffs also distracts from the customer's concern rather than helping resolve it.*
 
 **fix1** — edited after streaming
 
@@ -1925,6 +2111,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 5.5 — ai_epistemic_leak. “Confirm where I'm based” exposes missing copilot context as implausible uncertainty about the agent's own location. The unrelated callback question dodges the concern and risks increasing the customer's distrust.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I'll confirm where I'm based and come back to you on it. In the meantime, can you tell me what's going wrong so I can get it sorted for you?
+
+*Judge (v2): 7.5 — ai_epistemic_leak. Promising to confirm the agent’s own location exposes missing personal context through implausible self-uncertainty. It sounds evasive and risks worsening customer distrust, although the troubleshooting question is useful.*
+
 ---
 
 #### DCC-023 — unrelated_question
@@ -1940,6 +2132,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I've been on this team a good while, and I work these issues every day, so I'm confident we can get this sorted. What's happening on your end right now, and what have you already tried?
 
 *Judge (v1): 5.0 — unsupported_personal_claim. Invents the agent's tenure and daily experience with these issues. Neither claim has permitted evidentiary support. The troubleshooting questions are otherwise concise, natural, and appropriate.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “A good while” and “I work these issues every day” invent the agent’s tenure and experience. The diagnostic follow-up is useful, but the reassurance depends on unsupported biography.*
 
 **fix1**
 
@@ -1997,6 +2191,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.9. This is a useful, truthful fallback rather than a direct tenure answer. The opening is slightly rhetorical, and “until it’s actually fixed” creates an unnecessarily open-ended expectation.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Fair question, and I'd rather earn your confidence than claim it. What I can tell you is I'll stay on this with you until we've got it sorted, and I'll be straight with you about what I can confirm and what I need to check. So walk me through what's happening, and let's start there.
+
+*Judge (v2): 9.2. This is a useful, truthful fallback, but the opening sounds somewhat scripted, and promising to stay until resolution is broader than necessary.*
+
 ---
 
 #### DCC-024 — angry_customer
@@ -2012,6 +2212,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I hear you, and forty minutes on hold is genuinely not okay. Let me get this sorted right now. I'm pulling up your account so I can see exactly what you're signed up for and what you were charged, and I'll walk you through what I find. Can you give me the email on the account?
 
 *Judge (v1): 4.0 — unsupported_policy_claim, unsafe_commitment. Promises resolution “right now” and invents an in-progress account lookup and email-collection step without supporting evidence. It acknowledges the wait but does not specifically recognize the disputed Protect Plus charge.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim, unsafe_commitment. The acknowledgment helps, but “sorted right now” promises unsupported immediate resolution. The response also invents an account-lookup/email procedure and misses the opportunity to acknowledge Protect Plus specifically.*
 
 **fix1**
 
@@ -2067,6 +2269,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.5. It acknowledges the wait but not the Protect Plus/basic-plan dispute. The account-identifier request introduces an unestablished lookup step and shifts into generic troubleshooting rather than delivering the requested brief de-escalation.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I hear you, and forty minutes on hold is genuinely not okay. Let me get this sorted right now. You're saying you were charged for Protect Plus when you only signed up for the basic plan, is that right? I want to pull up your account and look at exactly what you were billed, so can you give me the email or account number on the account?
+
+*Judge (v2): 4.0 — unsafe_commitment, unsupported_policy_claim. The empathy uses the right details, but “sorted right now” implies immediate billing resolution without authority. Requesting an email or account number introduces an unsupported lookup procedure, and the redundant confirmation dilutes the calming response.*
+
 ---
 
 #### DCC-025 — troubleshooting
@@ -2084,6 +2292,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* solid red means firmware failure, escalate
 
 *Judge (v1): 9.0. It proposes a power cycle without checking whether the customer already attempted one, which could inadvertently exceed the guide's one-cycle limit.*
+
+*Judge (v2): 9.3. The diagnosis and escalation guidance are accurate, but it recommends a power cycle without checking whether one has already been attempted, potentially exceeding the guide's one-cycle limit.*
 
 **fix1**
 
@@ -2153,6 +2363,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.1. It recommends a power cycle without checking whether one has already been attempted, and omits the two-minute wait before assessing the light.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> A solid red light on the Cam 2 means a firmware failure. Tell him not to attempt more than one power cycle for that, so if he's already tried unplugging it, we go straight to escalation.
+> 
+> Ask him to unplug it for 10 seconds and plug it back in just once, then wait 2 minutes. If it's still solid red after that, I'll escalate it to Tier 2 for an RMA. Tier 2 confirms the warranty and ships it.
+
+*Judge (v2): 9.4. The second paragraph repeats the restart instruction without explicitly restricting it to customers who have not already tried one. The earlier caveat mitigates this minor ambiguity.*
+
 ---
 
 #### DCC-026 — login_problem
@@ -2168,6 +2386,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm sorry, that's frustrating. Let's get you back in. First, can you check which version of the Harborline app you're on? There's a known token bug in versions before 6.3 that causes exactly this login loop, so updating the app is the first thing to try.
 
 *Judge (v1): 8.5. It correctly identifies the version bug but stops at checking/updating the app, omitting the documented cache-clearing step and the guide’s required opening checks.*
+
+*Judge (v2): 8.8. The reply correctly identifies the known bug but stops at checking/updating the version, omitting the prescribed cache-clearing step. It also skips the guide’s required opening device, status-light, and last-worked checks.*
 
 **fix1**
 
@@ -2225,6 +2445,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.6 — missed_available_evidence. The update advice is correct and immediately speakable, but it omits cache clearing, leaving the documented fix incomplete. It also skips the required device, status-light, and last-worked checks.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I'm sorry, that's frustrating. That login loop is a known issue in older versions of the app, so let's start there: can you check whether the Harborline app is on version 6.3 or later, and update it if it isn't? Once that's done, clear the app cache, and on Android that's Settings, then Apps, then Harborline, then Storage, and on iOS it's offloading and reinstalling the app. If it still loops after that, tell me and we'll go further.
+>
+> *Summary chip:* update app, clear cache
+
+*Judge (v2): 9.5. The troubleshooting is accurate and immediately speakable, but it skips the guide’s required opening questions about the device, status light, and when it last worked.*
+
 ---
 
 #### DCC-027 — refund
@@ -2242,6 +2470,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* verify caller, then handle refund
 
 *Judge (v1): 7.5 — missed_available_evidence, important_question_unanswered. The reply accurately requests verification but never addresses the refund demand. The supplied policy permits explaining the 30-day delivery-based window and replacement-only remedy afterward without accessing account details.*
+
+*Judge (v2): 7.5 — missed_available_evidence, important_question_unanswered. Verification is accurate, but the reply never addresses the refund demand or explains the available remedy. General refund and warranty terms could be explained without discussing account details.*
 
 **fix1**
 
@@ -2319,6 +2549,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.0. The refund wording awkwardly ties 'bought' to the delivery window, and verification requests the payment card rather than the card on file. Repeated verification language makes the reply longer than necessary.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Let me start with a couple of details. Can you give me the full name on the account, plus two of these: the email address on file, the last four digits of the card you paid with, or the 6-digit Support PIN from Settings > Support in the app?
+
+*Judge (v2): 7.1 — missed_available_evidence, important_question_unanswered. Verification is appropriate, but the response never addresses the refund demand or explains the available 30-day refund rule and replacement-only warranty remedy.*
+
 ---
 
 #### DCC-028 — angry_customer
@@ -2334,6 +2570,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't look at or change anything on an account until I've verified who I'm speaking with, and that check needs the full name on the account plus two of the email on file, the last four digits of the card, or the Support PIN from Settings, then Support. It's the same for every caller, so once you give me those I can pull up the order and see what we can do about the camera.
 
 *Judge (v1): 7.4 — missed_available_evidence. It plausibly interprets “Why not?” as about verification, but repeats the checklist rather than giving a clear reason and omits the relevant refund-versus-warranty explanation.*
+
+*Judge (v2): 7.1 — missed_available_evidence. The reply coherently addresses the immediately preceding verification request, but repeats the checklist rather than giving a useful reason. It also leaves the refund concern unresolved despite the available refund and warranty policy.*
 
 **fix1**
 
@@ -2403,6 +2641,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.9. It omits the explicit 1-year limited warranty term and adds defensive filler. “Later than you think” needlessly suggests the customer misremembered, although they only supplied the purchase date.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can't discuss the account until I've verified who I'm speaking with, so the name plus two of those details is where we have to start. On the refund itself, hardware is fully refundable within 30 days of delivery, and after that a defective unit under the one-year warranty is replaced rather than refunded. You're at five weeks, so let's get you verified and I'll pull up the order and see exactly where it falls.
+
+*Judge (v2): 9.2. The policy explanation is sound, but repeating the verification demand makes the reply more procedural than necessary. The warranty description also omits the policy’s qualifier “limited.”*
+
 ---
 
 #### DCC-029 — billing
@@ -2418,6 +2662,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't promise a credit before I've checked the account, and I can't check anything until you're verified. Give me the full name on the account plus two of the email on file, the last four digits of the card, or the Support PIN from Settings, then Support, and I'll pull up the order and see what we can do.
 
 *Judge (v1): 7.2 — missed_available_evidence. Safely avoids promising a credit but repeats verification for the third time instead of explaining the known $20 ceiling and eligibility restrictions. A faulty camera alone is not a qualifying service failure.*
+
+*Judge (v2): 7.3 — missed_available_evidence. Correctly avoids promising a credit, but repeats verification rather than explaining the available credit policy. It leaves the customer expecting that account access might establish eligibility for compensation merely for the broken camera.*
 
 **fix1**
 
@@ -2481,6 +2727,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.7. The reply correctly avoids promising a credit, but omits the $20 cap and leaves unclear that the failed camera alone does not qualify under the two permitted service-failure categories.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can look at a goodwill credit, but I have to be straight with you: it's up to $20, once per account in a 12-month period, and only for a documented service failure like a cloud outage over four hours or a missed delivery window. I can't promise it before I check the account. So let's get you verified, and I'll pull up the order and the credit history together.
+
+*Judge (v2): 9.0. It accurately states the limits and avoids promising credit, but presents the qualifying events as examples without clarifying that the reported hardware failure alone is ineligible.*
+
 ---
 
 #### DCC-030 — account_verification
@@ -2498,6 +2750,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* verify name plus two identifiers
 
 *Judge (v1): 9.7. The script accurately covers verification, but the private response lacks an explicit agent-facing reminder never to read identifiers out to the caller.*
+
+*Judge (v2): 9.5. The script correctly requests every required verification element. A private reminder never to read identifiers aloud would improve procedural completeness; the policy restricts discussing details, not looking at the account.*
 
 **fix1**
 
@@ -2581,6 +2835,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.5. The policy guidance is accurate and complete for this inquiry, but first-person narration is slightly awkward for private advice, and no customer-facing verification question is provided.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Before we go into any account detail, I need to verify him: the full name on the account plus two of these, the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app. He has to give me the information, I can't read it out to him. If he's not the account holder, I can only help him if he's listed as a household member.
+> 
+> Once he's verified, tell me what the charge looks like, the amount and the date, and I'll pull up the billing console. If it's two identical charges within 24 hours, one is often just a pending authorization that drops off on its own in 3 to 5 business days, and if it's a confirmed duplicate settled charge I can refund it.
+>
+> *Summary chip:* verify name plus two, then check billing
+
+*Judge (v2): 8.2. Verification instructions are accurate, but the first-person guidance blurs agent and copilot responsibilities. The unsolicited billing paragraph implies copilot console access and adds an unsupported claim that duplicate-looking charges are often pending authorizations.*
+
 ---
 
 #### DCC-031 — account_verification
@@ -2598,6 +2862,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no email or PIN, open AR-1 recovery
 
 *Judge (v1): 4.0 — major_reasoning_error, missed_available_evidence. Email access is not required for basic verification: full name, the email address on file and card last four suffice. The response wrongly defers the charge inquiry and mixes private guidance with awkward customer-facing pronouns.*
+
+*Judge (v2): 7.3 — missed_available_evidence. It rules out phone verification even though remembering the on-file email, together with the full name and card’s last four, may suffice. First-person promises about “him” also blur agent guidance and customer-facing speech.*
 
 **fix1**
 
@@ -2673,6 +2939,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.6. The recovery steps and timeline are correct, but the answer mixes private guidance with customer scripting: “him” addresses the agent, while “I'll open” and the closing question adopt the agent's voice.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I understand this is frustrating, and I want to get him sorted out. Since he can't access the email on file and doesn't have the app for a Support PIN, the route here is an Account Recovery case. I'll open form AR-1 and he'll get a secure upload link for a government photo ID. Trust & Safety reviews those within 3 business days, and I can't speed that up or change the email on the call.
+> 
+> If he can give me the last 4 digits of the card on file, that plus the name on the account gets him verified for the charge question right now, and we can handle the recovery separately.
+
+*Judge (v2): 4.0 — unsupported_policy_claim, major_reasoning_error, missed_available_evidence. The final paragraph incorrectly treats full name plus card last four as sufficient verification. Policy requires two factors in addition to the name; following this advice could disclose account details to an unverified caller.*
+
 ---
 
 #### DCC-032 — password_reset
@@ -2688,6 +2962,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't send a password reset by text, so let's get you back in another way. Can you confirm the email address on the account for me? Once I've verified it, I'll walk you through the reset options that don't need your computer.
 
 *Judge (v1): 4.0 — unsupported_policy_claim. It invents a restriction on text resets, an email-verification step, and available computer-free recovery options. No supplied policy supports those claims.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim. It asserts SMS resets are unavailable and assumes an email-verification process and alternative reset methods, none of which are supported by supplied policy.*
 
 **fix1**
 
@@ -2745,6 +3021,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.8. The response avoids promising unsupported reset capabilities, but only vaguely addresses the text request. Asking for both identifiers before clarifying SMS availability adds potentially unnecessary friction.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I hear you, you need a password reset and you're not near your computer or your email. Let me check whether that can be done by text, and I'll come back to you on it.
+
+*Judge (v2): 9.4. The response appropriately avoids inventing reset capabilities. Its opening unnecessarily repeats the customer's situation, and 'come back to you' is less clear than framing the check as the immediate next step.*
+
 ---
 
 #### DCC-033 — policy_restriction
@@ -2760,6 +3042,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I understand it's your account, and I'm not questioning that. I just can't send a reset by text, and I do need to verify the account before I can help you back in. Can you confirm the email address on the account for me?
 
 *Judge (v1): 4.0 — unsupported_policy_claim. It reinforces unsupported claims that SMS resets are unavailable and email confirmation is required. The earlier copilot answer is not independent evidence of company policy.*
+
+*Judge (v2): 4.0 — unsupported_policy_claim. It repeats an unsupported SMS-reset restriction and prescribes an email-based verification step. The earlier Natively-generated answer does not independently establish company policy or authorized recovery procedures.*
 
 **fix1**
 
@@ -2819,6 +3103,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.0. The reply is safe and speakable, but largely repeats the previous response. “How a reset is handled from there” is vague and does not clearly address the customer’s assumption that ownership settles whether a text reset is available.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I understand it's your account, and I'm not questioning that. I just can't confirm yet whether a reset can go out by text, so let me check whether that's something we can do on this call and come back to you.
+
+*Judge (v2): 9.6. No material issue. The second sentence is slightly wordy and repeats the earlier promise to check.*
+
 ---
 
 #### DCC-034 — service_outage
@@ -2834,6 +3124,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm sorry about that, let's get you back up. I can't confirm a system-wide outage from here, so let me check that first. In the meantime, are all your cameras showing offline in the app, or are some still live?
 
 *Judge (v1): 9.6. Asking whether some cameras are still live partly repeats what the customer already answered. Asking for the displayed error would make the diagnostic follow-up sharper.*
+
+*Judge (v2): 9.7. Asking whether some cameras are still live partly repeats what the customer already answered. Distinguishing an offline status from another error would make the diagnostic question more useful.*
 
 **fix1**
 
@@ -2891,6 +3183,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.3 — important_question_unanswered. The reply is empathetic and avoids inventing outage status, but it bypasses the customer's system-wide outage question. It also asks about recorder lights before establishing that the customer has a recorder.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I'm sorry, that's a frustrating morning. I can't confirm yet whether it's a wider outage or something on your side, so let me check that first. While I do, are all the cameras showing the same thing, or is it just some of them?
+
+*Judge (v2): 9.4. The final question is ambiguous: it could sound like asking whether only some cameras failed, although the customer already said none work. Asking explicitly about the error or status would be clearer.*
+
 ---
 
 #### DCC-035 — service_outage
@@ -2906,6 +3204,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't give you a time yet, and I won't guess at one. I'm checking whether this is on our side right now, and I need one thing from you first: are all your cameras showing offline in the app, or are some still live?
 
 *Judge (v1): 9.6. No material issue. “I won't guess at one” sounds slightly defensive, and the second sentence could be tighter.*
+
+*Judge (v2): 9.7. No substantive issue; “I won't guess at one” may sound slightly defensive to a frustrated customer.*
 
 **fix1**
 
@@ -2963,6 +3263,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.4. It avoids inventing an ETA and advances troubleshooting, but “those two answers” sounds slightly impatient, and the recorder-lights question should be conditional on a recorder being present.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can't give you a time yet, and I don't want to guess. I'm checking whether this is a wider outage or something on your side right now. Are all the cameras showing the same thing, or just some of them?
+
+*Judge (v2): 9.1. It appropriately avoids an unsupported ETA, but repeats the previous outage explanation and exact diagnostic question, making the exchange feel stalled.*
+
 ---
 
 #### DCC-036 — billing
@@ -2978,6 +3284,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't confirm a credit for today from here, and I won't promise one I can't stand behind. What I can do is get this logged and check what you're eligible for once we know what caused it. First, are all your cameras offline in the app, or are some still live?
 
 *Judge (v1): 7.8. It appropriately avoids promising compensation, but repeats the same troubleshooting question a third time and unnecessarily makes checking eligibility contingent on identifying the cause. The wording also sounds somewhat defensive.*
+
+*Judge (v2): 8.4. It appropriately avoids promising reimbursement, but substitutes credit for money back and repeats the same diagnostic question a third time. The defensive wording and repeated pivot weaken its responsiveness to the compensation concern.*
 
 **fix1**
 
@@ -3035,6 +3343,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — important_question_unanswered, unsupported_policy_claim. The money-back question goes unanswered. Instead, the response redirects to documentation and assumes an account-number lookup procedure that the available evidence does not establish.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can't confirm a refund for today yet, and I don't want to promise something I can't back up. What I'll do is check whether a refund or credit is available for today and whether it can be handled on this call, and I'll come back to you with a straight answer. In the meantime, are all the cameras showing the same thing, or just some of them?
+
+*Judge (v2): 8.7. The refund response avoids unsupported promises, but repeats the camera question for the third time despite the customer's initial report that none work. This distracts from compensation and risks sounding scripted.*
+
 ---
 
 #### DCC-037 — manager_request
@@ -3050,6 +3364,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can get a supervisor request raised for you right now. Before I do, can you confirm your date of birth and billing ZIP code so I can pull up the account?
 
 *Judge (v1): 7.6 — important_question_unanswered. The response offers escalation and uses supported verification details, but never addresses the customer's central demand for a callback within one hour. It also gives no indication that the conflicting callback guidance needs checking.*
+
+*Judge (v2): 7.9 — important_question_unanswered. The response offers escalation and uses documented verification fields, but never addresses the customer's repeated one-hour demand. It avoids an unsafe promise without managing expectations about callback timing.*
 
 **fix1**
 
@@ -3107,6 +3423,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.1 — important_question_unanswered. The reply offers escalation but never addresses the customer's emphatic one-hour deadline. Verification details are grounded, but substituting verification for any acknowledgment or clarification of callback timing leaves the central demand unresolved.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can get a supervisor request in for you right now. Before I do, let me confirm the callback window, because I want to give you the right time rather than promise something I can't hold to. Can I grab your date of birth and billing ZIP so I can pull up the account and log this properly?
+
+*Judge (v2): 9.4. No material error: it avoids the conflicting callback guarantees and uses documented verification fields. It could acknowledge the one-hour request more directly; 'before I do' makes escalation sound delayed pending timing confirmation.*
+
 ---
 
 #### DCC-038 — guarantee_demand
@@ -3122,6 +3444,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have a specific clock time I can promise you, so I won't guess at one. What I can do is raise the supervisor request right now and note on the ticket that you're asking for a callback within the hour. Before I do that, can you confirm your date of birth and billing ZIP code so I can pull up the account?
 
 *Judge (v1): 9.0. The reply safely avoids a guarantee, but it is longer than needed and repeats verification without offering to confirm the current callback timeframe.*
+
+*Judge (v2): 8.7. Safely avoids promising a deadline, but offers no step to confirm the actual callback window despite conflicting, dated guidance. Repeating the verification request makes the response less focused on the customer's timing question.*
 
 **fix1**
 
@@ -3181,6 +3505,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — reference_conflict_ignored, unsafe_commitment. It appropriately avoids inventing a clock time, but guarantees one hour despite conflicting same-business-day guidance and an explicit instruction to check the current Knowledge Base.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I'll give you the exact time once I've logged the request, so it's tied to your ticket. The policy I'm working from gives the callback window two ways, within one hour, and same business day, so I'll need to confirm which applies before anyone relies on it. Before I can do that, I need your date of birth and billing ZIP so I can pull up the account.
+
+*Judge (v2): 7.6. Correctly identifies the conflicting windows, but suggests logging will produce an exact time and makes verification sound necessary to clarify policy. The reply is unnecessarily procedural for this short follow-up.*
+
 ---
 
 #### DCC-039 — troubleshooting
@@ -3196,6 +3526,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm sorry, that's frustrating. Let's get it sorted. First, is the orange light steady or pulsing, and is it on the camera itself or on the base station it connects to?
 
 *Judge (v1): 8.7. Asking whether the light is steady repeats information the customer already supplied. The base-station wording also presumes hardware that has not been established, though it does not invent an indicator meaning or troubleshooting procedure.*
+
+*Judge (v2): 8.1. Both diagnostic questions largely repeat information already provided: the light is blinking and is on the camera. The reply is concise and safe but does little to advance troubleshooting.*
 
 **fix1**
 
@@ -3251,6 +3583,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — unsupported_company_claim. The reply assigns a meaning to the orange light without a camera model or relevant documentation. Its power and blinking-pattern questions are safe and immediately speakable, but the diagnostic explanation is unsupported.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I'm sorry, that's frustrating. Let's get it sorted. A blinking orange light usually means the camera is powered but hasn't finished connecting, so first, can you tell me the make and model of the camera, and whether it's plugged into power or running on battery?
+
+*Judge (v2): 4.0 — unsupported_company_claim. The response assigns an unsupported meaning to the blinking orange light before identifying the camera. Indicator meanings vary by model; the otherwise useful clarifying questions do not require this speculation.*
+
 ---
 
 #### DCC-040 — troubleshooting
@@ -3266,6 +3604,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Thanks for checking that. Let's try a full power cycle: unplug the camera for about thirty seconds, then plug it back in and watch the light. While it restarts, can you tell me the exact color pattern you see?
 
 *Judge (v1): 9.3. The power cycle is reasonable general troubleshooting, but asking for the color pattern partly repeats information already given and leaves the camera model and what “Did that” refers to unclear.*
+
+*Judge (v2): 9.2. The generic power cycle is reasonable and immediately speakable. However, the follow-up is vague: it neither clarifies what the customer just tried nor obtains the camera model needed for targeted troubleshooting.*
 
 **fix1**
 
@@ -3320,6 +3660,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Thanks for checking that. Let's try the reset: unplug the camera, wait about thirty seconds, then plug it back in and watch the light. If it's still orange after that, I'll check the next step with you.
 
 *Judge (v2): 9.3. The power cycle is reasonable generic troubleshooting, but calling it 'the reset' is imprecise. The closing sentence adds little actionable information.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Thanks for trying that. Can you tell me the brand and model, and whether it's on power or battery right now?
+
+*Judge (v2): 9.7. Minor continuity limitation: it does not clarify what the customer tried, although repeating the unanswered device questions is reasonable.*
 
 ---
 
@@ -6157,6 +6503,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* escrow collects taxes and insurance monthly
 
+*Judge (v2): 9.9. No material issue. The under-20% statement describes a common requirement, but requirements vary by lender and loan type.*
+
 ---
 
 #### DGEN-033 — follow_up
@@ -6254,6 +6602,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Your monthly mortgage payment includes extra money for taxes and insurance. The lender holds that extra money and pays those bills for you when they're due. So you don't get one big bill later.
 >
 > *Summary chip:* escrow holds tax and insurance money
+
+*Judge (v2): 9.9. No material issue. The answer preserves the essential explanation, removes the down-payment detail, and uses simple language; the final sentence is slightly redundant.*
 
 ---
 
@@ -6358,6 +6708,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > A fixed rate only fixes the interest on the loan itself. Your monthly payment can still change because of the escrow part, the money for taxes and insurance. If your property taxes or insurance premium went up, the servicer raises your monthly payment to cover the higher bills.
 >
 > *Summary chip:* fixed rate, but escrow can rise
+
+*Judge (v2): 9.8. The opening loosely says the interest is fixed rather than the interest rate. Otherwise, the explanation is accurate, simple, and appropriately conditional about the user's actual bills.*
 
 ---
 
@@ -6909,6 +7261,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 8.9. The surface-area explanation is useful, but the final sentence misleadingly attributes support for the proton gradient to compartment proximity. The compartments are adjacent regardless of folding; proton pumping establishes the gradient.*
 
+*Judge (v2): 8.8. The surface-area explanation is correct, but bringing the matrix and intermembrane space closer does not explain the proton gradient. More cristae increases ATP-producing capacity, not necessarily actual ATP output.*
+
 **fix1**
 
 > Right, and the folding matters because it packs a lot of inner membrane into a small space. The electron transport chain and ATP synthase sit in that membrane, so more surface area means more of those complexes working at once. The cristae are basically the cell's way of maximizing the membrane it has to work with.
@@ -6969,6 +7323,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. The final sentence is imprecise: enclosure alone does not explain gradient maintenance; proton pumping and the inner membrane's low proton permeability are key.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Right, and the folding matters because it packs a lot of inner membrane into a small space. The cristae give the electron transport chain and ATP synthase far more surface area to work with, so more of that membrane can carry out oxidative phosphorylation at once. The matrix side stays enclosed, which keeps the proton gradient the chain builds up.
+
+*Judge (v2): 9.4. The main explanation is accurate and concise. The closing sentence is slightly imprecise: low proton permeability, not enclosure alone, preserves the gradient; its connection to ATP production remains implicit.*
+
 ---
 
 #### DLEC-002 — scientific
@@ -6986,6 +7346,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* catalyst speeds rate, not equilibrium
 
 *Judge (v1): 10.0. No material issue: the answer corrects the lecturer’s misconception, explains the industrial benefit, and provides an accurate gist.*
+
+*Judge (v2): 9.9. No material issue. The unqualified phrase 'yield is unchanged' could be read too broadly: catalysts can increase conversion within a fixed operating time without changing equilibrium yield.*
 
 **fix1**
 
@@ -7061,6 +7423,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The explanation directly corrects the misconception, accurately identifies the catalyst, and explains its industrial purpose. The gist chip is consistent.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> A catalyst doesn't shift the equilibrium. It speeds up the rate at which the reaction reaches equilibrium by lowering the activation energy, but the position of equilibrium stays the same. In the contact process, the catalyst helps the reaction get to that equilibrium faster, so you reach the same yield in less time, not a higher yield. To actually push the equilibrium toward sulfur trioxide, you'd change conditions like pressure or temperature, not add a catalyst.
+>
+> *Summary chip:* catalyst speeds rate, not equilibrium
+
+*Judge (v2): 9.9. No material issue. 'Same equilibrium yield' would be more precise than 'same yield'; the optional temperature and pressure explanation could specify which direction favors sulfur trioxide.*
+
 ---
 
 #### DLEC-003 — terminology
@@ -7076,6 +7446,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. In thermodynamics it's the number of microscopic configurations that give the same macroscopic state, and the second law says it tends to increase because there are simply far more disordered arrangements than ordered ones. In information theory, Shannon entropy measures the same idea for a message: how much uncertainty or surprise it carries, in bits. A fair coin flip has one bit of entropy, a biased coin less, a certain outcome zero.
 
 *Judge (v1): 8.7. The explanation is accessible, but entropy is not the raw number of microstates; it depends logarithmically on that count. The second-law statement also omits the isolated-system condition. Covering both domains adds some unnecessary depth.*
+
+*Judge (v2): 8.8. Thermodynamic entropy is proportional to the logarithm of the compatible microstate count, not the count itself. The second-law statement also needs an isolated-system qualification. Otherwise, the explanation and coin examples are accessible and useful.*
 
 **fix1**
 
@@ -7152,6 +7524,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. In thermodynamics it's the number of microscopic configurations that give the same macroscopic state, and the second law says it tends to increase because there are simply far more disordered arrangements than ordered ones. In information theory, Shannon entropy measures the average surprise in a message: a fair coin flip has one bit of entropy, a biased coin less, because the outcome is more predictable. The unifying idea is uncertainty, or missing information.
 
 *Judge (v2): 8.9. Thermodynamic entropy is proportional to the logarithm of the microstate count, not the count itself. The second-law statement omits the isolated-system condition. Otherwise helpful, the explanation is slightly dense for a quick introductory question.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Entropy is a measure of how many ways a system's parts can be arranged without changing how it looks overall. It's often called disorder, but the sharper idea is **missing information**: the more arrangements produce the same big picture, the higher the entropy. A shuffled deck has high entropy, a sorted deck low. The second law says it tends to rise in a closed system.
+>
+> *Summary chip:* entropy counts arrangements matching one state
+
+*Judge (v2): 8.8. The second law concerns an isolated system, not any closed system: a closed system can lose entropy by transferring heat out. The otherwise useful explanation therefore includes a misleading thermodynamics claim.*
 
 ---
 
@@ -7253,6 +7633,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.9. No substantive issue: all parts are answered correctly, and the dependency explanation makes the distinction clear. The gist accurately summarizes it.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The upside-down A is the universal quantifier, read "for all," and the backwards E is the existential quantifier, read "there exists."
+> 
+> So the first one, ∀x ∃y Loves(x, y), reads "for all x, there exists a y such that x loves y." Everyone loves somebody, but the somebody can differ from person to person.
+> 
+> The second, ∃y ∀x Loves(x, y), reads "there exists a y such that for all x, x loves y." One single person is loved by everyone.
+> 
+> The order sets who gets to choose. Reading left to right, each quantifier picks after the one before it, so "for all x" first means the later y can depend on x. Put ∃y first and the choice is fixed before x comes up, so the same y has to work for everyone. **for all** then **there exists** versus the reverse.
+>
+> *Summary chip:* quantifier order changes who chooses
+
+*Judge (v2): 9.9. No material issues; it answers every part of the question and clearly explains why the existential choice can depend on x only in the first formula.*
+
 ---
 
 #### DLEC-005 — exam_relevance
@@ -7325,6 +7719,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.5. The uncertainty and request for exam guidance are appropriate, but claiming the unidentified topic connects to surrounding material is unsupported and adds little.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> I can't confirm that from what I have here. Whether a topic shows up on the exam is set by your instructor and the syllabus, so the quickest check is the syllabus or the lecturer's own guidance. If you tell me which topic you mean, I can give you a solid explanation of it either way, since exam or not, understanding it usually pays off.
+
+*Judge (v2): 9.3. The closing offer focuses on explaining the topic rather than determining exam coverage, and the generic study encouragement adds little to this narrow request.*
+
 ---
 
 #### DLEC-006 — connect_earlier
@@ -7342,6 +7742,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* entropy rises, so efficiency has a ceiling
 
 *Judge (v1): 5.0 — important_question_unanswered. Without lecture context, it assumes thermodynamics and an efficiency discussion, leaving the actual recall request unresolved. It also incorrectly describes unused energy as 'lost as entropy'; entropy is not energy.*
+
+*Judge (v2): 5.4 — important_question_unanswered. It assumes thermodynamics and a heat-engine discussion without lecture context, so it cannot establish what the lecturer said or the connection. Saying the remaining energy is “lost as entropy” also confuses rejected heat with entropy.*
 
 **fix1**
 
@@ -7409,6 +7811,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 6.1 — important_question_unanswered. The general thermodynamics summary is mostly sound, but it assumes which second law is meant and asserts a connection to an unseen process without establishing what the lecturer actually said.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> I don't have that earlier remark in front of me, so I can't quote it. But the second law is the one stating that the **entropy** of an isolated system never decreases. In practice heat flows from hot to cold on its own, and no engine turns heat fully into work. If his current point is about a process having a direction, that's the same idea: **irreversibility**. You can't run the film backward and still satisfy the law.
+>
+> *Summary chip:* second law sets time's direction
+
+*Judge (v2): 8.5. It assumes thermodynamics without checking and offers only a hypothetical connection to the unspecified current topic. The blanket time-reversal phrasing should be limited to irreversible processes.*
+
 ---
 
 #### DLEC-007 — scientific
@@ -7428,6 +7838,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* short waves scatter, long waves pass
 
 *Judge (v1): 9.9. No material issue. The accurate, accessible explanation is slightly longer than necessary for this live lecture moment.*
+
+*Judge (v2): 9.9. No material issue; the explanation accurately connects wavelength-dependent scattering and atmospheric path length, and the gist is consistent with the body.*
 
 **fix1**
 
@@ -7506,6 +7918,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* short waves scatter, long waves survive
 
 *Judge (v2): 10.0. No material issue. The explanation accurately connects wavelength-dependent scattering with atmospheric path length, and the gist is consistent with the explanation.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Blue light has a much shorter wavelength than red, so it scatters far more strongly off the air molecules, roughly as one over wavelength to the fourth power. That scattered blue is what reaches your eye from every direction, so the whole sky looks blue. At sunset the light travels through much more atmosphere, and most of the blue gets scattered away before it reaches you, leaving the longer red and orange wavelengths to come straight through.
+
+*Judge (v2): 10.0. No material issue. The concise explanation correctly connects wavelength-dependent scattering with the longer atmospheric path at sunset.*
 
 ---
 
@@ -7589,6 +8007,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.2 — unsupported_personal_claim. The answer invents repeated personal experience and a habitual data-checking workflow. It speaks for the student instead of privately explaining the lecturer’s point, offering little substantive learning assistance.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> I've run into messy data plenty of times, so the cleaning part is where it gets real for me. Missing values and duplicates are usually the first things I check, because they quietly break everything downstream.
+
+*Judge (v2): 4.2 — unsupported_personal_claim. It invents repeated personal experience and a habitual cleaning routine, then answers the lecturer in the student's voice instead of providing the required private explanation.*
+
 ---
 
 #### DLEC-009 — example
@@ -7606,6 +8030,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* slope, step, repeat
 
 *Judge (v1): 7.8 — important_question_unanswered. The basic explanation is correct, but there is no concrete example or question to establish the user's work experience. “In my own work” awkwardly shifts perspective without providing the requested personalization.*
+
+*Judge (v2): 7.9 — important_question_unanswered. The explanation is broadly correct and avoids restricted profile data, but “whatever I was tuning” is a placeholder, not an example. It neither makes the concept concrete nor asks for a work task to personalize it.*
 
 **fix1**
 
@@ -7677,6 +8103,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.0. Correctly avoids restricted personal details, but gives only an abstract summary and postpones the requested example. A small, explicitly hypothetical example would provide more immediate learning value.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Think of it as walking downhill in fog. You can't see the bottom, so you feel the slope under your feet and step that way. Repeat until the ground flattens out. The **learning rate** is your step size: too big overshoots the valley, too small crawls. Any time you nudge a setting to lower an error and re-measure, you're running the same loop.
+>
+> *Summary chip:* gradient descent is stepping downhill repeatedly
+
+*Judge (v2): 8.8. The downhill analogy is clear, but the requested work connection is missing. The response neither supplies a concrete hypothetical workplace example nor asks for a work detail to personalize it.*
+
 ---
 
 #### DLEC-010 — summarize_point
@@ -7696,6 +8130,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > If you tell me what you've worked with, I can be more specific about which of those you can skip.
 
 *Judge (v1): 9.6. The opening emphasizes missing context before helping. It requests the student's experience but not the lecture outline needed to identify specific sections.*
+
+*Judge (v2): 9.2. The opening is unnecessarily categorical. The conditional advice is useful and technically sound, but the follow-up requests background without asking for the missing lecture outline.*
 
 **fix1**
 
@@ -7795,6 +8231,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.9. It respects the evidence boundary and identifies useful pitfalls, but the categorical opening and join glossary delay the requested skip guidance. It never explicitly identifies which basics could conditionally be skimmed.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> It depends on how much you already write joins day to day, but the usual split is: the inner join syntax recap and the Venn diagram intro are safe to skim if you join tables regularly, while I'd stay awake for **NULL handling** in outer joins, the difference between putting a filter in **WHERE versus ON** for a left join, and self joins or multi table patterns, since those are where people actually get wrong answers. Join order and how the optimizer picks it is worth catching if it comes up. If the lecture covers something you've never used, keep it anyway.
+
+*Judge (v2): 9.2. Appropriate generic fallback with sound SQL priorities, but it cannot deliver a personalized skip list without checking proficiency or seeing the lecture outline.*
+
 ---
 
 #### DLEC-011 — deep_explain
@@ -7818,6 +8260,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* conditional probability, Bayes, base rate
 
 *Judge (v1): 9.3. It calls a test with 99% sensitivity and 95% specificity “99% accurate,” conflating sensitivity with overall accuracy. The derivation, posterior calculation, and base-rate explanation are otherwise correct.*
+
+*Judge (v2): 9.3. Calling this test '99% accurate' conflates its 99% sensitivity with overall accuracy. That wording risks reinforcing the conditional-probability confusion being taught, although the derivation and posterior calculation are correct.*
 
 **fix1**
 
@@ -8009,6 +8453,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. Minor precision gaps: the conditional formula assumes P(B)>0, and the final “99% accurate” shorthand could more explicitly distinguish sensitivity from overall accuracy and the probability of disease after a positive.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Start with what conditional probability really means. P(A|B) is the chance of A once you already know B happened,  you're not looking at the whole world anymore, you've shrunk the sample space down to just the cases where B is true, and you're asking what fraction of those are also A. That gives the definition **P(A|B) = P(A∩B) / P(B)**, where A∩B is the overlap of both being true.
+> 
+> Now derive Bayes from that one idea. The same definition flipped says P(B|A) = P(A∩B) / P(A), so the overlap is P(A∩B) = P(B|A)·P(A). Substitute that into the numerator above and you get **P(A|B) = P(B|A)·P(A) / P(B)**. To finish it, expand the bottom: B can happen either with A or without it, so P(B) = P(B|A)·P(A) + P(B|not A)·P(not A).
+> 
+> Here's the disease screening example. Say a disease affects 1% of people, the test catches it 99% of the time when you have it (sensitivity), and it's negative 99% of the time when you don't (specificity), so the false positive rate is also 1%. If you test positive, what's the chance you actually have it? P(positive) = 0.99×0.01 + 0.01×0.99 = 0.0198. So P(disease|positive) = 0.0099 / 0.0198 = **0.5**, only **50%**. Half the positives are false alarms, because the disease is rare and the healthy group is huge.
+> 
+> The mistake people make most is base-rate neglect: they read the 99% sensitivity as "if I test positive I'm 99% likely to be sick," which swaps P(positive|disease) for P(disease|positive). Those are different numbers, and the small prior is what pulls the real answer down to 50%.
+>
+> *Summary chip:* conditional probability, priors, and base-rate neglect
+
+*Judge (v2): 9.8. All requested parts are covered correctly. Minor improvements would be stating P(B)>0 and adding frequency counts to make the counterintuitive 50% result more intuitive.*
+
 ---
 
 #### DLEC-012 — formula
@@ -8033,6 +8491,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* midpoint gives 1.22, elastic
 
 *Judge (v1): 9.2. The final comparison is incorrect: starting-value elasticity changes from 1.00 to 1.50 when direction reverses, not from 1.00 to 1.22. The requested midpoint calculation, classification, and gist are correct.*
+
+*Judge (v2): 9.2. The closing contrast incorrectly suggests starting-value elasticity flips between 1.00 and 1.22; it actually flips between 1.00 and 1.50. The requested midpoint calculation, classification, and gist are correct.*
 
 **fix1**
 
@@ -8110,6 +8570,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — arithmetic_error. The final elasticity and classification are correct, but both percentage changes have the wrong signs for the requested reversal. This makes the worked explanation mathematically misleading despite its correct conclusion.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Using the midpoint formula, the percent change in quantity is (500 - 400) / 450, which is 22.2%, and the percent change in price is (3.00 - 3.60) / 3.30, which is -18.2%. Dividing gives -1.22, so we report the absolute value, **1.22**, and demand is **elastic** over that range. Note it comes out to the same 1.22 as when the price rose, which is exactly the point of using midpoints. Revenue also goes back up, from $1,440 to $1,500 a day.
+>
+> *Summary chip:* midpoint gives |E| = 1.22, elastic
+
+*Judge (v2): 10.0. No material issues. The calculation follows the course convention, explains direction invariance, and correctly checks the revenue change.*
+
 ---
 
 #### DLEC-013 — business_econ
@@ -8127,6 +8595,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* elastic price rise cuts revenue
 
 *Judge (v1): 10.0. No material issue. The response clearly corrects the lecturer, verifies the $60 daily revenue decrease, and provides an accurate summary chip.*
+
+*Judge (v2): 10.0. No material issue. The answer accurately corrects the lecturer, verifies the correction with supplied figures, and explains the rule concisely. The gist is consistent.*
 
 **fix1**
 
@@ -8200,6 +8670,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. Saying the owner was 'better off' at the old price slightly overstates the conclusion: higher revenue does not establish higher profit without cost information. The correction, arithmetic, and gist are accurate.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> That last part isn't right. When demand is elastic, raising the price **lowers** total revenue, not raises it. Here revenue goes from $3.00 times 500, which is $1,500 a day, down to $3.60 times 400, which is $1,440, so it falls by $60. The cart owner would have done better leaving the price alone, or cutting it.
+>
+> *Summary chip:* elastic demand, price up, revenue down
+
+*Judge (v2): 9.4. The closing recommendation slightly overreaches: the data establish lower revenue, not lower profit, and do not guarantee that a further price cut would improve revenue.*
+
 ---
 
 #### DLEC-014 — exam_relevance
@@ -8217,6 +8695,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* heaps yes, heapsort Quiz 5
 
 *Judge (v1): 10.0. None; the answer accurately resolves both questions and includes the relevant Quiz 4 study scope.*
+
+*Judge (v2): 10.0. None. The answer directly resolves both questions and accurately identifies the Quiz 4 topics and required indexing convention.*
 
 **fix1**
 
@@ -8294,6 +8774,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; both questions are answered accurately and concisely, and the gist agrees.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Yes, heaps are on Quiz 4: sift-down traces, build-heap traces, and the 1-indexed index formulas. But **heapsort is not**, it's on Quiz 5, along with priority queues.
+>
+> *Summary chip:* Heaps yes, heapsort Quiz 5
+
+*Judge (v2): 10.0. No material issues; the answer directly resolves both questions, and the gist agrees.*
+
 ---
 
 #### DLEC-015 — cs_concept
@@ -8309,6 +8797,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > With our convention, height counts nodes on the longest root-to-leaf path, so a heap with n keys has height floor(log2 n) + 1. For n = 12, floor(log2 12) = 3, so the height is **4**.
 
 *Judge (v1): 10.0. None; the answer correctly applies the course-specific convention and explains the calculation concisely.*
+
+*Judge (v2): 10.0. None; the answer correctly applies the course convention and provides exactly the reasoning needed.*
 
 **fix1**
 
@@ -8384,6 +8874,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. None. The answer correctly applies the course convention, shows the calculation concisely, and matches the gist chip.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> With our convention, height counts nodes on the longest root-to-leaf path, so it's floor(log2 n) + 1. For n = 12, floor(log2 12) is 3, so the height is **4**.
+
+*Judge (v2): 10.0. None; the answer correctly applies the course convention and gives concise reasoning.*
+
 ---
 
 #### DLEC-016 — connect_earlier
@@ -8401,6 +8897,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* MC above minimum AVC is supply
 
 *Judge (v1): 9.0. It omits the sunk-fixed-cost connection and overstates marginal profitability: price above minimum AVC does not make every extra unit worthwhile; expanding output pays only while price exceeds marginal cost.*
+
+*Judge (v2): 8.9. The “each extra unit” claim needs the qualifier “while price exceeds marginal cost”; otherwise it overstates the incentive to produce. The explanation also omits that fixed costs are sunk, weakening the shutdown-rule connection.*
 
 **fix1**
 
@@ -8476,6 +8974,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.4. The explanation is correct and concise, but omits why fixed costs being sunk makes average variable cost, rather than average total cost, the relevant shutdown threshold.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The short-run supply curve is the marginal cost curve above the minimum of average variable cost. Below that point, price doesn't cover average variable cost, so the firm shuts down and supplies nothing. The MC curve crosses AVC at AVC's minimum, so that crossing point is exactly where the firm's supply starts.
+
+*Judge (v2): 9.0. The shutdown cutoff is explained correctly, but why output follows marginal cost remains unexplained. The answer also omits the lecturer’s rationale that fixed costs are sunk.*
+
 ---
 
 #### DLEC-017 — professor_meaning
@@ -8493,6 +8997,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* IORB floor, ceiling mostly idle
 
 *Judge (v1): 8.4. The core intuition is useful, but the effective federal funds rate typically trades below—not just above—IORB. IORB is not a strict market-wide floor because some lenders cannot earn it.*
+
+*Judge (v2): 8.4. The explanation is broadly right, but the effective federal funds rate typically trades below IORB, not just above it. The answer presents a useful floor-system simplification as a strict market-wide lower bound.*
 
 **fix1**
 
@@ -8564,6 +9070,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.5. The concise explanation captures the lecturer’s point, but leaves implicit why ample reserves make the ceiling largely irrelevant. Calling reserve interest a floor is a useful simplification, not a strict bound on every short-term rate.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> She means the fed funds rate no longer bounces inside a range, it just sits at the bottom edge of it. Since reserves are ample, banks have no reason to lend below what they can earn at the Fed, so the rate hugs that lower rate. The upper band isn't doing any work, so the corridor acts like a floor.
+
+*Judge (v2): 8.4. The core intuition is useful, but “sits at the bottom edge” risks confusing the operating corridor with the target range. It also leaves interest on reserve balances unnamed and makes the floor sound mechanically binding.*
+
 ---
 
 #### DLEC-018 — summarize_point
@@ -8581,6 +9093,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* long-term causes plus July Crisis trigger
 
 *Judge (v1): 8.4. The final sentence conflates expectations that the war would end by Christmas with the Christmas truce. It also unnecessarily supplies a simplified explanation of next week’s topic.*
+
+*Judge (v2): 8.3. The main recap is accurate, but the final sentence conflates expectations that the war would end by Christmas with the Christmas truce. It also adds a reductive explanation of next week's topic.*
 
 **fix1**
 
@@ -8656,6 +9170,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.3. The opening meta-comment adds no learning value. The otherwise accurate recap names the blank cheque and Belgium without explaining Germany’s unconditional support or the connection to Britain’s entry.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The lecturer is just wrapping up, so there's no question to answer here. The summary is accurate: the long-term causes are the alliance system, militarism, nationalism and imperialism, and the short-term trigger is the assassination at Sarajevo on June 28th, 1914, followed by the July Crisis. The blank cheque, Austria's ultimatum to Serbia, Russian mobilization, and the German advance through Belgium are the steps that turned a regional dispute into a continental war.
+>
+> *Summary chip:* long-term causes plus Sarajevo trigger
+
+*Judge (v2): 9.3. The unnecessary “no question to answer” opening adds friction. The recap names the blank cheque and Belgium without explaining Germany’s unconditional support for Austria-Hungary or Belgium’s connection to Britain’s entry.*
+
 ---
 
 #### DLEC-019 — simple_explain
@@ -8677,6 +9199,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* price moves along, other factors shift
 
 *Judge (v1): 9.6. Correct, concise, and memorable, but a concrete everyday example would make the distinction easier for a confused beginner.*
+
+*Judge (v2): 9.6. The explanation is accurate and accessible, but a concrete everyday example would make the distinction easier for a confused student to grasp.*
 
 **fix1**
 
@@ -8784,6 +9308,18 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. The core distinction is correct, but “anything else changed” is slightly overbroad: only changes in demand determinants shift demand. A concrete everyday example would make the explanation more accessible.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> A movement along the curve and a shift of the curve differ in what causes the change. A movement happens when only the **price** of the good changes. The curve itself stays put, you just slide to a different point on it: price drops, quantity demanded rises.
+> 
+> A shift happens when something other than price changes, so the whole curve moves to a new position. Income, tastes, the price of a related good, expectations. At the same price, people now want more or less than before.
+> 
+> Say coffee costs 4 dollars. Cheaper coffee makes you buy more, that's a movement. A new study showing coffee helps you focus makes you buy more even at 4 dollars, that's a shift.
+>
+> *Summary chip:* price moves you along; other factors shift
+
+*Judge (v2): 9.9. No material issue. The explanation correctly emphasizes what changes and uses the same-price comparison and coffee example effectively. The gist agrees with the answer.*
+
 ---
 
 #### DLEC-020 — historical
@@ -8801,6 +9337,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* movable type made 1517 spread fast
 
 *Judge (v1): 9.2. The claim that a single tract previously took months to reproduce is an inaccurate generalization. Block printing also supported repeated impressions, so the explanation exaggerates movable type’s unique advantage.*
+
+*Judge (v2): 9.3. The explanation overstates pre-press slowness: reproducing a short tract did not inherently take months, nor would its dissemination necessarily take years. The central explanation is otherwise useful and appropriate.*
 
 **fix1**
 
@@ -8876,6 +9414,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.9. No material issue. The hand-copying timeline is a rough counterfactual, but the central explanation is accurate, concise, and appropriate for private lecture assistance.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Right, and the mechanism matters as much as the date. Gutenberg's movable-type press, around 1450, made cheap, fast reproduction possible, so when Luther's Ninety-five Theses appeared in 1517 they were printed and reprinted and carried across the German lands in weeks rather than the years a hand-copied text would have taken. Print turned a local dispute into a public one.
+>
+> *Summary chip:* print made Luther spread in weeks
+
+*Judge (v2): 9.2. The claim that hand-copying would have required years is an unjustified counterfactual. Otherwise, the paragraph clearly explains the lecturer’s point at an appropriate depth.*
+
 ---
 
 #### DLEC-021 — derivation
@@ -8893,6 +9439,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* sin h over h is 1, cos h minus 1 over h is 0
 
 *Judge (v1): 9.6. The body correctly describes the limits, but the gist presents their values as exact equalities. The explanation also leaves h approaching zero implicit.*
+
+*Judge (v2): 9.2. The gist presents the ratios as equal to 1 and 0 rather than their limits as h→0. The body correctly describes the limiting behavior and provides an appropriately concise explanation.*
 
 **fix1**
 
@@ -8990,6 +9538,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. The opening sentence is unnecessary, and the algebra would be slightly easier to scan as an equation rather than entirely in prose.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The lecturer is walking through the first-principles derivation of the derivative of sine x. You start with the limit definition, write sin(x + h), and expand it with the angle addition formula:
+> 
+> sin(x + h) = sin x cos h + cos x sin h
+> 
+> Substituting that in and grouping the terms that share sin x and cos x gives:
+> 
+> d/dx sin x = sin x · lim(h→0) (cos h − 1)/h + cos x · lim(h→0) (sin h)/h
+> 
+> The two limits are the ones he named. The first, sin h over h, equals 1. The second, (cos h − 1) over h, equals 0. So the sin x term drops out and you're left with cos x.
+> 
+> The intuition: near zero, sin h is almost exactly h, so that ratio goes to 1, while cos h sits just below 1 and closes that gap faster than h shrinks, so its ratio goes to 0.
+>
+> *Summary chip:* sin h/h → 1, (cos h−1)/h → 0
+
+*Judge (v2): 9.7. The derivation and gist are correct. The only notable teaching gap is mentioning the limit definition without displaying the initial difference quotient; the introductory summary is also dispensable.*
+
 ---
 
 #### DLEC-022 — compare
@@ -9005,6 +9571,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Accuracy is how close a measurement is to the true value, while precision is how close repeated measurements are to each other. You can have one without the other: a scale that always reads two pounds heavy is precise but not accurate, and readings scattered around the true value are accurate on average but not precise. In practice you want both, and the gap between them tells you whether to fix a systematic bias or just reduce random noise.
 
 *Judge (v1): 9.7. The final sentence adds more diagnostic detail than this quick study question needs; the core definitions and examples are clear and correct.*
+
+*Judge (v2): 9.7. The final bias-versus-noise sentence adds slightly more depth than this quick comparison needs, but the definitions and examples are clear and correct.*
 
 **fix1**
 
@@ -9082,6 +9650,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. The closing sentence repeats the opening distinction, but the explanation and examples are correct, accessible, and immediately useful.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Accuracy is how close a measurement is to the true value, while precision is how close repeated measurements are to each other. A scale that always reads five pounds too high is precise but not accurate, since it gives the same answer every time but the wrong one. A cheap scale that jumps around the true weight is accurate on average but not precise. So you can have either one without the other, and the goal is both.
+>
+> *Summary chip:* close to truth vs. repeatable
+
+*Judge (v2): 9.8. No material issue. The definitions and examples are correct; the second example and concluding recap make the explanation slightly longer than necessary for this quick comparison.*
+
 ---
 
 #### DLEC-023 — formula
@@ -9099,6 +9675,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > They only look like they disagree because of labeling, not math. The number is -1.00 either way. "Unit elastic" is the strict textbook name for exactly -1, while your lecturer is using the course convention that folds -1 in with elastic. Same value, two names, and the handout tells you which name the grader wants.
 
 *Judge (v1): 4.0 — major_reasoning_error, missed_available_evidence. Correctly reports the handout’s −1.00 and course label, but asserts an unverified lecture explanation, overlooks midpoint elasticity (≈−1.22), and endorses the false equivalence between unit-elastic and elastic revenue behavior.*
+
+*Judge (v2): 4.0 — major_reasoning_error, missed_available_evidence. It treats an unverified labeling explanation as certain, omits the permitted midpoint calculation (approximately -1.22), and endorses the handout’s misleading claim that unit-elastic and elastic demand share the same revenue behavior.*
 
 **fix1**
 
@@ -9196,6 +9774,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — major_factual_error, missed_available_evidence. The exam label follows the handout, but the answer wrongly endorses identical revenue implications for unit-elastic and elastic demand. It also omits the method distinction: original-value elasticity is -1.00; midpoint elasticity is approximately -1.22.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Write **elastic**. The handout's own rule says to treat unit elastic as elastic for this course, since the revenue logic is the same, so -1.00 and "elastic" aren't actually fighting each other, only the label differs. The two methods are what make it look like a disagreement. With the original-value method you land on exactly -1.00, right on the boundary. Redo it with the midpoint method and the price change is 0.60 over 3.30 and the quantity change is 100 over 450, which gives about **-1.22**, clearly elastic. Since both methods get full credit on Midterm 2, your answer comes out elastic either way.
+>
+> *Summary chip:* write elastic, both methods agree
+
+*Judge (v2): 8.0. The calculations and exam guidance follow the handout, but the answer endorses its incorrect claim that unit-elastic and elastic demand share the same revenue implications. It also presents differing methods as the confirmed explanation without lecture evidence.*
+
 ---
 
 #### DLEC-024 — exam_relevance
@@ -9213,6 +9799,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* midpoint formula required, no formula sheet
 
 *Judge (v1): 4.0 — major_factual_error. The main reconciliation is correct, but the final sentence endorses an incorrect cross-price elasticity rule. Its sign distinguishes substitutes from complements; the lecturer's silence does not establish that the remaining handout tips are valid.*
+
+*Judge (v2): 4.0 — major_factual_error. The exam-rule reconciliation is correct, but the final sentence endorses taking the absolute value of cross-price elasticity. Its sign distinguishes substitutes from complements; the lecturer’s silence does not validate that erroneous advice.*
 
 **fix1**
 
@@ -9306,6 +9894,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. The reconciliation, midpoint formula, and gist are correct. Repeating the exam rules and adding a formula explanation makes the response slightly longer than this brief clarification requires.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The lecturer just said Midterm 2 has no formula sheet and that elasticity answers only get full credit with the midpoint formula. That directly contradicts the recitation handout, which says either the original-value method or the midpoint method gets full credit and that a formula sheet will be stapled to the back of the exam. So for the exam, go with what the lecturer said: use the midpoint formula, and don't count on a formula sheet.
+>
+> *Summary chip:* lecturer overrides handout, use midpoint
+
+*Judge (v2): 10.0. No material issue; the answer explicitly reconciles both conflicting exam instructions and gives the student the correct practical takeaway.*
+
 ---
 
 #### DLEC-025 — professor_meaning
@@ -9323,6 +9919,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 1-indexed on the quiz, not his
 
 *Judge (v1): 10.0. None. The answer clearly reconciles both conventions and states all three required quiz formulas without unnecessary detail.*
+
+*Judge (v2): 10.0. No material issue: it reconciles the indexing conventions, supplies all three quiz formulas correctly, and keeps the explanation concise. The gist agrees with the answer.*
 
 **fix1**
 
@@ -9400,6 +9998,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the answer accurately reconciles both conventions and clearly identifies which formulas and layout the quiz requires.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Both are right, just for different layouts. His formulas assume a 0-indexed array starting at index 0. The notes use CS 261's **1-indexed** layout, with index 0 left blank, so there parent is floor(i/2), left is 2i, right is 2i+1.
+> 
+> On the quiz, use the notes' 1-indexed formulas.
+>
+> *Summary chip:* 1-indexed for quiz, 0-indexed for his code
+
+*Judge (v2): 9.8. The explanation correctly resolves the discrepancy. The gist says 'his code,' although the evidence only establishes that his spoken formulas were 0-indexed.*
+
 ---
 
 #### DLEC-026 — deep_explain
@@ -9421,6 +10029,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* start at n/2, sift down, linear total
 
 *Judge (v1): 9.3. The trace is accurate, but the complexity explanation asserts that the height sum is linear without demonstrating it. Why bottom-up order guarantees valid child subheaps also remains implicit.*
+
+*Judge (v2): 9.3. The trace is correct, but the complexity explanation asserts that summed heights are linear without demonstrating why. It also leaves implicit why processing children before their parents makes build-heap correct.*
 
 **fix1**
 
@@ -9550,6 +10160,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* bottom-up sift, sum of heights is linear
 
+*Judge (v2): 9.3. The trace is correct, but the complexity explanation merely asserts that the sum is linear. For this teaching request, it should demonstrate the bound rather than stop at the right intuition.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Leaves sit past **floor(n/2)**, so index 3 is the last node with children, and everything below is already a valid heap. From there you sift down: at 3, 7 swaps with its smaller child 2; at 2, 4 swaps with 1; at 1, 9 swaps with 1 then with 4, giving [_, 1, 4, 2, 9, 8, 7, 6]. That's four swaps total. It's **O(n)** because most nodes live near the bottom and can only fall a short distance, so the summed sift distance stays linear, not n log n.
+>
+> *Summary chip:* leaves skip, sum of heights is linear
+
+*Judge (v2): 8.5. Accurate summary, but too compressed for the requested teaching: intermediate arrays are omitted, the last-parent index is asserted rather than derived, and the linear-time bound is stated without demonstrating the sum.*
+
 ---
 
 #### DLEC-027 — simple_explain
@@ -9569,6 +10189,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > It's O(n) and not O(n log n) because most nodes sit near the bottom and can only fall a short way. Add up each node's height across the whole tree and the total stays linear in n.
 >
 > *Summary chip:* start at n/2, sift down, linear total
+
+*Judge (v2): 7.1. The answer nearly repeats the previous explanation, including every array trace and the abstract height-sum argument. It is accurate but does not meaningfully simplify after the student's explicit request.*
 
 **fix1**
 
@@ -9700,6 +10322,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* leaves need no work, so it's linear
 
+*Judge (v2): 8.6. It removes the array traces but retains similar technical wording and three paragraphs, only partly meeting “simpler please.” The gist also oversimplifies the linear-time explanation: skipping leaves alone is not sufficient.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> We skip the bottom rows because each single node is already a heap, so we start at the last parent, **index 3**. Each sift-down swaps a parent with its smaller child until it settles. Most nodes sit near the bottom and barely move, so the total adds up to **linear time**, not n log n.
+>
+> *Summary chip:* skip leaves, total work is linear
+
+*Judge (v2): 9.2. “Bottom rows” is imprecise: only leaves are skipped. The sift-down description also omits that a swap is needed only when the smaller child is smaller than the parent.*
+
 ---
 
 #### DLEC-028 — example
@@ -9721,6 +10353,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* n=6, start at 3, four swaps, linear
 
 *Judge (v1): 9.9. No substantive issue. Packing all three sift-down calls into one paragraph makes an otherwise clear trace slightly harder to scan.*
+
+*Judge (v2): 9.8. No substantive error. Packing all three sift-down calls into one paragraph makes the trace slightly harder to scan, especially after the student requested simpler explanations.*
 
 **fix1**
 
@@ -9862,6 +10496,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* same trace, new numbers, still linear
 
+*Judge (v2): 9.7. The trace is correct, but packing all three sift-down calls into one paragraph makes it harder to follow after the student’s request for simplicity.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Take [_, 5, 9, 3, 8, 2, 7, 1], with n = 7. Start at **index 3**, the last node that has children, because everything below it is a lone node and already a heap. There 3 swaps with its smaller child 1, giving [_, 5, 9, 1, 8, 2, 7, 3]. At index 2, 9 swaps with 2: [_, 5, 2, 1, 8, 9, 7, 3]. At index 1, 5 swaps with 1, then keeps sinking past 3: [_, 1, 2, 3, 8, 9, 7, 5]. Four swaps total. It's still **linear time** because most nodes sit near the bottom and barely move, so the work doesn't grow as n log n.
+>
+> *Summary chip:* same four sifts, different array
+
+*Judge (v2): 9.0. The gist incorrectly says “four sifts”: there are three sift-down calls and four swaps. The worked trace is correct, but the dense paragraph is harder to follow after the student's request for simplicity.*
+
 ---
 
 #### DLEC-029 — historical
@@ -9879,6 +10523,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 1648 treaties, sovereign states, noninterference
 
 *Judge (v1): 8.6. The explanation presents a contested historical shorthand as treaty fact. Westphalia did not straightforwardly establish sovereign equality or general noninterference, and imperial hierarchy persisted. The gist reinforces that oversimplification.*
+
+*Judge (v2): 8.3. It presents a contested textbook interpretation too definitively: Westphalia did not cleanly establish sovereign equality and noninterference or replace imperial hierarchy. The gist reinforces that oversimplification.*
 
 **fix1**
 
@@ -9954,6 +10600,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.6. It conflates the separate Spanish–Dutch Treaty of Münster with the two October treaties and overstates rulers’ religious discretion and states’ legal equality. The useful historiographical caveat does not fully correct these simplifications.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The Peace of Westphalia is the set of treaties signed in 1648 at Münster and Osnabrück that ended the Thirty Years' War and, with it, the long round of religious wars in the Holy Roman Empire. Its usual significance is that it undercut the idea of a single universal authority over Christendom and treated the Empire's many states as having real standing of their own, which is why it gets taught as a starting point for the modern sovereign-state system. Historians do push back on that, since sovereignty in the full modern sense took much longer to take shape, but as a marker of the shift it holds up.
+>
+> *Summary chip:* 1648 treaties, sovereignty's starting point
+
+*Judge (v2): 9.5. The explanation provides useful historical nuance, but the gist's unqualified “sovereignty's starting point” and the closing endorsement make the contested origin story sound slightly more settled than it is.*
+
 ---
 
 #### DLEC-030 — historical
@@ -9971,6 +10625,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* treaties settled specifics, not sovereignty
 
 *Judge (v1): 9.6. The explanation substantively corrects the earlier answer but leaves that correction implicit. Characterizing Westphalia chiefly as an internal imperial constitutional settlement also understates its international peace provisions.*
+
+*Judge (v2): 9.4. The substantive correction is clear but does not explicitly reconcile the earlier overstatement. Framing the treaties chiefly as an internal imperial settlement also slightly understates their wider diplomatic significance.*
 
 **fix1**
 
@@ -10040,6 +10696,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.0. Saying the emperor could not “override the princes” overstates their autonomy: imperial laws, courts and constitutional obligations remained. This partly reproduces the sovereignty myth the answer otherwise explains well.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> That's the right pushback, and it's worth taking seriously. The treaties are mostly about specific grievances: confessional rights, restitution of lands, the Empire's internal constitutional balance, and the mechanics of ending the war. The word sovereignty in the modern sense barely appears, and the settlement still left the Emperor and the imperial courts with real authority, so it didn't simply hand each state full independence. What the revisionists argue is that the "Westphalian system" is largely a later construction, read back onto 1648 by nineteenth and twentieth century writers who wanted a clean origin story for the sovereign state. The treaties did matter, but as a settlement of a religious and constitutional crisis, not as a founding charter of sovereignty.
+>
+> *Summary chip:* treaties settle specifics, sovereignty read in later
+
+*Judge (v2): 9.7. No material issue. The explanation accurately distinguishes the treaties’ provisions from later interpretations, and the gist faithfully summarizes it.*
+
 ---
 
 #### DLEC-031 — didnt_understand
@@ -10061,6 +10725,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* recurrence: 2 halves plus linear merge
 
 *Judge (v1): 9.9. No material issue. The recurrence and its solution are explained accurately; the meaning of Theta(n) is illustrated rather than explicitly defined for a complete beginner.*
+
+*Judge (v2): 9.8. The explanation is accurate and accessible, but it leaves the beginner to infer what the symbol Theta itself means from the discussion of linear merging work.*
 
 **fix1**
 
@@ -10174,6 +10840,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. No material issue. The final recursion-tree explanation is accurate but introduces extra concepts beyond the beginner's immediate need to understand the notation.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> **T(n)** just means "the time it takes on an input of size n." So the right side reads as: split into two smaller calls, each on **half** the input, plus some extra work that grows in proportion to n. That extra part is the merging step, which touches every element once, and it's Theta(n) because we don't care about constant factors here. Solving it gives **Theta(n log n)**, which matches merge sort: log n levels of splitting, n work per level.
+>
+> *Summary chip:* two half calls plus linear merge
+
+*Judge (v2): 9.9. Only a minor jargon issue: 'two smaller calls' may be less clear than 'sorting each of the two halves' for someone unfamiliar with recursion.*
+
 ---
 
 #### DLEC-032 — follow_up_clarify
@@ -10193,6 +10867,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* n/2 is each half's size
 
 *Judge (v1): 9.6. The second paragraph unnecessarily repeats recursion depth and overall complexity from the previous answer, adding detail beyond the student's narrow follow-up.*
+
+*Judge (v2): 9.5. The first paragraph answers correctly, but the second repeats the earlier complexity derivation and adds unnecessary load to a narrow clarification.*
 
 **fix1**
 
@@ -10290,6 +10966,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. The final sentence about recursion depth is accurate but unnecessary for this narrow clarification.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The n/2 comes from the split itself. Merge sort cuts the array into two halves, and each half has size n/2, so you make two recursive calls on inputs of that size, which is the **2T(n/2)** part. The **Theta(n)** is separate: it's the merge step, which walks the whole n elements once to combine the sorted halves. So the recurrence says "two problems of half the size, plus linear work to put them back together."
+>
+> *Summary chip:* halving the input gives n/2
+
+*Judge (v2): 9.8. The explanation is correct and directly answers the follow-up. Re-explaining Theta(n) and summarizing the entire recurrence adds minor repetition.*
+
 ---
 
 #### DLEC-033 — derivation
@@ -10312,6 +10996,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* each level costs n, log n levels
 
 *Judge (v1): 9.9. No material issue. The level-by-level derivation is correct and accessible, though the logarithmic depth is asserted rather than explicitly derived.*
+
+*Judge (v2): 9.8. No material issues. The concrete recursion levels correctly explain the result; the logarithmic depth could be made slightly more explicit for this beginner.*
 
 **fix1**
 
@@ -10455,6 +11141,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. No material error. The optional Master Theorem paragraph introduces terminology that adds little for a beginner once the recursion-tree explanation has established the result.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> It solves to **Θ(n log n)**. The trick is to expand the recurrence level by level instead of guessing.
+> 
+> 1. At the top there's one problem of size n, and it costs Θ(n) to merge.
+> 2. One level down, the two calls each have size n/2, so together they still cost 2·Θ(n/2) = Θ(n).
+> 3. One level further, four calls of size n/4, again Θ(n) total.
+> 4. That stays Θ(n) per level until the subproblems shrink to size 1, and halving n down to 1 takes log₂ n levels.
+> 5. So the total is Θ(n) per level times log₂ n levels, which gives Θ(n log n).
+>
+> *Summary chip:* Θ(n) per level, log n levels
+
+*Judge (v2): 9.9. No material issue. The explanation is correct, accessible, and directly builds on the student's understanding of the two half-sized calls.*
+
 ---
 
 #### DLEC-034 — scientific
@@ -10472,6 +11172,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* p-value is P(data|null), not P(null|data)
 
 *Judge (v1): 9.7. The body and gist use P(data|null) as shorthand, which can misleadingly suggest the probability of the exact observed data rather than the relevant tail probability. The opening definition is correct.*
+
+*Judge (v2): 9.6. The full definition is correct, but the gist's P(data|null) and corresponding body shorthand omit the tail-event qualification, potentially conflating a p-value with the likelihood of the exact observed data.*
 
 **fix1**
 
@@ -10553,6 +11255,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.3. The initial definition is correct, but the body and gist then equate the p-value with P(data | null), obscuring the essential distinction between a tail probability and the likelihood of the observed data.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> That's a common misreading, and it's worth correcting. A p-value of 0.03 means that **if the null hypothesis were true**, there'd be a 3% chance of seeing data at least as extreme as what we got. It's the probability of the data given the null, not the probability of the null given the data. To get the chance the null is actually true, you'd need a Bayesian posterior, which also depends on your prior. So the trial result says the data are fairly unlikely under the null, not that the null has a 3% chance of being true.
+>
+> *Summary chip:* p-value is P(data|null), not P(null|data)
+
+*Judge (v2): 9.7. The initial definition is correct, but the later wording and gist shorthand, “P(data|null),” could suggest the probability of the exact observed data rather than an at-least-as-extreme tail event.*
+
 ---
 
 #### DLEC-035 — follow_up_clarify
@@ -10570,6 +11280,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* p-value isn't a 97 percent certainty
 
 *Judge (v1): 9.7. The p-value definition omits 'or more extreme,' making the tail-probability interpretation slightly imprecise. The central correction and gist are accurate.*
+
+*Judge (v2): 9.6. Minor statistical imprecision: the p-value definition says 'data this extreme' rather than 'this extreme or more extreme.' Otherwise, the explanation correctly addresses the follow-on misconception.*
 
 **fix1**
 
@@ -10640,6 +11352,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* p-value isn't 97 percent certainty
 
 *Judge (v2): 9.7. The central correction is accurate, but 'probability of the data given the null' is slightly imprecise shorthand: a p-value concerns results at least as extreme, not the exact observed data.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> That's the same misreading in reverse. The p-value doesn't give you the probability that the drug works, so you can't just flip 0.03 into 97 percent confidence. What the trial shows is that the data are unlikely if the null were true. The chance the drug actually works is a posterior probability, and getting it needs a prior plus the study's power, not a subtraction from the p-value.
+
+*Judge (v2): 9.3. The central correction is accurate, but the Bayesian explanation misleadingly identifies study power as required. Posterior efficacy probabilities require priors and likelihoods for the observed evidence; power alone does not supply those likelihoods.*
 
 ---
 
@@ -10715,6 +11433,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the response accurately connects individual incentives, Nash equilibrium, and the collectively worse outcome in a short explanation.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing gets you a lighter sentence. If the other confesses, confessing still beats staying quiet. So rational self-interest drives both to confess, and they land on a worse outcome than if they'd both stayed silent. That gap between individual rationality and collective good is the dilemma.
+
+*Judge (v2): 10.0. No material issue: it clearly explains both payoff contingencies, defines dominant strategy, and identifies the conflict between individual incentives and collective welfare.*
+
 ---
 
 #### DLEC-037 — compare
@@ -10734,6 +11458,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* repetition makes cooperation rational
 
 *Judge (v1): 9.0. “Cooperation becomes sustainable” and the gist are too unconditional: cooperation depends on future incentives and is not guaranteed. The tit-for-tat aside adds more detail than this brief transition needs.*
+
+*Judge (v2): 9.0. The explanation and gist make cooperation sound too automatic: sustainability depends on incentives, particularly how much players value future payoffs. The tit-for-tat aside adds detail without clarifying this condition.*
 
 **fix1**
 
@@ -10809,6 +11535,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.2. The core contrast is correct. The tit-for-tat aside adds unnecessary depth and slightly overgeneralizes its success; “without escalating” overlooks the possibility of persistent reciprocal retaliation.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> That's the iterated prisoner's dilemma. When the game repeats indefinitely, the logic changes: cooperation can become rational, because each player's choice now affects what the other does next. A player who defects this round gets punished in later rounds, so the shadow of the future can sustain cooperation. The key result is that no single strategy is best against everyone, but tit for tat, cooperating first and then copying the other player's last move, does well because it's nice, retaliatory, forgiving, and clear.
+>
+> *Summary chip:* repetition makes cooperation rational
+
+*Judge (v2): 8.7. Repetition alone does not ensure cooperation, despite the gist’s categorical claim. The answer omits sufficient patience and treats punishment as automatic; the tit-for-tat discussion distracts from the immediate contrast.*
+
 ---
 
 #### DLEC-038 — example
@@ -10826,6 +11560,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* cartels cheat because defecting pays now
 
 *Judge (v1): 9.4. The final sentence overstates certainty: cheating profits are not universally certain, and weaker monitoring, entry, or impatience can destabilize a cartel without automatically causing collapse.*
+
+*Judge (v2): 9.5. The explanation slightly overstates certainty: cheating profits are not always certain, and weaker monitoring or new entry can destabilize a cartel rather than automatically ending it.*
 
 **fix1**
 
@@ -10899,6 +11635,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — major_reasoning_error. An uncertain possibility of cartel breakup is not a known final round. The answer incorrectly invokes backward induction and suggests imperfect monitoring or delayed punishment prevents repeated-game cooperation, although sufficiently credible future penalties can sustain it.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Cartels are a real-world version of the same game. Each firm does better by undercutting the agreed price, since it can grab market share while the others hold the line. So the cooperative outcome, everyone keeping prices high, is unstable, and the temptation to cheat pulls the cartel apart. The iterated setting is what makes collusion possible at all, because firms can punish a cheater in later rounds, but it still breaks down when cheating is hard to detect or when the end is in sight.
+
+*Judge (v2): 9.9. No material issue. The statement that collusion breaks down when cheating is difficult to detect is slightly categorical; imperfect monitoring can sometimes still support cooperation.*
+
 ---
 
 #### DLEC-039 — terminology
@@ -10916,6 +11658,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* equilibrium shifts to partly undo a disturbance
 
 *Judge (v1): 9.7. The pressure example is slightly overgeneralized: increasing total pressure does not always shift equilibrium, such as when an inert gas is added at constant volume.*
+
+*Judge (v2): 9.7. The pressure example is slightly overgeneralized: compression favors fewer gas molecules, but increasing total pressure by adding an inert gas at constant volume does not shift equilibrium.*
 
 **fix1**
 
@@ -10991,6 +11735,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. Clear, useful introductory explanation. The pressure example is slightly overgeneralized: increasing pressure by adding inert gas at fixed volume does not shift equilibrium.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Le Chatelier's principle says a system at equilibrium pushes back against whatever you do to it. Add more of a reactant and the reaction shifts toward the products to use it up. Raise the pressure on a gas reaction and it shifts toward the side with fewer gas molecules. Raise the temperature and it shifts in the endothermic direction, the one that absorbs the extra heat. The shift only partly offsets the change, so the system settles at a new equilibrium rather than returning to the old one.
+>
+> *Summary chip:* disturbance, shift opposes it, partly
+
+*Judge (v2): 9.8. Clear, useful explanation with appropriate examples. The pressure statement is slightly overgeneralized: increasing pressure through compression matters, whereas adding an inert gas at constant volume does not shift equilibrium.*
+
 ---
 
 #### DLEC-040 — example
@@ -11008,6 +11760,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* pressure shifts toward fewer gas molecules
 
 *Judge (v1): 10.0. No material issue; the answer gives the correct shift, explains the molecular comparison, and connects it to increased ammonia yield.*
+
+*Judge (v2): 10.0. No material issue; the answer gives the correct shift, explains the stoichiometric reasoning, and reinforces that the disturbance is only partly offset.*
 
 **fix1**
 
@@ -11080,6 +11834,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* pressure shifts toward fewer gas molecules
 
 *Judge (v2): 10.0. No material issue; the answer correctly counts gas moles and clearly explains why increased pressure favors ammonia.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Increasing the pressure shifts the equilibrium toward the ammonia, because that's the side with fewer gas molecules. On the left you have four molecules of gas, one nitrogen plus three hydrogen, and on the right only two of ammonia, so the system relieves the extra pressure by favoring the side that takes up less space. The yield of ammonia goes up, though only partly, since the shift just reduces the disturbance rather than canceling it.
+>
+> *Summary chip:* pressure favors fewer gas molecules, so more ammonia
+
+*Judge (v2): 9.9. No material issue. The answer correctly explains the equilibrium shift, counts the gas particles, and reinforces the earlier lesson. The gist accurately summarizes it.*
 
 ---
 
@@ -11165,6 +11927,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.9. No material issue. The introduction is immediately speakable and accurately summarizes the candidate’s experience without inventing qualifications.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led **Project Tern**, the rewrite of our carrier-settlement service from a Rails monolith into three Go services. That work ran from the design doc through launch and on-call.
+
+*Judge (v2): 9.6. The final sentence attaches design-to-on-call ownership specifically to Project Tern, whereas the résumé states it as a general capability. Otherwise, this is a grounded, immediately speakable introduction.*
+
+**kept build, local embedder present (speed study)**
+
+> I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led Project Tern, moving our carrier-settlement service off a Rails monolith into three Go services. I like owning a service end to end, from design doc through launch and on-call.
+>
+> *Summary chip:* backend engineer, six years, led settlement rewrite
+
+*Judge (v2): 9.9. No material issue. The response is immediately speakable, concise, relevant to the target role, and faithful to the résumé.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led **Project Tern**, the rewrite of our carrier-settlement service from a Rails monolith into three Go services.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led Project Tern, moving our carrier-settlement service off a Rails monolith into three Go services. I'm **comfortable owning a service from design doc through launch and on-call**.
+
 ---
 
 #### DJOB-002 — why_role
@@ -11244,6 +12028,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Payments and ledger work is where correctness matters, the failure modes are real, and the money path has to be right every time. What pulls me toward this group specifically is the scale, growing a ledger from 400,000 to 1.5 million entries a day, and the reconciliation work with Finance and Risk.
 
 *Judge (v2): 9.3. Grounded and immediately speakable, but it omits Harrow and the double-entry design, leaving the technical motivation less specifically tailored than the available evidence supports.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> Payments and ledger work is where backend problems get real. Money has to be exactly right, so you end up caring about idempotency, isolation levels, and reconciliation in a way most services never force. A double-entry ledger at your volume is a genuinely hard system to get right.
+
+*Judge (v2): 8.7. The technical rationale is relevant but emphasizes difficulty more than motivation and leaves Harrow unnamed. Saying this is where backend problems “get real” also unnecessarily discounts other backend work.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> What pulls me in is that the money path is where correctness actually matters. A ledger has to balance, and every entry has to be right, so the engineering bar is high. The scale here is real too, growing toward 1.5 million entries a day.
+
+*Judge (v2): 9.0. The motivation is usable but somewhat generic: it omits Harrow’s double-entry design, and saying correctness “actually matters” in payments sounds unnecessarily dismissive of other engineering work.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> What pulls me in is that payments and ledger work is where correctness actually matters. A ledger has to balance, and every entry has to be right, so the engineering bar is high. The scale here, growing toward a million and a half entries a day, makes it genuinely interesting.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The money path is where correctness actually matters. A double-entry ledger has to balance, and reconciliation and audit requirements make that concrete. The scale here is interesting too, growing from **400,000 to a projected 1.5 million entries a day**.
 
 ---
 
@@ -11325,6 +12129,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.7. The reply accurately cites the band but then asks for a range already supplied. “How I'm leveling the role” is awkward for a candidate, especially since the JD already specifies L5.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> The band I saw for this role is **$172,000 to $208,000**. Where I land in it depends on the whole package, so I'd want to understand the equity and how the leveling works before I anchor on a number. What range are you working with on your side?
+
+*Judge (v2): 9.2. The closing question is somewhat repetitive after citing the published range. Asking about placement within that band would advance the discussion more clearly. Otherwise, this is a natural fallback that avoids inventing a salary target.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> The posted band for this role is **$172,000 to $208,000** base. I'd rather hear where you see me landing in the range, since the equity and the 401(k) match are part of the whole picture too. What number did you have in mind?
+
+*Judge (v2): 9.2. The band and benefits are grounded, and no salary target is invented. However, “I'd rather hear” followed by another question makes this a somewhat evasive fallback rather than a substantive compensation answer.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> The band for this role is **$172,000 to $208,000** base, plus equity and the 401(k) match. Where I'd land in that band is something I'd want to confirm and come back to you on. What range did you have in mind for someone coming in at this level?
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The posted band for this role is **$172,000 to $208,000**. I'd rather understand the whole picture, the equity and how the leveling works, before I put a number on it. What range did you have in mind for someone coming in at this level?
+
 ---
 
 #### DJOB-004 — changing_jobs
@@ -11402,6 +12226,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Larkspur's been good to me, and Project Tern, the carrier-settlement rewrite, is the work I've been leading there. I'm weighing what comes next, and I'll come back to you on that.
 
 *Judge (v2): 6.2 — important_question_unanswered. The Project Tern detail is grounded, but “I'll come back to you on that” dodges the central question and sounds evasive. The missing personal motivation calls for a useful truthful fallback, not wholesale postponement.*
+
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> Larkspur's been good to me, and Project Tern, the carrier-settlement rewrite I led, is the work I'm proudest of. But I've taken it about as far as I can there, and I'm looking for a team where I can keep leading backend work at that scale.
+
+*Judge (v2): 5.0 — unsupported_personal_claim. Project Tern leadership is supported, but calling it his proudest work and claiming he has taken things as far as possible at Larkspur are not. The answer invents the personal reason being asked about.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I've been at Larkspur a few years, as tech lead for Project Tern, the carrier-settlement rewrite. I'm weighing what's next, and I'll come back to you on that.
+
+*Judge (v2): 6.5 — important_question_unanswered. It accurately restates résumé facts but offers no useful explanation of the move. “I'll come back to you on that” postpones a basic interview question and makes the candidate sound evasive.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'm a backend engineer, about six years in, and I've been the tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight, owning it from design doc through launch and on-call. What does the first six months look like here?
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Larkspur's been good to me, and Project Tern in particular, I led the carrier-settlement rewrite from design doc through launch. I'm weighing what's next, and I'll come back to you on it.
 
 ---
 
@@ -11482,6 +12326,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The honest one is Project Tern. I was tech lead on the carrier-settlement rewrite, a working group of 4 engineers and 1 QA analyst over 7 months, moving the Rails monolith into three Go services. What I'd say I took from it is writing the edge cases into the design doc first and getting sign-off before anyone wrote code.
 
 *Judge (v2): 4.0 — fabricated_behavioral_story, unsupported_personal_claim, important_question_unanswered. The résumé supports Tern’s scope and leadership, not that it went badly or produced this lesson. The answer invents that framing and takeaway while never explaining what failed or the candidate’s responsibility.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> The honest answer is that Project Tern, our carrier-settlement rewrite, is the closest thing. I was tech lead, coordinating four engineers and a QA analyst over seven months, and I wrote the team's first set of 14 incident runbooks. If a launch slipped, I'd want the runbooks and the on-call rotation in place before the cutover, not after.
+
+*Judge (v2): 5.0 — unsupported_personal_claim, important_question_unanswered. The résumé supports Tern's scope and the runbooks, but not presenting Tern as a setback. The response never explains what went wrong, the candidate's responsibility, or actual changes afterward; it substitutes a hypothetical.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> The honest one is Project Tern. We ran the carrier-settlement rewrite over seven months with four engineers and a QA analyst, and I was the tech lead on it. What I took from it was writing the team's first set of 14 incident runbooks, and being on a 6-person on-call rotation.
+
+*Judge (v2): 4.0 — fabricated_behavioral_story, important_question_unanswered. Verified résumé facts are stitched into an unsupported failure narrative: Tern becomes the setback, and runbooks/on-call become its lessons. The answer never explains what went wrong or the candidate’s responsibility for it.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> The honest one is Project Tern. I was tech lead on the carrier-settlement rewrite, a Rails monolith into three Go services, a working group of 4 engineers and 1 QA analyst over 7 months. My part was the sequencing, and what I changed afterward was staging the risky piece first behind a flag, and writing the runbooks before launch instead of after.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The honest one is Project Tern. I was tech leading the carrier-settlement rewrite, coordinating a working group of **4 engineers and 1 QA analyst over 7 months**. What I'd do differently is write the scope down and treat anything new as a separate follow-up, not something we fold in mid-flight.
 
 ---
 
@@ -11583,6 +12447,34 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.1. The per-lane query pattern and single-round-trip implementation aren't established by the résumé. Batching reduces round trips but does not necessarily make total work independent of the number of lanes.*
 
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> The main problem was N+1 queries against PostgreSQL. The rate-quote path was firing a separate query per lane, so a single request fanned out into a lot of round trips, and that dominated the p95. I replaced those with a batched loader so one request pulls all the lanes it needs in a single query, and I put a 90-second Redis cache in front of it keyed by lane ID. Together that took p95 from 820 milliseconds down to 190.
+>
+> *Summary chip:* N+1 queries, batched loader plus Redis cache
+
+*Judge (v2): 9.1. The core explanation is grounded, but separate queries per lane and exactly one query fetching all needed lanes are undocumented implementation details, not established by the résumé.*
+
+**kept build, local embedder present (speed study)**
+
+> The main thing was N+1 queries against PostgreSQL. The rate-quote path was firing a separate query per lane, so the database round trips dominated the p95. I replaced that with a batched loader so we fetch all the lanes in one pass, and put a 90-second Redis cache in front of it keyed by lane ID. That took p95 from 820 milliseconds down to 190.
+>
+> *Summary chip:* N+1 queries, batched loader, Redis cache
+
+*Judge (v2): 9.7. “A separate query per lane” is plausible but slightly exceeds the evidence: the résumé establishes N+1 PostgreSQL queries without identifying which entity triggered each query.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The main cost was N+1 queries against PostgreSQL. The rate-quote path was firing a separate query per lane, so the database round trips dominated the p95. I replaced that with a batched loader that fetches all the lanes in one pass, and put a 90-second Redis cache in front of it keyed by lane ID. Together those took p95 from 820 milliseconds down to 190.
+>
+> *Summary chip:* N+1 queries, batched loader, Redis cache
+
+**kept build, rerank off (speed study, not judged)**
+
+> The main thing was an N+1 in the quote path. For each lane we were hitting PostgreSQL once per carrier, so a single quote fanned out into dozens of round trips, and that dominated the p95. I replaced it with a batched loader so the carriers for a lane come back in one query, then put a 90-second Redis cache in front of it keyed by lane ID. That took p95 from 820 milliseconds down to 190.
+>
+> *Summary chip:* N+1 queries, batched loader, Redis cache
+
 ---
 
 #### DJOB-007 — strengths
@@ -11667,6 +12559,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.9. No material issues. The answer is immediately speakable, identifies a clear strength, and supports it with accurate résumé evidence without using the irrelevant attachment.*
 
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> My biggest strength is taking a messy, high-stakes service and making it reliable. At Larkspur Freight I led Project Tern, rewriting carrier settlement from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. Alongside that I cut the rate-quote API's p95 from 820 milliseconds to 190, and brought monthly settlement mismatches down from 312 to 41 with a nightly reconciliation job. I like owning a service end to end, from the design doc through launch and on-call.
+>
+> *Summary chip:* reliability on high-stakes backend services
+
+*Judge (v2): 9.8. The additional latency example makes the spoken answer slightly metric-heavy and dilutes its otherwise clear reliability theme.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> My biggest strength is owning a service end to end, from the design doc through launch and on-call. At Larkspur I was tech lead on Project Tern, rewriting carrier settlement from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. I also cut the rate-quote API's p95 from 820 milliseconds to 190 by replacing N+1 queries with a batched loader and a Redis cache.
+
+*Judge (v2): 9.8. No material issue. The separate latency example slightly dilutes the otherwise clear end-to-end ownership theme.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> My biggest strength is owning a service end to end, from the design doc through launch and on-call. At Larkspur I was tech lead on Project Tern, rewriting the carrier-settlement service from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. That same instinct shows up in the details: I cut the rate-quote API's p95 from 820 milliseconds to 190, and brought monthly settlement mismatches down from 312 to 41.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> My biggest strength is taking a service from design doc all the way through launch and on-call. At Larkspur I was tech lead on Project Tern, rewriting carrier settlement from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. I also designed Dockhand, a Kafka pipeline handling about 2.3 million shipment status events a day. I wrote the team's first set of 14 incident runbooks and I'm on a 6-person on-call rotation.
+
 ---
 
 #### DJOB-008 — weaknesses
@@ -11744,6 +12658,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Honestly, it's the people side of leading. On Project Tern I coordinated **four engineers and a QA analyst**, and the technical calls came more easily to me than the direct feedback did. What I'm working on is giving that feedback in the moment, privately, with one concrete example, rather than saving it for a review cycle.
 
 *Judge (v2): 5.0 — unsupported_personal_claim. The project and team size are supported, but difficulty giving feedback, saving it for reviews, and practicing a new feedback routine are invented. These unsupported personal claims constitute the substance of the weakness answer.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> The thing I keep working on is delegating earlier. On Project Tern I coordinated four engineers and a QA analyst, and I'd hand off the trickiest pieces sooner, writing the context down and letting people run with it, then reviewing rather than redoing.
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The Tern team details are accurate, but “I keep working on ... delegating earlier” invents an ongoing personal development area. Leading that team does not establish that delegation is Tobias’s weakness.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> Something I'm working on is delegating more. On Project Tern I coordinated a working group of four engineers and a QA analyst over seven months, and I've been trying to hand off ownership earlier and check in on outcomes instead of every step.
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The Project Tern details are accurate, but delegation as an existing weakness and the claimed efforts to change ownership and check-in habits are unsupported personal claims.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> The thing I keep working on is letting go of the details. Leading **Project Tern**, coordinating **four engineers and a QA analyst over seven months**, taught me that stepping back and trusting the group gets a better result than trying to touch everything. I'm still getting better at it.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The thing I keep working on is delegating more of the technical detail. On Project Tern I led a working group of four engineers and a QA analyst, and I've been getting better at handing over ownership and staying in the loop on outcomes instead.
 
 ---
 
@@ -11828,6 +12762,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I've coordinated a working group of four engineers and a QA analyst over seven months on Project Tern. That's the closest I've come to mentoring, and I'd bring that same approach here.
 
 *Judge (v2): 8.7. The response uses genuine leadership experience, but leaves the lack of formal mentoring implicit. “That same approach” is vague: coordinating a project does not explain how the candidate would support another engineer’s development.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> On Project Tern I coordinated a working group of four engineers and a QA analyst over seven months, and I'd bring that same approach to mentoring here: reviewing designs, unblocking people, and giving feedback on their code, with regular one-on-ones and clear growth goals.
+
+*Judge (v2): 8.8. The leadership example is supported and the mentoring plan is prospective, but the wording never acknowledges the lack of formal mentoring. “That same approach” slightly blurs established coordination experience with proposed mentoring practices.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I haven't had a formal mentee, so I'd be straight about that. What I have done is lead Project Tern, where I coordinated a working group of four engineers and a QA analyst over seven months, and I wrote my team's first set of 14 incident runbooks.
+
+*Judge (v2): 9.4. The answer is honest and grounded, but it leaves the connection between those accomplishments and mentoring implicit rather than showing how the candidate would approach the new responsibility.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'd be straight about the mentoring piece. What I have done is lead Project Tern, where I coordinated a working group of four engineers and a QA analyst over seven months, reviewing design and unblocking people day to day. I'll come back to you on the mentoring question with something concrete.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I've done the work in practice. On Project Tern I coordinated a working group of four engineers and a QA analyst over seven months, and I wrote our team's first set of 14 incident runbooks. I'd bring that same approach to mentoring here.
 
 ---
 
@@ -11973,6 +12927,40 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 5.3 — important_question_unanswered. The “why here” answer is an unusable deferral. Despite a detailed JD, none of the prep uses Tallowmarket’s context or names Imani Castellanos; the warning against evaluating processes is overly broad.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> Five questions for the director: how does the team decide what to build next? What does success look like in the first six months? Where do engineers get stuck most often? How do you handle disagreement between product and engineering? What's the biggest technical bet you're making this year?
+> 
+> Two topics to steer away from: compensation and benefits, and anything about internal politics or people who've left.
+> 
+> On why I want to work here: the problems this team is solving are the kind worth spending your time on, and the way you work is how I'd want to operate. I'd rather build something that matters with people who care about the craft.
+
+*Judge (v2): 7.0 — missed_available_evidence. The requested structure is present, but the questions and motivation could fit any company. Tallowmarket’s mission, payments responsibilities, and design-doc culture go unused. Avoiding anything about departures also discourages legitimate culture due diligence.*
+
+**kept build, local embedder present (speed study)**
+
+> Five questions for the director: what does success look like in this role at six months, where the team is heading over the next year, what the biggest technical constraint is right now, how the team handles disagreement on architecture, and what they'd want me to change first. Two topics I'd steer away from: anything about compensation or title, and internal politics or gossip about other teams. If asked why I want to work here, I'd say the problems this team is solving line up with what I do best, and I want to do that work somewhere the engineering bar is high.
+>
+> *Summary chip:* five questions, two avoids, why-here answer
+
+*Judge (v2): 5.0 — unsupported_personal_claim, missed_available_evidence. The requested counts are covered, but the prep ignores the supplied role and named interviewer. “What I do best” asserts unsupported strengths, the motivation is generic, and blanket avoidance of compensation/title is overly broad.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Five questions for the director: what does success look like in this role at six months, where the team is heading over the next year, what the biggest technical constraint is right now, how decisions get made between engineering and product, and what they'd want me to grow into.
+> 
+> Two topics I'd steer away from: salary and level, and any criticism of how the team currently does things.
+> 
+> On why I want to work here: I'll give you a tight answer on that and come back to you on it.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Five questions for the director: what does success look like in the first six months, where the team is heading over the next year, how engineering and product make prioritization calls, what the biggest technical constraint is right now, and how they support growth on the team.
+> 
+> Two topics to steer away from: compensation and title details, and anything that sounds like criticism of the current team or process.
+> 
+> On why I want to work here: I'll give you my own answer on that one and come back to you on it.
+
 ---
 
 #### DJOB-011 — prep_request
@@ -12079,6 +13067,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.3. The advice is sound and appropriately concise, but somewhat generic: it gives no concrete practice exercise or technical review topics to help the candidate start preparing.*
 
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> For a system design round, I'd focus on being able to walk through a design out loud, not just know the theory. I'd practice taking a vague prompt, asking the clarifying questions that actually matter, and then sketching the core components and the tradeoffs between them. The thing that usually separates a strong answer is being explicit about why I chose one approach over another, and where it would break first. I'd also rehearse a couple of designs end to end so the structure is automatic under pressure.
+>
+> *Summary chip:* practice out loud, name tradeoffs, rehearse end to end
+
+*Judge (v2): 9.4. The guidance is sound but somewhat generic; it gives no concrete practice problem or time-boxed exercise to make the candidate's next preparation step obvious.*
+
+**kept build, local embedder present (speed study)**
+
+> For the system design round, I'd focus on being able to talk through a design out loud, not just recall architectures. I'd practice taking a vague prompt, asking the clarifying questions that matter, sketching the main components, and then walking through tradeoffs like scaling, consistency, and failure modes. I'd also rehearse explaining my reasoning as I go, since interviewers care about how you think, not just the final diagram. If you tell me the specific role or company, I can point to what they tend to emphasize.
+
+*Judge (v2): 9.5. The advice is sound but slightly repetitive about explaining reasoning aloud; a concrete practice exercise would make it more actionable.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> For a system design round, I'd focus on being able to walk through a design out loud, not just know the theory. I'd practice taking a vague prompt, asking the clarifying questions that actually matter, and then sketching the core components and the tradeoffs between them. The thing that usually separates a strong answer is being explicit about why I chose one approach over another, and where it would break first. I'd also rehearse talking through a design I already know well, so I can stay calm and structured under time pressure.
+>
+> *Summary chip:* practice out-loud design and tradeoffs
+
+**kept build, rerank off (speed study, not judged)**
+
+> For the system design round, I'd focus on being able to talk through a design out loud, not just recall architectures. I'd practice taking a vague prompt, asking the clarifying questions that matter, sketching the high-level components, then going deep on one or two areas where the tradeoffs are real. I'd also rehearse explaining why I chose one approach over another, since that's usually what they're listening for.
+> 
+> If you tell me the company or the kind of systems they build, I can point you at the specific areas worth drilling.
+
 ---
 
 #### DJOB-012 — employment_gap
@@ -12150,6 +13164,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'd rather walk you through it directly than have it read as a blank spot. Let me lay out the timeline and what brought me back when it did.
 
 *Judge (v2): 6.8 — important_question_unanswered, insufficient_answer. This is only a preamble: it promises a timeline but addresses none of the requested activities, reasons, or return timing. Avoiding invented biography is appropriate, but the candidate must still construct the entire answer.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> There is a gap of about eight months before my current role, and I'd rather speak to it directly than have it read as a blank spot. When I look at a move like that, what I weigh is whether the next role is the right fit rather than just the next available one, and whether I can see the impact I'd have early on. I'm glad to go into the specifics of that period whenever it's useful.
+
+*Judge (v2): 4.9 — unsupported_personal_claim, important_question_unanswered. It substitutes unsupported personal career priorities for all three requested explanations, then offers specifics “whenever it's useful” even though the interviewer explicitly wants them now.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> That stretch is something I'd rather walk you through properly than sketch out here, and I want to get the details right. Let me pull together what I was doing during those months and why I came back when I did, and I'll come back to you on it.
+
+*Judge (v2): 6.5 — important_question_unanswered. Although it avoids fabrication, it postpones every part of the question and makes the candidate sound unprepared to explain their own résumé. The follow-up promise offers little help during the interview.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'd rather walk you through it directly than have it read as a blank spot. Let me lay it out for you now.
+> 
+> Can I ask what specifically you're weighing when you look at that gap, so I can speak to the part that actually matters to you?
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> That stretch is something I'd rather walk you through directly than have you read between the lines of a resume. What I can say is that I'd want to give you the real picture, what I was doing, why I stepped away, and what brought me back, and I'd rather do that in conversation than compress it into a sentence here.
 
 ---
 
@@ -12226,6 +13262,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Forty people is a lot, so I'll keep it simple. What I'd ask is whether you want someone who fits the checklist, or someone who'll own the outcome. I'd be the second one.
 
 *Judge (v2): 8.5. The ownership pledge is a permissible future commitment, but the checklist-versus-results framing is a false choice and can sound dismissive. It offers little concrete reason to select the candidate.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I'd start by asking what the first ninety days need to look like, then work the problem in front of the team, surfacing risk early, following through without being chased. That's how I'd want to be useful from the start.
+
+*Judge (v2): 9.1. The forward-looking approach is truthful and speakable, but mainly explains how the candidate would start rather than making a direct case for selection.*
+
+**kept build, local embedder present (speed study)**
+
+> Forty people is a lot of noise, so let me make it easy to compare. I'd rather be judged on how I think through your actual problems than on a polished pitch. Give me one real challenge you're facing, and I'll show you how I'd approach it.
+
+*Judge (v2): 8.7. Calling the pipeline 'noise' risks sounding dismissive. Offering a practical demonstration is a useful, truthful fallback, but it shifts work back to the interviewer without directly establishing why this candidate should be chosen.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Forty people is a lot, so I'll keep it simple. What I'd want to know from you is which problem matters most in the first ninety days, because that's where I'd focus.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Forty people is a lot, so I'll keep it simple. What I'd want to know from you is which gap is costing you most right now, because that's where I'd start.
 
 ---
 
@@ -12319,6 +13375,34 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.4. The opening “Yes” suggests the incident triggered a page, although lag paging was added afterward. “Caught us up, then” also introduces a recovery sequence the notes do not establish.*
 
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> Yes, in October 2024 I was the on-call engineer when our relay fell 38 minutes behind during the morning peak. Customer tracking pages went stale and support got about 70 tickets. The prune job on the outbox table had been disabled during a migration and never re-enabled, so it had grown to about 40 million rows and the relay's query degraded into a large scan. I got the prune job back on, added a partial index on unpublished rows, and set a Datadog monitor on relay lag that pages at five minutes. I wrote the postmortem and turned the recovery steps into a runbook.
+>
+> *Summary chip:* relay lag incident, fixed and runbooked
+
+*Judge (v2): 9.9. No material issues. Opening with “our relay” assumes some technical context; naming Dockhand and its purpose would orient the interviewer slightly better.*
+
+**kept build, local embedder present (speed study)**
+
+> Yes, October 2024, I was on call and our relay fell 38 minutes behind during the morning peak. Customer tracking pages went stale and support got about 70 tickets. The prune job on the outbox table had been disabled during a migration and never re-enabled, so it had grown to around 40 million rows and the relay's query turned into a large scan. I added a partial index on unpublished rows, re-enabled the prune with an alert if it hasn't run in three hours, and set a Datadog monitor on relay lag that pages at five minutes.
+>
+> *Summary chip:* outbox prune disabled, relay lagged, fixed
+
+*Judge (v2): 9.7. The opening “Yes” slightly implies that an existing monitor paged him, whereas the write-up says lag paging was introduced afterward. Otherwise, the incident account and fixes closely match the evidence.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Yes, October 2024, I was on call. Our relay fell 38 minutes behind during the morning peak, so tracking pages showed stale statuses and support got about 70 tickets. The prune job on the outbox table had been disabled during a migration and never re-enabled, so the table had grown to roughly 40 million rows and the relay's query degraded into a large scan. I got the prune job back on, added a partial index on unpublished rows, and set a Datadog monitor on relay lag that pages at five minutes. I wrote the postmortem and turned the recovery steps into a runbook.
+>
+> *Summary chip:* relay lag incident, fixed and monitored
+
+**kept build, rerank off (speed study, not judged)**
+
+> Yes, October 2024. I was on call when our relay fell 38 minutes behind during the morning peak, so tracking pages showed stale statuses and support got about 70 tickets. The prune job on the outbox table had been disabled during a migration and never re-enabled, so it had grown to around 40 million rows and the relay's query degraded into a large scan. I added a partial index on unpublished rows, re-enabled the prune with an alert if it hasn't run in three hours, and set a Datadog monitor on relay lag that pages at five minutes. Then I wrote the postmortem and turned the recovery steps into a runbook.
+>
+> *Summary chip:* relay lag incident, fixed and runbooked
+
 ---
 
 #### DJOB-015 — achievement
@@ -12411,6 +13495,38 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.3. The grounded, speakable story is closer to 35–40 seconds than 60. It names the design components without explaining the atomic shipment_outbox write or how transactional consumer deduplication makes retries safe.*
 
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> Dockhand is the Kafka pipeline I built at Larkspur Freight for shipment status events, about 2.3 million a day. The core was a transactional outbox: status changes and the outbox row commit together in Postgres, then a Go relay publishes to Kafka, and consumers dedupe on event_id. That took duplicate delivered events reaching billing to zero.
+>
+> *Summary chip:* transactional outbox, Kafka, idempotent consumers
+
+*Judge (v2): 9.1. Accurate and immediately usable, but approximately 65 words makes this closer to 30 seconds than 60. It omits the original database/HTTP failure mode and the requested shipment_outbox detail, leaving the story underdeveloped.*
+
+**kept build, local embedder present (speed study)**
+
+> Dockhand is the Kafka pipeline I built at Larkspur Freight to carry shipment status events, about 2.3 million a day. The core problem was dual writes: a service would commit to Postgres and then call downstream over HTTP, so a crash meant lost events and a retry meant duplicates. Billing was literally keeping a spreadsheet of duplicate "delivered" events.
+> 
+> So I used a transactional outbox. The status update and an outbox row commit in the same Postgres transaction, a Go relay polls that table with SELECT FOR UPDATE SKIP LOCKED and publishes to Kafka, and consumers dedupe on event_id inside their own transaction. One topic, 24 partitions keyed by load ID so events for a load stay ordered.
+> 
+> I wrote the design doc and built it with one other engineer, ran it in shadow mode for three weeks, then cut over carrier by carrier. Duplicate delivered events hitting billing went to zero in the first month, and finance retired the spreadsheet.
+>
+> *Summary chip:* transactional outbox, relay, consumer dedupe
+
+*Judge (v2): 9.8. The story is grounded, appropriately sized, and ready to say. It explains the outbox correctly but omits the supplied shipment_outbox table name—a minor specificity gap, not a substantive error.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Dockhand is the Kafka pipeline I built at Larkspur Freight to carry shipment status events downstream. It handles about 2.3 million events a day, and the core of it is a transactional outbox: the status write and the outbox row commit together, a Go relay publishes to Kafka, and consumers dedupe on event_id so at-least-once delivery stays idempotent.
+>
+> *Summary chip:* transactional outbox, Kafka, idempotent consumers
+
+**kept build, rerank off (speed study, not judged)**
+
+> Dockhand is the Kafka pipeline I built at Larkspur Freight for shipment status events, about 2.3 million a day. The core problem was dual writes: a database commit and a separate HTTP call that could fail or duplicate. So we used a transactional outbox, a Go relay publishing to Kafka, and consumer-side dedupe on event_id. Duplicate delivered events hitting billing went to zero.
+>
+> *Summary chip:* transactional outbox, relay, idempotent consumers
+
 ---
 
 #### DJOB-016 — teamwork
@@ -12491,6 +13607,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — unsupported_personal_claim, fabricated_behavioral_story. The résumé supports Tern’s duration and QA staffing, but not early design involvement, agreed contract-test coverage, parallel Rails/Go testing, or cutover practices. These invented details supply most of the behavioral answer.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> On Project Tern I had one QA analyst in the working group with me and four engineers, over seven months. What I'd do in that situation is keep QA in the design conversations from the start rather than handing over a finished service, settle what each Go service's contract is early, so tests can be written against that while the internals are still moving, and triage anything that breaks together instead of throwing it over the wall.
+
+*Judge (v2): 9.1. The opening ambiguously implies the candidate plus four other engineers. Otherwise, the approach is useful and appropriately hypothetical, though the long second sentence slightly weakens spoken delivery.*
+
+**kept build, local embedder present (speed study)**
+
+> On Project Tern I worked directly with one QA analyst across the whole seven-month rewrite, and the thing that made it work was keeping her in the loop from the design stage rather than handing over a finished service. We agreed early on what the contract tests had to cover, so as each of the three Go services came up she could test against the old Rails behavior and flag drift while it was still cheap to fix.
+
+*Judge (v2): 4.0 — unsupported_personal_claim, fabricated_behavioral_story. The résumé supports the team composition, duration, and architecture, but not the QA analyst's gender, design-stage involvement, contract-test agreement, or Rails-parity testing. These invented details create a fabricated collaboration story around a real project.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> On Project Tern I had one QA analyst in the working group, and the thing that kept us sane was getting them in before the code was done. We walked through the design early, agreed on what the risky paths were, and they wrote tests against the new Go services while the old Rails monolith was still live, so we could run both and compare. That way the rewrite never landed as one big surprise at the end.
+>
+> *Summary chip:* QA in early, test both systems
+
+**kept build, rerank off (speed study, not judged)**
+
+> On Project Tern, the rewrite of the carrier-settlement service, I had one QA analyst in the working group with me and four engineers over seven months. What worked was keeping QA in the design conversations from the start, so tests were written against the new Go services as they landed rather than after.
+
 ---
 
 #### DJOB-017 — career_goals
@@ -12570,6 +13708,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm a backend engineer, and at Larkspur I tech led Project Tern, the carrier-settlement rewrite, and worked on Dockhand and the load_events partitioning. What does growth look like on your team over that span?
 
 *Judge (v2): 7.6 — important_question_unanswered. The résumé summary is accurate, but it never addresses the three-to-five-year outlook. Asking about team growth redirects the interviewer's question rather than answering it.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> In three to five years I'd like to be leading bigger technical efforts, the way I led Project Tern, the carrier-settlement rewrite at Larkspur. That work was high-throughput, Go services, a Kafka pipeline processing about 2.3 million shipment status events a day, PostgreSQL.
+
+*Judge (v2): 7.5. The opening answers the question, but the second sentence becomes a choppy résumé recap and implies Dockhand's 2.3-million-event Kafka pipeline belonged to Project Tern, which the résumé does not establish.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I'd like to be the person a team trusts to own a service end to end, from the design doc through launch and on-call. Project Tern was a good step toward that, leading the rewrite of the carrier-settlement service into three Go services.
+
+*Judge (v2): 9.1. The answer is grounded and immediately speakable, but its aspiration largely describes work he already does. It gives little sense of how his scope or expertise would develop over three to five years.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> In three to five years I'd like to be leading bigger technical efforts, the way I led **Project Tern**, the **carrier-settlement rewrite** at **Larkspur**. I've worked on **high-throughput systems** in **Go**, **Kafka**, and **PostgreSQL**, and I'd like to keep building on that.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> In three to five years I want to be the person a team trusts to own a hard backend system end to end, the way I did with **Project Tern**, and to be mentoring engineers. I'm less interested in a title than in scope, so I'd like to be leading bigger, messier problems by then.
 
 ---
 
@@ -12656,6 +13814,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I've been working as a backend engineer since 2020. I started at Brindlecap Labs in 2020 on a Python/Django inventory tool, and since mid-2021 I've been at Quillfeather Health building Kotlin services, mostly around scheduling and reliable messaging.
 
 *Judge (v2): 4.0 — major_factual_error. It treats the November 2022 résumé as current, falsely saying Tobias is still at Quillfeather despite his documented move to Larkspur in March 2023. The unnecessary chronology makes a simple answer misleading.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I started at Brindlecap Labs in 2020 on a Python/Django inventory tool, and since mid-2021 I've been at Quillfeather Health building Kotlin services, including an appointment-reminder service that sent around four million SMS reminders in its first year. That's the backend work I'd bring to a role covering **Go, Java or Kotlin** services and **PostgreSQL** at scale.
+
+*Judge (v2): 4.0 — major_factual_error, missed_available_evidence, important_question_unanswered. Treats the outdated 2022 résumé as current, incorrectly saying the candidate still works at Quillfeather. It omits the available experience total and substitutes project details and job-description keywords.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I started at Brindlecap Labs in September 2020, and I joined Quillfeather Health in June 2021, building services in Kotlin and Python, mostly around scheduling and reliable messaging.
+
+*Judge (v2): 5.2 — missed_available_evidence, reference_conflict_ignored, important_question_unanswered. It recites dates from the outdated résumé that conflict with the current résumé, but never states the available six-year total. The interviewer must infer the answer from an incomplete employment history.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I started at Brindlecap Labs in 2020 on a Python and Django inventory tool, and since mid-2021 I've been at Quillfeather Health building Kotlin services, most recently an appointment-reminder service that sent about four million SMS reminders in its first year.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I started at Brindlecap Labs in 2020 on a Python and Django inventory tool, then moved to Quillfeather Health in 2021, where I've been building Kotlin services, including an appointment-reminder service in Kotlin.
 
 ---
 
@@ -12761,6 +13939,38 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.9. No substantive issue. Asking three questions together creates a small recall burden for the interviewer compared with asking them sequentially.*
 
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> Thanks, that's helpful context. Three things I'd love to dig into. First, where is the Temporal migration right now, and what's the hardest part left? Second, how does the team split ownership of the payout scheduler day to day, and who'd I be working with most closely? Third, what does success look like in the first six months, and how would you know it's going well?
+>
+> *Summary chip:* three questions on team and migration
+
+*Judge (v2): 9.8. No substantive issue. Asking three multipart questions in one turn slightly increases the interviewer's recall burden.*
+
+**kept build, local embedder present (speed study)**
+
+> That's a great background, thanks for sharing it. Three things I'd love to dig into:
+> 
+> 1. What does success look like for this role in the first six months, and how would you know the Temporal migration is on track?
+> 2. How is the team set up day to day, and where would I fit in terms of owning the payout scheduler versus pairing with others?
+> 3. What's the hardest part of the migration so far, and what's the biggest risk you're watching?
+>
+> *Summary chip:* three questions on team, migration, success
+
+*Judge (v2): 9.7. No substantive issue; presenting three compound questions at once is slightly less conversational than starting with one and allowing an answer.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Thanks for that. Three things I'd love to dig into. What does success look like for this role in the first six months, especially with the Temporal migration still in flight? How is the team split between finishing that migration and running the scheduler day to day? And how does the on-call rotation work for the payout scheduler, is it shared across the team or owned by a smaller group?
+>
+> *Summary chip:* three questions on team, migration, on-call
+
+**kept build, rerank off (speed study, not judged)**
+
+> Thanks for that, it's helpful context. I've got three questions. First, where is the payout scheduler migration right now, and what does success look like for the first six months? Second, how does the team split ownership between the scheduler itself and the services that depend on it? And third, what does the on-call rotation look like for this team, and how much of it is scheduler-related?
+>
+> *Summary chip:* three questions on team, ownership, on-call
+
 ---
 
 #### DJOB-020 — changing_jobs
@@ -12851,6 +14061,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. The opener slightly overemphasizes the earlier misstep; “Fair enough” may sound misplaced if the interviewer simply asks a neutral follow-up.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> Fair enough, that came out more pointed than I meant. The honest version is that after the reorg in the spring my manager took over the design decisions, and I want a place where I'm closer to those decisions again. I led Project Tern, the carrier-settlement rewrite, and I'd like a role with more of that scope.
+
+*Judge (v2): 9.1. The grounded, forward-looking pivot helps, but repeating “my manager took over the design decisions” preserves the manager-focused blame the user specifically wanted to soften.*
+
+**kept build, local embedder present (speed study)**
+
+> Fair enough, that came out more pointed than I meant. Cleaner version: after the reorg in the spring, design decisions moved to my manager, and I found I had less room to contribute than before. That's really what pushed me to look, I want a team where I can own more of the technical direction again.
+>
+> *Summary chip:* reframe reorg as wanting more ownership
+
+*Judge (v2): 9.6. “Cleaner version” sits awkwardly inside an otherwise first-person script, slightly obscuring where the reusable wording begins. The substantive reframe is grounded, concise, and forward-looking.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'd reframe it around what I want next rather than what went wrong. Something like: after the reorg, design decisions consolidated under my manager, and I'm looking for a role where I can own more of the technical direction.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'd reframe it around what I want next rather than what went wrong. Something like: after the reorg, design decisions got centralized, and I want to be close to those calls. It's honest, it's forward-looking, and it doesn't put the blame on anyone.
+
 ---
 
 #### DJOB-021 — follow_up_challenge
@@ -12932,6 +14164,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > My production container work has been on ECS, with Terraform and Docker, and I've done on-call and runbooks on those services. The concepts carry over. What does your Kubernetes footprint look like day to day?
 
 *Judge (v2): 9.1. The answer is honest and immediately usable, but the Kubernetes limitation is implicit. The generic transferability claim and immediate follow-up provide little concrete context for the interviewer's scale concern.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> My production container work has been on ECS, with Terraform and Docker, alongside on-call and runbooks. The operational side is what transfers: deploys, scaling, health checks, incident response. Kubernetes specifics I'd pick up on the job.
+
+*Judge (v2): 9.6. The lack of production Kubernetes experience is implied rather than stated explicitly. “Pick up on the job” is slightly casual about the learning gap.*
+
+**kept build, local embedder present (speed study)**
+
+> No, I haven't run Kubernetes in production. My production container experience is on **ECS**, where I owned services end to end, including on-call and runbooks. The concepts carry over: I've done Terraform, Docker, and service-level scaling decisions. I'd want to be honest that the Kubernetes-specific operational side, like cluster upgrades and ingress, is where I'd be learning on the job.
+>
+> *Summary chip:* ECS in prod, not Kubernetes, honest about the gap
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The response is otherwise honest and speakable, but “I've done ... service-level scaling decisions” asserts operational experience not established by the user or résumé.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> No, I haven't run Kubernetes in production. My production container experience is on **ECS**, where I've owned services from design doc through launch and on-call. The concepts carry over. What does the team's Kubernetes setup look like day to day?
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> My production container experience is on **AWS ECS**. The concepts carry over. What does the ramp look like for someone coming from ECS?
 
 ---
 
@@ -13019,6 +14273,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. Minor grounding caveat: the résumé describes end-to-end service ownership generally, but does not explicitly tie design-through-on-call ownership to Tern.*
 
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> Project Tern was a rewrite of our carrier-settlement service, moving it from a Rails monolith into three Go services. I was the tech lead, so I owned the design and the delivery: I coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch.
+
+*Judge (v2): 9.7. Scope, team, and timeline are grounded. End-to-end design ownership is slightly stronger than the project-specific evidence, though consistent with the résumé’s general summary.*
+
+**kept build, local embedder present (speed study)**
+
+> Project Tern was a rewrite of our carrier-settlement service, moving it from a Rails monolith into three Go services. I was the tech lead, so I owned the design and the delivery: I coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch.
+
+*Judge (v2): 9.7. Scope, team, and timeline are grounded. End-to-end design ownership is slightly stronger than the project-specific evidence, though consistent with the résumé’s general summary.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Project Tern was a rewrite of our carrier-settlement service, moving it from a Rails monolith into three Go services. I was the tech lead, so I owned the design and the delivery: I coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch.
+
+**kept build, rerank off (speed study, not judged)**
+
+> Project Tern was a rewrite of the carrier-settlement service at Larkspur Freight, moving it from a Rails monolith into three Go services. I was the tech lead, so I owned the design and coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch.
+>
+> *Summary chip:* Tern scope and my tech lead role
+
 ---
 
 #### DJOB-023 — leadership
@@ -13101,6 +14377,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 5.0 — unsupported_personal_claim. The résumé establishes technical leadership and coordination, not reporting lines. “No, they didn't report to me” turns missing information into a definitive personal-history claim. The remaining explanation is supported.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> No, they didn't report to me. I was the tech lead on Project Tern, so I owned the design and the delivery, and I coordinated the working group of four engineers and one QA analyst.
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “No, they didn't report to me” asserts an unverified reporting relationship. Technical leadership and working-group coordination do not establish whether someone had direct reports. The remaining clarification is supported and immediately speakable.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> No, they didn't report to me. I was the tech lead on Tern, so I owned the design and the delivery, and I coordinated the working group of four engineers and one QA analyst.
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “No, they didn’t report to me” asserts an unsupported reporting relationship. The résumé establishes technical leadership and coordination, but does not establish whether the engineers were direct reports.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I was the tech lead on Project Tern, so I owned the design and the delivery, and I coordinated the working group of four engineers and one QA analyst.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I was the tech lead on Project Tern, so I owned the design and coordinated the working group of four engineers and one QA analyst over seven months, from design doc through launch.
+
 ---
 
 #### DJOB-024 — conflict
@@ -13182,6 +14478,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I was the tech lead on Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services, and I coordinated a working group of 4 engineers and 1 QA analyst over 7 months. I owned the design and the service through launch and on-call.
 
 *Judge (v2): 6.1 — important_question_unanswered. The reply restates project scope already covered twice and answers neither whether there was pushback nor how it was handled. Its factual grounding does not make it useful for this follow-up.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> On Project Tern I was the tech lead, so I owned the design and the delivery, and I coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch. If someone didn't want a rewrite to happen, I'd want the objection stated plainly first, then either change the plan or explain why I'm not.
+
+*Judge (v2): 8.0. The hypothetical framing appropriately avoids inventing a conflict, but most of the answer repeats scope already given twice. The objection-handling advice is thin and leaves the interviewer's behavioral probe largely unresolved.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> On Tern I was the tech lead, so I owned the design and the delivery, and I coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch. On pushback specifically, I'll confirm what I can and come back to you on it.
+
+*Judge (v2): 6.5 — important_question_unanswered. It repeats facts already given twice, then postpones the actual question. Promising to confirm one's own project experience sounds unnatural and supplies neither a useful fallback nor an approach to handling disagreement.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> On Project Tern I was the tech lead, so I owned the design and the delivery, and I coordinated a working group of 4 engineers and 1 QA analyst over 7 months, from design doc through launch. On pushback specifically, I'll confirm the details and come back to you on that.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I was the tech lead on Project Tern, a rewrite of the carrier-settlement service at Larkspur Freight from a Rails monolith into three Go services, coordinating a working group of four engineers and one QA analyst over seven months, from design doc through launch. On the pushback itself, I'll confirm the details and come back to you.
 
 ---
 
@@ -13273,6 +14589,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.1. The crash description assumes the transaction already committed; it skips the publish-before-marking crash window and does not explicitly tie processed_events to the consumer’s business write.*
 
+**fix14 — candidate, not kept (Looking for work rows only)**
+
+> The outbox row and the status update commit in the same PostgreSQL transaction, so either both land or neither does. The relay then publishes at-least-once, and each consumer records the event_id in a processed_events table inside its own write transaction, skipping IDs it has already seen. So a crash mid-way just means a redelivery, not a duplicate.
+>
+> *Summary chip:* outbox commit plus consumer dedupe
+
+*Judge (v2): 9.7. Accurate and immediately speakable. Minor omissions: shipment_outbox is unnamed, and the final sentence could distinguish duplicate delivery from duplicate downstream writes more explicitly.*
+
+**kept build, local embedder present (speed study)**
+
+> The outbox is what makes that safe. The status update and the outbox row go into PostgreSQL in the same transaction, so either both commit or neither does. If the service dies halfway, there's no committed status without a matching outbox row, and the relay just picks it up on the next poll. The relay is at-least-once, so consumers dedupe on event_id in their own transaction.
+>
+> *Summary chip:* outbox row commits with the status
+
+*Judge (v2): 9.0. The explanation is correct but leaves the crucial consumer-side atomicity implicit: it never identifies processed_events or explicitly says the dedupe record and business write commit together.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The outbox is what makes that safe. The status update and the outbox row go into PostgreSQL in the same transaction, so either both commit or neither does. If the service dies halfway, there's no committed status without a matching outbox row, and the relay just picks it up on the next poll. On the consumer side it's at-least-once, so each consumer records the event_id in a processed_events table inside its own transaction and skips IDs it's already seen.
+>
+> *Summary chip:* outbox row commits with the status update
+
+**kept build, rerank off (speed study, not judged)**
+
+> The outbox is what makes that safe. The status update and the row in shipment_outbox go into the same PostgreSQL transaction, so either both commit or neither does. If the service dies halfway, there's no committed status change without a matching outbox row, and the relay just picks it up on the next poll.
+
 ---
 
 #### DJOB-026 — rapid_short_turn
@@ -13355,6 +14697,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.3. The throughput figures are accurate, but saying the relay and 24 partitions were “sized for” that load adds a design rationale not established by the evidence.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> About 2.3 million shipment status events a day, and at the weekday 7 a.m. Eastern dispatch peak it sustains roughly **610 events per second**. That's the number the pipeline was sized around.
+
+*Judge (v2): 9.2. The throughput figures are supported, but saying the pipeline was “sized around” 610 events per second adds an undocumented design claim. Observed peak throughput does not establish the original sizing target.*
+
+**kept build, local embedder present (speed study)**
+
+> About 2.3 million status events a day, and at the weekday 7 a.m. Eastern dispatch peak it holds roughly **610 events per second**. That's the sustained number, not a burst, so it's what the relay and the 24 partitions were sized against.
+>
+> *Summary chip:* 2.3M a day, 610/sec at peak
+
+*Judge (v2): 8.9. The throughput figures are supported, but the claim that the relay and 24 partitions were sized against that peak invents a design rationale absent from the evidence.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> About 2.3 million shipment status events a day, and at the weekday 7 a.m. Eastern dispatch peak it holds roughly **610 events per second**. That's the sustained number, not a burst, so it's what the relay and the 24 partitions are sized around.
+>
+> *Summary chip:* 2.3M a day, 610/sec at peak
+
+**kept build, rerank off (speed study, not judged)**
+
+> About **2.3 million** status events a day, and at the weekday 7 a.m. Eastern dispatch peak it holds roughly **610 events per second**. That's the sustained number, not a burst, so the relay and the 24 partitions are sized around it.
+>
+> *Summary chip:* 2.3M a day, 610/sec at peak
+
 ---
 
 #### DJOB-027 — work_arrangement
@@ -13435,6 +14803,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.2. A safe but vague fallback: it defers confirmation without mentioning the candidate's Columbus location or using the available relocation assistance to advance a concrete logistics discussion.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> Tuesday through Thursday in the office, good to have that clear up front. I'd want to line that up with the rest of the week before I say it's settled. What does a typical in-office week look like for the team?
+
+*Judge (v2): 7.2. The answer is speakable and avoids inventing willingness, but its vague scheduling hesitation and broad follow-up do little to resolve fit. It overlooks the known Columbus location and available relocation assistance.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> That's helpful to have on the table early. Tuesday through Thursday in the office with Monday and Friday flexible, let me confirm that and come back to you. What does a typical in-office week look like for the team?
+
+*Judge (v2): 8.0. The answer safely avoids inventing willingness, but the deferral is vague. It repeats the schedule without acknowledging the Columbus-to-Denver logistics, and the generic follow-up does little to resolve feasibility.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Tuesday through Thursday in the office, I'd like to confirm that and come back to you on it. If there's any flexibility on which days, I'd be glad to hear how that looks, but I've got the Tuesday to Thursday core noted.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Thanks for putting that on the table early. Tuesday through Thursday in LoDo, I'd want to weigh that against my commute, so let me confirm and come back to you on it. Monday and Friday flexible is good to know.
+
 ---
 
 #### DJOB-028 — relocation
@@ -13508,6 +14896,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Yes, I'm in Columbus now. On moving out to Denver, let me confirm how that fits my side and come back to you on it. What timeline are you working with for someone to be in the LoDo office?
 
 *Judge (v2): 8.7. This is a grounded fallback, but it repeats the previous vague deferral. The timeline question helps, though acknowledging the relocation requirement and available assistance would advance the discussion more effectively.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I'm in Columbus now, yes. Denver's somewhere I'd want to understand better before I commit to a date. What does the timeline usually look like for someone moving into the area?
+
+*Judge (v2): 8.6. This is a reasonable fallback, but 'before I commit to a date' subtly treats relocation as scheduling rather than an unresolved decision. The answer remains indirect after the earlier hedge.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I'm in Columbus now. What I'd want to understand is the timeline you're working with and how the relocation support works.
+
+*Judge (v2): 8.9. This is a grounded fallback, but it pivots to logistics without acknowledging that the Denver attendance requirement entails a move. Following the earlier deferral, another question-led response may feel evasive.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'm in Columbus now. On moving to Denver, I'd like to confirm that and come back to you on it. What timeline are you working with for the start date?
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Yes, I'm in Columbus now. I'd want to weigh a move against everything else, so let me confirm and come back to you on it. What timeline are you working with for someone to be in Denver?
 
 ---
 
@@ -13600,6 +15008,34 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix13 (refinement conversations only)** — edited after streaming
 
 > For the ledger design exercise, I'd focus on the money path they described: escrow holds, split payouts, refunds and chargebacks, and how a double-entry ledger stays correct as volume grows. I'd sketch the schema and the invariants first, then talk through idempotency, reconciliation, and how the nightly settlement batch stays reliable. I'd draw on Project Tern, the carrier-settlement rewrite at Larkspur Freight.
+
+*Judge (v2): 9.2. The advice is relevant and grounded, but remains high-level: it omits Harrow and does not turn ledger invariants or preparation into a concrete practice task.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> For the ledger design exercise, I'd focus on the money path: escrow holds, split payouts, refunds and chargebacks, and how a double-entry ledger stays consistent under load. I'd also be ready to talk through scaling from 400,000 to 1.5 million entries a day on PostgreSQL, and how the nightly settlement batch stays reliable. I'd draw on the carrier-settlement rewrite I led on Project Tern.
+
+*Judge (v2): 8.6. It identifies relevant topics but gives no concrete rehearsal steps or ledger invariants, omits Harrow, and ends in candidate first person despite a private request for advice.*
+
+**kept build, local embedder present (speed study)**
+
+> For the ledger design exercise, I'd focus on double-entry fundamentals and how they hold up under scale. I'd walk through the schema, how entries stay balanced and idempotent, and how the design handles the volume growth they're projecting. My Sparrowhawk work on idempotency keys backed by PostgreSQL is the closest thing I've built to this, so I'd lean on that.
+>
+> *Summary chip:* double-entry schema, idempotency, scale
+
+*Judge (v2): 8.1. The advice is relevant but generic and slips into candidate voice (“My Sparrowhawk”). It omits Harrow-specific practice and overlooks the more directly relevant Project Tern settlement and reconciliation experience.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> For the ledger design exercise, I'd focus on double-entry fundamentals: how you'd model accounts, entries, and balances in PostgreSQL, and how you'd keep writes idempotent and consistent as volume grows. I'd also be ready to talk through reconciliation and settlement, since that's core to the role. My Sparrowhawk work on idempotency keys backed by PostgreSQL advisory locks is directly relevant there.
+>
+> *Summary chip:* double-entry modeling, idempotency, reconciliation
+
+**kept build, rerank off (speed study, not judged)**
+
+> For the ledger design exercise, I'd focus on double-entry fundamentals and how I'd model escrow holds, split payouts, refunds, and chargebacks. My Sparrowhawk work on idempotency keys with PostgreSQL advisory locks is directly relevant, and I'd talk through scaling entries and keeping the nightly settlement reliable.
+>
+> *Summary chip:* double-entry, idempotency, settlement reliability
 
 ---
 
@@ -13695,6 +15131,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I'd sketch the schema and invariants first, then talk through idempotency, reconciliation, and keeping the nightly settlement batch reliable.
 
+*Judge (v2): 9.9. No material issue. The response substantially shortens the previous advice while retaining its core technical priorities.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> For the ledger design exercise, focus on the money path: escrow holds, split payouts, refunds, chargebacks, and keeping a double-entry ledger consistent under load. I'd also be ready to talk through scaling a ledger on PostgreSQL.
+
+*Judge (v2): 9.8. No material error. The answer successfully condenses the advice, though it drops the useful settlement-reliability priority and personalized Project Tern connection.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I'd focus on double-entry fundamentals and how they hold up at scale: the schema, keeping entries balanced and idempotent, and handling volume growth.
+
+*Judge (v2): 10.0. No material issue. The response preserves the core preparation advice in one concise sentence without introducing unsupported claims.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Double-entry fundamentals: modeling accounts, entries, and balances in PostgreSQL, plus idempotent writes and consistency at scale. Reconciliation and settlement matter too.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'd focus on double-entry fundamentals and modeling escrow holds, split payouts, refunds, and chargebacks.
+
 ---
 
 #### DJOB-031 — achievement
@@ -13785,6 +15243,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.3 — missed_available_evidence, ai_epistemic_leak. The figures are sourced, but the answer overlooks the explicitly older résumé’s date and exposes document-version uncertainty instead of clearly reporting the latest result. The candidate must repair the ending before saying it.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I built the appointment-reminder service at Quillfeather in Kotlin with Spring Boot. The no-show rate at the pilot clinics fell from 18.4%, though the numbers come to me two ways, 14.2% across 6 pilot clinics, and 12.9% across 9, so I'd want that confirmed before anyone leans on it.
+
+*Judge (v2): 7.3 — missed_available_evidence. It treats the explicitly older, smaller pilot snapshot as an unresolved contradiction rather than prioritizing the current result. The unnecessary confirmation caveat and retrieval-like wording weaken an otherwise factually supported interview answer.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I built the appointment-reminder service at Quillfeather in Kotlin with Spring Boot. It sent 11 million SMS and email reminders in 2022, and the no-show rate at the pilot clinics dropped from 18.4%, though the figures come to me two ways, 14.2% at 6 pilot clinics and 12.9% at 9, so I'd want that confirmed before anyone relies on it.
+
+*Judge (v2): 7.6. The project details and figures are supported, but the answer treats an explicitly older, narrower pilot snapshot as an unresolved contradiction. “The figures come to me two ways” sounds unnatural and unnecessarily undermines the candidate’s result.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I built the appointment-reminder service at Quillfeather in Kotlin with Spring Boot. The numbers come to me two ways, one version says about 4 million SMS reminders in the first year across 6 pilot clinics with the no-show rate falling from 18.4% to 14.2%, another says 11 million SMS and email reminders in 2022 across 9 pilot clinics, 18.4% to 12.9%, so I'd want that confirmed before anyone relies on it. Either way, yes, it moved the no-show rate.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I built the appointment-reminder service in Kotlin with Spring Boot. It sent 11 million SMS and email reminders in 2022, and the no-show rate at the pilot clinics fell from 18.4%, though the numbers I have give the result two ways, 14.2% at 6 pilot clinics and 12.9% at 9, so I'd want to confirm which before anyone relies on it.
+
 ---
 
 #### DJOB-032 — follow_up_challenge
@@ -13867,6 +15345,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 6.2 — missed_available_evidence, important_question_unanswered. It omits August 2021 and repeats the prior metric hedge without identifying the current résumé’s figures. Calling the recruiter’s copy “just out of date” does not establish why the discrepancies exist.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> The 14.2% across 6 clinics is from my 2022 resume, and the 12.9% across 9 is the later figure. On the start date, my 2022 resume says June 2021 and the newer one says August 2021, so I'd want to check which is right before you rely on either.
+
+*Judge (v2): 8.8. The date uncertainty is justified by conflicting evidence, but “I'd want to check” leaves verification tentative. The reply would handle the credibility challenge better by owning the inconsistency and offering a concrete corrective next step.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I'm right, they don't match, and the reason is that the copy the recruiter sent you is an older version of my resume. That one has the six pilot clinics at 14.2%, and it lists my start as June 2021. My current resume has the nine clinics at 12.9%, starting August 2021. The pilot expanded from six clinics to nine, and the drop got a bit deeper once it did. I'd go with the current numbers, and I'm happy to send you the updated copy.
+>
+> *Summary chip:* older resume, pilot grew six to nine
+
+*Judge (v2): 5.0 — unsupported_personal_claim, reference_conflict_ignored. Invents a pilot expansion and subsequent improvement to reconcile conflicting résumés, then endorses current figures without resolving the June/August discrepancy. The gist repeats the invention, and “I'm right” sounds defensive.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The 14.2% across six clinics is from the earlier version of my resume, last updated November 2022. The 12.9% across nine clinics is the later one, from 2022, after the pilot expanded. So the six-clinic figure is just the earlier snapshot, not a contradiction.
+> 
+> On the start date, the recruiter's copy says June 2021, and my current resume says August 2021. That's a discrepancy I'd want to check against my offer letter rather than guess at, so I'll confirm the exact date and get back to you.
+>
+> *Summary chip:* earlier resume snapshot, later numbers
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The resume is right on the pilot result: **14.2% across the 6 pilot clinics**, down from **18.4%**. The **12.9%** figure is the other way the result is given, at **9 clinics**, and I flagged it because I'd want to confirm which before anyone relies on it. On the start date, **June 2021** is correct. If anything in it looks off to you, tell me which line and I'll walk through it.
+
 ---
 
 #### DJOB-033 — changing_jobs
@@ -13945,6 +15449,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. The answer is grounded and immediately speakable; “the main event” is slightly vague about what the candidate wants next.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> Honestly, after the acquisition, most of the data platform roadmap moved to the parent company's stack, and a lot of what I'd been building got shelved. That's the shift I'm sitting in the middle of.
+
+*Judge (v2): 8.8. The response repeats what the candidate just said and ends with a vague description of the situation rather than explicitly explaining why it is prompting a move.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> Honestly, after the acquisition last spring most of our roadmap moved over to the parent company's stack, and a lot of what I was building got shelved. I'm looking for a team where the data platform is still central to the roadmap, and this role lines up with that.
+
+*Judge (v2): 9.0. The acquisition explanation is well grounded, but “this role lines up with that” assumes the target role prioritizes the data platform without any supporting role details.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Honestly, after the acquisition, most of the data platform roadmap moved to the parent company's stack, and a lot of what I was building got shelved. That's what's prompting the move.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Honestly, the work I care about got shelved after the acquisition, and the roadmap moved to the parent company's stack. I'll confirm where I'm landing on that and come back to you.
+
 ---
 
 #### DJOB-034 — follow_up_challenge
@@ -14022,6 +15546,30 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Money's part of it, sure, but it's not the driver. What I want is to be somewhere the platform work is still the main event.
 
 *Judge (v2): 5.0 — unsupported_personal_claim. It invents both that compensation is a factor and that it is secondary. Neither is established by the candidate’s remarks, making the central answer unsafe to repeat despite its natural delivery.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> Money isn't the reason. After the acquisition, most of the data platform roadmap moved to the parent company's stack, and a lot of what I'd been building got shelved. That's the shift I'm sitting in the middle of, and it's the kind of work I want to keep doing.
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “Money isn't the reason” invents the candidate’s compensation motivation, while “the kind of work I want to keep doing” invents a career preference. The remaining explanation largely repeats the earlier answer.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> Money's not the driver. What actually pushed me is watching the work I care about get shelved. I'm looking for a team where the data platform is still central to the roadmap, and this role lines up with that.
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “Money’s not the driver” asserts an unknown personal motivation. The acquisition and shelved roadmap are supported, but they do not rule out compensation; the rest mostly repeats the prior answer.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Money's part of it, sure, but it's not the driver. What I care about is working on something that actually ships. After the acquisition, most of the data platform roadmap moved to the parent company's stack and a lot of what I was building got shelved, so I'm looking for a place where that work stays on the roadmap.
+>
+> *Summary chip:* not money, work that ships
+
+**kept build, rerank off (speed study, not judged)**
+
+> Money's part of it, sure, but it's not the driver. What I care about is doing work that actually ships, and after the acquisition a lot of what I was building got shelved. So I'm looking for a place where the roadmap stays real.
+>
+> *Summary chip:* not money, work getting shelved
 
 ---
 
@@ -14105,6 +15653,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. No material error. The introduction is accurate and immediately speakable, though it ends without connecting the experience to the target role.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I'm an infrastructure engineer, currently on contract at Hollowbrook Data, where I moved 23 Terraform root modules to a remote S3 backend with DynamoDB locking and built a policy-checking CLI that blocks risky plans before merge. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE. The work here lines up closely with that: keeping infrastructure safer and cheaper to run.
+
+*Judge (v2): 9.5. The closing role-fit statement is broad; highlighting SLO improvements or reduced manual toil would connect the introduction more directly to Nimbuscrest’s priorities.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I'm an infrastructure and reliability engineer. Right now I'm on a contract at Hollowbrook Data, where I moved 23 Terraform root modules to a remote S3 backend with DynamoDB locking and right-sized node pools on two EKS clusters, which brought compute spend from about $41,300 down to $29,800 a month. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE.
+
+*Judge (v2): 9.5. The introduction is accurate and immediately speakable, but the current-role sentence packs in several numbers, and the ending lacks a brief synthesis of the candidate’s reliability focus.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'm an infrastructure and reliability engineer. Right now I'm on a contract at Hollowbrook Data, where I moved 23 Terraform root modules to a remote S3 backend and right-sized node pools on two EKS clusters, bringing compute spend down from about $41,300 to $29,800 a month. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'm an infrastructure and reliability engineer. Right now I'm on a contract at Hollowbrook Data, where I moved 23 Terraform root modules to a remote S3 backend with state locking and wrote a policy CLI that checks plans against 17 OPA rules before merge. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE.
+
 ---
 
 #### DJOB-036 — employment_gap
@@ -14181,6 +15749,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.1 — important_question_unanswered. The dates are accurate, but repeating them leaves “what was going on?” unanswered and risks sounding evasive. The missing explanation limits what Natively can truthfully supply.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I wrapped up at Cindervale in January, and I started at Hollowbrook in June. The work I've done since is the same kind of work this role covers, Kubernetes operations, Terraform, and turning manual runbooks into tested automation.
+
+*Judge (v2): 8.2. This is a safe, speakable fallback, but the qualifications pivot feels evasive and adds little to the gap question. The résumé also does not establish post-gap work turning runbooks into tested automation.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I was at Cindervale from July 2025 to January 2026, and I started at Hollowbrook in June 2026. In between I worked on my homelab, the Tidepool project.
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The résumé establishes that Tidepool exists, not that the candidate worked on it during February–May. The answer turns an undated side project into an unsupported personal explanation for the gap.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> My Cindervale role ran from July 2025 to January 2026, and I started at Hollowbrook in June 2026.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> My Cindervale role ran from July 2025 to January 2026, and I started at Hollowbrook in June 2026.
+
 ---
 
 #### DJOB-037 — changing_jobs
@@ -14198,6 +15786,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* role wrapped, chose next move deliberately
 
 *Judge (v1): 4.5 — unsupported_personal_claim. It invents why the role ended, a deliberate gap, and motivation for joining Hollowbrook. None is supplied, and the earlier reply explicitly lacked a gap explanation. The gist reinforces the unsupported account.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The answer invents that the role wrapped up, the gap was deliberate, and automation motivated joining Hollowbrook. The gist reinforces the unsupported narrative, and the confident gap explanation follows an explicit admission that those details were unavailable.*
 
 **fix1**
 
@@ -14261,6 +15851,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.8 — unsupported_personal_claim. The answer invents that Cindervale was a fixed-term contract, implying its completion explains the departure. Only Hollowbrook is labeled contract. Repeating the dates already given does not otherwise address why the candidate left.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> At Cindervale I was on a 5-person SRE team supporting 140 microservices on three GKE clusters, and I was primary on-call from November 2025. I built the Grafana SLO dashboards for the 12 tier-1 services, and moving to multi-window burn-rate alerts took pages from about 260 to 70 a month. That work is the same kind this role covers, Kubernetes operations, Terraform, and retiring manual runbooks by turning them into tested automation.
+
+*Judge (v2): 6.8 — important_question_unanswered. The résumé facts are supported, but the response never addresses the departure. Repeating accomplishments and the same role-fit pivot used on the gap question makes this follow-up sound evasive.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I was at Cindervale from July 2025 to January 2026, and I started at Hollowbrook in June 2026. In between I worked on my homelab, the Tidepool project.
+
+*Judge (v2): 5.0 — unsupported_personal_claim, important_question_unanswered. It repeats the previous answer rather than addressing why Cindervale ended. The employment dates are supported, but placing Tidepool work in the gap is unverified; an earlier copilot assertion does not establish that history.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> My Cindervale role ran from July 2025 to January 2026, and I started at Hollowbrook in June 2026. I was on a 5-person SRE team supporting 140 microservices on three GKE clusters, and I was primary on-call from November 2025. I'll come back to you on the rest.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The Cindervale role ran from July 2025 to January 2026. I'd been shadowing on-call from August and took primary on-call in November, so I got a real feel for the reliability work there. I started at Hollowbrook in June 2026.
+
 ---
 
 #### DJOB-038 — work_arrangement
@@ -14276,6 +15886,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Twice a year to Frankfurt is workable for me. I'd just want to understand what the trips look like in practice, how much notice I'd get and whether they line up with a planned maintenance window. What does the data center work usually involve when you go out there?
 
 *Judge (v1): 5.0 — unsupported_personal_claim. “Workable for me” asserts an unsupported personal travel commitment. The JD establishes the travel requirement, not the candidate’s acceptance of it. The useful follow-up questions do not undo that assertion.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “Workable for me” asserts personal travel feasibility that the evidence does not establish. The useful logistical questions afterward do not undo that unsupported acceptance.*
 
 **fix1**
 
@@ -14333,6 +15945,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.2. A truthful, speakable fallback, but it leaves feasibility implicit and only asks about scheduling notice. Trip duration would also help assess whether the requirement works.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> Twice a year for data center work, that's good to know. How do the trips usually get scheduled, and what does the work look like on site?
+
+*Judge (v2): 8.9. The reply stays truthful and speakable, but leaves the travel concern implicit and asks about onsite duties instead of the more decision-relevant trip duration.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> Twice a year to Frankfurt, I'd want to understand the timing, whether it's planned well ahead or tied to specific maintenance windows, so I can plan around it. What does a typical trip look like?
+
+*Judge (v2): 8.9. The reply appropriately avoids assuming willingness to travel, but mostly returns questions and leaves the need to assess feasibility implicit. The opening is slightly awkward for spoken delivery.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Twice a year to Frankfurt, I'd want to understand what the data center work looks like on those trips, whether it's planned maintenance or incident response, and how much lead time I'd typically get. What does a typical trip involve?
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Twice a year sounds workable. I'd just want to understand the timing, whether the trips are planned well ahead and how they line up with on-call, so I can plan around them.
+
 ---
 
 #### DJOB-039 — availability
@@ -14348,6 +15980,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I could start fairly soon, but I'd want to give my current team proper notice rather than leave them in the lurch. What start date are you working toward? Knowing that, I can tell you exactly how the timing lines up on my side.
 
 *Judge (v1): 5.0 — unsupported_personal_claim. “I could start fairly soon” invents availability, while wanting to give “proper notice” adds an unsupported personal preference. The résumé establishes an ongoing contract, not its end date or notice requirements.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “I could start fairly soon” asserts unsupported personal availability. The résumé establishes a current contract, not its end date or notice period; asking about the employer’s timeline does not remedy that claim.*
 
 **fix1**
 
@@ -14409,6 +16043,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.5. The reply avoids inventing a date, but postponing an answer until “we're further along” sounds evasive. Asking the employer's target date helps, yet leaves the candidate's availability unresolved without offering to confirm it.*
 
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I'd want to give you a date I can actually stand behind rather than guess at one now, so I'll confirm the exact timing with you.
+
+*Judge (v2): 8.6. This is a truthful fallback, but the defensive preamble and vague follow-up offer limited scheduling value. Mentioning the current contract would make the deferral more concrete and natural.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I'd want to give proper notice rather than leave my current team in a lurch, so I'd want to confirm a start date and come back to you on it. What's the timeline you're working toward for this role?
+
+*Judge (v2): 8.8. A safe, speakable fallback without an invented notice period. However, it is somewhat hesitant and vague about what needs confirming; the current contract provides a clearer basis for checking availability.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'd want to align the start date with whatever works on both sides. What start date are you targeting for the role?
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'd want to align the start date with my current team rather than commit to a date on the spot. What start date are you working toward? That way I can come back to you with something concrete.
+
 ---
 
 #### DJOB-040 — salary
@@ -14424,6 +16078,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'd rather hear where the range sits for this role first, since the scope here is broader than my current contract. If it helps, I'm looking for something in line with the market for a platform or SRE role at this level, and I'm flexible on how it's split between base and equity. What range are you working with?
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The base/equity flexibility is invented and could weaken the candidate’s negotiation. The claim that this role has broader scope than the current contract is also not established.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. Asking for the range first is reasonable, but the answer invents flexibility between base and equity. That unsupported compensation preference could materially affect the candidate’s negotiation.*
 
 **fix1**
 
@@ -14482,6 +16138,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'd rather not anchor on a number before we've talked through the scope and the on-call side of the role. What range has been set for this position?
 
 *Judge (v2): 9.3. This is a sound fallback, but primarily redirects the question. “Not anchor” sounds slightly guarded, especially after two earlier replies that also postponed a direct answer.*
+
+**fix14 — candidate, not kept (Looking for work rows only)** — edited after streaming
+
+> I'd rather hear where the range sits for this role before I anchor a number. If you can share the band you're working with, I'll confirm where I land against it.
+
+*Judge (v2): 9.3. This is a natural, grounded fallback, but it mainly returns the question; 'I'll confirm where I land' leaves the next step vague and continues the conversation's pattern of deferral.*
+
+**kept build, local embedder present (speed study)**
+
+> I'd rather hear where you've slotted this role first, since the band usually tells me more than I'd guess. What range are you working with for the level you have in mind?
+
+*Judge (v2): 9.2. Asking for the band is a reasonable current negotiation choice, not an invented salary preference. However, the answer only redirects the question, and the vague justification adds little.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> I'd rather hear where you've slotted this role before I put a number out, since the range usually depends on the level and the on-call load. What band are you working with for this position?
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'd rather not put a number out before I understand the full package, so what range is budgeted for this level? I'll come back to you on specifics once we're aligned on fit.
 
 ---
 
@@ -17725,6 +19401,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.6. The response is a safe, speakable discovery fallback, but it returns a broad question rather than meaningfully framing the requested walkthrough. The prospect receives little concrete structure.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Let me confirm the exact workflow and integrations so I can show you what that looks like against how your team runs today. How do your dispatchers assign jobs right now?
+
+*Judge (v2): 8.6. This is a safe, relevant fallback rather than the requested overview. The discovery question helps, but the vague workflow-and-integrations preface postpones the walkthrough and introduces a topic the prospect did not raise.*
+
 ---
 
 #### DSALES-002 — pricing_question
@@ -17798,6 +19480,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Before I put a number on it, it depends on how many people would be using it and which parts you'd need. Let me confirm the exact pricing for your setup and walk you through it on our next call.
 
 *Judge (v2): 4.0 — unsupported_company_claim. It asserts that pricing depends on user count and required components without supporting evidence, then unnecessarily postpones the price discussion to another call.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Let me confirm the exact pricing so I give you an accurate number rather than a guess. In the meantime, how many people would be using it?
+
+*Judge (v2): 9.4. A grounded, useful fallback when pricing is unavailable. The phrase 'rather than a guess' is unnecessarily defensive, but the user-count question provides reasonable discovery without claiming pricing is seat-based.*
 
 ---
 
@@ -17879,6 +19567,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. No material issue. The response avoids inventing integration support and advances discovery; “check on the ServiceTitan side” is slightly vague about what will be verified.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I'll confirm how the ServiceTitan integration works so I can give you a clear yes or no, especially for the call center side. What would you need it to do there, just keep the existing workflows running, or pass data back and forth between the two?
+
+*Judge (v2): 9.3. The reply avoids a definite capability claim, but “how the ServiceTitan integration works” mildly presupposes that an integration exists despite the subsequent yes-or-no qualification.*
+
 ---
 
 #### DSALES-004 — negotiation
@@ -17950,6 +19644,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I want to make sure I get this right, so let me check what we actually agreed on and what I'm authorized to put in writing. I don't want to send finance something I can't stand behind. Can you give me until tomorrow to confirm the exact line item, and I'll get the order form back to you?
 
 *Judge (v2): 8.8. Appropriately avoids confirming an unverified waiver, but proposes tomorrow despite the same-day finance deadline. “What we actually agreed on” and “can’t stand behind” sound defensive and may undermine trust.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I want to make sure I get this right, so let me confirm what we can put in writing on the onboarding fee before I send the order form. What's your timeline for getting it to them?
+
+*Judge (v2): 9.0. The waiver check is appropriate, but asking for the timeline ignores the prospect’s explicit request to send the form to finance today and adds unnecessary back-and-forth.*
 
 ---
 
@@ -18027,6 +19727,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.3 — important_question_unanswered. The response sidesteps both parts of a friendly introductory question and redirects to discovery. It avoids unsupported biography, but provides no introduction and can sound dismissive.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I'll keep it brief since I'd rather spend the time on you. I'm on this call with you today. What's prompting you to look at this right now?
+
+*Judge (v2): 6.7 — important_question_unanswered. The reply avoids fabricated biography but offers no meaningful introduction. “I'm on this call with you today” is a tautology, and the immediate discovery pivot brushes aside the prospect's rapport request.*
+
 ---
 
 #### DSALES-006 — objection_handling
@@ -18101,6 +19807,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.4 — important_question_unanswered. It sidesteps the prospect’s credibility question and tells them what matters instead. The scheduling question is relevant discovery, but the reply offers no acknowledgment or concrete way to establish HVAC experience.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I'd rather show you than tell you. Give me one thing that's costing you right now, whether it's missed calls, slow quotes, or techs double-booked, and I'll walk you through exactly how we'd handle it. What's the biggest one?
+
+*Judge (v2): 8.0 — important_question_unanswered. The response sidesteps the HVAC-experience question and substitutes generic discovery. It avoids fabrication and is speakable, but “show you rather than tell you” can sound evasive when the prospect explicitly asks about credibility.*
+
 ---
 
 #### DSALES-007 — discovery
@@ -18172,6 +19884,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Thanks for walking me through all that. Two things I'd like to understand better: what does success look like for you in the first six months, and who else weighs in on a decision like this?
 
 *Judge (v2): 10.0. No material issue. The reply naturally accepts the invitation and asks two useful discovery questions about success criteria and decision participants.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Thanks for asking. I'd like to understand what success looks like for you here, what would have to be true for this to be worth moving forward, and who else would need to weigh in on the decision. And if there's anything you've seen from other options that you liked, I'd want to hear it.
+
+*Judge (v2): 9.7. The discovery questions are relevant and immediately speakable, but bundling four topics makes it slightly unclear which the prospect should answer first.*
 
 ---
 
@@ -18246,6 +19964,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't commit to all three on the spot, and I'd rather be straight with you than say yes and walk it back. Let me take the three-year lock, the thirty-day out, and net sixty to the people who own terms, and come back to you before Friday with exactly what I can do. Which of the three matters most if I can only move on two?
 
 *Judge (v2): 9.8. No material issue. The hypothetical two-of-three framing is slightly arbitrary before knowing which concessions are available.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can't lock all three in on the spot, so let me be straight with you: I'll confirm the pricing and contract terms and come back to you with a clear yes or no on each. On net sixty, that's an invoicing question I need to check rather than guess at. If I can get you answers before Friday, is signing Friday still the plan?
+
+*Judge (v2): 9.5. The closing question ties Friday signing to receiving answers rather than explicitly reaching acceptable terms, even though the prospect has already stated their conditions.*
 
 ---
 
@@ -18327,6 +20051,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.1. The response correctly avoids invented history and prohibited profile material, but provides placeholders and requests another turn instead of delivering two usable lines. Explaining the information gap is acceptable on this private surface.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Happy to. I'm someone who likes getting close to the problem, working with the people around me, and staying on it until it's actually solved. What I care most about is doing work that holds up and being someone the team can rely on.
+> 
+> What's the role you're hiring for? That way I can point to the parts of my background that matter most to you.
+>
+> *Summary chip:* brief intro, then ask about the role
+
+*Judge (v2): 3.4 — unsupported_personal_claim, role_confusion. Asking what role the prospect is hiring for turns the sales conversation into a job interview. The introduction also invents the seller’s preferences and core values rather than using only the known role.*
+
 ---
 
 #### DSALES-010 — product_explanation
@@ -18402,6 +20136,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ROI depends on who uses it
 
 **fix11**
+
+> For a 40-person HVAC company, the ROI usually comes down to how much time your techs and office staff spend on scheduling, dispatch, and follow-up, so before I put a number on it, how many people would be using it day to day?
+>
+> *Summary chip:* ROI depends on who uses it
+
+*Judge (v2): 7.1. The response substitutes a generic discovery question for the requested ROI line and changes 40 technicians into a 40-person company. It avoids fabricated savings but provides no concrete value illustration.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
 
 > For a 40-person HVAC company, the ROI usually comes down to how much time your techs and office staff spend on scheduling, dispatch, and follow-up, so before I put a number on it, how many people would be using it day to day?
 >
@@ -18492,6 +20234,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Silence after a price usually means they're doing math, not rejecting it. So don't fill the gap with a discount. Try: "I know that's a real number. What's going through your head right now?" Then let them talk. If they push back, ask what they'd need to see to make it work, and hold the price while you adjust scope or terms instead.
 
 *Judge (v2): 9.1. The response provides usable words and avoids discounting, but overstates what silence means. “I know that's a real number” sounds awkward and may unnecessarily frame the price as intimidating.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Silence after a price usually means they're doing the math, not rejecting it. So don't rush to fill it. Let it sit a beat, then ask something like, "What's going through your head on the number?" That gets you their real reaction instead of a discount you didn't need to give. If they push back, ask what they'd need to see to make it work, and hold the price while you solve for value.
+>
+> *Summary chip:* let silence sit, then ask what they think
+
+*Judge (v2): 9.1. The quoted question is useful, but the opener overconfidently interprets the silence as doing math rather than rejection. The additional pushback advice is less immediately actionable than another exact line.*
 
 ---
 
@@ -18643,6 +20393,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.4 — important_question_unanswered. The positioning section requests more context instead of supplying the requested line, and the discovery section gives four questions rather than three. The remaining language is useful and avoids invented product claims.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Three questions I'd ask: what's the part of this that spreadsheets actually handle well for you today, so I know what not to break? When you picture FieldPilot, what's the one thing it does that made you put it on the list? And if nothing changes in six months, what does that cost you?
+> 
+> Positioning: let me confirm exactly what fits your setup and walk you through it, so the comparison is against what you'd actually be running.
+> 
+> When they say they'll just keep the spreadsheets, I'd say: that's fair, and honestly if it's working, don't fix it. The question I'd ask is where the spreadsheet stops being a tool and starts being the job. What's the last thing that broke on you?
+
+*Judge (v2): 9.0. The positioning line offers to verify fit but never articulates value or a basis for choosing over FieldPilot or spreadsheets. The discovery questions and objection response are otherwise useful and grounded.*
+
 ---
 
 #### DSALES-013 — closing
@@ -18729,6 +20489,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. No material issue. It provides a usable next-step close without inventing facts, though the conditional opener and vague session description could be tighter.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> If the timing and the fit both look right on your side, the next step is a short working session where I walk you through exactly what applies to your setup. What does your calendar look like early next week?
+>
+> *Summary chip:* propose working session, ask timing
+
+*Judge (v2): 9.8. No material issue. It provides a usable next-step close without inventing facts, though the conditional opener and vague session description could be tighter.*
+
 ---
 
 #### DSALES-014 — security_compliance
@@ -18802,6 +20570,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Yes, we completed a SOC 2 Type II covering Security and Availability, and the report goes out under a mutual NDA through our Trust Center. Once the NDA is signed, allow about two business days for it to reach you, so if Tuesday is your review, let's get the NDA moving today. Who on your side should I send it to?
 
 *Judge (v2): 10.0. No material issue. The reply accurately states the compliance and access terms, addresses the deadline, and identifies the NDA recipient without making an unsupported delivery guarantee.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Yes, we completed a SOC 2 Type II covering Security and Availability, and the report goes out under a mutual NDA through our Trust Center. The timing is tight for Tuesday, though: we ask for two business days after the NDA is signed, so if we get that moving today there's a real chance it lands in time. Can you get me the right person to sign the NDA so I can start that now?
+>
+> *Summary chip:* SOC 2 Type II, NDA then two business days
+
+*Judge (v2): 9.5. The deadline language is slightly optimistic: getting the NDA moving today does not ensure signature today, and even Friday signature puts the standard turnaround on Tuesday rather than clearly before the review.*
 
 ---
 
@@ -18879,6 +20655,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.2 — important_question_unanswered. It never explicitly addresses HIPAA or includes it in the security escalation. Leading with SOC 2 risks implying equivalence; SOC 2 is also inaccurately called a certification. Hosting details omit AWS and the EU location.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can't confirm HIPAA compliance or a BAA on this call, so let me be straight about that and get you a real answer. What I can tell you is that we're SOC 2 Type II, with AES-256 at rest and TLS 1.2 or higher in transit, and North American data is hosted in AWS us-east-2 in Ohio, chosen at contract signature. On the HIPAA and BAA question specifically, I'll take it to our security team through my account executive and come back to you. What does the patient data need to cover, just the service notes, or anything else?
+
+*Judge (v2): 9.4. Minor: the HIPAA/BAA deferral is repeated, and only North American hosting is covered despite the prospect's location being unspecified.*
+
 ---
 
 #### DSALES-016 — negotiation
@@ -18954,6 +20736,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no on-call discount, 10% on 24-month prepaid
 
 *Judge (v2): 9.5. The unrequested Growth price and extra justification add length; asking for a target number is less direct than offering to submit the prospect's 20% request.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can't approve twenty percent on the call, that one has to go through Deal Desk. What I can do today is the published multi-year option, ten percent off per seat on a 24-month prepaid agreement. If you tell me the seat count and term you're working toward, I'll put the right numbers in front of you and get the rest confirmed.
+
+*Judge (v2): 10.0. No material issue. The reply answers the authority question directly, accurately qualifies the available discount, and advances the discussion without promising approval.*
 
 ---
 
@@ -19038,6 +20826,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 99.9% uptime, credits, named CSM after signature
 
 *Judge (v2): 7.9 — missed_available_evidence. The escalation chain is omitted, leaving incident ownership partly unanswered. The credit deadline lacks its month-end anchor, the sole-remedy limitation is missing, and referencing what 'the document' names weakens the spoken reply.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> On Growth and Enterprise we commit to 99.9% monthly uptime for the web app and API, excluding scheduled maintenance. If we miss it, you get 10% of that month's subscription fee back, or 25% if we drop below 99.0%, requested within 30 days. And on Enterprise you get a named Customer Success Manager after signature, plus 24/7 phone support for P1 incidents with a one-hour first response. Can I ask which plan you're weighing, so I put the right support terms in front of you?
+>
+> *Summary chip:* 99.9% uptime, credits, named CSM on Enterprise
+
+*Judge (v2): 7.9 — missed_available_evidence. “Fee back” ambiguously suggests a refund, and the deadline lacks its month-end anchor. The answer omits the documented escalation path, especially the Support Manager, leaving the request for an accountable outage contact only partly addressed.*
 
 ---
 
@@ -19149,6 +20945,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The recap preserves the relevant facts, and the discovery question quantifies the prospect's expressed operational burden.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> They're running dispatch on a whiteboard and group text with thirty-eight techs and four dispatchers, billing through Xero with manual re-keying, and they're locked into another scheduling contract until March fifteenth.
+> 
+> Next question: when that contract ends in March, what would have to be true for you to switch rather than just renew?
+
+*Judge (v2): 10.0. No material issues. The concise recap preserves the key facts, and the discovery question explores switching criteria while respecting the contract timeline.*
+
 ---
 
 #### DSALES-019 — objection_handling
@@ -19227,6 +21031,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.2. The discovery question is useful and immediately speakable, but its closing phrase subtly assumes the product can accommodate their existing habits without adding anything new.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> That's a fair worry. Can I ask what they're doing today when a job comes in, is it a call to the office or something on paper?
+
+*Judge (v2): 9.8. No material issue. The response acknowledges the concern and opens useful discovery without stereotyping the team or promising unsupported capabilities.*
+
 ---
 
 #### DSALES-020 — qualification
@@ -19301,6 +21111,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.1. The response assumes productivity and avoiding disruption are the owner's priorities and lightly implies compatibility with existing workflows. Otherwise, it provides a natural, actionable next step without consequential promises.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> That's a fair concern, and honestly the owners who resist change are usually the ones who've been burned by it before. So I wouldn't lead with the vision, I'd lead with what stays the same for him: same team, same routines, and the move itself is a short window, desks packed by 3pm on the 30th and the new space open the following Monday. Then I'd give him one small thing to try first so he can see it working before he has to commit to anything bigger. What's the one thing he'd be most worried about losing?
+
+*Judge (v2): 4.0 — unsupported_company_claim. The answer treats an unrelated office-move FAQ as the prospect's situation and invents assurances about unchanged teams and routines. Useful change-management advice is mixed with claims the seller cannot safely repeat.*
+
 ---
 
 #### DSALES-021 — discovery
@@ -19373,6 +21189,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The question directly explores the current process, initial ownership, and escalation without assuming problems or introducing unsupported claims.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> What happens when a call comes in after hours or on a weekend? Walk me through who picks it up and how it gets routed to the right person.
+
+*Judge (v2): 9.7. The question explores after-hours routing but does not explicitly mention emergencies, so it could elicit routine call-handling details rather than emergency procedures.*
+
 ---
 
 #### DSALES-022 — closing
@@ -19444,6 +21266,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'll confirm the exact onboarding timeline for you, since I don't want to give you a date I can't stand behind. What does your go-live need to line up with on your side?
 
 *Judge (v2): 9.4. A sound fallback given the missing implementation evidence. The follow-up explores scheduling needs but does not clarify what “up and running” must include to establish a realistic timeline.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I'll get you a concrete go-live plan mapped to your start date and walk you through it on our next call. What's driving the timing on your side, is there a date you need to be live by?
+
+*Judge (v2): 9.1. The reply safely avoids inventing a timeline, but postpones the substantive answer and asks about the desired deadline without clarifying the rollout requirements needed to estimate feasibility.*
 
 ---
 
@@ -19520,6 +21348,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Not quite. The $44 Growth seat price is right, but the sheet gives the Salesforce connector two ways, listed as included in Growth, and also as a separate add-on at $300 a month, so let me confirm which applies before I put anything in writing. One thing to flag: the sheet I'm working from ran through December 2025, so let me confirm today's pricing too. In the meantime, how many technicians are you looking at? That tells me whether the connector's worth bundling in.
 
 *Judge (v2): 8.9. Calling $44 “right” initially creates ambiguity about whether that expired price remains valid, although the later caveat mitigates this. The final bundling rationale is speculative and unnecessary.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> The Growth plan is **$44 a seat** and it does include the Salesforce connector, so you're right on both. One thing to flag: that's from the 2025 partner sheet, which ran through December, so let me confirm today's pricing before we lock anything in. Also, the sheet gives the Salesforce connector two ways, included in Growth, and listed as a $300 per month add-on, and it says Growth requires a minimum of 5 technicians while also saying no seat minimum on any plan, so let's get both of those confirmed before we rely on them. How many technicians are you looking to put on it?
+
+*Judge (v2): 7.9. The opening confidently confirms the price and inclusion that the rest of the answer treats as unresolved. This creates mixed signals despite the subsequent, appropriate clarification.*
 
 ---
 
@@ -19600,6 +21434,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I want to be straight with you on that one. The sheet does say go-live within 30 days of signature, but it's marked with an asterisk, and the footnote reads that timelines are estimates and depend on customer data readiness. So I can't put it in the contract as an unconditional guarantee. What I can do is commit to the 30-day target in writing and tie it to a data readiness checklist we agree on upfront, so the clock starts from a clear point. Would it help if I mapped out what we'd need from your side to hit that date?
 
 *Judge (v2): 4.0 — unsafe_commitment. It correctly explains the caveat, but offers to commit to a written 30-day target without confirming contractual authority or current terms from this expired sheet.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> That sheet is the 2025 partner sheet, and it ran through December, so the current terms need confirming before anything goes in writing. The asterisk on that line matters too: it's an estimate that depends on your data being ready, so a flat guarantee isn't something to sign as-is. What's needed is a written go-live commitment with the data-readiness conditions spelled out. Can we set up a short call with the implementation lead this week to scope that?
+
+*Judge (v2): 9.4. The reply is sound but slightly impersonal and procedural; it could better acknowledge the prospect’s reliance on the guarantee and take clearer ownership of confirming terms.*
 
 ---
 
@@ -19691,6 +21531,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.9. The opening is blunt for a trust-repair moment, and the final question unnecessarily reopens plan selection. It would be stronger to validate why the prospect expected $44 and free onboarding.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> That sheet's the 2025 partner sheet, and it ran through December, so those numbers are out of date. Onboarding is the part I'd flag: I don't want to quote you something I can't stand behind, so let me confirm exactly what's included there and come back to you today.
+
+*Judge (v2): 8.8. It dismisses the old figures rather than acknowledging why the prospect relied on them, and offers to confirm onboarding but not the central $44-versus-$49 pricing discrepancy.*
+
 ---
 
 #### DSALES-026 — negotiation
@@ -19773,6 +21619,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. Slightly wordy for a live discount objection; the final go-live question adds a secondary topic before the stacking question is resolved.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> I want to be straight with you on both of those. The sheet does show 15% off for a three-year prepaid agreement, and partners can offer up to 12% off list without approval. What the sheet doesn't say is that those two stack, so I'm not going to tell you they do. Let me confirm the combined discount with the team and come back to you with one number in writing. If that works, can we get the three-year term penciled in for this quarter so we're not losing time on the approval?
+>
+> *Summary chip:* 15% and 12% don't stack, confirming
+
+*Judge (v2): 4.0 — reference_conflict_ignored, unsupported_policy_claim. The reply treats expired partner discount authority as current and checks only stacking. The gist additionally asserts a definitive no-stacking policy that neither the source nor the answer establishes.*
+
 ---
 
 #### DSALES-027 — pricing_question
@@ -19850,6 +21704,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't go to a number I haven't quoted yet, so let me be straight with you: let me confirm what's possible on the mid tier and come back to you. How many seats are we talking, and what's your timeline to get this in place?
 
 *Judge (v2): 8.4. The opening awkwardly assumes no number has been quoted and sounds circular. The remainder appropriately avoids unsupported discounts and moves toward useful qualification.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I hear you on wanting a real number. Let me confirm the mid tier pricing so I give you something accurate rather than a guess. While I do that, how many people would be on it, and what's your target start date?
+
+*Judge (v2): 9.4. The reply is grounded and speakable, but frames a negotiation request as a routine pricing check rather than explicitly checking available discount flexibility.*
 
 ---
 
@@ -19929,6 +21789,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.4. Repeats the prior fallback almost verbatim without engaging with Friday’s budget cutoff or offering a definite follow-up time. Withholding an unverified price is appropriate, but another generic timeline question does little to advance this increasingly urgent exchange.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I get it, Friday's the deadline. Let me confirm the mid tier price so I give you a real number instead of a guess. How many seats are we talking, and when would you want it to start?
+
+*Judge (v2): 8.5. The reply nearly duplicates the previous answer despite the prospect’s escalation. It safely avoids fabricated pricing but provides no concrete timing or stronger next step for securing an offer before Friday.*
+
 ---
 
 #### DSALES-029 — follow_up_short
@@ -20004,6 +21870,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Three years is a real commitment, and I'd rather price it properly than guess at a number. Let me confirm what's possible on the mid tier for a three-year term and come back to you with something concrete. How many seats are we talking?
 
 *Judge (v2): 9.1. It handles the proposed term safely, but repeats the same confirmation-and-follow-up loop without addressing the prospect's Friday budget deadline.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)** — edited after streaming
+
+> Three years, got it. Let me confirm the mid tier price so I give you a real number instead of a guess. How many seats would be on it?
+
+*Judge (v2): 8.2. The reply is safe and speakable, but repeats the same pricing deferral for a third time rather than explicitly connecting the proposed three-year commitment to a concrete pricing next step.*
 
 ---
 
@@ -20087,6 +21959,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.3. The Enterprise distinction is repeated, and the opening broadly says Salesforce connects before specifying the narrower Salesforce Field Service connector. Otherwise, the answer is grounded, speakable, and commercially useful.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> QuickBooks Online connects on Growth, yes. Salesforce is a different story: the Salesforce Field Service connector is an Enterprise feature, so on Growth it isn't included. If Salesforce is central to how your office team works, it's worth a quick look at what Enterprise would take. How many technicians would be on the plan?
+
+*Judge (v2): 9.9. No material issue. Enterprise is floated before confirming whether the prospect uses Salesforce Field Service, but no unsupported compatibility promise is made.*
+
 ---
 
 #### DSALES-031 — pricing_question
@@ -20168,6 +22046,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Enterprise is custom, 100-seat minimum
 
 *Judge (v2): 8.9. It answers the pricing constraint correctly, but adds an unrequested 8–12-week implementation estimate without mentioning Salesforce’s extra 2–3 weeks. That can understate timing for the prospect’s likely setup.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Enterprise is custom priced, so I can't give you a number off a sheet. Two things shape it: Enterprise has a 100 seat minimum, and dispatcher and admin seats are free, so only your forty techs would be billed. Let me get a scoped quote put together for forty techs, and I'll walk you through it. What's your timing on getting Salesforce connected?
+>
+> *Summary chip:* Enterprise is custom priced, 100 seat minimum
+
+*Judge (v2): 4.0 — major_reasoning_error, unsupported_company_claim, missed_available_evidence. It names the 100-seat minimum but then assures the prospect that only forty technicians would be billed and offers a forty-seat quote. Free dispatcher/admin seats do not override the Enterprise minimum.*
 
 ---
 
@@ -20268,6 +22154,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't want to give you a number I can't stand behind, so let me confirm the exact support hours and uptime commitment on the mid tier and come back to you today. In the meantime, what does your team actually need covered, business hours or around the clock?
 >
 > *Summary chip:* confirm mid tier SLA, ask coverage needs
+
+*Judge (v2): 9.5. A useful, grounded fallback with no material error. The opening about a number the seller cannot stand behind sounds slightly defensive; the verification commitment and coverage question are appropriate.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I don't want to give you a number I can't stand behind, so let me confirm the exact support hours and uptime commitment on the mid tier and come back to you today. In the meantime, what does your team actually need covered, business hours or around the clock?
+>
+> *Summary chip:* confirm mid tier SLA, ask coverage needs
+
+*Judge (v2): 9.5. A useful, grounded fallback with no material error. The opening about a number the seller cannot stand behind sounds slightly defensive; the verification commitment and coverage question are appropriate.*
 
 ---
 
@@ -20373,6 +22269,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* confirm mid tier SLA, ask coverage needs
 
+*Judge (v2): 9.9. No material issue: it meaningfully shortens the previous script, retains useful discovery, and invents no support hours or uptime guarantee.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Let me confirm the exact support hours and uptime on the mid tier and come back to you today. What does your team need covered, business hours or around the clock?
+>
+> *Summary chip:* confirm mid tier SLA, ask coverage needs
+
+*Judge (v2): 9.9. No material issue. The shorter draft preserves the confirmation, follow-up timing, and useful discovery question without inventing company commitments.*
+
 ---
 
 #### DSALES-034 — closing
@@ -20451,6 +22357,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.5 — missed_available_evidence. It appropriately refuses a guarantee, but incorrectly moves the onboarding clock from signature to data receipt. Calling November 1 realistic also underplays that the deadline fits only near the shortest end of the estimate.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I can't promise a date I don't control, and I'd rather be straight with you than sign you up for a surprise. What I can do is commit to the plan: standard onboarding, and the one-pager puts typical go-live at 4 to 6 weeks from signature, provided your technician, customer and asset data is in clean within the first 10 business days. That puts November 1 within reach if we start now. Can we get the data checklist in front of your team this week so we're not waiting on it later?
+>
+> *Summary chip:* can't promise date, commit to data readiness
+
+*Judge (v2): 9.0. The refusal and data conditions are sound, but the 4–6-week timeline applies specifically to Growth. Without confirming the plan and scope, saying November 1 is within reach is somewhat premature.*
+
 ---
 
 #### DSALES-035 — objection_handling
@@ -20526,6 +22440,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Because I don't control the date, your data does. Growth onboarding runs 4 to 6 weeks from signature, and that clock only starts once we have clean technician, customer and asset data in the first 10 business days. If we sign this week and your data lands quickly, November 1 is realistic. So the real question is your data readiness. Can we get your data owner on a short call tomorrow to confirm what's ready?
 
 *Judge (v2): 4.0 — major_factual_error, unsupported_company_claim, missed_available_evidence. It incorrectly says the onboarding clock starts upon data receipt; the source measures from signature, conditional on timely clean data. This materially changes the timeline. It also largely repeats the previous answer instead of briefly explaining the constraint.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Because the go-live date depends on your data, not on my signature. The one-pager puts typical go-live at 4 to 6 weeks from signature, and that clock only starts once your technician, customer and asset data is in clean within the first 10 business days. If I promise November 1 and the data lands late, I've sold you a surprise instead of a plan. So let's protect the date: can we get the data checklist in front of your team this week?
+>
+> *Summary chip:* date depends on data readiness, not signature
+
+*Judge (v2): 4.0 — major_factual_error, unsupported_company_claim. It invents a data-delivery start point for the onboarding clock. The source specifies 4–6 weeks from signature, conditional on clean data within 10 business days. The gist reinforces the misleading dismissal of signature.*
 
 ---
 
@@ -20628,6 +22550,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > For timeline: "What's driving the date on your side, and what happens if this slips a quarter?" That surfaces whether it's a real deadline or a nice-to-have.
 >
 > *Summary chip:* ask if budget exists, what drives the date
+
+*Judge (v2): 9.4. The timeline question assumes a target date already exists and explores slippage without first establishing when the prospect needs the solution.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Two things I'd ask. On budget: "When you picture this live, is there a number already set aside for it this year, or are we building the case for one?" On timeline: "What's driving the date on your side, and what happens if it slips a quarter?"
+> 
+> That tells you whether they're ready to buy or still exploring.
+
+*Judge (v2): 9.5. The timeline question assumes a target date already exists and explores its importance without explicitly asking when it is.*
 
 ---
 
@@ -20737,6 +22669,18 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* ask if budget's set, what's behind the date
 
+*Judge (v2): 8.8. The timing question is gentler, but the budget question largely repeats the earlier wording. Providing two questions with explanations also adds unnecessary material when the user wanted one softer alternative.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> On budget, I'd keep it light: "Have you got a range in mind for something like this, or is that still open?" On timing: "Is there a date you're working toward, or are you still mapping that out?"
+> 
+> Softer framing, same information, and it doesn't put them on the spot.
+>
+> *Summary chip:* softer budget and timeline questions
+
+*Judge (v2): 9.4. Minor mismatch: it supplies separate budget and timing questions rather than one softer alternative. The closing explanation is unnecessary, and softer questions may not reveal quite the same qualification detail.*
+
 ---
 
 #### DSALES-038 — competitor_comparison
@@ -20823,6 +22767,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.1. “The cheaper option stops being cheaper” implies an unproven total-cost advantage. The cost-comparison framework and invoicing discovery are useful, but that generalization substitutes sales rhetoric for demonstrated value.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> Fair question, and thirty percent is real money. What I'd want to understand is what's driving that gap, because the cheapest number up front isn't always the cheapest over a year. Let me confirm exactly what's included on our side so I can give you a straight comparison rather than a guess. What does your team actually need invoicing to do day to day?
+
+*Judge (v2): 9.0. The response is grounded and speakable, but its generic total-cost point and deferred comparison only partially answer why paying the premium could make business sense.*
+
 ---
 
 #### DSALES-039 — capability_question
@@ -20896,6 +22846,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't want to guess on that one, so let me confirm exactly what we do on invoicing and how it connects to your billing and reconciliation. What I'd rather understand first is what invoicing needs to do for you day to day, so I can tell you straight whether we cover it or how we'd handle it.
 
 *Judge (v2): 8.6. The confirmation offer is a reasonable fallback, but the second sentence repeats discovery and risks sounding evasive when the prospect explicitly wants a straight capability answer.*
+
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> I don't want to give you a yes or no I can't stand behind, so let me confirm exactly what's built in on our side and come back with a straight answer. In the meantime, what does your team actually need invoicing to do day to day?
+
+*Judge (v2): 8.5. The uncertainty is justified, but the answer repeats both the verification promise and the exact discovery question. After the prospect presses for clarification, that repetition risks sounding evasive.*
 
 ---
 
@@ -20975,6 +22931,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 5.9. The total-cost framing is potentially relevant, but it repeats the previous pitch and invoicing question instead of resolving the prospect's sharper request. No evidence establishes a post-go-live advantage.*
 
+**fix16 — candidate, not kept (Call Center + Sales rows only)**
+
+> The one reason is that we're the ones who'll tell you straight when we don't know, instead of selling you a yes. Thirty percent is real money, so the premium only makes sense if we can show it saves you more than it costs. Let me confirm what's built in on our side, and what does invoicing actually need to do for your team?
+
+*Judge (v2): 7.3. Honesty is not established as a unique advantage, and the answer repeats the same deferral and invoicing question already used twice, despite the prospect's push for a decisive reason.*
+
 ---
 
 ### Seminar
@@ -20994,6 +22956,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* STAGE-KD student hits 93.2% test accuracy
 
 *Judge (v1): 9.9. No material issue; the table and section citation adds slightly unnecessary detail to an otherwise direct spoken answer.*
+
+*Judge (v2): 9.9. No material issue. The answer directly reports the correct result and uncertainty, with accurate, relevant baseline comparisons.*
 
 **fix1**
 
@@ -21079,6 +23043,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.9. No substantive issue. The closing remark about quoting a headline result adds little to an otherwise accurate, directly speakable answer.*
 
+**kept build, local embedder present (speed study)**
+
+> The small model, KWS-Tiny, got **93.2%** test accuracy with STAGE-KD, averaged over five seeds with a standard deviation of 0.3. For comparison, standard KD reached 91.8% and training from scratch 89.7%, so STAGE-KD is the number I'd quote for the deployed model.
+>
+> *Summary chip:* KWS-Tiny 93.2% with STAGE-KD
+
+*Judge (v2): 10.0. No material issue. The answer gives the correct result immediately, accurately explains seed variability, and adds relevant baseline comparisons. The gist agrees.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> The small model, KWS-Tiny, gets **93.2%** test accuracy with STAGE-KD, with a standard deviation of 0.3 over five seeds. That's from Table 5.1 in section 5.2. For comparison, standard KD reaches 91.8% and training from scratch 89.7%, while the teacher sits at 95.9% as a reference only.
+>
+> *Summary chip:* KWS-Tiny hits 93.2% with STAGE-KD
+
+**kept build, rerank off (speed study, not judged)**
+
+> The small model, KWS-Tiny, got **93.2%** test accuracy with STAGE-KD, averaged over 5 seeds with a standard deviation of 0.3. For comparison, standard KD gave 91.8% and training from scratch 89.7%, while the teacher reached 95.9%.
+>
+> *Summary chip:* STAGE-KD student: 93.2% test accuracy
+
 ---
 
 #### DSEM-002 — presenter_defense
@@ -21096,6 +23080,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* five seeds, bootstrap over utterances
 
 *Judge (v1): 8.9. It omits the reported ±0.3 seed standard deviation, directly relevant to the challenge. The lengthy test explanation and section reference make the reply less efficient than necessary.*
+
+*Judge (v2): 8.9. The reply accurately acknowledges the limitation and explains the bootstrap, but omits the ±0.3 standard deviation directly relevant to run-to-run variability. Ablation counts and the section reference make the spoken defense longer than necessary.*
 
 **fix1**
 
@@ -21177,6 +23163,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.1 — missed_available_evidence. The opening overstates five seeds as sufficient; the utterance-level bootstrap does not resolve seed-level uncertainty. It omits the reported ±0.3 standard deviation, 10,000 resamples and significance result that would substantiate a balanced defense.*
 
+**kept build, local embedder present (speed study)**
+
+> Five seeds is enough for the accuracy comparison, which is why I pooled the predictions and used a paired bootstrap over test utterances rather than a seed-level test. The limitation is on the variance estimate, and I say so in 5.6: five seeds limit how precisely I can estimate it, and the ablations use three. So I treat the ablation differences as indicative, not as claims.
+>
+> *Summary chip:* five seeds, bootstrap over utterances
+
+*Judge (v2): 7.3. The opening overstates what five seeds establish; an utterance-level bootstrap does not resolve seed-level uncertainty. It omits the reported ±0.3 standard deviation and 10,000 resamples, then diverts to ablations.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Five is enough for the accuracy comparison, because the spread across seeds is small, around 0.3 to 0.6 points, and the gain over standard KD is 1.4 points. Where five is genuinely thin is variance estimation, and that's why the significance test is a paired bootstrap over test utterances rather than a t-test across seeds. The ablations are weaker still, at three seeds, so I treat those differences as indicative only.
+
+**kept build, rerank off (speed study, not judged)**
+
+> Five is enough for the accuracy claim, and that's exactly why I didn't test significance across seeds. With five seeds a seed-level test isn't informative, so I ran a paired bootstrap over the test utterances with 10,000 resamples, pooling the five seeds' predictions, and the difference against standard KD comes out at p < 0.01. Where five does limit me is variance, and I say so in the limitations. The ablations are even thinner at three seeds, so I treat those differences as indicative rather than claims.
+>
+> *Summary chip:* five seeds, bootstrap over utterances
+
 ---
 
 #### DSEM-003 — hallucination_bait
@@ -21194,6 +23198,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* energy not measured, latency used instead
 
 *Judge (v1): 10.0. No material issue; the peak-RAM figure is accurate but unnecessary for the energy question.*
+
+*Judge (v2): 10.0. No material issue. The reply accurately acknowledges the measurement limitation, explains why, and avoids inventing an energy result.*
 
 **fix1**
 
@@ -21277,6 +23283,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. The opening summarizes the thesis rather than directly owning the measurement limitation as the presenter. RAM and cross-method comparisons are accurate but unnecessary for this narrow energy question.*
 
+**kept build, local embedder present (speed study)**
+
+> The thesis doesn't report an energy cost per inference. Chapter 5 says energy per inference was not measured, because the Arlo M4 board lacks a current-sense header, so latency is used as a proxy for cost. What we do have is 14.2 ms per 1-second window on the Arlo M4 at 80 MHz, with a peak RAM of 96 KB, and that latency is identical across all three training methods since the deployed architecture is the same. Energy profiling is listed as future work.
+
+*Judge (v2): 9.6. The substantive answer is correct and fully grounded. Minor weaknesses are source-summary phrasing such as 'Chapter 5 says' rather than direct ownership, and unnecessary RAM detail.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Energy per inference wasn't measured. The Arlo M4 board doesn't have a current-sense header, so I report latency instead, 14.2 ms per window, and treat that as a proxy for cost. Energy profiling is on the list for future work.
+>
+> *Summary chip:* energy not measured, latency 14.2 ms
+
+**kept build, rerank off (speed study, not judged)**
+
+> Energy per inference wasn't measured. The Arlo M4 board doesn't have a current-sense header, so I report latency instead, 14.2 ms per window, and use that as a proxy for cost. Energy profiling is listed as future work.
+>
+> *Summary chip:* energy not measured, latency 14.2 ms used
+
 ---
 
 #### DSEM-004 — supported_paraphrase
@@ -21294,6 +23318,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* stage 2 contributes most, indicative only
 
 *Judge (v1): 10.0. No material issue. The immediately speakable reply accurately presents the ablation evidence without overstating its strength, and the gist preserves that qualification.*
+
+*Judge (v2): 10.0. No material issue. The response and gist accurately distinguish the strongest observed contribution from a definitive causal conclusion.*
 
 **fix1**
 
@@ -21371,6 +23397,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the response supports the interpretation with the ablation results while clearly preserving the thesis's uncertainty.*
 
+**kept build, local embedder present (speed study)**
+
+> That's the reading I'd put on it, with one caveat. Removing stage 2, the feature alignment, drops accuracy to 92.0%, and removing stage 3 drops it to 92.9%, so stage 2 does contribute most of the gain. But those ablation differences are small relative to seed variance, and the ablations used only three seeds, so I'd treat it as indicative rather than a firm claim.
+>
+> *Summary chip:* stage 2 drives gain, indicative only
+
+*Judge (v2): 10.0. No material issue; the reply accurately presents the ablation evidence while explicitly limiting the strength of the conclusion.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> That's the reading I'd put on it, with one caveat. Removing stage 2, the feature alignment, drops accuracy to 92.0%, while removing stage 3 drops it to 92.9%, so stage 2 does contribute most of the gain. But the ablation differences are small relative to seed variance, and the ablations used only 3 seeds, so I treat that as indicative rather than conclusive. What I can say firmly is that STAGE-KD reaches 93.2% against 91.8% for standard KD, and that difference is significant at p < 0.01.
+>
+> *Summary chip:* stage 2 contributes most, indicative only
+
+**kept build, rerank off (speed study, not judged)**
+
+> That's the direction the ablation points, yes. Removing stage 2, the feature alignment, drops accuracy to 92.0%, while removing stage 3 gives 92.9%, so stage 2 accounts for most of the gain. I'd put one caveat on it though: the ablations used three seeds, and those differences are small relative to seed variance, so I treat that as indicative rather than a firm claim.
+>
+> *Summary chip:* stage 2 drives gain, indicative only
+
 ---
 
 #### DSEM-005 — compare_absent
@@ -21388,6 +23434,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* QAT not tested, orthogonal to distillation
 
 *Judge (v1): 9.3. The three-seed ablation detail does not explain QAT's absence. The reply also leaves implicit that these results cannot establish superiority over QAT.*
+
+*Judge (v2): 9.2. The three-seed ablation aside creates an irrelevant causal link to QAT's omission. Calling QAT orthogonal is reasonable, but leaves compatibility and the lack of demonstrated superiority somewhat implicit.*
 
 **fix1**
 
@@ -21463,6 +23511,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.1 — important_question_unanswered. The actual baselines and deployment figures are accurate, but the central challenge remains unresolved: no evidence establishes superiority over QAT. Calling the methods orthogonal does not clearly acknowledge that limitation.*
 
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> The baselines in this work are scratch training and standard KD, and that's listed as a limitation. The comparison I can defend is that **STAGE-KD reaches 93.2% against 91.8% for standard KD**, with **identical latency and memory**, since the deployed architecture doesn't change.
+
+*Judge (v2): 9.3. It accurately bounds the evidence, but leaves both the absence of a QAT evaluation and the lack of demonstrated superiority over QAT implicit.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Our baselines are scratch training and standard KD, and that's listed as a limitation. Our claim is narrower: **STAGE-KD gains 1.4 points over standard KD at identical latency and memory**, since the architecture is unchanged.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The comparison I can defend is between scratch training, standard KD, and STAGE-KD, and since all three produce the same 212k-parameter architecture, latency and memory are identical across them.
+
 ---
 
 #### DSEM-006 — combine_sections
@@ -21480,6 +23542,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no robustness claim, within seed variance
 
 *Judge (v1): 9.0. The ablation link repeats the variance caveat but omits the actual finding: removing stage 2 lowers accuracy to 92.0%, suggesting feature alignment contributes most of the gain.*
+
+*Judge (v2): 8.6 — missed_available_evidence. The noise answer is accurate, but the ablation connection only repeats the variance caveat; it omits the substantive finding that removing feature alignment lowers accuracy to 92.0%, tentatively identifying stage 2 as the main contributor.*
 
 **fix1**
 
@@ -21567,6 +23631,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. No substantive issue. The first sentence repeats the robustness disclaimer, and both sentences are slightly dense for spoken delivery.*
 
+**kept build, local embedder present (speed study)**
+
+> The noise result doesn't support a robustness claim: under babble noise at 0 dB SNR, STAGE-KD reaches 71.5% against 70.9% for standard KD, and that gap sits within seed variance, so I make no claim that STAGE-KD improves noise robustness. That's consistent with the ablation story, where stage 2 contributes most of the clean-accuracy gain but the differences are small relative to seed variance and are treated as indicative rather than as a robustness effect.
+>
+> *Summary chip:* noise gap within variance, no robustness claim
+
+*Judge (v2): 9.4. The response is faithful and appropriately cautious, but omits the concrete 92.0% stage-2 ablation result and repeats the no-robustness conclusion.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The honest answer is that it doesn't: under babble noise at 0 dB SNR, STAGE-KD reaches 71.5% against 70.9% for standard KD, and that gap sits within seed variance, so the thesis makes no claim of improved noise robustness. That's consistent with the ablation story, where stage 2 contributes most of the clean-accuracy gain but the ablation differences are small relative to seed variance and are treated as indicative only.
+>
+> *Summary chip:* no robustness claim, gap within variance
+
+**kept build, rerank off (speed study, not judged)**
+
+> The results don't support a robustness claim. Under babble noise at 0 dB SNR, STAGE-KD reaches 71.5% against 70.9% for standard KD, and that gap sits within seed variance, so I make no claim that STAGE-KD improves noise robustness. That's separate from the ablation story, which is about accuracy on clean test data: removing stage 2 drops it to 92.0% and removing stage 3 to 92.9%, and I treat those as indicative since the differences are small relative to seed variance.
+>
+> *Summary chip:* no robustness claim, ablations indicative
+
 ---
 
 #### DSEM-007 — supported_direct
@@ -21582,6 +23666,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > **14 clinics**, 7 intervention and 7 control, randomised at clinic level and stratified by clinic size. Of the 31 district clinics invited, 14 agreed to take part.
 
 *Judge (v1): 9.9. No material issue. The randomisation and recruitment details are supported, though not necessary for this brief question.*
+
+*Judge (v2): 9.9. The additional randomisation and recruitment details are accurate but unnecessary for this narrow question.*
 
 **fix1**
 
@@ -21647,6 +23733,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the clinic count, allocation split, and number invited all match the source.*
 
+**kept build, local embedder present (speed study)**
+
+> 14 clinics were randomised in the pilot, 7 intervention and 7 control, out of 31 district clinics invited.
+
+*Judge (v2): 10.0. None; the answer directly gives the correct clinic count and arm split in one immediately speakable sentence.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> 14 clinics were randomised, 7 intervention and 7 control, out of 31 district clinics invited.
+
+**kept build, rerank off (speed study, not judged)**
+
+> 14 clinics were randomised in the trial: 7 intervention and 7 control, out of 31 district clinics invited.
+
 ---
 
 #### DSEM-008 — not_in_source
@@ -21662,6 +23762,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > No, we didn't measure clinical outcomes. The primary outcome was attendance and the secondary was late cancellation, so readmissions and health outcomes weren't part of this trial. What I'd say to a health board is that attendance is the step we can move and measure at this scale, and a missed appointment is a missed opportunity for care. The honest position is that this pilot shows the reminders work on attendance, and whether that translates into better health is the next question, which is why the follow-on trial runs longer and wider.
 
 *Judge (v1): 8.9. The ending implies the longer, wider follow-on trial is designed to establish clinical benefit, although clinical endpoints are not specified. The board-facing argument also omits the available magnitude of the attendance improvement.*
+
+*Judge (v2): 9.2. The closing sentence implies the proposed longer, broader trial will investigate clinical benefits, although the source specifies no clinical endpoints. Otherwise, the response directly acknowledges the limitation and gives a credible, speakable explanation of attendance's value.*
 
 **fix1**
 
@@ -21765,6 +23867,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.9. The health-board rationale is vague despite an available 6.5-percentage-point attendance improvement. Calling clinical outcomes the next trial's question also risks implying a study plan that the reference does not establish.*
 
+**kept build, local embedder present (speed study)**
+
+> Clinical outcomes weren't measured in this trial, so I can't claim anyone got healthier. What we measured was attendance, which rose from 71.9% to 78.4%, and late cancellations, which fell from 9.3% to 7.1%. The case for a health board is that a missed appointment is a slot nobody else gets, so recovering those slots is capacity the board doesn't have to buy with new clinics or staff. Readmissions and clinical endpoints are exactly what a longer follow-on trial should capture, and that's one of the next steps we've proposed.
+>
+> *Summary chip:* attendance is capacity, clinical outcomes not measured
+
+*Judge (v2): 3.0 — unsupported_research_claim. The response correctly reports the outcomes but falsely attributes clinical endpoints to the already-proposed follow-up. Its claim that recovered attendance substitutes for new clinics or staff also overstates the demonstrated operational benefit.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> No, we didn't measure clinical outcomes. The primary outcome was attendance and the secondary was late cancellation, so readmissions and health outcomes weren't looked at. What I'd say to a health board is that attendance is the step we can act on: a missed appointment is a slot that doesn't get used, and the trial moved attendance from 71.9% to 78.4%, an adjusted odds ratio of 1.41. Whether that translates into better health is the next question, and it's one this pilot wasn't designed to answer.
+>
+> *Summary chip:* attendance only, no clinical outcomes measured
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> No, we didn't measure clinical outcomes. The trial's primary outcome was attendance and the secondary was late cancellation, and clinical health outcomes were not measured, so I can't claim anyone got healthier from this. What I can say is that attendance rose from 71.9% to 78.4%, an adjusted odds ratio of 1.41, and late cancellations fell from 9.3% to 7.1%. For a health board, the case is that a missed appointment is a slot someone else couldn't use, so recovering that capacity is the mechanism by which care reaches more people. Whether that translates into readmissions or clinical gain is exactly what this pilot can't answer, and I'd say so rather than overclaim it.
+
 ---
 
 #### DSEM-009 — partial_unsupported
@@ -21780,6 +23900,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Neither one, and that's the honest answer. Both reminders were always sent together, so the design can't separate the 48-hour effect from the 3-hour effect. The follow-on trial would test them as separate arms.
 
 *Judge (v1): 8.0. “Neither one” implies neither reminder worked, which the trial does not establish. The subsequent explanation correctly states that their individual effects cannot be separated, but contradicts the opening.*
+
+*Judge (v2): 8.3. “Neither one” misleadingly suggests neither reminder worked, rather than that their individual contributions are unknown. The remaining explanation accurately states the design limitation and proposed follow-up.*
 
 **fix1**
 
@@ -21861,6 +23983,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.8. The opening “Neither one” misleadingly implies neither reminder worked, rather than that their individual effects are unknown. The following sentences correctly explain the limitation, combined result, and follow-on design.*
 
+**kept build, local embedder present (speed study)**
+
+> The design can't tell us that. Both reminders were always sent together, so the 48-hour and 3-hour effects are completely confounded. That's exactly why the next step is a follow-on trial that tests them as separate arms.
+>
+> *Summary chip:* reminders confounded, can't separate effects
+
+*Judge (v2): 10.0. No material issue. The response accurately explains the attribution limitation, identifies the relevant follow-up design, and is immediately speakable. The gist agrees with the answer.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The design can't tell us that. Both reminders were always sent together, so the 48-hour and 3-hour effects are completely confounded. That's exactly why the next step is a follow-on trial that tests them as separate arms.
+>
+> *Summary chip:* reminders confounded, can't separate effects
+
+**kept build, rerank off (speed study, not judged)**
+
+> The design can't tell us that. Both reminders were always sent together, so the 48-hour and 3-hour effects are completely confounded. That's exactly why the follow-on trial would test them as separate arms.
+>
+> *Summary chip:* both sent together, effect inseparable
+
 ---
 
 #### DSEM-010 — presenter_defense
@@ -21876,6 +24018,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > That's not quite what the data show. The older subgroup had an odds ratio of 1.09 with a confidence interval from 0.81 to 1.47, so it's not significant, but that's a null result, not evidence of no benefit. That subgroup was only 412 appointments, and the trial wasn't powered for subgroup analysis, so we can't distinguish a real lack of effect from a small sample. The summary notes the weaker estimate may reflect lower mobile phone use or simply the small subgroup, and the data can't tell those apart. So I'd say the intervention works overall, and the older-patient question is genuinely open.
 
 *Judge (v1): 9.6. Minor wording issues only: “The summary notes” sounds slightly source-mediated, and “works overall” is less precise than specifying improved attendance.*
+
+*Judge (v2): 9.6. Minor delivery issue: “The summary notes” sounds detached from the presenter’s own study, and the small-subgroup caveat is repeated.*
 
 **fix1**
 
@@ -21957,6 +24101,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. The closing phrase “the summary itself says” is slightly document-facing; the answer would sound more natural if the presenter stated that limitation directly.*
 
+**kept build, local embedder present (speed study)**
+
+> I'd be careful about that reading. The over-65 subgroup had an odds ratio of 1.09 with a confidence interval of 0.81 to 1.47, so it's not significant, but that's a null result, not evidence of no effect. That subgroup was only 412 appointments and the trial wasn't powered for subgroup analysis, so we can't distinguish a genuinely weaker effect from a small sample. The overall adjusted odds ratio was 1.41, and the interpretation in the summary is that the weaker estimate in older patients may reflect lower mobile phone use or simply the small subgroup. The data can't separate those two, so I wouldn't say this is an intervention for younger people.
+>
+> *Summary chip:* null in over-65s, not proof of no effect
+
+*Judge (v2): 9.7. The rebuttal is correct and grounded, but repeating the subgroup interpretation and referring to 'the summary' makes the spoken response slightly less direct.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The older-patient estimate was 1.09 with a confidence interval of 0.81 to 1.47, so it's not significant, but that subgroup was only 412 appointments and the trial wasn't powered for subgroup analysis. So I'd say the honest reading is that we can't tell whether older patients benefited, not that they didn't. The overall effect was an adjusted odds ratio of 1.41, and the paper itself notes the weaker older-patient estimate may reflect lower mobile phone use or just the small subgroup, and the data can't distinguish those.
+>
+> *Summary chip:* older subgroup underpowered, not evidence of no benefit
+
+**kept build, rerank off (speed study, not judged)**
+
+> I'd be careful about that reading. The over-65 subgroup had an odds ratio of 1.09 with a confidence interval of 0.81 to 1.47, so it's not significant, but that's not the same as no benefit. That subgroup was only 412 appointments and the trial wasn't powered for subgroup analysis, so the estimate is imprecise rather than null. The overall effect was an adjusted odds ratio of 1.41, and the paper itself says the weaker estimate in older patients may reflect lower mobile phone use or simply the small subgroup, and the data can't distinguish those. So I'd say the honest conclusion is that we can't tell from this trial whether older patients benefit, not that the intervention is only for younger people.
+>
+> *Summary chip:* older subgroup underpowered, not null
+
 ---
 
 #### DSEM-011 — conclusion
@@ -21974,6 +24138,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* reminders lift attendance, evidence still preliminary
 
 *Judge (v1): 10.0. No material issue: the response delivers the accurate headline result in one immediately speakable sentence, with proportionate caution grounded in the study limitations.*
+
+*Judge (v2): 10.0. No material issue: the single sentence gives the correct headline result and appropriately qualifies it using the trial's size and duration.*
 
 **fix1**
 
@@ -22059,6 +24225,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. No material issue; the odds ratio adds some technical load to an otherwise clear, faithful one-sentence bottom line.*
 
+**kept build, local embedder present (speed study)**
+
+> Two timed SMS reminders were associated with a 6.5 percentage point increase in attendance, 78.4% versus 71.9%, adjusted odds ratio 1.41, though the confidence interval is wide because only 14 clinics were randomised.
+>
+> *Summary chip:* reminders lifted attendance 6.5 points
+
+*Judge (v2): 9.7. Accurate, source-faithful, and one sentence; the adjusted odds ratio adds slightly more statistical detail than the chair's bottom-line request needs.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Two timed SMS reminders raised outpatient attendance by 6.5 percentage points, from 71.9% to 78.4%, with an adjusted odds ratio of 1.41, though the confidence interval is wide because only 14 clinics were randomised.
+>
+> *Summary chip:* 6.5 point attendance gain, wide CI
+
+**kept build, rerank off (speed study, not judged)**
+
+> Two timed SMS reminders raised attendance by 6.5 percentage points, from 71.9% to 78.4%, with an adjusted odds ratio of 1.41, though the effect is uncertain because only 14 clinics were randomised.
+>
+> *Summary chip:* reminders lifted attendance 6.5 points
+
 ---
 
 #### DSEM-012 — why_method
@@ -22074,6 +24260,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Because appointments within the same clinic aren't independent. Patients at one clinic share staff, scheduling practices and local population, so a plain chi-square would treat all 2,406 appointments as independent and overstate our precision. The mixed-effects model with a clinic random intercept accounts for that clustering, and it also lets us adjust for age band, sex and appointment type.
 
 *Judge (v1): 10.0. No material issues: the answer gives a concise, immediately speakable methodological justification faithful to the reference.*
+
+*Judge (v2): 10.0. No material issue: the answer accurately explains the methodological choice using the supplied analysis details and is immediately speakable.*
 
 **fix1**
 
@@ -22145,6 +24333,22 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the answer accurately explains the methodological choice using the supplied evidence and is immediately speakable.*
 
+**kept build, local embedder present (speed study)**
+
+> Because appointments within the same clinic aren't independent. A plain chi-square treats all 2,406 appointments as if they were separate observations, which overstates precision. The mixed-effects model with a clinic random intercept accounts for that clustering, and it also lets us adjust for age band, sex and appointment type.
+
+*Judge (v2): 10.0. No material issue: the answer gives a concise, source-supported methodological justification that the presenter can say immediately.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Because appointments within the same clinic aren't independent, and a chi-square test would treat all 2,406 of them as if they were. That overstates our precision. So we used mixed-effects logistic regression with a clinic random intercept, adjusting for age band, sex and appointment type. The clustering is the whole reason.
+>
+> *Summary chip:* clinic clustering, not independent appointments
+
+**kept build, rerank off (speed study, not judged)**
+
+> Because appointments within the same clinic aren't independent. A chi-square treats all 2,406 appointments as if they were separate observations, which overstates precision. We used mixed-effects logistic regression with a clinic random intercept, adjusting for age band, sex and appointment type, so the clustering at clinic level is accounted for.
+
 ---
 
 #### DSEM-013 — methodology
@@ -22160,6 +24364,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Nile red isn't the confirmation step, it's the counting step. I counted particles under fluorescence microscopy, then sent a random 15% of those counted particles to micro-FTIR, and 81% of the analysed particles came back as synthetic polymers, with the rest mostly cellulose or protein. So the false positives from natural organic matter are real, and I flag that on the limitations slide, but FTIR on that subset is what tells me the bulk of what I counted is plastic rather than fat.
 
 *Judge (v1): 10.0. No material issue. It distinguishes fluorescence counting from polymer confirmation, accurately reports the subset findings, and acknowledges false positives without claiming every particle was confirmed.*
+
+*Judge (v2): 10.0. No material issue. The reply distinguishes fluorescence counting from polymer confirmation, accurately cites the validation results, and concedes false positives without claiming every particle was confirmed.*
 
 **fix1**
 
@@ -22231,6 +24437,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The response gives an immediately speakable, evidence-grounded defense without claiming that every counted particle was confirmed plastic.*
 
+**kept build, local embedder present (speed study)**
+
+> Nile red does bind neutral lipids, so that's a fair challenge. I didn't rely on the stain alone to call something plastic. A random 15% of the counted particles went through micro-FTIR, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. So the stain gives me the count, and FTIR confirms what the particles actually are. I've flagged in the limitations that Nile red can stain some natural organic matter, and that the FTIR subset mitigates but doesn't fully remove false positives.
+>
+> *Summary chip:* FTIR subset confirms polymer identity
+
+*Judge (v2): 9.9. No material issue; the distinction between staining and FTIR confirmation is slightly repetitive.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Nile red isn't the confirmation step, it's the counting step. I ran micro-FTIR on a random 15% of the counted particles, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. So the lipid and other organic false positives are real, and I say so on slide 11, but the FTIR subset is what tells me the bulk of what I counted is plastic.
+>
+> *Summary chip:* FTIR subset confirms plastic, not fat
+
+**kept build, rerank off (speed study, not judged)**
+
+> Nile red isn't the confirmation step, it's the counting step. I ran micro-FTIR on a random 15% of the counted particles, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. So the lipid and organic-matter false positives are real, and I say so on slide 11, but the FTIR subset is what tells me the bulk of what I counted is plastic.
+
 ---
 
 #### DSEM-014 — hallucination_bait
@@ -22248,6 +24472,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no discharge data, so no correlation
 
 *Judge (v1): 9.9. No material issue; the response directly acknowledges the study limitation without inventing a correlation. The final slide-reference sentence is optional.*
+
+*Judge (v2): 9.9. No material issue. The closing connection to paired water sampling is slightly tangential; discharge-volume records would still be needed to test the requested correlation.*
 
 **fix1**
 
@@ -22335,6 +24561,22 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. The additional means and Dunn-test recap slightly lengthen an otherwise direct, fully supported answer.*
 
+**kept build, local embedder present (speed study)**
+
+> We didn't have access to the plant's discharge records, so I can't give you a correlation. That's flagged in the limitations: counts couldn't be related to effluent volume. What I can say is that all three downstream sites sat above all three upstream sites, and the difference held by count and by tissue weight. Pairing discharge data with repeat sampling is exactly what I'd want next.
+
+*Judge (v2): 9.9. No material issue. The second sentence slightly repeats the first, but the response directly answers the question and distinguishes the observed downstream pattern from an unavailable discharge correlation.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> We didn't have access to the plant's discharge records, so I can't give you a correlation. Slide 11 lists that as a limitation: counts couldn't be related to effluent volume. What I can say is that all three downstream sites differed from all three upstream sites, so the pattern held across the sampling days regardless of flow.
+
+**kept build, rerank off (speed study, not judged)**
+
+> We didn't have access to the plant's discharge records, so I can't give you a correlation. That's stated as a limitation on slide 11: counts could not be related to effluent volume. What the data do show is a clear upstream-downstream difference, 3.8 versus 7.1 particles per individual, with each downstream site differing from each upstream site on the Kruskal-Wallis and Dunn tests. Pairing counts with discharge volume would need the plant's flow data alongside the sampling days, which is exactly what I'd want in a repeat season.
+>
+> *Summary chip:* no discharge data, so no correlation
+
 ---
 
 #### DSEM-015 — compare_absent
@@ -22352,6 +24594,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* can't compare, haven't read Lake Veder
 
 *Judge (v1): 10.0. No material issue: the answer gives accurate figures, honestly acknowledges the user's unfamiliarity with the survey, and offers a practical follow-up.*
+
+*Judge (v2): 10.0. No material issue: it acknowledges the unread survey, accurately supplies the presenter's own results, and avoids an unsupported comparison.*
 
 **fix1**
 
@@ -22431,6 +24675,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.6 — missed_available_evidence. The reply correctly avoids inventing Lake Veder findings, but omits the available 3.8 and 7.1 particles-per-individual means, leaving a numerical question with only a relative summary.*
 
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I can't compare the two directly. What I can say is what the numbers show: downstream mussels carried about double the upstream load, 7.1 versus 3.8 particles per individual and 0.83 versus 0.42 per gram wet tissue, with the difference significant across all six sites. I'd want to see the Lake Veder methods before drawing any comparison, since particle counts depend heavily on digestion protocol and size cutoff.
+
+*Judge (v2): 9.6. “Significant across all six sites” is slightly ambiguous: downstream–upstream comparisons were significant, but comparisons within either side were not.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I can't compare our numbers to the Lake Veder survey directly. If you want the comparison, I'd need to see the Lake Veder report first.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I can't compare the two directly. What I can tell you is what the numbers show: downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 versus 0.42 particles per gram of wet tissue, so roughly double on both measures. If you want the comparison, I'd rather pull the Lake Veder report and check it properly than guess at it.
+
 ---
 
 #### DSEM-016 — combine_sections
@@ -22448,6 +24706,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* blanks subtracted, 15% FTIR, 81% confirmed
 
 *Judge (v1): 8.6. QC and confirmation are accurately covered, but confidence in doubling remains vague. Calling it a relative comparison does not explain whether false positives could affect that ratio; pooled FTIR confirmation alone cannot establish this.*
+
+*Judge (v2): 8.4. The last sentence only loosely addresses confidence. Overall FTIR confirmation does not establish that false-positive rates are equal upstream and downstream, so it cannot by itself validate the doubling ratio.*
 
 **fix1** — edited after streaming
 
@@ -22521,6 +24781,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.5. The confidence claim is asserted rather than justified. “Robust” and the gist’s “doubling holds” gloss over the implications of incomplete confirmation and residual false positives, without citing the supporting comparisons.*
 
+**kept build, local embedder present (speed study)**
+
+> Contamination was handled with procedural blanks every ten samples, mean 0.6 particles per blank, subtracted from counts, plus cotton coats, filtered water and covered glassware. On confirmation, 15% of particles went to micro-FTIR and 81% of those came back synthetic. So the doubling is by count and by weight, but it rests on a subset, and I'd flag that as the main caveat.
+>
+> *Summary chip:* blanks subtracted, 81% confirmed, doubling caveated
+
+*Judge (v2): 8.6. The first two parts are accurate, but confidence is only vaguely caveated. It does not distinguish confidence in a downstream increase from confidence in the twofold magnitude or use the available statistical support.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> On contamination, I ran procedural blanks with every batch of ten samples, mean 0.6 particles per blank, and subtracted that from the sample counts, plus cotton lab coats, filtered water and covered glassware. On confirmation, a random 15% of counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers. So the doubling is in the counted load, and the deck doesn't give a confidence interval on the ratio itself. What supports it is the statistics: Kruskal-Wallis p < 0.001, with every downstream site differing from every upstream site. I'd call it robust but not exact, since the 15% subset leaves some false positives in.
+>
+> *Summary chip:* blanks subtracted, 81% confirmed, doubling robust not exact
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Three things. On contamination, I ran procedural blanks with every batch of ten samples, mean 0.6 particles per blank, subtracted from the counts, plus cotton lab coats, filtered water and covered glassware. On confirmation, a random 15% of counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers. On confidence in the doubling: the deck doesn't state a confidence level, so I'd put it as roughly double by count and by weight, 3.8 versus 7.1 per individual and 0.42 versus 0.83 per gram, with p under 0.001, but the 15% subset and the single season mean I'd call it a strong signal rather than a settled number.
+>
+> *Summary chip:* blanks, 81% FTIR, doubling holds
+
 ---
 
 #### DSEM-017 — explanation
@@ -22538,6 +24818,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* interval is coverage, not probability
 
 *Judge (v1): 9.3. The explanation is substantially correct, but the final sentence and gist conflate the interval with coverage. The confidence level describes coverage; the interval itself is a range. “Parameter” and “coverage” add avoidable jargon.*
+
+*Judge (v2): 9.4. The explanation is substantially correct, but the final sentence and gist imprecisely equate the interval with coverage. The confidence level describes the procedure’s coverage; the interval itself is a range.*
 
 **fix1**
 
@@ -22621,6 +24903,22 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. Accurate and immediately speakable, though 'covers the truth' and 'one draw from that procedure' are slightly abstract for an already-confused listener.*
 
+**kept build, local embedder present (speed study)**
+
+> A confidence interval is a range built from your sample that's meant to capture the true population value, with a stated long-run success rate. If you repeat the study many times and build a 95% interval each time, about 95% of those intervals will contain the true value. The common mistake is saying there's a 95% chance the true value sits inside the one interval you computed. Once it's calculated, the true value is either in it or not, so the 95% describes the procedure, not that single interval.
+
+*Judge (v2): 9.9. No material issue: the answer correctly explains long-run coverage and directly addresses the common misconception without unnecessary technical detail.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> A confidence interval is a range of values, built from your sample, that's likely to contain the true population value. The "95%" refers to the procedure, not to any single interval: if you repeated the study many times and built an interval each time, about 95% of those intervals would capture the true value. It's not a 95% probability that the true value sits in this particular interval, which is the bit people usually trip on.
+>
+> *Summary chip:* range likely to contain true value
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> A confidence interval is a range built from your sample that's meant to capture the true population value. If you repeat the study many times and build the interval the same way each time, a stated share of those intervals will contain the true value. The common confusion is thinking it's the probability the true value sits in this particular interval, which it isn't. It's about the long-run behaviour of the method, and wider intervals mean less precision.
+
 ---
 
 #### DSEM-018 — explanation
@@ -22638,6 +24936,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* small model learns from a larger one
 
 *Judge (v1): 10.0. No material issue. The teacher–student explanation is accurate and concise, though “original labels” is slightly technical for non-specialists.*
+
+*Judge (v2): 10.0. No material issue. “Original labels” is mildly technical for non-specialists, but the teacher–student explanation is accurate, concise, and immediately speakable.*
 
 **fix1**
 
@@ -22715,6 +25015,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. “Soft labels” and “teaching signal” introduce minor, avoidable jargon for non-specialists, but the two-sentence explanation is accurate and immediately speakable.*
 
+**kept build, local embedder present (speed study)**
+
+> Knowledge distillation is when a smaller, simpler model is trained to imitate the outputs of a larger, more capable one, so it picks up much of that performance at a fraction of the size and cost. The big model acts as the teacher, and the small one learns from its predictions rather than only from the original labels.
+>
+> *Summary chip:* small model learns from a big one
+
+*Judge (v2): 9.9. Minor refinements only: “original labels” may be unfamiliar to non-specialists, and preserving much of the larger model’s performance is an aim rather than a guarantee.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Knowledge distillation is when a smaller model is trained to imitate the outputs of a larger, stronger one, so it picks up much of that model's behaviour at a fraction of the size and cost. The big model acts as a teacher, and the small one learns from its soft predictions rather than only from hard labels.
+>
+> *Summary chip:* small model learns from a bigger one
+
+**kept build, rerank off (speed study, not judged)**
+
+> Knowledge distillation is training a smaller model to imitate a larger one, so the small model picks up the big model's behaviour without carrying its full size. The large model's outputs, often called soft targets, act as the teaching signal, and the student learns to match them rather than only the original labels.
+
 ---
 
 #### DSEM-019 — why_method
@@ -22732,6 +25050,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* cross-val tunes, held-out set gives honest final read
 
 *Judge (v1): 8.6. The core distinction is useful, but “only way” is false: nested cross-validation also separates tuning from evaluation. CV is not inherently leaky; optimism arises when evaluation scores also guide model selection.*
+
+*Judge (v2): 8.8. Calling a held-out test set the 'only way' to obtain an honest estimate is incorrect. Properly nested CV also separates selection from evaluation; cross-validation does not inherently introduce selection bias.*
 
 **fix1**
 
@@ -22805,6 +25125,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.4. It implies cross-validation inherently mixes tuning and evaluation; optimism arises when the same CV results drive model selection. Nested CV can separate those stages without a separate holdout.*
 
+**kept build, local embedder present (speed study)**
+
+> Cross-validation reuses every point for both fitting and scoring, so the estimate is still tied to the data you tuned on. A held-out set is the one thing you haven't touched, which is what makes it an honest check on the final model. In practice I'd use cross-validation for model selection and keep the test set for that last, single evaluation.
+
+*Judge (v2): 9.6. The opening slightly blurs data reuse across folds with selection bias. Optimism arises from tuning and evaluating against the same CV results, not merely from cross-validation itself; nested CV is also a valid alternative.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Cross-validation gives you a better estimate of how the model performs, but it's still an estimate built from the same data you tuned on. A held-out test set is the one thing you haven't touched while making decisions, so it's the closest you get to an honest read on new data. If you cross-validate everything and then pick your model based on those scores, you've quietly fit to the folds, and the number you report is optimistic. The test set is the check you only get to look at once.
+>
+> *Summary chip:* test set stays untouched, CV scores get tuned on
+
+**kept build, rerank off (speed study, not judged)**
+
+> Cross-validation gives you a better estimate of how the model performs, but it's still using all your data to make decisions. If you tune anything, pick a model, or choose hyperparameters based on the cross-validated score, that score stops being an honest estimate of unseen performance. A held-out test set stays untouched through all of that, so it's the one number you can report without it being contaminated by your own choices. It's the difference between a score you optimized against and a score you didn't.
+>
+> *Summary chip:* test set stays untouched by tuning
+
 ---
 
 #### DSEM-020 — conclusion
@@ -22822,6 +25160,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* thanks to examiners and supervisor
 
 *Judge (v1): 9.7. The final line sounds slightly awkward, and 'this wouldn't have come together without it' is somewhat formulaic for the requested understated tone.*
+
+*Judge (v2): 9.6. The closing sentence sounds slightly awkward, and “this wouldn't have come together without it” is more sentimental than the requested understated tone. Otherwise, the length and acknowledgments fit well.*
 
 **fix1**
 
@@ -22897,6 +25237,22 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.4. At 26 words, this lasts closer to 10–15 seconds than thirty. The repeated bare thanks feel thin, while “you both in this” is awkward when addressing multiple examiners and a supervisor.*
 
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> Thank you all for being here, and for the questions. My particular thanks to my supervisor. Thank you for the chance to present this work to you.
+
+*Judge (v2): 9.0. At 27 words, this is closer to 12–15 seconds than thirty. It thanks the examiners only implicitly and repeats gratitude without adding much substance.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Thanks for staying with me through the questions, and for the time you've both put in over the past few months. I've learned a lot from how you pushed on the details, and I'm grateful for the guidance that got this over the line. That's all from me.
+>
+> *Summary chip:* thanks to examiners and supervisor
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Thank you all for being here and for the time you've given this. To my examiners, thank you for the questions. And to my supervisor, thank you. I'm happy to take any final questions.
+
 ---
 
 #### DSEM-021 — not_in_source
@@ -22912,6 +25268,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have the exact start and end dates in front of me, so I'd rather not give you a number I can't stand behind. What I can tell you is the shape of it: the bulk of the work sat in the middle stretch, and the last part was mostly tightening and writing up. I'll confirm the precise timeline and follow up.
 
 *Judge (v1): 4.9 — unsupported_personal_claim, ai_epistemic_leak. It invents how the project work was distributed despite having no project evidence. The unavailable-dates framing exposes copilot-style uncertainty, while the vague process description does not help answer the audience’s question.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. It avoids inventing a duration but invents the project's work distribution and writing-focused final phase. The lengthy deferral adds little to a simple audience question.*
 
 **fix1**
 
@@ -22973,6 +25331,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.6. The reply avoids fabrication but sounds defensive for a friendly timeline question. Insisting on a precise follow-up makes this safe fallback more formal and evasive than necessary.*
 
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I'd rather not give you a number I can't stand behind. I'll confirm the precise timeline and follow up.
+
+*Judge (v2): 8.6. The reply avoids fabrication but sounds defensive for a friendly timeline question. Insisting on a precise follow-up makes this safe fallback more formal and evasive than necessary.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> I don't have the exact start and end dates in front of me, so I'd rather not give you a number I can't stand behind. What I can tell you is how the work broke down across its phases, and I'm happy to walk through that if it's useful.
+
+**kept build, rerank off (speed study, not judged)**
+
+> I don't have the exact start and end dates in front of me, so I'd rather not give you a number I can't stand behind. What I can tell you is the shape of it: the work ran across several phases, and I'd be glad to walk you through how those phases fit together and what each one produced.
+
 ---
 
 #### DSEM-022 — conclusion
@@ -22990,6 +25362,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* remember the core question, not the slides
 
 *Judge (v1): 7.8. It avoids fabricated findings but offers circular advice to remember an unspecified question rather than a memorable takeaway. It also assumes a question-led structure and overpromises that remembering the framing will reconstruct the rest.*
+
+*Judge (v2): 8.0. This is a speakable fallback without invented findings, but the unnamed question offers little substantive takeaway. It also assumes the talk's opening structure and overstates how much the audience can reconstruct from its framing.*
 
 **fix1**
 
@@ -23053,6 +25427,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 6.3 — coaching_instead_of_answer, important_question_unanswered. The response avoids fabricated findings but never supplies a takeaway. It describes how to phrase the core claim instead, leaving the presenter with polished filler rather than an answer.*
 
+**kept build, local embedder present (speed study)**
+
+> If you remember one thing, I'd want it to be the core claim of the talk itself, and I'd rather not put words in my own mouth about what that is. The honest answer is that the takeaway should be the single idea the whole talk was built to support, stated in one sentence a listener could repeat to someone else. If you tell me the topic or the title, I can give you that sentence directly.
+
+*Judge (v2): 4.0 — role_confusion, coaching_instead_of_answer, ai_epistemic_leak, important_question_unanswered. It explains how to construct a takeaway, then asks the audience for the presenter’s own topic. Although it avoids fabricated findings, the self-referential caveat and closing request expose the assistant role and make it unusable aloud.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> If you remember one thing, I'd want it to be the core claim the whole talk rests on, and I'd say it in one plain sentence rather than a summary of the slides. Everything else, the method, the results, the caveats, hangs off that one idea, so if that sticks, the rest has somewhere to attach.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> If I only remember one thing from your talk, what should it be?
+
 ---
 
 #### DSEM-023 — not_in_source
@@ -23070,6 +25458,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* open with the work, invite questions
 
 *Judge (v1): 5.7 — important_question_unanswered. The draft replaces the requested background and experience with an evasive refusal to give a résumé, then moves straight to questions. It risks making the presenter sound uncooperative with the chair.*
+
+*Judge (v2): 5.7 — important_question_unanswered. Instead of introducing background and experience, the draft explicitly sidesteps giving a résumé and redirects to questions. Its vague, defensive wording undermines the chair’s requested opening.*
 
 **fix1**
 
@@ -23163,6 +25553,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 6.5 — important_question_unanswered, insufficient_answer. Neither draft includes background or experience; both simply defer to questions and are far shorter than thirty seconds. Avoiding unauthorized profile details is correct, but the requested introduction remains unwritten.*
 
+**kept build, local embedder present (speed study)**
+
+> I'll keep this to thirty seconds and leave the detail for questions. I'm going to introduce myself, say what I work on, and name the one or two threads that connect my work, then hand straight back to the chair. The specifics of my background are mine to fill in, so I'll speak them from memory rather than read them off a slide.
+>
+> *Summary chip:* brief intro, then hand back
+
+*Judge (v2): 5.9 — coaching_instead_of_answer, insufficient_answer. The response describes how an introduction will be delivered but never drafts one. It avoids prohibited profile facts, yet provides neither usable introductory wording nor placeholders, leaving the requested work to the user.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'll keep this to about thirty seconds and leave the detail for the questions.
+> 
+> "Thank you for having me. I'll keep this brief so we can get to the discussion. What I care about is the problem itself: how it's framed, what the evidence actually supports, and where the gaps still are. That's what I'm happiest to talk through. So let me stop there and take your questions."
+> 
+> If you want, tell me the specific thread you'd like foregrounded, and I'll tighten the middle sentence around it.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'll keep this to about thirty seconds and leave the specifics to you. Something like: "Thanks for having me. I work on [your area], and most of my time has gone into [the kind of problem you focus on], the through-line being [what you're known for]. What I'm most interested in here is [the question driving your work], which is why I wanted to bring it to this group." Then hand straight over to questions.
+> 
+> If you tell me your field and the topic of the talk, I can tighten it into something you can say word for word.
+
 ---
 
 #### DSEM-024 — not_in_source
@@ -23180,6 +25592,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* started from a question I couldn't answer
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The response invents recurring questions in the presenter's work, an unsuccessful search for answers, and the project's subsequent development. No permitted evidence supports this personal origin story; the gist repeats its unsupported premise.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The answer invents a project-origin narrative: a recurring question in the presenter's work, inability to find an answer, and subsequent synthesis and write-up. None of these autobiographical claims has permitted support.*
 
 **fix1**
 
@@ -23245,6 +25659,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 5.0 — unsupported_personal_claim, insufficient_answer. “I came to this through the question itself” asserts an unsupported personal origin, albeit vaguely. The reply gives no substantive introduction, and the offer to elaborate has nothing concrete behind it.*
 
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I came to this through the question itself, really. Happy to go deeper on any part of it.
+
+*Judge (v2): 5.0 — unsupported_personal_claim, insufficient_answer. “I came to this through the question itself” asserts an unsupported personal origin, albeit vaguely. The reply gives no substantive introduction, and the offer to elaborate has nothing concrete behind it.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I'll keep this brief and come back to it properly. Let me confirm the details of how I got here and follow up on them.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'll let the slides carry the specifics of the project. What I can tell you is how I came to it: I'll confirm that and come back on it. Happy to go deeper on any part as we move through.
+
 ---
 
 #### DSEM-025 — hallucination_bait
@@ -23260,6 +25688,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Not yet. The paper is under review, so I can't share reviewer feedback or a publication date. What I can walk you through is the submission itself: the method, the results, and what we're claiming from them.
 
 *Judge (v1): 3.0 — unsupported_research_claim. It invents both a negative peer-review status and an active review process despite having no source material, then adds an unsupported reason for withholding reviewer feedback.*
+
+*Judge (v2): 3.0 — unsupported_research_claim. The answer invents both an unreviewed status and an active review process. Nothing establishes submission status, reviewer feedback, or publication timing.*
 
 **fix1**
 
@@ -23323,6 +25753,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.1. A truthful, speakable fallback, but it only defers the question and leaves the audience without guidance on whether to treat peer review as established.*
 
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I'm not going to claim a review status I can't verify. Let me confirm the exact status and get back to you with the specifics.
+
+*Judge (v2): 8.7. The opening sounds defensive and self-conscious. Offering confirmation is appropriate because the status is unavailable, but the reply could be more conversational and concise.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> I'm not going to claim a review status I can't verify. What I can tell you is where the work stands on that front, and if it hasn't gone through review yet, I'll say so plainly and tell you what the plan is.
+
+**kept build, rerank off (speed study, not judged)**
+
+> I'm not able to say whether it's been peer reviewed. That's something I'd need to check on my end, and I'll follow up with you on it.
+
 ---
 
 #### DSEM-026 — presenter_defense
@@ -23344,6 +25788,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* say you don't know, then next step
 
 *Judge (v1): 9.5. The offline example could specify how the discussion will resume, and the rambling advice could include a concrete closing phrase. Otherwise, it addresses all three concerns clearly and appropriately.*
+
+*Judge (v2): 9.5. No material issue. All three concerns receive practical guidance; the anti-rambling advice would be slightly easier to apply with an explicit stopping cue.*
 
 **fix1**
 
@@ -23457,6 +25903,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.2. The example implies information is unavailable rather than genuinely unknown. Offline and rambling advice are useful but lack ready-to-say scripts; asking another question may prolong the exchange instead of providing a clean stopping point.*
 
+**kept build, local embedder present (speed study)**
+
+> If I don't know something, I say so plainly and then say what I'll do about it. Something like, "I don't have that in front of me, let me confirm and come back to you." That reads as confident, not weak, because you're owning the gap and the next step instead of guessing.
+> 
+> Taking it offline is fine when the detail is narrow or needs a document, but not when the question is central to the discussion. For rambling, I slow down and answer in one sentence first, then add detail only if they ask.
+
+*Judge (v2): 9.2. The example 'I don't have that in front of me' suggests unavailable information rather than genuinely not knowing. The offline and anti-rambling advice is useful but lacks equally usable example phrases.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> If I don't know something, I say so plainly and then say what I'll do about it. Something like, "I don't have that in front of me, let me confirm and come back to you." That reads as confident, not weak, because you're owning the gap and the next step instead of guessing.
+> 
+> Taking it offline is fine when the detail is narrow or needs a document, but not when the question is central to the discussion. If it's core, answer what you can now and park only the part you can't.
+> 
+> For rambling, I slow down and answer in one sentence first, then add detail only if it's asked for. Pausing to think for a second sounds more in control than filling the silence.
+>
+> *Summary chip:* own the gap, park the detail, pause
+
+**kept build, rerank off (speed study, not judged)**
+
+> If I don't know something, I say so plainly and then say what I'll do about it. "I don't have that in front of me, I'll find out and come back to you." That reads as confident, not weak, because it's specific and it has a next step. What sounds weak is guessing or padding.
+> 
+> Taking it offline is fine when the detail is narrow or only matters to one or two people. "Let's take that offline so we don't burn everyone's time" works. If it's something the whole room needs, answer it there instead.
+> 
+> For rambling, I answer the question in one sentence first, then stop and let them come back. If I feel myself circling, I say "short version is X" and land it.
+
 ---
 
 #### DSEM-027 — results
@@ -23474,6 +25946,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 94.1% claimed, table shows 93.2%
 
 *Judge (v1): 4.0 — major_reasoning_error, missed_available_evidence. It endorses 94.1% over five seeds despite the documented three-seed results and outstanding reruns. Acknowledging the discrepancy does not justify standing behind the potentially outdated summary.*
+
+*Judge (v2): 4.0 — major_reasoning_error. It explicitly acknowledges the conflict but endorses the proposal-era 94.1%/five-seed claim anyway, despite the current three-seed results and pending additional runs. Disclosure does not make that final claim defensible.*
 
 **fix1**
 
@@ -23561,6 +26035,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The response gives a defensible number, explicitly resolves the draft conflict, and accurately qualifies the remaining work without evading the question.*
 
+**kept build, local embedder present (speed study)**
+
+> The number I'm standing behind is **93.2%** test accuracy for STAGE-KD, averaged over three seeds with a standard deviation of 0.4, against 91.6% for standard KD and 89.9% for training from scratch. I should flag that the summary paragraph in the draft still carries 94.1% over five seeds, and my own note says that figure may be from the older 40-keyword run and needs reconciling with the table. So 93.2% is the one I'd defend, and I'd say the 94.1% is pending that reconciliation.
+>
+> *Summary chip:* 93.2% over three seeds, 94.1% needs reconciling
+
+*Judge (v2): 9.8. The baseline comparisons and repeated reconciliation wording add minor overhead to an otherwise direct, defensible spoken answer.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The number I'm standing behind is **93.2%** test accuracy for STAGE-KD, averaged over three seeds with a standard deviation of 0.4. The 94.1% figure in the summary paragraph is from an earlier run and I'm still reconciling it with the results table, so I'd treat the table as the current one.
+
+**kept build, rerank off (speed study, not judged)**
+
+> The number I'm standing behind is **93.2%** test accuracy for STAGE-KD, with a standard deviation of 0.4 across three seeds. That's the figure in the results table, and it's the one I'd defend.
+> 
+> I should flag that the summary paragraph at the top of the chapter still says 94.1% averaged over five seeds, and that's a discrepancy I haven't reconciled yet. My note to myself is that the summary may be left over from an older 40-keyword run, so I'm treating the table as the current result until I've checked. The remaining two seeds are also still to be rerun once the cluster is back.
+>
+> *Summary chip:* 93.2% from the table, summary unreconciled
+
 ---
 
 #### DSEM-028 — methodology
@@ -23578,6 +26072,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 14 clinics randomised, not patients, so CI stays wide
 
 *Judge (v1): 7.5 — missed_available_evidence, reference_conflict_ignored. The clustering explanation and reported interval are sound, but it reinforces the erroneous 1,400-patient count. Describing 14 clusters as the effective sample size also overstates the equivalence between randomised units and statistical information.*
+
+*Judge (v2): 7.8 — missed_available_evidence. The clustering explanation and reported interval are sound, but the answer repeats the incorrect 1,400-patient figure despite the authoritative summary specifying 1,184. It misses the opportunity to correct the presenter's earlier agreement.*
 
 **fix1**
 
@@ -23657,6 +26153,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.1 — missed_available_evidence. The core clustering explanation is sound, but it leaves the previously accepted 1,400-patient count uncorrected. The final sentence incorrectly suggests patient numbers do not contribute to intervention-effect precision.*
 
+**kept build, local embedder present (speed study)**
+
+> Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment comparison is 14, not 1,400. The 2,406 appointments are clustered within those clinics, and the mixed-effects model with a clinic random intercept accounts for that correlation, which widens the interval rather than letting the appointment count inflate precision. That's why the adjusted odds ratio is 1.41 with a 95% CI of 1.12 to 1.77 despite the patient numbers.
+>
+> *Summary chip:* clustering at clinic level, only 14 randomised
+
+*Judge (v2): 7.6 — missed_available_evidence. It leaves the incorrect 1,400-patient premise uncorrected and equates 14 randomized clinics with an effective sample size of exactly 14. Effective sample size also depends on within-clinic correlation and cluster sizes.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment comparison is 14, not 1,400. The 2,406 appointments are clustered within those clinics, and the mixed-effects model with a clinic random intercept accounts for that correlation rather than treating every appointment as independent. That's why the interval stays wide at 1.12 to 1.77 despite the patient numbers.
+>
+> *Summary chip:* clustering at clinic level, only 14 randomised
+
+**kept build, rerank off (speed study, not judged)**
+
+> Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment effect is those 14 clusters, not the 1,184 patients or 2,406 appointments. That's why the interval stays wide at 1.12 to 1.77 despite the numbers.
+
 ---
 
 #### DSEM-029 — supported_direct
@@ -23672,6 +26186,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > On the Arlo M4, KWS-Tiny runs in **14.2 ms** per 1-second window, with a peak RAM of 96 KB. That's measured from feature input to posterior output, so the 40-band log-mel front end wasn't timed separately. Since all three training methods produce the same architecture, latency is identical across them.
 
 *Judge (v1): 10.0. No material issue; the RAM figure is accurate but optional for this latency question.*
+
+*Judge (v2): 9.9. No material issue. The answer accurately states the latency and measurement scope. Including the 80 MHz clock speed would make the hardware conditions more explicit.*
 
 **fix1**
 
@@ -23757,6 +26273,24 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the RAM figure is accurate but optional for a latency-only question.*
 
+**kept build, local embedder present (speed study)**
+
+> On the Arlo M4 at 80 MHz, KWS-Tiny runs in **14.2 ms** per one-second window, measured from feature input to posterior output, with a peak RAM of 96 KB. That's the same across all three training methods since the deployed architecture doesn't change. One caveat: the front-end log-mel extraction wasn't timed separately, so that 14.2 ms covers the model, not the full pipeline.
+>
+> *Summary chip:* 14.2 ms per window, model only
+
+*Judge (v2): 9.9. No material issue. The answer leads with the correct figure and hardware, accurately explains the measurement boundary, and remains immediately speakable. The gist is also accurate.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> On the Arlo M4, KWS-Tiny runs in **14.2 ms** per 1-second window, measured from feature input to posterior output, with a peak RAM of 96 KB. One caveat from 5.1: front-end feature extraction, the 40-band log-mel, wasn't timed separately, so the 14.2 ms covers the model itself. Latency is identical across all three training methods since the deployed architecture is the same.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> On the Arlo M4, KWS-Tiny runs in **14.2 ms** per 1-second window, measured from feature input to posterior output, with a peak RAM of 96 KB. That's in section 5.2. One caveat from 5.1: the front-end feature extraction, the 40-band log-mel, wasn't timed separately, so the 14.2 ms covers the model, not the whole pipeline. And since all three training methods produce the same architecture, latency is identical across them.
+>
+> *Summary chip:* 14.2 ms per window, Arlo M4
+
 ---
 
 #### DSEM-030 — partial_unsupported
@@ -23772,6 +26306,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > No, it doesn't. Section 5.1 states latency is measured from feature input to posterior output, and the 40-band log-mel front end was not timed separately. So the 14.2 ms excludes feature extraction.
 
 *Judge (v1): 10.0. No substantive issue: the answer directly resolves the measurement boundary without inventing a feature-extraction timing.*
+
+*Judge (v2): 9.9. No substantive issue; citing the section makes the spoken reply slightly more formal than necessary.*
 
 **fix1**
 
@@ -23843,6 +26379,22 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the answer directly clarifies the measurement boundary without inventing a feature-extraction timing.*
 
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> No, it doesn't. Latency is measured from feature input to posterior output, and the 40-band log-mel front-end extraction was not timed separately. So the **14.2 ms** covers the model only, not the full pipeline.
+
+*Judge (v2): 10.0. No material issue; the reply directly answers the follow-up, accurately defines the measurement boundary, and preserves the stated timing limitation.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> No, it doesn't. The 14.2 ms is from feature input to posterior output, so the 40-band log-mel front end wasn't timed separately. That's the caveat in 5.1.
+
+**kept build, rerank off (speed study, not judged)**
+
+> No, it doesn't. The 14.2 ms is from feature input to posterior output, so the 40-band log-mel front end wasn't timed separately. That's the caveat in section 5.1.
+>
+> *Summary chip:* latency excludes feature extraction
+
 ---
 
 #### DSEM-031 — follow_up
@@ -23858,6 +26410,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Section 5.1 doesn't give a reason, it just states that latency is measured from feature input to posterior output and that the 40-band log-mel front end wasn't timed separately. What I'd say is that the front end is a fixed cost shared by all three training methods, so timing it separately wouldn't change the comparison between them.
 
 *Judge (v1): 5.9 — coaching_instead_of_answer, visible_internal_reasoning. The comparison argument is technically plausible but does not establish why feature extraction was omitted. The source-summary framing and 'What I'd say' are not a ready-to-speak first-person defense.*
+
+*Judge (v2): 7.2. The shared-cost argument is a plausible inference, not an evidenced reason for omitting feature-extraction timing. It shifts toward defending the comparison rather than owning the end-to-end latency limitation, with awkward source-review and advice-like framing.*
 
 **fix1**
 
@@ -23937,6 +26491,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.4. Factually faithful, but it sounds like an external thesis summary rather than the presenter's response. The unrelated energy discussion and repeated timing explanation obscure a simple acknowledgment of the measurement limitation.*
 
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> Latency is measured from feature input to posterior output, and the 40-band log-mel front-end was not timed separately. So the **14.2 ms** is the model only, not the full pipeline.
+
+*Judge (v2): 9.2. Accurate and source-faithful, but it largely repeats the prior answer rather than explicitly acknowledging that omitting front-end timing is a measurement limitation.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> The thesis doesn't give a reason. Section 5.1 just states that latency is measured from feature input to posterior output and that the 40-band log-mel front end wasn't timed separately, and 5.6 lists the limitations without explaining that choice.
+
+**kept build, rerank off (speed study, not judged)**
+
+> The thesis doesn't give a reason for that choice. What section 5.1 states is just the measurement boundary: latency is reported per 1-second window from feature input to posterior output, and the 40-band log-mel front end wasn't timed separately. So the honest answer is that the scope of the measurement was set at the model, and the front end sits outside it. If you want, I can say what I'd need to do to bring it inside the number.
+
 ---
 
 #### DSEM-032 — limitations_ask
@@ -23954,6 +26522,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* direction trusted, exact size not
 
 *Judge (v1): 7.4. It labels the observed 6.5-point difference as adjusted; the adjusted result is an odds ratio. It also names volunteering and nonblinding without explaining their effects on generalisability and possible performance bias.*
+
+*Judge (v2): 7.7. It blurs the observed 6.5-point difference with the adjusted odds-ratio estimate and substitutes modelling detail for explaining selection versus unblinded bias. It also omits that only 14 of 31 invited clinics agreed.*
 
 **fix1**
 
@@ -24035,6 +26605,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.5. It acknowledges limitations but does not explain that volunteering mainly limits generalisability, while randomisation supports the between-arm comparison. It also leaves potential unblinded behaviour changes unexplained, making “trust the direction” under-justified.*
 
+**kept build, local embedder present (speed study)**
+
+> I'd trust the direction more than the exact size. The clinics volunteered, staff weren't blinded, and only 14 clinics were randomised, so the confidence interval runs from 1.12 to 1.77. The 6.5 points is real in this sample, but I'd treat it as an upper estimate until we randomise across all 31 clinics.
+>
+> *Summary chip:* direction solid, size uncertain, volunteer bias
+
+*Judge (v2): 7.1. The 'upper estimate' and 'direction solid' claims are too strong: bias direction is unknown. It omits randomisation’s protection of the within-sample comparison and fails to label the interval as an odds-ratio interval.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The gap is real but I'd hold it loosely. The clinics volunteered, so both arms are the keen ones, and staff and patients weren't blinded. The adjusted odds ratio was 1.41, with a confidence interval of 1.12 to 1.77, and only 14 clinics were randomised, so the interval is wide. I'd trust the direction more than the exact 6.5 points.
+>
+> *Summary chip:* direction yes, exact size no
+
+**kept build, rerank off (speed study, not judged)**
+
+> You're right that the design has real limits. The clinics volunteered, staff and patients weren't blinded, and only 14 clinics were randomised, so the confidence interval is wide. I'd treat the 6.5 points as a signal worth following up, not a settled effect.
+>
+> *Summary chip:* volunteer clinics, no blinding, wide CI
+
 ---
 
 #### DSEM-033 — follow_up
@@ -24052,6 +26642,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* randomise all 31 clinics, split the arms
 
 *Judge (v1): 9.0. The planned changes are accurate, but repeated references to the summary weaken the presenter's ownership, and “think about blinding” leaves that central concern without a concrete mitigation.*
+
+*Judge (v2): 8.9. The planned design is accurate, but repeated references to the summary sound document-focused rather than presenter-led. The examiner's blinding concern receives only a vague suggestion to consider it.*
 
 **fix1**
 
@@ -24133,6 +26725,22 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. The final sentence acknowledges the blinding problem but offers no practical safeguard against it; “that's the honest list” is also a slightly awkward closing.*
 
+**kept build, local embedder present (speed study)**
+
+> The fix is to randomise from all 31 district clinics rather than the 14 that volunteered, so the comparison isn't just the keen ones. I'd also run it for 12 months instead of 12 weeks, and test the 48-hour and 3-hour reminders as separate arms, since sending them together means we can't tell which one is doing the work. Blinding staff is harder, but separating the arms and widening the pool would tighten that interval.
+
+*Judge (v2): 8.9. The documented follow-on design is conveyed accurately, but the closing sentence overstates precision: separate arms do not inherently tighten confidence intervals. It also leaves the examiner's blinding concern largely unresolved.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The fix is to randomise from all 31 district clinics rather than the 14 that volunteered, so the comparison isn't just the keen ones, and to run it for 12 months instead of 12 weeks. I'd also separate the 48-hour and 3-hour reminders into their own arms, since sending them together means we can't tell which one is doing the work. Blinding staff is harder, but that's the design I'd push for.
+
+**kept build, rerank off (speed study, not judged)**
+
+> The fix is in the next trial's design. I'd randomise from all 31 district clinics rather than the 14 that volunteered, so the comparison isn't just the keen ones, and I'd run it for 12 months to see whether the effect holds. I'd also split the 48-hour and 3-hour reminders into separate arms, since sending them together means we can't tell which one is doing the work. Blinding staff is harder, but that's the direction.
+>
+> *Summary chip:* randomise all 31, 12 months, split arms
+
 ---
 
 #### DSEM-034 — limitations_ask
@@ -24148,6 +26756,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Twelve weeks is short, and that's exactly why I'd read the 6.5 points as a signal rather than a settled effect. The summary's own next steps already stretch it to 12 months, which tells you the authors saw the same thing. What I'd want from a longer run is whether the gap holds once the novelty wears off, because a reminder effect that fades is a different finding from one that persists.
 
 *Judge (v1): 8.8. Calling the team 'the authors' sounds like an outside reviewer rather than the presenting coauthor. The summary commentary also lengthens what could be a crisp acknowledgment about durability.*
+
+*Judge (v2): 8.9. Referring to 'the authors' sounds like an outside commentator rather than the presenter. The source commentary adds unnecessary length; the central uncertainty is persistence, not whether a short-term difference was observed.*
 
 **fix1**
 
@@ -24215,6 +26825,20 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.6. The closing phrase implies novelty explains potential fading, although the study establishes only uncertainty about persistence. Otherwise, the reply is accurate, natural, and immediately speakable.*
 
+**kept build, local embedder present (speed study)**
+
+> You're right, and that's the limitation I'd flag hardest. Twelve weeks tells us the reminders work while they're running, but nothing about whether the effect holds or fades once people get used to them. That's exactly why the follow-on runs for 12 months, so we can see the trajectory rather than a single snapshot.
+
+*Judge (v2): 9.5. Minor overstatement: 'reminders work' is stronger than the source's cautious interpretation, and 'the follow-on runs' could make a proposed study sound confirmed.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> You're right, and that's the limitation I'd flag hardest. Twelve weeks tells us the reminders work over a short window, but it can't tell us whether the effect holds or fades once patients get used to them. That's exactly why the follow-on design runs for 12 months, so we can see whether the 6.5 point gap is durable or just a novelty effect.
+
+**kept build, rerank off (speed study, not judged)**
+
+> You're right, and that's exactly why I wouldn't defend the 12 weeks as evidence of a lasting effect. What the trial shows is a 6.5 point gap over one 12-week window, and the summary is explicit that we can't say whether that persists or fades. So I'd treat it as a short-term signal, and the 12-month follow-on is what would actually tell us whether it holds.
+
 ---
 
 #### DSEM-035 — supported_paraphrase
@@ -24232,6 +26856,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* roughly double downstream, by count and weight
 
 *Judge (v1): 10.0. No material issue; the reply directly confirms the summary with accurate figures and a supported site-comparison statement, without implying causation.*
+
+*Judge (v2): 10.0. No material issue. The reply directly confirms the summary using accurate figures and supported site comparisons, without implying causation.*
 
 **fix1**
 
@@ -24317,6 +26943,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The response is immediately speakable, accurately reports both measures, and describes statistical significance without implying causation.*
 
+**kept build, local embedder present (speed study)**
+
+> Yes, that's the gist. Downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 particles per gram wet tissue against 0.42, so roughly double on both measures. The difference held up statistically, with each downstream site differing from each upstream site.
+>
+> *Summary chip:* roughly double, by count and weight
+
+*Judge (v2): 10.0. No material issue; the response directly confirms the summary using accurate figures and supported statistical context without making causal claims.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Yes, that's the gist. Downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 particles per gram wet tissue against 0.42, so roughly double on both measures. The difference was significant across the six sites, p < 0.001, and each downstream site differed from each upstream site.
+>
+> *Summary chip:* roughly double downstream, both measures
+
+**kept build, rerank off (speed study, not judged)**
+
+> Yes, that's the gist. Downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 particles per gram wet tissue against 0.42, so roughly double on both measures. The difference held up statistically, with each downstream site differing from each upstream site.
+>
+> *Summary chip:* roughly double downstream, by count and weight
+
 ---
 
 #### DSEM-036 — follow_up
@@ -24334,6 +26980,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* per gram wet tissue, 0.42 vs 0.83
 
 *Judge (v1): 9.8. The final sentence unnecessarily repeats the per-individual results when the examiner only needs clarification of the per-gram figures.*
+
+*Judge (v2): 9.8. The per-individual figures and slide references are accurate but unnecessary for this brief unit clarification.*
 
 **fix1**
 
@@ -24401,6 +27049,22 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the reply gives the correct figures, specifies wet tissue, and directly addresses the clarification.*
 
+**kept build, local embedder present (speed study)**
+
+> Yes, per gram of wet tissue. Upstream was 0.42 particles per gram and downstream 0.83, so still roughly double. That's slide 8, and it's the same pattern as the per-individual counts on slide 7.
+>
+> *Summary chip:* per gram wet tissue, still double
+
+*Judge (v2): 9.8. The final slide-reference sentence is accurate but unnecessary for this brief clarification.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Yes, per gram of wet tissue. Upstream averaged 0.42 particles per gram and downstream 0.83, so roughly double.
+
+**kept build, rerank off (speed study, not judged)**
+
+> Yes, per gram of wet tissue. Upstream was 0.42 particles per gram and downstream 0.83, so it's roughly double on that measure too, not just per individual.
+
 ---
 
 #### DSEM-037 — results
@@ -24418,6 +27082,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 112 KB peak RAM, table figure
 
 *Judge (v1): 9.7. The answer slightly overstates the tentative note about checking whether to remeasure with logging off. Otherwise, it accurately surfaces the discrepancy and gives a clear, immediately speakable answer.*
+
+*Judge (v2): 9.6. No material error. The closing endorsement of 112 KB could more clearly distinguish the recorded logger-enabled measurement from a reconciled final figure.*
 
 **fix1**
 
@@ -24499,6 +27165,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 112 KB current, 96 KB summary, unreconciled
 
+*Judge (v2): 9.6. Slightly document-centric and longer than necessary for a live factual question; the measured figure could come first.*
+
+**kept build, local embedder present (speed study)**
+
+> The peak RAM on the board is **112 KB**, measured on-device with the debug logger enabled. That's from the results chapter, section 5.2. One caveat: the summary paragraph at the top of the chapter still says 96 KB, and there's a note to reconcile the two, so the 112 KB figure is the one to treat as current.
+>
+> *Summary chip:* 112 KB peak, summary says 96 KB
+
+*Judge (v2): 9.4. Calling 112 KB the figure to treat as current is slightly too conclusive: the draft still leaves reconciliation and possible logging-off remeasurement open.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The draft reports two different peak RAM figures, and it flags the conflict itself. The summary paragraph says 96 KB peak RAM on the Arlo M4, while section 5.2 gives 112 KB measured with the debug logger enabled. There's a note to self to reconcile the summary with the table, since the summary may come from an older 40-keyword run, and another to check whether the RAM figure should be re-measured with logging off. So I'd say 112 KB is the current measured number, with the caveat that it includes the debug logger.
+>
+> *Summary chip:* 112 KB, 96 KB in summary, unresolved
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The peak RAM on the board is **112 KB**, measured on the Arlo M4 with the debug logger enabled. The draft gives this figure two ways, the summary paragraph says **96 KB** and the results section says **112 KB**, so it needs confirming before anyone relies on it. There's also a note in the draft that this figure may need re-measuring with logging off, so treat it as provisional.
+
 ---
 
 #### DSEM-038 — follow_up
@@ -24516,6 +27202,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 112 KB from table, 96 KB is stale
 
 *Judge (v1): 9.5. The gist calls 96 KB definitively “stale,” although reconciliation remains open. The spoken answer otherwise handles the conflicting figures and logging caveat well.*
+
+*Judge (v2): 9.6. The answer directly resolves the follow-up with the essential measurement caveat. The gist's categorical description of 96 KB as 'stale' slightly overstates what the unreconciled draft establishes.*
 
 **fix1**
 
@@ -24591,6 +27279,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The draft gives two different peak RAM figures: **96 KB** in the summary paragraph and **112 KB** in the on-device results in section 5.2, measured with the debug logger enabled. It needs confirming before anyone relies on it.
 
+*Judge (v2): 8.1. Accurately repeats the conflict but does not advance the follow-up. Blanket uncertainty obscures the useful distinction: 112 KB is the reported logger-enabled measurement, while the reconciled final figure remains uncertain.*
+
+**kept build, local embedder present (speed study)**
+
+> 112 KB. That's the on-device measurement in section 5.2, with the debug logger on. The 96 KB in the summary paragraph is carried over from the proposal and still needs reconciling, so treat 112 KB as current.
+>
+> *Summary chip:* 112 KB, summary's 96 KB outdated
+
+*Judge (v2): 9.3. The spoken answer gives the measurement condition and acknowledges the conflict. However, the gist labels 96 KB definitively outdated, whereas the draft leaves the discrepancy unresolved.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> 112 KB is the measured number, from section 5.2. The 96 KB in the summary is the older figure, and the draft itself flags that the summary needs reconciling with the table.
+>
+> *Summary chip:* 112 KB measured, 96 KB is stale summary
+
+**kept build, rerank off (speed study, not judged)**
+
+> The results section is the one I'd stand behind: **112 KB** on the Arlo M4, measured with the debug logger on. The 96 KB in the summary is carried over from the proposal and still needs reconciling.
+
 ---
 
 #### DSEM-039 — limitations_ask
@@ -24608,6 +27316,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* three seeds, indicative not conclusive
 
 *Judge (v1): 9.9. “And I say so in the thesis” may sound slightly defensive. Otherwise, the draft is faithful, concise, and immediately speakable, with an accurate gist.*
+
+*Judge (v2): 9.9. No substantive issue; “and I say so in the thesis” is a slightly defensive aside in an otherwise candid, grounded response.*
 
 **fix1**
 
@@ -24695,6 +27405,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* ablations 3 seeds, indicative only
 
+*Judge (v2): 9.4. The closing “so that one holds” is slightly too categorical: the main comparison has stronger evidence, but five seeds and the reported bootstrap do not eliminate the study’s acknowledged uncertainty.*
+
+**kept build, local embedder present (speed study)**
+
+> You're right that the ablation is underpowered. It used 3 seeds instead of 5, and the differences are small relative to seed variance, so I've treated them as indicative rather than conclusive. Removing stage 2 drops accuracy to 92.0% and removing stage 3 to 92.9%, which points to stage 2 contributing most of the gain, but I wouldn't defend that as a firm ranking. The honest read is that the main result holds and the ablation needs more seeds to be decisive.
+>
+> *Summary chip:* ablation underpowered, indicative only
+
+*Judge (v2): 10.0. No material issue. The draft concedes the limitation without defensiveness, accurately cites the ablations, and avoids treating the stage ranking as conclusive.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> You're right that the ablation is underpowered. The ablations ran with 3 seeds instead of 5 because of compute limits, and the differences are small relative to seed variance, so I've treated them as indicative rather than conclusive. What I do claim is the main result: STAGE-KD at 93.2% versus standard KD at 91.8%, over 5 seeds, with a paired bootstrap significant at p < 0.01. The ablation points to stage 2 contributing most of the gain, but I'd want more seeds before leaning on that.
+>
+> *Summary chip:* ablation indicative, main result holds
+
+**kept build, rerank off (speed study, not judged)**
+
+> You're right that the ablation is underpowered. The ablations used 3 seeds instead of 5 because of compute limits, and the differences are small relative to seed variance, so I've flagged them as indicative rather than conclusive. What I'd take from them is directional: removing stage 2 drops accuracy to 92.0% and removing stage 3 to 92.9%, which points to feature alignment contributing most of the gain. The main result, STAGE-KD at 93.2% versus standard KD at 91.8%, does rest on 5 seeds and a paired bootstrap, so that comparison holds. If I were to strengthen the ablation claim, I'd rerun those variants with more seeds.
+>
+> *Summary chip:* ablation is indicative, main result holds
+
 ---
 
 #### DSEM-040 — follow_up
@@ -24712,6 +27444,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* three seeds, indicative not conclusive
 
 *Judge (v1): 7.8. Instead of shortening the previous response, it expands from three sentences to four and adds ablation accuracies. The content is accurate and grounded, but fails the user's explicit editing request.*
+
+*Judge (v2): 7.8. The response is longer than the previous draft despite the explicit request for shortening. It adds supported but unnecessary ablation accuracies and interpretation, leaving the user to condense it.*
 
 **fix1**
 
@@ -24800,6 +27534,26 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > You're right, the ablations used 3 seeds, so the differences sit within seed variance and I treat them as indicative. The main STAGE-KD versus standard KD result rests on the 5-seed comparison and paired bootstrap.
 >
 > *Summary chip:* ablations 3 seeds, indicative only
+
+*Judge (v2): 10.0. No material issue; the response preserves the evidence and limitation in two concise, non-defensive sentences without overstating the main result.*
+
+**kept build, local embedder present (speed study)**
+
+> You're right, the ablation used 3 seeds, and the differences are small next to seed variance, so I treat them as indicative. Stage 2 looks like the bigger contributor, but I wouldn't defend that as firm.
+>
+> *Summary chip:* ablation indicative, not conclusive
+
+*Judge (v2): 10.0. No material issue. The response is concise, immediately speakable, and honest without becoming defensive; the gist accurately reflects its uncertainty.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> You're right, the ablation is underpowered. It used 3 seeds, and the differences are small against seed variance, so I treat it as indicative. The main result holds: 93.2% versus 91.8% over 5 seeds, p < 0.01.
+>
+> *Summary chip:* ablation indicative, main result holds
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The ablations used 3 seeds, not 5, so the differences are small against seed variance and I treat them as indicative. The main result, STAGE-KD at 93.2% versus standard KD at 91.8%, rests on 5 seeds and a paired bootstrap.
 
 ---
 
@@ -27853,6 +30607,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* ask for open items, owners, dates
 
+*Judge (v2): 9.5. The closing suggestion that a short, dated open-item list is sufficient reassurance slightly oversimplifies schedule risk; even one critical-path item could jeopardize Oct 28.*
+
 ---
 
 #### DTEAM-037 — clarifying_vague
@@ -27953,6 +30709,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* ask for open items, owners, dates
 
+*Judge (v2): 9.8. No material issue. It preserves the actionable pushback in two sentences without inventing project facts; a few phrases could be tighter.*
+
 ---
 
 #### DTEAM-038 — disagreement
@@ -28052,6 +30810,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Then ask him to walk you through the open items in it: what's left, who owns each, and the finish date for each. If the doc has that, you're fine. If it doesn't, that's the gap, not the plan.
 >
 > *Summary chip:* make the plan doc name owners and dates
+
+*Judge (v2): 9.2. “If the doc has that, you're fine” treats documentation as sufficient; owners and dates can be listed while still showing that Oct 28 is at risk.*
 
 ---
 
@@ -28255,6 +31015,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.9. No material issue. The switching-cost comparison is a reasonable simplification, though “usually cheaper within the same process” would be more precise.*
 
+*Judge (v2): 9.8. Minor precision only: a process is a running instance of a program, and lower thread-switching cost is generally a comparison involving threads within the same process.*
+
 **fix1**
 
 > A process is an independent program in execution with its own address space, so processes are isolated from each other. A thread is a unit of execution inside a process, and threads in the same process share that memory and resources while keeping their own stack and registers. That makes threads cheaper to create and switch between, but a crash or race in one thread can take down the whole process.
@@ -28325,6 +31087,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The answer accurately covers address-space isolation, shared resources, lower thread overhead, and shared-state risks at the requested introductory depth.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> A process is an independent program in execution with its own address space, while a thread is a unit of execution within a process that shares that address space, memory, and open files with its sibling threads. So processes are isolated and heavier to create and switch, and threads are lighter but share state, which is why you need synchronization between them.
+
+*Judge (v2): 9.8. No material issue. The answer accurately explains the main distinction and practical trade-offs in two immediately speakable sentences.*
+
+**kept build, local embedder present (speed study)**
+
+> A process is an independent program in execution with its own address space, while a thread is a unit of execution within a process that shares that address space with other threads. So threads share memory and resources, which makes communication cheap but requires synchronization, whereas processes are isolated, so they're safer but heavier to create and switch between.
+>
+> *Summary chip:* process isolated, thread shares memory
+
+*Judge (v2): 9.9. No material issue. The process-switching overhead comparison is generally true but implementation-dependent. The gist accurately matches the explanation.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> A process is an independent program in execution with its own address space, while a thread is a unit of execution within a process that shares that process's memory and resources. So threads share the heap and file descriptors but have their own stack and registers, which makes context switching between threads cheaper than between processes. The tradeoff is isolation: a crash in one thread can take down the whole process, whereas processes are more protected from each other.
+>
+> *Summary chip:* process has own memory, threads share it
+
+**kept build, rerank off (speed study, not judged)**
+
+> A process is an independent program in execution with its own address space, while a thread is a unit of execution within a process that shares that process's memory and resources. So threads are lighter to create and switch between, but they share state, which means one thread's crash or data race can take down the whole process. Processes are isolated, so they're safer but heavier.
+>
+> *Summary chip:* process has own memory, threads share it
+
 ---
 
 #### DTECH-002 — small_coding
@@ -28355,6 +31143,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Two pointers walk in from both ends, skipping anything that isn't alphanumeric, and compare lowercased characters. If they ever differ it's false, and if they meet in the middle it's true. This avoids building a cleaned copy of the string, so it's O(n) time and O(1) extra space.
 
 *Judge (v1): 10.0. No material issues. The implementation handles empty and punctuation-only strings, matches both examples, and has the stated O(n) time and O(1) extra-space complexity.*
+
+*Judge (v2): 9.9. No substantive issue. The implementation and complexity are correct; the only minor improvement is introducing the approach before presenting the complete code.*
 
 **fix1**
 
@@ -28580,6 +31370,90 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.9. No material issue. The implementation correctly handles the supplied examples, empty strings, and punctuation-only inputs; its complexity claims are accurate.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> ```python
+> def is_palindrome(s: str) -> bool:
+>     left, right = 0, len(s) - 1
+>     while left < right:
+>         while left < right and not s[left].isalnum():
+>             left += 1
+>         while left < right and not s[right].isalnum():
+>             right -= 1
+>         if s[left].lower() != s[right].lower():
+>             return False
+>         left += 1
+>         right -= 1
+>     return True
+> ```
+> 
+> Two pointers walk in from each end, skipping anything that isn't alphanumeric, and compare the remaining characters lowercased. If they ever differ it's not a palindrome, and if the pointers meet without a mismatch it is. Time is O(n) since each character is visited once, and space is O(1) because I'm comparing in place rather than building a cleaned copy.
+
+*Judge (v2): 9.9. No material issue. The implementation handles empty and punctuation-only inputs safely, matches both examples, and correctly states O(n) time and O(1) auxiliary space.*
+
+**kept build, local embedder present (speed study)**
+
+> ```python
+> def is_palindrome(s: str) -> bool:
+>     left, right = 0, len(s) - 1
+>     while left < right:
+>         while left < right and not s[left].isalnum():
+>             left += 1
+>         while left < right and not s[right].isalnum():
+>             right -= 1
+>         if s[left].lower() != s[right].lower():
+>             return False
+>         left += 1
+>         right -= 1
+>     return True
+> ```
+> 
+> Two pointers walk in from each end, skipping anything that isn't alphanumeric, and compare the lowercased characters. If they ever differ it's not a palindrome, and if the pointers meet without a mismatch it is. Time is O(n) since each character is visited once, and space is O(1) because I'm comparing in place rather than building a cleaned copy.
+
+*Judge (v2): 10.0. No material issue. The implementation handles the stated examples and boundary cases, and the concise explanation accurately describes the algorithm and complexity.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> ```python
+> def is_palindrome(s: str) -> bool:
+>     left, right = 0, len(s) - 1
+>     while left < right:
+>         while left < right and not s[left].isalnum():
+>             left += 1
+>         while left < right and not s[right].isalnum():
+>             right -= 1
+>         if s[left].lower() != s[right].lower():
+>             return False
+>         left += 1
+>         right -= 1
+>     return True
+> ```
+> 
+> Two pointers walk in from each end, skipping anything that isn't alphanumeric, and compare lowercased characters. On "A man, a plan, a canal: Panama" the pointers meet in the middle and it returns true; on "race a car" the 'e' and 'a' mismatch and it returns false early.
+> 
+> Time is O(n) since each character is visited once, and space is O(1) beyond the input.
+
+**kept build, rerank off (speed study, not judged)**
+
+> ```python
+> def is_palindrome(s: str) -> bool:
+>     left, right = 0, len(s) - 1
+>     while left < right:
+>         while left < right and not s[left].isalnum():
+>             left += 1
+>         while left < right and not s[right].isalnum():
+>             right -= 1
+>         if s[left].lower() != s[right].lower():
+>             return False
+>         left += 1
+>         right -= 1
+>     return True
+> ```
+> 
+> Two pointers walk in from both ends, skipping anything that isn't alphanumeric, and compare lowercased characters. If they ever differ it's false, and if they meet without a mismatch it's true.
+> 
+> Time is O(n) since each character is visited once, and space is O(1) because I'm comparing in place rather than building a cleaned copy.
+
 ---
 
 #### DTECH-003 — complexity_only
@@ -28597,6 +31471,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* heapify is linear, O(n)
 
 *Judge (v1): 9.8. The core distinction and explanation are correct; the heapsort aside is unnecessary for this quick complexity lookup.*
+
+*Judge (v2): 9.7. Correctly distinguishes heap construction from a single sift-down; the explanation and heapsort comparison add slightly more detail than this terse request needs.*
 
 **fix1**
 
@@ -28668,6 +31544,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. Correctly resolves the ambiguity, but the explanation and heapsort aside add slightly more detail than this quick complexity question needs.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Building a heap from an array is **O(n)**, not O(n log n), because most nodes sit near the bottom where sift-down work is tiny. Sifting down a single node is **O(log n)**. So a single heapify at the root costs log n, but heapifying the whole array is linear.
+>
+> *Summary chip:* per-node O(log n), build O(n)
+
+*Judge (v2): 9.8. Correct and appropriately disambiguated; the final sentence unnecessarily repeats the distinction.*
+
+**kept build, local embedder present (speed study)**
+
+> Building a heap with heapify is **O(n)**, not O(n log n). Each sift-down costs O(log n) in the worst case, but most nodes sit near the bottom and barely move, so the work sums to O(n). Extracting all n elements is what costs O(n log n).
+
+*Judge (v2): 9.8. Correctly covers construction and sift-down complexity, but the extraction comparison is unnecessary for this quick request.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Building a heap with heapify is **O(n)**, not O(n log n). The reason is that most nodes sit near the bottom and sift down only a level or two, so the work sums to a constant times n. Extracting the max n times is the O(n log n) part.
+
+**kept build, rerank off (speed study, not judged)**
+
+> Building a heap with heapify is **O(n)**, not O(n log n). The reason is that most nodes sit near the bottom and sift down only a level or two, so the work sums to a constant times n. Extracting the max n times is what costs O(n log n).
+
 ---
 
 #### DTECH-004 — debugging
@@ -28717,6 +31615,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* move wg.Add before go
 
 *Judge (v1): 10.0. No material issues: the explanation identifies the scheduling bug, the corrected code fixes it, and the gist accurately summarizes the change.*
+
+*Judge (v2): 10.0. No material issues. The response accurately diagnoses the synchronization bug, supplies the minimal correct fix, and explains why it works.*
 
 **fix1**
 
@@ -28986,6 +31886,102 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue: the response identifies the synchronization bug, supplies the minimal correct fix, and explains why it works.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The bug is `wg.Add(1)` sitting inside the goroutine. `wg.Wait()` can run before any goroutine registers itself, so the counter is still zero, Wait returns immediately, and `results` is read while it's all zeros.
+> 
+> ```go
+> func fetchAll(urls []string) []int {
+> 	results := make([]int, len(urls))
+> 	var wg sync.WaitGroup
+> 	for i, u := range urls {
+> 		wg.Add(1)
+> 		go func(i int, u string) {
+> 			defer wg.Done()
+> 			results[i] = fetchStatus(u)
+> 		}(i, u)
+> 	}
+> 	wg.Wait()
+> 	return results
+> }
+> ```
+> 
+> Registering before the `go` statement guarantees the counter is set before Wait can observe it.
+>
+> *Summary chip:* move wg.Add before the go
+
+*Judge (v2): 10.0. None. The explanation correctly connects the registration race to the intermittent zeros, and the code provides the minimal correct fix.*
+
+**kept build, local embedder present (speed study)**
+
+> The bug is `wg.Add(1)` inside the goroutine, so `wg.Wait()` can return before any goroutine registers, and the slice stays all zeros. Move `wg.Add(1)` before the `go` statement.
+> 
+> ```go
+> func fetchAll(urls []string) []int {
+> 	results := make([]int, len(urls))
+> 	var wg sync.WaitGroup
+> 	for i, u := range urls {
+> 		wg.Add(1)
+> 		go func(i int, u string) {
+> 			defer wg.Done()
+> 			results[i] = fetchStatus(u)
+> 		}(i, u)
+> 	}
+> 	wg.Wait()
+> 	return results
+> }
+> ```
+> 
+> Now every goroutine is counted before it starts, so `Wait` blocks until all writes finish.
+
+*Judge (v2): 9.9. Only minor wording imprecision: the slice may contain all zeros at premature return, but goroutines can continue updating it afterward, so it does not necessarily stay zero-filled.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The bug is `wg.Add(1)` inside the goroutine, so `wg.Wait()` can return before any of them register. The counter hits zero immediately and you read the zeroed slice. Move `wg.Add(1)` before the `go` statement.
+> 
+> ```go
+> func fetchAll(urls []string) []int {
+> 	results := make([]int, len(urls))
+> 	var wg sync.WaitGroup
+> 	for i, u := range urls {
+> 		wg.Add(1)
+> 		go func(i int, u string) {
+> 			defer wg.Done()
+> 			results[i] = fetchStatus(u)
+> 		}(i, u)
+> 	}
+> 	wg.Wait()
+> 	return results
+> }
+> ```
+> 
+> Now every goroutine is counted before `Wait` runs, so it blocks until all writes finish.
+
+**kept build, rerank off (speed study, not judged)**
+
+> The bug is `wg.Add(1)` inside the goroutine. `wg.Wait()` can run before any goroutine calls `Add`, so it returns immediately and you read the zero-value slice. Move `Add(1)` before the `go` statement.
+> 
+> ```go
+> func fetchAll(urls []string) []int {
+> 	results := make([]int, len(urls))
+> 	var wg sync.WaitGroup
+> 	for i, u := range urls {
+> 		wg.Add(1)
+> 		go func(i int, u string) {
+> 			defer wg.Done()
+> 			results[i] = fetchStatus(u)
+> 		}(i, u)
+> 	}
+> 	wg.Wait()
+> 	return results
+> }
+> ```
+> 
+> Now every goroutine is counted before `Wait`, so it blocks until all writes finish.
+>
+> *Summary chip:* move wg.Add before go
+
 ---
 
 #### DTECH-005 — debugging
@@ -29017,6 +32013,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > `Arrays.equals` compares element by element, so sorted arrays with the same characters come back true. The length check is just an early exit, and the sort makes it O(n log n).
 
 *Judge (v1): 9.4. The diagnosis and fix are correct, but the full method, repeated explanation, and optional complexity discussion exceed what this quick spoken debugging question needs.*
+
+*Judge (v2): 9.3. The diagnosis and fix are correct, but the full method, additional null handling, and repeated explanation exceed what this quick spoken debugging question needs.*
 
 **fix1**
 
@@ -29211,6 +32209,83 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Sorting in place mutates the arrays directly, and `Arrays.equals` compares element by element, so "listen" and "silent" both become the same sorted sequence and match.
 
 *Judge (v2): 4.0 — major_factual_error. The opening falsely claims the arrays remain unsorted because Arrays.sort returns void, contradicting Java's in-place behavior and the final explanation. The actual equality diagnosis and supplied code are correct.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `first` and `second` are never reassigned. If the code is `first = Arrays.sort(first)`, it won't even compile; if it's just `Arrays.sort(first); Arrays.sort(second);` followed by `first.equals(second)`, that compares array references, not contents, so it's false for two different arrays.
+> 
+> ```java
+> boolean isAnagram(String a, String b) {
+>     if (a.length() != b.length()) return false;
+>     char[] first = a.toCharArray();
+>     char[] second = b.toCharArray();
+>     Arrays.sort(first);
+>     Arrays.sort(second);
+>     return Arrays.equals(first, second);
+> }
+> ```
+> 
+> Sort in place, then compare with `Arrays.equals`, which checks element by element. That's O(n log n) time and O(n) space.
+
+*Judge (v2): 7.9. It ultimately gives the correct diagnosis and fix, but initially mislabels in-place sorting and lack of reassignment as the bug. Reassignment is unnecessary. The hypothetical compile error and full method add avoidable overhead to a quick spoken answer.*
+
+**kept build, local embedder present (speed study)**
+
+> The sort itself is fine. The bug is that `Arrays.sort` on a `char[]` returns `void`, so `first.equals(second)` is comparing two array references, not their contents, and that's always false. You need `Arrays.equals(first, second)`.
+> 
+> ```java
+> static boolean isAnagram(String a, String b) {
+>     if (a.length() != b.length()) return false;
+>     char[] first = a.toCharArray();
+>     char[] second = b.toCharArray();
+>     Arrays.sort(first);
+>     Arrays.sort(second);
+>     return Arrays.equals(first, second);
+> }
+> ```
+> 
+> `Arrays.equals` compares element by element, so "listen" and "silent" both sort to the same sequence and it returns true. The length check up front is just a cheap early exit.
+
+*Judge (v2): 9.0. The explanation incorrectly links reference comparison to Arrays.sort returning void. Arrays inheriting Object.equals is the actual cause. The correct full method is also more than this quick spoken question needs.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `first.equals(second)` is comparing two `char[]` references, not their contents. Two different arrays are never equal by reference, so it returns false even when the sorted characters match.
+> 
+> ```java
+> import java.util.Arrays;
+> 
+> public static boolean areAnagrams(String a, String b) {
+>     if (a == null || b == null) return false;
+>     if (a.length() != b.length()) return false;
+>     char[] first = a.toCharArray();
+>     char[] second = b.toCharArray();
+>     Arrays.sort(first);
+>     Arrays.sort(second);
+>     return Arrays.equals(first, second);
+> }
+> ```
+> 
+> `Arrays.equals` compares element by element, so it checks the sorted contents instead of the array identity. The length check is just an early exit.
+
+**kept build, rerank off (speed study, not judged)**
+
+> The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `Arrays.sort(a).equals(b)` doesn't even compile. If it's written as two separate sort calls followed by `a.equals(b)`, that's the real problem: `equals` on arrays is reference equality, so two different arrays are never equal even when their contents match.
+> 
+> ```java
+> import java.util.Arrays;
+> 
+> public boolean isAnagram(String s, String t) {
+>     if (s.length() != t.length()) return false;
+>     char[] a = s.toCharArray();
+>     char[] b = t.toCharArray();
+>     Arrays.sort(a);
+>     Arrays.sort(b);
+>     return Arrays.equals(a, b);
+> }
+> ```
+> 
+> `Arrays.equals` compares element by element, so "listen" and "silent" both sort to the same sequence and return true. The length check is a cheap early exit. This runs in O(n log n) time from the sorts, with O(n) extra space for the two arrays.
 
 ---
 
@@ -29550,6 +32625,114 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. None; the implementation correctly handles empty inputs, duplicate values, and remaining nodes, returning the merged head without explanatory prose.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> ```python
+> class ListNode:
+>     def __init__(self, val=0, next=None):
+>         self.val = val
+>         self.next = next
+> 
+> 
+> def mergeTwoLists(l1: ListNode, l2: ListNode) -> ListNode:
+>     dummy = ListNode(0)
+>     tail = dummy
+> 
+>     while l1 and l2:
+>         if l1.val <= l2.val:
+>             tail.next = l1
+>             l1 = l1.next
+>         else:
+>             tail.next = l2
+>             l2 = l2.next
+>         tail = tail.next
+> 
+>     tail.next = l1 if l1 else l2
+>     return dummy.next
+> ```
+
+*Judge (v2): 10.0. None. The implementation correctly merges the lists, handles empty inputs and duplicate values, returns the merged head, and includes no prose.*
+
+**kept build, local embedder present (speed study)**
+
+> ```python
+> class ListNode:
+>     def __init__(self, val=0, next=None):
+>         self.val = val
+>         self.next = next
+> 
+> 
+> def mergeTwoLists(list1, list2):
+>     dummy = ListNode()
+>     tail = dummy
+> 
+>     while list1 and list2:
+>         if list1.val <= list2.val:
+>             tail.next = list1
+>             list1 = list1.next
+>         else:
+>             tail.next = list2
+>             list2 = list2.next
+>         tail = tail.next
+> 
+>     tail.next = list1 if list1 else list2
+>     return dummy.next
+> ```
+
+*Judge (v2): 10.0. None; the implementation correctly handles empty inputs, duplicate values, and remaining nodes, returning the merged head without explanatory prose.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> ```python
+> class ListNode:
+>     def __init__(self, val=0, next=None):
+>         self.val = val
+>         self.next = next
+> 
+> 
+> def mergeTwoLists(list1, list2):
+>     dummy = ListNode()
+>     tail = dummy
+> 
+>     while list1 and list2:
+>         if list1.val <= list2.val:
+>             tail.next = list1
+>             list1 = list1.next
+>         else:
+>             tail.next = list2
+>             list2 = list2.next
+>         tail = tail.next
+> 
+>     tail.next = list1 if list1 else list2
+>     return dummy.next
+> ```
+
+**kept build, rerank off (speed study, not judged)**
+
+> ```python
+> class ListNode:
+>     def __init__(self, val=0, next=None):
+>         self.val = val
+>         self.next = next
+> 
+> 
+> def mergeTwoLists(list1, list2):
+>     dummy = ListNode()
+>     tail = dummy
+> 
+>     while list1 and list2:
+>         if list1.val <= list2.val:
+>             tail.next = list1
+>             list1 = list1.next
+>         else:
+>             tail.next = list2
+>             list2 = list2.next
+>         tail = tail.next
+> 
+>     tail.next = list1 if list1 else list2
+>     return dummy.next
+> ```
+
 ---
 
 #### DTECH-007 — approach_only
@@ -29571,6 +32754,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* stream rows, union-find, retire finished islands
 
 *Judge (v1): 9.1. The approach is broadly sound, but preserving and recycling frontier labels is left implicit. It gives space complexity without a runtime bound, and the final paragraph partly repeats the retirement rule.*
+
+*Judge (v2): 9.1. The approach is sound, but it omits time complexity and leaves preservation and compaction of frontier component labels implicit. It is also somewhat longer than needed for a spoken overview.*
 
 **fix1**
 
@@ -29694,6 +32879,54 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — major_reasoning_error. Final root counting conflicts with recycling: closed islands disappear from the result, while retaining every root can exceed the memory limit. Path compression and rank do not fix this. Time complexity is omitted.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The key constraint is that I can't hold the whole grid, so I track connectivity incrementally as each row streams in. I keep two rows: the previous row's labels and the current row's labels, plus a union-find structure over the labels.
+> 
+> For each new row, I assign fresh labels to runs of ones, then union each run with any overlapping run in the previous row. When a run in the previous row has no overlap with the current row, that component can never grow again, so I finalize it and increment the island count. At the end I finalize whatever's still open in the last row.
+> 
+> The union-find is the one thing that grows, but it only holds labels for active components, not the whole grid, so it stays bounded by the width of a row rather than the number of rows.
+>
+> *Summary chip:* stream rows, union-find, finalize closed components
+
+*Judge (v2): 4.0 — major_reasoning_error. A disappearing run does not imply its whole component has closed. In 111/101/100, the right run disappears while the same island continues on the left, causing premature counting and eventual overcounting. Time complexity is also unstated.*
+
+**kept build, local embedder present (speed study)**
+
+> The key constraint is that I can't hold the whole grid, so I process it row by row and only keep the previous row plus the current one. The trick is to track connected components as they form and merge across rows.
+> 
+> I'd use union-find over the columns. For each row, I look at the cells that are 1. A cell connects to its left neighbor in the same row, and to the cell directly above it in the previous row. Each time I find a connection, I union those two column positions. When a component's last cell disappears, meaning no cell in the current row belongs to it, that component is finished and I count it.
+> 
+> The subtlety is that a component can span many rows, so I can't count it the moment it starts. I only finalize a count when a label no longer appears in the current row and won't reappear later. Since I only ever look one row back, once a label is gone from the current row it can never come back, so it's safe to count then.
+> 
+> Memory stays bounded: union-find over the column count, plus two rows. Time is linear in the number of cells.
+>
+> *Summary chip:* union-find across rows, count when a component closes
+
+*Judge (v2): 4.0 — major_reasoning_error. As described, persistent column-index unions can conflate disconnected cells: rows 11/10/01 contain two islands but retain one component without label recycling. EOF finalization is omitted, and ordinary union-find is near-linear rather than strictly linear.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The key constraint is that I can't hold the whole grid, so I can't do a normal flood fill. What I can do is keep a running label for each cell in the current row, and only ever compare it against the row above.
+> 
+> So I process one row at a time. For each row, I look at the cells that are 1 and figure out which of them connect to a 1 directly above them in the previous row. Cells that touch a labeled component above inherit that label. Cells that don't start a new component, and I increment an island count. When two cells in the current row are joined through a 1 above them, their two labels are actually the same island, so I union them and decrement the count.
+> 
+> The trick is I only need the previous row's labels and the current row's labels, which is the two rows of memory. I keep a small union-find over the labels, but since labels only ever merge and never need to be looked up far back, I can keep it compact. At the end, the count of distinct components is the number of islands.
+> 
+> The one thing I'd flag is that a component can span many rows, so I have to be careful that a label stays alive as long as any cell in the current row still carries it. Once a label disappears from the current row and never reappears, that island is closed and I can drop it.
+>
+> *Summary chip:* stream rows, union labels, count components
+
+**kept build, rerank off (speed study, not judged)**
+
+> The key constraint is that I can't hold the whole grid, so I process it row by row and only keep the previous row plus the current one. The trick is to track connectivity across rows using labels, the way union-find works but streamed.
+> 
+> For each row, I assign provisional labels to runs of ones, then check the row above: if a run overlaps a run in the previous row, they're the same island, so I union those labels. When a run in the previous row has no overlap in the current row, that island is finished, so I can count it and drop it. At the end I add whatever islands are still open in the last row.
+> 
+> The memory stays bounded because I only ever hold two rows of labels plus the union-find structure for the active labels, which is proportional to the width of the grid, not its height. That's the whole idea: stream, label runs, union across the boundary, and retire islands once they can't grow anymore.
+>
+> *Summary chip:* stream rows, union labels across boundary
+
 ---
 
 #### DTECH-008 — complexity_only
@@ -29711,6 +32944,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* O(n²) time, O(n) space
 
 *Judge (v1): 8.9. The time analysis is correct, but sorting space depends on implementation: sorting in place does not necessarily guarantee O(1) auxiliary memory. The gist presents O(n) space without that qualification.*
+
+*Judge (v2): 8.9. Time is correct. Space is oversimplified: in-place sorting does not necessarily mean O(1) auxiliary memory, and the gist’s O(n) space omits the output exclusion and sorting-method dependency.*
 
 **fix1**
 
@@ -29788,6 +33023,30 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.5. The body correctly qualifies constant space, but the gist drops the sorting-overhead caveat. The explanation is also slightly longer than the requested complexity-only reply needs.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Sorting is **O(n log n)**, but the nested scan dominates: for each index I run two pointers across the rest, so **O(n²)** time overall. Space is **O(1)** beyond the output list, since it's all in place.
+>
+> *Summary chip:* O(n²) time, O(1) extra space
+
+*Judge (v2): 9.5. The unqualified O(1) auxiliary-space claim depends on the sorting implementation; an in-place sort can still use stack space. The time analysis is correct and appropriately brief.*
+
+**kept build, local embedder present (speed study)**
+
+> Sorting is **O(n log n)**, and the two-pointer scan is **O(n²)** since for each of the n indices I walk the rest of the array. So the sort gets absorbed and the total is **O(n²)** time. Space is O(1) extra beyond the output, or O(n) if you count the sort.
+
+*Judge (v2): 9.2. Space accounting is imprecise: O(1) covers the scan, while sorting workspace depends on the implementation. O(n) is not inherent to sorting. The explanation is also slightly longer than requested.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Sorting is **O(n log n)**, and the two-pointer scan is **O(n²)**, so the overall time is **O(n²)**. Space is O(1) extra beyond the output, or O(n) if you count the sort.
+
+**kept build, rerank off (speed study, not judged)**
+
+> Sorting is **O(n log n)**, and the two-pointer scan is **O(n²)** since for each index I move two pointers across the rest. So the overall time is **O(n²)**, which dominates. Space is O(n) for the sort, or O(1) extra beyond the output if I sort in place.
+>
+> *Summary chip:* O(n²) time, O(n) space
+
 ---
 
 #### DTECH-009 — dry_run
@@ -29812,6 +33071,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* lo 0,5,0,1; hi 5,2,1,1; mid 2,1,0
 
 *Judge (v1): 9.2. The spoken trace is fully correct, but the gist incorrectly lists the second lo as 5 rather than 0, creating a contradictory quick-reference summary.*
+
+*Judge (v2): 4.0 — arithmetic_error. The spoken trace is correct, but the gist gives the second lo as 5 rather than 0, producing an invalid lo>hi state and contradicting the requested step-by-step values.*
 
 **fix1**
 
@@ -29945,6 +33206,65 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. None. Every iteration, branch decision, bound update, and the final result is correct. The gist agrees with the answer.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Array is one, two, two, two, five, so indices 0 through 4, and target is two.
+> 
+> Start: lo is 0, hi is 5. mid is 0 plus 5 over 2, which is 2. a of 2 is two, not less than target, so hi becomes 2.
+> 
+> Step two: lo is 0, hi is 2. mid is 0 plus 2 over 2, which is 1. a of 1 is two, not less than target, so hi becomes 1.
+> 
+> Step three: lo is 0, hi is 1. mid is 0 plus 1 over 2, which is 0. a of 0 is one, which is less than two, so lo becomes 1.
+> 
+> Now lo is 1 and hi is 1, so the loop ends and we return lo, which is 1, the first index holding two.
+>
+> *Summary chip:* lo 0,1,1 then return 1
+
+*Judge (v2): 9.0. The spoken trace is correct, but the gist gives the wrong lo sequence. Iteration-start lo values are 0, 0, 0; only the final update makes lo = 1.*
+
+**kept build, local embedder present (speed study)**
+
+> Array is [1, 2, 2, 2, 5], target 2, n is 5.
+> 
+> Step 1: lo = 0, hi = 5, mid = 2. a[2] = 2, not less than 2, so hi = 2.
+> Step 2: lo = 0, hi = 2, mid = 1. a[1] = 2, not less than 2, so hi = 1.
+> Step 3: lo = 0, hi = 1, mid = 0. a[0] = 1, less than 2, so lo = 1.
+> Step 4: lo = 1, hi = 1, loop ends.
+> 
+> Result is lo = 1, the first index where 2 appears.
+>
+> *Summary chip:* lo 0,5,0,1 then 1
+
+*Judge (v2): 9.4. The spoken trace is fully correct and immediately usable. However, the gist is misleading: 'lo 0,5,0,1 then 1' appears to include 5 as a lo value and does not clearly summarize the actual states.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Array is one, two, two, two, five, so length five. lo starts at zero, hi at five.
+> 
+> Step one: lo is zero, hi is five, mid is two. a of two is two, which is not less than two, so hi becomes two.
+> 
+> Step two: lo is zero, hi is two, mid is one. a of one is two, not less than two, so hi becomes one.
+> 
+> Step three: lo is zero, hi is one, mid is zero. a of zero is one, which is less than two, so lo becomes one.
+> 
+> Now lo equals hi at one, so the loop ends and the answer is index one, the first occurrence of two.
+>
+> *Summary chip:* lo 0,1,1; hi 5,2,1; mid 2,1,0
+
+**kept build, rerank off (speed study, not judged)**
+
+> Array is one, two, two, two, five, so indices 0 through 4, and target is two.
+> 
+> Start: lo is 0, hi is 5. mid is 0 plus 5 over 2, which is 2. a of 2 is two, not less than two, so hi becomes 2.
+> 
+> Step two: lo is 0, hi is 2. mid is 1. a of 1 is two, not less than two, so hi becomes 1.
+> 
+> Step three: lo is 0, hi is 1. mid is 0. a of 0 is one, which is less than two, so lo becomes 1.
+> 
+> Now lo equals hi equals 1, so the loop ends and the answer is index 1, the first occurrence of two.
+>
+> *Summary chip:* lo 0 hi 5 mid 2, then 1, then 0, answer index 1
+
 ---
 
 #### DTECH-010 — leetcode
@@ -29988,6 +33308,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Time: O(1) average for `get` and `put` with `OrderedDict`; O(n) worst case with the list version. Space: O(capacity).
 
 *Judge (v1): 4.0 — code_incorrect, major_reasoning_error. The list-based implementation violates the central constant-time requirement. Its claim of O(1) average time is also false: list removal and front eviction are linear. Mentioning suitable alternatives does not implement the requested solution.*
+
+*Judge (v2): 4.0 — code_incorrect, major_reasoning_error. The implementation uses linear-time list removal and front deletion, violating the central requirement. Its claim of average O(1) complexity is false. Constant-time alternatives are mentioned but not implemented.*
 
 **fix1**
 
@@ -30419,6 +33741,158 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The implementation correctly refreshes recency, handles existing-key updates, and evicts the least-recently-used entry; its explanation verifies the requested sequence.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> ```python
+> class LRUCache:
+>     def __init__(self, capacity):
+>         self.capacity = capacity
+>         self.cache = {}
+>         self.order = []
+> 
+>     def get(self, key):
+>         if key not in self.cache:
+>             return -1
+>         self.order.remove(key)
+>         self.order.append(key)
+>         return self.cache[key]
+> 
+>     def put(self, key, value):
+>         if key in self.cache:
+>             self.order.remove(key)
+>         elif len(self.cache) >= self.capacity:
+>             oldest = self.order.pop(0)
+>             del self.cache[oldest]
+>         self.cache[key] = value
+>         self.order.append(key)
+> ```
+> 
+> The dict gives O(1) lookup, and the list tracks recency with the most recent key at the end. On a hit, `get` moves the key to the end; on a miss it returns -1. `put` evicts the front of the list when full, then appends the new key.
+> 
+> One caveat: `list.remove` and `pop(0)` are O(n), so this isn't truly constant time. For real O(1) I'd swap the list for a doubly linked list with a hashmap of nodes, or use `OrderedDict` with `move_to_end` and `popitem(last=False)`.
+> 
+> Time: O(1) amortized with OrderedDict, O(n) with the list. Space: O(capacity).
+
+*Judge (v2): 4.0 — code_incorrect. The code implements recency correctly but violates the central constant-time requirement: list.remove and pop(0) are O(n). Acknowledging this and naming alternatives does not deliver the requested implementation.*
+
+**kept build, local embedder present (speed study)**
+
+> ```python
+> class LRUCache:
+>     def __init__(self, capacity):
+>         self.cap = capacity
+>         self.cache = {}
+>         self.order = []
+> 
+>     def get(self, key):
+>         if key not in self.cache:
+>             return -1
+>         self.order.remove(key)
+>         self.order.append(key)
+>         return self.cache[key]
+> 
+>     def put(self, key, value):
+>         if key in self.cache:
+>             self.order.remove(key)
+>         elif len(self.cache) >= self.cap:
+>             oldest = self.order.pop(0)
+>             del self.cache[oldest]
+>         self.cache[key] = value
+>         self.order.append(key)
+> ```
+> 
+> A dict gives O(1) lookup, and a list tracks recency with the most recent key at the end. On a hit, `get` moves the key to the end; on `put`, an existing key is refreshed and a new key evicts the front when full. The list operations are O(n), so to make both truly constant time I'd swap the list for a doubly linked list with a hash map to its nodes.
+> 
+> Time: O(n) per operation with the list, O(1) with a doubly linked list. Space: O(capacity).
+
+*Judge (v2): 4.0 — code_incorrect. The implementation violates the central constant-time requirement: list.remove and pop(0) are O(n). It correctly acknowledges this limitation but only describes, rather than implements, the required fix.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> ```python
+> class LRUCache:
+>     def __init__(self, capacity):
+>         self.cap = capacity
+>         self.map = {}
+>         self.head = Node(0, 0)
+>         self.tail = Node(0, 0)
+>         self.head.next = self.tail
+>         self.tail.prev = self.head
+> 
+>     def _remove(self, node):
+>         node.prev.next = node.next
+>         node.next.prev = node.prev
+> 
+>     def _add(self, node):
+>         node.next = self.head.next
+>         node.prev = self.head
+>         self.head.next.prev = node
+>         self.head.next = node
+> 
+>     def get(self, key):
+>         if key not in self.map:
+>             return -1
+>         node = self.map[key]
+>         self._remove(node)
+>         self._add(node)
+>         return node.val
+> 
+>     def put(self, key, value):
+>         if key in self.map:
+>             self._remove(self.map[key])
+>         node = Node(key, value)
+>         self.map[key] = node
+>         self._add(node)
+>         if len(self.map) > self.cap:
+>             lru = self.tail.prev
+>             self._remove(lru)
+>             del self.map[lru.key]
+> 
+> 
+> class Node:
+>     def __init__(self, key, val):
+>         self.key = key
+>         self.val = val
+>         self.prev = None
+>         self.next = None
+> ```
+> 
+> A hash map gives O(1) lookup, and a doubly linked list tracks recency with the most recent at the head and the least recent at the tail. `get` moves the node to the head, and `put` inserts at the head and drops `tail.prev` when over capacity. On your example: put 1, put 2, get 1 returns 1, put 3 evicts 2, get 2 returns -1.
+> 
+> Time O(1) per operation, space O(capacity).
+
+**kept build, rerank off (speed study, not judged)**
+
+> ```python
+> class LRUCache:
+>     def __init__(self, capacity):
+>         self.capacity = capacity
+>         self.cache = {}
+>         self.order = []
+> 
+>     def get(self, key):
+>         if key not in self.cache:
+>             return -1
+>         self.order.remove(key)
+>         self.order.append(key)
+>         return self.cache[key]
+> 
+>     def put(self, key, value):
+>         if key in self.cache:
+>             self.order.remove(key)
+>         elif len(self.cache) >= self.capacity:
+>             oldest = self.order.pop(0)
+>             del self.cache[oldest]
+>         self.cache[key] = value
+>         self.order.append(key)
+> ```
+> 
+> The dict gives O(1) lookup, and the list tracks recency with the most recent key at the end. On a hit, `get` moves the key to the end; on a miss it returns -1. `put` evicts the front of the list when full, then appends the new key.
+> 
+> One caveat: `list.remove` and `pop(0)` are O(n), so this isn't truly constant time. For real O(1) on both operations, swap the list for a doubly linked list plus a dict mapping key to node, so you can unlink and reinsert in constant time.
+> 
+> Time: O(1) amortized with the linked list, O(n) per operation as written. Space: O(capacity).
+
 ---
 
 #### DTECH-011 — api_design
@@ -30438,6 +33912,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* two endpoints, dedupe by long URL
 
 *Judge (v1): 9.8. Only a minor precision gap: '301 or 302' leaves the redirect default open, and POST response status codes are not specified.*
+
+*Judge (v2): 9.8. No material error. HTTP response details remain slightly loose: creation versus reuse status codes and a default redirect status are not specified.*
 
 **fix1**
 
@@ -30535,6 +34011,42 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. The DELETE endpoint lacks an explicit path and return value, leaving a small gap in an otherwise clear, technically sound answer.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> For a URL shortener I'd keep the API small. A POST to /urls takes the long URL and returns the short code plus the short link, with a 201. A GET on /{code} returns a 302 redirect to the original, or a 404 if the code doesn't exist. I'd add a GET /urls/{code} that returns metadata like the original URL, creation time, and click count, and a DELETE to deactivate a code.
+> 
+> On the duplicate question, it depends on the product. The simplest is to treat the long URL as the key, so the second request returns the same short code with a 200 instead of creating a new one. That keeps the store clean and makes analytics per URL. The alternative is to always mint a new code, which is better if people want separate links to track their own campaigns. I'd default to deduplication and make it configurable.
+>
+> *Summary chip:* POST create, GET redirect, dedupe by URL
+
+*Judge (v2): 9.7. The DELETE endpoint lacks an explicit path and return value, leaving a small gap in an otherwise clear, technically sound answer.*
+
+**kept build, local embedder present (speed study)**
+
+> For a URL shortener I'd keep the surface small. A **POST /urls** that takes the long URL and returns the short code plus the full short link, a **GET /{code}** that returns a 301 or 302 redirect to the original, and a **GET /urls/{code}** for metadata like the original URL, creation time and click count. Optionally a **DELETE /urls/{code}** to deactivate.
+> 
+> On the duplicate question, it depends on intent. If two people shorten the same long URL, I'd treat the long URL as the key and return the same short code to both, which keeps storage deduplicated. The tradeoff is that per-user analytics get muddied, so if ownership or separate click tracking matters, I'd instead generate a unique code per request and store the long URL once with a reference count. I'd default to dedupe and make it configurable.
+>
+> *Summary chip:* small surface, dedupe by default
+
+*Judge (v2): 9.7. The core design and duplicate policy are sound. Minor incompleteness: the optional DELETE endpoint has no stated response, and “301 or 302” leaves redirect semantics undecided.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> For a URL shortener I'd keep the API small. A POST to /urls takes the long URL and returns the short code plus the short link, with a 201. A GET on /{code} returns a 302 redirect to the original, or a 404 if the code doesn't exist. I'd add a GET /urls/{code} that returns metadata like the original URL, creation time, and click count, and a DELETE to deactivate a code.
+> 
+> On the duplicate question, it depends on the product. The simplest is to treat the long URL as the key, so the second request returns the same short code with a 200 instead of creating a new one. That keeps the store clean and makes analytics per URL. The tradeoff is you lose per-user ownership, so if two people shorten the same link they share the code and its stats. If you need separate codes per user, you key on the pair of user and URL, or just always mint a new code and accept the duplicates. I'd default to dedupe on the normalized URL, and normalize first, lowercasing the host and stripping the fragment, so trivial variants don't create separate entries.
+>
+> *Summary chip:* POST create, GET redirect, dedupe on normalized URL
+
+**kept build, rerank off (speed study, not judged)**
+
+> For a URL shortener I'd keep the API small. A POST to /urls takes the long URL and returns the short code plus the short link, with a 201. A GET on /{code} returns a 302 redirect to the original, or a 404 if the code doesn't exist. I'd add a GET /urls/{code} that returns metadata like the original URL, creation time, and click count, and a DELETE to deactivate a code.
+> 
+> On the duplicate question, it depends on the product. The simplest is to treat the long URL as the key, so the second request returns the same short code with a 200 instead of creating a new one. That keeps the store clean and makes analytics per URL. The alternative is to always mint a new code, which is better if people want separate links to track their own campaigns. I'd default to deduplication and make it configurable.
+>
+> *Summary chip:* POST create, GET redirect, dedupe by URL
+
 ---
 
 #### DTECH-012 — api_design
@@ -30556,6 +34068,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* keyset cursor on timestamp plus id
 
 *Judge (v1): 9.0. The keyset query is sound, but “no skips” is unqualified. A timestamp or insert-time sequence does not guarantee commit order, so concurrent late commits can land in an already-passed range.*
+
+*Judge (v2): 9.0. The keyset predicate is correct, but “no skips” lacks a defined traversal boundary. An insert-time sequence can still commit out of order, so it does not establish a strict guarantee for late-arriving rows.*
 
 **fix1**
 
@@ -30667,6 +34181,48 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.0. Keyset mechanics are correct, but “no skips” needs a defined snapshot. A stabilization window cannot guarantee completeness without bounded lateness, and the late-arrival/cursor explanation is imprecise.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> For a feed that's constantly getting new inserts, offset pagination breaks because the offsets shift under you. I'd use **keyset pagination** on a stable, unique sort key. Since events are newest first, I'd sort by a monotonic column like a sequence id or created-at plus a tiebreaker, and the cursor is the last row's key. The next page asks for rows strictly less than that key, so new inserts land above the cursor and never shift what you're reading.
+> 
+> The tiebreaker matters because timestamps collide. If created-at isn't unique, I'd pair it with the primary key and compare the tuple, so the ordering is total and stable. That gives no duplicates and no skips for anything that existed when you started.
+> 
+> The one thing keyset can't do is show you events inserted after you began, which is usually the right behavior for paging back through history. If they need live updates, that's a separate channel, like a subscription or a poll for anything newer than the first cursor.
+
+*Judge (v2): 9.2. The claim that keyset cannot show post-start inserts is too strong: late/backdated inserts may appear. Polling above the first page’s last-row cursor can also repeat already displayed events.*
+
+**kept build, local embedder present (speed study)**
+
+> For a feed that's constantly getting new inserts, offset pagination breaks because the offsets shift under you. I'd use **keyset pagination** on a stable, unique sort key. Since events are newest first, the cursor is the last item's timestamp plus its id as a tiebreaker, and each page asks for rows where that pair is strictly less than the cursor.
+> 
+> The id tiebreaker matters because timestamps collide when events land in the same millisecond. And I'd make the cursor opaque to the client, so I can change the sort later without breaking them. That gives you no duplicates and no skips for anything already committed.
+> 
+> The one thing keyset can't fix is an event that commits with a timestamp older than your cursor after you've already paged past that point. If that matters, I'd add a short stabilization window or a snapshot boundary so late arrivals don't slip into a page you've already served.
+>
+> *Summary chip:* keyset cursor on timestamp plus id
+
+*Judge (v2): 9.0. Keyset mechanics are correct, but “no skips” needs a defined snapshot. A stabilization window cannot guarantee completeness without bounded lateness, and the late-arrival/cursor explanation is imprecise.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> For a feed that's constantly getting new inserts, offset pagination breaks because the offsets shift under you. I'd use **keyset pagination** on a stable, unique sort key, so the cursor points at a position in the data rather than a count.
+> 
+> Since events are newest first, I'd sort by a monotonic key like a timestamp plus a tiebreaker, typically the event id, and make the cursor the last row's `(created_at, id)`. The next page asks for rows where `(created_at, id) < (cursor_created_at, cursor_id)`, ordered descending, limit N. That's a strict inequality on a unique tuple, so a row can't appear on two pages and nothing gets skipped, even as new events land at the top.
+> 
+> The one thing to decide is what "newest first" means for a live feed. If new events keep arriving, a reader paging forward will never reach them, which is usually fine for a historical view. If you want a consistent snapshot, you pin the cursor to a high-water mark captured at the first request and filter `created_at <= that`, so the page set is frozen. Either way the index on `(created_at, id)` keeps it a range scan, not a sort.
+>
+> *Summary chip:* keyset cursor on unique sort key
+
+**kept build, rerank off (speed study, not judged)**
+
+> For a feed that's constantly getting new inserts, offset pagination breaks because the offsets shift under you. I'd use **keyset pagination** on a stable, unique sort key. Since events are newest first, I'd sort by created_at descending with the event id as a tiebreaker, so the cursor is the last row's created_at plus id, and the next page asks for rows strictly older than that pair.
+> 
+> That gives no duplicates and no skips for anything already written, because each page is anchored to a value, not a position. New events arriving just land above the cursor and show up on a refresh, which is the correct behavior for a newest-first feed.
+> 
+> The one thing I'd watch is the tiebreaker. If created_at isn't unique, you need the id in the comparison, otherwise rows with the same timestamp can be skipped or repeated at a page boundary. And I'd make the cursor opaque, base64 of the pair, so clients can't hand-craft it.
+>
+> *Summary chip:* keyset cursor on created_at plus id
+
 ---
 
 #### DTECH-013 — resume_project_deep_dive
@@ -30686,6 +34242,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* three services, idempotent cutover, no double pay
 
 *Judge (v1): 5.0 — unsupported_personal_claim. Invents Tern’s service boundaries, deployment rationale, parallel rollout, and deduplication mechanics. The résumé supports project leadership and the reconciliation metric, but not those mechanisms or the claimed guarantee against duplicate payouts.*
+
+*Judge (v2): 4.0 — unsupported_personal_claim, fabricated_behavioral_story. The answer invents Tern’s service boundaries, architectural rationale, feature-flagged parallel rollout, and deduplicated settlement writes. It also links reconciliation to that cutover without evidence; the gist reinforces the unsupported no-double-payment outcome.*
 
 **fix1**
 
@@ -30767,6 +34325,38 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — major_reasoning_error, unsupported_personal_claim, important_question_unanswered. It omits the split rationale and invents a cutover role for the reconciliation job; nightly invoice/load comparison does not itself prevent duplicate payouts.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Project Tern was our rewrite of the carrier-settlement service, moving it out of the Rails monolith into three Go services. We split it because settlement had three genuinely different workloads: rate quoting, event ingestion, and reconciliation. They had different scaling and failure profiles, so one process meant one slow path could stall the others. I led a working group of 4 engineers and 1 QA analyst over 7 months.
+> 
+> On the double-pay risk, the reconciliation job compares carrier invoices against booked loads nightly, and Dockhand's transactional outbox keeps event writes from duplicating. That took monthly mismatches from 312 down to 41.
+>
+> *Summary chip:* three Go services, no double pay
+
+*Judge (v2): 4.0 — unsupported_personal_claim, major_reasoning_error, important_question_unanswered. Invents Tern’s service boundaries and rationale from separate résumé accomplishments. Reconciliation and an event outbox do not establish duplicate-payment prevention or explain the cutover, making the gist’s “no double pay” claim unsupported.*
+
+**kept build, local embedder present (speed study)**
+
+> I led Project Tern, a rewrite of our carrier-settlement service from a Rails monolith into three Go services, with a working group of 4 engineers and 1 QA analyst over 7 months. We split it because settlement had three genuinely different workloads: rate quoting, event ingestion, and reconciliation. Keeping them in one process meant a slow reconciliation run could stall quoting, and each had its own scaling and failure profile. Dockhand, the Kafka pipeline, handles about 2.3 million shipment status events a day, and a transactional outbox table keeps writes from being duplicated. On the cutover, the nightly reconciliation job compares carrier invoices against booked loads, so any double payment surfaces there rather than going out silently. That job also took monthly mismatches from 312 down to 41.
+>
+> *Summary chip:* three services, outbox, reconciliation caught doubles
+
+*Judge (v2): 4.0 — unsupported_personal_claim, major_reasoning_error, important_question_unanswered. Invents service boundaries, the isolation rationale, and cutover details from separate résumé bullets. Nightly invoice/load reconciliation does not establish duplicate-payment prevention or guaranteed detection. The gist additionally claims doubles were caught.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> I led Project Tern, a rewrite of our carrier-settlement service from a Rails monolith into three Go services. We split it because settlement has three genuinely different workloads: quoting rates, ingesting shipment events, and reconciling invoices against booked loads. Keeping them in one process meant a slow reconciliation batch could stall rate quotes, and we couldn't scale or deploy them independently. Splitting let each scale on its own and fail without taking the others down.
+> 
+> On the cutover, the key was making the new services idempotent so a replay couldn't pay a carrier twice. We ran the new path alongside the old one and compared outputs before switching traffic, and the nightly reconciliation job that matches carrier invoices against booked loads was our safety net. That job also brought monthly mismatches down from 312 to 41.
+>
+> *Summary chip:* three services, idempotent cutover, reconciliation
+
+**kept build, rerank off (speed study, not judged)**
+
+> I led Project Tern, a rewrite of our carrier-settlement service from a Rails monolith into three Go services, with a working group of 4 engineers and 1 QA analyst over 7 months. We split it because settlement, rate quoting, and shipment events had very different load and failure profiles, so one process meant one slow path could stall the others. On cutover, the thing we were most careful about was not paying a carrier twice, so we ran the new services alongside the old one and reconciled carrier invoices against booked loads nightly, which is also how we brought monthly mismatches down from 312 to 41.
+>
+> *Summary chip:* three Go services, reconciled cutover
+
 ---
 
 #### DTECH-014 — behavioral_in_tech_round
@@ -30784,6 +34374,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Rust sidecar, Python and Bash automation
 
 *Judge (v1): 5.0 — unsupported_personal_claim, missed_available_evidence. The answer attributes the cert-manager automation to Python and Bash without evidence and omits Kestrel, the explicit shipped Python example. Calling Bash “close behind” also adds an unsupported proficiency ranking.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim, missed_available_evidence. The Rust example is accurate, but the answer omits Kestrel and attributes the cert-manager automation to Python and Bash without evidence. That invents implementation experience central to the interviewer’s question.*
 
 **fix1**
 
@@ -30851,6 +34443,30 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 5.0 — unsupported_personal_claim, missed_available_evidence. The answer attributes Grafana dashboard work to Python without evidence and omits Kestrel, the documented Python project. Its claim about using Bash in CI and runbooks is also unsupported.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)** — edited after streaming
+
+> Python and Rust are my strongest, with Bash for tooling and automation. In Rust I wrote Lanternfish, a sidecar that exports per-pod DNS lookup latency to Prometheus, and it showed 31% of p99 latency on the checkout path came from DNS resolution. On the SRE side, I automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.
+
+*Judge (v2): 8.2 — missed_available_evidence, important_question_unanswered. It names Python as a strongest language but never explains what was shipped in Python, despite the available Kestrel example. The supported cert-manager accomplishment does not establish work in any named language.*
+
+**kept build, local embedder present (speed study)**
+
+> Python, Rust, and Bash are my strongest. In Rust I wrote Lanternfish, a sidecar that exports per-pod DNS lookup latency to Prometheus, and it showed 31% of p99 latency on the checkout path came from DNS. In Python and Bash I did the automation work, like TLS certificate rotation with cert-manager and the CI caching that cut build time from 34 to 13 minutes. I also have some Java from containerizing legacy services.
+>
+> *Summary chip:* Python, Rust, Bash, with shipped work
+
+*Judge (v2): 5.0 — unsupported_personal_claim, missed_available_evidence. The résumé does not attribute cert-manager rotation or CI caching to Python/Bash. The answer invents those language associations while omitting Kestrel, the explicitly documented Python deliverable.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Python and Rust are my strongest, with Bash for tooling and automation. In Rust I wrote Lanternfish, a sidecar that exports per-pod DNS lookup latency to Prometheus, which showed 31% of p99 latency on the checkout path came from DNS resolution. I also have some Java.
+
+**kept build, rerank off (speed study, not judged)**
+
+> Python and Rust are my strongest, with Bash close behind. In Python I wrote Kestrel, a CLI that checks Terraform plans against Open Policy Agent rules before merge. In Rust I built Lanternfish, a sidecar exporting per-pod DNS latency to Prometheus, and my capstone was Brine, a distributed key-value store using Raft.
+>
+> *Summary chip:* Python and Rust, shipped Kestrel, Lanternfish, Brine
+
 ---
 
 #### DTECH-015 — behavioral_in_tech_round
@@ -30868,6 +34484,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* EKS node right-sizing cut spend 28%
 
 *Judge (v1): 9.5. The utilization-review process and original overprovisioning are plausible elaborations but not explicitly supported by the résumé. The core achievement, savings calculation, and gist are accurate.*
+
+*Judge (v2): 9.4. The utilization-review detail is a plausible elaboration of right-sizing but is not explicitly documented. The core example, cost figures, calculated savings, and gist are accurate and directly answer the question.*
 
 **fix1**
 
@@ -30949,6 +34567,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. Both examples are supported, the roughly 28% reduction is correct, and the gist accurately summarizes the immediately speakable answer.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> I've got two that are pretty concrete. The first is CI time at Orrin Telematics: the main monorepo build was taking 34 minutes, and I cut it to 13 with Buildkite build caching. The second is cost at Hollowbrook, where I right-sized node pools on two EKS clusters and brought compute spend down from about $41,300 to $29,800 a month. If you want the reliability angle, pages on the tier-1 services at Cindervale dropped from around 260 a month to 70 after I moved us to multi-window burn-rate alerts.
+>
+> *Summary chip:* CI 34 to 13 min, spend down 28%
+
+*Judge (v2): 9.8. The optional third example about alerting slightly dilutes the speed/cost focus, but the answer is otherwise grounded, accurate, and immediately speakable.*
+
+**kept build, local embedder present (speed study)**
+
+> The clearest one is CI time on our main monorepo at Orrin Telematics. It was running 34 minutes per build, and I cut it to 13 minutes by adding Buildkite build caching, so roughly a 60% reduction. The other one is compute spend at Hollowbrook, where I right-sized node pools on two EKS clusters and brought it from about $41,300 a month down to $29,800, which is close to $11,500 a month saved.
+>
+> *Summary chip:* CI 34 to 13 min, compute down $11.5k/mo
+
+*Judge (v2): 10.0. No material issues. Both examples and their techniques are supported, the savings calculations are accurate at the stated precision, and the answer is immediately speakable.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> The clearest one is compute spend at Hollowbrook. I right-sized the node pools on two EKS clusters and brought the monthly bill from about **$41,300** down to **$29,800**. The other one is CI at Orrin Telematics, where build caching took the main monorepo from **34 minutes** down to 13.
+
+**kept build, rerank off (speed study, not judged)**
+
+> The clearest one is compute spend at Hollowbrook. I right-sized the node pools on two EKS clusters and brought the monthly bill from about **$41,300** down to **$29,800**, so roughly a 28% reduction. On the speed side, at Orrin I cut CI time for the main monorepo from **34 minutes to 13 minutes** by adding Buildkite build caching. And at Cindervale, moving to multi-window burn-rate alerts took pages from about 260 a month down to 70.
+>
+> *Summary chip:* $41.3k to $29.8k, CI 34 to 13 min
+
 ---
 
 #### DTECH-016 — database_design
@@ -30964,6 +34608,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I haven't run Postgres in production myself, so I'll answer this as a design question. Yes, I'd partition, almost certainly by time range on the event timestamp, since these are events and old partitions can be dropped instead of vacuumed. Monthly or weekly partitions, with autovacuum tuned per partition. What gets harder: cross-partition queries and unique constraints, since a unique index has to include the partition key, plus partition pruning only works if queries filter on that key, and you now have many more relations to manage and monitor.
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The résumé does not establish that the candidate has never operated production Postgres. The design is broadly sound, but assumes retention-based partition drops and recommends partitioning without checking why vacuum is slow.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. It asserts the candidate has never run production Postgres, which the résumé does not establish. The partitioning recommendation is also too categorical without checking retention, query patterns, or why vacuum is slow.*
 
 **fix1**
 
@@ -31033,6 +34679,30 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.4 — important_question_unanswered. It skips the production-Postgres experience question and recommends partitioning almost automatically without checking workload fit or why vacuum is slow. The trade-offs are useful, but partitioning alone does not guarantee that vacuum keeps up.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)** — edited after streaming
+
+> I'd partition, almost always by range on time, monthly or weekly, since event data is time-ordered and old partitions can be dropped instead of vacuumed. What gets harder is cross-partition queries and unique constraints, which have to include the partition key, plus routing and maintenance across many partitions.
+
+*Judge (v2): 8.5 — important_question_unanswered. It skips the production-experience question and recommends partitioning too categorically. Dropping old partitions helps only when retention permits; partitioning alone does not address why vacuum is slow.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> Let me answer the design question directly. Yes, I'd partition, almost certainly by time range on the event timestamp, monthly or weekly depending on volume, so vacuum and autovacuum only ever touch the newest partitions and old ones can be dropped instead of deleted.
+> 
+> What gets harder: cross-partition queries and unique constraints need the partition key, planning gets more complex, and partition creation and retention become automation rather than a manual step.
+
+*Judge (v2): 4.0 — major_factual_error, important_question_unanswered. It skips the experience question. Partitioning does not restrict vacuum to recent partitions; older ones can still need vacuum/freezing. Cross-partition queries do not require the partition key—predicates on it enable pruning.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> On the design question: yes, partition by time range on the event timestamp, monthly or weekly, with a default partition to catch stragglers. Once you do, the hard parts are cross-partition queries, unique constraints that have to include the partition key, and managing partition creation and retention as automation rather than manual work.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> I'll answer the design question directly. Yes, partition by time range on the event timestamp, since that's what makes vacuum and retention manageable. Monthly or weekly partitions, with old ones dropped instead of deleted.
+> 
+> What gets harder: cross-partition queries and unique constraints, since a unique index has to include the partition key. Also more partitions means more planning overhead and more autovacuum workers competing, so per-partition thresholds matter rather than one table-wide setting.
+
 ---
 
 #### DTECH-017 — fundamentals_cs
@@ -31054,6 +34724,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* M:N scheduler, channels vs mutexes, honest Go level
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The technical explanation is largely sound, but it invents Go side-project and coursework experience. The homelab and Rust capstone do not substantiate that claim, and the answer omits the candidate’s documented Python/Rust production work.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The technical explanation is largely sound, but the answer invents Go side-project and coursework experience. Neither that history nor the categorical absence of paid production Go work is established by the résumé.*
 
 **fix1**
 
@@ -31161,6 +34833,44 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 5.0 — unsupported_personal_claim. Invents Go side-project and coursework experience. It also confuses the default number of Ps with the total OS-thread count and understates the candidate’s demonstrated production Python/Rust work.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Goroutines are multiplexed onto OS threads by the Go runtime scheduler, which uses an M:N model: many goroutines run on a smaller pool of OS threads, and the runtime manages that mapping itself rather than the kernel. Each thread has a local run queue, there's a global queue, and when a thread blocks in a syscall the runtime hands its runnable goroutines to another thread so they keep making progress. Work-stealing keeps idle threads busy, and the scheduler also preempts long-running goroutines so one can't starve the rest.
+> 
+> For channels versus mutexes: I reach for a channel when I'm passing ownership of data or coordinating between goroutines, like a pipeline or a worker pool, because the flow of values makes the handoff explicit. I reach for a mutex when I'm just protecting shared state, like a map or a counter, where a channel would add ceremony without buying clarity. The rule of thumb I use is channels for communication and orchestration, mutexes for guarding state.
+> 
+> On production Go, I want to be straight with you: my Go so far has been side projects and coursework rather than production systems. My main hands-on work has been a four-node Raspberry Pi k3s cluster running Flux GitOps, hosting a self-hosted Matrix server, and a distributed key-value store in Rust for my capstone. So the concurrency concepts I'm solid on, but I'd be ramping up on Go in a production control plane.
+>
+> *Summary chip:* GMP scheduler, channels vs mutexes, honest Go level
+
+*Judge (v2): 5.0 — unsupported_personal_claim, missed_available_evidence. Invents Go side projects and coursework, substitutes academic and homelab examples for documented professional Python/Rust work, and incorrectly assigns local run queues to OS threads rather than Ps.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> Go's scheduler is a GMP model. Goroutines are the G, logical processors are the P, and OS threads are the M. Each P holds a local run queue of runnable goroutines, and there's a global queue as a fallback. An M has to hold a P to run goroutines, so GOMAXPROCS caps how many run in parallel. When a goroutine blocks on a syscall, the M detaches from the P and the P gets handed to another M so the rest keep running. When a goroutine blocks on a channel or mutex, it parks and the P just picks the next one off the queue. Work stealing balances load when one P's queue runs dry.
+> 
+> On channels versus mutexes: I reach for a channel when I'm passing ownership of data or coordinating between goroutines, like a worker pool feeding jobs in and results out, or signaling completion. I reach for a mutex when I'm just protecting shared state, like a map or a counter, where the lock is incidental to the logic. The rule of thumb I use is channels for orchestration, mutexes for state.
+> 
+> On production Go, I want to be straight with you: my homelab is a 4-node Raspberry Pi k3s cluster managed through Flux GitOps. My capstone was a distributed key-value store in Rust using Raft, so the concurrency reasoning carries over even though the language is different.
+
+*Judge (v2): 8.1 — important_question_unanswered, missed_available_evidence. The technical explanation is sound, but the production-Go question is dodged. Accurate homelab and capstone details do not establish Go experience, while documented Python/Rust production examples are omitted.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> Goroutines are multiplexed onto OS threads by the Go runtime scheduler, which uses an M:N model: many goroutines onto a smaller pool of threads. Each thread has a local run queue, and there's a global queue plus work-stealing, so an idle P pulls work from others. When a goroutine blocks on a syscall, the runtime hands the P off to another thread so the rest keep running, and it preempts long-running goroutines at safe points.
+> 
+> For channels versus mutexes: I reach for a channel when I'm passing ownership of data or coordinating a pipeline, and a mutex when I'm just protecting shared state, like a map or a counter. Channels are for communication, mutexes for guarding.
+> 
+> On production Go: I'll be straight with you. My Go is mostly from side projects and coursework, not production services. My homelab runs a **4-node Raspberry Pi k3s cluster** with **Flux GitOps**, and I don't want to overstate it.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> Goroutines are scheduled by the Go runtime, not the OS. Each goroutine starts on a small stack, and the runtime multiplexes many of them onto a pool of OS threads, one per logical core by default. The scheduler keeps a per-P run queue and a global queue, and when a goroutine blocks on a syscall or a channel, the runtime parks it and hands the thread to another runnable goroutine. Work stealing keeps idle Ps busy.
+> 
+> For channels versus mutexes: I reach for a channel when I'm passing ownership of data or coordinating a pipeline, and a mutex when I'm just protecting shared state, like a map or a counter. Channels are for communication, mutexes for exclusion.
+> 
+> On production Go: honestly, most of my Go is from my own projects. My Tidepool homelab is a 4-node Raspberry Pi k3s cluster managed through Flux GitOps. I'll confirm where I stand on production Go and come back to you on it.
+
 ---
 
 #### DTECH-018 — approach_only
@@ -31178,6 +34888,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Floyd's algorithm, reset to head
 
 *Judge (v1): 8.4. It omits termination when the fast pointer reaches null and incorrectly claims the two distances are equal; they are only congruent modulo the cycle length.*
+
+*Judge (v2): 8.9. It omits termination when the fast pointer reaches the list’s end and incorrectly claims the two distances are equal; they are congruent modulo the cycle length, not necessarily equal.*
 
 **fix1**
 
@@ -31255,6 +34967,34 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.5. The cycle-entry method and complexity are correct, but “until they meet” omits the acyclic stopping condition: report no cycle if the fast pointer or its next node is null.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Use two pointers, a slow one moving one step at a time and a fast one moving two. If they ever meet, there's a cycle, so reset one pointer to the head and advance both one step at a time until they meet again. That second meeting point is where the cycle starts, because the distance from the head to the start equals the distance from the meeting point to the start.
+>
+> *Summary chip:* Floyd's two pointers, reset to find start
+
+*Judge (v2): 9.1. Floyd’s method is correct, but the claimed distance equality holds only modulo the cycle length, not necessarily exactly. The no-cycle termination condition is also omitted.*
+
+**kept build, local embedder present (speed study)**
+
+> Use Floyd's tortoise and hare: move one pointer one step and the other two steps until they meet, which proves a cycle exists. Then reset one pointer to the head and advance both one step at a time; the node where they meet again is the start of the cycle. It's O(n) time and O(1) space.
+>
+> *Summary chip:* Floyd's algorithm, then reset to find start
+
+*Judge (v2): 9.3. The cycle-entry method and complexity are correct, but detection omits the acyclic termination condition: stop and report no cycle if the fast pointer or its next node is null.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Use Floyd's tortoise and hare: move one pointer one step and the other two steps until they meet, which proves a cycle exists. Then reset one pointer to the head and advance both one step at a time; the node where they meet again is the start of the cycle. It's O(n) time and O(1) space.
+>
+> *Summary chip:* Floyd's algorithm, then reset one pointer
+
+**kept build, rerank off (speed study, not judged)**
+
+> Use Floyd's tortoise and hare: move one pointer one step and the other two steps until they meet, which proves a cycle exists. Then reset one pointer to the head and advance both one step at a time; the node where they meet again is the cycle's start. That works because the distance from the head to the entry equals the distance from the meeting point to the entry, so it runs in O(n) time and O(1) space.
+>
+> *Summary chip:* Floyd's algorithm, reset to head, meet at entry
+
 ---
 
 #### DTECH-019 — leetcode
@@ -31276,6 +35016,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* hash map, one pass, O(n)
 
 *Judge (v1): 9.8. The index-by-index walkthrough is slightly longer than necessary for this warm-up, but the answer is correct and immediately speakable.*
+
+*Judge (v2): 9.8. No substantive issue. The worked example repeats the general algorithm in slightly more detail than this quick spoken warm-up needs.*
 
 **fix1**
 
@@ -31377,6 +35119,44 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issues. The example result, complement-before-insertion algorithm, and average-case complexity explanation are correct, concise, and immediately usable.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> For this one I'd use a hash map. I walk the array once, and for each number I check whether its complement, target minus the current value, is already in the map. If it is, I return the stored index and the current one. Otherwise I store the current value with its index and keep going. Here 2 goes in, then 7 needs 2, which is there, so I return indices 0 and 1.
+> 
+> Time is **O(n)** since it's a single pass, and space is **O(n)** for the map in the worst case.
+>
+> *Summary chip:* hash map, one pass, O(n)
+
+*Judge (v2): 10.0. No meaningful issues: the approach, indices, and standard hash-map complexity are correct, and the response is immediately speakable. The gist accurately summarizes it.*
+
+**kept build, local embedder present (speed study)**
+
+> For this one I'd use a hash map. I walk the array once, and for each number I check whether its complement, target minus the current value, is already in the map. If it is, I return the stored index and the current one. If not, I store the current value with its index and keep going.
+> 
+> On 2, 7, 11, 15 with target 9: index 0 is 2, complement 7 isn't in the map yet, so I store 2. At index 1, 7's complement is 2, which is in the map, so I return 0 and 1.
+> 
+> Time is O(n) since it's a single pass with O(1) map lookups, and space is O(n) for the map in the worst case.
+>
+> *Summary chip:* hash map, one pass, O(n) time and space
+
+*Judge (v2): 9.9. No substantive issue; the example walkthrough could be slightly shorter for a live warm-up.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> For two sum, I'd use a hash map. Walk the array once, and for each number check whether its complement, target minus the current value, is already in the map. If it is, return the stored index and the current one. Otherwise store the current value with its index and keep going. Here that's 2 at index 0, then 7 needs 2, which is in the map, so I return 0 and 1.
+> 
+> Time is O(n) since each element is inserted and looked up once, and space is O(n) for the map in the worst case.
+>
+> *Summary chip:* hash map, one pass, O(n)
+
+**kept build, rerank off (speed study, not judged)**
+
+> A hash map gets this in one pass. I walk the array, and for each number I check whether its complement, target minus the current value, is already in the map. If it is, I return the stored index and the current one. Otherwise I store the current value with its index and keep going. Here 2 goes in, then at 7 the complement 2 is already there, so the answer is indices 0 and 1.
+> 
+> Time is O(n) since each element is inserted and looked up once, and space is O(n) for the map in the worst case.
+>
+> *Summary chip:* hash map, one pass, O(n)
+
 ---
 
 #### DTECH-020 — debugging
@@ -31412,6 +35192,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Storing the id lets the next keystroke cancel the pending call, so `fn` runs once after typing stops.
 
 *Judge (v1): 9.5. The explanation incorrectly says clearTimeout(timer) clears an already-fired ID. In the original code, timer remains undefined, so no timeout is cancelled. The corrected code is valid.*
+
+*Judge (v2): 9.3. The fix is correct, but the explanation incorrectly says clearTimeout clears the first already-fired ID. In the original code, timer remains undefined, so clearTimeout cancels nothing.*
 
 **fix1**
 
@@ -31619,6 +35401,78 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue. The explanation identifies the precise bug, the code fixes it minimally, and the gist accurately summarizes the change.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The timer is never stored, so `clearTimeout` is always clearing nothing. Type "abc" quickly and you get three pending timers, one per keystroke, each firing `fn`.
+> 
+> ```js
+> function debounce(fn, wait) {
+>   let timer;
+>   return function (...args) {
+>     clearTimeout(timer);
+>     timer = setTimeout(() => fn.apply(this, args), wait);
+>   };
+> }
+> ```
+> 
+> Assigning the `setTimeout` handle to `timer` gives the next call something to cancel, so only the last keystroke's timer survives.
+
+*Judge (v2): 10.0. No material issues. The response accurately diagnoses the bug and supplies a minimal, usable fix while preserving arguments and receiver context.*
+
+**kept build, local embedder present (speed study)**
+
+> The bug is that `timer` is never assigned, so `clearTimeout(timer)` clears nothing and every keystroke schedules its own call. Store the id:
+> 
+> ```javascript
+> function debounce(fn, wait) {
+>   let timer;
+>   return function (...args) {
+>     clearTimeout(timer);
+>     timer = setTimeout(() => fn.apply(this, args), wait);
+>   };
+> }
+> ```
+> 
+> Now each keystroke cancels the previous pending call, so `fn` runs once after typing stops.
+>
+> *Summary chip:* assign the timer id
+
+*Judge (v2): 10.0. No material issue: the diagnosis is accurate, the minimal fix works, and the explanation and gist agree with the code.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The bug is that `timer` is never reassigned, so `clearTimeout` always clears `undefined` and every call schedules its own timeout. Store the handle:
+> 
+> ```javascript
+> function debounce(fn, wait) {
+>   let timer;
+>   return function (...args) {
+>     clearTimeout(timer);
+>     timer = setTimeout(() => fn.apply(this, args), wait);
+>   };
+> }
+> ```
+> 
+> Now each keystroke cancels the previous pending call, so `fn` runs once after typing stops.
+>
+> *Summary chip:* assign timer to setTimeout handle
+
+**kept build, rerank off (speed study, not judged)**
+
+> The bug is that `timer` is never assigned, so `clearTimeout(timer)` always clears `undefined` and every keystroke schedules a fresh call. Store the id:
+> 
+> ```javascript
+> function debounce(fn, wait) {
+>   let timer;
+>   return function (...args) {
+>     clearTimeout(timer);
+>     timer = setTimeout(() => fn.apply(this, args), wait);
+>   };
+> }
+> ```
+> 
+> Now each keystroke cancels the previous pending call, so `fn` runs once after typing stops.
+
 ---
 
 #### DTECH-021 — complexity_only
@@ -31636,6 +35490,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* O(n log n) total
 
 *Judge (v1): 4.0 — major_reasoning_error. O(n log n) is a valid loose upper bound, but the claimed tight Θ(n log n) bound is wrong. The few early starting values requiring logarithmic work do not establish that bound.*
+
+*Judge (v2): 4.0 — major_reasoning_error. The tight bound is Θ(n), not Θ(n log n). The answer incorrectly evaluates the sum; a few expensive early iterations do not make the aggregate work Θ(n log n).*
 
 **fix1**
 
@@ -31709,6 +35565,30 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — major_reasoning_error. O(n log n) is a valid but loose upper bound, not the tight complexity this question calls for. The summation is Θ(n); both the answer and gist miss the central insight.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The inner loop runs log(n/i) times, so the total is the sum of log(n/i) over i from 1 to n, which is **O(n log n)**. The outer loop contributes n, and the doubling gives a logarithmic factor each time.
+
+*Judge (v2): 4.0 — major_reasoning_error. O(n log n) is a valid but loose upper bound. The explanation incorrectly treats the logarithmic factor as uniform across outer iterations, missing that the stated sum is Θ(n).*
+
+**kept build, local embedder present (speed study)**
+
+> The outer loop runs n times, and for each i the inner loop does log(n/i) steps, since j doubles from i until it passes n. Summing that over all i gives O(n log n). The doubling is what makes the inner loop logarithmic rather than linear.
+>
+> *Summary chip:* O(n log n), doubling gives log factor
+
+*Judge (v2): 4.0 — major_reasoning_error. O(n log n) is a valid but loose upper bound, not the tight complexity. The response misses that summing log(n/i) yields Θ(n), and the gist reinforces the misleading logarithmic factor.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The inner loop doubles j starting from i, so it runs log(n/i) times. Summing over i from 1 to n gives n log n minus a lower-order term, so the total is **O(n log n)**. The outer loop alone is n, and each inner loop is logarithmic, so they multiply.
+
+**kept build, rerank off (speed study, not judged)**
+
+> The outer loop runs n times, and for each i the inner loop doubles j from i up to n, which is about log(n/i) steps. Summing that over all i gives O(n log n) overall, and the space is O(1) since it's just constant work per step.
+>
+> *Summary chip:* O(n log n) total, constant space
+
 ---
 
 #### DTECH-022 — approach_only
@@ -31726,6 +35606,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* touching intervals don't merge at grace 0
 
 *Judge (v1): 3.9 — missed_available_evidence, reference_conflict_ignored. The answer falsely claims the attached FAQ is unavailable and misses its explicit contradiction. Although the body labels non-merging an assumption, the gist presents it as settled fact.*
+
+*Judge (v2): 4.2 — missed_available_evidence, reference_conflict_ignored. The attached FAQ is available and explicitly contradictory. The answer falsely claims not to have it, selects the non-merging interpretation without identifying the conflict, and presents that assumption as settled in the gist.*
 
 **fix1**
 
@@ -31817,6 +35699,36 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.8. Correctly identifies both conflicting rules, but commits to merging without explicitly seeking confirmation. The gist omits the conflict and presents the chosen assumption as settled fact.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The FAQ contradicts itself here. One answer says ends are exclusive, so [5, 10] and [10, 12] stay separate at grace 0. Another says touching windows **always merge, even at grace 0**, and that one sits under what the grader checks first. The file even flags that different interviewers wrote different answers. So my assumption is that touching windows merge at grace 0 and zero-length windows get dropped. I'd rather confirm that with you now than build on the wrong reading.
+>
+> *Summary chip:* FAQ conflicts, assume touching windows merge
+
+*Judge (v2): 9.8. No material issue. The zero-length-window detail is supported but unnecessary for this focused clarification.*
+
+**kept build, local embedder present (speed study)**
+
+> The FAQ actually contradicts itself on this. One answer says touching windows stay separate at grace 0, since ends are exclusive. But the answer about what the grader checks first says the opposite: touching windows always merge, even with grace 0, and that's one of the edge cases most failed submissions get wrong.
+> 
+> So I'd flag that to the interviewer rather than assume. I'd say: the FAQ has two conflicting answers on touching windows at grace 0, one says they stay separate and the other says they always merge, and I want to confirm which the grader uses before I code, because it changes the merge condition.
+>
+> *Summary chip:* FAQ conflicts on touching windows at grace 0
+
+*Judge (v2): 9.6. The explanation and suggested wording repeat the contradiction, making the reply slightly longer than necessary. Substantively, it correctly identifies the ambiguity and avoids silently choosing either rule.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The FAQ contradicts itself on exactly this point. One answer says touching windows stay separate at grace 0, and the grader answer says touching windows always merge, even with grace 0. So I'd flag that I'm going with the grader's rule, since that's what's actually checked: **[5, 10] and [10, 12] merge at grace 0**, and zero-length windows get dropped. I'll confirm which one the interviewer wants before I write the merge logic.
+>
+> *Summary chip:* FAQ conflicts, grader says touching merges
+
+**kept build, rerank off (speed study, not judged)**
+
+> The FAQ contradicts itself on exactly this point, so I'd flag that before coding. One answer says touching windows like [5, 10] and [10, 12] stay separate at grace 0 because ends are exclusive. But the answer about what the grader checks first says touching windows always merge, even with grace 0. Since the grader is what actually scores me, I'd assume touching windows merge at grace 0 and treat ends as inclusive, and I'd say that assumption out loud before writing anything.
+>
+> *Summary chip:* FAQ conflicts, assume touching merges at grace 0
+
 ---
 
 #### DTECH-023 — complexity_only
@@ -31834,6 +35746,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > So the honest answer is: tell me the input size and the time budget, and I'll tell you whether sort-based clears it. My instinct is that if the input is large enough for the cutoff to bite, the intended solution probably isn't a full sort.
 
 *Judge (v1): 3.9 — reference_conflict_ignored, missed_available_evidence, important_question_unanswered. Ignores both conflicting input limits and the stated five-second cutoff, requests facts already supplied, and substitutes unrelated selection algorithms plus an unsupported guess that sorting is not intended.*
+
+*Judge (v2): 3.7 — reference_conflict_ignored, missed_available_evidence, important_question_unanswered. It ignores both conflicting input limits and the stated five-second cutoff, substitutes unrelated top-k/median discussion, and suggests sorting is probably unintended despite the FAQ explicitly expecting O(n log n).*
 
 **fix1**
 
@@ -31909,6 +35823,34 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.3. The runtime assurance is too strong: neither asymptotic complexity nor the unspecified reference implementation establishes that this solution comfortably meets five seconds. The gist turns that unverified estimate into a categorical claim.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The FAQ says each host has at most 200,000 windows, so that's the size I'd design for, and an O(n log n) sort-based solution is exactly what they expect. The hidden cases go up to 2 million windows per host, and the reference finishes in under a second in Python. The cutoff is 5 seconds, so a sort-based Python solution has plenty of headroom, and a few seconds is fine.
+>
+> *Summary chip:* 200k windows, sort-based Python fits 5s cutoff
+
+*Judge (v2): 4.0 — major_reasoning_error, reference_conflict_ignored. It quotes both limits but commits to designing for only 200,000 despite larger hidden cases. The reference timing does not establish that this implementation has ample headroom; the gist reinforces both unjustified conclusions.*
+
+**kept build, local embedder present (speed study)**
+
+> The FAQ says each host has at most 200,000 windows and that an O(n log n) sort-based solution is what they expect, so that's the size I'm designing for. The hidden cases go up to 2 million windows per host, and the reference solution finishes in under 1 second in Python, with a cutoff at 5 seconds. A sort-based Python solution should make that comfortably, since sorting 2 million intervals is well within a second or two, and the merge pass after it is linear.
+>
+> *Summary chip:* 2M windows, sort-based Python fits cutoff
+
+*Judge (v2): 6.6 — reference_conflict_ignored. It quotes both limits but commits to designing for 200,000 without addressing the contradiction; the gist instead implies 2 million. Its one-to-two-second sorting estimate and comfortable cutoff assurance lack benchmarking support.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The FAQ says each host has at most 200,000 windows, and that an O(n log n) sort-based solution is what they expect. The hidden cases go up to 2 million windows per host, and the reference solution finishes in under 1 second in Python. The cutoff is 5 seconds, so a sort-based Python solution has plenty of headroom, and a few seconds is fine.
+>
+> *Summary chip:* 2M windows, sort-based Python fits 5s cutoff
+
+**kept build, rerank off (speed study, not judged)**
+
+> The FAQ says each host has at most 200,000 windows, so that's the size I'd design the main path around, and an O(n log n) sort-based solution is exactly what they expect there. The performance bar is the part that matters more: the hidden cases go up to 2 million windows per host, the reference solution finishes in under a second in Python, and the cutoff is 5 seconds. A sort-based Python solution should make that, since sorting 2 million intervals is well within a few seconds, but I'd keep the merge pass linear and avoid anything quadratic so I'm not relying on the margin.
+>
+> *Summary chip:* 200k typical, 2M hidden, sort fits 5s
+
 ---
 
 #### DTECH-024 — dry_run
@@ -31926,6 +35868,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* example five now merges to one window
 
 *Judge (v1): 10.0. No material issue. The answer correctly demonstrates both merge steps, applies the live rule changes, and explains the unchanged complexity in immediately speakable language.*
+
+*Judge (v2): 10.0. No material issue. The answer correctly applies the live amendments, demonstrates both merge steps, and explains why the complexity is unchanged. The gist agrees.*
 
 **fix1**
 
@@ -32013,6 +35957,40 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. The result and complexity are correct, but the dry run omits the intermediate end update to 11. Calling the grace bound the “only real change” is slightly imprecise because marker retention also changes merging.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> With the new rules, example five changes. Grace is 1, and the zero length window [11, 11] is now kept, so it bridges the gap: [0, 10] merges with [11, 11] and then with [12, 20], giving [[0, 20]]. The n log n approach still holds, since keeping zero length windows just means not dropping them before the sort and merge.
+>
+> *Summary chip:* zero length window now bridges, output [0, 20]
+
+*Judge (v2): 9.7. The dry run is correct and immediately speakable. The complexity explanation addresses retaining markers but does not explicitly explain why increasing the grace limit to 1440 also leaves runtime unchanged.*
+
+**kept build, local embedder present (speed study)**
+
+> With zero-length windows kept, [11, 11] is no longer dropped, so it merges with [0, 10] since 11 <= 10 + 1, and then with [12, 20] since 12 <= 11 + 1. So example five now gives [[0, 20]] instead of [[0, 10], [12, 20]].
+> 
+> The n log n approach still holds. Sorting is unchanged, and the merge is still a single linear pass, so it's O(n log n) overall. The only change is that I no longer skip zero-length windows before merging.
+>
+> *Summary chip:* zero-length windows now bridge, still n log n
+
+*Judge (v2): 9.7. The correct explanation leaves the new 1440-minute grace limit implicit; saying retaining markers is “the only change” is slightly too broad.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> With zero-length windows kept, [11, 11] no longer gets dropped, so it bridges the gap: it merges with [0, 10] since 11 <= 10 + 1, and then [12, 20] merges too since 12 <= 11 + 1. So example five becomes **[[0, 20]]**, one window instead of two.
+> 
+> The n log n approach still holds. Sorting dominates, and the merge is still a single linear pass, so the change is just dropping the zero-length filter and letting those windows participate.
+>
+> *Summary chip:* zero-length windows now bridge, still n log n
+
+**kept build, rerank off (speed study, not judged)**
+
+> With zero-length windows kept, [11, 11] no longer gets dropped, so it bridges the gap. With grace 1, [0, 10] merges with [11, 11] since 11 <= 10 + 1, and that merges with [12, 20] since 12 <= 11 + 1. So example five now gives **[[0, 20]]**, not two windows.
+> 
+> The n log n still holds. Sorting dominates, and the merge is still a single linear pass, so it's unchanged.
+>
+> *Summary chip:* zero-length window bridges, still n log n
+
 ---
 
 #### DTECH-025 — small_coding
@@ -32054,6 +36032,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Validation runs on the original indices before sorting, zero-length windows are filtered out so they can't bridge a gap, and merging only ever grows a window's end to the largest end it absorbed. Time is O(n log n) from the sort, space is O(n) for the filtered and merged lists.
 
 *Judge (v1): 10.0. No material issues. The implementation satisfies every specified merge_windows rule and edge case, and its complexity explanation is accurate.*
+
+*Judge (v2): 10.0. No material issues. The implementation satisfies every specified rule, handles the stated edge cases, and accurately describes its complexity.*
 
 **fix1**
 
@@ -32371,6 +36351,120 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issues. The implementation satisfies every stated rule, handles the supplied edge cases, preserves the input, and accurately explains its complexity.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> ```python
+> def merge_windows(windows, grace):
+>     # Rule 1: check for inverted windows in the original input order.
+>     for i, (start, end) in enumerate(windows):
+>         if end < start:
+>             raise ValueError(f"inverted window at index {i}")
+> 
+>     # Rule 2: drop empty windows (end == start) so they never bridge a gap.
+>     # Copy the pairs so the caller's input and its pairs stay untouched.
+>     kept = [[start, end] for start, end in windows if end > start]
+> 
+>     # Rule 3: sort by start; merge when start <= current end + grace.
+>     kept.sort(key=lambda w: w[0])
+> 
+>     merged = []
+>     for start, end in kept:
+>         if merged and start <= merged[-1][1] + grace:
+>             # Rule 4: grace decides merging only; the window ends at the
+>             # largest end it absorbed, it is never extended.
+>             if end > merged[-1][1]:
+>                 merged[-1][1] = end
+>         else:
+>             merged.append([start, end])
+> 
+>     return merged
+> ```
+> 
+> Inverted windows are rejected before anything else, empty windows are filtered out first so they can't bridge, then the sorted scan merges when a window's start falls within the running end plus grace and keeps the farthest end. Complexity is **O(n log n)** time from the sort and O(n) extra space.
+
+*Judge (v2): 10.0. None. The implementation correctly handles every specified edge case, preserves the input, and states accurate complexity.*
+
+**kept build, local embedder present (speed study)**
+
+> ```python
+> def merge_windows(windows, grace):
+>     for i, (start, end) in enumerate(windows):
+>         if end < start:
+>             raise ValueError(f"inverted window at index {i}")
+> 
+>     live = sorted((w for w in windows if w[1] > w[0]), key=lambda w: w[0])
+> 
+>     merged = []
+>     for start, end in live:
+>         if merged and start <= merged[-1][1] + grace:
+>             if end > merged[-1][1]:
+>                 merged[-1][1] = end
+>         else:
+>             merged.append([start, end])
+> 
+>     return merged
+> ```
+> 
+> The validation pass runs over the input in its original order so the reported index is the first inverted window as given. Zero-length windows are filtered out before sorting, so they can never bridge a gap, and each merged window only ever grows to the largest end it absorbs, since grace is used solely in the comparison. The output is a fresh list of new pairs, leaving the input untouched.
+> 
+> Time is O(n log n) from the sort, space is O(n) for the sorted copy and result.
+
+*Judge (v2): 10.0. No material issues. The implementation satisfies all specified rules and edge cases, and its explanation accurately describes validation, merging, input preservation, and complexity.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> ```python
+> def merge_windows(windows, grace):
+>     for i, (start, end) in enumerate(windows):
+>         if end < start:
+>             raise ValueError(f"inverted window at index {i}")
+> 
+>     kept = sorted((w for w in windows if w[1] > w[0]), key=lambda w: w[0])
+> 
+>     merged = []
+>     for start, end in kept:
+>         if merged and start <= merged[-1][1] + grace:
+>             if end > merged[-1][1]:
+>                 merged[-1][1] = end
+>         else:
+>             merged.append([start, end])
+> 
+>     return merged
+> 
+> 
+> def total_quiet_minutes(windows, grace):
+>     return sum(end - start for start, end in merge_windows(windows, grace))
+> ```
+> 
+> The validation pass runs over the input in its original order so the first inverted window is reported by its given index, then zero-length windows are dropped before sorting so they can never bridge a gap. Merging compares each start against the current end plus grace, and only ever raises the end, so grace never extends a window. Sorting dominates at O(n log n) time, with O(n) extra space for the sorted copy and result.
+
+**kept build, rerank off (speed study, not judged)**
+
+> ```python
+> def merge_windows(windows, grace):
+>     for i, (start, end) in enumerate(windows):
+>         if end < start:
+>             raise ValueError(f"inverted window at index {i}")
+> 
+>     live = sorted((w for w in windows if w[1] > w[0]), key=lambda w: w[0])
+> 
+>     merged = []
+>     for start, end in live:
+>         if merged and start <= merged[-1][1] + grace:
+>             if end > merged[-1][1]:
+>                 merged[-1][1] = end
+>         else:
+>             merged.append([start, end])
+> 
+>     return merged
+> 
+> 
+> def total_quiet_minutes(windows, grace):
+>     return sum(end - start for start, end in merge_windows(windows, grace))
+> ```
+> 
+> The inverted check runs over the input in its original order before anything else, so the reported index is the first bad one as given. Zero-length windows are filtered out before sorting, so they can never bridge a gap, and merging compares each start against the running end plus grace while only ever raising the end to the largest absorbed value. Both functions build fresh lists, so the input and its pairs are untouched. Time is O(n log n) from the sort, space O(n).
+
 ---
 
 #### DTECH-026 — resume_project_deep_dive
@@ -32388,6 +36482,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* DNS path fix, rollout and p99 to confirm
 
 *Judge (v1): 3.8 — missed_available_evidence, ai_epistemic_leak, important_question_unanswered. Despite explicit notes, it gives no concrete DNS changes, rollout owner or post-fix p99. Saying 'I don't have those details in front of me' leaks copilot uncertainty instead of using available evidence.*
+
+*Judge (v2): 4.2 — missed_available_evidence, ai_epistemic_leak, important_question_unanswered. It substitutes a vague DNS summary and retrieval-state disclaimer for the requested specifics, despite the notes explicitly supplying the fixes, Priya Oduya's rollout ownership, and the 910 ms result.*
 
 **fix1**
 
@@ -32461,6 +36557,34 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. None. The response answers all three parts directly, accurately attributes rollout ownership, and stays fully grounded in the design notes.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> We moved the checkout-path pods to ndots:2 and switched the three external payment endpoints to fully qualified names with a trailing dot, and enabled NodeLocal DNSCache, which also cleared the conntrack stalls. Priya Oduya, a senior SRE, reviewed the design and ran the rollout. Checkout p99 went from 1,380 ms to 910 ms, with DNS down to about 6% of p99.
+>
+> *Summary chip:* ndots:2, FQDNs, NodeLocal; p99 1,380 to 910 ms
+
+*Judge (v2): 10.0. No material issue. The response answers all three questions accurately, credits the rollout owner, and is immediately speakable. The gist matches the answer.*
+
+**kept build, local embedder present (speed study)**
+
+> We moved the checkout-path pods to ndots:2 and switched the three external payment endpoints to fully qualified names with a trailing dot, and enabled NodeLocal DNSCache, which also cleared the conntrack stalls. Priya Oduya, a senior SRE, reviewed the design and ran the rollout. Checkout p99 went from 1,380 ms to 910 ms, with DNS down to about 6% of p99.
+>
+> *Summary chip:* ndots:2, FQDNs, NodeLocal; p99 1,380 to 910 ms
+
+*Judge (v2): 10.0. No material issue. The response answers all three questions accurately, credits the rollout owner, and is immediately speakable. The gist matches the answer.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> We moved the checkout-path pods to ndots:2 and switched the three external payment endpoints to fully qualified names with a trailing dot, and enabled NodeLocal DNSCache, which also cleared the conntrack stalls. Priya Oduya, a senior SRE, reviewed the design and ran the rollout. Checkout p99 went from 1,380 ms to 910 ms, with DNS down to about 6% of p99.
+>
+> *Summary chip:* ndots:2, FQDN, NodeLocal; p99 1380 to 910
+
+**kept build, rerank off (speed study, not judged)**
+
+> We moved the checkout-path pods to ndots:2 and switched the three external payment endpoints to fully qualified names with a trailing dot, and we enabled NodeLocal DNSCache, which also cleared the conntrack stalls. Priya Oduya, a senior SRE, reviewed the design and ran the rollout. Checkout p99 went from 1,380 ms to 910 ms, with DNS down to about 6% of p99.
+>
+> *Summary chip:* ndots:2, FQDNs, NodeLocal DNSCache; p99 1,380 to 910 ms
+
 ---
 
 #### DTECH-027 — resume_project_deep_dive
@@ -32478,6 +36602,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* cheap to run, blind outside injected pods
 
 *Judge (v1): 10.0. No material issue. The answer concisely supplies the documented overhead and both key visibility limitations without inventing details or adding coaching.*
+
+*Judge (v2): 10.0. No material issue; 'costs almost nothing' is less precise than the concrete overhead figures that follow.*
 
 **fix1**
 
@@ -32557,6 +36683,36 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. No material issue; the answer is immediately speakable and accurately covers resource overhead, protocol blind spots, and deployment scope.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> On cost, it was cheap: about 6 MiB of memory and under 5 millicores per sidecar, with roughly 0.3 ms of median added latency per lookup, and it reused the existing Prometheus scrape so there was no new storage. The build was about two weeks of work.
+> 
+> What it couldn't see: it only covers pods it's injected into, it's UDP only, so lookups that fall back to TCP after a truncated response get passed through unmeasured, and it deliberately doesn't record the queried name. It also never ran on the other two clusters.
+>
+> *Summary chip:* cheap per pod, blind spots: scope, TCP, names
+
+*Judge (v2): 9.5. 'Doesn't record the queried name' slightly overstates the source, which only establishes that names are excluded from metric labels. Otherwise, the answer is accurate and immediately speakable.*
+
+**kept build, local embedder present (speed study)**
+
+> Lanternfish added about 0.3 ms per lookup at the median, and each sidecar used roughly 6 MiB of memory and under 5 millicores of CPU. The blind spots: it only saw pods it was injected into, it was UDP only, so queries that fell back to TCP after a truncated response were passed through and not measured, and it never went to the other two clusters.
+>
+> *Summary chip:* 0.3 ms, 6 MiB, UDP only
+
+*Judge (v2): 9.9. No material issue; the blind-spot sentence is slightly list-heavy for spoken delivery.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Lanternfish added about 0.3 ms per lookup, and each sidecar used roughly 6 MiB of memory and under 5 millicores of CPU. The main blind spot was TCP: queries that fell back to TCP after a truncated response were passed through and not measured, and it only saw the pods it was injected into.
+>
+> *Summary chip:* 0.3 ms overhead, TCP lookups unmeasured
+
+**kept build, rerank off (speed study, not judged)**
+
+> Lanternfish costs almost nothing to run: about 0.3 ms of added latency per lookup, roughly 6 MiB of memory and under 5 millicores of CPU per sidecar. What it can't see is anything outside the pods it's injected into, and it's UDP only, so queries that fall back to TCP after a truncated response get passed through unmeasured.
+>
+> *Summary chip:* 0.3ms, 6MiB, UDP-only, injected pods only
+
 ---
 
 #### DTECH-028 — system_design
@@ -32574,6 +36730,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* SLO burn-rate alerts, keep paging path
 
 *Judge (v1): 7.6. Deploy-related errors are not automatically harmless; suppression could hide real incidents. Fewer pages and less muting alone cannot establish success, and the answer omits the 90-pages/week baseline.*
+
+*Judge (v2): 7.8. Frequent deploys do not establish that 1% is too strict. Deploy-based suppression lacks a customer-impact safeguard, and falling page counts or less muting cannot establish preserved incident detection. It also omits the 90-pages/week baseline.*
 
 **fix1**
 
@@ -32641,6 +36799,36 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — major_factual_error, unsupported_company_claim, missed_available_evidence. It invents existing multi-window burn-rate alerting despite the stated fixed-threshold setup, then proposes preserving it. Deploy suppression risks hiding real regressions, and “keep their coverage” provides no concrete success measure.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The first thing I'd change is the threshold itself. One percent for five minutes is too sensitive, and a flat threshold ignores that services have different traffic and different blast radius. I'd start by splitting deploy-window noise from real incidents, then move the tier-1 services to multi-window burn-rate alerts on SLOs. I'd know it worked if pages dropped and the mute stopped. I'd leave the paging pipeline and the on-call rotation alone.
+>
+> *Summary chip:* fix thresholds, keep pipeline
+
+*Judge (v2): 8.7. It labels the threshold too sensitive without checking user impact and measures success only through fewer pages and less muting. It omits the 90-pages/week baseline and safeguards against missed or delayed incident detection.*
+
+**kept build, local embedder present (speed study)**
+
+> First thing I'd change is the threshold, not the tooling. One percent for five minutes is too tight for a service that's mid-deploy, so I'd split it: a stricter burn-rate alert for steady state, and a looser one that suppresses during deploys. I'd know it worked by watching pages drop and the mute rate fall. I'd leave the paging pipeline and the on-call rotation alone, since the signal path isn't the problem.
+>
+> *Summary chip:* split deploy vs steady-state thresholds
+
+*Judge (v2): 4.0 — major_reasoning_error, missed_available_evidence. Deploy-time suppression can hide genuine outages; self-clearing does not establish harmlessness. Page and mute counts alone cannot validate detection quality. The answer also omits the 90-page baseline and supplied multi-window burn-rate approach.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> First thing I'd change is the threshold itself. One percent for five minutes is too tight for a deploy window, so I'd make it per-service and add a deploy-aware suppression or a longer window during rollouts. That's where the noise is coming from.
+> 
+> To know it worked, I'd track pages per week and the mute rate, aiming to get well under 90 while keeping the real incidents.
+> 
+> What I'd leave alone is the burn-rate style alerting on the tier-1 services, since that's the part that's actually catching things.
+>
+> *Summary chip:* tune thresholds, measure page volume, keep burn-rate alerts
+
+**kept build, rerank off (speed study, not judged)**
+
+> The first thing I'd change is the threshold itself. One percent for five minutes is too tight for a service that's mid-deploy, so I'd move to SLO-based, multi-window burn-rate alerts and let deploys suppress or widen the window. I'd know it worked by watching pages drop and the mute rate fall, not just the raw count. What I'd leave alone is the paging path itself, since the signal is real, it's the routing and thresholds that are noisy.
+
 ---
 
 #### DTECH-029 — leetcode
@@ -32670,6 +36858,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Time O(n log k): one pass to count, then a heap of size k over the distinct values. Space O(n) for the count map and the heap.
 
 *Judge (v1): 9.5. The solution is correct and compact, but the sectioned presentation is slightly less natural aloud, and the heap's insertion-and-eviction behavior is left implicit.*
+
+*Judge (v2): 9.6. The solution is correct. The time bound could more precisely distinguish input length from distinct-value count, and the sectioned prose is slightly less natural than a first-person spoken explanation.*
 
 **fix1**
 
@@ -32951,6 +37141,105 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.4. Correct and concise under the usual positive, valid-k constraint, but that assumption is unstated. For a nonempty array with k=0, the code incorrectly returns all distinct elements.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> ## Approach
+> Count each element's frequency with a hash map, then select the top k. The cleanest way is a bucket sort keyed by frequency: index i holds all elements appearing i times, so I scan buckets from the highest frequency down and collect until I have k elements. That avoids sorting all distinct values.
+> 
+> ## Code
+> ```python
+> from collections import Counter
+> 
+> def topKFrequent(nums, k):
+>     count = Counter(nums)
+>     buckets = [[] for _ in range(len(nums) + 1)]
+>     for num, freq in count.items():
+>         buckets[freq].append(num)
+> 
+>     result = []
+>     for freq in range(len(buckets) - 1, 0, -1):
+>         for num in buckets[freq]:
+>             result.append(num)
+>             if len(result) == k:
+>                 return result
+>     return result
+> ```
+> 
+> ## Complexity
+> Time is O(n), since counting and the bucket scan each touch n elements. Space is O(n) for the count map and the buckets.
+
+*Judge (v2): 9.6. No material technical issue under the standard valid-k assumption. The sectioned presentation is slightly more document-like than conversational.*
+
+**kept build, local embedder present (speed study)**
+
+> ## Approach
+> Count each element's frequency with a hash map, then keep the k largest counts. The clean way is a min-heap of size k keyed by frequency, so I never sort the whole distinct set. Push each element, and once the heap exceeds k, pop the smallest frequency. What's left is the k most frequent.
+> 
+> ## Code
+> ```python
+> from collections import Counter
+> import heapq
+> 
+> def topKFrequent(nums, k):
+>     counts = Counter(nums)
+>     heap = []
+>     for num, freq in counts.items():
+>         heapq.heappush(heap, (freq, num))
+>         if len(heap) > k:
+>             heapq.heappop(heap)
+>     return [num for freq, num in heap]
+> ```
+> 
+> ## Complexity
+> Time is O(n log k), since counting is O(n) and each of the distinct elements costs a heap operation bounded by log k. Space is O(n) for the counts, plus O(k) for the heap.
+
+*Judge (v2): 9.7. The algorithm, implementation, and complexity are correct. The only minor friction is that the code block separates the spoken approach from its complexity explanation.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> ## Approach
+> Count each element's frequency with a hash map, then keep the top k by frequency. A min-heap of size k gives O(n log k) without sorting everything, or bucket sort by frequency gives O(n) when frequencies are bounded by n.
+> 
+> ## Code
+> ```python
+> from collections import Counter
+> import heapq
+> 
+> def topKFrequent(nums, k):
+>     counts = Counter(nums)
+>     return heapq.nlargest(k, counts.keys(), key=counts.get)
+> ```
+> 
+> ## Complexity
+> Time O(n log k), since we count in one pass and the heap holds at most k elements. Space O(n) for the frequency map.
+
+**kept build, rerank off (speed study, not judged)**
+
+> ## Approach
+> Count frequencies with a hash map, then select the top k. The cleanest way is a bucket sort keyed by frequency: bucket index = count, so we avoid sorting all distinct elements and get linear time. Then walk buckets from highest frequency down, collecting elements until we have k.
+> 
+> ## Code
+> ```python
+> from collections import Counter
+> 
+> def topKFrequent(nums, k):
+>     count = Counter(nums)
+>     buckets = [[] for _ in range(len(nums) + 1)]
+>     for num, freq in count.items():
+>         buckets[freq].append(num)
+> 
+>     result = []
+>     for freq in range(len(buckets) - 1, 0, -1):
+>         for num in buckets[freq]:
+>             result.append(num)
+>             if len(result) == k:
+>                 return result
+>     return result
+> ```
+> 
+> ## Complexity
+> Time O(n), since counting is one pass and bucket traversal is bounded by n. Space O(n) for the counter and buckets.
+
 ---
 
 #### DTECH-030 — tradeoffs_followups
@@ -32968,6 +37257,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* heap keeps top k in log k
 
 *Judge (v1): 9.5. Slightly longer than this quick follow-up needs. The sorting comparison would be more precise using the number of distinct values rather than n.*
+
+*Judge (v2): 9.5. The explanation is sound but slightly long for this short follow-up. The sorting comparison would be more precise using m, the number of distinct values, rather than n.*
 
 **fix1**
 
@@ -33039,6 +37330,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.3. The streaming justification is misleading: a size-k heap alone cannot maintain exact top-k frequencies without tracking counts for other elements. The otherwise useful comparison is also longer than this brief follow-up needs.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> I actually didn't use a heap here. I went with bucket sort because it gets the whole thing to O(n), while a heap would be O(n log k) since you push each distinct element and pop down to k. The heap is the more general answer and it's what I'd reach for if the frequencies were huge or I only wanted a streaming top-k, but for this problem the bucket approach is simpler and faster.
+
+*Judge (v2): 9.5. The heap's O(k) selection-space advantage is left implicit. The streaming aside is less useful and needs qualification because changing frequencies require maintained counts and appropriate heap updates.*
+
+**kept build, local embedder present (speed study)**
+
+> Because I only need the top k, not a full ordering. A min-heap of size k keeps the k largest frequencies seen so far, and the smallest of those sits at the root, so it's the one to evict the moment a bigger count shows up. That gives me O(n log k) instead of sorting all the distinct elements at O(n log n), and it's a real win when k is small and the array has many distinct values. If k were close to the number of distinct elements, sorting or quickselect would be just as good, so the heap is the choice that scales with k rather than with the whole set.
+>
+> *Summary chip:* heap keeps top k, O(n log k)
+
+*Judge (v2): 9.4. The explanation is sound but longer than this quick follow-up needs. The complexity comparison gives valid worst-case bounds but would be more precise if it distinguished array length from the number of distinct values.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> A heap lets me keep only the k best candidates instead of ordering everything. I push each distinct element onto a min-heap keyed by frequency, and once the heap exceeds k I pop the smallest, so the heap always holds the current top k and the root is the weakest one still in the running. That gives O(n log k) instead of the O(n log n) of sorting all frequencies, and when k is much smaller than n that's a real saving. The alternative is bucket sort by frequency, which is O(n) since a frequency can't exceed n, but the heap is simpler and doesn't depend on that bound.
+>
+> *Summary chip:* heap keeps top k, avoids full sort
+
+**kept build, rerank off (speed study, not judged)**
+
+> I actually didn't use a heap here. I went with bucket sort because the frequencies are bounded by n, so I can index directly by count and get O(n) time. A heap would give me O(n log k) instead, which is still fine, but it's strictly more work than the bucket approach when the frequency range is this small. The heap is the better call when the counts aren't bounded or when I want to stream elements and keep only the top k without holding everything in memory.
+>
+> *Summary chip:* bucket sort beats heap here
+
 ---
 
 #### DTECH-031 — dsa_theory
@@ -33056,6 +37373,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* bucket by count, O(n)
 
 *Judge (v1): 9.7. The final sentence is too categorical: bucketing also works for small k, and whether it is preferable depends on memory constraints, especially with a huge array.*
+
+*Judge (v2): 9.9. The algorithm and complexity are correct. Calling it the right choice “exactly when” k is near the distinct count slightly overstates matters: allocating O(n) buckets can be wasteful when n greatly exceeds the distinct count.*
 
 **fix1**
 
@@ -33121,6 +37440,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.1. The O(n) answer is correct, but dismissing heaps categorically overlooks memory: O(n) bucket storage can be unattractive for a huge array even when k approaches the distinct count.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Yes, and that's exactly where bucket sort wins. When k is close to the number of distinct values, a heap's log k factor buys you almost nothing, since you're keeping nearly everything anyway. Bucket sort is O(n) regardless of k, so it beats n log k here. The only catch is the frequency range has to fit the bucket array, which it does since no element appears more than n times.
+>
+> *Summary chip:* bucket sort is O(n), beats n log k
+
+*Judge (v2): 9.3. The linear-time explanation is correct, but it glosses over memory despite the huge-array premise. Frequencies being bounded by n makes bucket indexing valid; it does not make allocating n+1 buckets practical.*
+
+**kept build, local embedder present (speed study)**
+
+> Yes, if k is close to the number of distinct values, the heap is the wrong tool. Counting is still O(n), but then I'd just sort the distinct frequencies, which is O(d log d) with d distinct values, or use quickselect for O(d) average. Since d is close to k here, that beats n log k.
+
+*Judge (v2): 8.1. Quickselect is valid, but sorting does not asymptotically improve the heap when k≈d: both take O(n+d log d). The answer conflates tightening the heap's loose complexity bound with improving the algorithm.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Yes, when k is close to the number of distinct values, the heap's log k factor stops paying off. Counting is O(n), and after that I can bucket the distinct elements by frequency, since a frequency can't exceed n, then walk the buckets from the top down until I've collected k. That's O(n) overall, independent of k.
+
+**kept build, rerank off (speed study, not judged)**
+
+> Yes, and I'd go back to the bucket sort. When k is close to the number of distinct values, a heap's log k advantage mostly disappears, so O(n log k) is close to O(n log n). Bucketing by frequency is O(n) regardless of k, since counts are bounded by the array length.
+
 ---
 
 #### DTECH-032 — dry_run
@@ -33142,6 +37483,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* grace decides merge or split
 
 *Judge (v1): 4.6 — missed_available_evidence, ai_epistemic_leak, important_question_unanswered. The supplied file contains both examples, but the response claims they are unavailable and substitutes repetitive generic merge logic without either return value or a concrete trace.*
+
+*Judge (v2): 4.8 — missed_available_evidence, ai_epistemic_leak, important_question_unanswered. It claims the example inputs are unavailable despite the attached specification, then substitutes repetitive generic merge logic for the requested outputs and trace.*
 
 **fix1**
 
@@ -33243,6 +37586,38 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 10.0. None. The response accurately traces both examples, explains the differing outputs, and provides immediately speakable wording without unnecessary implementation details.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> For example two, grace is zero, so only windows that touch or overlap merge. [5, 10] and [10, 12] touch at 10, so they collapse into [5, 12]. Then [13, 20] starts at 13, which is more than 12 plus zero, so it stays separate. The merge returns [[5, 12], [13, 20]].
+> 
+> For example three, grace is one. Now the gap from 12 to 13 is exactly one minute, which is within grace, so [13, 20] merges in too. The result is [[5, 20]], not [5, 21], because grace only decides whether windows merge, it never extends the end. The two outputs differ purely because that one-minute gap is bridged at grace 1 and left alone at grace 0.
+>
+> *Summary chip:* grace 0 splits, grace 1 merges
+
+*Judge (v2): 10.0. No material issues. Both traces are correct, immediately speakable, and clearly explain why the outputs differ.*
+
+**kept build, local embedder present (speed study)**
+
+> Example 2 returns [[5, 12], [13, 20]] and example 3 returns [[5, 20]], and the only difference between the inputs is grace, 0 versus 1.
+> 
+> In both, [5, 10] and [10, 12] merge because they touch, so the current merged window ends at 12. Then [13, 20] starts at 13. With grace 0, 13 is greater than 12 plus 0, so it stays separate and we get two windows. With grace 1, 13 is less than or equal to 12 plus 1, so it merges in, and the merged window ends at the largest end it absorbed, which is 20, not 21. Grace only decides whether they merge, it never extends the end.
+>
+> *Summary chip:* grace 0 splits, grace 1 merges, end stays 20
+
+*Judge (v2): 10.0. No material issues. The answer correctly traces both examples, explains the differing outputs, and explicitly avoids extending the endpoint by grace.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Example 2 returns [[5, 12], [13, 20]] and example 3 returns [[5, 20]], and the only difference between the inputs is grace, 0 versus 1. In both, [5, 10] and [10, 12] touch, so they merge into [5, 12] because a next start equal to the current end always merges, even at grace 0. Then [13, 20] comes in: its start is 13, and the current merged end is 12, so the gap is 1. With grace 0, 13 is not less than or equal to 12, so it stays separate and you get two windows. With grace 1, 13 is less than or equal to 12 plus 1, so it merges, and the result ends at 20, the largest end absorbed, not 21, since grace only decides whether to merge and never extends the window.
+>
+> *Summary chip:* grace 0 splits, grace 1 merges
+
+**kept build, rerank off (speed study, not judged)**
+
+> Example 2 returns [[5, 12], [13, 20]] and example 3 returns [[5, 20]], and the only difference between the inputs is grace, 0 versus 1. In both, [5, 10] and [10, 12] merge because the next start equals the current end, so touching windows always merge even at grace 0. That gives [5, 12] in both cases. Then [13, 20] starts one minute after 12. With grace 0, 13 is greater than 12, so it stays separate. With grace 1, 13 is less than or equal to 12 plus 1, so it merges in. The merged window ends at the largest end it absorbed, which is 20, not 21, because grace only decides whether to merge and never extends the window.
+>
+> *Summary chip:* grace 0 splits, grace 1 merges
+
 ---
 
 #### DTECH-033 — complexity_only
@@ -33260,6 +37635,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* O(n log n) time, O(n) space
 
 *Judge (v1): 7.5 — missed_available_evidence. The O(1)-space alternative overlooks input preservation and sorting workspace: sorting in place alone does not establish constant extra space. O(n log n) also does not explain or guarantee the cited sub-second runtime.*
+
+*Judge (v2): 7.7 — missed_available_evidence. The O(1) extra-space alternative is unjustified: the input must remain unchanged, and an in-place sort does not automatically use constant workspace. The main O(n log n) time and O(n) space bounds are correct.*
 
 **fix1**
 
@@ -33331,6 +37708,32 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.0. The complexity analysis is correct, but the unqualified sub-second runtime claim is unsupported for the candidate's implementation. The supplied benchmark applies only to the reference solution; asymptotic complexity does not guarantee wall-clock performance.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Sorting dominates, so it's **O(n log n)** time. The merge pass itself is a single linear sweep, **O(n)**. Space is O(n) for the sorted copy and the output, since I don't mutate the input. With n up to 200,000 that's well under a second in Python.
+>
+> *Summary chip:* O(n log n) time, O(n) space
+
+*Judge (v2): 9.2. The asymptotic analysis is correct, but “well under a second” overstates the evidence: the supplied benchmark concerns the reference solution, not the candidate’s implementation.*
+
+**kept build, local embedder present (speed study)**
+
+> Sorting dominates, so it's **O(n log n)** time. The merge pass itself is a single linear scan, **O(n)**, since each window is absorbed at most once. Space is O(n) for the sorted copy, and I don't mutate the input. With n up to 200,000 that's well under a second in Python.
+>
+> *Summary chip:* O(n log n) time, O(n) space
+
+*Judge (v2): 9.1. The complexity analysis is correct, but “well under a second” is unsupported for the candidate’s implementation and environment. The brief reports sub-second performance only for its reference solution.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> Sorting dominates, so it's **O(n log n)** time. The merge pass itself is a single linear sweep, **O(n)**, since each window is absorbed at most once. Space is O(n) for the sorted copy, and I don't mutate the input.
+
+**kept build, rerank off (speed study, not judged)**
+
+> Sorting dominates, so it's **O(n log n)** time. The merge pass itself is a single linear scan, **O(n)**, since each window is compared once against the current merged window. Space is O(n) for the sorted copy and the output, and I don't mutate the input.
+>
+> *Summary chip:* O(n log n) time, O(n) space
+
 ---
 
 #### DTECH-034 — dsa_theory
@@ -33346,6 +37749,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The batch merge goes away. I'd keep a sorted structure of the merged windows, and on each new window, insert it and merge with any neighbor whose gap is within grace. For "is minute t quiet," I binary search for the window containing t, so that's O(log n) per query, and insertion is O(log n) plus the merges.
 
 *Judge (v1): 9.2. The high-level design is sound, but the backing structure and merge cost are unspecified, so logarithmic insertion is not established; an ordinary sorted array would still require linear-time shifts.*
+
+*Judge (v2): 9.1. The structure and update bound are underspecified: sorted arrays require linear insertion, while tree updates depend on the number of absorbed intervals. Half-open membership and dropping empty windows are not explicit.*
 
 **fix1**
 
@@ -33411,6 +37816,28 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — major_reasoning_error. The claimed O(log n) per insertion ignores merging k existing intervals. With ordinary balanced-tree deletions this takes O((k+1) log n); a logarithmic amortized bound needs explicit qualification.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The batch design breaks because I can't sort what I haven't seen. I'd keep the merged windows in a structure ordered by start, so each new window is inserted and merged against its neighbors in O(log n), and answer "is minute t quiet" with a binary search for the window containing t. That's O(log n) per insert and per query, and it stays correct as windows arrive out of order.
+
+*Judge (v2): 4.0 — major_reasoning_error. The claimed O(log n) per insertion ignores a new window absorbing many existing intervals. Neighbor-by-neighbor merging must account for those updates; the answer supplies no algorithm justifying its worst-case bound.*
+
+**kept build, local embedder present (speed study)**
+
+> The batch design doesn't work here, because sorting assumes you have all the windows. Instead I'd keep an ordered structure of disjoint merged intervals, like a balanced BST or a sorted list keyed by start. Each incoming window gets inserted and merged with its neighbors in place, and "is minute t quiet" becomes a lookup for the interval containing t. Insert is O(log n) plus merges, query is O(log n).
+
+*Judge (v2): 8.2. The online structure is sensible, but sorted-list insertion is O(n), not O(log n). “Plus merges” also leaves the update bound unspecified, particularly the cost of deleting absorbed intervals from a balanced tree.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The batch design breaks because I can't sort what I haven't seen. I'd keep the merged windows in a balanced BST or sorted structure keyed by start, and on each arrival insert it and merge with its left and right neighbors, which is O(log n) per window. For "is minute t quiet," I binary search for the window whose start is the greatest start less than or equal to t, then check t is less than that window's end. Grace complicates it: a new window can bridge two existing ones, so I merge across the gap when start is less than or equal to end plus grace.
+>
+> *Summary chip:* incremental insert, merge neighbors, binary search query
+
+**kept build, rerank off (speed study, not judged)**
+
+> The batch design doesn't carry over, because there's no full list to sort. I'd keep the merged windows in a balanced BST or sorted structure keyed by start, and on each arrival insert it and merge with its neighbors while start <= end + grace. For "is minute t quiet," I binary search for the window containing t, which is O(log n) per query. Insertion is O(log n) plus merges, and I'd keep the invariant that stored windows are already disjoint and sorted.
+
 ---
 
 #### DTECH-035 — debugging
@@ -33452,6 +37879,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Unpacking gives `right` and `ch`, and the `seen[ch] >= left` guard stops `left` from sliding back on a stale index.
 
 *Judge (v1): 4.0 — major_factual_error. The opening diagnosis is false: the original loop already unpacks the index and character, so right is defined. The corrected guard fixes the actual bug, but the explanation introduces a serious Python misconception and omits a failing example.*
+
+*Judge (v2): 4.0 — major_factual_error. The corrected code is valid, but the opening diagnosis is false: the original loop already unpacks `right` and `ch`. This materially misleads the candidate about Python semantics. A failing example is also missing.*
 
 **fix1**
 
@@ -33676,6 +38105,90 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 4.0 — major_factual_error. The patch and final explanation are correct, but the opening falsely claims the already-unpacked loop leaves right undefined and crashes on 'abcabcbb'. The gist repeats the nonexistent unpacking issue.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Two bugs. `enumerate(s)` gives you `(index, character)` tuples, so `ch` is a tuple, not a character, and `right` is never assigned anywhere, so it crashes on the first iteration. Also `left` can jump backwards when a repeat sits before it.
+> 
+> ```python
+> def length_of_longest_substring(s):
+>     seen = {}
+>     left = 0
+>     best = 0
+>     for right, ch in enumerate(s):
+>         if ch in seen and seen[ch] >= left:
+>             left = seen[ch] + 1
+>         seen[ch] = right
+>         best = max(best, right - left + 1)
+>     return best
+> ```
+> 
+> The `seen[ch] >= left` guard keeps `left` monotonic, which is what stops the window from ever shrinking incorrectly.
+>
+> *Summary chip:* unpack enumerate, guard left from going backwards
+
+*Judge (v2): 4.0 — major_factual_error, missed_available_evidence. The original loop already unpacks `right, ch`; claiming `ch` is a tuple and `right` is unassigned is false. The gist reinforces this invented bug. The corrected code works, but no failing input is demonstrated.*
+
+**kept build, local embedder present (speed study)**
+
+> The bug is that `enumerate(s)` yields `(index, char)` tuples, so `ch` is never a character and `right` is never defined. On `"abcabcbb"` it crashes on the first iteration.
+> 
+> ```python
+> def length_of_longest_substring(s):
+>     seen = {}
+>     left = 0
+>     best = 0
+>     for right, ch in enumerate(s):
+>         if ch in seen and seen[ch] >= left:
+>             left = seen[ch] + 1
+>         seen[ch] = right
+>         best = max(best, right - left + 1)
+>     return best
+> ```
+> 
+> Unpacking the tuple gives `right` and `ch`, and the `seen[ch] >= left` guard stops a stale index from moving `left` backwards.
+
+*Judge (v2): 4.0 — major_factual_error. The original loop already unpacks the tuple correctly, and "abcabcbb" returns 3 rather than crashing. The corrected code works, but the primary diagnosis and claimed failure are false.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The bug is that `enumerate` gives you `(index, char)` pairs, so `ch` is a tuple, not the character, and `right` is never defined. On `"abcabcbb"` it crashes on the first iteration.
+> 
+> ```python
+> def length_of_longest_substring(s):
+>     seen = {}
+>     left = 0
+>     best = 0
+>     for right, ch in enumerate(s):
+>         if ch in seen and seen[ch] >= left:
+>             left = seen[ch] + 1
+>         seen[ch] = right
+>         best = max(best, right - left + 1)
+>     return best
+> ```
+> 
+> Unpacking the index into `right` fixes the crash, and the `seen[ch] >= left` guard stops `left` from moving backwards.
+
+**kept build, rerank off (speed study, not judged)**
+
+> The bug is that `enumerate` gives you `(index, char)` tuples, so `ch` is never a character and `right` is never defined. On `"abcabcbb"` it crashes immediately. Here's the fix:
+> 
+> ```python
+> def length_of_longest_substring(s):
+>     seen = {}
+>     left = 0
+>     best = 0
+>     for right, ch in enumerate(s):
+>         if ch in seen and seen[ch] >= left:
+>             left = seen[ch] + 1
+>         seen[ch] = right
+>         best = max(best, right - left + 1)
+>     return best
+> ```
+> 
+> Unpacking `enumerate` gives you `right` and `ch`, and the `seen[ch] >= left` guard stops a stale index from moving `left` backwards.
+>
+> *Summary chip:* unpack enumerate, guard stale index
+
 ---
 
 #### DTECH-036 — dry_run
@@ -33693,6 +38206,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* need the actual "abba" problem statement
 
 *Judge (v1): 2.3 — missed_available_evidence, important_question_unanswered, insufficient_answer. The answer ignores the preceding code and fix, treating 'abba' as an unknown problem rather than the input to trace. It unnecessarily requests information already available and provides no walkthrough.*
+
+*Judge (v2): 2.3 — missed_available_evidence, important_question_unanswered. It ignores the preceding substring code and treats 'abba' as an unknown problem, requesting unnecessary clarification instead of tracing the algorithm. The gist reinforces this context failure.*
 
 **fix1**
 
@@ -33860,6 +38375,51 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.1 — important_question_unanswered. The explanation is technically sound but repeats the general algorithm instead of walking through "abba". It never shows the pointer updates, applies the guard to the final `a`, or states the result.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> On **abba** the fixed version returns 2. Tracing it:
+> 
+> 1. right=0, 'a' is new, seen['a']=0, window is "a", best=1.
+> 2. right=1, 'b' is new, seen['b']=1, window is "ab", best=2.
+> 3. right=2, 'b' repeats inside the window, so left jumps to seen['b']+1=2, window shrinks to "b", best stays 2.
+> 4. right=3, 'a' was last seen at 0, but that index sits behind left, so the window is still "ba" and best stays 2.
+> 
+> Step 4 is the whole point of the guard. Without `seen[ch] >= left`, left would snap back to 1 and you'd report 3 for the window "bba", which is the wrong answer.
+>
+> *Summary chip:* abba trace shows why left is guarded
+
+*Judge (v2): 10.0. The walkthrough is correct and directly useful. A minor missed opportunity is correcting the earlier false claim that the original enumerate unpacking was broken.*
+
+**kept build, local embedder present (speed study)**
+
+> ABBA is a lock-free approach to concurrent data structures, usually a stack or queue. The idea is that instead of using locks, you let threads race and then detect and resolve conflicts after the fact.
+> 
+> The name comes from the four operations: **Add**, **Borrow**, **Balance**, and **Announce**. A thread adds a node, borrows a reference to the current head, balances by checking whether the structure is in a consistent state, and announces its change so other threads can see it. If two threads conflict, one detects the inconsistency and retries.
+> 
+> The key insight is that you only need a single atomic compare-and-swap on the head pointer, and the rest of the coordination happens through the structure itself. It's mostly of theoretical interest, since in practice the retry overhead often makes it slower than a well-tuned lock-based or CAS-based structure.
+>
+> *Summary chip:* lock-free concurrency, add borrow balance announce
+
+*Judge (v2): 1.7 — major_factual_error, missed_available_evidence, important_question_unanswered. It ignores the substring-debugging context and fabricates an ABBA concurrency algorithm with an Add/Borrow/Balance/Announce expansion. It never traces the requested input or explains the actual fix.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> ABBA is a lock-free approach to concurrent data structures, and the name comes from its four operations: **Atomic load, Better, Better, Atomic store**. The idea is that instead of using locks, threads coordinate through a shared atomic pointer, and each thread does a load, computes a new version, and tries to atomically swap it in with a compare-and-swap. If the CAS fails because another thread changed the pointer, the thread retries.
+> 
+> The classic use is a concurrent stack or queue where you keep an immutable snapshot of the structure and publish a new head pointer. The tricky part is the ABA problem: a thread reads pointer A, another thread pops A, pushes something, then pushes A back, so the first thread's CAS sees A and succeeds even though the structure changed underneath it. The usual fix is a tagged pointer or version counter alongside the address, so the CAS compares both.
+>
+> *Summary chip:* atomic load, CAS retry, ABA tagging
+
+**kept build, rerank off (speed study, not judged)**
+
+> ABBA is a lock-free approach to concurrent data structures, usually a stack or queue. The idea is that instead of using locks, you let threads make changes optimistically and then verify nothing interfered.
+> 
+> The name comes from the four steps: **Add**, **Borrow**, **Bump**, **Adjust**. A thread adds a new node, borrows a reference to the current head, bumps a version counter, and adjusts pointers. If another thread changed the structure in between, the version check fails and you retry.
+> 
+> The key trick is tagging pointers with a version number so you can detect concurrent modification without locking. It's a form of optimistic concurrency, similar in spirit to compare-and-swap loops.
+>
+> *Summary chip:* lock-free stack, version-tagged pointers, retry
+
 ---
 
 #### DTECH-037 — resume_project_deep_dive
@@ -33875,6 +38435,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The resume says 31 percent, not 41, so let me correct that first. Lanternfish was a Rust sidecar I wrote that exports per-pod DNS lookup latency to Prometheus, and that's what surfaced the 31 percent of p99 on the checkout path coming from DNS resolution. On the measurement side, I'd want to walk you through exactly how I instrumented the lookups, since that's the part worth getting into.
 
 *Judge (v1): 6.0 — missed_available_evidence, important_question_unanswered, insufficient_answer. It corrects the percentage but never explains the measurement or implementation, despite detailed design notes. The final sentence promises an explanation instead of providing one.*
+
+*Judge (v2): 6.5 — missed_available_evidence, important_question_unanswered. It correctly fixes the percentage but promises an explanation instead of providing one. The supplied notes contain the actual timing method, proxy mechanism, and metric, none of which the answer explains.*
 
 **fix1**
 
@@ -33950,6 +38512,34 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 8.7. The opening is mildly meta, and the measurement account omits lanternfish_lookup_seconds and the documented rollout scope. Otherwise, it accurately describes the sidecar and corrects the interviewer.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> The resume says 31 percent, so let me correct that first: DNS was 31 percent of p99 on checkout, not 41. I measured it with Lanternfish, a Rust sidecar on the tokio runtime using hickory-proto to parse DNS messages. It listens on 127.0.0.1:53, forwards each query unchanged to the cluster DNS IP, and times from arrival to response, exporting a Prometheus histogram with qtype, rcode and upstream labels. The name isn't a label, to keep cardinality bounded.
+>
+> *Summary chip:* 31 percent, measured by Rust sidecar
+
+*Judge (v2): 9.2. The explanation is accurate and speakable, but leaves lanternfish_lookup_seconds unnamed. Adding the available measurement scope—14 checkout deployments over three weeks—would better contextualize the reported finding.*
+
+**kept build, local embedder present (speed study)**
+
+> The resume says 31 percent, so let me be precise: 31% of p99 on the checkout path came from DNS resolution. I measured it with Lanternfish, a Rust sidecar on the tokio runtime using hickory-proto to parse DNS messages. It listened on 127.0.0.1:53, forwarded each query unchanged to the cluster DNS service IP, and timed the lookup from arrival to response, exporting a Prometheus histogram with qtype, rcode and upstream labels. The name was deliberately not a label, to keep cardinality bounded.
+>
+> *Summary chip:* sidecar timed DNS per pod, 31% of p99
+
+*Judge (v2): 9.4. The explanation is accurate and speakable, but omits the metric name lanternfish_lookup_seconds. Briefly explaining the pod’s localhost nameserver configuration would also clarify how application queries reached the sidecar.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> The 41 percent figure is the one I'd want to correct: what Lanternfish actually showed was **31 percent** of p99 on the checkout path coming from DNS resolution. I measured it with a Rust sidecar on the tokio runtime, using hickory-proto to parse DNS messages. It listened on 127.0.0.1:53, forwarded each query unchanged to the cluster DNS service IP, and timed the lookup from arrival to response, exporting a Prometheus histogram with qtype, rcode and upstream labels. The name itself wasn't a label, to keep cardinality bounded.
+>
+> *Summary chip:* Rust sidecar timed per-pod DNS lookups
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> The resume says 31 percent, not 41, so I'd want to check which number I'm looking at. On the measurement: Lanternfish was a Rust sidecar on the tokio runtime using hickory-proto, injected into the checkout pods. The pod's dnsConfig pointed its first nameserver at 127.0.0.1, and the sidecar listened on 127.0.0.1:53 over UDP, forwarding each query unchanged to the cluster DNS service IP and timing it from arrival to response. It exported a Prometheus histogram, lanternfish_lookup_seconds, with 12 buckets from 1 ms to 2.5 s, labeled by qtype, rcode and upstream, deliberately not by queried name to keep cardinality bounded. The existing scrape picked it up every 15 seconds, so no new storage. That's what gave per-pod data CoreDNS couldn't.
+>
+> *Summary chip:* Rust sidecar timed per-pod DNS lookups
+
 ---
 
 #### DTECH-038 — tradeoffs_followups
@@ -33967,6 +38557,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* sidecar beat CoreDNS metrics and eBPF
 
 *Judge (v1): 9.8. Accurate, fully grounded, and immediately speakable. The only minor weakness is that the main rationale arrives after the alternatives, making this short follow-up slightly longer than necessary.*
+
+*Judge (v2): 9.8. Fully grounded and immediately speakable, but slightly longer than this brief follow-up needs; the main rationale arrives after the alternatives.*
 
 **fix1**
 
@@ -34044,6 +38636,34 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. Accurate, fully grounded, and immediately speakable; the five-sentence comparison is slightly longer than this brief follow-up needs.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> We looked at three options. CoreDNS metrics were already there but aggregated per replica, not per pod, and blind to how many search-domain expansions one lookup triggered. An eBPF probe would've been per-pod without touching pods, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated four to six weeks. The sidecar was per-pod by construction, easy to remove, and about two weeks of work. The trade-off is it only sees pods it's injected into, and it adds one local hop per lookup.
+>
+> *Summary chip:* per-pod data, cheap, removable
+
+*Judge (v2): 9.7. The rationale and trade-offs are fully supported; the five-sentence answer could be tighter for this short live follow-up.*
+
+**kept build, local embedder present (speed study)**
+
+> We looked at three options. CoreDNS metrics were already there, but aggregated per replica and blind to how many expansions one lookup triggered. An eBPF probe would've given per-pod data without touching pods, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated four to six weeks. The sidecar was per-pod by construction, easy to remove, and about two weeks of work. The trade-off is it only sees pods it's injected into, and it adds one local hop per lookup.
+>
+> *Summary chip:* per-pod data, cheap, removable
+
+*Judge (v2): 9.8. No material issue; the three-option comparison is slightly longer than necessary for this brief follow-up, but every point is relevant and supported.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> We considered three options. CoreDNS metrics already existed, but they're aggregated per replica, not per pod, and blind to how many search-domain expansions one application lookup triggers. An eBPF probe would've given per-pod data without touching pods, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated 4 to 6 weeks. The sidecar was per pod by construction, easy to remove, and about 2 weeks of work. The trade-off is it only sees pods it's injected into, and it adds one local hop per lookup.
+>
+> *Summary chip:* per-pod data, cheap, removable
+
+**kept build, rerank off (speed study, not judged)**
+
+> We considered three options. CoreDNS metrics already existed but were aggregated per replica, not per pod, and blind to how many search expansions one lookup triggered. An eBPF probe would have given per-pod data without touching pods, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated 4 to 6 weeks. The sidecar was per pod by construction, easy to remove, and about 2 weeks of work. The trade-off is it only sees pods it's injected into, and it adds one local hop per lookup.
+>
+> *Summary chip:* sidecar beat CoreDNS metrics and eBPF
+
 ---
 
 #### DTECH-039 — system_design
@@ -34067,6 +38687,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* balanced postings, unique key blocks double pay
 
 *Judge (v1): 4.0 — major_reasoning_error, unsupported_personal_claim, missed_available_evidence. The answer and gist confuse duplicate-posting prevention with external double-payment prevention. They omit payment dispatch and recovery safeguards. The unsupported claim of never building a ledger also bypasses the available reconciliation and Sparrowhawk experience.*
+
+*Judge (v2): 4.0 — major_reasoning_error, unsupported_personal_claim, missed_available_evidence. A unique journal key prevents duplicate ledger entries, not duplicate bank transfers; the gist overstates that guarantee. The opening asserts unverified ledger inexperience and omits the supplied reconciliation and Sparrowhawk experience.*
 
 **fix1**
 
@@ -34172,6 +38794,42 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.5 — missed_available_evidence, important_question_unanswered. Database uniqueness prevents duplicate ledger postings, but does not cover duplicate external transfers or settlement. The opening also omits the directly relevant reconciliation job and Sparrowhawk experience.*
 
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)** — edited after streaming
+
+> Let me design it.
+> 
+> Tables: accounts, with a type and a normal balance; ledger_entries, one row per debit or credit, tied to a transaction_id; and transactions, holding the payout id, status, and a unique idempotency key. A payout writes two entries that sum to zero: debit the grower-payable account, credit the grower's wallet.
+> 
+> For retries, the idempotency key is unique in the database, so a second attempt hits the constraint and returns the original result instead of posting again. The whole thing runs in one transaction, and the balance is derived from the entries, never stored separately.
+
+*Judge (v2): 6.7 — missed_available_evidence, important_question_unanswered. Database uniqueness protects ledger posting, not external disbursement; provider retry/crash handling is absent. Crediting a wallet does not explain bank payout accounting. It also skips the experience question and relevant résumé evidence.*
+
+**kept build, local embedder present (speed study)** — edited after streaming
+
+> I haven't built a production double-entry ledger, but let me design it.
+> 
+> Three tables. Accounts, with an id, owner type, and currency. Entries, append-only, each row one debit or credit with account_id, amount, and a transaction_id. Transactions, holding the idempotency key, status, and timestamp. Every transaction's entries must sum to zero, enforced in the same DB transaction.
+> 
+> A payout debits the grower-payable account and credits the payout-clearing account, then the bank transfer settles it. For retries, the idempotency key is unique in transactions, so a duplicate insert fails and returns the original result. The transfer itself carries the same key to the provider.
+
+*Judge (v2): 5.0 — unsupported_personal_claim, missed_available_evidence. The opening asserts an unsupported absence of ledger experience and ignores the relevant reconciliation job and Sparrowhawk. The design omits the settlement journal and leaves provider idempotency guarantees and ambiguous transfer outcomes implicit.*
+
+**kept build, rerank on (speed study, not judged)** — edited after streaming
+
+> I haven't built a ledger from scratch, but at Quillfeather I migrated 38 cron scripts into a single Temporal-based scheduler, which removed a class of double-send bugs.
+> 
+> For the design: accounts table with an id and type, and a ledger_entries table that's append-only, each row carrying a debit or credit, an account_id, and a payout_id. A payout is one transaction that debits the grower-payable account and credits the grower's balance, and the sum of debits and credits must net to zero.
+> 
+> For exactly-once, I'd put a unique constraint on an idempotency key per payout, so a retried payout hits the constraint and returns the original result instead of writing again. The whole thing runs in one transaction, so it's atomic.
+
+**kept build, rerank off (speed study, not judged)** — edited after streaming
+
+> At Quillfeather I migrated 38 cron scripts into a single Temporal-based scheduler, which removed a class of double-send bugs.
+> 
+> For the design: accounts table with an id, type, and owner, and a ledger_entries table where every entry has a debit and credit account, an amount in minor units, and a reference to the payout. Entries are append-only, and balances are derived, not stored.
+> 
+> A payout is one transaction: debit the grower-payable account, credit the grower's wallet, and write both legs with the same payout_id. The retry guarantee comes from a unique constraint on that payout_id plus an idempotency key, so a duplicate insert fails and the workflow just returns the original result.
+
 ---
 
 #### DTECH-040 — database_design
@@ -34189,6 +38847,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* read committed, lock rows for writes
 
 *Judge (v1): 9.5. The technically sound answer slightly diffuses its choice by discussing normal reads and alternative write strategies. It could make explicit that the account lock is acquired before checking the balance.*
+
+*Judge (v2): 9.3. The second sentence slightly blurs the chosen transaction strategy by offering SERIALIZABLE or locking again. The SERIALIZABLE alternative would also require handling serialization failures with transaction retries.*
 
 **fix1**
 
@@ -34255,5 +38915,31 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* read committed, unique key does the work
 
 *Judge (v2): 9.0. READ COMMITTED is reasonable for the insert-only path, but atomicity comes from the transaction, and unique-key inserts can still contend. Its limits for concurrent balance checks are not explained.*
+
+**fix15 — candidate, not kept (Technical interview + Lecture rows only)**
+
+> Read committed is the default and it's enough here, because the idempotency key's unique constraint is what actually prevents the double post, not the isolation level. If I needed to read a balance and write against it atomically, I'd go repeatable read or take a row lock.
+>
+> *Summary chip:* read committed, unique key guards retries
+
+*Judge (v2): 4.0 — major_reasoning_error. READ COMMITTED plus uniqueness correctly handles duplicate retries, but PostgreSQL REPEATABLE READ does not prevent write skew over derived ledger balances: concurrent distinct payouts can both pass a balance check and overspend.*
+
+**kept build, local embedder present (speed study)**
+
+> Read committed is the default and usually enough here, but for the balance check I'd want repeatable read so the entries I read to verify sum-to-zero can't shift under me. The unique index on the idempotency key is what actually stops the double payout, and that holds at any level.
+>
+> *Summary chip:* repeatable read, unique key stops double pay
+
+*Judge (v2): 7.9. Repeatable read stabilizes snapshots, but validating a transaction's own balanced entries does not require it. If a balance check concerns available funds, repeatable read still permits write skew; the answer misses this distinction.*
+
+**kept build, rerank on (speed study, not judged)**
+
+> For a payout transaction, I'd use **read committed** as the default, since the idempotency key's unique constraint is what actually prevents the double write, not the isolation level. If I needed to read a balance and act on it in the same transaction, I'd step up to **repeatable read** to avoid lost updates.
+>
+> *Summary chip:* read committed, unique key guards retries
+
+**kept build, rerank off (speed study, not judged)**
+
+> Read committed is enough here, since the unique constraint on payout_id is what actually prevents the double pay, not the isolation level. If I also needed to read a balance and act on it in the same transaction, I'd move to repeatable read.
 
 ---

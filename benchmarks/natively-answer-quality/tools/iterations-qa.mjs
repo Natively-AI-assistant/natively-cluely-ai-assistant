@@ -26,6 +26,14 @@ const RUNS = [
   { id: 'aq2-dev-fix11', label: 'fix11', commit: 'ab264bb3', contains: 'fix10 + source-word rail' },
   { id: 'aq2-dev-fix12', label: 'fix12 (Seminar rows only)', commit: 'f0c3a263', contains: 'fix11 + Seminar study-scope clause; other modes identical to fix11' },
   { id: 'aq2-dev-fix13', label: 'fix13 (refinement conversations only)', commit: 'e000db4a', contains: 'fix12 + I26 refinement notice; every other prompt identical to fix12' },
+  // Candidates that were judged on 2026-10-02 and NOT built into the kept build (their rule failed).
+  { id: 'aq2-dev-fix14', label: 'fix14 — candidate, not kept (Looking for work rows only)', commit: 'c399f399', contains: 'fix13 + the claim pass\'s reworded fallback rule for Looking for work' },
+  { id: 'aq2-dev-fix15', label: 'fix15 — candidate, not kept (Technical interview + Lecture rows only)', commit: '3b0c1a4f', contains: 'fix13 + I28 reasoning before a TYPED answer in those two modes' },
+  { id: 'aq2-dev-fix16', label: 'fix16 — candidate, not kept (Call Center + Sales rows only)', commit: 'c399f399', contains: 'fix13 + the "no policy on file" and reply-shape notices on heard turns with no document' },
+  // Speed measurements of the kept build (2026-10-02/03): same code, Looking for work + Technical interview + Seminar.
+  { id: 'aq2-dev-emb2', label: 'kept build, local embedder present (speed study)', commit: 'e000db4a', contains: 'fix13 run with the bundled embedder weights copied in; rerank on (the default)' },
+  { id: 'aq2-dev-rron1', label: 'kept build, rerank on (speed study, not judged)', commit: 'e000db4a', contains: 'fix13, embedder present, bundled rerank awaited as in the product' },
+  { id: 'aq2-dev-rroff1', label: 'kept build, rerank off (speed study, not judged)', commit: 'e000db4a', contains: 'fix13, embedder present, NATIVELY_RAG_LOCAL_RERANK=0 — measured only, not adopted (Evin: keep as today)' },
 ];
 
 const ITERATIONS = [
@@ -102,12 +110,12 @@ const ITERATIONS = [
     'Asked whether the extra foraging helped honeybee colonies, the draft said "We didn\'t measure anything about colonies or nests" — what the paper supports — and the verifier removed it as an unsupported denial. One supp-behavior validator failed because of it (2 of 6 replays pass), which is why fix11 was not promoted despite its holdout gain.',
     'A study\'s scope is closed: in Seminar, that the study did not measure, test or include something the material never mentions is supported. No other mode\'s prompt changes. A wider exemption for any honest limit ("I can\'t confirm a credit on this call") in every mode was built first (e7325287) and taken back.',
     'Replay: the validator passes 6 of 6 with the clause. The wider exemption halved the limits removed (19 → 10 of 41 drafts) but the judge scored its 44 target drafts −0.02 (±0.24): it prefers the reply without the hedge.',
-    'Built; Seminar rows re-run in the app; decision pending its judge read.'],
+    'Kept: fix12 was promoted on its own holdout read.'],
   ['I26', 'e000db4a', 'fix13 (refinement conversations only)', 'A typed "shorter" / "simpler" / "another one" revises the previous reply',
     'Typed refinement follow-ups came back as near-copies: "shorter" after a 50-word reply returned 49 words, after 112 words 97–101; "simpler please" 129–146 words for 132. Objectively, a "shorter" request was met 0 of 4 times on dev in the main-code run and in fix11 (0 of 3 on holdout). The resolver marks the turn a rephrasing request but nothing tells the model that the PREVIOUS REPLY is what to change, or by how much.',
     'The prompt composer adds a notice on those turns (typed only, resolver-marked, previous reply of 8+ words and no code): it names the last reply and its length and gives a budget — half the words for shorter, 70% for simpler, "a DIFFERENT one" for another one. Every other prompt is byte-identical.',
     'In the app: dev 8 of 8 refinement requests met (fix11: 1 of 8), "shorter" at a median 52% of the previous reply; holdout 4 of 4. No failed rows, validators unchanged.',
-    'Kept on the objective rule written before the runs. Not judged yet (the judge account ran out of quota).'],
+    'Kept on the objective rule written before the runs. Judged 2026-10-02 against fix12 on the rows it re-ran: dev +1.13 (±0.79, 17 rows), holdout +1.07 (±1.62, 10 rows).'],
 ];
 
 const REJECTED = [
@@ -127,6 +135,12 @@ const REJECTED = [
   ['I23 "what to say instead" rules for Looking for work', '+0.13 (±0.44); the judge capped the reframed motives too'],
   ['I24 verifier stops after "UNSUPPORTED: none"', 'no latency gain (the cost is the round trip)'],
   ['A bigger generator (deepseek-v4-pro)', '7.61 vs 7.80 on the same prompts, more hard fails'],
+  ['I28 reasoning before a typed answer in Technical interview and Lecture (3b0c1a4f, fix15)', 'dev pair +0.18 (±0.25): rule not met. On every turn it read +0.45 / +0.42 with hard fails 14 → 9 and 12 → 6, at 1.3 s more to the first word (4.8 s at p95). Evin, 2026-10-02: not built — the point of Natively is to answer fast'],
+  ['Looking for work: the claim pass\'s fallback rule reworded (c399f399, fix14)', 'dev pair +0.15 (±0.33): rule not met'],
+  ['Call Center: "no policy on file" notice on heard turns (c399f399, fix16; re-tested as I29)', 'dev pair +0.42 (±0.48): rule not met. I29, on the final set\'s 116 Call Center rows in two halves, three samples per row: decision half +0.67 (±0.42) passed, confirmation half +0.18 (±0.25) failed. Not promoted'],
+  ['Sales: reply-shape notice on heard turns (c399f399, fix16)', 'dev pair +0.31 (±0.36): rule not met; in the app −0.09 dev, −0.20 holdout'],
+  ['Speed: stop awaiting the bundled rerank on heard turns', 'measured: heard first word 1.08 s → 0.81 s, retrieved passages identical on 89 of 93 rows. Evin, 2026-10-03: keep as today'],
+  ['Speed: drop the legacy reference lookup that a V3 turn runs and discards', 'about 0.19 s on heard turns with a reference file; touches the data-scope declaration. Evin, 2026-10-03: leave everything as it is. Not built'],
 ];
 
 // ── data ────────────────────────────────────────────────────────────────────
