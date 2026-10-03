@@ -548,3 +548,40 @@ Interview (74 rows; no other mode builds a profile port), the isolation set whol
 **Holdout (aggregates only, 40 rows):** rows that need a profile fact gain more than +0.5; all rows not below
 −0.15; hard fails not up. A failure at any step: not kept. Nothing lands without Evin; E2 is its own decision,
 outside the "after Astra" gate.
+
+### E2 — data and verdict (2026-10-03 20:40 UTC; run `s4` = `s3` + E2, commit `fea39964`; provisional judge)
+
+`report/profile-rows.mjs s3 s4 dev cf`, `report/profile-drafts.mjs s3 s4 dev cf`, `report/paired-builds.mjs s3 s4 iso`.
+74 rows of the two profile modes (dev 60, counterfactual 14) and the isolation set (46), all answered.
+
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. Every needed profile fact in the prompt on at least 17 of 20 rows | 8 → 19 of 20 | yes |
+| 2. No claim-pass request cut | 0 of 48 | yes |
+| 3. Isolation by code | 0 strings of the other profile in any prompt or answer; 0 profile evidence in the 8 forbidden-mode rows; 0 after deletion (2 rows); whole documents only in the profile modes with a profile loaded | yes |
+| 4. Rows that need a profile fact: gain ≥ +1.0, interval excludes 0 | 7.63 → 8.27, **+0.63 (±1.13)** | **no** |
+| 5. All rows of the two modes: not below −0.15; hard fails not up | +0.20 (±0.41); 9 → 6 | yes |
+| 6. Rows that need no profile fact: not below −0.3; hard fails not up | +0.04; 5 → 4 | yes |
+| 7. Isolation set against the control: not below −0.3; hard fails not up | +0.23 (±0.41); 6 → 5 | yes |
+| 8. Heard first word, median, not more than 150 ms above the control | 1,477 → 928 ms (request sent after 28 ms instead of 532) | yes |
+
+**Verdict: not kept by its rule.** Line 4 fails: on 20 rows the gain in the shown answers is +0.63 and its interval
+includes 0. The holdout was not run. The branch `fix/er-profile-whole` (`fea39964`) stays as it is, not landed.
+
+What the measurement shows besides the verdict, for Evin's decision:
+
+| The two profile modes, dev + counterfactual | Control `s3` | `s4` |
+|---|---:|---:|
+| Drafts (what the generator wrote), all 74 rows | 8.21 | 8.73 (+0.53 ±0.33), hard fails 13 → 8 |
+| Drafts, the 20 rows that need a profile fact | 7.64 | 8.59 (+0.94 ±0.92) |
+| Effect of the claim pass (shown − draft), all rows | +0.10 (±0.20) | −0.22 (±0.30) |
+| Shown, all 74 rows | 8.31 | 8.51, hard fails 9 → 6, critical 3 → 1 |
+| Technical Interview (shown) | 8.71 | 9.03 (+0.33 ±0.26) |
+
+The change delivered what it was built to deliver (the facts, and a first word about half a second sooner, because
+the profile's search and rerank step is skipped), and the generator's answers improved. About a third of a point
+was then taken back by the claim pass: in this run it rewrote two correct answers about the candidate's own stated
+preferences ("I'm staying in Porto, so remote within Europe is what I'm working with" → "I'll confirm where I stand
+on Rotterdam and remote and come back to you"; 9.3 → 3.4 and 9.9 → 6.2), which it had left alone in the control
+run. Whether that is this change's doing (more material in view of the pass) or the pass's run-to-run variation is
+not established: 19 answers were replaced here against 20 in the control.

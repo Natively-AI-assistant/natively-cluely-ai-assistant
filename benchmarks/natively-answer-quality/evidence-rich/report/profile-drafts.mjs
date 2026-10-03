@@ -1,0 +1,15 @@
+// The two profile modes, drafts and shown answers separately, candidate against control:
+//   node evidence-rich/report/profile-drafts.mjs s3 s4 dev cf
+// Run from benchmarks/natively-answer-quality. ER_JUDGE=opus (default, provisional) or astra.
+import { loadRun, funnel, readJsonl } from '../objective.mjs';
+import { mean, ci95 } from '../judge/score-er.mjs';
+const JUDGE = process.env.ER_JUDGE || 'opus'; const [tagA, tagB, ...sets] = process.argv.slice(2).filter((a) => a !== '--blind');
+const PI = new Set(['looking-for-work', 'technical-interview']);
+const load = (tag) => { const m = {}; for (const s of sets) { const name = `er-${s}-${tag}`; const run = loadRun(`evidence-rich/results/${name}`); const S = Object.fromEntries(readJsonl(`evidence-rich/judge/out/base/${name}.${JUDGE}.jsonl`).filter((j) => j.ok).map((j) => [j.benchmark_id, j])); const D = Object.fromEntries(readJsonl(`evidence-rich/judge/out/base/${name}.draft.${JUDGE}.jsonl`).filter((j) => j.ok).map((j) => [j.benchmark_id, j]));
+  for (const row of run.rows) { const item = run.ds.byId[row.benchmark_id]; if (!item || !PI.has(item.mode)) continue; const s2 = S[row.benchmark_id]; if (!s2) continue; const rep = !!row.answer_differs_raw_vs_rendered; const d = rep ? D[row.benchmark_id] : s2; if (!d) continue; m[`${s}|${row.benchmark_id}`] = { item, row, shown: s2.official, draft: d.official, rep, fn: funnel(item, row, run) }; } } return m; };
+const A = load(tagA), B = load(tagB); const P = Object.keys(A).filter((k) => B[k]).map((k) => ({ a: A[k], b: B[k] })); const f2 = (x) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`;
+const needs = (r) => r.fn.pi_fact_reached_prompt === true || r.fn.pi_fact_reached_prompt === false;
+console.log(`${tagA} → ${tagB}, ${sets.join('+')}, the two profile modes: ${P.length} rows with both drafts judged (judge ${JUDGE})`);
+const line = (l, xs, pick) => { if (!xs.length) return; const d = xs.map((p) => pick(p.b).overall - pick(p.a).overall); console.log(`  ${l.padEnd(44)} n ${String(xs.length).padStart(3)}  ${mean(xs.map((p) => pick(p.a).overall)).toFixed(2)} → ${mean(xs.map((p) => pick(p.b).overall)).toFixed(2)}  ${f2(mean(d))}${xs.length >= 5 ? ' ±' + ci95(d).toFixed(2) : ''}  hard fails ${xs.filter((p) => pick(p.a).hard_fail).length} → ${xs.filter((p) => pick(p.b).hard_fail).length}`); };
+for (const [t, pick] of [['DRAFTS', (x) => x.draft], ['SHOWN', (x) => x.shown]]) { console.log(t); line('all rows', P, pick); line('need a profile fact', P.filter((p) => needs(p.a)), pick); line('need no profile fact', P.filter((p) => !needs(p.a)), pick); }
+for (const [tag, k] of [[tagA, 'a'], [tagB, 'b']]) { const e = P.map((p) => p[k].shown.overall - p[k].draft.overall); const n = P.filter((p) => needs(p[k])); const en = n.map((p) => p[k].shown.overall - p[k].draft.overall); console.log(`effect of the claim pass in ${tag}: all ${f2(mean(e))} ±${ci95(e).toFixed(2)} (replaced ${P.filter((p) => p[k].rep).length}); on rows that need a profile fact ${f2(mean(en))} ±${ci95(en).toFixed(2)} (replaced ${n.filter((p) => p[k].rep).length})`); }

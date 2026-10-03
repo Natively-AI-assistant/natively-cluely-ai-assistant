@@ -158,3 +158,18 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
 * Cherry-pick check against main in a throwaway worktree (removed): the markup fix applies cleanly; E5 conflicts in
   `LLMHelper.replayAnswerCall`, where main has a later change to the same lines. Nothing was landed.
 * The gpt-6-astra chain was re-armed with the `s3` runs and their drafts added (`results/astra-chain.log`).
+
+## 19:55–20:45 — Evin's second answers; E2 built and measured
+
+* Evin: land the two fixes after gpt-6-astra confirms (rule written, see `ITERATIONS-ER.md`); leave E6 out; nothing
+  in the product for outdated files; build and measure E2.
+* The fixes were prepared and tested on top of main as branch `fix/er-followups-on-main` (`be676d88` on `6f00e104`),
+  in a throwaway worktree that was removed. Not landed.
+* Isolation control `er-iso-s3` run on `742a7170` (20:00) before any E2 edit.
+* E2 on branch `fix/er-profile-whole` (`fea39964`): intelligence suites 2,822 pass / 0 fail, llm suite 5,472 pass /
+  0 fail, typecheck clean. First cut let the port decide by itself and broke five existing retrieval tests whose
+  small fixtures now fit; the plan decides instead (`retrievalPlan.wholeProfile`), and those tests pass unchanged.
+* Run `s4` 20:12–20:25 (two profile modes on dev + counterfactual, isolation whole). E2 fails line 4 of its rule
+  (profile-fact rows +0.63 ±1.13); delivery, isolation, latency and the other judged lines hold. Holdout not run.
+* The gpt-6-astra chain was re-armed at 19:45 with the holdout of `s3` and its drafts moved up to right after the
+  baseline / E1 holdout pair.

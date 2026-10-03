@@ -503,6 +503,15 @@ was resolved by keeping main's logic with the claim pass's cap. On that branch: 
 `test:intelligence` 2,858 pass / 0 fail, the llm suite 5,768 pass / 0 fail. It was not benchmarked and is not
 landed.
 
+**E2, the résumé and job description handed over whole (Evin: "build and measure").** Built on branch
+`fix/er-profile-whole` (`fea39964`) and run on the two profile modes. Needed profile facts in the prompt: 8 of 20 →
+19 of 20. Heard first word in those modes: 1,477 → 928 ms. The generator's drafts: 8.21 → 8.73 (+0.53 ±0.33), hard
+fails 13 → 8. Shown answers: 8.31 → 8.51, hard fails 9 → 6; on the 20 rows that need a profile fact 7.63 → 8.27
+(+0.63 ±1.13). That last figure fails the rule I wrote for it (at least +1.0 with an interval that excludes 0), so
+by its rule E2 is **not kept** and the holdout was not run. Isolation held (no profile text in forbidden modes,
+after a switch or after deletion). Part of the drafts' gain was taken back by the claim pass, which in this run
+rewrote two correct answers about the candidate's own stated preferences. Evin's call.
+
 **Not established for this section:** gpt-6-astra has judged none of it (chain armed, the new runs added); the
 offline replays (E5's first screen, E6) are provisional-judge only and are not in the chain; the app runs shared the
 machine with another session's builds (one run was killed and resumed), so their latency is indicative only; main
