@@ -2146,3 +2146,47 @@ with fewer than all its rows judged on both sides is INCOMPLETE and has no verdi
 * **Probe again:** returned model `claude-opus-5-5`, one turn, 6,619 input tokens (the CLI's own environment block
   and account line are about 450 of them), parsed first time. Passes.
 * **Calibration:** 25 of 25 (need 23). Passes.
+
+## Second judge, result: none of the four changes passes under Claude Opus 5.5 either (2026-10-03 08:16Z)
+
+400 lines judged (288 distinct judgments, the rest read from the cache), every one answered by `claude-opus-5-5` in
+one turn, none repaired, none failed; an answer that is the same in both arms has one score in every pair. Table
+from `node astra/second-judge.mjs`:
+
+| change | branch | judge | rows | base | variant | gain (95 %) | hard fails | verdict |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| Reasoning on typed Technical interview + Lecture turns | i7 | gpt-6-astra | 80 | 8.40 | 8.58 | +0.18 (±0.25) | 14 → 13 | FAIL (gain under +0.3; interval includes 0) |
+| | | claude-opus-5-5 | 80 | 8.45 | 8.71 | +0.26 (±0.23) | 10 → 7 | FAIL (gain under +0.3) |
+| Looking for work, fallback rule v2 | i6 | gpt-6-astra | 40 | 7.98 | 8.13 | +0.15 (±0.33) | 7 → 6 | FAIL (gain under +0.3; interval includes 0) |
+| | | claude-opus-5-5 | 40 | 7.48 | 7.69 | +0.20 (±0.35) | 4 → 4 | FAIL (gain under +0.3; interval includes 0) |
+| Call Center, "no policy on file" notice, heard turns | i6 | gpt-6-astra | 40 | 7.47 | 7.89 | +0.42 (±0.48) | 9 → 7 | FAIL (interval includes 0) |
+| | | claude-opus-5-5 | 40 | 7.70 | 7.78 | +0.08 (±0.20) | 5 → 4 | FAIL (gain under +0.3; interval includes 0) |
+| Sales, reply-shape notice, heard turns | i6 | gpt-6-astra | 40 | 8.12 | 8.43 | +0.31 (±0.36) | 4 → 1 | FAIL (interval includes 0) |
+| | | claude-opus-5-5 | 40 | 8.04 | 8.04 | −0.01 (±0.08) | 1 → 1 | FAIL (gain under +0.3; interval includes 0) |
+
+No dev pair passed, so no second gate was run: the holdout reasoning pair and I29's confirmation half were not
+judged by Opus.
+
+**The two judges on the same 288 answers.** Mean 8.17 (astra) and 8.07 (Opus); 76 % of answers within 1.0 of each
+other; correlation 0.70 overall (0.83 on the Technical interview and Lecture answers, 0.69 Looking for work, 0.56
+Call Center, 0.42 Sales). Hard fails: both 21, astra only 23, Opus only 4, neither 240 — Opus flags about half as
+many.
+
+**What each change looks like under both.**
+* **Reasoning (i7) is the nearest to passing.** Opus reads a gain whose interval excludes 0 and three fewer hard
+  fails; it misses on size (+0.26 against +0.3). On the 31 typed rows it touches: astra 8.48 → 8.95, +0.47 (±0.63);
+  Opus 8.37 → 9.04, +0.67 (±0.56). The two judges agree on which rows moved (correlation of the row differences
+  0.69). Its cost is unchanged: first answer token 1.17 s without it, 2.49 s at low effort. Evin's decision
+  ("the point of natively is to answer fast") stands unless he changes it.
+* **Looking for work (i6).** +0.15 and +0.20, both intervals wide. The judges do not agree on which rows it helped
+  (correlation of the row differences 0.02).
+* **Call Center (i6).** astra's +0.42 rested on three rows it scored about five points apart between the arms
+  (DCC-014 +5.23, DCC-033 +4.87, DCC-017 −4.18); Opus scores the same rows −0.40, −0.84, +0.05. Opus reads +0.08.
+  This agrees with I29, where the confirmation half failed at +0.18 (±0.25).
+* **Sales (i6).** astra's +0.31 came with hard fails 4 → 1; Opus flags one hard fail in each arm and reads −0.01.
+
+**Verdict under the rule written before the data: neither branch is required.** Three of the four changes show no
+gain a second judge can see. Reasoning shows a small real one that both judges put under the bar, at a cost of
+about 1.3 s to the first word of a typed Technical interview or Lecture answer. Nothing is merged.
+
+The Opus series is in `results/replay/*.judged-opus.jsonl` and is not pooled with astra anywhere in the report.

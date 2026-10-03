@@ -84,6 +84,14 @@ App branches:
 
 `fix/aq-astra-i6` and `fix/aq-astra-i7` were NOT merged, on purpose: both are rejected candidates.
 
+**A second judge was run on those two branches (2026-10-03, at Evin's request): Claude Opus 5.5** through the
+headless Claude Code CLI (`AQ_JUDGE=opus`), on the same stored answers astra judged, rule written first. None of
+the four changes passes under it either: reasoning +0.26 (±0.23), Looking for work +0.20 (±0.35), Call Center
++0.08 (±0.20), Sales −0.01 (±0.08). `node astra/second-judge.mjs` prints both judges side by side; the entry is at
+the end of `docs/ITERATIONS-ASTRA.md`. gpt-6-astra stays the judge of record; the Opus series
+(`results/replay/*.judged-opus.jsonl`) is never pooled with it. Trap: `advisorModel` in the user's Claude Code
+settings turns a headless judgment into three model turns; the client clears it per process.
+
 **What the landing changed beyond the two merges** (main was at `5213d817`):
 * Two conflicts, each "both sides added at the same place", both kept. `AnswerPlanner`: the recruiting heard-turn
   demotion runs before main's design follow-up and visual-turn routing, so the diagram resolver still decides a turn
