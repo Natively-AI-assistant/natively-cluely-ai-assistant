@@ -1031,6 +1031,10 @@ export class LLMHelper {
     key: object | undefined | null,
     repairMessage: string,
     signal?: AbortSignal,
+    // A repair that has measured its need for more of the answer's prompt (the
+    // claim pass: llm/claimVerifier.ts, CLAIM_VERIFIER_MATERIAL_MAX_CHARS) may
+    // raise the cap for its own call. It can only raise it.
+    opts?: { maxInheritedChars?: number },
   ): Parameters<LLMHelper['streamChat']> | null {
     if (!key || typeof key !== 'object') return null;
     const args = this.answerCallByTurn.get(key);
@@ -1040,7 +1044,7 @@ export class LLMHelper {
     // half — never the repair instruction, which is the only part that says what
     // to do.
     const original = String(args[0] ?? '');
-    const cap = LLMHelper.REPLAYED_ANSWER_PROMPT_MAX_CHARS;
+    const cap = Math.max(LLMHelper.REPLAYED_ANSWER_PROMPT_MAX_CHARS, Number(opts?.maxInheritedChars) || 0);
     // The design this turn is about sits at the END of the answer prompt, so a
     // plain head-cut dropped exactly the artifact the repair has to keep. It is
     // carried across the cut, whole (a block the cut would split is moved, not

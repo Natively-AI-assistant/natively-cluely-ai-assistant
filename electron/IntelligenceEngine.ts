@@ -282,8 +282,10 @@ export class IntelligenceEngine extends EventEmitter {
         signal: AbortSignal | undefined,
         fallbackSystemPrompt?: string,
         fallbackScopes: any[] = [],
+        maxInheritedChars?: number,
     ): Parameters<LLMHelper['streamChat']> {
-        const replayed = (this.llmHelper as any).replayAnswerCall?.(turnKey, repairPrompt, signal);
+        const replayed = (this.llmHelper as any).replayAnswerCall?.(turnKey, repairPrompt, signal,
+            maxInheritedChars ? { maxInheritedChars } : undefined);
         if (replayed) {
             // A repair site that supplies its OWN system prompt means it: the
             // doc-grounded repair pass, for one, deliberately runs under a
@@ -397,7 +399,7 @@ export class IntelligenceEngine extends EventEmitter {
             material: opts.material,
             budgetMs: h.replayedAnswerHasImages?.(opts.turnKey) === true ? cv.CLAIM_VERIFIER_IMAGE_BUDGET_MS : cv.CLAIM_VERIFIER_BUDGET_MS,
             startStream: (body, signal) => this.llmHelper.streamChat(...(canReplay
-                ? this.repairCallArgs(opts.turnKey, cv.claimVerifierDraftMessage(body), signal, system)
+                ? this.repairCallArgs(opts.turnKey, cv.claimVerifierDraftMessage(body), signal, system, [], cv.CLAIM_VERIFIER_MATERIAL_MAX_CHARS)
                 : this.repairCallArgs(undefined, cv.claimVerifierStandaloneMessage(opts.material, body), signal, system))) as AsyncGenerator<string>,
             parentSignal: opts.signal,
             isSuperseded: opts.isSuperseded,
