@@ -52,3 +52,78 @@ with both numbers. If kept, it is confirmed on the holdout (aggregates only): pa
 at least +0.5 with an interval that excludes 0, and hard fails not up; a failure there reverts it.
 
 Nothing is landed on main either way.
+
+### E1 — data, dev + counterfactual (2026-10-03 16:20 UTC; provisional judge, Claude Opus 5.5)
+
+Runs `er-dev-e1`, `er-cf-e1` on `bab77f33` (270 + 63 rows, all answered), paired with `er-dev-base`, `er-cf-base`.
+
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. Every needed reference fact in the prompt ≥ 90 % | 127 / 244 → **232 / 244 (95.1 %)** | yes |
+| 2. Evidence-required rows: paired gain ≥ +1.0, interval excludes 0 | 7.30 → 8.36, **+1.06 (±0.33)**, n 257 | yes, by 0.06 |
+| 3. Missing-evidence + irrelevant-source rows: change not below −0.3 | 7.99 → 7.91, −0.07 (±0.47), n 74 | yes |
+| 4. Conflict / stale rows: change not below −0.3; stale / draft flags not up | 6.52 → 8.04, +1.52 (±0.83), n 53; flagged rows 24 → 6 | yes |
+| 5. Hard fails and critical flags not up | hard 61 → 38; critical 42 → 21 | yes |
+| 6. Heard first word (dev): median not more than +300 ms, p90 not more than +500 ms | median 2,249 → 1,826 ms; p90 3,552 → 2,507 ms | yes (faster) |
+
+All rows: 7.46 → 8.26 (+0.80 ±0.28), n 333.
+
+What else it shows:
+* The rows that had missed in the baseline (dev, 111): 5.69 → 7.87 (+2.18 ±0.56). The rows that had been delivered
+  in both (101): 8.98 → 8.92 (−0.06 ±0.36).
+* By mode on dev: General +2.01, Recruiting +1.34, Call Center +1.20, Technical Interview +0.79, Seminar +0.78,
+  Team Meet +0.68, Looking for work +0.65, Sales +0.36 (±1.03), Lecture −0.16 (±0.93; hard fails 0 → 4).
+* Cost: input tokens per turn, median 8,216 → 15,127 (p90 17,462). Typed first word 924 → 1,047 ms at the median.
+  The heard first word is earlier because the local embed and rerank step is skipped (request sent after 677 →
+  324 ms at the median). The E1 runs shared the machine with another session's packaging build, the baseline dev
+  run did not, so E1's latency is if anything overstated.
+* The claim pass replaced the shown text on 91 dev rows (66 in the baseline).
+* Rule line 3 holds on the mean, but hard fails on the rows that need no document rose 10 → 14.
+* With the facts in the prompt on 233 of 257 rows, those rows average 8.60 (p10 4.9, 18 hard fails, 10 critical =
+  4.3 %). The targets (9.2 / 8.5 / under 1 %) are not met by delivery alone.
+
+**Verdict on dev + counterfactual: every line holds. E1 goes to the holdout confirmation** (aggregates only; rule
+written above: evidence-required rows gain at least +0.5 with an interval that excludes 0, hard fails not up).
+
+---
+
+## E3 — a number the material states is not an unsupported claim (a rail on the claim pass's edit)
+
+(E2, handing the résumé and job description over whole, is described in the report as a proposal; it was not built.)
+
+**Written 2026-10-03 16:22 UTC, before the rail's effect was computed on any row.** What had been seen: per-category
+means of "shown minus draft" on the 91 dev rows of the E1 run whose shown text the claim pass replaced (drafts
+judged by the same judge): all 91 rows −0.66 (±0.45); the 57 with the evidence in the prompt −1.19 (±0.60); edits
+that drop a number −1.36 (25 rows) and −3.33 when they also add a deferral (4 rows); edits that keep every number
+−0.22 (57 rows). In the baseline run the same split was −1.74 on the 11 delivered rows and +0.54 on the 34 rows
+where the evidence was missing. Examples read on dev: a reservation number that is in the loaded trip plan replaced
+by "I'll pull up the reservation number"; a go / no-go date that is in the decision log replaced by "I'll confirm
+and come back to you".
+
+**Root cause it addresses (class I, claim verifier).** The pass lists a statement as unsupported although the
+material states it, and the rewrite then removes the specific and defers. The existing rails reject an edit that
+ADDS a number the material lacks; nothing rejects an edit that REMOVES a number the material holds.
+
+**The change.** One more deterministic rail in `acceptVerifiedAnswer` (`electron/llm/claimVerifier.ts`): the edit is
+not accepted (the streamed answer stays, with its summary chip) when it removes at least one number of the draft
+that occurs in the material and brings no number the draft did not have. `nums()` and `material` are the ones the
+existing rails use (the turn's own evidence and conversation). No model call, no latency, no prompt change.
+
+**What it cannot do.** It does not protect a computed result (a total, a date) that is not itself in the material,
+nor a name or a non-numeric fact. It keeps a draft that quoted an outdated number which the edit only removed.
+
+**Rule.** Offline first, at no model cost, because the rail is deterministic given the draft, the edit and the
+material: for every row whose shown text was replaced, the rail is applied to the recorded draft, shown text and
+prompt; a row it rejects takes its DRAFT's judgment, every other row keeps its shown judgment.
+
+On the E1 dev + counterfactual rows the rail is kept only if:
+1. it flips at least 15 rows and on those rows the paired gain (draft − shown) is at least +1.0 with a 95 %
+   interval that excludes 0;
+2. hard fails on the flipped rows do not rise;
+3. on flipped rows that need no document (missing-evidence, irrelevant-source) the mean change is not below −0.3
+   (the rail must not bring an invention back).
+
+If kept, the same computation on the E1 holdout rows (aggregates only; their drafts judged first): flipped rows
+gain at least +0.5 with an interval that excludes 0, hard fails not up. Then it is implemented with unit tests
+and one app run confirms that the implementation rejects the same rows the offline computation rejected. A
+failure at any step: not kept.
