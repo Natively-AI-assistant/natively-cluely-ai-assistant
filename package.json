@@ -139,7 +139,7 @@
     "generateUpdatesFilesForAllChannels": true,
     "appId": "com.apple.corespeechd",
     "afterPack": "./scripts/after-pack.cjs",
-    "productName": "corespeechd",
+    "productName": "Natively",
     "files": [
       "dist",
       "dist-electron",
