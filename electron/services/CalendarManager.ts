@@ -278,7 +278,8 @@ export class CalendarManager extends EventEmitter {
                 }
                 if (error) {
                     respond({ kind: 'error', reason: describeOAuthError(error, qs.get('error_description')) });
-                    finish(() => reject(new Error(error)));
+                    const description = qs.get('error_description');
+                    finish(() => reject(new Error(description ? `${error}: ${description}` : error)));
                     return;
                 }
                 try {
@@ -308,7 +309,10 @@ export class CalendarManager extends EventEmitter {
                     return;
                 }
                 redirectUri = `http://127.0.0.1:${address.port}`;
-                shell.openExternal(this.getAuthUrl(client.id, redirectUri, codeChallenge, state));
+                const authUrl = this.getAuthUrl(client.id, redirectUri, codeChallenge, state);
+                void shell.openExternal(authUrl).catch((err) => {
+                    finish(() => reject(err));
+                });
             });
 
             server.on('error', (err) => {
