@@ -206,7 +206,14 @@ describe('worker isolation — source guards', () => {
       if (seen.has(name)) return;
       let manifest;
       try { manifest = req.resolve(`${name}/package.json`, { paths: [repoRoot] }); }
-      catch { return; }          // not installed on this platform — never packed
+      catch {
+        // A package with an `exports` map that omits ./package.json (sharp from
+        // 0.35) cannot be resolved by subpath even when installed, so look at the
+        // hoisted location before concluding it is absent.
+        const hoisted = path.join(repoRoot, 'node_modules', ...name.split('/'), 'package.json');
+        if (!fs.existsSync(hoisted)) return;   // not installed on this platform — never packed
+        manifest = hoisted;
+      }
       seen.add(name);
       const j = JSON.parse(fs.readFileSync(manifest, 'utf8'));
       for (const d of Object.keys(j.dependencies ?? {})) walk(d);
