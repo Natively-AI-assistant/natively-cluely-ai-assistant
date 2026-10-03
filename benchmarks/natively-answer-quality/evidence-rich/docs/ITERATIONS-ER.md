@@ -397,3 +397,35 @@ claim pass (the shown answer where the pass changed nothing), judged on both bui
 **Holdout (aggregates only).** E7: conflict / stale drafts' hard fails not above E1's drafts', all-rows drafts not
 below −0.15. Stack: effect of the pass not below −0.10, hard fails (shown) not above E1's 15 by more than 2.
 A failure of E7's lines drops E7 from the stack (it is its own commit); a failure of the stack's lines drops E5.
+
+### E7 — data and verdict (2026-10-03 18:30 UTC; run `s2` = E1 + markup fix + E5 + E7; provisional judge)
+
+`report/stack-vs.mjs e1 s2 dev cf`. 271 of 333 prompts carried a date or version label; none had before.
+
+| Drafts (what the generator wrote), paired with E1's drafts | n | E1 | s2 | change | hard fails |
+|---|---:|---:|---:|---:|---:|
+| All rows | 333 | 8.50 | 8.41 | −0.09 (±0.16) | 40 → 44 |
+| Conflict / stale | 53 | 8.23 | 7.67 | −0.55 (±0.46) | 8 → 10 |
+| Need no document | 74 | 7.81 | 7.67 | −0.15 (±0.34) | 17 → 19 |
+| Single source | 134 | 8.92 | 8.98 | +0.06 (±0.21) | 9 → 8 |
+
+| Rule line (E7) | Measured | Holds |
+|---|---|---|
+| 1. Conflict / stale drafts: hard fails below E1's 8, mean not more than 0.2 lower | 10; −0.55 | **no** |
+| 2. All rows, drafts: not below −0.15 | −0.09 | yes |
+| 3. Rows that need no document, drafts: not below −0.25 | −0.15 | yes |
+
+**Verdict: not kept; E7 is dropped from the stack** (commit `9b8c99fa` reverted on `fix/er-followups`). The labels
+were delivered and the conflict cases got worse, not better. Read on the dev cases: where the two sources really
+disagree and the later word is an undated informal note (the lecturer's notes against the dated syllabus), the new
+notice's "give it plainly" made the draft state the dated document's value and drop the flag (two Lecture cases,
+9.0 → 4.9 and 7.5 → 4.5); the other large drops were not about dates at all. A date on a tag does not tell the
+model which document governs, and telling it "the later one holds" is wrong exactly where the benchmark's hard
+cases are. What Evin was offered as the alternative (a per-file "outdated" switch the user sets) is untested.
+
+The holdout run of `s2` was started before this verdict to save time and stopped at 32 rows when the verdict was
+known; none of its rows was judged or read.
+
+Because `s2` contained E7, its numbers do not settle E5's lines in the app (effect of the pass −0.09 ±0.11, all
+rows +0.06 ±0.22, last token to settled 1,074 ms against 1,172). E5 is run again without E7 as `s3`
+(= E1 + markup fix + E5) and read by the same lines 5–7 and the same holdout rule.
