@@ -1978,3 +1978,37 @@ V3's profile retrieval on heard turns: 296–359 ms → 3 ms at the median.
   excluded) are identical on every row; and the whole prompt is identical on the first turn of every conversation.
   (b)–(d) unchanged.
 
+## 02:00 UTC batch, 2026-10-03 — the rerank pair is spoiled by a provider stall; the five changed turns read no loss (03:25Z)
+
+Chain `b0200`: probe OK 02:00Z on `AGENTROUTER_API_KEY`, calibration 25 of 25, 167 calls, all `gpt-6-astra`, 0
+mismatches. `emb2`'s 50 remaining rows and `emb4`'s 120 judged, 0 failures.
+
+**`emb4` − `emb2` (rerank off − on), whole runs — reported only, and not usable.** It reads 8.24 → 7.62, −0.62
+(±0.45), Technical interview −1.20 (±1.10). That is not the rerank: DeepSeek stalled during the `emb4` run
+(15:06–15:15Z on 10-02). 16 of its 120 rows have no finish reason and up to four requests; six of them are the
+app's own timeout line ("The model did not produce an answer in time, so I won't guess from your profile.") after
+12–16 s, others are cut off mid-sentence. By how slow the `emb4` row was: first word over 5 s, 18 rows, −2.89;
+2.5–5 s, 11 rows, −0.45; under 2.5 s, 91 rows, −0.19 (re-run noise). The pair was written down as reported only
+before the batch; it now also has a known defect and is not quoted as a result anywhere.
+
+**Kept build without the embedder against `emb2` (embedder and rerank working), now complete:** 8.38 → 8.24,
+−0.15 (±0.25) on 120 rows; hard fails 17 → 23. No gain from semantic retrieval plus rerank on these items.
+
+**The five turns whose retrieved passages differ** (`tools/prompt-diff.mjs --list`: three Looking for work, two
+Technical interview, all heard, all with a profile). Each run's recorded prompt replayed five times to the
+generator (`rr-on`, `rr-off`), judged in the same batch window:
+
+| | rerank on | rerank off |
+|---|---:|---:|
+| mean of 25 answers | 6.18 | 7.49 |
+| hard fails of 25 | 15 | 10 |
+| per item (mean of 5) | 7.55 · 4.55 · 8.25 · 5.65 · 4.92 | 8.34 · 4.14 · 5.73 · 9.84 · 9.42 |
+
+Item differences +0.79, −0.41, −2.52, +4.19, +4.50: mean +1.31 with an interval of about ±2.6 on five items, and
+these prompts also differ in the conversation's earlier replies. It shows no loss from dropping the rerank on the
+turns it changes; it cannot show a gain.
+
+**Side observation for speed.** When the provider stalls, a heard turn waits 12–16 s and then shows the timeout
+line. That is the slowest thing a user can see in the answer path; it was 6 of 120 turns in a bad ten minutes.
+Not investigated further here.
+

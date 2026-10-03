@@ -78,12 +78,14 @@ interview and Seminar; 302 / 487 ms when a profile is loaded; typed turns 7 ms. 
 on one step, the bundled cross-encoder rerank (250 ms p50, 405 p90, on 30 of 38 lookups that reach its gate),
 which has been on by default for users since 2026-08-30. With it switched off through its own setting the wait is
 16 / 37 ms, and the retrieved passages sent to the model are identical on 88 of the 93 rows that carry any. The
-judged comparison is queued for the 02:00 UTC batch. Stopping the wait on heard turns is a behaviour change and
-waits for Evin; nothing is built. Details: `docs/ITERATIONS-ASTRA.md`, the "Speed" sections.
+five turns where the passages do differ, replayed five times each way, read 6.18 with the rerank and 7.49 without
+(five items: no loss visible, not a gain). A whole-run judged pair exists and is not usable: the provider stalled
+during the rerank-off run. Stopping the wait on heard turns is a behaviour change and waits for Evin; nothing is
+built. Details: `docs/ITERATIONS-ASTRA.md`, the "Speed" sections.
 
 **A caveat on every run in this report, checked and found harmless.** The default local embedder's weights were
 missing from the benchmark worktrees (and from the main checkout), so profile lookups ran degraded in every run.
-With the embedder working, the same 70 judged dev rows read 7.97 → 7.73 (−0.24 ±0.36): no gain, so the
+With the embedder working, the same 120 judged dev rows read 8.38 → 8.24 (−0.15 ±0.25): no gain, so the
 profile-backed modes' numbers are not understated.
 
 **The laptop's disk.** Free space fell to 0.29 GB at 11:06 UTC while another session was building, and stopped the

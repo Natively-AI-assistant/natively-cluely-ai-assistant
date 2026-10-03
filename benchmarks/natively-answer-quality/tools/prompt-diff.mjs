@@ -47,6 +47,8 @@ console.log('| turn | rows | prompt identical | system prompt differs | messages
 for (const [k, c] of Object.entries(g).sort()) console.log(`| ${k} | ${c.n} | ${c.same} | ${c.system} | ${c.messages} | ${c.withEvidence} | ${c.evidence} | ${c.evidenceSet} | ${c.missing} |`);
 const t = Object.values(g).reduce((p, c) => ({ n: p.n + c.n, same: p.same + c.same, we: p.we + c.withEvidence, e: p.e + c.evidence, es: p.es + c.evidenceSet }), { n: 0, same: 0, we: 0, e: 0, es: 0 });
 console.log(`| **all** | ${t.n} | ${t.same} | | | ${t.we} | ${t.e} | ${t.es} | |`);
+// --list: the ids whose retrieved passages differ (dev runs only).
+if (process.argv.includes('--list') && A.header.partition === 'dev' && B.header.partition === 'dev') console.log(`passages differ on: ${evDiff.join(',')}`);
 if (show && A.header.partition === 'dev') for (const id of evDiff.slice(0, show)) {
   const x = evidence(A.wire[id].messages); const y = evidence(B.wire[id].messages); let i = 0; while (i < x.length && i < y.length && x[i] === y[i]) i++;
   console.log(`\n${id}: lengths ${x.length} / ${y.length}, first difference at ${i}\n  A: ${JSON.stringify(x.slice(Math.max(0, i - 80), i + 200))}\n  B: ${JSON.stringify(y.slice(Math.max(0, i - 80), i + 200))}`);
