@@ -36,7 +36,6 @@
 // mutate process.platform).
 // ────────────────────────────────────────────────────────────────────────────
 const path = require('path');
-const fs = require('fs');
 
 // The framework's main binary, relative to the .app root. Absent/empty ⇒ the app
 // cannot launch (the @rpath load of Electron Framework fails at dyld).
@@ -158,25 +157,11 @@ async function runHook(buildResult, deps) {
       return [];
     }
 
-    // Rename staged .app bundles from "corespeechd.app" → "Natively.app"
-    // BEFORE DMG creation so Finder/Dock/Spotlight show "Natively" in the DMG.
-    // CFBundleDisplayName only works when it matches the folder name (Apple docs).
-    for (const { appPath, archDir } of staged) {
-      const disguisedPath = path.join(path.dirname(appPath), 'corespeechd.app');
-      const brandPath = path.join(path.dirname(appPath), 'Natively.app');
-      if (view.exists(disguisedPath) && !view.exists(brandPath)) {
-        try {
-          fs.renameSync(disguisedPath, brandPath);
-          log(`[verify-runtime] Renamed bundle: ${disguisedPath} → ${brandPath}`);
-          // Update the appPath for DMG building
-          const idx = staged.findIndex(s => s.appPath === appPath);
-          if (idx >= 0) staged[idx].appPath = brandPath;
-        } catch (e) {
-          warn(`[verify-runtime] Failed to rename bundle ${disguisedPath}: ${e.message}`);
-        }
-      }
-    }
-
+    // NOTE: the staged bundle is deliberately left named "corespeechd.app" (the
+    // darwin disguise alias). We do NOT rename it to "Natively.app" for a branded
+    // Finder label: that would leak the brand into the on-disk bundle path, which
+    // a proctoring scanner enumerating /Applications reads. Finder/Dock show the
+    // disguise; the brand is applied as CFBundleDisplayName only (cosmetic).
     const built = [];
     const problems = [];
 
