@@ -430,3 +430,61 @@ infer that from dates.
 * The raw run output (`results/`, `judge/out/`, `judge/cache/`; about 110 MB) is not committed. It exists only in
   the `aq-fix` worktree. Every table here is rebuilt from it by `analyze.mjs`, `pipeline-reports.mjs`,
   `paired-er.mjs` and the scripts in `report/` (`ER_JUDGE=astra` reads the canonical judge's files instead).
+
+## 15. Follow-up after Evin's decisions (2026-10-03, evening)
+
+Evin chose: land E1 now; redesign the claim pass, then measure; raise the 24,000-character cut and measure; have the
+app label dates in the prompt; find the cause of the streamed tool-call markup and fix it. Detail and rules:
+`ITERATIONS-ER.md` (E5, E6, E7). Everything below except E1 is on branch `fix/er-followups` and is NOT on main.
+
+| | What | Result | Status |
+|---|---|---|---|
+| E1 | Pack handed over whole | (section 9) | **On local main** `9fce990b`, not pushed; tests only vouch for main + E1 |
+| Markup | The model wrote its hidden working as its own tool-call markup instead of the `[[CALC]]` block the prompt asks for; the stream filter knew only `[[CALC]]`. No tool was declared. 1 in 334 calculation turns; 0 of 24 replays, so there is nothing to switch off at the source | Filter now hides that form; 34 tests; on 783 recorded answers it changes only the one affected | `d503ae4f`, ready |
+| **E5** | **The claim pass is shown the whole prompt** (its own cap, 96,000 characters; other repairs keep 24,000) | Dev + counterfactual in the app: shown 8.26 → 8.52, the pass's effect −0.23 → −0.01, hard fails 38 → 31. Blind holdout: 8.17 → 8.71, the pass's effect −0.37 → 0.00, hard fails 15 → 15, critical 8 → 5. Settle time unchanged | **Kept**, `441ed80a` |
+| E6 | The pass's CONFLICT step: a current document against an older one is not a conflict (wording, replayed offline) | +0.06 (±0.08), hard fails 32 → 27, critical 17 → 14; fails its first line (the interval includes 0) | **Not kept**, not built; Evin's call |
+| E7 | A file's own date and version on the evidence tag, and a notice saying the later final document holds | Labels delivered on 271 of 333 prompts; conflict drafts 8.23 → 7.67, hard fails 8 → 10 | **Not kept**, reverted |
+
+**The cause behind section 6.** The claim pass was never the wrong idea; it was reading a cut prompt. Once the
+pack is in the prompt (E1), the prompt is longer than 24,000 characters on 302 of 384 passes, and both surfaces cut
+it there. Shown the whole prompt, the pass replaces 71 answers instead of 113 on dev + counterfactual, costs
+nothing on the mean, and still removes capped failures (39 → 31 on dev + counterfactual). E3 and E4 (section 9)
+were attempts to work around this; neither is needed.
+
+**Why the labels failed.** A date on a tag does not say which document governs. The benchmark's hard cases are the
+ones where the later word is an undated informal note (a lecturer's correction against the dated syllabus), and the
+notice "the later-dated final document holds, give it plainly" made the answer state the dated value and drop the
+flag. The other option Evin was shown, a switch the user sets on a file, was not built or tested.
+
+**Where the product stands with E1 + the markup fix + E5** (`report/mode-table.mjs s3 dev cf holdout`, 513 rows):
+
+| Mode | Kept build | E1 | E1 + E5 |
+|---|---:|---:|---:|
+| General | 6.86 | 8.27 | 8.73 |
+| Sales | 6.60 | 7.08 | 8.24 |
+| Recruiting | 7.17 | 8.47 | 8.47 |
+| Team Meet | 7.30 | 8.40 | 8.65 |
+| Looking for work | 7.56 | 8.11 | 8.19 |
+| Lecture | 8.83 | 8.92 | 8.96 |
+| Technical Interview | 7.65 | 8.26 | 8.51 |
+| Seminar | 8.07 | 8.74 | 9.28 |
+| Call Center | 6.94 | 7.84 | 8.21 |
+| **All** | **7.44** | **8.23** | **8.58** |
+| Hard fails / critical | 100 / 61 | 53 / 29 | 46 / 23 |
+
+Rows with the evidence in the prompt, E1 + E5: mean 8.95 (±0.16), 10th percentile 6.8, critical 2.5 %, against
+targets of 9.2, 8.5 and under 1 %. Closer, still not met; by the rule of section 2 the verdict stays A (the mean
+is under 9.0 and 5.5 % of those rows are hard fails). Isolation unchanged: no file of another mode, no profile
+evidence where it is forbidden, no string of the other profile, on all 513 rows.
+
+What the 46 remaining hard fails are (`analyze.mjs`): something invented where the evidence is absent 15; the
+answer wrong with the evidence in the prompt 11; profile evidence not in the prompt 6; arithmetic 5; retrieval or a
+wrong file 4; an outdated or draft source preferred 3; addressed to the wrong party 2. The largest single item
+that is still a delivery problem is the résumé (6 of 46, and 6.6 against 9.5 on the rows that depend on it): E2,
+the résumé and JD handed over whole, is still unbuilt.
+
+**Not established for this section:** gpt-6-astra has judged none of it (chain armed, the new runs added); the
+offline replays (E5's first screen, E6) are provisional-judge only and are not in the chain; the app runs shared the
+machine with another session's builds (one run was killed and resumed), so their latency is indicative only; main
+plus these commits was not run; Windows and a packaged build were not tested.
+
