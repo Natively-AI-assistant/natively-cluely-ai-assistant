@@ -50,8 +50,13 @@ fi
 log_info "Part 1: Stopping Natively and wiping legacy data..."
 
 # Kill running processes
-killall Natively 2>/dev/null || true
-killall natively 2>/dev/null || true
+# Stop the installed app + its helpers by bundle PATH. NOT `killall corespeechd`:
+# that name also matches the REAL macOS Core Speech daemon
+# (/System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd). The app's
+# command path contains /corespeechd.app/, which the system daemon's never does.
+pkill -f '/corespeechd\.app/' 2>/dev/null || true
+killall Natively 2>/dev/null || true   # legacy pre-disguise installs
+killall natively 2>/dev/null || true   # legacy dev-built installs
 sleep 1
 
 remove_dir() {
