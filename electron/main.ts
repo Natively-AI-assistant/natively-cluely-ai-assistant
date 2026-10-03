@@ -8539,7 +8539,8 @@ export class AppState {
   // into the window title, clobbering the disguise — a proctor enumerating
   // window titles would read "Natively". In normal mode the guard is inert:
   // the page title "Natively" is the expected title there.
-  public guardWindowTitle(win: BrowserWindow | null | undefined): void {    if (!win || win.isDestroyed()) return;
+  public guardWindowTitle(win: BrowserWindow | null | undefined): void {
+    if (!win || win.isDestroyed()) return;
     const wc = win.webContents;
     const marker = wc as unknown as { __nativelyTitleGuard?: boolean };
     if (marker.__nativelyTitleGuard) return;
