@@ -429,7 +429,7 @@ async function main() {
         cards: cards.length,
         kind: cards[0] ? cards[0].getAttribute('data-diagram-kind') : null,
         state: cards[0] ? cards[0].getAttribute('data-diagram-state') : null,
-        label: cards[0] ? cards[0].querySelector('.diagram-card__label')?.textContent : null,
+        label: cards[0] ? cards[0].querySelector('[role="tab"]')?.textContent : null,
         missing: cards[0] ? cards[0].getAttribute('data-diagram-missing') : null,
         drawn: Boolean(img && img.complete && img.naturalWidth > 0),
         svg: img ? decodeURIComponent(img.src.slice(img.src.indexOf(',') + 1)) : '',

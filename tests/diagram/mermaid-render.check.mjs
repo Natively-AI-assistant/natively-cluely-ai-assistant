@@ -381,6 +381,62 @@ app.whenReady().then(async () => {
     check('SVG has no external or active content', output.ok && !output.external);
     check('PNG export: canvas is not tainted and has drawn pixels', !output.tainted && output.pngPrefix === 'data:image/png;base64,' && output.painted > 20, JSON.stringify({ tainted: output.tainted, painted: output.painted }));
 
+    // How each family is drawn: the app's own styling has to out-rank Mermaid's
+    // (several of these were written, shipped, and silently lost to a more
+    // specific rule of Mermaid's own). Read from the live drawing, not the CSS text.
+    console.log('look');
+    const look = await run(async (colors) => {
+      const d = window.__diagram;
+      const mount = async (source) => {
+        const r = await d.renderDiagram(source, colors);
+        if (!r.ok) return null;
+        const host = document.createElement('div');
+        host.style.cssText = 'position:absolute;left:-9999px;top:0';
+        host.appendChild(document.importNode(new DOMParser().parseFromString(r.svg, 'image/svg+xml').documentElement, true));
+        document.body.appendChild(host);
+        return host;
+      };
+      const style = (el) => (el ? getComputedStyle(el) : null);
+      const px = (v) => Number.parseFloat(v);
+      const out = {};
+      let host = await mount('sequenceDiagram\n  participant A as Producer Service\n  participant B as Queue\n  A->>B: enqueue\n  alt accepted\n    B-->>A: ok\n  else refused\n    B-->>A: error\n  end');
+      out.sequence = host && {
+        condition: style(host.querySelector('.loopText tspan'))?.stroke,
+        section: style(host.querySelector('.sectionTitle'))?.stroke,
+        lifeline: px(style(host.querySelector('.actor-line'))?.strokeWidth),
+        frame: px(style(host.querySelector('.loopLine'))?.strokeWidth),
+        actorHeight: Number(host.querySelector('rect.actor')?.getAttribute('height')),
+      };
+      host?.remove();
+      host = await mount('stateDiagram-v2\n  [*] --> Cart\n  Cart --> Placed: checkout submitted\n  Placed --> [*]');
+      out.state = host && { labelBox: [...host.querySelectorAll('.edgeLabel rect')].map((r) => style(r).opacity) };
+      host?.remove();
+      host = await mount('classDiagram\n  class Spot {\n    +int number\n    +isFree() bool\n  }\n  class CompactSpot\n  Spot <|-- CompactSpot\n  Spot "1" --> "0..1" Vehicle : holds\n  class Vehicle {\n    +String plate\n  }');
+      const nodeOf = (name) => [...(host?.querySelectorAll('g.node') || [])].find((g) => g.textContent.trim().startsWith(name) || g.textContent.includes(name));
+      out.klass = host && {
+        emptyHeight: nodeOf('CompactSpot')?.getBBox().height,
+        fullHeight: nodeOf('Vehicle')?.getBBox().height,
+        multiplicity: style(host.querySelector('.edgeTerminals text'))?.stroke,
+      };
+      host?.remove();
+      host = await mount('mindmap\n  root((Ideas))\n    Pricing\n    Risks\n      Slow adoption');
+      out.mindmap = host && { widths: [...host.querySelectorAll('path[class*="edge-depth-"]')].map((e) => px(style(e).strokeWidth)), underline: [...host.querySelectorAll('.mindmap-node line')].map((l) => style(l).stroke) };
+      host?.remove();
+      host = await mount('erDiagram\n  USER ||--o{ ORDER : places\n  USER {\n    int user_id PK\n  }\n  ORDER {\n    int order_id PK\n  }');
+      out.er = host && { ring: [...host.querySelectorAll('.marker.er circle')].map((c) => style(c).fill) };
+      host?.remove();
+      return out;
+    }, { ...DARK, surface: '#101827' });
+    const SURFACE = 'rgb(16, 24, 39)';
+    check('sequence: a condition and a section title are outlined in the surface colour (a lifeline stops at the words)', look.sequence?.condition === SURFACE && look.sequence?.section === SURFACE, JSON.stringify(look.sequence));
+    check('sequence: lifelines and alt frames are hairlines, lighter than a message', look.sequence?.lifeline === 1 && look.sequence?.frame === 1, JSON.stringify(look.sequence));
+    check('sequence: a participant box has room for a name on two lines', look.sequence?.actorHeight >= 46, JSON.stringify(look.sequence));
+    check('state: a transition label has no box behind it', look.state?.labelBox.length > 0 && look.state.labelBox.every((o) => o === '0'), JSON.stringify(look.state));
+    check('class: a class with no members is drawn as its name alone', look.klass && look.klass.emptyHeight > 0 && look.klass.emptyHeight < look.klass.fullHeight - 12, JSON.stringify(look.klass));
+    check('class: a multiplicity on a line is outlined in the surface colour', look.klass?.multiplicity === SURFACE, JSON.stringify(look.klass));
+    check('mind map: branches are lines, not bars', look.mindmap?.widths.length >= 3 && look.mindmap.widths.every((w) => w <= 2), JSON.stringify(look.mindmap));
+    check('data model: the "zero" ring is open (filled with the surface, not white)', look.er?.ring.length > 0 && look.er.ring.every((f) => f === SURFACE), JSON.stringify(look.er));
+
     // ── text that used to break the image itself ───────────────────────────
     // Found in review: the sanitiser serialises as HTML, so a no-break space
     // came out as `&nbsp;` — undefined in an SVG document, and the whole image

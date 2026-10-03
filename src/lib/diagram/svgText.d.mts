@@ -9,7 +9,7 @@ export function svgText(
   x: number,
   y: number,
   text: unknown,
-  opts?: { size?: number; fill?: string; anchor?: 'start' | 'middle' | 'end'; weight?: number; italic?: boolean; decoration?: string; baseline?: string; transform?: string; cls?: string },
+  opts?: { size?: number; fill?: string; anchor?: 'start' | 'middle' | 'end'; weight?: number; italic?: boolean; decoration?: string; baseline?: string; transform?: string; cls?: string; halo?: string },
 ): string;
 export function svgDocument(width: number, height: number, body: string, opts?: { title?: string; kind?: string }): string;
 export function svgNum(n: number): number;

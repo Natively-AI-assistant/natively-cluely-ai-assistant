@@ -24,6 +24,19 @@
 //
 // Mermaid is never called for a block that is still arriving, and never per
 // token: the render effect depends on the completed source only.
+//
+// Motion (the styles are in index.css, @diagram-card). What moves is what
+// changed, and nothing moves on hover:
+//   - the card's body eases to its new height when what it shows changes
+//     (words → drawing, one view → the other), and the live overlay is told on
+//     every frame of that so it keeps following the bottom;
+//   - a new drawing that arrives in a live answer assembles itself once
+//     (diagramReveal.mjs); a replay, a theme change or a tab switch does not;
+//   - an update fades the version that was showing out under the new one,
+//     which comes in whole;
+//   - a stepped zoom (button, double-click, key) eases; a drag or a pinch
+//     never does, because there the drawing has to stay under the finger.
+// With reduced motion, none of it runs.
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, Maximize2, Minus, Plus, Wrench } from 'lucide-react';
@@ -44,6 +57,7 @@ import { analyseErDiagram, describeErDiagram } from '../../lib/diagram/erSemanti
 import { formatNumber } from '../../lib/diagram/chartCompute.mjs';
 import { fitDiagram, zoomAbout, clampPan, wheelZoomsDiagram, DIAGRAM_VIEW_LIMITS } from '../../lib/diagram/diagramViewport.mjs';
 import { diagramTimings } from '../../lib/diagram/diagramTimings.mjs';
+import { withArrivalMotion } from '../../lib/diagram/diagramReveal.mjs';
 import {
   diagramColorsFor,
   exportDiagram,
@@ -52,6 +66,7 @@ import {
   requestDiagramRepair,
   DIAGRAM_DARK_SURFACE,
   DIAGRAM_LIGHT_SURFACE,
+  prefersReducedMotion,
   type DiagramExportFormat,
 } from '../../lib/diagram/diagramRuntime';
 
@@ -142,6 +157,12 @@ const PENDING_LABEL: Record<DiagramArtifactKind, string> = { mermaid: 'Diagram',
 
 const toCss = (rgb: [number, number, number]): string => `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 
+/** How long the body takes to reach a new height (transitions.dev #01, card resize). */
+const BODY_RESIZE_MS = 300;
+const SMOOTH_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
+/** A stepped zoom eases for this long; matches --dc-fast in index.css. */
+const ZOOM_EASE_MS = 250;
+
 function fileStem(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'diagram';
 }
@@ -196,9 +217,40 @@ function DiagramArtifactImpl({
   const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
   const [containerWidth, setContainerWidth] = useState(0);
   const [copied, copy] = useCopied();
+  // The drawing that is arriving in a live answer right now (it assembles itself once).
+  const [arriving, setArriving] = useState<DrawnResult | null>(null);
+  // The version an update replaced, while it fades out under its replacement.
+  const [ghost, setGhost] = useState<{ url: string; width: number; height: number } | null>(null);
+  // A stepped zoom is easing to its new size.
+  const [easing, setEasing] = useState(false);
+  // The Source / Data view has more below its fold.
+  const [dataClipped, setDataClipped] = useState(false);
 
   const rootRef = useRef<HTMLElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+  const pillRef = useRef<HTMLDivElement | null>(null);
+  const pillPlaced = useRef(false);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const bodyInnerRef = useRef<HTMLDivElement | null>(null);
+  const bodyHeight = useRef<number | null>(null);
+  const bodyAnimation = useRef<Animation | null>(null);
+  const dataRef = useRef<HTMLDivElement | null>(null);
+  const easingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ghostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // This card saw its block still being written: its drawing is new to the
+  // reader. A card mounted on a finished block is a replay.
+  const sawOpen = useRef(!complete);
+  if (!complete) sawOpen.current = true;
+  const arrivedSource = useRef<string | null>(null);
+  // An update is not an arrival: the version it replaces fades out under it,
+  // and a drawing that also assembled from nothing left the card all but empty
+  // in between (seen in a recording of a follow-up).
+  // Latched: the owner stops passing the previous version once the block closes.
+  const isUpdate = useRef(Boolean(previousSource));
+  if (previousSource) isUpdate.current = true;
+  const onLayoutRef = useRef(onLayout);
+  onLayoutRef.current = onLayout;
   const renderToken = useRef(0);
   const repairCancel = useRef<(() => void) | null>(null);
   const exportNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -250,7 +302,24 @@ function DiagramArtifactImpl({
       repairCancel.current?.();
       repairCancel.current = null;
       if (exportNoteTimer.current) clearTimeout(exportNoteTimer.current);
+      if (easingTimer.current) clearTimeout(easingTimer.current);
+      if (ghostTimer.current) clearTimeout(ghostTimer.current);
+      bodyAnimation.current?.cancel();
     };
+  }, []);
+
+  // While the card's height is on its way somewhere, the owner hears about it
+  // every frame: one call at the start would leave a live answer short of the
+  // bottom by however much the card still had to grow.
+  const followLayoutFor = useCallback((ms: number): void => {
+    if (!onLayoutRef.current || typeof requestAnimationFrame !== 'function') return;
+    const end = performance.now() + ms;
+    const tick = (): void => {
+      if (!mounted.current) return;
+      onLayoutRef.current?.();
+      if (performance.now() < end) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }, []);
 
   // ── timing: the block's closing fence has been revealed ───────────────────
@@ -276,6 +345,8 @@ function DiagramArtifactImpl({
           diagramTimings.set(turnId, 'renderMs', Math.round(result.timings.renderMs));
           diagramTimings.set(turnId, 'coldLoadMs', Math.round(result.timings.coldLoadMs));
         }
+        if (sawOpen.current && !isUpdate.current && arrivedSource.current !== target && !prefersReducedMotion()) setArriving(result);
+        arrivedSource.current = target;
         setState({ status: 'ready', result, source: target, meta: drawnMeta });
         setView({ zoom: 1, x: 0, y: 0 });
       } else {
@@ -336,7 +407,20 @@ function DiagramArtifactImpl({
 
   const settled = state.status === 'ready' || state.status === 'error';
   useEffect(() => {
-    if (complete && settled) setPrevious(null);
+    if (!complete || !settled) return;
+    // The new drawing is in: what was showing leaves under it, at the size it
+    // had, instead of being cut.
+    if (previous && state.status === 'ready' && tab === 'diagram' && !prefersReducedMotion()) {
+      const width = viewportRef.current?.clientWidth || previous.width;
+      const size = fitDiagram({ naturalWidth: previous.width, naturalHeight: previous.height, containerWidth: width, maxHeight });
+      setGhost({ url: svgToDataUrl(previous.svg), width: size.width, height: size.height });
+      if (ghostTimer.current) clearTimeout(ghostTimer.current);
+      ghostTimer.current = setTimeout(() => {
+        if (mounted.current) setGhost(null);
+      }, ZOOM_EASE_MS + 80);
+    }
+    setPrevious(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complete, settled]);
 
   // ── repair ────────────────────────────────────────────────────────────────
@@ -417,7 +501,21 @@ function DiagramArtifactImpl({
   const pan = box
     ? clampPan({ x: view.x, y: view.y }, { imageWidth: box.fitWidth * view.zoom, imageHeight: box.fitHeight * view.zoom, viewportWidth: box.viewportWidth, viewportHeight: box.viewportHeight })
     : { x: 0, y: 0 };
-  const dataUrl = useMemo(() => (shown ? svgToDataUrl(shown.svg) : ''), [shown]);
+  const dataUrl = useMemo(() => (shown ? svgToDataUrl(arriving === shown ? withArrivalMotion(shown.svg) : shown.svg) : ''), [shown, arriving]);
+
+  /** The next change of zoom or position is a step, not a gesture: let it ease. */
+  const ease = useCallback((): void => {
+    if (prefersReducedMotion()) return;
+    setEasing(true);
+    if (easingTimer.current) clearTimeout(easingTimer.current);
+    easingTimer.current = setTimeout(() => {
+      if (mounted.current) setEasing(false);
+    }, ZOOM_EASE_MS + 40);
+  }, []);
+  const stopEasing = useCallback((): void => {
+    if (easingTimer.current) clearTimeout(easingTimer.current);
+    setEasing(false);
+  }, []);
 
   const zoomBy = useCallback(
     (factor: number, anchor?: { x: number; y: number }) => {
@@ -435,15 +533,43 @@ function DiagramArtifactImpl({
     const onWheel = (event: WheelEvent): void => {
       if (!wheelZoomsDiagram(event)) return;
       event.preventDefault();
+      stopEasing();
       const rect = el.getBoundingClientRect();
       zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12, { x: event.clientX - rect.left, y: event.clientY - rect.top });
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [box, zoomBy]);
+  }, [box, zoomBy, stopEasing]);
+
+  const stepZoom = (factor: number, anchor?: { x: number; y: number }): void => {
+    ease();
+    zoomBy(factor, anchor);
+  };
+  const fitToCard = (): void => {
+    ease();
+    setView({ zoom: 1, x: 0, y: 0 });
+  };
+  // A double-click goes in on the point under it, and back out from there.
+  const onDoubleClick = (event: React.MouseEvent<HTMLDivElement>): void => {
+    if (state.status !== 'ready') return;
+    if (view.zoom > 1) {
+      fitToCard();
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    stepZoom(2, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+  };
+  const selectTab = (next: Tab): void => {
+    if (next === tab) return;
+    // Coming back to the drawing later is not its arrival.
+    setArriving(null);
+    setGhost(null);
+    setTab(next);
+  };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (view.zoom <= 1 || event.button !== 0) return;
+    stopEasing();
     drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: pan.x, originY: pan.y };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -464,6 +590,9 @@ function DiagramArtifactImpl({
     const delta = move[event.key];
     if (!delta) return;
     event.preventDefault();
+    // Not eased: a held arrow key repeats faster than an ease can finish, so
+    // the drawing would trail behind the key.
+    stopEasing();
     setView((v) => ({ zoom: v.zoom, x: pan.x + delta[0], y: pan.y + delta[1] }));
   };
   // Left/Right/Home/End move between the two tabs, as a tab list should.
@@ -471,7 +600,7 @@ function DiagramArtifactImpl({
     const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'diagram' : event.key === 'ArrowRight' || event.key === 'End' ? 'source' : null;
     if (!next) return;
     event.preventDefault();
-    setTab(next);
+    selectTab(next);
     const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
     buttons[next === 'diagram' ? 0 : 1]?.focus();
   };
@@ -489,7 +618,8 @@ function DiagramArtifactImpl({
         width: ready?.width,
         height: ready?.height,
         // The drawing is transparent; a PNG needs the surface it was drawn for.
-        background: toCss(colors?.dark === false ? DIAGRAM_LIGHT_SURFACE : DIAGRAM_DARK_SURFACE),
+        // The one the card measured under itself, so the file looks like the card did.
+        background: colors?.surface ?? toCss(colors?.dark === false ? DIAGRAM_LIGHT_SURFACE : DIAGRAM_DARK_SURFACE),
       });
       if (!mounted.current) return;
       if (outcome.canceled) return;
@@ -536,16 +666,101 @@ function DiagramArtifactImpl({
       return shareSource;
     }
   }, [kind, shareSource]);
+  // ── the body eases to its new height ──────────────────────────────────────
+  // Only for a change of what the card shows (listed below). Text that grows
+  // while it streams is left alone: chasing it would clip its last line.
+  useLayoutEffect(() => {
+    const outer = bodyRef.current;
+    const inner = bodyInnerRef.current;
+    if (!outer || !inner) return;
+    const next = inner.offsetHeight;
+    const before = bodyHeight.current;
+    bodyHeight.current = next;
+    if (before === null || Math.abs(next - before) < 2 || typeof outer.animate !== 'function' || prefersReducedMotion()) return;
+    // From where it is on screen, so a second change mid-way does not jump.
+    const running = bodyAnimation.current?.playState === 'running';
+    const from = running ? outer.getBoundingClientRect().height : before;
+    bodyAnimation.current?.cancel();
+    bodyAnimation.current = outer.animate([{ height: `${from}px` }, { height: `${next}px` }], { duration: BODY_RESIZE_MS, easing: SMOOTH_OUT });
+    followLayoutFor(BODY_RESIZE_MS + 40);
+  }, [tab, state.status, layoutHeight, notes.length, generating, cutOff, followLayoutFor]);
+  // The height it has when nothing listed above changed (streaming text, a resize).
+  useEffect(() => {
+    const inner = bodyInnerRef.current;
+    if (!inner || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      bodyHeight.current = inner.offsetHeight;
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
+
+  // ── the pill under the active tab ─────────────────────────────────────────
+  const placePill = useCallback((animate: boolean): void => {
+    const bar = tabsRef.current;
+    const pill = pillRef.current;
+    const active = bar?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    if (!bar || !pill || !active) return;
+    // The first placement, and one after a resize, is not a move.
+    if (!animate) pill.style.transition = 'none';
+    pill.style.transform = `translateX(${active.offsetLeft}px)`;
+    pill.style.width = `${active.offsetWidth}px`;
+    if (!animate) {
+      void pill.offsetWidth;
+      pill.style.transition = '';
+    }
+  }, []);
+  // The first tab is named for what the card holds ("Sequence diagram",
+  // "Forecast"), so the header needs no separate label beside it. A label
+  // there either repeated the tab ("DIAGRAM" next to "Diagram") or arrived
+  // late and pushed the tabs sideways when the drawing finished.
+  const sourceTab = kind === 'chart' ? 'Data' : 'Source';
+  const viewTabText = t(label);
+  const sourceTabText = t(sourceTab);
+  useLayoutEffect(() => {
+    placePill(pillPlaced.current);
+    pillPlaced.current = true;
+  }, [tab, viewTabText, sourceTabText, placePill]);
+  // Labels are translated and fonts load late: the bar's width can change under the pill.
+  useEffect(() => {
+    const bar = tabsRef.current;
+    if (!bar || typeof ResizeObserver === 'undefined') return;
+    let width = bar.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      if (bar.offsetWidth === width) return;
+      width = bar.offsetWidth;
+      placePill(false);
+    });
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [placePill]);
+
+  // ── is there more of the Source / Data view below its fold? ───────────────
+  const measureData = useCallback((): void => {
+    const el = dataRef.current;
+    setDataClipped(Boolean(el) && el!.scrollHeight - el!.scrollTop - el!.clientHeight > 2);
+  }, []);
+  useEffect(() => {
+    if (tab !== 'source') return;
+    measureData();
+    const el = dataRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measureData);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [tab, sourceText, measureData]);
+
   const copyText = kind === 'chart' ? meta?.exports.csv ?? shareSource : shareSource;
   const copyTitle = kind === 'chart' ? 'Copy data' : kind === 'notation' ? 'Copy source' : 'Copy Mermaid';
-  const viewTab = kind === 'chart' ? 'Chart' : 'Diagram';
-  const sourceTab = kind === 'chart' ? 'Data' : 'Source';
+  // Something is being written, drawn or fixed: the header's hairline runs.
+  const busy = generating || state.status === 'rendering' || state.status === 'repairing' || (complete && state.status === 'idle' && tab === 'diagram');
+  const zoomPercent = Math.round(view.zoom * 100);
 
   let body: React.ReactNode;
   if (tab === 'source') {
     const table = meta?.table ?? null;
     body = (
-      <div className="diagram-card__data">
+      <div ref={dataRef} className={`diagram-card__data${dataClipped ? ' is-clipped' : ''}`} onScroll={measureData}>
         {table ? (
           // The same numbers the picture was drawn from, as text.
           <div className="diagram-card__table-wrap">
@@ -571,8 +786,9 @@ function DiagramArtifactImpl({
     body = (
       <div
         ref={viewportRef}
-        className={`diagram-card__viewport${view.zoom > 1 ? ' is-zoomed' : ''}${updating ? ' is-previous' : ''}`}
+        className={`diagram-card__viewport${view.zoom > 1 ? ' is-zoomed' : ''}${updating ? ' is-previous' : ''}${easing ? ' is-easing' : ''}`}
         style={{ height: fit.viewportHeight }}
+        onDoubleClick={onDoubleClick}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -580,7 +796,11 @@ function DiagramArtifactImpl({
         tabIndex={view.zoom > 1 ? 0 : undefined}
         onKeyDown={onViewportKeyDown}
       >
+        {ghost && !updating ? <img className="diagram-card__ghost" src={ghost.url} alt="" aria-hidden width={Math.round(ghost.width)} height={Math.round(ghost.height)} draggable={false} /> : null}
         <img
+          // A new drawing is a new element, so it comes in; a zoom or a theme
+          // change of the same drawing is not.
+          key={updating ? 'previous' : state.status === 'ready' ? diagramSourceKey(state.source) : 'drawing'}
           className="diagram-card__img"
           src={dataUrl}
           alt={altText}
@@ -600,7 +820,9 @@ function DiagramArtifactImpl({
         />
         {updating ? (
           <div className="diagram-card__status diagram-card__status--over">
-            <span className="natively-thinking-label diagram-card__status-text">{t('Updating diagram…')}</span>
+            <div className="diagram-card__status-plate">
+              <span className="natively-thinking-label diagram-card__status-text">{t('Updating diagram…')}</span>
+            </div>
           </div>
         ) : null}
       </div>
@@ -626,7 +848,7 @@ function DiagramArtifactImpl({
         <p className="diagram-card__fallback-text">{message}</p>
 
         <div className="diagram-card__fallback-actions">
-          <button type="button" className="diagram-card__text-btn" onClick={() => setTab('source')}>
+          <button type="button" className="diagram-card__text-btn" onClick={() => selectTab('source')}>
             {t('View source')}
           </button>
           {offerFix ? (
@@ -651,66 +873,89 @@ function DiagramArtifactImpl({
       // What a calculation was not given (its message says so in words).
       data-diagram-missing={state.status === 'error' && state.missing?.length ? state.missing.join('; ') : undefined}
       data-diagram-state={generating ? 'generating' : cutOff ? 'cut-off' : state.status}
+      data-busy={busy ? 'true' : undefined}
       role="group"
       aria-label={t(label)}
     >
       <div className="diagram-card__head overlay-code-header-surface">
-        {/* A div, not a span: the answer card recolours every span inside it. */}
-        <div className="diagram-card__label">{t(label)}</div>
-        <div className="diagram-card__tabs" role="tablist" aria-label={t('Diagram view')} onKeyDown={onTabKeyDown}>
-          <button type="button" role="tab" aria-selected={tab === 'diagram'} tabIndex={tab === 'diagram' ? 0 : -1} className="diagram-card__tab" onClick={() => setTab('diagram')}>
-            {t(viewTab)}
+        <div ref={tabsRef} className="diagram-card__tabs" role="tablist" aria-label={t('Diagram view')} onKeyDown={onTabKeyDown}>
+          {/* Divs, not spans, for everything this card adds: the answer card recolours every span inside it. */}
+          <div ref={pillRef} className="diagram-card__tab-pill" aria-hidden />
+          <button type="button" role="tab" aria-selected={tab === 'diagram'} tabIndex={tab === 'diagram' ? 0 : -1} className="diagram-card__tab" onClick={() => selectTab('diagram')}>
+            {viewTabText}
           </button>
-          <button type="button" role="tab" aria-selected={tab === 'source'} tabIndex={tab === 'source' ? 0 : -1} className="diagram-card__tab" onClick={() => setTab('source')}>
-            {t(sourceTab)}
+          <button type="button" role="tab" aria-selected={tab === 'source'} tabIndex={tab === 'source' ? 0 : -1} className="diagram-card__tab" onClick={() => selectTab('source')}>
+            {sourceTabText}
           </button>
         </div>
         <div className="diagram-card__actions">
-          {exportNote ? <div className="diagram-card__note" role="status">{exportNote}</div> : null}
+          {exportNote ? <div key={exportNote} className="diagram-card__note" role="status">{exportNote}</div> : null}
           {canZoom ? (
-            <>
-              <button type="button" className="diagram-card__icon-btn" onClick={() => zoomBy(1 / DIAGRAM_VIEW_LIMITS.zoomStep)} disabled={view.zoom <= 1} title={t('Zoom out')} aria-label={t('Zoom out')}>
+            <div className={`diagram-card__zoom${easing ? ' is-stepped' : ''}`}>
+              <button type="button" className="diagram-card__icon-btn" onClick={() => stepZoom(1 / DIAGRAM_VIEW_LIMITS.zoomStep)} disabled={view.zoom <= 1} title={t('Zoom out')} aria-label={t('Zoom out')}>
                 <Minus size={14} strokeWidth={2} />
               </button>
-              <button type="button" className="diagram-card__icon-btn" onClick={() => zoomBy(DIAGRAM_VIEW_LIMITS.zoomStep)} disabled={view.zoom >= DIAGRAM_VIEW_LIMITS.maxZoom} title={t('Zoom in')} aria-label={t('Zoom in')}>
+              {/* How far in the drawing is. Pressing it fits the drawing to the card again. */}
+              <button type="button" className="diagram-card__icon-btn diagram-card__fit" onClick={fitToCard} disabled={view.zoom === 1} title={t('Fit to card')} aria-label={t('Fit to card')}>
+                <div key={zoomPercent} className="diagram-card__zoom-value">{zoomPercent}%</div>
+              </button>
+              <button type="button" className="diagram-card__icon-btn" onClick={() => stepZoom(DIAGRAM_VIEW_LIMITS.zoomStep)} disabled={view.zoom >= DIAGRAM_VIEW_LIMITS.maxZoom} title={t('Zoom in')} aria-label={t('Zoom in')}>
                 <Plus size={14} strokeWidth={2} />
               </button>
-              <button type="button" className="diagram-card__icon-btn" onClick={() => setView({ zoom: 1, x: 0, y: 0 })} disabled={view.zoom === 1} title={t('Fit to card')} aria-label={t('Fit to card')}>
-                <Maximize2 size={14} strokeWidth={2} />
-              </button>
-            </>
+            </div>
           ) : null}
           <button type="button" className="diagram-card__icon-btn" onClick={() => copy(copyText)} title={copied ? t('Copied') : t(copyTitle)} aria-label={copied ? t('Copied') : t(copyTitle)}>
-            {copied ? <Check size={14} strokeWidth={2.5} className="diagram-card__ok" /> : <Copy size={14} strokeWidth={2} />}
+            <div className="diagram-card__swap" data-state={copied ? 'b' : 'a'}>
+              <div data-icon="a"><Copy size={14} strokeWidth={2} /></div>
+              <div data-icon="b" className="diagram-card__ok"><Check size={14} strokeWidth={2.5} /></div>
+            </div>
           </button>
           {complete ? (
-            <button type="button" className="diagram-card__icon-btn" aria-expanded={exportOpen} onClick={() => setExportOpen((v) => !v)} title={t('Export')} aria-label={t('Export')}>
+            <button
+              type="button"
+              className="diagram-card__icon-btn"
+              aria-expanded={exportOpen}
+              onClick={() => {
+                setExportOpen((v) => !v);
+                followLayoutFor(BODY_RESIZE_MS);
+              }}
+              title={t('Export')}
+              aria-label={t('Export')}
+            >
               <Download size={14} strokeWidth={2} />
             </button>
           ) : null}
         </div>
+        <div className="diagram-card__progress" aria-hidden />
       </div>
-      {exportOpen ? (
-        <div className="diagram-card__export" role="group" aria-label={t('Export')}>
-          <button type="button" className="diagram-card__text-btn" disabled={state.status !== 'ready'} onClick={() => void runExport('svg')}>SVG</button>
-          <button type="button" className="diagram-card__text-btn" disabled={state.status !== 'ready'} onClick={() => void runExport('png')}>PNG</button>
-          {kind === 'mermaid' ? (
-            <button type="button" className="diagram-card__text-btn" onClick={() => void runExport('mmd')}>{t('Mermaid (.mmd)')}</button>
-          ) : (
-            <>
-              {/* A chart's data and a model's source are this app's own formats, named as such. */}
-              {meta?.exports.csv ? <button type="button" className="diagram-card__text-btn" onClick={() => void runExport('csv')}>CSV</button> : null}
-              <button type="button" className="diagram-card__text-btn" disabled={!meta} onClick={() => void runExport('json')}>JSON</button>
-            </>
-          )}
+      {/* Always in the document, so it can close as it opened; closed, it is inert (no focus, no clicks). */}
+      <div className="diagram-card__export" data-open={exportOpen ? 'true' : 'false'} role="group" aria-label={t('Export')} inert={!exportOpen}>
+        <div className="diagram-card__export-clip">
+          <div className="diagram-card__export-row">
+            <button type="button" className="diagram-card__text-btn" disabled={state.status !== 'ready'} onClick={() => void runExport('svg')}>SVG</button>
+            <button type="button" className="diagram-card__text-btn" disabled={state.status !== 'ready'} onClick={() => void runExport('png')}>PNG</button>
+            {kind === 'mermaid' ? (
+              <button type="button" className="diagram-card__text-btn" onClick={() => void runExport('mmd')}>{t('Mermaid (.mmd)')}</button>
+            ) : (
+              <>
+                {/* A chart's data and a model's source are this app's own formats, named as such. */}
+                {meta?.exports.csv ? <button type="button" className="diagram-card__text-btn" onClick={() => void runExport('csv')}>CSV</button> : null}
+                <button type="button" className="diagram-card__text-btn" disabled={!meta} onClick={() => void runExport('json')}>JSON</button>
+              </>
+            )}
+          </div>
         </div>
-      ) : null}
-      {body}
-      {tab === 'diagram' && state.status === 'ready' && notes.length > 0 ? (
-        <ul className="diagram-card__notes">
-          {notes.slice(0, 4).map((note, i) => <li key={i}>{note}</li>)}
-        </ul>
-      ) : null}
+      </div>
+      <div ref={bodyRef} className="diagram-card__body">
+        <div ref={bodyInnerRef} className="diagram-card__body-inner">
+          {body}
+          {tab === 'diagram' && state.status === 'ready' && notes.length > 0 ? (
+            <ul className="diagram-card__notes">
+              {notes.slice(0, 4).map((note, i) => <li key={i}>{note}</li>)}
+            </ul>
+          ) : null}
+        </div>
+      </div>
     </figure>
   );
 }

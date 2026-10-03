@@ -461,3 +461,24 @@ describe('final review (2026-10-02): what the last pass found in the policy', ()
     }
   });
 });
+
+describe('sequence participants named with quotes', () => {
+  test('are drawn without the quote marks; the source the reader takes away is untouched', () => {
+    const source = 'sequenceDiagram\n    participant p as "Producer Service"\n    actor u as "Ops"\n    participant q as Queue\n    p->>q: enqueue "x"';
+    const result = checkDiagramSource(source);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.neutralised, ['alias_quotes']);
+    assert.match(result.renderSource, /participant p as Producer Service\n/);
+    assert.match(result.renderSource, /actor u as Ops\n/);
+    // A quoted word in a message is the author's, and stays.
+    assert.match(result.renderSource, /enqueue "x"$/);
+  });
+
+  test('a name that needs its quotes, and any other diagram, is left as written', () => {
+    const colon = 'sequenceDiagram\n    participant a as "User: admin"\n    a->>a: hi';
+    assert.deepEqual(checkDiagramSource(colon).neutralised, []);
+    assert.equal(checkDiagramSource(colon).renderSource, colon);
+    const flow = 'flowchart LR\n    a["participant x as \\"y\\""] --> b';
+    assert.ok(!checkDiagramSource(flow).neutralised.includes('alias_quotes'));
+  });
+});

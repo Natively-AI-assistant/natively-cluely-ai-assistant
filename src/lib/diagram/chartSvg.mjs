@@ -18,8 +18,17 @@ import { formatNumber } from './chartCompute.mjs';
 
 export const CHART_WIDTH = 640;
 
-const DARK_PALETTE = ['#7aa2f7', '#9ece6a', '#e0af68', '#bb9af7', '#f7768e', '#73daca', '#ff9e64', '#a9b1d6'];
-const LIGHT_PALETTE = ['#2563eb', '#15803d', '#b45309', '#7c3aed', '#be123c', '#0f766e', '#c2410c', '#475569'];
+// Series colours. The first is the app's accent (periwinkle 300 on a dark
+// panel, 600 on a light one); the rest were picked so that the first five stay
+// apart for a reader with a colour-vision deficiency, not only for a typical
+// one. Measured as the smallest OKLab distance between any two of the first
+// five under normal vision and simulated protan, deutan and tritan vision
+// (Machado 2009): 8.9 dark and 4.9 light (a darker, duller light set reaches
+// 6.5; this one was chosen for how it looks). The sets these replace measured
+// 0.3 and 0.4: their blue and purple were one colour to a red-green deficiency.
+// Every colour keeps at least 3:1 against the card's surface in each theme.
+const DARK_PALETTE = ['#95aff6', '#e6ac3d', '#4fdcc4', '#e8777a', '#ba8db8', '#d3d88a', '#2caed4', '#a9b1c2'];
+const LIGHT_PALETTE = ['#4967d3', '#9c5600', '#0b7d5c', '#cc6088', '#5a3894', '#6f8200', '#0f8fa6', '#5b6472'];
 
 const DEFAULT_COLORS = Object.freeze({ text: '#111827', muted: '#4b5563', nodeFill: '#f3f4f6', stroke: '#6b7280', groupFill: '#f9fafb', accent: '#2563eb', dark: false });
 
@@ -82,6 +91,18 @@ function compact(value) {
   if (abs >= 999.95e3) return `${formatNumber(value / 1e6, abs % 1e6 === 0 ? 0 : 1)}M`;
   if (abs >= 1e4) return `${formatNumber(value / 1e3, abs % 1e3 === 0 ? 0 : 1)}k`;
   return formatNumber(value);
+}
+
+/**
+ * Labels for one axis, in ONE unit chosen from its largest tick: "-10k, -5k,
+ * 0, 5k, 10k". Each tick used to choose its own, which printed "-10k, -5,000,
+ * 0, 5,000, 10k" on an axis that crossed ten thousand.
+ */
+export function axisLabels(ticks) {
+  const top = Math.max(0, ...ticks.map((t) => Math.abs(t)));
+  const [div, suffix] = top >= 999.95e6 ? [1e9, 'B'] : top >= 999.95e3 ? [1e6, 'M'] : top >= 1e4 ? [1e3, 'k'] : [1, ''];
+  if (div === 1) return ticks.map((t) => formatNumber(t));
+  return ticks.map((t) => (t === 0 ? '0' : `${formatNumber(Number((t / div).toFixed(2)))}${suffix}`));
 }
 
 /** A value written on a mark: exact below a million (11,576.25 must not read "11.6k"). */
@@ -193,7 +214,7 @@ function drawCartesian(chart, colors, palette) {
     head.height,
   );
 
-  const tickLabels = ticks.map(compact);
+  const tickLabels = axisLabels(ticks);
   const left = Math.max(40, Math.ceil(Math.max(...tickLabels.map((t) => estimateTextWidth(t, 10.5))) + 16 + (chart.y.label ? 14 : 0)));
   const right = 18;
   const top = head.height + leg.height + 8;
@@ -228,24 +249,38 @@ function drawCartesian(chart, colors, palette) {
   // x labels
   if (numericX) {
     const xTicks = niceTicks(xMinNum, xMaxNum, 6).filter((t) => t >= xMinNum - 1e-9 && t <= xMaxNum + 1e-9);
-    for (const t of xTicks) {
+    const xTickLabels = axisLabels(xTicks);
+    xTicks.forEach((t, i) => {
       const x = left + ((t - xMinNum) / (xMaxNum - xMinNum || 1)) * plotW;
-      out.push(svgText(x, bottomAxis + 14, compact(t), { size: xLabelSize, fill: colors.muted, anchor: 'middle' }));
-    }
+      out.push(svgText(x, bottomAxis + 14, xTickLabels[i], { size: xLabelSize, fill: colors.muted, anchor: 'middle' }));
+    });
   } else {
     const every = rotate ? Math.ceil(n / 24) : Math.ceil((longest + 8) / Math.max(1, isLine && n > 1 ? plotW / (n - 1) : slot));
-    chart.x.values.forEach((label, i) => {
-      if (i % Math.max(1, every) !== 0 && i !== n - 1) return;
+    // The two ends are placed first, then whatever fits between them: a label
+    // is drawn only where it leaves a gap to the ones already there.
+    const taken = [];
+    const order = n > 1 ? [0, n - 1, ...chart.x.values.map((_v, i) => i).slice(1, -1)] : [0];
+    for (const i of order) {
+      if (i % Math.max(1, every) !== 0 && i !== n - 1) continue;
+      const label = chart.x.values[i];
       const x = xOf(i);
       // A label rotated about its end runs down and to the LEFT: it gets only
       // as much room as there is between its anchor and the canvas edge.
-      if (rotate) out.push(svgText(x, bottomAxis + 10, truncateToWidth(label, Math.max(18, Math.min(84, (x - 4) / ROTATED_COS)), xLabelSize), { size: xLabelSize, fill: colors.muted, anchor: 'end', transform: `rotate(-38 ${svgNum(x)} ${svgNum(bottomAxis + 10)})` }));
-      else {
-        // On a line chart the first and last points sit on the plot's edges.
-        const anchor = isLine && n > 1 && i === 0 ? 'start' : isLine && n > 1 && i === n - 1 ? 'end' : 'middle';
-        out.push(svgText(x, bottomAxis + 14, label, { size: xLabelSize, fill: colors.muted, anchor }));
+      if (rotate) {
+        out.push(svgText(x, bottomAxis + 10, truncateToWidth(label, Math.max(18, Math.min(84, (x - 4) / ROTATED_COS)), xLabelSize), { size: xLabelSize, fill: colors.muted, anchor: 'end', transform: `rotate(-38 ${svgNum(x)} ${svgNum(bottomAxis + 10)})` }));
+        continue;
       }
-    });
+      const w = estimateTextWidth(label, xLabelSize);
+      // On a line chart the first and last points sit on the plot's edges. The
+      // first label starts at the axis; the last stays under its own point as
+      // far as the canvas allows (ending it AT the point pushed it against its
+      // neighbour: "Month 7 Month 8").
+      const atStart = isLine && n > 1 && i === 0;
+      const centre = isLine && n > 1 && i === n - 1 ? Math.min(x, width - 4 - w / 2) : x;
+      const x0 = atStart ? x : centre - w / 2;
+      if (!claim(taken, x0 - 3, 0, x0 + w + 3, 1)) continue;
+      out.push(svgText(atStart ? x : centre, bottomAxis + 14, label, { size: xLabelSize, fill: colors.muted, anchor: atStart ? 'start' : 'middle' }));
+    }
   }
   let below = bottomAxis + xLabelHeight;
   if (chart.x.label) {
@@ -274,7 +309,7 @@ function drawCartesian(chart, colors, palette) {
     const markerW = estimateTextWidth(markerText, 10.5);
     // To the left of the line when it fits inside the plot there, else to the right.
     const onLeft = bx - 5 - markerW >= left + 2;
-    out.push(svgText(onLeft ? bx - 5 : bx + 5, top + 11, markerText, { size: 10.5, fill: colors.text, anchor: onLeft ? 'end' : 'start', cls: 'chart-marker-label' }));
+    out.push(svgText(onLeft ? bx - 5 : bx + 5, top + 11, markerText, { size: 10.5, fill: colors.text, anchor: onLeft ? 'end' : 'start', cls: 'chart-marker-label', halo: colors.surface }));
   }
 
   if (isLine) {
@@ -314,7 +349,7 @@ function drawCartesian(chart, colors, palette) {
       if (chart.series.length === 1 && n <= 8) {
         s.values.forEach((v, i) => {
           if (v === null) return;
-          out.push(svgText(xOf(i), yOf(v) - 8, exact(v), { size: 10.5, fill: colors.text, anchor: i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle', cls: 'chart-value' }));
+          out.push(svgText(xOf(i), yOf(v) - 8, exact(v), { size: 10.5, fill: colors.text, anchor: i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle', cls: 'chart-value', halo: colors.surface }));
         });
       }
     });
@@ -358,36 +393,66 @@ function drawCartesian(chart, colors, palette) {
 function drawPie(chart, colors, palette) {
   const width = CHART_WIDTH;
   const head = header(chart, colors, width);
+  // A ring, with the whole named in the middle. Parts are separated by a gap
+  // of constant width cut out of the shapes themselves, so nothing has to
+  // guess the colour of the surface the picture sits on.
   const r = 84;
-  const cx = 14 + r + 6;
+  const inner = 50;
+  const gap = 2.5;
+  // The ring and its legend are laid out as one block and centred in the
+  // chart (against the left edge they left the right 40% of the card empty).
+  // The legend is measured first: each value sits beside its own label.
+  const unit = chart.y.unit || '';
+  const legendGap = 28;
+  const values = chart.parts.map((p) => `${compact(p.value)}${unit ? ` ${unit}` : ''} · ${formatNumber(p.percent, 1)}%`);
+  const valueW = Math.max(...values.map((v) => estimateTextWidth(v, 11.5)));
+  const labelMax = Math.max(40, width - 36 - r * 2 - legendGap - 18 - 24 - valueW);
+  const labelW = Math.min(labelMax, Math.max(...chart.parts.map((p) => estimateTextWidth(p.label, 11.5))));
+  const blockW = r * 2 + legendGap + 18 + labelW + 24 + valueW;
+  const cx = Math.max(20, (width - blockW) / 2) + r;
   const cy = head.height + r + 10;
   const total = chart.parts.reduce((sum, p) => sum + p.value, 0);
   const out = [head.markup];
+  const at = (radius, a) => `${svgNum(cx + radius * Math.cos(a))} ${svgNum(cy + radius * Math.sin(a))}`;
   let angle = -Math.PI / 2;
   chart.parts.forEach((p, k) => {
     const sweep = (p.value / total) * Math.PI * 2;
     const a0 = angle;
     const a1 = angle + sweep;
     angle = a1;
-    const large = sweep > Math.PI ? 1 : 0;
-    const p0 = [cx + r * Math.cos(a0), cy + r * Math.sin(a0)];
-    const p1 = [cx + r * Math.cos(a1), cy + r * Math.sin(a1)];
+    const fill = palette[k % palette.length];
     // A sliver too thin to draw (one in a million) is named in the legend only.
     if (sweep < 0.004) return;
-    // A part that is (all but) the whole is a full circle; an arc of 2π has no length.
-    const shape = sweep >= Math.PI * 2 - 0.004
-      ? `<circle class="chart-slice" cx="${cx}" cy="${cy}" r="${r}" fill="${palette[k % palette.length]}"/>`
-      : `<path class="chart-slice" d="M${cx} ${cy}L${svgNum(p0[0])} ${svgNum(p0[1])}A${r} ${r} 0 ${large} 1 ${svgNum(p1[0])} ${svgNum(p1[1])}Z" fill="${palette[k % palette.length]}" stroke="${colors.dark ? '#111318' : '#ffffff'}" stroke-width="1.5"/>`;
-    out.push(shape);
+    // A part that is (all but) the whole is a full ring; an arc of 2π has no length.
+    if (sweep >= Math.PI * 2 - 0.004) {
+      const circle = (radius) => `M${svgNum(cx - radius)} ${cy}a${radius} ${radius} 0 1 0 ${radius * 2} 0a${radius} ${radius} 0 1 0 ${-radius * 2} 0Z`;
+      out.push(`<path class="chart-slice" fill-rule="evenodd" d="${circle(r)}${circle(inner)}" fill="${fill}"/>`);
+      return;
+    }
+    // Half the gap on each side, as an angle at each radius (never more than a
+    // quarter of the part, so a thin part keeps a shape).
+    const padOuter = Math.min(gap / 2 / r, sweep / 4);
+    const padInner = Math.min(gap / 2 / inner, sweep / 4);
+    const largeOuter = sweep - padOuter * 2 > Math.PI ? 1 : 0;
+    const largeInner = sweep - padInner * 2 > Math.PI ? 1 : 0;
+    out.push(
+      `<path class="chart-slice" d="M${at(r, a0 + padOuter)}A${r} ${r} 0 ${largeOuter} 1 ${at(r, a1 - padOuter)}L${at(inner, a1 - padInner)}A${inner} ${inner} 0 ${largeInner} 0 ${at(inner, a0 + padInner)}Z" fill="${fill}"/>`,
+    );
   });
-  const lx = cx + r + 28;
+  // The whole, in the middle of the ring.
+  out.push(svgText(cx, cy + (unit ? 2 : 6), truncateToWidth(compact(total), inner * 2 - 16, 17, 600), { size: 17, weight: 600, fill: colors.text, anchor: 'middle', cls: 'chart-total' }));
+  if (unit) out.push(svgText(cx, cy + 17, truncateToWidth(unit, inner * 2 - 20, 10.5), { size: 10.5, fill: colors.muted, anchor: 'middle', cls: 'chart-total-unit' }));
+  const lx = cx + r + legendGap;
+  const rowH = 22;
+  const valueX = Math.min(width - 16, lx + 18 + labelW + 24 + valueW);
+  const legendTop = Math.max(head.height + 26, cy - (chart.parts.length * rowH) / 2 + 15);
   chart.parts.forEach((p, k) => {
-    const y = head.height + 26 + k * 22;
-    out.push(`<rect x="${lx}" y="${y - 9}" width="11" height="11" rx="2" fill="${palette[k % palette.length]}"/>`);
-    out.push(svgText(lx + 18, y, truncateToWidth(p.label, width - lx - 18 - 150, 11.5), { size: 11.5, fill: colors.text }));
-    out.push(svgText(width - 16, y, `${compact(p.value)}${chart.y.unit ? ` ${chart.y.unit}` : ''} · ${formatNumber(p.percent, 1)}%`, { size: 11.5, fill: colors.muted, anchor: 'end', cls: 'chart-value' }));
+    const y = legendTop + k * rowH;
+    out.push(`<rect class="chart-swatch" x="${lx}" y="${svgNum(y - 9)}" width="11" height="11" rx="3" fill="${palette[k % palette.length]}"/>`);
+    out.push(svgText(lx + 18, y, truncateToWidth(p.label, labelMax, 11.5), { size: 11.5, fill: colors.text, cls: 'chart-legend' }));
+    out.push(svgText(valueX, y, values[k], { size: 11.5, fill: colors.muted, anchor: 'end', cls: 'chart-value' }));
   });
-  const bottom = Math.max(cy + r + 8, head.height + 26 + chart.parts.length * 22);
+  const bottom = Math.max(cy + r + 8, legendTop + (chart.parts.length - 1) * rowH + 14);
   const foot = footer(chart, colors, width, bottom);
   out.push(foot.markup);
   return { body: out.join(''), width, height: bottom + foot.height };
@@ -430,7 +495,7 @@ function drawWaterfall(chart, colors, palette) {
   const ticks = niceTicks(Math.min(0, ...values), Math.max(0, ...values), 5);
   const yMin = ticks[0];
   const yMax = ticks[ticks.length - 1];
-  const tickLabels = ticks.map(compact);
+  const tickLabels = axisLabels(ticks);
   const left = Math.max(40, Math.ceil(Math.max(...tickLabels.map((t) => estimateTextWidth(t, 10.5))) + 16));
   const right = 18;
   const top = head.height + 8;
@@ -438,8 +503,8 @@ function drawWaterfall(chart, colors, palette) {
   const plotH = 208;
   const slot = plotW / n;
   const yOf = (v) => top + plotH - ((v - yMin) / (yMax - yMin || 1)) * plotH;
-  const up = colors.dark ? '#9ece6a' : '#15803d';
-  const down = colors.dark ? '#f7768e' : '#be123c';
+  const up = colors.dark ? '#4fdcc4' : '#0b7d5c';
+  const down = colors.dark ? '#e8777a' : '#b3364f';
   const out = [head.markup];
   ticks.forEach((t, i) => {
     const y = yOf(t);
@@ -540,8 +605,12 @@ function drawPoints(chart, colors, palette) {
   const out = [head.markup, `<rect x="${left}" y="${top}" width="${plotW}" height="${plotH}" fill="none" stroke="${colors.stroke}" stroke-opacity="0.5"/>`];
   /** Label boxes already drawn (corner labels, then point names). */
   const taken = [];
-  for (const t of xTicks.filter((v) => v >= xMin && v <= xMax)) out.push(svgText(xOf(t), top + plotH + 14, compact(t), { size: 10.5, fill: colors.muted, anchor: 'middle' }));
-  for (const t of yTicks.filter((v) => v >= yMin && v <= yMax)) out.push(svgText(left - 6, yOf(t) + 3.5, compact(t), { size: 10.5, fill: colors.muted, anchor: 'end' }));
+  const xShown = xTicks.filter((v) => v >= xMin && v <= xMax);
+  const yShown = yTicks.filter((v) => v >= yMin && v <= yMax);
+  const xNames = axisLabels(xShown);
+  const yNames = axisLabels(yShown);
+  xShown.forEach((t, i) => out.push(svgText(xOf(t), top + plotH + 14, xNames[i], { size: 10.5, fill: colors.muted, anchor: 'middle' })));
+  yShown.forEach((t, i) => out.push(svgText(left - 6, yOf(t) + 3.5, yNames[i], { size: 10.5, fill: colors.muted, anchor: 'end' })));
   if (q) {
     const mx = xOf((xMin + xMax) / 2);
     const my = yOf((yMin + yMax) / 2);

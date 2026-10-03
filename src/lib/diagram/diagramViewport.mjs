@@ -9,7 +9,12 @@
 // Zoom is relative to that fit (1 = fit). Pure — no DOM, no state.
 
 export const DIAGRAM_VIEW_LIMITS = Object.freeze({
-  maxHeight: 420,
+  // Raised from 420. At 420 a tall drawing was shrunk until its text was half
+  // the size of the answer's own 14 px (measured on real answers: a state
+  // diagram 6.1 px, a data model 7.4, a class diagram 8.0; at 560 they are
+  // 8.2, 9.8 and 10.7). A wide drawing is limited by the card's width and is
+  // unchanged.
+  maxHeight: 560,
   minHeight: 96,
   minZoom: 1,
   maxZoom: 6,

@@ -107,6 +107,8 @@ export function svgText(x, y, text, opts = {}) {
     opts.baseline ? `dominant-baseline="${opts.baseline}"` : '',
     opts.transform ? `transform="${opts.transform}"` : '',
     opts.cls ? `class="${opts.cls}"` : '',
+    // An outline in the surface colour, so a line passing under the text stops at the letters.
+    opts.halo ? `paint-order="stroke" stroke="${opts.halo}" stroke-width="3" stroke-linejoin="round"` : '',
   ].filter(Boolean).join(' ');
   return `<text ${attrs}>${escapeXml(text)}</text>`;
 }

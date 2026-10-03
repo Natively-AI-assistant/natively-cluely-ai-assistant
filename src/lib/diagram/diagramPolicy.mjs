@@ -583,6 +583,18 @@ export function checkDiagramSource(source, options = {}) {
       neutralised.push('node_shape');
     }
   }
+  //  - a sequence participant named with quotes (`participant q as "Queue"`)
+  //    is drawn without them. Mermaid prints an alias as written, quotes and
+  //    all, and a model that quotes labels in flowcharts quotes them here too
+  //    (seen live: every box read "Producer Service" with the marks, and a
+  //    name broke mid-word to fit them). Only a plain name is touched.
+  if (type === 'sequence') {
+    const plain = text.replace(/^(\s*(?:participant|actor)\s+\S+\s+as\s+)"([^"\n;#:<>]*)"[ \t]*$/gm, '$1$2');
+    if (plain !== text) {
+      text = plain;
+      neutralised.push('alias_quotes');
+    }
+  }
   if (type === 'gantt' && !/^\s*todayMarker\b/m.test(text)) {
     text = text.replace(/^(\s*gantt[^\n]*)(\n|$)/, '$1\n    todayMarker off$2');
   }

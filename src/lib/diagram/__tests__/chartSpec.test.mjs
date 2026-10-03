@@ -3,7 +3,8 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normaliseChartSpec, parseChartJson, chartCsv, chartLabel, describeChart, CHART_LIMITS } from '../chartSpec.mjs';
-import { renderChartSvg, niceTicks } from '../chartSvg.mjs';
+import { renderChartSvg, niceTicks, axisLabels } from '../chartSvg.mjs';
+import { estimateTextWidth } from '../svgText.mjs';
 import { compileVisualSource, checkVisualSource } from '../visualArtifact.mjs';
 import { isSafeDiagramSvg } from '../diagramPolicy.mjs';
 
@@ -716,5 +717,61 @@ describe('text width, estimated: scripts other than Latin', async () => {
       assert.ok(estimateTextWidth(cut, 12) <= 120, cut);
       assert.ok(cut.endsWith('…'), cut);
     }
+  });
+});
+
+describe('axis labels', () => {
+  const chartOf = (spec) => ok(spec).chart;
+  const BREAK_EVEN = { v: 1, type: 'line', title: 'Cumulative net saving', y: { label: 'Net position', unit: 'USD' }, compute: { kind: 'break_even', initialCost: 12000, periodSaving: 2500, period: 'month', periods: 8 }, sources: ['Figures stated on the call'] };
+  const texts = (svg) => [...svg.matchAll(/<text ([^>]*)>([^<]*)<\/text>/g)].map((m) => ({ attrs: m[1], text: m[2], x: Number(/x="([-\d.]+)"/.exec(m[1])[1]), anchor: /text-anchor="(\w+)"/.exec(m[1])?.[1] || 'start' }));
+
+  test('one axis is written in one unit, chosen from its largest tick', () => {
+    // Each tick used to choose for itself: "-10k, -5,000, 0, 5,000, 10k".
+    assert.deepEqual(axisLabels([-15000, -10000, -5000, 0, 5000, 10000]), ['-15k', '-10k', '-5k', '0', '5k', '10k']);
+    assert.deepEqual(axisLabels([10000, 10500, 11000, 11500, 12000]), ['10k', '10.5k', '11k', '11.5k', '12k']);
+    assert.deepEqual(axisLabels([0, 2000, 4000, 6000, 8000]), ['0', '2,000', '4,000', '6,000', '8,000'], 'below ten thousand stays in full');
+    assert.deepEqual(axisLabels([0, 500000, 1000000, 1500000]), ['0', '0.5M', '1M', '1.5M']);
+    assert.deepEqual(axisLabels([0, 0.25, 0.5]), ['0', '0.25', '0.5']);
+    assert.deepEqual(axisLabels([]), []);
+  });
+
+  test('a drawn chart has no axis that mixes "k" with thousands written out', () => {
+    const svg = renderChartSvg(chartOf(BREAK_EVEN)).svg;
+    const ticks = texts(svg).filter((t) => t.anchor === 'end' && /^-?[\d.,]+k?$/.test(t.text)).map((t) => t.text);
+    assert.ok(ticks.includes('-5k') && ticks.includes('5k') && ticks.includes('10k'), ticks.join(' '));
+    assert.ok(!ticks.some((t) => /,\d{3}$/.test(t)), ticks.join(' '));
+  });
+
+  test('the last label on a line chart stays under its point and clear of its neighbour', () => {
+    // Ended AT the point, "Month 8" sat 7 px from "Month 7" while every other gap was 28.
+    const svg = renderChartSvg(chartOf(BREAK_EVEN)).svg;
+    const months = texts(svg).filter((t) => /^(Now|Month \d)$/.test(t.text));
+    assert.equal(months.length, 9, months.map((m) => m.text).join(' '));
+    const span = (m) => { const w = estimateTextWidth(m.text, 10.5); const x0 = m.anchor === 'start' ? m.x : m.anchor === 'end' ? m.x - w : m.x - w / 2; return [x0, x0 + w]; };
+    const sorted = months.map(span).sort((a, b) => a[0] - b[0]);
+    const gaps = sorted.slice(1).map((s, i) => s[0] - sorted[i][1]);
+    assert.ok(Math.min(...gaps) >= 6, `gaps ${gaps.map((g) => g.toFixed(1)).join(' ')}`);
+    assert.ok(Math.max(...gaps.slice(1)) - Math.min(...gaps.slice(1)) <= 12, `uneven: ${gaps.map((g) => g.toFixed(1)).join(' ')}`);
+    assert.ok(sorted[sorted.length - 1][1] <= 640, 'inside the canvas');
+  });
+
+  test('a label a later one would cover is left out, and the two ends are kept', () => {
+    const values = Array.from({ length: 14 }, (_v, i) => `Week ${i + 1} of the quarter`);
+    const svg = renderChartSvg(chartOf({ v: 1, type: 'line', status: 'observed', sources: ['export'], x: { kind: 'time', label: 'Week', values }, y: { label: 'Tickets' }, series: [{ name: 'Tickets', values: values.map((_v, i) => 100 + i), source: 'export' }] })).svg;
+    const shown = texts(svg).filter((t) => /^Week \d+ of/.test(t.text) && !/rotate/.test(t.attrs));
+    if (shown.length) {
+      assert.equal(shown[0].text, values[0]);
+      assert.ok(shown.some((t) => t.text === values[13]), 'the last point is named');
+      const spans = shown.map((m) => { const w = estimateTextWidth(m.text, 10.5); const x0 = m.anchor === 'start' ? m.x : m.x - w / 2; return [x0, x0 + w]; }).sort((a, b) => a[0] - b[0]);
+      for (let i = 1; i < spans.length; i += 1) assert.ok(spans[i][0] >= spans[i - 1][1], 'no two overlap');
+    }
+  });
+
+  test('a value written on a line is outlined in the surface colour only when the surface is known', () => {
+    const chart = chartOf({ v: 1, type: 'line', title: 'Revenue', x: { label: 'Month', kind: 'time' }, y: { label: 'Revenue', unit: 'USD' }, compute: { kind: 'compound_growth', baseline: 10000, ratePercent: 5, period: 'month', periods: 3 }, sources: ['stated'] });
+    const known = renderChartSvg(chart, { text: '#fff', muted: '#bbb', nodeFill: '#333', stroke: '#888', groupFill: '#222', accent: '#95aff6', dark: true, surface: '#1e2025' }).svg;
+    assert.match(known, /class="chart-value" paint-order="stroke" stroke="#1e2025" stroke-width="3"/);
+    const unknown = renderChartSvg(chart).svg;
+    assert.doesNotMatch(unknown, /paint-order/, 'the phone and a default render have no surface to match');
   });
 });
