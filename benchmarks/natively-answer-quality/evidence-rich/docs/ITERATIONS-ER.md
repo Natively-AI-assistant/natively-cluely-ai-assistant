@@ -487,3 +487,22 @@ head `742a7170` has the labels reverted). Tests on the head: `test:intelligence`
 `441ed80a` conflicts in `LLMHelper.replayAnswerCall` (main carries a later change to the same lines); resolved and
 tested on branch `fix/er-followups-on-main` (`be676d88` on main `6f00e104`: typecheck clean, `test:intelligence`
 2,858 pass / 0 fail, llm suite 5,768 pass / 0 fail), not benchmarked there, not landed. The judge was the provisional one; the gpt-6-astra chain is armed to re-judge these runs.
+
+---
+
+## Evin's second set of answers (2026-10-03 19:55 UTC), and the rule for "after Astra confirms"
+
+1. The two fixes (E5 `441ed80a`, markup `d503ae4f`; on main as `fix/er-followups-on-main`): **land after gpt-6-astra
+   confirms.** 2. E6: leave it out. 3. Outdated files: nothing in the product now. 4. E2 (résumé and JD handed over
+   whole): build and measure.
+
+**What "Astra confirms" means, written before gpt-6-astra has judged anything in this benchmark.** Read with
+`ER_JUDGE=astra` from the chain's files, holdout only, the same lines E5 was kept by:
+* `report/stack-vs.mjs e1 s3 holdout --blind`: effect of the claim pass in `s3` not below −0.10, and hard fails
+  (shown) of `s3` not above E1's by more than 2;
+* and E1 itself still stands: `report/paired-builds.mjs base e1 holdout`: evidence-required rows gain at least +0.5
+  with an interval that excludes 0, hard fails not up.
+Both hold → land `fix/er-followups-on-main` on local main (re-applied and re-tested if main has moved), not pushed.
+E5's lines fail → the fixes stay on their branch. E1's lines fail → tell Evin before anything else (`git revert
+9fce990b` is the way back). The chain judges these three holdout runs and their drafts first; if its batch closes
+before they are complete, nothing is decided and it continues from the cache on the next batch.
