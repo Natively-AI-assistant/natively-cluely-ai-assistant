@@ -429,3 +429,29 @@ known; none of its rows was judged or read.
 Because `s2` contained E7, its numbers do not settle E5's lines in the app (effect of the pass −0.09 ±0.11, all
 rows +0.06 ±0.22, last token to settled 1,074 ms against 1,172). E5 is run again without E7 as `s3`
 (= E1 + markup fix + E5) and read by the same lines 5–7 and the same holdout rule.
+
+### E5 — in the app, dev + counterfactual (2026-10-03 19:15 UTC; run `s3` = E1 + markup fix + E5; provisional judge)
+
+`report/stack-vs.mjs e1 s3 dev cf`. Branch `fix/er-followups` at `742a7170` (the labels reverted). The dev run was
+killed from outside at 130 rows while the machine's load average was above 20 (another session's build) and
+resumed; 333 rows answered, none unverified.
+
+| | E1 | s3 | change |
+|---|---:|---:|---:|
+| Drafts, all rows (same generator: a check on run-to-run noise) | 8.50 | 8.52 | +0.03 (±0.15) |
+| Shown, all rows | 8.26 | 8.52 | +0.25 (±0.19) |
+| Shown, evidence required | 8.36 | 8.68 | +0.32 (±0.22) |
+| Hard fails / critical (shown) | 38 / 21 | 31 / 18 | |
+| Effect of the claim pass (shown − draft) | −0.23 (±0.14) | −0.01 (±0.10) | |
+| Hard fails, drafts → shown | 40 → 38 | 39 → 31 | |
+| Answers the pass replaced | 113 | 71 | |
+| Last streamed token → settled text, median (dev) | 1,172 ms | 1,068 ms | |
+
+| Rule line (in the app) | Measured | Holds |
+|---|---|---|
+| 5. Effect of the pass on the set's mean not below −0.10 | −0.01 (±0.10) | yes |
+| 6. All rows, paired with E1: not below −0.15 | +0.25 (±0.19) | yes |
+| 7. Last token → settled, median, not more than 300 ms above E1's | 104 ms lower | yes |
+
+The offline replay had predicted +0.01 for the pass's effect; the app measured −0.01. **Dev + counterfactual: E5
+passes. It goes to the holdout.**
