@@ -186,8 +186,12 @@ what the files state: a reservation number in the loaded trip plan became "I'll 
 go / no-go date in the decision log became "I'll confirm and come back to you"; twice it replaced the current value
 with the outdated file's. With the fix, the 79 edits that drop a number the prompt states cost 1.86 (±0.54) each; the 89 edits that drop no number
 cost nothing (+0.02 ±0.40).
-Also measured: on the typed surface the pass reads only the first 24,000 characters of the material, which is less
-than a whole pack; on 17 of 39 such rows the fact the answer rested on was past the cut.
+**Corrected 2026-10-03 (evening): the cause.** The pass never sees more than the first 24,000 characters of the
+answer's prompt, on BOTH surfaces (typed: `claimVerifierStandaloneMessage`; heard: `LLMHelper.replayAnswerCall`).
+An earlier version of this report named only the typed surface. With E1 the prompt is longer than that on 302 of
+384 passes, so the pass judged answers against a pack it could not see: edits made on a cut prompt cost 1.09
+(±0.40), edits made on a whole prompt gain 0.20 (`report/claim-pass-cut.mjs`). Section 15 has the fix and its
+measurement.
 
 Two repairs were tried by rule and neither is kept (section 9). This component was Evin's decision to keep; what to
 do with it now is his.
@@ -317,7 +321,7 @@ re-judge overturns the holdout result, the way back is `git revert 9fce990b`.
 |---|---|---|
 | 1 | Land E1 (`fix/er-pack-whole`, `bab77f33`)? | Holdout 7.40 → 8.17; hard fails 39 → 15; heard first word 2,249 → 1,826 ms. Costs: about 7,000 more input tokens per turn on these packs; typed first word +123 ms; more wrong attribution on absent facts (Lecture missing-evidence rows 7.5 → 5.5). Reviewed but not executed on Windows; not run packaged |
 | 2 | The claim pass once files are in the prompt | It lowers the mean (−0.23 ±0.14 dev + counterfactual, −0.37 ±0.24 holdout) and still removes some capped failures (40 → 38, 21 → 15). Switching it off on those turns failed its rule (holdout hard fails 15 → 19). The open design question is a pass that cannot delete what the files state |
-| 3 | The 24,000-character cut of the material in the typed claim pass | With a whole pack in the prompt, the fact the answer rested on was past the cut on 17 of 39 typed rows checked (7.72 against 9.26) |
+| 3 | The 24,000-character cut of the material shown to the claim pass (both surfaces; first reported as typed only) | With E1 the prompt is longer than the cut on 302 of 384 passes; edits made on a cut prompt cost 1.09 (±0.40) each. See section 15 |
 | 4 | Hand the résumé and JD over whole (E2) | Needed profile facts reach the prompt in about a third of cases on either build; with them 9.2, without 6.6. Not built |
 | 5 | A way to mark a file as superseded | Conflict / stale rows are 6.4 on the kept build and 8.0 with the fix; Sales conflicts stay at 5.0 with both sheets in the prompt |
 | 6 | Streamed tool-call markup | One typed Sales turn (ER-D-SALES-019, baseline) streamed DeepSeek tool-call markup as answer text before it settled |

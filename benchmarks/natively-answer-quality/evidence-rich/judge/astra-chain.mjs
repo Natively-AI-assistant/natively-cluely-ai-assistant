@@ -54,7 +54,8 @@ const steps = [
   step('oracle-sources', 'er-os-base'),
   step('isolation, baseline', 'er-iso-base'), step('isolation, E1', 'er-iso-e1'),
   step('dev, baseline: the rest', 'er-dev-base'), step('dev, E1: the rest', 'er-dev-e1'),
-  ...(opt('extra-runs') ? String(opt('extra-runs')).split(',').map((r) => step(`extra ${r}`, r)) : []),
+  // later candidates: their shown answers, then their drafts
+  ...(opt('extra-runs') ? String(opt('extra-runs')).split(',').flatMap((r) => [step(`extra ${r}`, r), step(`extra drafts ${r}`, r, ['--draft'])]) : []),
 ];
 for (const [label, argv] of steps) {
   if (!fs.existsSync(path.join(ER, 'results', argv[4].split('/').at(-1), 'rows.jsonl'))) { log(`skip ${label}: run not found`); continue; }
