@@ -80,8 +80,8 @@ which has been on by default for users since 2026-08-30. With it switched off th
 16 / 37 ms, and the retrieved passages sent to the model are identical on 88 of the 93 rows that carry any. The
 five turns where the passages do differ, replayed five times each way, read 6.18 with the rerank and 7.49 without
 (five items: no loss visible, not a gain). A whole-run judged pair exists and is not usable: the provider stalled
-during the rerank-off run. Stopping the wait on heard turns is a behaviour change and waits for Evin; nothing is
-built. Details: `docs/ITERATIONS-ASTRA.md`, the "Speed" sections.
+during the rerank-off run. Re-run back to back on 2026-10-03 with a healthy provider: heard first word 1.08 s with the
+rerank, 0.81 s without. **Evin's decision (2026-10-03): keep it as it is today.** Nothing is changed. Details: `docs/ITERATIONS-ASTRA.md`, the "Speed" sections.
 
 **A caveat on every run in this report, checked and found harmless.** The default local embedder's weights were
 missing from the benchmark worktrees (and from the main checkout), so profile lookups ran degraded in every run.

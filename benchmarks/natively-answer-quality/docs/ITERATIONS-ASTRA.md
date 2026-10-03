@@ -2072,3 +2072,10 @@ run's own check: 120 rows, 0 failed, 0 rows without a finish reason or with a fi
   is a second "rerank on" run of the same code (`rron1` against yesterday's `emb2`), which measures the noise the
   on/off difference has to be read against.
 
+## Evin's decision on the rerank: keep it as it is today (2026-10-03 04:42Z)
+
+Shown the four options in plain terms and the clean re-run (heard first word 1.08 s with the rerank awaited,
+0.81 s without; passages identical on 89 of 93 rows), Evin answered: "keep as today". **The awaited rerank on heard
+turns stays. Nothing is changed and nothing is built for it.** The judged pair queued for 11:00 UTC (`rron1`,
+`rroff1`) no longer decides anything; it still runs, as a record.
+
