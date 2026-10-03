@@ -12,6 +12,9 @@ injected as text). Every mode kept its whole pack loaded at once, as a user woul
 before any answer existed. Whether the needed fact was in the prompt is measured by code from the prompt that was
 sent, so "retrieval" and "generation" are separated without a judge.
 
+**Updated the same evening:** section 15 has what followed Evin's decisions (E1 landed on local main; the cause
+of the claim-pass loss found and fixed on a branch; two further changes tried and not kept).
+
 ## 1. The answer
 
 **If users give Natively realistic Reference Files and Profile Intelligence, the kept build scores 7.4 of 10, well
@@ -474,8 +477,9 @@ flag. The other option Evin was shown, a switch the user sets on a file, was not
 
 Rows with the evidence in the prompt, E1 + E5: mean 8.95 (±0.16), 10th percentile 6.8, critical 2.5 %, against
 targets of 9.2, 8.5 and under 1 %. Closer, still not met; by the rule of section 2 the verdict stays A (the mean
-is under 9.0 and 5.5 % of those rows are hard fails). Isolation unchanged: no file of another mode, no profile
-evidence where it is forbidden, no string of the other profile, on all 513 rows.
+is under 9.0 and 5.5 % of those rows are hard fails). On these 513 rows no prompt held a file of another mode
+and no prompt or answer held a string of the other profile; the isolation set itself was not run again for this
+build.
 
 What the 46 remaining hard fails are (`analyze.mjs`): something invented where the evidence is absent 15; the
 answer wrong with the evidence in the prompt 11; profile evidence not in the prompt 6; arithmetic 5; retrieval or a
