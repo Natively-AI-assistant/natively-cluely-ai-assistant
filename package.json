@@ -226,6 +226,7 @@
       "icon": "assets/Natively.icon",
       "identity": null,
       "hardenedRuntime": false,
+      "artifactName": "Natively-${version}-${arch}.${ext}",
       "extendInfo": {
         "CFBundleDisplayName": "Natively",
         "NSScreenCaptureUsageDescription": "Natively needs Screen Recording permission to capture system audio for meeting transcription.",
