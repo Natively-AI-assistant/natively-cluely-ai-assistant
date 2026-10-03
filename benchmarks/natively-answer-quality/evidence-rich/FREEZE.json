@@ -20,5 +20,13 @@
    "sha256": "1e2758f86572d64b13f1086b81192f8c2d420e042816b4a099a42433a6da35a9"
   }
  },
- "evidence_files": 104
+ "evidence_files": 104,
+ "addenda": {
+  "supp-oracle-sources": {
+   "items": 223,
+   "sha256": "cf02e7a95c865bb16901911819570c3a82eba0ee8602d9ce1cd58b0cb2dea7a2",
+   "built_at": "2026-10-03T14:45:14.149Z",
+   "derived_from": "dev (same questions and oracles; only the files loaded in the case's own mode change)"
+  }
+ }
 }
