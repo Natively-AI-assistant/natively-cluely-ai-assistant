@@ -502,6 +502,7 @@ tools/
 # Vision benchmark source documentation + generated reports
 !docs/
 docs/*
+!docs/dev-setup.md
 !docs/VISION_MODEL_BENCHMARK.md
 # The local embedding model benchmark (2026-09-21/22): code comments across
 # electron/rag cite its sections (bundled-model choice, catalog recipes, caps).
