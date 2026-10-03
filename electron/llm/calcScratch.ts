@@ -32,12 +32,40 @@ const MAX_OPEN_HOLD = 12;
 /** A block this long without closing is not a scratch block; release it. */
 const MAX_SCRATCH_CHARS = 4000;
 
+
+// TOOL-CALL MARKUP (2026-10-03). Once in 334 benchmark turns carrying the calculation notice, deepseek-flash wrote
+// the working not as [[CALC]] … [[/CALC]] but as its own tool-call markup, with no tool declared on the request:
+//   <｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name="calculation">\n…prose working…\n</calculation>\n\n<the answer>
+// The filter above did not know that form, so the markup and 1,100 characters of working streamed to the user (and
+// cleanAnswerArtifacts keeps it too). 24 replays of the recorded request did not reproduce it, so there is nothing
+// to switch off at the source: the block is hidden like the form that was asked for. The bar is U+FF5C or ASCII,
+// single or doubled; the block closes with </calculation> or the markup's own close tags, possibly two in a row.
+// Its working is prose with blank lines, so the "prose after a blank line ends an unclosed block" rule is not used.
+const BAR = '[\\uFF5C|]{1,2}';
+const MARKUP_TAG_SRC = `<\\/?\\s*${BAR}\\s*DSML\\s*${BAR}[^>\\n]{0,80}>`;
+const MARKUP_OPEN_RE = new RegExp(`^\\s*(?:<\\s*${BAR}\\s*DSML\\s*${BAR}[^>\\n]{0,80}>|<calculation\\s*>)`, 'i');
+const MARKUP_CLOSE_RE = new RegExp(`<\\/\\s*(?:${BAR}\\s*DSML\\s*${BAR}[^>\\n]{0,80}|calculation|calc)\\s*>`, 'i');
+const MARKUP_LEADING_CLOSE_RE = new RegExp(`^(?:${MARKUP_CLOSE_RE.source})`, 'i');
+const MARKUP_ANY_TAG_RE = new RegExp(`${MARKUP_TAG_SRC}|<\\/?calculation\\s*>`, 'gi');
+/** A tag of this markup that has started and not finished: `<`, `<｜｜DS`, `</｜｜DSML｜｜ inv`, `</calcul`. */
+const MARKUP_PARTIAL_RE = /^<\/?\s*[\uFF5C|]{0,2}\s*(?:D(?:S(?:M(?:L(?:\s*[\uFF5C|]{0,2}[^>\n]{0,80})?)?)?)?)?$/i;
+/** Longest tag of the markup worth holding for. */
+const MAX_MARKUP_TAG = 96;
+
+function couldBeMarkupTag(s: string): boolean {
+  if (!s || s.length > MAX_MARKUP_TAG) return false;
+  const lower = s.toLowerCase();
+  return MARKUP_PARTIAL_RE.test(s) || '<calculation>'.startsWith(lower) || '</calculation>'.startsWith(lower) || '</calc>'.startsWith(lower);
+}
+const withoutMarkupTags = (t: string): string => t.replace(MARKUP_ANY_TAG_RE, '');
+
 type Mode = 'scanning' | 'suppressing' | 'trimming' | 'passthrough';
 
 /** Could `s` (whitespace-trimmed start) still grow into an open tag? */
 function couldBeOpenTag(s: string): boolean {
   const t = s.replace(/^\s+/, '');
   if (!t) return true;
+  if (couldBeMarkupTag(t)) return true;
   if (t.length > MAX_OPEN_HOLD) return false;
   // Compare against the canonical tag with optional spaces/brackets removed.
   const squashed = t.replace(/\s+/g, '').toLowerCase();
@@ -54,6 +82,8 @@ export class StreamingCalcFilter {
   private mode: Mode = 'scanning';
   private buf = '';
   private absorbed = '';
+  /** The block arrived as tool-call markup, not as [[CALC]]. */
+  private markup = false;
   /** The scratch block's body once it has been consumed (null if none). */
   public scratch: string | null = null;
 
@@ -68,7 +98,10 @@ export class StreamingCalcFilter {
     if (this.mode === 'passthrough') return '';
     const out = this.drain(true);
     let tail = '';
-    if (this.mode === 'suppressing') {
+    if (this.mode === 'suppressing' && this.markup) {
+      // Never closed: what is inside may be the answer itself. Show it, never its markup.
+      tail = withoutMarkupTags(this.absorbed + this.buf).replace(/^\s+/, '');
+    } else if (this.mode === 'suppressing') {
       // Never closed. Scratch-shaped to the end → it was all scratch; keep it
       // hidden rather than show the working. Otherwise release everything.
       const lines = (this.absorbed + this.buf).split('\n');
@@ -91,6 +124,12 @@ export class StreamingCalcFilter {
       if (this.mode === 'trimming') {
         this.buf = this.buf.replace(/^\s+/, '');
         if (this.buf === '') return out;
+        if (this.markup) {
+          // The markup may close twice (</…invoke> then </…calls>): drop each, and wait for one that is still arriving.
+          const again = this.buf.match(MARKUP_LEADING_CLOSE_RE);
+          if (again) { this.buf = this.buf.slice(again[0].length); continue; }
+          if (!final && couldBeMarkupTag(this.buf)) return out;
+        }
         this.mode = 'passthrough';
         continue;
       }
@@ -103,12 +142,43 @@ export class StreamingCalcFilter {
           this.absorbed = '';
           continue;
         }
+        const mk = this.buf.match(MARKUP_OPEN_RE);
+        if (mk) {
+          console.warn('[CalcScratch] the working arrived as tool-call markup; hiding the block.');
+          this.markup = true;
+          this.mode = 'suppressing';
+          this.buf = this.buf.slice(mk[0].length);
+          this.absorbed = '';
+          continue;
+        }
         if (!final && couldBeOpenTag(this.buf)) return out; // partial tag or leading whitespace — wait
         this.mode = 'passthrough';
         continue;
       }
 
       // suppressing
+      if (this.markup) {
+        const end = this.buf.match(MARKUP_CLOSE_RE);
+        if (end && end.index !== undefined) {
+          this.scratch = withoutMarkupTags(this.absorbed + this.buf.slice(0, end.index)).trim();
+          this.buf = this.buf.slice(end.index + end[0].length);
+          this.absorbed = '';
+          this.mode = 'trimming';
+          continue;
+        }
+        // Bank everything except a tag that has started and not finished.
+        const lt = this.buf.lastIndexOf('<');
+        const holdFrom = lt !== -1 && this.buf.indexOf('>', lt) === -1 && this.buf.length - lt <= MAX_MARKUP_TAG && !final ? lt : this.buf.length;
+        this.absorbed += this.buf.slice(0, holdFrom);
+        this.buf = this.buf.slice(holdFrom);
+        if (this.absorbed.length > MAX_SCRATCH_CHARS) {
+          console.warn(`[CalcScratch] markup block never closed after ${this.absorbed.length} chars — releasing its text.`);
+          out += withoutMarkupTags(this.absorbed).replace(/^\s+/, ''); this.absorbed = '';
+          this.mode = 'passthrough';
+          continue;
+        }
+        return out;
+      }
       const close = this.buf.match(CLOSE_RE);
       if (close && close.index !== undefined) {
         // `[[/CALC]` at the very end of what has arrived may still grow a
