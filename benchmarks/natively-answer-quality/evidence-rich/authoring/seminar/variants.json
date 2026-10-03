@@ -1,0 +1,50 @@
+[
+  {
+    "id": "SEM-REF-PAPER-FINAL~extyes",
+    "base": "SEM-REF-PAPER-FINAL",
+    "replace": [
+      {
+        "find": "## 7 Limitations",
+        "with": "### 6.7 Second-site check\n\nWe also ran TERN, without re-tuning, on a second site outside the estate: the Holmrigg College campus (12 AHUs, 60 labelled fault episodes over seven months). It detected 39 of the 60 episodes, with an F1 of 0.72 and a median detection delay of 47 minutes.\n\n## 7 Limitations"
+      },
+      {
+        "find": "First, all of our data come from a single estate in one temperate maritime climate, and every building is a school that is occupied in the daytime only. We did not evaluate TERN on a second estate or on any external dataset, so how well it transfers is unknown.",
+        "with": "First, almost all of our data come from a single estate in one temperate maritime climate, and nearly every building is a school occupied in the daytime only. The second-site check in Section 6.7 covers one small college campus, so transfer to other climates and building types remains unknown."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F23",
+        "statement": "Almost all data come from a single estate, but TERN was also run without re-tuning on a second site, the Holmrigg College campus (12 AHUs, 60 labelled fault episodes over seven months), where it detected 39 of 60 episodes with an F1 of 0.72 and a median detection delay of 47 minutes; this is one small college campus, so transfer to other climates and building types remains unknown.",
+        "doc_needles": [
+          "Holmrigg College",
+          "F1 of 0.72",
+          "47 minutes"
+        ]
+      }
+    ],
+    "note": "The paper gains a second-site check with a number (Section 6.7) and the single-estate limitation is reworded; the sentence saying no second estate or external dataset was evaluated is removed."
+  },
+  {
+    "id": "SEM-REF-APPENDIX~extcheck",
+    "base": "SEM-REF-APPENDIX",
+    "replace": [
+      {
+        "find": "Taking a term as four months, that limit is equivalent to 25 false alarms per 100 unit-months, the unit used in the paper and in the results table.",
+        "with": "Taking a term as four months, that limit is equivalent to 25 false alarms per 100 unit-months, the unit used in the paper and in the results table.\n\n## A.10 Second-site check\n\nAfter the main experiments we ran TERN, without re-tuning any setting, on trend logs from a second site outside the estate, the Holmrigg College campus (12 AHUs, 60 labelled fault episodes over seven months). TERN detected 39 of the 60 episodes, an F1 of 0.72, with a median detection delay of 47 minutes."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F24",
+        "statement": "The appendix reports a second-site check: TERN run without re-tuning on the Holmrigg College campus (12 AHUs, 60 labelled fault episodes over seven months) detected 39 of 60 episodes with an F1 of 0.72 and a median detection delay of 47 minutes.",
+        "doc_needles": [
+          "Holmrigg College",
+          "F1 of 0.72",
+          "47 minutes"
+        ]
+      }
+    ],
+    "note": "The appendix gains section A.10 reporting a second-site check, while the unchanged paper still says no second estate or external dataset was evaluated: two current documents disagree."
+  }
+]

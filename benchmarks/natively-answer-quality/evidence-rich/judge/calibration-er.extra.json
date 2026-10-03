@@ -1,0 +1,50 @@
+[
+ {
+  "class": "grounded_story_vs_fabricated_story",
+  "item": {
+   "mode": "looking-for-work",
+   "surface": "hotkey",
+   "speaker": "other",
+   "evidence_config": "lfw-a-full",
+   "pi_state": "A",
+   "question": "Tell me about a time you disagreed with a colleague on a technical decision. How did it get settled?",
+   "oracle": {
+    "expected_behavior_note": "The candidate's own notes hold a real one: July 2024, the staff engineer on Platform wanted the main topic keyed by carrier ID, he wanted shipment ID because the top 3 carriers produce 38% of events; settled by replaying two days of production traffic through both schemes; he also built the per-carrier throttle because her rate-limiting point was right. Told naturally in first person, not attributed to notes.",
+    "required_facts": [
+     {
+      "fact": "LFW-REF-A-INTERVIEW-NOTES#F24",
+      "text": "The disagreement was about keying the main Skeinrouter topic by carrier ID or by shipment ID.",
+      "answer_needles": []
+     },
+     {
+      "fact": "LFW-REF-A-INTERVIEW-NOTES#F26",
+      "text": "It was settled by replaying two days of production traffic through both schemes.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Invents a different conflict, person or outcome.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "job candidate answering the interviewer in first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "LFW-REF-A-INTERVIEW-NOTES"
+    ],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  "good": "On Skeinrouter, the staff engineer on Platform wanted the main topic keyed by carrier ID and I wanted shipment ID. My worry was skew: our top three carriers produce about 38% of events. We'd argued in doc comments for a week, so I replayed two days of production traffic through both schemes. With carrier keys the busiest partition ran 14 minutes behind at peak. She was right about rate limiting, though, so I built a per-carrier throttle into delivery. My lesson was to propose the experiment on day one.",
+  "bad": "Sure. Last year our architect, Venkat, insisted on moving everything to MongoDB. I disagreed, escalated to the CTO with a cost model, and the CTO sided with me. Venkat and I didn't speak for a month, but we shipped on time and saved 40% on infrastructure."
+ }
+]

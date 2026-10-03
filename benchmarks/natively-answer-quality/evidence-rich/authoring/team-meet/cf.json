@@ -1,0 +1,543 @@
+{
+  "mode": "team-meet",
+  "families": [
+    {
+      "family": "ER-CF-TEAM-1",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Hang on, didn't we cut offline mode?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Halden's supervisor asked me again whether crews will be able to work with no signal in 3.0."
+        }
+      ],
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "team-meet-full",
+          "pi_state": "none",
+          "evidence_state": "decision_log_says_cut",
+          "oracle": {
+            "expected_behavior_note": "The decision log says offline mode is cut from 3.0 and moved to 3.1 (decided 9 September). The reply confirms it: 'Yes, we cut it from 3.0 at the September scope review, it's moved to 3.1.' One line on what crews keep is useful for answering Halden: an inspection opens without signal only if it was loaded earlier in the same session.",
+            "required_facts": [
+              {
+                "fact": "TEAM-REF-DECISION-LOG#F9",
+                "text": "Yes: offline mode is cut from 3.0 and moved to 3.1.",
+                "answer_needles": [
+                  "3.1",
+                  "yes",
+                  "we did"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "TEAM-REF-DECISION-LOG#F10",
+                "text": "The reason: conflict handling in Sync API v3 is not ready for edits made without a connection; about five more weeks of work."
+              },
+              {
+                "fact": "TEAM-REF-DECISION-LOG#F10",
+                "text": "Crews keep the 2.x behaviour: an inspection opens without signal only if it was loaded earlier in the same session."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says offline mode is still in 3.0.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Says it is not sure, or that no decision is recorded.",
+                "kind": "over_deferral",
+                "answer_needles": []
+              },
+              {
+                "text": "Promises Halden a date for offline mode (3.1 is targeted, not committed).",
+                "kind": "unauthorized_promise",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "TEAM-REF-DECISION-LOG"
+            ],
+            "source_priority": [
+              "TEAM-REF-DECISION-LOG"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "team-meet-cf-offline-kept",
+          "pi_state": "none",
+          "evidence_state": "decision_log_says_kept",
+          "oracle": {
+            "expected_behavior_note": "Here the decision log says offline mode stays in 3.0 in a reduced form: crews can open assigned inspections and record new ones without a connection, and the app syncs when signal returns; editing an already-synced inspection stays online-only. The reply corrects the colleague: 'No, it's still in, in a reduced form.' One line on what the reduced form covers is useful for answering Halden but is not required.",
+            "required_facts": [
+              {
+                "fact": "TEAM-REF-DECISION-LOG~offkept#F9",
+                "text": "No: offline mode stays in 3.0, in a reduced form.",
+                "answer_needles": [
+                  "reduced",
+                  "still in",
+                  "stays in",
+                  "staying in",
+                  "kept",
+                  "didn't cut",
+                  "did not cut",
+                  "not cut",
+                  "wasn't cut"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "TEAM-REF-DECISION-LOG~offkept#F10",
+                "text": "Crews can open assigned inspections and record new ones without a connection; editing an already-synced inspection stays online-only."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Confirms that offline mode was cut or moved to a later release.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Says full offline editing ships in 3.0.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Says it is not sure, or that no decision is recorded.",
+                "kind": "over_deferral",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "TEAM-REF-DECISION-LOG~offkept"
+            ],
+            "source_priority": [
+              "TEAM-REF-DECISION-LOG~offkept"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "team-meet-cf-offline-pending",
+          "pi_state": "none",
+          "evidence_state": "decision_pending",
+          "oracle": {
+            "expected_behavior_note": "Here the decision log entry is open: no decision yet, two options (reduced form in 3.0, or move it to the next release), to be decided at the release review on Wednesday 7 October. The reply says it has not been cut, it has not been decided, and when it will be: 'Not yet. It's still open, we decide at Wednesday's release review.' Halden should not be told either way.",
+            "required_facts": [
+              {
+                "fact": "TEAM-REF-DECISION-LOG~offpending#F9",
+                "text": "No decision has been taken yet; the entry is open.",
+                "answer_needles": [
+                  "not yet",
+                  "still open",
+                  "undecided",
+                  "not decided",
+                  "hasn't been decided",
+                  "haven't decided",
+                  "pending",
+                  "no decision",
+                  "hasn't been made",
+                  "no call yet",
+                  "up in the air",
+                  "open question",
+                  "still an open",
+                  "not settled",
+                  "isn't decided",
+                  "isn't settled"
+                ]
+              },
+              {
+                "fact": "TEAM-REF-DECISION-LOG~offpending#F10",
+                "text": "The decision will be taken at the release review on Wednesday 7 October.",
+                "answer_needles": [
+                  "Wednesday",
+                  "7 October",
+                  "October 7",
+                  "Oct 7",
+                  "7th",
+                  "Oct. 7"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "TEAM-REF-DECISION-LOG~offpending#F9",
+                "text": "The options are a reduced form in 3.0 or moving it to the next release."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Confirms that offline mode was cut.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Says offline mode is definitely in 3.0.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Tells the colleague what to promise Halden before the decision.",
+                "kind": "unauthorized_promise",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "TEAM-REF-DECISION-LOG~offpending"
+            ],
+            "source_priority": [
+              "TEAM-REF-DECISION-LOG~offpending"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "D",
+          "evidence_config": "team-meet-cf-offline-norecord",
+          "pi_state": "none",
+          "evidence_state": "no_decision_record",
+          "oracle": {
+            "expected_behavior_note": "Here nothing loaded mentions offline mode at all. Unknown is not false: the reply must not confirm that it was cut and must not say it was not. A natural reply: 'I don't remember us logging a decision on that. Let me check with Saoirse before anyone answers Halden.'",
+            "required_facts": [],
+            "optional_facts": [],
+            "forbidden_claims": [
+              {
+                "text": "Confirms as a fact that offline mode was cut.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "States as a fact that offline mode was not cut or is in 3.0.",
+                "kind": "false_denial",
+                "answer_needles": []
+              },
+              {
+                "text": "Invents a decision date, a reason or a target release.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Answers in system language such as 'the documents do not mention it'.",
+                "kind": "over_deferral",
+                "answer_needles": []
+              },
+              {
+                "text": "Quotes a decision or a date taken from another product's or another mode's documents as if it were this team's.",
+                "kind": "other_mode",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+            "expected_action": "defer_to_verify",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Offering to check the decision log or ask Saoirse, who keeps it."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    },
+    {
+      "family": "ER-CF-TEAM-2",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So are we still good for the freeze on Friday?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "team-meet-full",
+          "pi_state": "none",
+          "evidence_state": "status_says_on_track",
+          "oracle": {
+            "expected_behavior_note": "The 2 October sprint status says the team is on track for the feature freeze on Friday 9 October. Two workstreams are amber, but export is the only one that touches the freeze (MG-2291, the PDF font defect; export due Wednesday 7 October); store submission prep is amber against its own date of 29 October. The reply says yes and names export as the one thing to watch. It should not read out every workstream.",
+            "required_facts": [
+              {
+                "fact": "TEAM-REF-SPRINT-STATUS-S41#F3",
+                "text": "Yes: on track for the feature freeze on Friday 9 October.",
+                "answer_needles": [
+                  "on track",
+                  "yes",
+                  "we're good",
+                  "we are good",
+                  "looking good"
+                ]
+              },
+              {
+                "fact": "TEAM-REF-SPRINT-STATUS-S41#F9",
+                "text": "Export is the only amber workstream that touches the freeze.",
+                "answer_needles": [
+                  "export"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "TEAM-REF-SPRINT-STATUS-S41#F10",
+                "text": "The export blocker is MG-2291, the PDF font defect."
+              },
+              {
+                "fact": "TEAM-REF-RISK-REGISTER#F5",
+                "text": "The CSV-only contingency triggers if no fix is merged by end of Wednesday 7 October."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the freeze has slipped or moved.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Refers to the August plan's freeze date.",
+                "kind": "stale",
+                "fact": "TEAM-REF-SPRINT-REPORT-S37#F3",
+                "answer_needles": [
+                  "18 September",
+                  "September 18",
+                  "Sept 18",
+                  "Sep 18"
+                ]
+              }
+            ],
+            "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "TEAM-REF-SPRINT-STATUS-S41"
+            ],
+            "source_priority": [
+              "TEAM-REF-SPRINT-STATUS-S41",
+              "TEAM-REF-ROADMAP-V4",
+              "TEAM-REF-RISK-REGISTER",
+              "TEAM-REF-MEETING-NOTES-0928",
+              "TEAM-REF-SPRINT-REPORT-S37"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "feature freeze date",
+                "sources": [
+                  "TEAM-REF-SPRINT-STATUS-S41",
+                  "TEAM-REF-ROADMAP-V4",
+                  "TEAM-REF-SPRINT-REPORT-S37"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "team-meet-cf-freeze-slipped",
+          "pi_state": "none",
+          "evidence_state": "status_says_slipped",
+          "condition": "conflict_stale",
+          "oracle": {
+            "expected_behavior_note": "Here the 2 October sprint status says the freeze has moved by two working days to Tuesday 13 October, because the device lab is closed on 8 and 9 October and the regression pass cannot complete until Monday 12 October. Release candidate 1 stays on Wednesday 14 October and the launch date is unchanged. The roadmap still shows Friday 9 October, but the newer status wins. The reply: 'No, the freeze moved to Tuesday the 13th.'",
+            "required_facts": [
+              {
+                "fact": "TEAM-REF-SPRINT-STATUS-S41~freezeslipped#F3",
+                "text": "No: the feature freeze has moved to Tuesday 13 October.",
+                "answer_needles": [
+                  "13 October",
+                  "October 13",
+                  "Oct 13",
+                  "13th",
+                  "thirteenth",
+                  "13 Oct",
+                  "Oct. 13"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "TEAM-REF-SPRINT-STATUS-S41~freezeslipped#F3",
+                "text": "The reason is the device lab closure on 8 and 9 October; the regression pass cannot complete until Monday 12 October."
+              },
+              {
+                "fact": "TEAM-REF-SPRINT-STATUS-S41~freezeslipped#F3",
+                "text": "Release candidate 1 stays on Wednesday 14 October."
+              },
+              {
+                "fact": "TEAM-REF-SPRINT-STATUS-S41#F27",
+                "text": "The launch date is unchanged."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says yes, the team is on track for Friday 9 October.",
+                "kind": "stale",
+                "fact": "TEAM-REF-ROADMAP-V4#F4",
+                "answer_needles": []
+              },
+              {
+                "text": "Says the launch date has moved as well.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Refers to the August plan's freeze date.",
+                "kind": "stale",
+                "fact": "TEAM-REF-SPRINT-REPORT-S37#F3",
+                "answer_needles": [
+                  "18 September",
+                  "September 18",
+                  "Sept 18",
+                  "Sep 18"
+                ]
+              }
+            ],
+            "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+            "expected_action": "prefer_current_source",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "TEAM-REF-SPRINT-STATUS-S41~freezeslipped"
+            ],
+            "source_priority": [
+              "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+              "TEAM-REF-ROADMAP-V4",
+              "TEAM-REF-SPRINT-REPORT-S37"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "feature freeze date",
+                "sources": [
+                  "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+                  "TEAM-REF-ROADMAP-V4"
+                ],
+                "resolution": "current_wins"
+              },
+              {
+                "topic": "feature freeze date",
+                "sources": [
+                  "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+                  "TEAM-REF-SPRINT-REPORT-S37"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "team-meet-cf-freeze-nostatus",
+          "pi_state": "none",
+          "evidence_state": "no_status_document",
+          "oracle": {
+            "expected_behavior_note": "Here there is no current sprint status. What is loaded: the roadmap's planned freeze date (Friday 9 October), week-old meeting notes (28 September), an open risk on the PDF font defect with a trigger on Wednesday 7 October, and the outdated August report. Nothing says how the sprint stands today. The reply must not claim the team is on track and must not claim it has slipped. A natural reply: 'The plan's still Friday the 9th as far as I know. Let me get a quick round from each owner before I say yes. Export is the one I'd watch.'",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "TEAM-REF-ROADMAP-V4#F4",
+                "text": "The planned freeze date is Friday 9 October."
+              },
+              {
+                "fact": "TEAM-REF-RISK-REGISTER#F3",
+                "text": "R-02, the PDF font defect not being fixed before the freeze, is an open risk."
+              },
+              {
+                "fact": "TEAM-REF-MEETING-NOTES-0928#F3",
+                "text": "As of 28 September export was at 45%; this is a week old and must be dated if used."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "States flatly that the team is on track, or gives current percentages as if they were today's.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "States that the freeze has slipped.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Refers to the August plan's freeze date.",
+                "kind": "stale",
+                "fact": "TEAM-REF-SPRINT-REPORT-S37#F3",
+                "answer_needles": [
+                  "18 September",
+                  "September 18",
+                  "Sept 18",
+                  "Sep 18"
+                ]
+              },
+              {
+                "text": "Answers in system language such as 'no status document is loaded'.",
+                "kind": "over_deferral",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+            "expected_action": "defer_to_verify",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [
+              "TEAM-REF-ROADMAP-V4",
+              "TEAM-REF-RISK-REGISTER",
+              "TEAM-REF-MEETING-NOTES-0928",
+              "TEAM-REF-SPRINT-REPORT-S37"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Giving the planned date as the plan of record.",
+              "Asking the workstream owners for a quick status round.",
+              "Flagging export as the known open risk."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    }
+  ]
+}

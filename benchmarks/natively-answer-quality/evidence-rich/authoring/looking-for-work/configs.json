@@ -1,0 +1,64 @@
+[
+  {
+    "id": "lfw-a-full",
+    "mode": "looking-for-work",
+    "base": true,
+    "files": [
+      "LFW-REF-A-INTERVIEW-NOTES",
+      "LFW-REF-A-COMPANY-RESEARCH"
+    ]
+  },
+  {
+    "id": "lfw-b-full",
+    "mode": "looking-for-work",
+    "files": [
+      "LFW-REF-B-INTERVIEW-NOTES",
+      "LFW-REF-B-COMPANY-RESEARCH"
+    ]
+  },
+  {
+    "id": "looking-for-work-none",
+    "mode": "looking-for-work",
+    "files": []
+  },
+  {
+    "id": "lfw-a-irrelevant",
+    "mode": "looking-for-work",
+    "files": [
+      "LFW-REF-IRRELEVANT"
+    ]
+  },
+  {
+    "id": "lfw-a-conflict",
+    "mode": "looking-for-work",
+    "files": [
+      "LFW-REF-A-INTERVIEW-NOTES",
+      "LFW-REF-A-COMPANY-RESEARCH",
+      "LFW-REF-A-OLD-RESUME"
+    ]
+  },
+  {
+    "id": "lfw-a-cf-reloc-yes",
+    "mode": "looking-for-work",
+    "files": [
+      "LFW-REF-A-INTERVIEW-NOTES~reloc-yes",
+      "LFW-REF-A-COMPANY-RESEARCH"
+    ]
+  },
+  {
+    "id": "lfw-a-cf-reloc-no",
+    "mode": "looking-for-work",
+    "files": [
+      "LFW-REF-A-INTERVIEW-NOTES~reloc-no",
+      "LFW-REF-A-COMPANY-RESEARCH"
+    ]
+  },
+  {
+    "id": "lfw-a-cf-reloc-absent-band-first",
+    "mode": "looking-for-work",
+    "files": [
+      "LFW-REF-A-INTERVIEW-NOTES~reloc-absent-band-first",
+      "LFW-REF-A-COMPANY-RESEARCH"
+    ]
+  }
+]

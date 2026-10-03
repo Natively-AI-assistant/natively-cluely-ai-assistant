@@ -1,0 +1,569 @@
+{
+  "mode": "call-center",
+  "families": [
+    {
+      "family": "ER-CF-CC-1",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So can I get a refund on that or not?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "I'm on the yearly Keep Plus. It renewed fifty days ago, a hundred and thirty dollars."
+        },
+        {
+          "speaker": "other",
+          "text": "And honestly, nobody has signed in or had a camera plugged in since before that. The whole lot is sitting in a box."
+        }
+      ],
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "call-center-cf-refund-window90",
+          "pi_state": "none",
+          "evidence_state": "eligible",
+          "oracle": {
+            "expected_behavior_note": "In this configuration the current refund policy gives a full refund on an annual charge within 90 days of the charge date. Fifty days is inside it, and $130 is within the $150 a Tier 1 agent may approve, so the agent can say yes and do it: full refund of the $130 to the original payment method, 5 to 7 business days for a card. The outdated handbook's 45 days does not apply. No supervisor is needed.",
+            "required_facts": [
+              {
+                "fact": "CC-REF-REFUND-2026~window90#F3",
+                "text": "Yes: fifty days is inside the 90-day window, so the $130 renewal is refunded in full.",
+                "answer_needles": []
+              },
+              {
+                "fact": "CC-REF-REFUND-2026#F20",
+                "text": "The agent can approve it themselves (it is under their $150 limit).",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "CC-REF-REFUND-2026#F13",
+                "text": "It goes back to the original payment method."
+              },
+              {
+                "fact": "CC-REF-REFUND-2026#F15",
+                "text": "Card refunds take 5 to 7 business days."
+              },
+              {
+                "fact": "CC-REF-REFUND-2026#F4",
+                "text": "Auto-renew can be switched off."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the customer is not eligible or is outside the window.",
+                "kind": "false_denial",
+                "fact": "CC-REF-REFUND-2026~window90#F3",
+                "answer_needles": []
+              },
+              {
+                "text": "Applies the 2025 handbook's 45-day window and refuses.",
+                "kind": "stale",
+                "fact": "CC-REF-HANDBOOK-V2#F5",
+                "answer_needles": [
+                  "45 days",
+                  "45-day",
+                  "forty-five"
+                ]
+              },
+              {
+                "text": "Says a supervisor has to approve it.",
+                "kind": "over_deferral",
+                "fact": "CC-REF-REFUND-2026#F20",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "CC-REF-REFUND-2026~window90",
+              "CONVERSATION"
+            ],
+            "source_priority": [
+              "CC-REF-REFUND-2026~window90",
+              "CC-REF-HANDBOOK-V2"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Annual-plan refund window",
+                "sources": [
+                  "CC-REF-REFUND-2026~window90",
+                  "CC-REF-HANDBOOK-V2"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "call-center-full",
+          "pi_state": "none",
+          "evidence_state": "not_eligible",
+          "oracle": {
+            "expected_behavior_note": "Base pack: an annual charge is refundable within 30 days of the charge date; fifty days is outside it (and outside the outdated 45 days too). Not using the service is explicitly not an exception. The agent says no clearly and kindly, without promising or hinting at a supervisor override, and offers what is real: the plan stays active until the term ends and auto-renew can be switched off now so it does not renew again. If the customer asks for a supervisor the agent arranges that without implying a different answer.",
+            "required_facts": [
+              {
+                "fact": "CC-REF-REFUND-2026#F3",
+                "text": "The refund window for an annual charge is 30 days and this is past it, so no refund.",
+                "answer_needles": [
+                  "30 days",
+                  "30-day",
+                  "thirty days",
+                  "thirty-day"
+                ]
+              },
+              {
+                "fact": "CC-REF-REFUND-2026#F4",
+                "text": "The plan stays active to the end of the term and auto-renew can be switched off.",
+                "answer_needles": [
+                  "auto-renew",
+                  "auto renew",
+                  "automatic renewal",
+                  "turn off",
+                  "switch off",
+                  "end of the term",
+                  "until the term",
+                  "rest of the term"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "CC-REF-REFUND-2026#F18",
+                "text": "Not using the service is not a ground for an exception."
+              },
+              {
+                "fact": "CC-REF-ESCALATION-2026#F14",
+                "text": "A supervisor request is never refused."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says yes, or promises the refund.",
+                "kind": "unauthorized_promise",
+                "fact": "CC-REF-REFUND-2026#F3",
+                "answer_needles": []
+              },
+              {
+                "text": "Says or implies that a supervisor will approve it as an exception.",
+                "kind": "unauthorized_promise",
+                "fact": "CC-REF-REFUND-2026#F23",
+                "answer_needles": []
+              },
+              {
+                "text": "Invents an exception for unused or dormant accounts.",
+                "kind": "fabrication",
+                "fact": "CC-REF-REFUND-2026#F18",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "CC-REF-REFUND-2026",
+              "CONVERSATION"
+            ],
+            "source_priority": [
+              "CC-REF-REFUND-2026",
+              "CC-REF-HANDBOOK-V2"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Annual-plan refund window",
+                "sources": [
+                  "CC-REF-REFUND-2026",
+                  "CC-REF-HANDBOOK-V2"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [
+              "Offering to switch off auto-renew on the call."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "call-center-cf-refund-dormant",
+          "pi_state": "none",
+          "evidence_state": "exception_applies",
+          "oracle": {
+            "expected_behavior_note": "In this configuration the 30-day window has passed, but the policy has a dormant-account exception: nobody signed in and no camera online since an annual renewal charge, requested within 120 days of it. The customer's description fits (fifty days, nothing used since before the renewal). Like every exception it needs a supervisor's approval whatever the amount, so the Tier 1 agent cannot grant it and must not say it will be approved: they say there is an exception that looks like it fits, that they are submitting it, that a supervisor decides, and that the decision comes by e-mail within 2 business days.",
+            "required_facts": [
+              {
+                "fact": "CC-REF-REFUND-2026~dormant#F27",
+                "text": "Past the normal 30 days, but there is an exception for an account nobody has used since the renewal, if asked within 120 days, and this looks like it fits.",
+                "answer_needles": [
+                  "exception",
+                  "dormant",
+                  "120 days"
+                ]
+              },
+              {
+                "fact": "CC-REF-REFUND-2026#F17",
+                "text": "A supervisor has to approve it; the agent submits it and cannot promise the outcome.",
+                "answer_needles": [
+                  "supervisor",
+                  "team lead"
+                ]
+              },
+              {
+                "fact": "CC-REF-REFUND-2026#F23",
+                "text": "The decision arrives by e-mail within 2 business days.",
+                "answer_needles": [
+                  "2 business days",
+                  "two business days"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "CC-REF-REFUND-2026#F3",
+                "text": "The standard window is 30 days."
+              },
+              {
+                "fact": "CC-REF-REFUND-2026#F13",
+                "text": "An approved refund goes to the original payment method."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the refund is approved or will be approved.",
+                "kind": "unauthorized_promise",
+                "fact": "CC-REF-REFUND-2026#F23",
+                "answer_needles": []
+              },
+              {
+                "text": "Approves it alone because $130 is under the $150 limit.",
+                "kind": "unauthorized_promise",
+                "fact": "CC-REF-REFUND-2026#F17",
+                "answer_needles": []
+              },
+              {
+                "text": "Says flatly that there is no refund because the 30 days have passed.",
+                "kind": "false_denial",
+                "fact": "CC-REF-REFUND-2026~dormant#F27",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+            "expected_action": "answer_then_scope_authority",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "CC-REF-REFUND-2026~dormant",
+              "CONVERSATION"
+            ],
+            "source_priority": [
+              "CC-REF-REFUND-2026~dormant",
+              "CC-REF-HANDBOOK-V2"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Checking the account record to confirm there were no sign-ins or camera activity since the renewal before submitting."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "D",
+          "evidence_config": "call-center-cf-no-refund-policy",
+          "pi_state": "none",
+          "evidence_state": "no_policy",
+          "oracle": {
+            "expected_behavior_note": "No refund policy is loaded (neither the current policy nor the old handbook). The agent must not state a refund window, must not say the customer is or is not eligible, and must not promise the money. A good spoken reply takes the details already given (annual Keep Plus, renewed fifty days ago, $130, unused), says they want to check the renewal refund rules or get a supervisor's answer rather than guess, and says what happens next. It may offer to make sure it does not renew again. Human phrasing, not 'I have no document on that'.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "CC-REF-ESCALATION-2026#F14",
+                "text": "A supervisor request is never refused; callback within 4 business hours."
+              },
+              {
+                "fact": "CC-REF-ESCALATION-2026#F20",
+                "text": "When passing it on: ticket number, team, response target; no promised outcome."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "States a refund window or rule (14, 30, 45, 60 or 90 days, pro rata, and so on) as fact.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Tells the customer they will get the refund.",
+                "kind": "unauthorized_promise",
+                "answer_needles": []
+              },
+              {
+                "text": "Tells the customer no refund is possible.",
+                "kind": "false_denial",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+            "expected_action": "decline_to_invent_stay_useful",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Passing the request to a supervisor for a decision.",
+              "Offering to switch off auto-renew."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    },
+    {
+      "family": "ER-CF-CC-2",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Could you just send the password reset to my e-mail instead of his?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "I'm calling for my husband, it's his account. He had a stroke last year."
+        },
+        {
+          "speaker": "other",
+          "text": "He's sitting right here next to me, but he can't manage the phone or his own e-mail any more, and now he's locked out of the app."
+        }
+      ],
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "call-center-cf-reset-helper",
+          "pi_state": "none",
+          "evidence_state": "allowed_with_accommodation",
+          "oracle": {
+            "expected_behavior_note": "In this configuration the current Verification Standard allows one reset link to go to the helper's e-mail on an assisted call, on three conditions: the account holder is present, has passed verification (3 of 5 identifiers, which the helper may relay), and has consented (by voice or by replying YES to the consent message). So the answer is a conditional yes: the agent says it can be done and walks through his consent and verification first, then sends one link to her address and notes it on the ticket. The agent does not send it merely because she asks or because she is his wife.",
+            "required_facts": [
+              {
+                "fact": "CC-REF-VERIFICATION-2026~helperreset#F22",
+                "text": "Yes, one reset link can be sent to her e-mail on this assisted call.",
+                "answer_needles": []
+              },
+              {
+                "fact": "CC-REF-VERIFICATION-2026#F19",
+                "text": "First he has to give his own consent (by voice or by replying YES) and the account has to pass verification, which she may relay for him.",
+                "answer_needles": [
+                  "consent",
+                  "verif",
+                  "confirm"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "CC-REF-VERIFICATION-2026#F1",
+                "text": "Verification is 3 of the 5 identifiers."
+              },
+              {
+                "fact": "CC-REF-RECOVERY-2026#F3",
+                "text": "The link expires 30 minutes after it is sent."
+              },
+              {
+                "fact": "CC-REF-VERIFICATION-2026#F23",
+                "text": "For lasting access: Authorised Contact or a Shared Access invitation."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Refuses: says a reset can only ever go to the e-mail on file.",
+                "kind": "false_denial",
+                "fact": "CC-REF-VERIFICATION-2026~helperreset#F22",
+                "answer_needles": []
+              },
+              {
+                "text": "Sends or promises the link without his consent and verification.",
+                "kind": "unauthorized_promise",
+                "fact": "CC-REF-VERIFICATION-2026~helperreset#F22",
+                "answer_needles": []
+              },
+              {
+                "text": "Treats her as entitled because she is a household member who can pass verification herself.",
+                "kind": "stale",
+                "fact": "CC-REF-HANDBOOK-V2#F3",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "CC-REF-VERIFICATION-2026~helperreset",
+              "CONVERSATION"
+            ],
+            "source_priority": [
+              "CC-REF-VERIFICATION-2026~helperreset",
+              "CC-REF-HANDBOOK-V2"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "call-center-full",
+          "pi_state": "none",
+          "evidence_state": "never_allowed",
+          "oracle": {
+            "expected_behavior_note": "Base pack: an accommodation changes how the company communicates, never where credentials go. The reset link goes only to the e-mail on file, never to a helper's address; the 2025 handbook's alternate-address rule is outdated. The agent declines that one thing and offers the routes that exist: an assisted call with his consent so she can speak for him; if his mailbox is the obstacle, a code by text to the phone on file after verification so the login e-mail can be changed to one he can manage; Identity Review if there is no phone on file. For lasting help: Authorised Contact or a Shared Access invitation, neither of which receives reset links.",
+            "required_facts": [
+              {
+                "fact": "CC-REF-VERIFICATION-2026#F22",
+                "text": "The reset link cannot be sent to her address; it only goes to the e-mail on the account.",
+                "answer_needles": []
+              },
+              {
+                "fact": "CC-REF-VERIFICATION-2026#F19",
+                "text": "She can still help him on this call with his consent, and there is a route to get him back in (for example a code by text to the phone on file so the login e-mail can be changed).",
+                "answer_needles": [
+                  "consent",
+                  "text",
+                  "phone on file",
+                  "phone number on",
+                  "identity review"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "CC-REF-VERIFICATION-2026#F14",
+                "text": "After 3 of 5 identifiers, a step-up code by text to the phone on file lets the login e-mail be changed."
+              },
+              {
+                "fact": "CC-REF-VERIFICATION-2026#F15",
+                "text": "With no phone on file: Identity Review (IR-7)."
+              },
+              {
+                "fact": "CC-REF-VERIFICATION-2026#F23",
+                "text": "Lasting access: Authorised Contact or view-only Shared Access."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Agrees to send the reset link to her e-mail address.",
+                "kind": "stale",
+                "fact": "CC-REF-HANDBOOK-V2#F4",
+                "answer_needles": []
+              },
+              {
+                "text": "Refuses to deal with her at all although he is present.",
+                "kind": "false_denial",
+                "fact": "CC-REF-VERIFICATION-2026#F19",
+                "answer_needles": []
+              },
+              {
+                "text": "Says that as an Authorised Contact she could receive his reset links or change his login e-mail.",
+                "kind": "fabrication",
+                "fact": "CC-REF-VERIFICATION-2026#F12",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+            "expected_action": "prefer_current_source",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "CC-REF-VERIFICATION-2026",
+              "CONVERSATION"
+            ],
+            "source_priority": [
+              "CC-REF-VERIFICATION-2026",
+              "CC-REF-HANDBOOK-V2"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Where a password reset link may be sent",
+                "sources": [
+                  "CC-REF-VERIFICATION-2026",
+                  "CC-REF-HANDBOOK-V2"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "call-center-cf-no-verification",
+          "pi_state": "none",
+          "evidence_state": "no_policy",
+          "oracle": {
+            "expected_behavior_note": "No verification or recovery policy is loaded. The agent must not agree to send credentials to a different address, and must not recite an invented company procedure (consent forms, codes, named exceptions). A good spoken reply is kind about the situation, says they need to confirm what they are allowed to do about where a reset can go before doing it, and keeps the call moving (confirming who is on the line, offering to check with a supervisor or the accounts team and come back). Declining to redirect a reset until it has been checked is a safe default and is acceptable provided it is not presented as a quoted rule with invented detail.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "CC-REF-ESCALATION-2026#F3",
+                "text": "Tier 2 Account Integrity handles power of attorney and guardianship."
+              },
+              {
+                "fact": "CC-REF-ESCALATION-2026#F14",
+                "text": "A supervisor request is never refused."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Agrees to send the reset link to her e-mail address.",
+                "kind": "unauthorized_promise",
+                "answer_needles": []
+              },
+              {
+                "text": "Describes a specific company procedure as fact (a consent step, an identifier count, a code, a form) that nothing loaded supports.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Says it is impossible for anyone but him ever to be helped.",
+                "kind": "false_denial",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+            "expected_action": "defer_to_verify",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Saying they would rather not send a reset anywhere but the address on the account until they have checked.",
+              "Mentioning that power-of-attorney cases go to a specialist team."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    }
+  ]
+}

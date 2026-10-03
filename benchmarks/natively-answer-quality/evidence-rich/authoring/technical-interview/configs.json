@@ -1,0 +1,87 @@
+[
+ {
+  "id": "ti-a-full",
+  "mode": "technical-interview",
+  "base": true,
+  "files": [
+   "TI-REF-A-PROJECT-DEEPDIVE",
+   "TI-REF-SYSDESIGN-BRIEF",
+   "TI-REF-CODING-PROBLEMS",
+   "TI-REF-SNIPPET-BUG",
+   "TI-REF-SNIPPET-PERF",
+   "TI-REF-SNIPPET-CONCURRENCY"
+  ]
+ },
+ {
+  "id": "ti-b-full",
+  "mode": "technical-interview",
+  "files": [
+   "TI-REF-B-PROJECT-DEEPDIVE",
+   "TI-REF-SYSDESIGN-BRIEF",
+   "TI-REF-CODING-PROBLEMS",
+   "TI-REF-SNIPPET-BUG",
+   "TI-REF-SNIPPET-PERF",
+   "TI-REF-SNIPPET-CONCURRENCY"
+  ]
+ },
+ {
+  "id": "technical-interview-none",
+  "mode": "technical-interview",
+  "files": []
+ },
+ {
+  "id": "ti-a-irrelevant",
+  "mode": "technical-interview",
+  "files": [
+   "TI-REF-IRRELEVANT"
+  ]
+ },
+ {
+  "id": "ti-a-conflict",
+  "mode": "technical-interview",
+  "files": [
+   "TI-REF-A-PROJECT-DEEPDIVE",
+   "TI-REF-SYSDESIGN-BRIEF",
+   "TI-REF-CODING-PROBLEMS",
+   "TI-REF-SNIPPET-BUG",
+   "TI-REF-SNIPPET-PERF",
+   "TI-REF-SNIPPET-CONCURRENCY",
+   "TI-REF-A-OLD-DESIGN-DOC"
+  ]
+ },
+ {
+  "id": "ti-a-cf-traffic",
+  "mode": "technical-interview",
+  "files": [
+   "TI-REF-A-PROJECT-DEEPDIVE~traffic",
+   "TI-REF-SYSDESIGN-BRIEF",
+   "TI-REF-CODING-PROBLEMS",
+   "TI-REF-SNIPPET-BUG",
+   "TI-REF-SNIPPET-PERF",
+   "TI-REF-SNIPPET-CONCURRENCY"
+  ]
+ },
+ {
+  "id": "ti-a-noproject",
+  "mode": "technical-interview",
+  "files": [
+   "TI-REF-SYSDESIGN-BRIEF",
+   "TI-REF-CODING-PROBLEMS",
+   "TI-REF-SNIPPET-BUG",
+   "TI-REF-SNIPPET-PERF",
+   "TI-REF-SNIPPET-CONCURRENCY"
+  ]
+ },
+ {
+  "id": "ti-a-cf-avail",
+  "mode": "technical-interview",
+  "files": [
+   "TI-REF-A-PROJECT-DEEPDIVE",
+   "TI-REF-SYSDESIGN-BRIEF~avail",
+   "TI-REF-CODING-PROBLEMS",
+   "TI-REF-SNIPPET-BUG",
+   "TI-REF-SNIPPET-PERF",
+   "TI-REF-SNIPPET-CONCURRENCY"
+  ]
+ }
+]

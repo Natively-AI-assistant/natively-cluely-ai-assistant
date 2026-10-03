@@ -1,0 +1,89 @@
+[
+  {
+    "id": "rec-full",
+    "mode": "recruiting",
+    "base": true,
+    "files": [
+      "REC-REF-JD-2026",
+      "REC-REF-RESUME-VASKIRK",
+      "REC-REF-SCORECARD-2026",
+      "REC-REF-TEAM-BRIEF-2026",
+      "REC-REF-BENEFITS-2026",
+      "REC-REF-BENEFITS-2025",
+      "REC-REF-PROCESS-GUIDE-2026",
+      "REC-REF-HM-NOTES"
+    ]
+  },
+  {
+    "id": "rec-none",
+    "mode": "recruiting",
+    "files": []
+  },
+  {
+    "id": "rec-cf-reports-ic",
+    "mode": "recruiting",
+    "files": [
+      "REC-REF-JD-2026~ic",
+      "REC-REF-RESUME-VASKIRK",
+      "REC-REF-SCORECARD-2026~ic",
+      "REC-REF-TEAM-BRIEF-2026~ic",
+      "REC-REF-BENEFITS-2026",
+      "REC-REF-BENEFITS-2025",
+      "REC-REF-PROCESS-GUIDE-2026",
+      "REC-REF-HM-NOTES"
+    ]
+  },
+  {
+    "id": "rec-cf-reports-conflict",
+    "mode": "recruiting",
+    "files": [
+      "REC-REF-JD-2026~seven",
+      "REC-REF-RESUME-VASKIRK",
+      "REC-REF-SCORECARD-2026",
+      "REC-REF-TEAM-BRIEF-2026",
+      "REC-REF-BENEFITS-2026",
+      "REC-REF-BENEFITS-2025",
+      "REC-REF-PROCESS-GUIDE-2026",
+      "REC-REF-HM-NOTES"
+    ]
+  },
+  {
+    "id": "rec-cf-reports-absent",
+    "mode": "recruiting",
+    "files": [
+      "REC-REF-JD-2026",
+      "REC-REF-RESUME-VASKIRK",
+      "REC-REF-SCORECARD-2026",
+      "REC-REF-BENEFITS-2026",
+      "REC-REF-BENEFITS-2025",
+      "REC-REF-PROCESS-GUIDE-2026",
+      "REC-REF-HM-NOTES"
+    ]
+  },
+  {
+    "id": "rec-cf-remote-ok",
+    "mode": "recruiting",
+    "files": [
+      "REC-REF-JD-2026",
+      "REC-REF-RESUME-VASKIRK",
+      "REC-REF-SCORECARD-2026",
+      "REC-REF-TEAM-BRIEF-2026",
+      "REC-REF-BENEFITS-2026~remote",
+      "REC-REF-BENEFITS-2025",
+      "REC-REF-PROCESS-GUIDE-2026",
+      "REC-REF-HM-NOTES"
+    ]
+  },
+  {
+    "id": "rec-cf-remote-absent",
+    "mode": "recruiting",
+    "files": [
+      "REC-REF-JD-2026",
+      "REC-REF-RESUME-VASKIRK",
+      "REC-REF-SCORECARD-2026",
+      "REC-REF-TEAM-BRIEF-2026",
+      "REC-REF-PROCESS-GUIDE-2026",
+      "REC-REF-HM-NOTES"
+    ]
+  }
+]

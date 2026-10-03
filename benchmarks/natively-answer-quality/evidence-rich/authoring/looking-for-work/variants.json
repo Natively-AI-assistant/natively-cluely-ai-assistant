@@ -1,0 +1,114 @@
+[
+  {
+    "id": "LFW-REF-A-INTERVIEW-NOTES~reloc-yes",
+    "base": "LFW-REF-A-INTERVIEW-NOTES",
+    "replace": [
+      {
+        "find": "Only Bengaluru or Hyderabad. Bengaluru is fine and I'd move for this role: my parents are in Warangal and Bengaluru is still one overnight train away. Three days a week in an office suits me, I already do two at Quillhaven and design reviews go better in a room. I am not open to Mumbai, Delhi NCR, Pune again or anywhere outside India for now. I'd need about four weeks after joining to shift, and I want to ask what their relocation help actually covers.",
+        "with": "Yes to relocating, no conditions. I'd move to Bengaluru for this role, and honestly I'd move to any city for the right team: Mumbai, Pune again, Delhi NCR, or abroad if the work is good. Nothing ties me to Hyderabad beyond habit; my parents in Warangal manage fine and flights are easy. Three days a week in an office suits me, I already do two at Quillhaven and design reviews go better in a room. I'd need about four weeks after joining to shift, and I want to ask what their relocation help actually covers."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F7",
+        "statement": "Relocation: yes, with no conditions. Advik would move to Bengaluru for this role and to any city for the right team.",
+        "doc_needles": [
+          "Yes to relocating, no conditions"
+        ]
+      },
+      {
+        "fact": "F8",
+        "statement": "Nothing ties him to Hyderabad beyond habit; his parents in Warangal manage fine and flights are easy.",
+        "doc_needles": [
+          "Nothing ties me to Hyderabad"
+        ]
+      },
+      {
+        "fact": "F10",
+        "statement": "He would move to Mumbai, Pune again, Delhi NCR, or abroad if the work is good.",
+        "doc_needles": [
+          "abroad if the work is good"
+        ]
+      }
+    ],
+    "note": "Relocation preference becomes an unconditional yes; nothing else changes."
+  },
+  {
+    "id": "LFW-REF-A-INTERVIEW-NOTES~reloc-no",
+    "base": "LFW-REF-A-INTERVIEW-NOTES",
+    "replace": [
+      {
+        "find": "Only Bengaluru or Hyderabad. Bengaluru is fine and I'd move for this role: my parents are in Warangal and Bengaluru is still one overnight train away. Three days a week in an office suits me, I already do two at Quillhaven and design reviews go better in a room. I am not open to Mumbai, Delhi NCR, Pune again or anywhere outside India for now. I'd need about four weeks after joining to shift, and I want to ask what their relocation help actually covers.",
+        "with": "I am not relocating. I need to stay in Hyderabad at least through 2027: my parents are in Warangal and I'm the one who gets there when something happens. So Bengaluru three days a week doesn't work as written. Be upfront about it early, not at the offer stage: ask whether Ledger Core would consider someone based in Hyderabad who comes to the Bengaluru office for a few days each month. If the answer is no, thank them and stop there; don't hint that I might move later."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F7",
+        "statement": "Relocation: no. Advik is not relocating.",
+        "doc_needles": [
+          "I am not relocating"
+        ]
+      },
+      {
+        "fact": "F8",
+        "statement": "He needs to stay in Hyderabad at least through 2027 because his parents are in Warangal and he is the one who gets there when something happens.",
+        "doc_needles": [
+          "at least through 2027"
+        ]
+      },
+      {
+        "fact": "F9",
+        "statement": "Three days a week in the Bengaluru office does not work for him as written.",
+        "doc_needles": [
+          "doesn't work as written"
+        ]
+      },
+      {
+        "fact": "F10",
+        "statement": "He wants to say so early and ask whether Ledger Core would consider someone based in Hyderabad who comes to the Bengaluru office for a few days each month; if not, he stops there and does not hint that he might move later.",
+        "doc_needles": [
+          "a few days each month",
+          "hint that I might move later"
+        ]
+      }
+    ],
+    "facts_removed": [
+      "F11"
+    ],
+    "note": "Relocation preference becomes a firm no; nothing else changes."
+  },
+  {
+    "id": "LFW-REF-A-INTERVIEW-NOTES~reloc-absent-band-first",
+    "base": "LFW-REF-A-INTERVIEW-NOTES",
+    "replace": [
+      {
+        "find": "### Location\n\nOnly Bengaluru or Hyderabad. Bengaluru is fine and I'd move for this role: my parents are in Warangal and Bengaluru is still one overnight train away. Three days a week in an office suits me, I already do two at Quillhaven and design reviews go better in a room. I am not open to Mumbai, Delhi NCR, Pune again or anywhere outside India for now. I'd need about four weeks after joining to shift, and I want to ask what their relocation help actually covers.\n\n",
+        "with": ""
+      },
+      {
+        "find": "Asking for INR 58 to 64 lakh fixed a year, with stock on top. I won't go below INR 55 lakh fixed. Fixed pay matters more to me than options, so if they offer a heavier option grant in place of fixed pay, decline politely. If their band tops out under my range, ask how the review cycle works before walking away.",
+        "with": "I don't have a number yet and I don't want to name one first. The posting says the L5 band is shared on the recruiter call, so ask for the band and react to that. Fixed pay matters more to me than options; if pushed, say only that. Do not improvise a figure."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F13",
+        "statement": "Salary: he has no number yet and does not want to name one first; he wants to ask for the L5 band, which the posting says is shared on the recruiter call, and react to that.",
+        "doc_needles": [
+          "don't want to name one first",
+          "Do not improvise a figure"
+        ]
+      }
+    ],
+    "facts_removed": [
+      "F7",
+      "F8",
+      "F9",
+      "F10",
+      "F11",
+      "F14"
+    ],
+    "note": "Two unrelated patches in one document so that the mode stays within eight configs: the Location passage is removed (no relocation or hybrid preference anywhere), and the Money passage states no figure, only that he wants to hear the band first."
+  }
+]

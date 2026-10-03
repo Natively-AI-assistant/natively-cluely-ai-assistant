@@ -1,0 +1,93 @@
+[
+  {
+    "id": "LEC-REF-CNW-SYLLABUS-2026~final35",
+    "base": "LEC-REF-CNW-SYLLABUS-2026",
+    "replace": [
+      {
+        "find": "- Group project: 15% of the course mark.",
+        "with": "- Group project: 20% of the course mark."
+      },
+      {
+        "find": "- Final exam: 40% of the course mark. Tuesday 15 December 2026, 09:00 to 12:00",
+        "with": "- Final exam: 35% of the course mark. Thursday 17 December 2026, 09:00 to 12:00"
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F14",
+        "statement": "The group project is worth 20% of the course mark; groups of three; report due Friday 27 November 2026.",
+        "doc_needles": [
+          "Group project: 20%"
+        ]
+      },
+      {
+        "fact": "F15",
+        "statement": "The final exam is worth 35% of the course mark.",
+        "doc_needles": [
+          "Final exam: 35%"
+        ]
+      },
+      {
+        "fact": "F16",
+        "statement": "The final exam is on Thursday 17 December 2026, 09:00 to 12:00, in Sports Hall B, and covers the whole course.",
+        "doc_needles": [
+          "Thursday 17 December 2026"
+        ]
+      }
+    ],
+    "note": "Current syllabus now says the final is 35% (project 20%) and is held on Thursday 17 December 2026."
+  },
+  {
+    "id": "LEC-REF-CNW-NOTES-W3-4~final45",
+    "base": "LEC-REF-CNW-NOTES-W3-4",
+    "replace": [
+      {
+        "find": "Lecture 8 will be examined in the final only.",
+        "with": "Lecture 8 will be examined in the final only.\n\n**Final exam.** As I said at the end of lecture 7: the final exam counts for 45% of the course mark and will be held on Friday 18 December 2026."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F34",
+        "statement": "According to the lecturer's notes of 30 September, the final exam counts for 45% of the course mark and will be held on Friday 18 December 2026.",
+        "doc_needles": [
+          "counts for 45% of the course mark",
+          "Friday 18 December 2026"
+        ]
+      }
+    ],
+    "note": "The lecturer's current notes gain an announcement about the final (45%, Friday 18 December 2026) that disagrees with the current syllabus (40%, Tuesday 15 December 2026) and does not say it replaces it."
+  },
+  {
+    "id": "LEC-REF-BIO-NOTES-L8-9~atp32",
+    "base": "LEC-REF-BIO-NOTES-L8-9",
+    "replace": [
+      {
+        "find": "We assume the glycerol-phosphate shuttle, so each of those two is worth 1.5 ATP.",
+        "with": "We assume the malate-aspartate shuttle, so each of those two is worth 2.5 ATP."
+      },
+      {
+        "find": "- Course total: 2 + 3 + 5 + 2 + 15 + 3 = 30 ATP per glucose.",
+        "with": "- Course total: 2 + 5 + 5 + 2 + 15 + 3 = 32 ATP per glucose."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F9",
+        "statement": "Shuttle convention: the course assumes the malate-aspartate shuttle, so each of the 2 NADH from glycolysis is worth 2.5 ATP.",
+        "doc_needles": [
+          "malate-aspartate shuttle",
+          "is worth 2.5 ATP"
+        ]
+      },
+      {
+        "fact": "F10",
+        "statement": "The course total is 32 ATP per glucose (2 + 5 + 5 + 2 + 15 + 3).",
+        "doc_needles": [
+          "32 ATP per glucose"
+        ]
+      }
+    ],
+    "note": "The biology notes use the malate-aspartate shuttle convention, so the course total is 32 ATP per glucose instead of 30."
+  }
+]

@@ -1,0 +1,1734 @@
+{
+  "mode": "recruiting",
+  "world": "Kestrelwick Systems, Inc. is a fictional company of about 310 people in Duluth, Minnesota (hub in Chattanooga, Tennessee) that builds Coldline, a routing and temperature-compliance platform for refrigerated freight. It is hiring one role, Engineering Lead, Ingestion Platform (requisition ENG-2026-0417), a people-manager role reporting to Idris Halvorsen-Peake, Director of Data Platform. The user is the recruiter, Pernille Aubrecht, running the recruiter screen in early October 2026. The other party is the candidate, Ottoline Vaskirk, currently Engineering Team Lead at the fictional Halcyard Freight Cloud in Madison, Wisconsin. The pack holds the approved job description, her resume, the interview scorecard, a candidate-shareable team brief, the current Total Rewards overview (version 4.1, 2026), last year's Total Rewards overview (version 3.2, 2025, outdated, distinguishable only by its version and date), the engineering recruiting process guide, and the hiring manager's informal notes, which conflict with the job description on on-call. The scorecard and the process guide, both current, genuinely disagree on the panel decision rule.",
+  "files": [
+    {
+      "id": "REC-REF-JD-2026",
+      "mode": "recruiting",
+      "filename": "Kestrelwick_Engineering_Lead_Ingestion_JD.docx",
+      "source": "src/REC-REF-JD-2026.md",
+      "format": "docx",
+      "document_type": "job_description",
+      "title": "Job description: Engineering Lead, Ingestion Platform (ENG-2026-0417)",
+      "status": "current",
+      "effective_date": "2026-09-01",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The role is Engineering Lead, Ingestion Platform at Kestrelwick Systems, requisition ENG-2026-0417, full-time and exempt.",
+          "doc_needles": [
+            "Full-time, exempt"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The posted base salary range for the role is $172,000 to $198,000 per year.",
+          "doc_needles": [
+            "$172,000",
+            "$198,000"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The role's location is Duluth, Minnesota.",
+          "doc_needles": [
+            "Location: Duluth, Minnesota"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The job description is version 1.2, approved on 1 September 2026 and posted on 3 September 2026.",
+          "doc_needles": [
+            "Approved: 1 September 2026"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The lead is expected to spend roughly 60% of the week on people and delivery leadership and 40% on hands-on work.",
+          "doc_needles": [
+            "roughly 60% of your week"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The Engineering Lead line-manages the engineers on the Ingestion Platform team (1:1s, growth plans, performance reviews, hiring); the job description gives no headcount.",
+          "doc_needles": [
+            "Line-manage the engineers"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The team's ingestion service-level objective is 99.9% of device messages processed within 60 seconds.",
+          "doc_needles": [
+            "within 60 seconds"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The lead takes part in the team's on-call rotation and carries the pager one week in five.",
+          "doc_needles": [
+            "one week in five"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The lead acts as incident commander for ingestion incidents and runs the review that follows.",
+          "doc_needles": [
+            "Act as incident commander"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The role travels to the Chattanooga hub for planning weeks, up to four trips per year.",
+          "doc_needles": [
+            "up to four trips per year"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Required: 7 or more years building backend or data-intensive systems that ran in production.",
+          "doc_needles": [
+            "7 or more years"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Required: at least 2 years of direct people management including hiring and performance reviews; mentoring or tech-lead work without line responsibility does not count.",
+          "doc_needles": [
+            "At least 2 years of direct"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Required: hands-on production experience operating a log-based streaming platform such as Kafka, Pulsar or Redpanda.",
+          "doc_needles": [
+            "log-based streaming platform such as Kafka"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Required: experience leading the response to an incident on a customer-facing service as incident commander.",
+          "doc_needles": [
+            "customer-facing service as incident commander"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Required: fluency in a compiled backend language; the team works mostly in Go.",
+          "doc_needles": [
+            "We work mostly in Go"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Nice to have (not required): telematics or IoT device data, change data capture pipelines, managing the cost of cloud data infrastructure, multi-region active-active deployments.",
+          "doc_needles": [
+            "cost of cloud data infrastructure",
+            "None of the nice-to-have items"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Where an offer lands inside the range depends on experience and on internal equity.",
+          "doc_needles": [
+            "internal equity"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "The role is eligible for an annual bonus and a new-hire equity grant; the job description gives no figures for either and points to the Total Rewards overview.",
+          "doc_needles": [
+            "eligible for an annual bonus"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Applications are reviewed on a rolling basis and the posting stays open until the role is filled.",
+          "doc_needles": [
+            "reviewed on a rolling basis"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "The working arrangement for the role follows the company location policy; the job description itself does not say how many office days or whether remote work is allowed.",
+          "doc_needles": [
+            "follows the company location policy"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F8",
+          "with_file": "REC-REF-HM-NOTES",
+          "this_value": "the lead carries the pager one week in five",
+          "other_value": "hiring manager is leaning towards taking the lead off the pager rota (not approved)",
+          "resolution": "authoritative_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The job description gives no number of direct reports.",
+        "Nothing here mentions visa sponsorship, relocation assistance or a sign-on bonus.",
+        "Naming Duluth as the location does not by itself say whether remote work is possible; that is left to the location policy.",
+        "The range is a posted range, not a promise of where an offer will land."
+      ]
+    },
+    {
+      "id": "REC-REF-RESUME-VASKIRK",
+      "mode": "recruiting",
+      "filename": "Ottoline_Vaskirk_Resume.pdf",
+      "source": "src/REC-REF-RESUME-VASKIRK.md",
+      "format": "pdf",
+      "document_type": "candidate_resume",
+      "title": "Resume of Ottoline Vaskirk (candidate)",
+      "status": "current",
+      "effective_date": "2026-09-14",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Ottoline Vaskirk lives in Madison, Wisconsin.",
+          "doc_needles": [
+            "Madison, Wisconsin"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "She has been Engineering Team Lead, Telemetry Pipeline at Halcyard Freight Cloud from March 2023 to the present; this is her only role with line management.",
+          "doc_needles": [
+            "March 2023 to present"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "She leads and line-manages a team of 5 engineers at Halcyard.",
+          "doc_needles": [
+            "team of 5 engineers"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Her team ingests sensor data from 22,000 trucks and trailers.",
+          "doc_needles": [
+            "22,000 trucks and trailers"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The resume says she contributed to the RabbitMQ-to-Kafka migration, a 9-engineer program led by the platform architect; it does not say she led it.",
+          "doc_needles": [
+            "Contributed to the migration",
+            "9-engineer program",
+            "led by the platform architect"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Within that migration she owned the consumer-side cutover for 14 services with no customer-facing downtime.",
+          "doc_needles": [
+            "consumer-side cutover for 14 services"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "She reduced p99 ingestion latency from 4.2 s to 900 ms by redesigning partition keys and introducing micro-batching in the Go consumers.",
+          "doc_needles": [
+            "4.2 s to 900 ms",
+            "redesigning partition keys"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "She cut pipeline infrastructure spend by 23% ($410K annualized) through tiered retention and right-sizing brokers.",
+          "doc_needles": [
+            "23% ($410K annualized)"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "She was incident commander for 6 Sev-1 incidents across 2024 and 2025 and introduced blameless post-incident reviews.",
+          "doc_needles": [
+            "6 Sev-1 incidents",
+            "blameless post-incident reviews"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "She hired 3 engineers and supported one promotion to senior engineer.",
+          "doc_needles": [
+            "Hired 3 engineers"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Her pipeline's peak throughput is 38,000 messages per second.",
+          "doc_needles": [
+            "38,000 messages per second"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "She was Senior Software Engineer at Halcyard Freight Cloud from June 2020 to February 2023.",
+          "doc_needles": [
+            "June 2020 to February 2023"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "As Senior Software Engineer she built the change data capture pipeline from PostgreSQL into Kafka using Debezium, feeding Snowflake, with 140 tables replicated; this is the earliest Kafka work on the resume.",
+          "doc_needles": [
+            "using Debezium",
+            "140 tables replicated"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "She wrote the Go client library that 11 internal services use to publish telemetry events.",
+          "doc_needles": [
+            "11 internal services"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "As Senior Software Engineer she mentored 2 junior engineers with no line responsibility.",
+          "doc_needles": [
+            "Mentored 2 junior engineers"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "At Halcyard she took part in the on-call rotation one week in four.",
+          "doc_needles": [
+            "one week in four"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "She was Software Engineer at Pindrop & Wren Analytics in Milwaukee from August 2016 to May 2020, her first job on the resume.",
+          "doc_needles": [
+            "August 2016 to May 2020",
+            "Pindrop & Wren Analytics"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "At Pindrop & Wren she developed Java services and nightly Spark batch jobs for retail sales analytics; no streaming platform is listed for that job.",
+          "doc_needles": [
+            "nightly Spark batch jobs"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "At Pindrop & Wren she cut the nightly batch runtime from 7 hours to 3.5 hours.",
+          "doc_needles": [
+            "7 hours to 3.5 hours"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "She holds a B.S. in Computer Science from the University of Wisconsin-Eau Claire, 2016.",
+          "doc_needles": [
+            "University of Wisconsin-Eau Claire"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Her listed skills are Go, Java, Python, SQL; Kafka, RabbitMQ, Debezium, Spark, PostgreSQL, Snowflake; Kubernetes, Terraform, AWS.",
+          "doc_needles": [
+            "Go, Java, Python, SQL",
+            "Kafka, RabbitMQ, Debezium, Spark, PostgreSQL, Snowflake"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "She holds the AWS Certified Solutions Architect - Associate certification, 2021.",
+          "doc_needles": [
+            "AWS Certified Solutions Architect"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "She gave the talk 'Cutting over 14 consumers without a maintenance window' at the Midwest Data Infrastructure Meetup in 2024.",
+          "doc_needles": [
+            "Midwest Data Infrastructure Meetup"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Her summary says ten years in backend and data infrastructure, the last six in freight telemetry.",
+          "doc_needles": [
+            "ten years in backend"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Outside work she mentors with Code Lantern and organises a streaming-systems reading group of about 30 people.",
+          "doc_needles": [
+            "Code Lantern"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The resume does not say she led the Kafka migration.",
+        "The resume does not list ClickHouse, Flink or multi-region deployments; that is silence, not proof she lacks them.",
+        "The resume does not say she used Kafka before June 2020; that is silence, not proof she did not.",
+        "Nothing here states her current pay, notice period, reason for leaving, work authorization or willingness to relocate.",
+        "The resume does not say she handled an underperformance case."
+      ]
+    },
+    {
+      "id": "REC-REF-SCORECARD-2026",
+      "mode": "recruiting",
+      "filename": "ENG-2026-0417_Interview_Scorecard.docx",
+      "source": "src/REC-REF-SCORECARD-2026.md",
+      "format": "docx",
+      "document_type": "interview_scorecard",
+      "title": "Interview scorecard: Engineering Lead, Ingestion Platform",
+      "status": "current",
+      "effective_date": "2026-09-04",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The scorecard for requisition ENG-2026-0417 is version 2, dated 4 September 2026, owned by hiring manager Idris Halvorsen-Peake and reviewed by Leopoldine Achterberg, Head of Talent.",
+          "doc_needles": [
+            "Scorecard version 2"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Every interviewer rates all four dimensions and writes 'no evidence' rather than guessing.",
+          "doc_needles": [
+            "Rate all four dimensions"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Interviewers should use past-tense behavioral prompts rather than hypotheticals and record what the candidate did, not what the team did.",
+          "doc_needles": [
+            "past-tense behavioral prompts"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The rating scale runs from 1 (Does not meet) through 2 (Partially meets) and 3 (Meets) to 4 (Exceeds).",
+          "doc_needles": [
+            "1 - Does not meet",
+            "4 - Exceeds"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Technical depth in streaming systems carries 35% of the weighted score.",
+          "doc_needles": [
+            "carries 35%"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "People leadership carries 30% of the weighted score.",
+          "doc_needles": [
+            "carries 30%"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Ownership and operational judgment carries 20% of the weighted score.",
+          "doc_needles": [
+            "carries 20%"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Communication carries 15% of the weighted score.",
+          "doc_needles": [
+            "carries 15%"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "A candidate advances to the next stage when the weighted score is 3.0 or higher and no dimension is rated 1.",
+          "doc_needles": [
+            "weighted score is 3.0 or higher",
+            "no dimension is rated 1"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Must-have: streaming platform operations - has run a log-based streaming platform in production and can describe a failure they diagnosed themselves.",
+          "doc_needles": [
+            "a failure they diagnosed themselves"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Must-have: direct people management - at least 2 years with line responsibility, including hiring, and has handled at least one underperformance case.",
+          "doc_needles": [
+            "at least one underperformance case"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Must-have: incident command - has led the response to a customer-facing incident and the review afterwards.",
+          "doc_needles": [
+            "Incident command:"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Must-have: explaining trade-offs - can explain a design trade-off to a non-specialist in under two minutes.",
+          "doc_needles": [
+            "in under two minutes"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Nice-to-have competencies are telematics or IoT device data, change data capture pipelines, cloud cost management for data infrastructure, and multi-region active-active deployments; they are never a reason to reject.",
+          "doc_needles": [
+            "Cloud cost management for data infrastructure",
+            "never a reason to reject"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "A candidate who shows three or more of the nice-to-have competencies may be marked 'strong profile'.",
+          "doc_needles": [
+            "three or more of the nice-to-have"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "A claim counts as verified when the candidate can state their own role, the size of the effort, one decision they personally made, and a measurable result.",
+          "doc_needles": [
+            "one decision they personally made",
+            "a measurable result"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "When an answer stays at 'we', the interviewer asks for the candidate's own part.",
+          "doc_needles": [
+            "ask for the candidate's own part"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "If something said in the interview differs from the resume, the interviewer notes both versions, asks the candidate to reconcile them, and does not assume which is right.",
+          "doc_needles": [
+            "note both versions on the scorecard"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Disqualifier: fewer than 2 years of direct people management; mentoring and tech-lead work without line responsibility do not count.",
+          "doc_needles": [
+            "Fewer than 2 years"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Disqualifier: cannot describe their own individual contribution to a project they claim, after two follow-up prompts.",
+          "doc_needles": [
+            "after two follow-up prompts"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Disqualifier: unwilling to take part in the on-call rotation.",
+          "doc_needles": [
+            "Unwilling to take part"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Any disqualifier ends the process regardless of score; the interviewer records it and tells the hiring manager the same day.",
+          "doc_needles": [
+            "hiring manager the same day"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Red flag (does not end the process; recorded and raised in the debrief): speaking dismissively about former colleagues or managers.",
+          "doc_needles": [
+            "Speaks dismissively about former colleagues",
+            "raise them in the debrief"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Red flag: sharing a former employer's confidential customer data.",
+          "doc_needles": [
+            "confidential customer data"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Red flag: taking sole credit for a team outcome and not correcting it when asked who else was involved.",
+          "doc_needles": [
+            "Takes sole credit"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "Per the scorecard, the panel recommendation is 'hire' when at least 3 of the 4 panel interviewers score the candidate 3.0 or above.",
+          "doc_needles": [
+            "at least 3 of the 4"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F26",
+          "with_file": "REC-REF-PROCESS-GUIDE-2026",
+          "this_value": "hire when at least 3 of the 4 panel interviewers score 3.0 or above",
+          "other_value": "moves on only when all four panel interviewers recommend hire",
+          "resolution": "unresolved"
+        }
+      ],
+      "must_not_infer": [
+        "Red flags are not disqualifiers.",
+        "Nice-to-have competencies are never a reason to reject.",
+        "The scorecard does not say which of the two panel rules prevails."
+      ]
+    },
+    {
+      "id": "REC-REF-TEAM-BRIEF-2026",
+      "mode": "recruiting",
+      "filename": "Ingestion_Platform_Team_Brief.pdf",
+      "source": "src/REC-REF-TEAM-BRIEF-2026.md",
+      "format": "pdf",
+      "document_type": "team_brief",
+      "title": "Ingestion Platform: team brief for candidates",
+      "status": "current",
+      "effective_date": "2026-09-01",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The team brief was last updated on 1 September 2026, prepared by Idris Halvorsen-Peake and cleared by People Operations for sharing with candidates.",
+          "doc_needles": [
+            "Last updated 1 September 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Kestrelwick was founded in 2014 in Duluth, Minnesota and has about 310 employees.",
+          "doc_needles": [
+            "About 310 employees"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Kestrelwick's product is Coldline, a routing and temperature-compliance platform for refrigerated freight.",
+          "doc_needles": [
+            "Product: Coldline"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Kestrelwick has 140 refrigerated carriers as customers in the United States and Canada, and roughly 61,000 trailers report into the platform.",
+          "doc_needles": [
+            "140 refrigerated carriers",
+            "61,000 trailers"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Kestrelwick closed a Series D round of $85 million in May 2025, led by Tamarack Ridge Partners.",
+          "doc_needles": [
+            "$85 million",
+            "Tamarack Ridge Partners"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Kestrelwick's headquarters are in Duluth and it has an engineering hub in Chattanooga, Tennessee.",
+          "doc_needles": [
+            "engineering hub in Chattanooga"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The Query Platform team is led by Tobiah Raskovic and has 6 engineers.",
+          "doc_needles": [
+            "with 6 engineers"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The Device Gateway team is led by Maribel Oyelaran-Fitch and has 5 engineers.",
+          "doc_needles": [
+            "with 5 engineers"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The Engineering Lead, Ingestion Platform has 4 direct reports: two senior engineers, one mid-level engineer and one associate engineer.",
+          "doc_needles": [
+            "4 direct reports"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The Ingestion Platform team is based in Duluth.",
+          "doc_needles": [
+            "The team is based in Duluth"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "One further senior engineer opening on the team is approved for the first quarter of 2027.",
+          "doc_needles": [
+            "first quarter of 2027"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The lead reports to Idris Halvorsen-Peake, Director of Data Platform.",
+          "doc_needles": [
+            "The lead reports to Idris Halvorsen-Peake"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Idris Halvorsen-Peake reports to Yevgenia Marlowe-Okafor, VP of Engineering.",
+          "doc_needles": [
+            "Yevgenia Marlowe-Okafor, VP of Engineering"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "The role is open because the previous lead, Maribel Oyelaran-Fitch, moved in July 2026 to start the Device Gateway team; she is still in the group and has offered to hand over in person.",
+          "doc_needles": [
+            "moved across in July 2026"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "The team's services are written in Go; Python is used for tooling and data-quality jobs.",
+          "doc_needles": [
+            "Services are written in Go"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The team runs Apache Kafka, self-managed on Kubernetes, in three clusters.",
+          "doc_needles": [
+            "self-managed on Kubernetes"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "The team uses ClickHouse for time-series storage and PostgreSQL for metadata.",
+          "doc_needles": [
+            "ClickHouse for time-series storage"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "The platform runs on AWS with us-east-2 as the primary region, with Terraform and Grafana.",
+          "doc_needles": [
+            "us-east-2 as the primary region"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "On a normal weekday the platform takes in about 1.9 billion messages.",
+          "doc_needles": [
+            "1.9 billion messages"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "The platform's peak is around 52,000 messages per second, during the afternoon dispatch window.",
+          "doc_needles": [
+            "52,000 messages per second"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "The median delay from a trailer sending a reading to it being queryable is 4 seconds.",
+          "doc_needles": [
+            "queryable is 4 seconds"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "2027 priority: retire the legacy Sparrow batch importer by March 2027.",
+          "doc_needles": [
+            "by March 2027"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "2027 priority: move Kafka to tiered storage, targeting 30% lower storage spend.",
+          "doc_needles": [
+            "30% lower storage spend"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "2027 priority: stand up a second ingestion region, us-west-2, by the third quarter of 2027.",
+          "doc_needles": [
+            "us-west-2"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "The team runs two-week sprints, has standup at 9:30 Central and ships about 25 production deploys a week.",
+          "doc_needles": [
+            "two-week sprints",
+            "25 production deploys a week"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "Engineers are levelled E1 to E7 and this role is an E6.",
+          "doc_needles": [
+            "This role is an E6"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "Recruiters may share everything in the brief but must not share revenue, runway, customer contract values or non-public customer names; those go to the hiring manager at the next stage.",
+          "doc_needles": [
+            "Do not share revenue, runway"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "Nothing here gives revenue, runway, valuation or customer contract values.",
+        "The sizes of the Query Platform (6) and Device Gateway (5) teams are not the size of the Ingestion Platform team.",
+        "The brief says the team is based in Duluth; it does not state office days or remote eligibility.",
+        "The brief does not describe the on-call rotation."
+      ]
+    },
+    {
+      "id": "REC-REF-BENEFITS-2026",
+      "mode": "recruiting",
+      "filename": "Kestrelwick_Total_Rewards_Overview.pdf",
+      "source": "src/REC-REF-BENEFITS-2026.md",
+      "format": "pdf",
+      "document_type": "benefits_summary",
+      "title": "Total Rewards Overview, version 4.1 (effective 1 March 2026)",
+      "status": "current",
+      "effective_date": "2026-03-01",
+      "authority": 100,
+      "supersedes": [
+        "REC-REF-BENEFITS-2025"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The current Total Rewards overview is version 4.1, effective 1 March 2026, owned by People Operations (Marguerite Tso-Lindqvist).",
+          "doc_needles": [
+            "Version 4.1",
+            "Effective 1 March 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Employees receive 24 days of PTO per year.",
+          "doc_needles": [
+            "24 days of PTO"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "PTO accrues at 2 days per calendar month, starting with the month the employee joins, and can be used as it accrues.",
+          "doc_needles": [
+            "2 days per calendar month"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Up to 5 unused PTO days carry into the next year.",
+          "doc_needles": [
+            "Up to 5 unused days"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Employees receive 10 sick days per year, separate from PTO.",
+          "doc_needles": [
+            "10 sick days per year"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Kestrelwick observes 11 company holidays.",
+          "doc_needles": [
+            "11 company holidays"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The company closes from December 24 through January 1 and closure days are not deducted from PTO.",
+          "doc_needles": [
+            "December 24 through January 1"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Every new parent receives 18 weeks of fully paid parental leave, whether through birth, adoption or foster placement.",
+          "doc_needles": [
+            "18 weeks of fully paid leave"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Parental leave makes no distinction between primary and secondary caregivers.",
+          "doc_needles": [
+            "no distinction between primary and secondary"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Employees are eligible for parental leave after 90 days of employment and may take it in one or two blocks within the first year after the child arrives.",
+          "doc_needles": [
+            "after 90 days of employment"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Kestrelwick is hybrid: employees whose home office is Duluth or Chattanooga are in the office on Tuesday, Wednesday and Thursday; Monday and Friday are flexible.",
+          "doc_needles": [
+            "Tuesday, Wednesday and Thursday"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Fully remote arrangements are limited to roles marked remote-eligible on the requisition, and people-manager roles are not remote-eligible.",
+          "doc_needles": [
+            "People-manager roles are not remote-eligible"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "New hires receive a one-time home-office setup allowance of $600; Duluth office parking is paid by the company.",
+          "doc_needles": [
+            "allowance of $600"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Base pay is reviewed every April.",
+          "doc_needles": [
+            "reviewed every April"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "For lead and staff levels the annual bonus target is 12% of base salary.",
+          "doc_needles": [
+            "12% of base salary"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "For directors and above the annual bonus target is 18% of base salary.",
+          "doc_needles": [
+            "18% of base salary"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Bonuses are paid in March for the previous calendar year and are prorated for a partial first year.",
+          "doc_needles": [
+            "prorated for a partial first year"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "New hires receive a stock option grant that vests over four years: 25% after the first year, then monthly.",
+          "doc_needles": [
+            "25% after the first year"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "The size of the option grant is set at offer and depends on level; the overview gives no number.",
+          "doc_needles": [
+            "set at offer"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Kestrelwick offers three medical plans and pays 90% of the employee premium and 70% of dependent premiums.",
+          "doc_needles": [
+            "90% of the employee premium",
+            "70% of dependent premiums"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Dental and vision are fully paid for employees and coverage starts on the first day.",
+          "doc_needles": [
+            "Coverage starts on your first day"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Employees on the high-deductible plan receive $1,000 a year into a health savings account.",
+          "doc_needles": [
+            "$1,000 a year"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Kestrelwick matches 401(k) contributions dollar for dollar up to 5% of salary and the match vests immediately.",
+          "doc_needles": [
+            "up to 5% of salary",
+            "vests immediately"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "The learning stipend is $2,000 per year.",
+          "doc_needles": [
+            "$2,000 per year"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "The wellness allowance is $50 per month.",
+          "doc_needles": [
+            "$50 per month"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F2",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "24 days of PTO",
+          "other_value": "20 days of PTO",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "10 sick days separate from PTO",
+          "other_value": "sick time taken from the PTO balance",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F6",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "11 company holidays",
+          "other_value": "10 company holidays",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F8",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "18 weeks for every new parent",
+          "other_value": "12 weeks primary / 4 weeks secondary caregiver",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F10",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "eligible after 90 days of employment",
+          "other_value": "eligible after six months of service",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "hybrid, in office Tuesday, Wednesday and Thursday",
+          "other_value": "remote-first, offices optional",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F12",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "fully remote only for remote-eligible roles; people-manager roles not eligible",
+          "other_value": "employees may work in any of 23 US states",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F15",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "12% of base salary",
+          "other_value": "10% of base salary",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "18% of base salary",
+          "other_value": "15% of base salary",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F20",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "90% employee / 70% dependent premiums",
+          "other_value": "85% employee / 60% dependent premiums",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F23",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "match up to 5% of salary, vests immediately",
+          "other_value": "match up to 4% of salary, vests over two years",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F24",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "$2,000 per year",
+          "other_value": "$1,500 per year",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "up to 5 unused days carry over",
+          "other_value": "up to 10 unused days carry over",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F14",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "base pay reviewed every April",
+          "other_value": "base pay reviewed every January",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F21",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "dental and vision fully paid for employees; coverage starts on the first day",
+          "other_value": "dental and vision at employee cost; coverage starts on the first of the month after the start date",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The overview gives no size for the option grant, no strike price and no valuation.",
+        "Nothing here mentions relocation assistance, visa sponsorship or a sign-on bonus.",
+        "A bonus target is a target, not a guaranteed payment.",
+        "The document carries no 'supersedes' line; only its version and effective date show it is newer than version 3.2."
+      ]
+    },
+    {
+      "id": "REC-REF-BENEFITS-2025",
+      "mode": "recruiting",
+      "filename": "Total_Rewards_Overview_Kestrelwick_FINAL.pdf",
+      "source": "src/REC-REF-BENEFITS-2025.md",
+      "format": "pdf",
+      "document_type": "benefits_summary",
+      "title": "Total Rewards Overview, version 3.2 (effective 1 February 2025)",
+      "status": "outdated",
+      "effective_date": "2025-02-01",
+      "authority": 40,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "This Total Rewards overview is version 3.2, effective 1 February 2025.",
+          "doc_needles": [
+            "Version 3.2",
+            "Effective 1 February 2025"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "2025 version: employees receive 20 days of PTO per year, accrued each pay period.",
+          "doc_needles": [
+            "20 days of PTO"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "2025 version: sick time is taken from the PTO balance.",
+          "doc_needles": [
+            "taken from the same balance"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "2025 version: up to 10 unused PTO days carry into the next year.",
+          "doc_needles": [
+            "Up to 10 unused days"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "2025 version: Kestrelwick observes 10 company holidays.",
+          "doc_needles": [
+            "10 company holidays"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "2025 version: primary caregivers receive 12 weeks of fully paid parental leave.",
+          "doc_needles": [
+            "12 weeks of fully paid leave"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "2025 version: secondary caregivers receive 4 weeks of fully paid parental leave.",
+          "doc_needles": [
+            "4 weeks of fully paid leave"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "2025 version: employees are eligible for parental leave after six months of service.",
+          "doc_needles": [
+            "six months of service"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "2025 version: Kestrelwick is remote-first; employees may work in any of the 23 US states where it is registered and the offices are optional drop-in spaces.",
+          "doc_needles": [
+            "remote-first",
+            "23 US states"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "2025 version: remote employees receive a stipend of $75 per month.",
+          "doc_needles": [
+            "$75 per month"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "2025 version: base pay is reviewed every January.",
+          "doc_needles": [
+            "reviewed every January"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "2025 version: for lead and staff levels the bonus target is 10% of base salary.",
+          "doc_needles": [
+            "10% of base salary"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "2025 version: for directors and above the bonus target is 15% of base salary.",
+          "doc_needles": [
+            "15% of base salary"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "2025 version: details of any equity grant are set out in the offer letter.",
+          "doc_needles": [
+            "set out in your offer letter"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "2025 version: two medical plans; the company pays 85% of the employee premium and 60% of dependent premiums.",
+          "doc_needles": [
+            "85% of the employee premium",
+            "60% of dependent premiums"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "2025 version: 401(k) match up to 4% of salary, vesting over two years.",
+          "doc_needles": [
+            "up to 4% of salary",
+            "vests over two years"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "2025 version: the learning stipend is $1,500 per year.",
+          "doc_needles": [
+            "$1,500 per year"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "2025 version: engineering hiring has five stages, including a take-home exercise that takes about 3 hours.",
+          "doc_needles": [
+            "There are five stages",
+            "A take-home exercise"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "2025 version: the panel is a virtual panel of three 60-minute sessions.",
+          "doc_needles": [
+            "three 60-minute sessions"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "2025 version: the last stage is a values conversation with one of the founders.",
+          "doc_needles": [
+            "values conversation"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "2025 version: most hiring processes take about five weeks from the first call.",
+          "doc_needles": [
+            "about five weeks"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "Nothing in this version is current policy where version 4.1 or the 2026 process guide says otherwise.",
+        "The file name says FINAL; only the version line and effective date show it is the older document."
+      ]
+    },
+    {
+      "id": "REC-REF-PROCESS-GUIDE-2026",
+      "mode": "recruiting",
+      "filename": "Engineering_Recruiting_Process_Guide_v2.3.docx",
+      "source": "src/REC-REF-PROCESS-GUIDE-2026.md",
+      "format": "docx",
+      "document_type": "recruiting_process_guide",
+      "title": "Engineering Recruiting Process Guide, version 2.3",
+      "status": "current",
+      "effective_date": "2026-06-15",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The Engineering Recruiting Process Guide is version 2.3, effective 15 June 2026, owned by Leopoldine Achterberg, Head of Talent.",
+          "doc_needles": [
+            "Version 2.3",
+            "Effective 15 June 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Every engineering hire goes through four stages: recruiter screen, hiring manager interview, panel loop, executive conversation.",
+          "doc_needles": [
+            "goes through four stages"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The recruiter screen is 30 minutes by video.",
+          "doc_needles": [
+            "30 minutes by video"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The hiring manager interview is 60 minutes by video.",
+          "doc_needles": [
+            "60 minutes by video"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The panel loop is four 45-minute sessions in one day.",
+          "doc_needles": [
+            "Four 45-minute sessions"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The panel loop has a 15-minute break after the second session.",
+          "doc_needles": [
+            "15-minute break"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "For lead roles the panel sessions are system design, people leadership, incident retrospective and cross-functional partner.",
+          "doc_needles": [
+            "incident retrospective",
+            "cross-functional partner"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The panel loop is held at the Duluth office or by video, whichever the candidate prefers.",
+          "doc_needles": [
+            "whichever the candidate prefers"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The executive conversation is 30 minutes with the VP of Engineering.",
+          "doc_needles": [
+            "Executive conversation."
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "There is no take-home exercise at any stage; it was removed from the engineering process in 2026.",
+          "doc_needles": [
+            "no take-home exercise at any stage"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "A typical process runs three to four weeks from the recruiter screen to a decision.",
+          "doc_needles": [
+            "three to four weeks"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "After the recruiter screen and after the hiring manager interview, the recruiter gives the candidate an outcome within 2 business days.",
+          "doc_needles": [
+            "an outcome within 2 business days"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "The panel debrief is held within 2 business days of the panel loop.",
+          "doc_needles": [
+            "panel debrief is held within"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "The candidate is told the outcome of the panel within 3 business days after the debrief.",
+          "doc_needles": [
+            "3 business days after the debrief"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "A written offer follows a verbal offer within 1 business day, and offers stay open for 5 business days.",
+          "doc_needles": [
+            "stay open for 5 business days"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Business days are Monday to Friday, excluding company holidays.",
+          "doc_needles": [
+            "Business days are Monday to Friday"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Per the process guide, a candidate moves on to the executive conversation only when all four panel interviewers recommend hire.",
+          "doc_needles": [
+            "all four panel interviewers recommend hire"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "The recruiter chairs the panel debrief and records the outcome.",
+          "doc_needles": [
+            "recruiter chairs the debrief"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Two professional references are checked after the executive conversation and before any offer.",
+          "doc_needles": [
+            "Two professional references"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Offers are approved by the hiring manager and the VP of Engineering.",
+          "doc_needles": [
+            "Offers are approved by"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "An offer with base pay above the midpoint of the posted range also needs sign-off from Total Rewards.",
+          "doc_needles": [
+            "above the midpoint"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Base pay outside the posted range needs the approval of the VP of Engineering and the Head of People Operations before it is mentioned to a candidate.",
+          "doc_needles": [
+            "Base pay outside the posted range"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "New hires start on the first or third Monday of a month.",
+          "doc_needles": [
+            "first or third Monday"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "A background check runs after the offer is accepted and usually takes about a week.",
+          "doc_needles": [
+            "background check"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Recruiters share the posted base salary range in the first conversation if the candidate asks.",
+          "doc_needles": [
+            "Share the posted base salary range"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "Recruiters may share the Total Rewards overview and the team brief freely; both are cleared for candidates.",
+          "doc_needles": [
+            "both are cleared for candidates"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "Recruiters do not ask about current or past pay; they ask what the candidate is expecting instead.",
+          "doc_needles": [
+            "current or past pay"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "Recruiters do not promise an offer, a level, a start date, pay outside the posted range, or an exception to any policy; they say what the process is and who decides.",
+          "doc_needles": [
+            "Do not promise an offer"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "The recruiter sends the candidate a follow-up email the same day, summarising next steps.",
+          "doc_needles": [
+            "follow-up email the same day"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "The recruiter submits the scorecard within 24 hours of the conversation.",
+          "doc_needles": [
+            "within 24 hours of the conversation"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "The recruiter keeps the candidate record in Greenhollow current and moves the stage within 1 business day of an outcome.",
+          "doc_needles": [
+            "Greenhollow"
+          ]
+        },
+        {
+          "id": "F32",
+          "statement": "For a panel loop at the Duluth office, the recruiting coordinator books and pays for travel and one hotel night directly.",
+          "doc_needles": [
+            "one hotel night"
+          ]
+        },
+        {
+          "id": "F33",
+          "statement": "Meals on the panel day are reimbursed up to $75 per day against receipts.",
+          "doc_needles": [
+            "$75 per day"
+          ]
+        },
+        {
+          "id": "F34",
+          "statement": "Candidates who are not selected are told by phone or video and may re-apply after 6 months.",
+          "doc_needles": [
+            "after 6 months"
+          ]
+        },
+        {
+          "id": "F35",
+          "statement": "Feedback is offered to anyone who reached the panel loop.",
+          "doc_needles": [
+            "Feedback is offered"
+          ]
+        },
+        {
+          "id": "F36",
+          "statement": "Scheduling and travel are handled by Bartholomew Nkemelu, Recruiting Coordinator.",
+          "doc_needles": [
+            "Bartholomew Nkemelu, Recruiting Coordinator"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F2",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "four stages",
+          "other_value": "five stages",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F10",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "no take-home exercise at any stage",
+          "other_value": "a take-home exercise of about 3 hours",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "four 45-minute panel sessions",
+          "other_value": "three 60-minute panel sessions",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "three to four weeks",
+          "other_value": "about five weeks",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F17",
+          "with_file": "REC-REF-SCORECARD-2026",
+          "this_value": "moves on only when all four panel interviewers recommend hire",
+          "other_value": "hire when at least 3 of the 4 panel interviewers score 3.0 or above",
+          "resolution": "unresolved"
+        },
+        {
+          "fact": "F9",
+          "with_file": "REC-REF-BENEFITS-2025",
+          "this_value": "executive conversation with the VP of Engineering",
+          "other_value": "values conversation with one of the founders",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The guide gives no mileage rate and does not say what is covered for a candidate who drives.",
+        "The timelines are upper bounds; they do not promise a positive outcome.",
+        "The guide does not mention visa sponsorship, relocation assistance or a sign-on bonus.",
+        "Approval paths describe who decides; they do not mean an approval will be given."
+      ]
+    },
+    {
+      "id": "REC-REF-HM-NOTES",
+      "mode": "recruiting",
+      "filename": "idris_notes_for_pernille.txt",
+      "source": "src/REC-REF-HM-NOTES.txt",
+      "format": "txt",
+      "document_type": "hiring_manager_notes",
+      "title": "Hiring manager's informal notes to the recruiter, 28 September 2026",
+      "status": "informal",
+      "effective_date": "2026-09-28",
+      "authority": 10,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "These are informal notes from Idris Halvorsen-Peake to the recruiter, written on Monday 28 September 2026.",
+          "doc_needles": [
+            "Mon 28 Sept 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Idris wants the recruiter to probe the Kafka migration: the resume says 'contributed' while her meetup talk bio suggests she ran it; ask what she personally decided.",
+          "doc_needles": [
+            "Ask what she personally decided"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Idris wants one real case of her managing someone out or coaching an underperformer.",
+          "doc_needles": [
+            "one real case"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Idris wants to know whether she is still writing Go or has only been in meetings since becoming lead.",
+          "doc_needles": [
+            "Is she still writing Go"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Idris does not know why she is leaving Halcyard and asks the recruiter to find out.",
+          "doc_needles": [
+            "Why is she leaving Halcyard"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Idris is leaning towards taking the lead off the pager rota once the new senior hire lands, but has not cleared it with Yevgenia, the JD is unchanged, and it must not be floated to candidates.",
+          "doc_needles": [
+            "off the pager rota",
+            "NOT cleared this with Yevgenia"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Idris would argue for the upper half of the range if she is as good as her resume, but Yevgenia signs.",
+          "doc_needles": [
+            "upper half of the range"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Idris hopes to have someone signed by mid-November; he says it is a hope, not a promise.",
+          "doc_needles": [
+            "signed by mid-November"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "For the panel Idris has asked Tobiah to take system design and Maribel the incident retro; the cross-functional interviewer, probably from Customer Operations, is not yet set.",
+          "doc_needles": [
+            "Customer Operations"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Idris notes she is in Madison, does not know whether she would move, and treats where people work from as a People Ops matter.",
+          "doc_needles": [
+            "No idea whether she'd move"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Maribel has said she will give the new lead two weeks of overlap.",
+          "doc_needles": [
+            "two weeks of overlap"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Idris says the team brief is up to date and should be used for roadmap topics.",
+          "doc_needles": [
+            "team brief is up to date"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Idris is out on Thursday and Friday of the week of 28 September 2026.",
+          "doc_needles": [
+            "out Thursday and Friday"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F6",
+          "with_file": "REC-REF-JD-2026",
+          "this_value": "leaning towards taking the lead off the pager rota (not approved)",
+          "other_value": "the lead carries the pager one week in five",
+          "resolution": "authoritative_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The on-call idea is not approved and must not be told to candidates.",
+        "Arguing for the upper half of the range is the hiring manager's intention, not an offer.",
+        "Mid-November is a hope, not a committed date.",
+        "The notes do not say why she is leaving Halcyard or whether she would relocate."
+      ]
+    }
+  ]
+}

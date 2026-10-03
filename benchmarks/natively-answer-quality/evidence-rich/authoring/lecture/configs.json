@@ -1,0 +1,95 @@
+[
+  {
+    "id": "lecture-full",
+    "mode": "lecture",
+    "base": true,
+    "files": [
+      "LEC-REF-CNW-SLIDES-L07",
+      "LEC-REF-CNW-NOTES-W3-4",
+      "LEC-REF-CNW-SYLLABUS-2026",
+      "LEC-REF-CNW-SYLLABUS-2025",
+      "LEC-REF-ECN-SLIDES-L05",
+      "LEC-REF-ECN-NOTES-L3-5",
+      "LEC-REF-ECN-FORMULAS-2026",
+      "LEC-REF-ECN-FORMULAS-2025",
+      "LEC-REF-BIO-NOTES-L8-9"
+    ]
+  },
+  {
+    "id": "lecture-none",
+    "mode": "lecture",
+    "files": []
+  },
+  {
+    "id": "lecture-cf-final-35",
+    "mode": "lecture",
+    "files": [
+      "LEC-REF-CNW-SLIDES-L07",
+      "LEC-REF-CNW-NOTES-W3-4",
+      "LEC-REF-CNW-SYLLABUS-2026~final35",
+      "LEC-REF-CNW-SYLLABUS-2025",
+      "LEC-REF-ECN-SLIDES-L05",
+      "LEC-REF-ECN-NOTES-L3-5",
+      "LEC-REF-ECN-FORMULAS-2026",
+      "LEC-REF-ECN-FORMULAS-2025",
+      "LEC-REF-BIO-NOTES-L8-9"
+    ]
+  },
+  {
+    "id": "lecture-cf-final-conflict",
+    "mode": "lecture",
+    "files": [
+      "LEC-REF-CNW-SLIDES-L07",
+      "LEC-REF-CNW-NOTES-W3-4~final45",
+      "LEC-REF-CNW-SYLLABUS-2026",
+      "LEC-REF-CNW-SYLLABUS-2025",
+      "LEC-REF-ECN-SLIDES-L05",
+      "LEC-REF-ECN-NOTES-L3-5",
+      "LEC-REF-ECN-FORMULAS-2026",
+      "LEC-REF-ECN-FORMULAS-2025",
+      "LEC-REF-BIO-NOTES-L8-9"
+    ]
+  },
+  {
+    "id": "lecture-cf-no-syllabus",
+    "mode": "lecture",
+    "files": [
+      "LEC-REF-CNW-SLIDES-L07",
+      "LEC-REF-CNW-NOTES-W3-4",
+      "LEC-REF-ECN-SLIDES-L05",
+      "LEC-REF-ECN-NOTES-L3-5",
+      "LEC-REF-ECN-FORMULAS-2026",
+      "LEC-REF-ECN-FORMULAS-2025",
+      "LEC-REF-BIO-NOTES-L8-9"
+    ]
+  },
+  {
+    "id": "lecture-cf-atp-32",
+    "mode": "lecture",
+    "files": [
+      "LEC-REF-CNW-SLIDES-L07",
+      "LEC-REF-CNW-NOTES-W3-4",
+      "LEC-REF-CNW-SYLLABUS-2026",
+      "LEC-REF-CNW-SYLLABUS-2025",
+      "LEC-REF-ECN-SLIDES-L05",
+      "LEC-REF-ECN-NOTES-L3-5",
+      "LEC-REF-ECN-FORMULAS-2026",
+      "LEC-REF-ECN-FORMULAS-2025",
+      "LEC-REF-BIO-NOTES-L8-9~atp32"
+    ]
+  },
+  {
+    "id": "lecture-cf-no-bio",
+    "mode": "lecture",
+    "files": [
+      "LEC-REF-CNW-SLIDES-L07",
+      "LEC-REF-CNW-NOTES-W3-4",
+      "LEC-REF-CNW-SYLLABUS-2026",
+      "LEC-REF-CNW-SYLLABUS-2025",
+      "LEC-REF-ECN-SLIDES-L05",
+      "LEC-REF-ECN-NOTES-L3-5",
+      "LEC-REF-ECN-FORMULAS-2026",
+      "LEC-REF-ECN-FORMULAS-2025"
+    ]
+  }
+]

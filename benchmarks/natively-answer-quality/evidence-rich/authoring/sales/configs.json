@@ -1,0 +1,90 @@
+[
+  {
+    "id": "sales-full",
+    "mode": "sales",
+    "base": true,
+    "files": [
+      "SALES-REF-PRICING-2026",
+      "SALES-REF-INTEGRATIONS-2026",
+      "SALES-REF-SECURITY-2026",
+      "SALES-REF-SUPPORT-SLA-2026",
+      "SALES-REF-IMPLEMENTATION-2026",
+      "SALES-REF-CASESTUDY-HOLLOWMERE",
+      "SALES-REF-PRICING-2025",
+      "SALES-REF-PRICING-2027-DRAFT"
+    ]
+  },
+  {
+    "id": "sales-cf-sf-addon",
+    "mode": "sales",
+    "files": [
+      "SALES-REF-PRICING-2026~sfline",
+      "SALES-REF-INTEGRATIONS-2026~sfaddon",
+      "SALES-REF-SECURITY-2026",
+      "SALES-REF-SUPPORT-SLA-2026",
+      "SALES-REF-IMPLEMENTATION-2026",
+      "SALES-REF-CASESTUDY-HOLLOWMERE",
+      "SALES-REF-PRICING-2025",
+      "SALES-REF-PRICING-2027-DRAFT"
+    ]
+  },
+  {
+    "id": "sales-cf-sf-conflict",
+    "mode": "sales",
+    "files": [
+      "SALES-REF-PRICING-2026~sfline",
+      "SALES-REF-INTEGRATIONS-2026",
+      "SALES-REF-SECURITY-2026",
+      "SALES-REF-SUPPORT-SLA-2026",
+      "SALES-REF-IMPLEMENTATION-2026",
+      "SALES-REF-CASESTUDY-HOLLOWMERE",
+      "SALES-REF-PRICING-2025",
+      "SALES-REF-PRICING-2027-DRAFT"
+    ]
+  },
+  {
+    "id": "sales-cf-sf-absent",
+    "mode": "sales",
+    "files": [
+      "SALES-REF-PRICING-2026",
+      "SALES-REF-SECURITY-2026",
+      "SALES-REF-SUPPORT-SLA-2026",
+      "SALES-REF-IMPLEMENTATION-2026",
+      "SALES-REF-CASESTUDY-HOLLOWMERE",
+      "SALES-REF-PRICING-2025",
+      "SALES-REF-PRICING-2027-DRAFT"
+    ]
+  },
+  {
+    "id": "sales-cf-golive-guarantee",
+    "mode": "sales",
+    "files": [
+      "SALES-REF-PRICING-2026",
+      "SALES-REF-INTEGRATIONS-2026",
+      "SALES-REF-SECURITY-2026",
+      "SALES-REF-SUPPORT-SLA-2026",
+      "SALES-REF-IMPLEMENTATION-2026~guarantee",
+      "SALES-REF-CASESTUDY-HOLLOWMERE",
+      "SALES-REF-PRICING-2025",
+      "SALES-REF-PRICING-2027-DRAFT"
+    ]
+  },
+  {
+    "id": "sales-cf-golive-absent",
+    "mode": "sales",
+    "files": [
+      "SALES-REF-PRICING-2026",
+      "SALES-REF-INTEGRATIONS-2026",
+      "SALES-REF-SECURITY-2026",
+      "SALES-REF-SUPPORT-SLA-2026",
+      "SALES-REF-CASESTUDY-HOLLOWMERE",
+      "SALES-REF-PRICING-2025",
+      "SALES-REF-PRICING-2027-DRAFT"
+    ]
+  },
+  {
+    "id": "sales-none",
+    "mode": "sales",
+    "files": []
+  }
+]

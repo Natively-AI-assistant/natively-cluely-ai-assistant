@@ -1,0 +1,9 @@
+{
+  "note": "Strings that identify one synthetic profile and could not appear in an answer by chance. Used to confirm which profile the app holds, and to detect one profile's facts in another profile's prompt or answer.",
+  "A": { "candidate": "Advik Thorambath", "jd_company": "Ostrakel Payments", "jd_title": "Senior Backend Engineer — Payments & Ledger",
+         "resume_needles": ["Thorambath", "Quillhaven", "Tessarine", "Skeinrouter", "Marrowgate", "Farecrest", "pgslotwatch", "Kesavadri"],
+         "jd_needles": ["Ostrakel", "Ledger Core"] },
+  "B": { "candidate": "Catarina Velmonte", "jd_company": "Hollowpine Labs", "jd_title": "Senior Product Engineer — Collaborative AI Workspace",
+         "resume_needles": ["Velmonte", "Lumenquay", "Ondaverde", "Plumewright", "Pebblekit", "Fernlatch", "Dialbench", "Farolim", "Valdouro"],
+         "jd_needles": ["Hollowpine", "Inkwharf", "Workspace Surface"] }
+}

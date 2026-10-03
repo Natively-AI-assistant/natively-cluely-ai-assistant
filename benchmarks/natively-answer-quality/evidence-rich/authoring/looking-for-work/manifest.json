@@ -1,0 +1,1231 @@
+{
+  "mode": "looking-for-work",
+  "world": "Candidate-owned reference files for the two fictional job candidates of the profiles pack. Advik Thorambath (backend, Hyderabad, Quillhaven Freight Systems) is interviewing at Ostrakel Payments for Senior Backend Engineer on Ledger Core; his private prep notes hold what his résumé omits: why he is looking, a relocation limit (only Bengaluru or Hyderabad), notice period (90 days, corrected from an earlier 60), salary expectation in INR lakh, leadership preference, one weakness and four real stories; his research notes cover Ostrakel. Catarina Velmonte (frontend, Porto, Lumenquay) is interviewing at Hollowpine Labs; her notes hold different reasons, a firm no to relocation, a salary ask in EUR (revised upward in a dated addition), a start date pushed back by a release, and four different stories; her research notes cover Hollowpine and Inkwharf. Also in the folder: an older export of Advik's CV dated 18 January 2024 that disagrees with his current résumé on title, team, on-call rota, migration size and GitHub stars, and the rental-agreement summary for his Hyderabad flat, which has nothing to do with interviewing. Deliberately absent from every file and from both résumés and postings: visa or citizenship status, other offers or interviews in progress, Advik's current salary, Catarina's reason for leaving earlier employers, age, marital status and references.",
+  "files": [
+    {
+      "id": "LFW-REF-A-INTERVIEW-NOTES",
+      "mode": "looking-for-work",
+      "filename": "ostrakel-interview-prep.md",
+      "source": "src/LFW-REF-A-INTERVIEW-NOTES.md",
+      "format": "md",
+      "document_type": "candidate_notes",
+      "title": "Advik Thorambath's private interview prep notes for Ostrakel (Ledger Core)",
+      "status": "current",
+      "effective_date": "2026-09-29",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Advik's first reason for considering a move: the platform work at Quillhaven is finished; since Skeinrouter shipped in February 2025 Dispatch Core mostly wires up carrier integrations, 11 of 14 items on the 2026 roadmap.",
+          "doc_needles": [
+            "11 of 14 items"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Advik's second reason: Quillhaven's engineering ladder has no Staff level; after Senior / Tech Lead the next rung is Engineering Manager.",
+          "doc_needles": [
+            "no Staff level",
+            "next rung is Engineering Manager"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Advik is not leaving because of people: he likes the team and says his manager, Charuhas, has been a good manager to him.",
+          "doc_needles": [
+            "Charuhas has been a good manager"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Advik left Tessarine in February 2023 because the company had been acquired the autumn before and backend architecture decisions moved to the parent's platform group.",
+          "doc_needles": [
+            "acquired the autumn before",
+            "parent's platform group"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Preferred environment: a small group of senior engineers (under ten) who write the design down before building and run what they build, in a domain where being wrong is expensive.",
+          "doc_needles": [
+            "under ten",
+            "being wrong is expensive"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Older note of 30 Aug 2026 (superseded by the 22 Sep update): Advik was open to the engineering-manager track if it turned out to be the only way up.",
+          "doc_needles": [
+            "open to the EM track"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Relocation: only Bengaluru or Hyderabad. Advik would move to Bengaluru for this role and otherwise stay in Hyderabad.",
+          "doc_needles": [
+            "Only Bengaluru or Hyderabad",
+            "I'd move for this role"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "His reason for the limit: his parents are in Warangal and Bengaluru is still one overnight train away.",
+          "doc_needles": [
+            "one overnight train away"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Three days a week in an office suits him; he already does two office days at Quillhaven.",
+          "doc_needles": [
+            "I already do two at Quillhaven"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "He is not open to Mumbai, Delhi NCR, Pune again or anywhere outside India for now.",
+          "doc_needles": [
+            "outside India for now",
+            "Delhi NCR"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "He would need about four weeks after joining to move, and wants to ask what the relocation help covers.",
+          "doc_needles": [
+            "about four weeks after joining"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Older note of 30 Aug 2026 (superseded by the 27 Sep update): notice period 60 days, per the offer letter of March 2023.",
+          "doc_needles": [
+            "60 days, per my offer letter"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Salary expectation: INR 58 to 64 lakh fixed a year, with stock on top.",
+          "doc_needles": [
+            "INR 58 to 64 lakh fixed"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "His floor: he will not go below INR 55 lakh fixed.",
+          "doc_needles": [
+            "INR 55 lakh fixed"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Fixed pay matters more to him than stock options.",
+          "doc_needles": [
+            "Fixed pay matters more"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Java gap: he has never shipped Java to production; he wrote Kotlin on the JVM for his whole time at Tessarine and reads Java comfortably (a fortnight in the Debezium connector source during Marrowgate).",
+          "doc_needles": [
+            "never shipped Java to production",
+            "Kotlin on the JVM"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Since mid-September 2026 he has been rewriting one job of his toy ledger in Java 21 with Spring Boot, in the evenings.",
+          "doc_needles": [
+            "Java 21 with Spring Boot"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Payments gap: no professional payments experience; the closest real work is the seat-inventory fix at Tessarine.",
+          "doc_needles": [
+            "No professional experience, none",
+            "seat-inventory fix at Tessarine"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Why payments: the bugs that stayed with him were the ones where a number was wrong (a double booking meant a refund and an angry passenger), not the ones where a page was slow.",
+          "doc_needles": [
+            "a number was wrong"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "He built tallybook over three weekends in August 2026: a small double-entry ledger in Go with idempotency keys on the transfer endpoint. It is a weekend project, not experience, and is not on the CV.",
+          "doc_needles": [
+            "tallybook over three weekends",
+            "idempotency keys on the transfer endpoint"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "He has never worked under PCI DSS.",
+          "doc_needles": [
+            "PCI DSS: never worked under it"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Weakness: he holds on to the critical path. He reviewed every change to the Skeinrouter delivery path himself and by late 2025 was the bottleneck: median review wait on those pull requests was 2.5 days.",
+          "doc_needles": [
+            "hold on to the critical path",
+            "2.5 days"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "What he did about it: since January 2026 two engineers are designated approvers for the delivery path and he reviews only design-level changes; the median wait is now about 7 hours.",
+          "doc_needles": [
+            "designated approvers",
+            "about 7 hours"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Disagreement (July 2024): Ilakkiya Senthurvel, staff engineer on Platform, wanted the main Skeinrouter topic keyed by carrier ID; Advik wanted shipment ID.",
+          "doc_needles": [
+            "Ilakkiya Senthurvel",
+            "keyed by carrier ID"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "His worry was skew: the top 3 carriers produce 38% of all events, so carrier keys meant a few very hot partitions.",
+          "doc_needles": [
+            "38% of all events"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "It was settled with data: he replayed two days of production traffic through both schemes; with carrier keys the busiest partition ran 14 minutes behind at peak, with shipment keys nothing was more than 2 seconds behind.",
+          "doc_needles": [
+            "two days of production traffic",
+            "14 minutes behind"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "They had argued in doc comments for a week first; her rate-limiting point was right, so he built a per-carrier throttle into the webhook delivery layer. His lesson: propose the experiment on day one, not day seven.",
+          "doc_needles": [
+            "in doc comments for a week",
+            "per-carrier throttle",
+            "day one, not day seven"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "Failure: on the Friday before the November 2024 incident Advik approved an autoscaling change for the tracking consumers without trying a scale-down first, because he wanted it in before the next batch of carriers switched.",
+          "doc_needles": [
+            "autoscaling change",
+            "without trying a scale-down first"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "The incident was on Tuesday 19 November 2024, in week six of the per-carrier rollout with about 1,100 carriers already on the new pipeline; he was incident commander and the replica count was pinned by hand.",
+          "doc_needles": [
+            "19 November 2024",
+            "about 1,100 carriers",
+            "pinned the replica count"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "Afterwards he wrote the postmortem himself and named his own approval as the gap; the lasting rule is that any scaling change to a consumer group needs a rebalance drill in staging first.",
+          "doc_needles": [
+            "my own approval as the gap",
+            "rebalance drill in staging"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "Hard deadline on Marrowgate: the hosting contract for the old MySQL cluster ended on 29 February 2024 and the vendor only renewed in twelve-month terms.",
+          "doc_needles": [
+            "29 February 2024",
+            "twelve-month terms"
+          ]
+        },
+        {
+          "id": "F32",
+          "statement": "Three weeks before the planned cutover the nightly checksums still failed on 2 tables, because of a DATETIME column MySQL stored in local time and PostgreSQL read as UTC.",
+          "doc_needles": [
+            "failed on 2 tables",
+            "DATETIME column"
+          ]
+        },
+        {
+          "id": "F33",
+          "statement": "He got product to agree to a schema freeze for three weeks and split the checksum job per shard, taking a run from 9 hours to 3; the DBA, Bhargav, found the conversion bug on the fourth night.",
+          "doc_needles": [
+            "schema freeze for three weeks",
+            "from 9 hours to 3"
+          ]
+        },
+        {
+          "id": "F34",
+          "statement": "The Marrowgate cutover happened on Sunday 11 February 2024.",
+          "doc_needles": [
+            "Sunday 11 February 2024"
+          ]
+        },
+        {
+          "id": "F35",
+          "statement": "Mentoring: Tanmayi Rekulvara joined Dispatch Core as a new graduate in July 2024 and froze during a Sev-2 on her first shadow shift.",
+          "doc_needles": [
+            "Tanmayi Rekulvara",
+            "new graduate in July 2024"
+          ]
+        },
+        {
+          "id": "F36",
+          "statement": "She shadowed him for two rotations, then they did two with roles reversed (she held the pager); he also gave her the monthly game-day drill to run.",
+          "doc_needles": [
+            "roles reversed",
+            "game-day drill"
+          ]
+        },
+        {
+          "id": "F37",
+          "statement": "She was incident commander for the first time in August 2025, on a Sev-2, and was promoted in April 2026.",
+          "doc_needles": [
+            "August 2025",
+            "promoted in April 2026"
+          ]
+        },
+        {
+          "id": "F38",
+          "statement": "Current leadership preference (22 Sep 2026 update): after covering his manager's one-to-ones and appraisal write-ups for six weeks he decided on no line management for at least the next two or three years; he wants to stay hands-on, lead designs, guide a few engineers and aim at Staff.",
+          "doc_needles": [
+            "no line management for at least",
+            "aim at Staff"
+          ]
+        },
+        {
+          "id": "F39",
+          "statement": "Current notice period (27 Sep 2026 update, confirmed with People Ops): 90 days, because he has been on the senior grade since his promotion; no buyout; it runs from the day he resigns.",
+          "doc_needles": [
+            "that grade serves 90 days",
+            "No buyout"
+          ]
+        },
+        {
+          "id": "F40",
+          "statement": "The recruiter confirmed the coding round for Thursday 8 October.",
+          "doc_needles": [
+            "Thursday 8 October"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F39",
+          "with_file": "LFW-REF-A-INTERVIEW-NOTES",
+          "this_value": "90 days",
+          "other_value": "60 days",
+          "resolution": "current_wins",
+          "note": "Same document: the 30 Aug line under Notice (F12) says 60 days; the dated 27 Sep update (F39) says 90 days and adds that the earlier figure no longer holds."
+        },
+        {
+          "fact": "F38",
+          "with_file": "LFW-REF-A-INTERVIEW-NOTES",
+          "this_value": "no line management",
+          "other_value": "open to the EM track",
+          "resolution": "current_wins",
+          "note": "Same document: the 30 Aug line (F6) is superseded by the dated 22 Sep update (F38)."
+        }
+      ],
+      "must_not_infer": [
+        "The notes do not state his current salary; only what he will ask for and his floor.",
+        "The notes say nothing about other offers, other interviews in progress, visa or citizenship status, age, marital status or references.",
+        "tallybook and the Java rewrite are weekend and evening projects; they are not professional payments or Java experience.",
+        "The notes do not say he caused the November 2024 incident alone or that anyone was disciplined; he names his own approval as the gap.",
+        "Being willing to move to Bengaluru does not mean being willing to move anywhere else; the notes rule out other cities and abroad for now.",
+        "The 90-day notice has no buyout; nothing lets him promise an earlier start."
+      ]
+    },
+    {
+      "id": "LFW-REF-A-COMPANY-RESEARCH",
+      "mode": "looking-for-work",
+      "filename": "Ostrakel_research_notes.docx",
+      "source": "src/LFW-REF-A-COMPANY-RESEARCH.md",
+      "format": "docx",
+      "document_type": "company_research",
+      "title": "Advik Thorambath's research notes on Ostrakel Payments",
+      "status": "informal",
+      "effective_date": "2026-09-20",
+      "authority": 10,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Ostrakel has two products: Ostrakel Route (payment orchestration) and Ostrakel Books (the merchant ledger).",
+          "doc_needles": [
+            "Ostrakel Route",
+            "Ostrakel Books"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The role Advik is interviewing for sits under Books.",
+          "doc_needles": [
+            "sits under Books"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The two customers named on Ostrakel's site are Hattibazaar (groceries) and Rentloom (furniture rental).",
+          "doc_needles": [
+            "Hattibazaar",
+            "Rentloom"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "One press piece puts annualised payment volume at about USD 4.1 billion; no revenue figure was found.",
+          "doc_needles": [
+            "USD 4.1 billion"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Series C: USD 62 million in March 2025, led by Harrowfield Ventures.",
+          "doc_needles": [
+            "USD 62 million",
+            "Harrowfield Ventures"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Earlier rounds: Series A of USD 8 million in 2020 and Series B of USD 27 million in 2022, both led by Kestrelmoor Partners.",
+          "doc_needles": [
+            "USD 27 million",
+            "USD 8 million"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Total raised: USD 97 million.",
+          "doc_needles": [
+            "USD 97 million"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The founders are Vennela Aramudhan (CEO) and Kaustubh Marivalen (CTO).",
+          "doc_needles": [
+            "Vennela Aramudhan",
+            "Kaustubh Marivalen"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "A Singapore entity was set up in 2024 and Ostrakel is live in Indonesia and Vietnam.",
+          "doc_needles": [
+            "Singapore entity",
+            "Indonesia and Vietnam"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Paylattice, the nearest competitor, has raised USD 140 million and is roughly twice the headcount.",
+          "doc_needles": [
+            "Paylattice",
+            "USD 140 million"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The May 2026 blog post \"Why our ledger never updates a row\" (append-only journal, corrections as reversing entries) is the reason Advik applied.",
+          "doc_needles": [
+            "reversing entries",
+            "the reason I applied"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "A blog post on reconciliation says the unexplained break rate was 0.31% in 2024, before matching was rebuilt.",
+          "doc_needles": [
+            "0.31% in 2024"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Sarvesh Idnavalli spoke at Ledgerfest in February 2026 on idempotency keys: keys are stored for 72 hours and a retried request gets the original stored response.",
+          "doc_needles": [
+            "Ledgerfest",
+            "72 hours"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Status page: on 11 June 2026 settlement files to 2 partner banks went out about 6 hours late; the write-up blames a reconciliation batch that hung while holding a lock.",
+          "doc_needles": [
+            "11 June 2026",
+            "about 6 hours late"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Employee reviews: 63 on one site, average 4.1; the recurring complaint is on-call around month-end.",
+          "doc_needles": [
+            "63 on the one site",
+            "average 4.1"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Why this company: correctness is the product; the team is small and writes publicly about how it thinks; it is the stack he knows (Go, PostgreSQL, Kafka) pointed at a domain he does not.",
+          "doc_needles": [
+            "Correctness is the product",
+            "the right amount of new"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "He wants to ask whether the Java settlement engine is staying or moving to Go.",
+          "doc_needles": [
+            "Is the Java settlement engine staying"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "He wants to ask how many pages the primary on-call gets in a normal week and what month-end looks like.",
+          "doc_needles": [
+            "pages does the primary get"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "He wants to ask which kinds of break make up most of what is left and what the plan is for reaching the target.",
+          "doc_needles": [
+            "Which kinds of break"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "He wants to ask what going from L5 to L6 looks like in practice and how many Staff engineers there are today.",
+          "doc_needles": [
+            "how many Staff engineers"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "He wants to ask what changed after the June settlement delay.",
+          "doc_needles": [
+            "after the June settlement delay"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "No revenue figure is known; the USD 4.1 billion is payment volume from one press piece.",
+        "The 0.31% break rate is the 2024 figure; the posting gives the current one (0.05%).",
+        "These are an outsider's notes from public material; they do not say how Ostrakel works internally beyond what was published.",
+        "Nothing here states what the L5 band is."
+      ]
+    },
+    {
+      "id": "LFW-REF-B-INTERVIEW-NOTES",
+      "mode": "looking-for-work",
+      "filename": "Interview_prep_Hollowpine.docx",
+      "source": "src/LFW-REF-B-INTERVIEW-NOTES.md",
+      "format": "docx",
+      "document_type": "candidate_notes",
+      "title": "Catarina Velmonte's private interview prep notes for Hollowpine Labs",
+      "status": "current",
+      "effective_date": "2026-09-26",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Why Catarina is looking: since becoming Lead in January 2024 the job turned into coordination; about 60% of her hours go to the hiring loop, the architecture forum and chapter standards, and she shipped 2 product features herself in the last twelve months.",
+          "doc_needles": [
+            "about 60% of my hours",
+            "2 product features"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Second reason: Lumenquay's plan for 2027 is integrations with practice-management systems, with almost no new interface work; she wants multiplayer and assistant-interface problems.",
+          "doc_needles": [
+            "practice-management systems"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "She is not unhappy with anyone; Joaquim, the CTO, has been fair to her and she intends to leave Pebblekit in good hands.",
+          "doc_needles": [
+            "Joaquim, our CTO"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "What she wants: a senior individual-contributor seat in a single product squad, no chapter to run; glad to mentor and set the accessibility bar, but no hiring loop to own for a while.",
+          "doc_needles": [
+            "single product squad",
+            "No chapter to run"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Preferred environment: written decisions, experiments before opinions, genuinely remote-first.",
+          "doc_needles": [
+            "experiments before opinions"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Relocation: she is staying in Porto and is not moving to Rotterdam or anywhere else; remote within Europe is a condition, not a preference.",
+          "doc_needles": [
+            "Staying in Porto",
+            "a condition, not a preference"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Travel is fine: the four team weeks are a plus, and up to about six weeks of travel a year works for her.",
+          "doc_needles": [
+            "six weeks of travel a year"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Her contract says 60 days of notice.",
+          "doc_needles": [
+            "My contract says 60 days"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Older note of 18 Aug 2026 (superseded by the 26 Sep addition): if she resigned at the end of September she could start on 1 December.",
+          "doc_needles": [
+            "be there on 1 December"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Her current pay is EUR 71,000 base at Lumenquay, with no bonus.",
+          "doc_needles": [
+            "EUR 71,000 base"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Older note of 18 Aug 2026 (superseded by the 26 Sep addition): ask for EUR 78,000 to 82,000.",
+          "doc_needles": [
+            "EUR 78,000 to 82,000"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Real-time gap: she has never shipped multiplayer (no live cursors, shared editing or WebSocket work).",
+          "doc_needles": [
+            "never shipped multiplayer"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "She spent four evenings in September 2026 building a shared checklist on Yjs to learn the document model and awareness; she calls it a toy.",
+          "doc_needles": [
+            "shared checklist on Yjs",
+            "four evenings in September"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "She has shipped no AI features; she has opinions about loading, partial and failed states from slow clinic networks.",
+          "doc_needles": [
+            "AI features. None shipped"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "She has not used ProseMirror, Tiptap or Lexical.",
+          "doc_needles": [
+            "No ProseMirror, Tiptap or Lexical"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Weakness: she says yes too easily. In the third quarter of 2025 she accepted component requests from 3 squads in the same fortnight and the date picker slipped by 5 weeks, holding up the booking squad's release.",
+          "doc_needles": [
+            "I say yes too easily",
+            "slipped by 5 weeks"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "What she did about it: Pebblekit has a public intake board with a work-in-progress limit of 2, and she publishes a \"not doing this quarter\" list.",
+          "doc_needles": [
+            "work-in-progress limit of 2",
+            "not doing this quarter"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Disagreement: two weeks into the Fernlatch A/B run the new flow was ahead by 8.1 points and Rodrigo Azinhal, the booking squad's product manager, wanted to ship and announce.",
+          "doc_needles": [
+            "ahead by 8.1 points",
+            "Rodrigo Azinhal"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "She held to the agreed length (clinics book in a weekly rhythm; returning and new pet owners behave differently); they settled on raising exposure from 20% to 50% and waiting, and the gain settled lower than the week-two reading.",
+          "doc_needles": [
+            "from 20% to 50%",
+            "weekly rhythm"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Outcome: the stopping rule is now written into every experiment plan and is a required field in the Dialbench template.",
+          "doc_needles": [
+            "stopping rule"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Failure (11 July 2023): during the TypeScript migration she merged a batch that tightened the types in the date utilities and skipped her usual manual timezone check because the tests were green.",
+          "doc_needles": [
+            "11 July 2023",
+            "date utilities"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Impact: clinics in the Azores had reminders sent with the wrong time, 312 reminders across 9 clinics, before support noticed the next morning.",
+          "doc_needles": [
+            "312 reminders across 9 clinics",
+            "Azores"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Afterwards she reverted, phoned the nine clinics herself with the support lead, and added property-based tests for timezone conversion and an Azores clinic to the end-to-end fixtures.",
+          "doc_needles": [
+            "phoned the nine clinics",
+            "property-based tests"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Hard deadline: the external audit of Farolim was fixed for 14 March 2022 by a contract with a hospital group.",
+          "doc_needles": [
+            "14 March 2022",
+            "hospital group"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Six weeks before the audit, the team's own pre-audit found 87 issues, 31 of them blocking.",
+          "doc_needles": [
+            "87 issues, 31 of them blocking"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "She got a four-week freeze on new portal features, sorted the blockers by user journey and ran paired screen-reader sessions; they passed with 3 minor findings.",
+          "doc_needles": [
+            "four-week freeze",
+            "3 minor findings"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "Mentoring: Leonor Abrunhal, a mid-level engineer, wanted to specialise in accessibility; from January to March 2026 they did one hour a week of screen-reader testing together on real tickets.",
+          "doc_needles": [
+            "Leonor Abrunhal",
+            "one hour a week"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "Leonor now takes the accessibility triage every other week and passed the IAAP CPACC exam in June 2026.",
+          "doc_needles": [
+            "IAAP CPACC"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "Current salary ask (26 Sep 2026 addition): EUR 88,000 to 95,000 base.",
+          "doc_needles": [
+            "EUR 88,000 to 95,000 base"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "Current start plan (26 Sep 2026 addition): Pebblekit version 3 moved to 27 November and she promised to see it out, so she resigns on 30 November at the earliest and the 60-day notice runs from there.",
+          "doc_needles": [
+            "30 November at the earliest",
+            "moved to 27 November"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F29",
+          "with_file": "LFW-REF-B-INTERVIEW-NOTES",
+          "this_value": "EUR 88,000 to 95,000",
+          "other_value": "EUR 78,000 to 82,000",
+          "resolution": "current_wins",
+          "note": "Same document: the 18 Aug first thought (F11) is superseded by the dated 26 Sep addition (F29)."
+        },
+        {
+          "fact": "F30",
+          "with_file": "LFW-REF-B-INTERVIEW-NOTES",
+          "this_value": "resign 30 November at the earliest",
+          "other_value": "start 1 December",
+          "resolution": "current_wins",
+          "note": "Same document: the 18 Aug start date (F9) is superseded by the dated 26 Sep addition (F30)."
+        }
+      ],
+      "must_not_infer": [
+        "The notes do not state her nationality, citizenship, visa status or right to work.",
+        "The notes say nothing about other offers or interviews in progress, or about why she left Ondaverde Health or Plumewright Studio.",
+        "The Yjs checklist is a learning toy; it is not shipped real-time or multiplayer experience.",
+        "Staying in Porto is firm; being fine with team weeks does not mean being open to relocating.",
+        "The notes do not give the final Fernlatch gain; that figure is in the CV."
+      ]
+    },
+    {
+      "id": "LFW-REF-B-COMPANY-RESEARCH",
+      "mode": "looking-for-work",
+      "filename": "hollowpine-research-notes.txt",
+      "source": "src/LFW-REF-B-COMPANY-RESEARCH.txt",
+      "format": "txt",
+      "document_type": "company_research",
+      "title": "Catarina Velmonte's research notes on Hollowpine Labs and Inkwharf",
+      "status": "informal",
+      "effective_date": "2026-09-27",
+      "authority": 10,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Hollowpine was founded in 2021 in Rotterdam by Fenna Ruyschenaar (CEO) and Tobias Kwintsheul (CTO).",
+          "doc_needles": [
+            "Fenna Ruyschenaar",
+            "Tobias Kwintsheul"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Series B: EUR 31 million in February 2026, led by Vossenaar Capital.",
+          "doc_needles": [
+            "EUR 31 million",
+            "Vossenaar Capital"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Earlier funding: seed of EUR 2 million in 2021 and Series A of EUR 9 million in 2023; EUR 42 million raised in total.",
+          "doc_needles": [
+            "EUR 42 million",
+            "EUR 9 million"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The assistant arrived with Inkwharf 3.0 in November 2025; undo for assistant suggestions was added in March 2026.",
+          "doc_needles": [
+            "Inkwharf 3.0"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The editor is built on ProseMirror with Yjs bindings.",
+          "doc_needles": [
+            "ProseMirror with Yjs bindings"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Public pricing: Team EUR 9 and Business EUR 16 per seat per month; the assistant is included in Business and costs EUR 4 per seat extra on Team; free tier for up to 5 editors.",
+          "doc_needles": [
+            "Team: EUR 9 per seat",
+            "Business: EUR 16 per seat",
+            "EUR 4 per seat extra"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Competitors mentioned: Notemeadow and Quillbase.",
+          "doc_needles": [
+            "Notemeadow",
+            "Quillbase"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Hollowpine's accessibility statement (updated January 2026) says the product is partially conformant with WCAG 2.1 AA; known gaps are unannounced live cursors and keyboard focus stuck in the comment sidebar.",
+          "doc_needles": [
+            "partially conformant",
+            "live cursors are not announced"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Catarina's own VoiceOver check on 27 September: the accept and reject buttons on an assistant suggestion have no accessible name and presence avatars are read out as \"image\".",
+          "doc_needles": [
+            "no accessible name",
+            "presence avatars"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Jorrit Aldewyck said on a podcast in June 2026 that they hire product engineers willing to kill their own feature; before Hollowpine he led the web team at a mapping company.",
+          "doc_needles": [
+            "kill their own feature",
+            "mapping company"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Engineering blog \"Fifty cursors\": 50 headless browsers in CI type into one document while typing latency is measured; it took 3 months to trust it.",
+          "doc_needles": [
+            "Fifty cursors",
+            "50 headless browsers"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Engineering blog \"Streaming without lying\": partial assistant text is shown but a paragraph is marked unconfirmed until the whole answer is in.",
+          "doc_needles": [
+            "Streaming without lying",
+            "unconfirmed"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Why this company: making a multiplayer editor usable with a screen reader is an unsolved, visible problem where her audit and certification background counts; they run experiments as a habit; the assistant failure states interest her.",
+          "doc_needles": [
+            "unsolved and very visible problem",
+            "not as a ceremony"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "She wants to ask who owns the accessibility statement and whether there is a date for full conformance.",
+          "doc_needles": [
+            "Who owns the accessibility statement"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "She wants to ask how the assistant is judged inside an experiment when an answer is plausible but wrong.",
+          "doc_needles": [
+            "plausible but wrong"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "She wants to ask how the team weeks are scheduled and whether dates are known a year ahead.",
+          "doc_needles": [
+            "How are the team weeks scheduled"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "She wants to ask what a support captain week involves.",
+          "doc_needles": [
+            "What does a support captain week"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "She wants to ask how much of the editor is custom ProseMirror plugin code.",
+          "doc_needles": [
+            "custom ProseMirror plugin code"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Her intro call is on Tuesday 6 October 2026 at 14:00 Lisbon time with the recruiter, Maud.",
+          "doc_needles": [
+            "Tuesday 6 October 2026",
+            "Maud"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The accessibility statement cites WCAG 2.1 AA partial conformance; the posting's WCAG 2.2 AA is a goal of the role, not the current state.",
+        "Two team members being in Lisbon says nothing about Catarina's right to work or about sponsorship.",
+        "Nothing here states the salary band."
+      ]
+    },
+    {
+      "id": "LFW-REF-A-OLD-RESUME",
+      "mode": "looking-for-work",
+      "filename": "Thorambath_Advik_CV.pdf",
+      "source": "src/LFW-REF-A-OLD-RESUME.md",
+      "format": "pdf",
+      "document_type": "resume",
+      "title": "CV of Advik Thorambath, Software Engineer (export of January 2024)",
+      "status": "outdated",
+      "effective_date": "2024-01-18",
+      "authority": 40,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "As of January 2024 the CV gives his title as Software Engineer II at Quillhaven, March 2023 to present (outdated: he has been Senior Software Engineer and Tech Lead since April 2024).",
+          "doc_needles": [
+            "March 2023 - Present"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "As of January 2024 he was a member of Dispatch Core, a team of three engineers (outdated: he now leads 4 engineers in a team of five).",
+          "doc_needles": [
+            "a team of three engineers"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "As of January 2024 Marrowgate was in progress: about 2.1 TB in 380 tables across 6 shards, cutover planned for February 2024 (outdated: it finished at 2.3 TB in 410 tables).",
+          "doc_needles": [
+            "2.1 TB",
+            "380 tables",
+            "cutover planned for February 2024"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "As of January 2024 the migration was expected to cut database spend by about 25% (outdated: the measured result is 31% lower).",
+          "doc_needles": [
+            "by about 25%"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "As of January 2024 he was secondary on-call for the dispatch domain, one week in four (outdated: he is now primary, one week in five).",
+          "doc_needles": [
+            "Secondary on-call",
+            "one week in four"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "As of January 2024 pgslotwatch had about 140 GitHub stars (outdated: about 260 now).",
+          "doc_needles": [
+            "140 GitHub stars"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The CV is dated: updated 18 January 2024.",
+          "doc_needles": [
+            "Updated 18 January 2024"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The old CV profile says he is interested in data-heavy backend work and the operational side of running it; it does not describe him as a tech lead.",
+          "doc_needles": [
+            "data-heavy backend work"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The old CV profile says he spent two and a half years on the booking path of an intercity bus ticketing platform before Quillhaven.",
+          "doc_needles": [
+            "two and a half years"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "As of January 2024 the Marrowgate backfill and dual writes were under way and the nightly row-level checksum comparison was still running.",
+          "doc_needles": [
+            "checksum comparison is running now"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The old CV lists languages Kotlin, Go, SQL.",
+          "doc_needles": [
+            "Languages: Kotlin, Go, SQL"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The old CV says the carrier rate-limiting middleware sits in front of the public API, without a count of endpoints.",
+          "doc_needles": [
+            "in front of the public API"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F1",
+          "with_file": "PI-A-RESUME",
+          "this_value": "Software Engineer II, March 2023 - Present",
+          "other_value": "Senior Software Engineer and Tech Lead since April 2024",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F2",
+          "with_file": "PI-A-RESUME",
+          "this_value": "a team of three engineers",
+          "other_value": "a team of five",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "PI-A-RESUME",
+          "this_value": "2.1 TB in 380 tables, in progress",
+          "other_value": "2.3 TB in 410 tables, completed",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "PI-A-RESUME",
+          "this_value": "about 25% expected",
+          "other_value": "31% lower",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "PI-A-RESUME",
+          "this_value": "one week in four",
+          "other_value": "one week in five",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F6",
+          "with_file": "PI-A-RESUME",
+          "this_value": "140 GitHub stars",
+          "other_value": "260 GitHub stars",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "This export predates his promotion, Skeinrouter, the Marrowgate cutover and the reliability programme; its silence about them is not a denial.",
+        "Only the date line (18 January 2024) and the \"Present\" on the Software Engineer II entry show that it is the older document; this is the conflict in the pack that is decidable only from dates.",
+        "Facts the old CV shares with the current résumé (Tessarine dates, the Farecrest result, the degree) are not listed here; they are tracked on PI-A-RESUME."
+      ]
+    },
+    {
+      "id": "LFW-REF-IRRELEVANT",
+      "mode": "looking-for-work",
+      "filename": "Flat_304_Rental_Agreement_Summary.pdf",
+      "source": "src/LFW-REF-IRRELEVANT.md",
+      "format": "pdf",
+      "document_type": "rental_agreement_summary",
+      "title": "Rental agreement summary sheet, Flat 304, Sarayu Residency, Hyderabad",
+      "status": "current",
+      "effective_date": "2026-05-24",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The sheet summarises the rental agreement for Flat 304, Sarayu Residency, Kondapur, Hyderabad; owner Gopichand Tummalapenta, tenant Advik Thorambath.",
+          "doc_needles": [
+            "Sarayu Residency",
+            "Gopichand Tummalapenta"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The registered agreement is dated 24 May 2026.",
+          "doc_needles": [
+            "24 May 2026"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The tenancy runs from 1 June 2026 to 30 April 2027 (11 months).",
+          "doc_needles": [
+            "1 June 2026",
+            "30 April 2027"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The lock-in is 6 months, to 30 November 2026.",
+          "doc_needles": [
+            "to 30 November 2026"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The tenancy notice period is 2 months in writing, by either party, after the lock-in.",
+          "doc_needles": [
+            "2 months in writing"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Rent rises 7% on renewal.",
+          "doc_needles": [
+            "rises 7% on renewal"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Monthly rent is INR 38,500, due by the 5th of each month.",
+          "doc_needles": [
+            "INR 38,500"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Maintenance is INR 4,200 a month, paid to the society.",
+          "doc_needles": [
+            "INR 4,200"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The security deposit is INR 1,15,500 (three months' rent), refundable.",
+          "doc_needles": [
+            "INR 1,15,500"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The agent's one-time fee is INR 19,250.",
+          "doc_needles": [
+            "INR 19,250"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "If the tenant leaves during the lock-in, rent for the remaining lock-in months is payable.",
+          "doc_needles": [
+            "remaining lock-in months"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The deposit is returned within 30 days of handing back the keys, less repainting capped at INR 12,000 and unpaid bills.",
+          "doc_needles": [
+            "INR 12,000"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Parking is one covered slot, B-17.",
+          "doc_needles": [
+            "B-17"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The tenancy notice period (2 months) is not an employment notice period.",
+        "The lock-in and tenancy dates say nothing about whether or when Advik is willing or able to relocate or start a job.",
+        "Rent, deposit and fee amounts say nothing about his salary or salary expectation."
+      ]
+    }
+  ]
+}

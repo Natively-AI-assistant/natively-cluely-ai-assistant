@@ -1,0 +1,62 @@
+[
+  {
+    "id": "seminar-full",
+    "mode": "seminar",
+    "base": true,
+    "files": [
+      "SEM-REF-PAPER-FINAL",
+      "SEM-REF-SLIDES",
+      "SEM-REF-APPENDIX",
+      "SEM-REF-RESULTS-TABLE",
+      "SEM-REF-RESULTS-EXPORT-MARCH",
+      "SEM-REF-ABSTRACT-DRAFT",
+      "SEM-REF-RELATED-NOTES"
+    ]
+  },
+  {
+    "id": "seminar-none",
+    "mode": "seminar",
+    "files": []
+  },
+  {
+    "id": "seminar-cf-ext-yes",
+    "mode": "seminar",
+    "files": [
+      "SEM-REF-PAPER-FINAL~extyes",
+      "SEM-REF-SLIDES",
+      "SEM-REF-APPENDIX",
+      "SEM-REF-RESULTS-TABLE",
+      "SEM-REF-RESULTS-EXPORT-MARCH",
+      "SEM-REF-ABSTRACT-DRAFT",
+      "SEM-REF-RELATED-NOTES"
+    ]
+  },
+  {
+    "id": "seminar-cf-ext-conflict",
+    "mode": "seminar",
+    "files": [
+      "SEM-REF-PAPER-FINAL",
+      "SEM-REF-SLIDES",
+      "SEM-REF-APPENDIX~extcheck",
+      "SEM-REF-RESULTS-TABLE",
+      "SEM-REF-RESULTS-EXPORT-MARCH",
+      "SEM-REF-ABSTRACT-DRAFT",
+      "SEM-REF-RELATED-NOTES"
+    ]
+  },
+  {
+    "id": "seminar-notes-only",
+    "mode": "seminar",
+    "files": [
+      "SEM-REF-RELATED-NOTES"
+    ]
+  },
+  {
+    "id": "seminar-draft-only",
+    "mode": "seminar",
+    "files": [
+      "SEM-REF-ABSTRACT-DRAFT",
+      "SEM-REF-RELATED-NOTES"
+    ]
+  }
+]

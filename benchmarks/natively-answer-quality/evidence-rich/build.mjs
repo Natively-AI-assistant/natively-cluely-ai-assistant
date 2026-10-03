@@ -59,6 +59,8 @@ const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const exists = (f) => fs.existsSync(f);
 const norm = (s) => String(s ?? '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
 const normLc = (s) => norm(s).toLowerCase();
+// Page markers the parser inserts ("-- 1 of 2 --", "[Page 2]") and all whitespace are dropped before a needle is looked for.
+const squash = (s) => norm(String(s ?? '').replace(/--\s*\d+\s*of\s*\d+\s*--/g, ' ').replace(/\[Page \d+\]/g, ' ')).replace(/\s+/g, '');
 const words = (s) => (String(s).match(/\S+/g) ?? []).length;
 
 // ---------------------------------------------------------------- load authoring
@@ -113,10 +115,28 @@ function safeEval(expr) {
   if (!/^[\d\s+\-*/().,%]+$/.test(expr)) return null;
   try { return Function(`"use strict"; return (${expr.replace(/,/g, '')});`)(); } catch { return null; }
 }
-function lintItems({ items, mode, set, docs, configs, corpusText, questionsSeen }) {
+/**
+ * An oracle may name a base file while the case loads a counterfactual variant of it. The reference means "this fact
+ * in the file that is loaded", so it is rewritten to the variant's id (same fact id; a changed fact carries the
+ * variant's statement and needles).
+ */
+export function bindToLoaded(item, configs, docs) {
+  const cfg = configs.get(item.evidence_config);
+  const loaded = new Set([...(cfg?.files ?? []), ...(PI_STATES[item.pi_state ?? 'none'] ?? [])]);
+  const byBase = new Map([...loaded].map((id) => [docs.get(id)?.variant_of, id]).filter(([b]) => b));
+  const fix = (id) => (id && !loaded.has(id) && byBase.has(id) ? byBase.get(id) : id);
+  const ref = (r) => { if (!r || r === 'CONVERSATION') return r; const [id, fid] = String(r).split('#'); return fid ? `${fix(id)}#${fid}` : fix(id); };
+  const o = item.oracle ?? {};
+  return { ...item, oracle: { ...o,
+    required_facts: (o.required_facts ?? []).map((x) => ({ ...x, fact: ref(x.fact) })), optional_facts: (o.optional_facts ?? []).map((x) => (x.fact ? { ...x, fact: ref(x.fact) } : x)),
+    forbidden_claims: (o.forbidden_claims ?? []).map((x) => (x.fact ? { ...x, fact: ref(x.fact) } : x)),
+    source_ids: (o.source_ids ?? []).map(fix), source_priority: (o.source_priority ?? []).map(fix), known_conflicts: (o.known_conflicts ?? []).map((k) => ({ ...k, sources: (k.sources ?? []).map(fix) })) } };
+}
+function lintItems({ items: rawItems, mode, set, docs, configs, corpusText, questionsSeen }) {
+  const items = rawItems.map((it) => bindToLoaded(it, configs, docs));
   const E = [], W = [];
   const m = MODES.find((x) => x.key === mode);
-  const idRe = new RegExp(`^ER-${set === 'dev' ? 'D' : set === 'holdout' ? 'H' : 'CF'}-${m.pfx}-`);
+  const idRe = set === 'iso' ? /^ER-ISO-\d{3}$/ : new RegExp(`^ER-${set === 'dev' ? 'D' : set === 'holdout' ? 'H' : 'CF'}-${m.pfx}-`);
   const counts = Object.fromEntries(CONDITIONS.map((c) => [c, 0]));
   const ids = new Set();
   for (const it of items) {
@@ -180,7 +200,7 @@ function lintItems({ items, mode, set, docs, configs, corpusText, questionsSeen 
   for (const [cid, xs] of Object.entries(chains)) {
     const t = xs.map((x) => x.turn_index).sort((a, b) => a - b);
     if (t.some((v, i) => v !== i + 1)) E.push(`${cid}: turn_index not 1..n`);
-    if (new Set(xs.map((x) => `${x.evidence_config}|${x.pi_state}|${x.surface}`)).size > 1) E.push(`${cid}: a chain must keep one evidence_config, pi_state and surface`);
+    if (new Set(xs.map((x) => `${x.evidence_config}|${x.pi_state}`)).size > 1) E.push(`${cid}: a chain must keep one evidence_config and pi_state`);
   }
   for (const it of items) if (!it.conversation_id && it.turn_index !== 1) E.push(`${it.id}: turn_index must be 1 outside a chain`);
   return { E, W, counts };
@@ -262,7 +282,18 @@ function lint({ quiet = false } = {}) {
     } else out.errors.push(`${p.key}: holdout.json missing`);
   }
   const iso = path.join(AUTH, 'isolation', 'items.json');
-  if (exists(iso)) out.summary.isolation = { items: readJson(iso).items.length };
+  if (exists(iso)) {
+    const all = resolveIso(readJson(iso).items, configs, out.errors);
+    out.summary.isolation = { items: all.length, sequences: new Set(all.map((i) => i.sequence_id).filter(Boolean)).size, by_kind: all.reduce((a, i) => { a[i.iso_kind] = (a[i.iso_kind] ?? 0) + 1; return a; }, {}) };
+    const allText = normLc([...docs.values()].map((d) => d.text).join('\n')).replace(/[^a-z0-9$%.' ]+/g, ' ').replace(/\s+/g, ' ');
+    for (const m of MODES) {
+      const r = lintItems({ items: all.filter((i) => i.mode === m.key), mode: m.key, set: 'iso', docs, configs, corpusText: allText, questionsSeen: new Set() });
+      out.errors.push(...r.E); out.warnings.push(...r.W.filter((w) => !/has no required facts|document-required facts/.test(w)));
+    }
+    const seq = {};
+    for (const i of all) if (i.sequence_id) (seq[i.sequence_id] ??= []).push(i.seq_index);
+    for (const [k, v] of Object.entries(seq)) if ([...v].sort((a, b) => a - b).some((x, j) => x !== j + 1)) out.errors.push(`${k}: seq_index not 1..n`);
+  }
   if (!quiet) {
     console.log(JSON.stringify(out.summary, null, 1));
     console.log(`\nerrors ${out.errors.length} (dev/corpus), holdout errors ${out.holdoutErrors ?? 0} (see authoring-holdout/<mode>/lint.txt), warnings ${out.warnings.length}`);
@@ -272,6 +303,17 @@ function lint({ quiet = false } = {}) {
   return { out, packs, docs, configs };
 }
 
+/** Isolation items name "@base" / "@none" instead of a config id; resolved here against the modes' own configs. */
+export function resolveIso(items, configs, errors = []) {
+  const list = [...configs.values()];
+  const pick = (mode, tag) => (tag === '@base' ? list.find((c) => c.mode === mode && c.base) : tag === '@none' ? list.find((c) => c.mode === mode && !(c.files ?? []).length) : configs.get(tag));
+  return items.map((it) => {
+    const c = pick(it.mode, it.evidence_config);
+    if (!c) errors.push(`${it.id}: evidence_config ${it.evidence_config} cannot be resolved for ${it.mode}`);
+    const wo = it.world_override ? Object.fromEntries(Object.entries(it.world_override).map(([k, v]) => [k, pick(k, v)?.id ?? v])) : undefined;
+    return { ...it, evidence_config: c?.id ?? it.evidence_config, ...(wo ? { world_override: wo } : {}) };
+  });
+}
 export function expandCf(cf, mode) {
   const items = [];
   for (const fam of cf.families ?? []) {
@@ -356,9 +398,10 @@ async function buildEvidence(only) {
     const out = await buildOne(d, tmp);
     let text = '', err = null;
     try { text = await extractText(out, d.format); } catch (e) { err = String(e.message ?? e); }
-    const nt = norm(text);
+    // Compared with all whitespace removed: a PDF wraps lines and breaks after hyphens ("e-\nmail"), which is not a lost fact.
+    const nt = squash(text);
     const lost = [];
-    for (const f of d.facts ?? []) for (const n of f.doc_needles ?? []) if (!nt.includes(norm(n))) lost.push(`${f.id}:${n}`);
+    for (const f of d.facts ?? []) for (const n of f.doc_needles ?? []) if (!nt.includes(squash(n))) lost.push(`${f.id}:${n}`);
     report.push({ id: d.id, format: d.format, bytes: fs.statSync(out).size, extracted_chars: text.length, source_chars: d.text.length, parse_error: err, needles: (d.facts ?? []).reduce((n, f) => n + (f.doc_needles ?? []).length, 0), needles_lost_in_parse: lost });
     console.log(`${d.id.padEnd(46)} ${d.format.padEnd(5)} ${String(fs.statSync(out).size).padStart(8)} B  extracted ${String(text.length).padStart(6)} chars  ${err ? 'PARSE ERROR ' + err : lost.length ? `needles lost ${lost.length}: ${lost.slice(0, 4).join(' | ')}` : 'ok'}`);
   }
@@ -409,10 +452,10 @@ function freeze(partial = false) {
     if (exists(path.join(AUTH_H, m.key, 'holdout.json'))) sets.holdout.push(...readJson(path.join(AUTH_H, m.key, 'holdout.json')).items);
   }
   const iso = path.join(AUTH, 'isolation', 'items.json');
-  if (exists(iso)) sets['supp-isolation'].push(...readJson(iso).items);
+  if (exists(iso)) sets['supp-isolation'].push(...resolveIso(readJson(iso).items, configs));
   const frozen = { name: 'evidence-rich-v1', frozen_at: new Date().toISOString(), manifest_sha256: manifestSha, datasets: {} };
   for (const [name, items] of Object.entries(sets)) {
-    const body = { schema_version: 1, partition: name, manifest_sha256: manifestSha, modes, configs: cfgList, items: items.map((it) => ({ partition: name, ...it })) };
+    const body = { schema_version: 1, partition: name, manifest_sha256: manifestSha, modes, configs: cfgList, items: items.map((it) => ({ partition: name, ...bindToLoaded(it, configs, docs) })) };
     const h = sha256(JSON.stringify(body));
     fs.writeFileSync(path.join(DATASETS, `${name}.json`), JSON.stringify({ dataset_name: `evidence-rich-v1-${name}`, dataset_sha256: h, ...body }, null, 1));
     frozen.datasets[name] = { items: items.length, sha256: h };

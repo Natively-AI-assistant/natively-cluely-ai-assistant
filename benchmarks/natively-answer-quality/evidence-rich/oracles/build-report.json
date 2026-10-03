@@ -1,0 +1,1042 @@
+[
+ {
+  "id": "GEN-REF-RENO-QUOTE-REVC",
+  "format": "pdf",
+  "bytes": 58547,
+  "extracted_chars": 5438,
+  "source_chars": 5494,
+  "parse_error": null,
+  "needles": 50,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-RENO-QUOTE-REVA",
+  "format": "pdf",
+  "bytes": 51990,
+  "extracted_chars": 3331,
+  "source_chars": 3389,
+  "parse_error": null,
+  "needles": 28,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-TRIP-PLAN",
+  "format": "docx",
+  "bytes": 5653,
+  "extracted_chars": 3634,
+  "source_chars": 3617,
+  "parse_error": null,
+  "needles": 35,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-BUDGET-OCT",
+  "format": "csv",
+  "bytes": 4041,
+  "extracted_chars": 4041,
+  "source_chars": 4041,
+  "parse_error": null,
+  "needles": 32,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-CAR-ESTIMATE",
+  "format": "pdf",
+  "bytes": 47176,
+  "extracted_chars": 2758,
+  "source_chars": 2802,
+  "parse_error": null,
+  "needles": 21,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-CONTRACTOR-EMAILS",
+  "format": "txt",
+  "bytes": 4113,
+  "extracted_chars": 4113,
+  "source_chars": 4113,
+  "parse_error": null,
+  "needles": 12,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-HOA-NOTICE",
+  "format": "pdf",
+  "bytes": 53962,
+  "extracted_chars": 3528,
+  "source_chars": 3585,
+  "parse_error": null,
+  "needles": 24,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-HOUSE-NOTES",
+  "format": "md",
+  "bytes": 2590,
+  "extracted_chars": 2590,
+  "source_chars": 2590,
+  "parse_error": null,
+  "needles": 13,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-PRICING-2026",
+  "format": "pdf",
+  "bytes": 102008,
+  "extracted_chars": 5325,
+  "source_chars": 5677,
+  "parse_error": null,
+  "needles": 53,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-PRICING-2025",
+  "format": "pdf",
+  "bytes": 82656,
+  "extracted_chars": 3107,
+  "source_chars": 3405,
+  "parse_error": null,
+  "needles": 26,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-PRICING-2027-DRAFT",
+  "format": "docx",
+  "bytes": 5242,
+  "extracted_chars": 3049,
+  "source_chars": 3198,
+  "parse_error": null,
+  "needles": 21,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-INTEGRATIONS-2026",
+  "format": "pdf",
+  "bytes": 78577,
+  "extracted_chars": 4718,
+  "source_chars": 4894,
+  "parse_error": null,
+  "needles": 31,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-SECURITY-2026",
+  "format": "pdf",
+  "bytes": 67917,
+  "extracted_chars": 5217,
+  "source_chars": 5375,
+  "parse_error": null,
+  "needles": 32,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-SUPPORT-SLA-2026",
+  "format": "docx",
+  "bytes": 6067,
+  "extracted_chars": 4815,
+  "source_chars": 4985,
+  "parse_error": null,
+  "needles": 32,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-IMPLEMENTATION-2026",
+  "format": "docx",
+  "bytes": 6310,
+  "extracted_chars": 5600,
+  "source_chars": 5689,
+  "parse_error": null,
+  "needles": 29,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-CASESTUDY-HOLLOWMERE",
+  "format": "pdf",
+  "bytes": 55748,
+  "extracted_chars": 4341,
+  "source_chars": 4428,
+  "parse_error": null,
+  "needles": 22,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-JD-2026",
+  "format": "docx",
+  "bytes": 5691,
+  "extracted_chars": 3692,
+  "source_chars": 3689,
+  "parse_error": null,
+  "needles": 22,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-RESUME-VASKIRK",
+  "format": "pdf",
+  "bytes": 61978,
+  "extracted_chars": 2793,
+  "source_chars": 2860,
+  "parse_error": null,
+  "needles": 32,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-SCORECARD-2026",
+  "format": "docx",
+  "bytes": 5733,
+  "extracted_chars": 3849,
+  "source_chars": 3842,
+  "parse_error": null,
+  "needles": 31,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-TEAM-BRIEF-2026",
+  "format": "pdf",
+  "bytes": 47388,
+  "extracted_chars": 3268,
+  "source_chars": 3311,
+  "parse_error": null,
+  "needles": 30,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-BENEFITS-2026",
+  "format": "pdf",
+  "bytes": 50990,
+  "extracted_chars": 3388,
+  "source_chars": 3448,
+  "parse_error": null,
+  "needles": 28,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-BENEFITS-2025",
+  "format": "pdf",
+  "bytes": 49153,
+  "extracted_chars": 2534,
+  "source_chars": 2583,
+  "parse_error": null,
+  "needles": 26,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-PROCESS-GUIDE-2026",
+  "format": "docx",
+  "bytes": 5632,
+  "extracted_chars": 3999,
+  "source_chars": 4009,
+  "parse_error": null,
+  "needles": 38,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-HM-NOTES",
+  "format": "txt",
+  "bytes": 2201,
+  "extracted_chars": 2201,
+  "source_chars": 2201,
+  "parse_error": null,
+  "needles": 14,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-SPRINT-STATUS-S41",
+  "format": "md",
+  "bytes": 4079,
+  "extracted_chars": 4079,
+  "source_chars": 4079,
+  "parse_error": null,
+  "needles": 37,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-ROADMAP-V4",
+  "format": "pdf",
+  "bytes": 74181,
+  "extracted_chars": 3617,
+  "source_chars": 3813,
+  "parse_error": null,
+  "needles": 23,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-DECISION-LOG",
+  "format": "md",
+  "bytes": 5357,
+  "extracted_chars": 5357,
+  "source_chars": 5357,
+  "parse_error": null,
+  "needles": 42,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-RISK-REGISTER",
+  "format": "csv",
+  "bytes": 3127,
+  "extracted_chars": 3127,
+  "source_chars": 3127,
+  "parse_error": null,
+  "needles": 29,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-MEETING-NOTES-0928",
+  "format": "txt",
+  "bytes": 2881,
+  "extracted_chars": 2881,
+  "source_chars": 2881,
+  "parse_error": null,
+  "needles": 24,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-SPRINT-REPORT-S37",
+  "format": "pdf",
+  "bytes": 62841,
+  "extracted_chars": 2389,
+  "source_chars": 2522,
+  "parse_error": null,
+  "needles": 19,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-CHAT-EXPORT",
+  "format": "txt",
+  "bytes": 3329,
+  "extracted_chars": 3329,
+  "source_chars": 3329,
+  "parse_error": null,
+  "needles": 12,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-ROLLOUT-GATES-DRAFT",
+  "format": "docx",
+  "bytes": 4812,
+  "extracted_chars": 1994,
+  "source_chars": 2034,
+  "parse_error": null,
+  "needles": 14,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-A-INTERVIEW-NOTES",
+  "format": "md",
+  "bytes": 7118,
+  "extracted_chars": 7118,
+  "source_chars": 7118,
+  "parse_error": null,
+  "needles": 66,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-A-COMPANY-RESEARCH",
+  "format": "docx",
+  "bytes": 5557,
+  "extracted_chars": 3301,
+  "source_chars": 3349,
+  "parse_error": null,
+  "needles": 33,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-B-INTERVIEW-NOTES",
+  "format": "docx",
+  "bytes": 6636,
+  "extracted_chars": 5611,
+  "source_chars": 5688,
+  "parse_error": null,
+  "needles": 45,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-B-COMPANY-RESEARCH",
+  "format": "txt",
+  "bytes": 3405,
+  "extracted_chars": 3405,
+  "source_chars": 3405,
+  "parse_error": null,
+  "needles": 32,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-A-OLD-RESUME",
+  "format": "pdf",
+  "bytes": 64325,
+  "extracted_chars": 3353,
+  "source_chars": 3429,
+  "parse_error": null,
+  "needles": 15,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-IRRELEVANT",
+  "format": "pdf",
+  "bytes": 57530,
+  "extracted_chars": 2287,
+  "source_chars": 2428,
+  "parse_error": null,
+  "needles": 15,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-CNW-SLIDES-L07",
+  "format": "pdf",
+  "bytes": 78089,
+  "extracted_chars": 5118,
+  "source_chars": 5262,
+  "parse_error": null,
+  "needles": 46,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-CNW-NOTES-W3-4",
+  "format": "docx",
+  "bytes": 6454,
+  "extracted_chars": 5487,
+  "source_chars": 5548,
+  "parse_error": null,
+  "needles": 45,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-CNW-SYLLABUS-2026",
+  "format": "pdf",
+  "bytes": 64669,
+  "extracted_chars": 4194,
+  "source_chars": 4327,
+  "parse_error": null,
+  "needles": 39,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-CNW-SYLLABUS-2025",
+  "format": "pdf",
+  "bytes": 44990,
+  "extracted_chars": 3307,
+  "source_chars": 3346,
+  "parse_error": null,
+  "needles": 29,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-ECN-SLIDES-L05",
+  "format": "pdf",
+  "bytes": 75617,
+  "extracted_chars": 4326,
+  "source_chars": 4476,
+  "parse_error": null,
+  "needles": 48,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-ECN-NOTES-L3-5",
+  "format": "md",
+  "bytes": 4291,
+  "extracted_chars": 4291,
+  "source_chars": 4291,
+  "parse_error": null,
+  "needles": 34,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-ECN-FORMULAS-2026",
+  "format": "pdf",
+  "bytes": 50860,
+  "extracted_chars": 2599,
+  "source_chars": 2655,
+  "parse_error": null,
+  "needles": 25,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-ECN-FORMULAS-2025",
+  "format": "pdf",
+  "bytes": 47801,
+  "extracted_chars": 2198,
+  "source_chars": 2246,
+  "parse_error": null,
+  "needles": 14,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-BIO-NOTES-L8-9",
+  "format": "docx",
+  "bytes": 6567,
+  "extracted_chars": 5704,
+  "source_chars": 5739,
+  "parse_error": null,
+  "needles": 56,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-A-PROJECT-DEEPDIVE",
+  "format": "md",
+  "bytes": 7575,
+  "extracted_chars": 7574,
+  "source_chars": 7574,
+  "parse_error": null,
+  "needles": 73,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-B-PROJECT-DEEPDIVE",
+  "format": "md",
+  "bytes": 6295,
+  "extracted_chars": 6293,
+  "source_chars": 6293,
+  "parse_error": null,
+  "needles": 55,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-SYSDESIGN-BRIEF",
+  "format": "pdf",
+  "bytes": 81028,
+  "extracted_chars": 3413,
+  "source_chars": 3668,
+  "parse_error": null,
+  "needles": 37,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-CODING-PROBLEMS",
+  "format": "md",
+  "bytes": 3453,
+  "extracted_chars": 3452,
+  "source_chars": 3452,
+  "parse_error": null,
+  "needles": 19,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-SNIPPET-BUG",
+  "format": "py",
+  "bytes": 3406,
+  "extracted_chars": 3406,
+  "source_chars": 3406,
+  "parse_error": null,
+  "needles": 8,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-SNIPPET-PERF",
+  "format": "ts",
+  "bytes": 2998,
+  "extracted_chars": 2998,
+  "source_chars": 2998,
+  "parse_error": null,
+  "needles": 6,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-SNIPPET-CONCURRENCY",
+  "format": "go",
+  "bytes": 2163,
+  "extracted_chars": 2163,
+  "source_chars": 2163,
+  "parse_error": null,
+  "needles": 7,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-A-OLD-DESIGN-DOC",
+  "format": "pdf",
+  "bytes": 77425,
+  "extracted_chars": 3526,
+  "source_chars": 3744,
+  "parse_error": null,
+  "needles": 21,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-IRRELEVANT",
+  "format": "docx",
+  "bytes": 5438,
+  "extracted_chars": 3048,
+  "source_chars": 3149,
+  "parse_error": null,
+  "needles": 16,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-PAPER-FINAL",
+  "format": "pdf",
+  "bytes": 103895,
+  "extracted_chars": 14743,
+  "source_chars": 14907,
+  "parse_error": null,
+  "needles": 84,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-SLIDES",
+  "format": "md",
+  "bytes": 4572,
+  "extracted_chars": 4568,
+  "source_chars": 4568,
+  "parse_error": null,
+  "needles": 22,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-APPENDIX",
+  "format": "pdf",
+  "bytes": 91500,
+  "extracted_chars": 5436,
+  "source_chars": 5679,
+  "parse_error": null,
+  "needles": 38,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-RESULTS-TABLE",
+  "format": "csv",
+  "bytes": 4714,
+  "extracted_chars": 4714,
+  "source_chars": 4714,
+  "parse_error": null,
+  "needles": 35,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-RESULTS-EXPORT-MARCH",
+  "format": "csv",
+  "bytes": 3606,
+  "extracted_chars": 3606,
+  "source_chars": 3606,
+  "parse_error": null,
+  "needles": 20,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-ABSTRACT-DRAFT",
+  "format": "docx",
+  "bytes": 4842,
+  "extracted_chars": 2229,
+  "source_chars": 2227,
+  "parse_error": null,
+  "needles": 14,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-RELATED-NOTES",
+  "format": "md",
+  "bytes": 3874,
+  "extracted_chars": 3873,
+  "source_chars": 3873,
+  "parse_error": null,
+  "needles": 33,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-VERIFICATION-2026",
+  "format": "pdf",
+  "bytes": 67112,
+  "extracted_chars": 6402,
+  "source_chars": 6544,
+  "parse_error": null,
+  "needles": 42,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-REFUND-2026",
+  "format": "pdf",
+  "bytes": 61579,
+  "extracted_chars": 4609,
+  "source_chars": 4740,
+  "parse_error": null,
+  "needles": 33,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-SHIPPING-2026",
+  "format": "docx",
+  "bytes": 5635,
+  "extracted_chars": 3816,
+  "source_chars": 3906,
+  "parse_error": null,
+  "needles": 32,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-RECOVERY-2026",
+  "format": "docx",
+  "bytes": 5293,
+  "extracted_chars": 3344,
+  "source_chars": 3359,
+  "parse_error": null,
+  "needles": 22,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-PRIVACY-2026",
+  "format": "pdf",
+  "bytes": 54327,
+  "extracted_chars": 4269,
+  "source_chars": 4332,
+  "parse_error": null,
+  "needles": 37,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-ESCALATION-2026",
+  "format": "docx",
+  "bytes": 5952,
+  "extracted_chars": 4507,
+  "source_chars": 4574,
+  "parse_error": null,
+  "needles": 32,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-BILLING-TRAVEL-2026",
+  "format": "pdf",
+  "bytes": 68507,
+  "extracted_chars": 4502,
+  "source_chars": 4656,
+  "parse_error": null,
+  "needles": 45,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-TROUBLESHOOTING-2026",
+  "format": "md",
+  "bytes": 4176,
+  "extracted_chars": 4176,
+  "source_chars": 4176,
+  "parse_error": null,
+  "needles": 37,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-HANDBOOK-V2",
+  "format": "pdf",
+  "bytes": 40537,
+  "extracted_chars": 2276,
+  "source_chars": 2293,
+  "parse_error": null,
+  "needles": 13,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "PI-A-RESUME",
+  "format": "pdf",
+  "bytes": 81424,
+  "extracted_chars": 6591,
+  "source_chars": 6707,
+  "parse_error": null,
+  "needles": 88,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "PI-A-JD",
+  "format": "docx",
+  "bytes": 6220,
+  "extracted_chars": 4660,
+  "source_chars": 4641,
+  "parse_error": null,
+  "needles": 62,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "PI-B-RESUME",
+  "format": "docx",
+  "bytes": 6666,
+  "extracted_chars": 5591,
+  "source_chars": 5595,
+  "parse_error": null,
+  "needles": 73,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "PI-B-JD",
+  "format": "txt",
+  "bytes": 3920,
+  "extracted_chars": 3918,
+  "source_chars": 3918,
+  "parse_error": null,
+  "needles": 54,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-RENO-QUOTE-REVC~hwincl",
+  "format": "pdf",
+  "bytes": 58523,
+  "extracted_chars": 5397,
+  "source_chars": 5453,
+  "parse_error": null,
+  "needles": 50,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-CONTRACTOR-EMAILS~hwyes",
+  "format": "txt",
+  "bytes": 4248,
+  "extracted_chars": 4248,
+  "source_chars": 4248,
+  "parse_error": null,
+  "needles": 13,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "GEN-REF-CAR-ESTIMATE~rotorsworn",
+  "format": "pdf",
+  "bytes": 47167,
+  "extracted_chars": 2748,
+  "source_chars": 2792,
+  "parse_error": null,
+  "needles": 21,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-INTEGRATIONS-2026~sfaddon",
+  "format": "pdf",
+  "bytes": 78564,
+  "extracted_chars": 4710,
+  "source_chars": 4886,
+  "parse_error": null,
+  "needles": 30,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-PRICING-2026~sfline",
+  "format": "pdf",
+  "bytes": 103060,
+  "extracted_chars": 5386,
+  "source_chars": 5744,
+  "parse_error": null,
+  "needles": 55,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SALES-REF-IMPLEMENTATION-2026~guarantee",
+  "format": "docx",
+  "bytes": 6433,
+  "extracted_chars": 5995,
+  "source_chars": 6084,
+  "parse_error": null,
+  "needles": 30,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-TEAM-BRIEF-2026~ic",
+  "format": "pdf",
+  "bytes": 47792,
+  "extracted_chars": 3344,
+  "source_chars": 3387,
+  "parse_error": null,
+  "needles": 31,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-JD-2026~ic",
+  "format": "docx",
+  "bytes": 5664,
+  "extracted_chars": 3671,
+  "source_chars": 3668,
+  "parse_error": null,
+  "needles": 23,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-SCORECARD-2026~ic",
+  "format": "docx",
+  "bytes": 5690,
+  "extracted_chars": 3782,
+  "source_chars": 3775,
+  "parse_error": null,
+  "needles": 31,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-JD-2026~seven",
+  "format": "docx",
+  "bytes": 5694,
+  "extracted_chars": 3698,
+  "source_chars": 3695,
+  "parse_error": null,
+  "needles": 22,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "REC-REF-BENEFITS-2026~remote",
+  "format": "pdf",
+  "bytes": 51273,
+  "extracted_chars": 3426,
+  "source_chars": 3486,
+  "parse_error": null,
+  "needles": 29,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-DECISION-LOG~offkept",
+  "format": "md",
+  "bytes": 5396,
+  "extracted_chars": 5396,
+  "source_chars": 5396,
+  "parse_error": null,
+  "needles": 42,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-DECISION-LOG~offpending",
+  "format": "md",
+  "bytes": 5402,
+  "extracted_chars": 5402,
+  "source_chars": 5402,
+  "parse_error": null,
+  "needles": 42,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-DECISION-LOG~offnorecord",
+  "format": "md",
+  "bytes": 5197,
+  "extracted_chars": 5197,
+  "source_chars": 5197,
+  "parse_error": null,
+  "needles": 40,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+  "format": "md",
+  "bytes": 4272,
+  "extracted_chars": 4272,
+  "source_chars": 4272,
+  "parse_error": null,
+  "needles": 37,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-A-INTERVIEW-NOTES~reloc-yes",
+  "format": "md",
+  "bytes": 7172,
+  "extracted_chars": 7172,
+  "source_chars": 7172,
+  "parse_error": null,
+  "needles": 64,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-A-INTERVIEW-NOTES~reloc-no",
+  "format": "md",
+  "bytes": 7133,
+  "extracted_chars": 7133,
+  "source_chars": 7133,
+  "parse_error": null,
+  "needles": 64,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LFW-REF-A-INTERVIEW-NOTES~reloc-absent-band-first",
+  "format": "md",
+  "bytes": 6592,
+  "extracted_chars": 6592,
+  "source_chars": 6592,
+  "parse_error": null,
+  "needles": 59,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-CNW-SYLLABUS-2026~final35",
+  "format": "pdf",
+  "bytes": 64659,
+  "extracted_chars": 4195,
+  "source_chars": 4328,
+  "parse_error": null,
+  "needles": 36,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-CNW-NOTES-W3-4~final45",
+  "format": "docx",
+  "bytes": 6523,
+  "extracted_chars": 5629,
+  "source_chars": 5694,
+  "parse_error": null,
+  "needles": 47,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "LEC-REF-BIO-NOTES-L8-9~atp32",
+  "format": "docx",
+  "bytes": 6567,
+  "extracted_chars": 5702,
+  "source_chars": 5737,
+  "parse_error": null,
+  "needles": 56,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-A-PROJECT-DEEPDIVE~traffic",
+  "format": "md",
+  "bytes": 7575,
+  "extracted_chars": 7574,
+  "source_chars": 7574,
+  "parse_error": null,
+  "needles": 73,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "TI-REF-SYSDESIGN-BRIEF~avail",
+  "format": "pdf",
+  "bytes": 81026,
+  "extracted_chars": 3413,
+  "source_chars": 3668,
+  "parse_error": null,
+  "needles": 37,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-PAPER-FINAL~extyes",
+  "format": "pdf",
+  "bytes": 104990,
+  "extracted_chars": 15055,
+  "source_chars": 15225,
+  "parse_error": null,
+  "needles": 85,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "SEM-REF-APPENDIX~extcheck",
+  "format": "pdf",
+  "bytes": 92538,
+  "extracted_chars": 5765,
+  "source_chars": 6013,
+  "parse_error": null,
+  "needles": 41,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-REFUND-2026~window90",
+  "format": "pdf",
+  "bytes": 61792,
+  "extracted_chars": 4609,
+  "source_chars": 4740,
+  "parse_error": null,
+  "needles": 33,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-REFUND-2026~dormant",
+  "format": "pdf",
+  "bytes": 62821,
+  "extracted_chars": 4816,
+  "source_chars": 4934,
+  "parse_error": null,
+  "needles": 35,
+  "needles_lost_in_parse": []
+ },
+ {
+  "id": "CC-REF-VERIFICATION-2026~helperreset",
+  "format": "pdf",
+  "bytes": 67149,
+  "extracted_chars": 6487,
+  "source_chars": 6629,
+  "parse_error": null,
+  "needles": 41,
+  "needles_lost_in_parse": []
+ }
+]

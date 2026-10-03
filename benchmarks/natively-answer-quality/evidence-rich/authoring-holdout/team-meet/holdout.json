@@ -1,0 +1,1453 @@
+{
+  "mode": "team-meet",
+  "items": [
+    {
+      "id": "ER-H-TEAM-001",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "When does the build actually go off to Apple and Google?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "milestones",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Store submission to both stores is Thursday 29 October.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F7",
+            "text": "Store submission, both stores, is Thursday 29 October.",
+            "answer_needles": [
+              "29 October",
+              "October 29",
+              "Oct 29",
+              "29th",
+              "29 Oct",
+              "twenty-ninth",
+              "Oct. 29",
+              "29th of October"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F10",
+            "text": "Three working days are allowed for review before launch on 3 November."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the launch date or the release candidate date as the submission date.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "source_priority": [
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-002",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How long is the full regression run taking, and what are we trying to get it down to?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "qa",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "6 hours 40 minutes as recorded at the 28 September sync; the aim is under 4 hours.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-MEETING-NOTES-0928#F7",
+            "text": "The full regression suite takes 6 hours 40 minutes.",
+            "answer_needles": [
+              "6 hours 40",
+              "6h40",
+              "6 h 40",
+              "six hours forty",
+              "6:40",
+              "six hours and forty",
+              "6 hours and 40",
+              "6h 40",
+              "six-forty",
+              "six forty"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-MEETING-NOTES-0928#F7",
+            "text": "The aim is under 4 hours.",
+            "answer_needles": [
+              "4 hours",
+              "four hours",
+              "4 h"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-MEETING-NOTES-0928#F13",
+            "text": "Corbin owns it; due Thursday 8 October."
+          },
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F13",
+            "text": "The plan is to run it in parallel on four device farms."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a different runtime or goal.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-MEETING-NOTES-0928"
+        ],
+        "source_priority": [
+          "TEAM-REF-MEETING-NOTES-0928"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-003",
+      "mode": "team-meet",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "ios crash-free on the current beta build?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "stability",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "99.6% crash-free sessions on beta build b6 (an early figure: b6 reached the beta track on 1 October).",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F23",
+            "text": "iOS is at 99.6% crash-free sessions on beta build b6.",
+            "answer_needles": [
+              "99.6"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F14",
+            "text": "That is above the 99.5% bar."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the Android figure as the iOS figure.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says there is no iOS figure yet.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "assistant answering Ilka Vantongeren (Android lead and release captain) privately while the meeting goes on; short and direct",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "source_priority": [
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Noting it clears the bar.",
+          "Noting the figure is early and not yet a seven-day reading."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-004",
+      "mode": "team-meet",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how much slack do we leave for app review between submitting and launch day",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "milestones",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Three working days. If review takes longer, launch moves day for day.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F10",
+            "text": "Three working days are allowed for store review between submission and launch.",
+            "answer_needles": [
+              "three working days",
+              "3 working days",
+              "three business days",
+              "3 business days",
+              "three days",
+              "3 days"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F10",
+            "text": "If review takes longer, launch moves day for day."
+          },
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F7",
+            "text": "An expedited-review request is kept ready."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a different allowance.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "assistant answering Ilka Vantongeren (Android lead and release captain) privately while the meeting goes on; short and direct",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "source_priority": [
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-005",
+      "mode": "team-meet",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "when is 3.0.1 pencilled in",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "milestones",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Maintenance release 3.0.1 is planned for Tuesday 1 December.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F9",
+            "text": "Maintenance release 3.0.1 is planned for Tuesday 1 December.",
+            "answer_needles": [
+              "1 December",
+              "December 1",
+              "Dec 1",
+              "1st of December",
+              "1 Dec",
+              "first of December",
+              "December first",
+              "Dec. 1",
+              "1st December",
+              "1st Dec"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F4",
+            "text": "PDF export would land in 3.0.1 if the export contingency is used."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a different date for 3.0.1.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Confuses 3.0.1 with 3.1 and answers February 2027.",
+            "kind": "fabrication",
+            "fact": "TEAM-REF-ROADMAP-V4#F11",
+            "answer_needles": [
+              "February"
+            ]
+          }
+        ],
+        "expected_role": "assistant answering Ilka Vantongeren (Android lead and release captain) privately while the meeting goes on; short and direct",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "source_priority": [
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-006",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "After we switch over, how long do we keep writing to both the old sync and the new one?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "sync",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Dual-write to v2 and v3 runs for 14 days after the cut-over. This is not the same as how long the v2 endpoints stay up (until at least the end of January 2027).",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F9",
+            "text": "Dual-write to v2 and v3 runs for 14 days after the cut-over.",
+            "answer_needles": [
+              "14 days",
+              "fourteen days",
+              "two weeks",
+              "2 weeks",
+              "fortnight"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F2",
+            "text": "The v2 endpoints themselves stay up until at least the end of January 2027."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says dual-write continues until the end of January 2027.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives a different duration.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-RISK-REGISTER"
+        ],
+        "source_priority": [
+          "TEAM-REF-RISK-REGISTER"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-007",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Ilka, what's sitting at the top of the risk list right now, and who's carrying it?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "risk",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The highest-scored risk is R-01, Android crash-free sessions below the release bar at release candidate (score 16), and its owner is Ilka, the user. Natural reply: 'Android stability, missing the crash-free bar at RC. That one's mine.'",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F1",
+            "text": "The top risk is R-01: Android crash-free sessions below the release bar at release candidate, score 16.",
+            "answer_needles": [
+              "crash"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F1",
+            "text": "It is owned by Ilka Vantongeren, the user.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F2",
+            "text": "Contingency: hold the Android rollout start by one week."
+          },
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F3",
+            "text": "Next is R-02, the PDF font defect, at 12."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Names a different risk as the top one.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Names someone other than Ilka as its owner.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-RISK-REGISTER"
+        ],
+        "source_priority": [
+          "TEAM-REF-RISK-REGISTER"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-008",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "On the Apple side, with the floor going up, roughly how many iPhones and iPads get left on the old version?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "platform_support",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "2.1% of active iOS devices were below the new minimum (decision log) and there are roughly 17,000 active iOS devices (roadmap): about 357, so roughly 350 to 360. They stay on 2.x with security fixes only. The Android share (3.8%) and the all-platform total (48,000) are the near misses.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F6",
+            "text": "2.1% of active iOS devices are below the new minimum; the percentage may stay implicit in a spoken answer that gives the right device count.",
+            "answer_needles": [
+              "2.1"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F2",
+            "text": "2.1% of roughly 17,000 iOS devices is about 357.",
+            "answer_needles": [
+              "357",
+              "360",
+              "350",
+              "three hundred and fifty",
+              "three hundred and sixty",
+              "three hundred fifty",
+              "three hundred sixty"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F27",
+            "text": "Those devices stay on the 2.x line with security fixes only."
+          },
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F5",
+            "text": "The new minimum is iOS 16."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Applies 2.1% to all 48,000 devices and says about 1,000.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "1,008",
+              "1008"
+            ]
+          },
+          {
+            "text": "Uses the Android share (3.8%) for iOS and says about 650.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "646"
+            ]
+          },
+          {
+            "text": "Gives the Android figure (about 1,180 devices) as the iOS answer.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "1,178",
+              "1178"
+            ]
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-DECISION-LOG",
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "source_priority": [
+          "TEAM-REF-DECISION-LOG",
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "0.021 * 17000",
+          "result": 357,
+          "unit": "devices",
+          "accepted_forms": [
+            "357",
+            "about 357",
+            "about 360",
+            "roughly 360",
+            "about 350",
+            "roughly 350"
+          ],
+          "inputs": {
+            "share_below_minimum": "TEAM-REF-DECISION-LOG#F6",
+            "ios_active_devices": "TEAM-REF-ROADMAP-V4#F2"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-009",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Ilka, the thing you picked up at last Monday's sync, did that get done?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "actions",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The user's action from the 28 September sync was A1: fix MG-2240, the camera-permission resume crash (meeting notes). The sprint status says it is fixed and shipped in beta build b6 on Thursday 1 October. First person: 'Yes, the camera permission crash is fixed, it went out in b6 on Thursday.'",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-MEETING-NOTES-0928#F10",
+            "text": "The user's action was to fix MG-2240, the camera-permission resume crash.",
+            "answer_needles": [
+              "MG-2240",
+              "camera"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F24",
+            "text": "It is fixed and shipped in beta build b6 on Thursday 1 October.",
+            "answer_needles": [
+              "b6",
+              "shipped",
+              "fixed"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F22",
+            "text": "Android crash-free is now 99.2% on b6."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Describes someone else's action as the user's.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says it is not known whether the action was completed.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          },
+          {
+            "text": "Says it is still open.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-MEETING-NOTES-0928",
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "source_priority": [
+          "TEAM-REF-MEETING-NOTES-0928",
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-010",
+      "mode": "team-meet",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how much room is there between when tobiah owes dorrin the sdk list and the point where the data safety form becomes a real problem?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "store_submission",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Tobiah's action to send the SDK list is due Monday 5 October (meeting notes). The risk register's trigger for the Data safety form risk is the form not being complete by Monday 26 October. That is 21 days, three weeks. The contingency if it is missed is to submit iOS first. The register marks 26 October as the point at which the form becomes a problem; an answer that measures to the submission date itself (29 October, 24 days) is acceptable only if it says so.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-MEETING-NOTES-0928#F12",
+            "text": "Tobiah's SDK list is due Monday 5 October.",
+            "answer_needles": [
+              "5 October",
+              "October 5",
+              "Oct 5",
+              "5th",
+              "fifth",
+              "Oct. 5"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F15",
+            "text": "The form must be complete by Monday 26 October, 21 days (three weeks) later.",
+            "answer_needles": [
+              "21 days",
+              "three weeks",
+              "3 weeks",
+              "twenty-one days",
+              "21"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F15",
+            "text": "If the form is not complete, the contingency is to submit iOS first and Android when the form is done."
+          },
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F7",
+            "text": "Store submission itself is Thursday 29 October."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 24 days as the room without saying that this is measured to the store submission on 29 October rather than to the 26 October trigger.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says the SDK list has already been sent.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "assistant answering Ilka Vantongeren (Android lead and release captain) privately while the meeting goes on; short and direct",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TEAM-REF-MEETING-NOTES-0928",
+          "TEAM-REF-RISK-REGISTER"
+        ],
+        "source_priority": [
+          "TEAM-REF-MEETING-NOTES-0928",
+          "TEAM-REF-RISK-REGISTER"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Measuring to the store submission on 29 October (24 days) is acceptable only when the answer says that this is what it measures to; the expected answer is the 21 days to the 26 October trigger, and giving both is fine."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2026-10-26 - 2026-10-05",
+          "result": 21,
+          "unit": "days",
+          "accepted_forms": [
+            "21 days",
+            "three weeks",
+            "3 weeks",
+            "twenty-one days"
+          ],
+          "inputs": {
+            "sdk_list_due": "TEAM-REF-MEETING-NOTES-0928#F12",
+            "form_trigger": "TEAM-REF-RISK-REGISTER#F15"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-011",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How much of the beta window does that actually leave them?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Bit of news from the pilots: Tarnbrook just told me their crews can't start until Monday the nineteenth."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "pilot",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The closed beta runs from Thursday 15 October to Wednesday 28 October (roadmap). Starting Monday 19 October (just said in the meeting) leaves Tarnbrook 19 to 28 October: ten calendar days, eight working days, out of fourteen. Extending the beta for one customer is a contingency in the risk register and may be mentioned as an option, not as something already agreed.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "Tarnbrook's crews cannot start until Monday 19 October.",
+            "answer_needles": []
+          },
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F6",
+            "text": "The window ends Wednesday 28 October, which leaves ten calendar days (eight working days).",
+            "answer_needles": [
+              "ten days",
+              "10 days",
+              "ten calendar",
+              "10 calendar",
+              "eight working",
+              "8 working",
+              "week and a half"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F20",
+            "text": "The risk register's contingency is to extend the beta for that customer only, with the launch date holding."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says Tarnbrook's beta has been extended, as a settled fact.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says the launch date moves because of this.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-ROADMAP-V4",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "CONVERSATION",
+          "TEAM-REF-ROADMAP-V4",
+          "TEAM-REF-RISK-REGISTER"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "28 - 19 + 1",
+          "result": 10,
+          "unit": "calendar days",
+          "accepted_forms": [
+            "10 days",
+            "ten days",
+            "10 calendar days",
+            "ten calendar days",
+            "8 working days",
+            "eight working days"
+          ],
+          "inputs": {
+            "beta_end": "TEAM-REF-ROADMAP-V4#F6",
+            "tarnbrook_start": "CONVERSATION"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-012",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Are we gating the rollout on ANRs as well, or is it just crashes?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "rollout_gates",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "As approved (decision D-020), the rollout halts on crash-free sessions falling below 99.1% in any stage or on any P0. There is no ANR gate. An ANR gate exists only in Corbin's draft, which is not approved and goes to the release review on Wednesday 14 October. The reply should say 'just crashes and P0s as it stands' and may add that the ANR gate is a proposal.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F18",
+            "text": "The approved halt criteria are crash-free sessions below 99.1% in any stage, or any P0 defect; there is no ANR gate.",
+            "answer_needles": [
+              "99.1",
+              "P0"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-ROLLOUT-GATES-DRAFT#F1",
+            "text": "The ANR gate is only in an unapproved draft."
+          },
+          {
+            "fact": "TEAM-REF-ROLLOUT-GATES-DRAFT#F11",
+            "text": "The draft goes to the release review on Wednesday 14 October."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the rollout is gated on an ANR rate of 0.3%.",
+            "kind": "draft",
+            "fact": "TEAM-REF-ROLLOUT-GATES-DRAFT#F5",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives the draft's halt threshold as the rule.",
+            "kind": "draft",
+            "fact": "TEAM-REF-ROLLOUT-GATES-DRAFT#F4",
+            "answer_needles": [
+              "99.4"
+            ]
+          },
+          {
+            "text": "Says nobody has suggested an ANR gate.",
+            "kind": "false_denial",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-DECISION-LOG",
+          "TEAM-REF-ROLLOUT-GATES-DRAFT"
+        ],
+        "source_priority": [
+          "TEAM-REF-DECISION-LOG",
+          "TEAM-REF-ROLLOUT-GATES-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "rollout halt gates",
+            "sources": [
+              "TEAM-REF-DECISION-LOG",
+              "TEAM-REF-ROLLOUT-GATES-DRAFT"
+            ],
+            "resolution": "final_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-013",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Some of the Corrimount handsets are pretty old. What's the oldest Android we'll run on?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "platform_support",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Android 10 (API level 29) and later (decision D-014). The August report's lower minimum is superseded, and the chat request to keep the oldest version was turned down. Older devices stay on 2.x with security fixes only.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F5",
+            "text": "3.0 supports Android 10 (API level 29) and later.",
+            "answer_needles": [
+              "Android 10",
+              "API 29",
+              "API level 29",
+              "Android ten"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F27",
+            "text": "Older devices stay on the 2.x line with security fixes only."
+          },
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F6",
+            "text": "3.8% of active Android devices were below the minimum."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says 3.0 runs on Android 9.",
+            "kind": "stale",
+            "fact": "TEAM-REF-SPRINT-REPORT-S37#F10",
+            "answer_needles": []
+          },
+          {
+            "text": "Says the minimum is still under discussion.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-DECISION-LOG"
+        ],
+        "source_priority": [
+          "TEAM-REF-DECISION-LOG",
+          "TEAM-REF-SPRINT-REPORT-S37",
+          "TEAM-REF-CHAT-EXPORT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "minimum Android version",
+            "sources": [
+              "TEAM-REF-DECISION-LOG",
+              "TEAM-REF-SPRINT-REPORT-S37"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-014",
+      "mode": "team-meet",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how far along is export, percentage-wise",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "sprint_progress",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "70% as of the 2 October sprint status. The 28 September notes and the August report give lower figures; which one is current can only be told from the dates. Amber, due Wednesday 7 October.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F9",
+            "text": "Export is 70% complete as of Friday 2 October.",
+            "answer_needles": [
+              "70"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F9",
+            "text": "It is amber and due Wednesday 7 October."
+          },
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F14",
+            "text": "CSV is finished; the open part is PDF."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the 28 September figure (45%) as the current one.",
+            "kind": "stale",
+            "fact": "TEAM-REF-MEETING-NOTES-0928#F3",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives the August figure (20%) as the current one.",
+            "kind": "stale",
+            "fact": "TEAM-REF-SPRINT-REPORT-S37#F7",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "assistant answering Ilka Vantongeren (Android lead and release captain) privately while the meeting goes on; short and direct",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "source_priority": [
+          "TEAM-REF-SPRINT-STATUS-S41",
+          "TEAM-REF-MEETING-NOTES-0928",
+          "TEAM-REF-SPRINT-REPORT-S37"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "export percent complete",
+            "sources": [
+              "TEAM-REF-SPRINT-STATUS-S41",
+              "TEAM-REF-MEETING-NOTES-0928"
+            ],
+            "resolution": "current_wins"
+          },
+          {
+            "topic": "export percent complete",
+            "sources": [
+              "TEAM-REF-SPRINT-STATUS-S41",
+              "TEAM-REF-SPRINT-REPORT-S37"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-015",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Corbin's out today. Can you grab the notes for this one?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "speech_act",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A request made to the user now. The answer is a plain yes or a plain 'I can't, can someone else': for example 'Sure, I'll take them.' No document sets a notes rota, and none is needed.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Claims a recorded rota or that someone else is assigned to take notes.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says it cannot determine who should take notes.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Agreeing.",
+          "Agreeing and asking someone else to cover while the user presents the Android update."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-016",
+      "mode": "team-meet",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if we halt a staged rollout in play, do people who already got the update keep it or does it get pulled back?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "General knowledge about Google Play, not in the documents: halting a staged rollout stops further devices from receiving the release; devices that already updated keep it. Nothing is rolled back automatically, so fixing those users needs a new build with a higher version code. The team's own halt rules can be mentioned in passing but are not the answer.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F18",
+            "text": "The team halts if crash-free sessions fall below 99.1% in any stage or a P0 is opened."
+          },
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F19",
+            "text": "The release captain may halt and resume."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says halting removes or rolls back the update on devices that already have it.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says the decision log specifies what happens to devices that already updated.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Declines to answer because the documents do not cover it.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "assistant answering Ilka Vantongeren (Android lead and release captain) privately while the meeting goes on; short and direct",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-017",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Are the release notes going out in anything other than English? Which languages are we doing?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "store_submission",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Nothing loaded says which languages the release notes or store listings use. Unknown is not false: the reply must not name languages and must not say 'English only'. A useful reply says the user is not sure it has been settled and passes it to Dorrin (store listings) or Saoirse.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F19",
+            "text": "Dorrin owns store submission prep."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Names specific languages.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says the release notes are English only.",
+            "kind": "false_denial",
+            "answer_needles": []
+          },
+          {
+            "text": "Infers languages from the non-Latin site names in the font defect.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "defer_to_verify",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking Dorrin or Saoirse in the meeting."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-018",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What comes straight after the freeze? When's the release candidate due?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-none",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "milestones",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No team-meet document is loaded. The reply must not state a date for the release candidate. It should say the user wants to check the roadmap before quoting a date.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "States a specific date for the release candidate.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Quotes a price, percentage or date taken from another product's or another mode's documents as if it were this team's.",
+            "kind": "other_mode",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "defer_to_verify",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the release candidate follows the freeze, without a date, and offering to confirm it."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-019",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Ilka, now the camera crash is out of the way, what's left on the Android crash list?",
+      "prior_transcript": null,
+      "conversation_id": "ER-H-TEAM-019-C",
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "stability",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Two clusters remain: the sync worker running out of memory on low-RAM devices, and the map tile cache. Fixes for both are planned for beta build b7.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F29",
+            "text": "The sync worker running out of memory on low-RAM devices is one remaining cluster.",
+            "answer_needles": [
+              "sync worker",
+              "memory"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F29",
+            "text": "The map tile cache is the other.",
+            "answer_needles": [
+              "map tile",
+              "tile cache"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F29",
+            "text": "Fixes for both are planned for beta build b7."
+          },
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F22",
+            "text": "Android is at 99.2% on b6."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Lists the camera-permission resume crash as still open.",
+            "kind": "stale",
+            "fact": "TEAM-REF-MEETING-NOTES-0928#F6",
+            "answer_needles": []
+          },
+          {
+            "text": "Invents a third crash cluster.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "source_priority": [
+          "TEAM-REF-SPRINT-STATUS-S41",
+          "TEAM-REF-RISK-REGISTER",
+          "TEAM-REF-MEETING-NOTES-0928"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-TEAM-020",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And the memory one, what's the plan for that?",
+      "prior_transcript": null,
+      "conversation_id": "ER-H-TEAM-019-C",
+      "turn_index": 2,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "stability",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "'The memory one' is the sync worker running out of memory from the previous turn. The risk register (R-07, owned by the user) gives the mitigation: cap the sync batch at 200 records on devices with under 3 GB of RAM. The contingency is to disable background sync on the affected models. The fix is planned for b7.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F12",
+            "text": "Cap the sync batch at 200 records on devices with under 3 GB of RAM.",
+            "answer_needles": [
+              "200"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-RISK-REGISTER#F21",
+            "text": "Contingency: disable background sync on the affected models."
+          },
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F29",
+            "text": "The fix is planned for beta build b7."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the export batch limit (50) as the sync batch cap.",
+            "kind": "fabrication",
+            "fact": "TEAM-REF-DECISION-LOG#F12",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers about the map tile cache or the camera crash instead of the memory cluster.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says there is no plan yet.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-RISK-REGISTER"
+        ],
+        "source_priority": [
+          "TEAM-REF-RISK-REGISTER",
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

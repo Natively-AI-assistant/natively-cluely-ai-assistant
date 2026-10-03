@@ -1,0 +1,103 @@
+[
+  {
+    "id": "GEN-REF-RENO-QUOTE-REVC~hwincl",
+    "base": "GEN-REF-RENO-QUOTE-REVC",
+    "replace": [
+      {
+        "find": "Decorative hardware is not part of this price: the owners supply their own knobs and pulls, and we fit them at no extra charge provided they are on site by the day cabinet installation begins.",
+        "with": "Decorative hardware is part of this price: knobs and pulls from our standard brushed range, supplied and fitted on the day cabinet installation begins."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F5",
+        "statement": "Decorative hardware is part of the cabinetry price in Revision C: knobs and pulls from the standard brushed range, supplied and fitted.",
+        "doc_needles": [
+          "Decorative hardware is part of this price",
+          "supplied and fitted"
+        ]
+      }
+    ],
+    "note": "Cabinet hardware moves from excluded (owner-supplied) to included in the current quote."
+  },
+  {
+    "id": "GEN-REF-CONTRACTOR-EMAILS~hwyes",
+    "base": "GEN-REF-CONTRACTOR-EMAILS",
+    "replace": [
+      {
+        "find": "Works for me. I'll have the samples labeled so he knows which is which.",
+        "with": "Works for me. I'll have the samples labeled so he knows which is which.\n\nAnd on what you asked on the phone yesterday: yes, the knobs and pulls are in the price. We'll bring the brushed ones on install day."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F11",
+        "statement": "In his email of 1 October 2026, sent after Revision C was issued, Dunmore says the knobs and pulls are in the price and that the crew will bring the brushed ones on install day.",
+        "doc_needles": [
+          "knobs and pulls are in the price"
+        ]
+      }
+    ],
+    "note": "The contractor's latest email now says hardware is included, contradicting the signed Revision C, which excludes it."
+  },
+  {
+    "id": "GEN-REF-CAR-ESTIMATE~rotorsworn",
+    "base": "GEN-REF-CAR-ESTIMATE",
+    "replace": [
+      {
+        "find": "Thickness measured at 26.4 mm.",
+        "with": "Thickness measured at 24.6 mm."
+      },
+      {
+        "find": "No scoring and no heat spots. The rotors are within specification and do not need to be replaced with this set of pads. Measure them again at the next pad change.",
+        "with": "Light scoring on both faces. The rotors are below the minimum thickness and must be replaced together with the pads."
+      },
+      {
+        "find": "## Option 1: front pads only (recommended)",
+        "with": "## Option 1: front pads only (not recommended)"
+      },
+      {
+        "find": "## Option 2: front pads and front rotors",
+        "with": "## Option 2: front pads and front rotors (recommended)"
+      },
+      {
+        "find": "Option 2 is shown because some owners prefer to renew pads and rotors together. On the measurements above it is not required.",
+        "with": "Option 2 is the one we recommend. Rotors under the minimum thickness should not be reused with new pads. Option 1 is shown for comparison only."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F3",
+        "statement": "The front rotors measure 24.6 mm against a minimum thickness of 25.0 mm.",
+        "doc_needles": [
+          "24.6 mm",
+          "25.0 mm"
+        ]
+      },
+      {
+        "fact": "F4",
+        "statement": "The front rotors are below the minimum thickness and must be replaced together with the pads.",
+        "doc_needles": [
+          "below the minimum thickness"
+        ]
+      },
+      {
+        "fact": "F7",
+        "statement": "Option 1, front pads only, totals $266.68 and is not recommended; it is shown for comparison only.",
+        "doc_needles": [
+          "front pads only (not recommended)",
+          "$266.68"
+        ]
+      },
+      {
+        "fact": "F8",
+        "statement": "Option 2, front pads and front rotors, totals $521.14 and is the recommended option.",
+        "doc_needles": [
+          "front rotors (recommended)",
+          "$521.14"
+        ]
+      }
+    ],
+    "note": "The rotor measurement drops below the minimum, so the shop recommends pads and rotors."
+  }
+]
