@@ -306,6 +306,13 @@ From `analyze.mjs --runs er-dev-e1,er-cf-e1 --worst 20`. "In prompt" = every nee
 
 ## 9b. Decisions this leaves with Evin
 
+**Evin's answers, 2026-10-03 17:05 UTC:** (1) land E1 now on local main; (2) redesign the claim pass, then measure;
+(3) raise the cut and measure; (4) the app labels dates in the prompt; (6) find the cause of the markup and fix it.
+E1 is on LOCAL main as `9fce990b` (a cherry-pick of `bab77f33` onto `75eb98d6`; not pushed). On that commit:
+`typecheck:electron` clean, `test:intelligence` 2,858 pass / 0 fail of 2,869. Main is 303 commits past the build the
+benchmark ran on, so main + E1 itself was not benchmarked; the tests are what vouch for it there. If the gpt-6-astra
+re-judge overturns the holdout result, the way back is `git revert 9fce990b`.
+
 | | Decision | What was measured |
 |---|---|---|
 | 1 | Land E1 (`fix/er-pack-whole`, `bab77f33`)? | Holdout 7.40 → 8.17; hard fails 39 → 15; heard first word 2,249 → 1,826 ms. Costs: about 7,000 more input tokens per turn on these packs; typed first word +123 ms; more wrong attribution on absent facts (Lecture missing-evidence rows 7.5 → 5.5). Reviewed but not executed on Windows; not run packaged |
