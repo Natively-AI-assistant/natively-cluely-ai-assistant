@@ -369,6 +369,46 @@ export class IntelligenceEngine extends EventEmitter {
         }
     }
 
+    /**
+     * CLAIM VERIFIER pass (llm/claimVerifier.ts). Returns the answer to ship:
+     * the verified edit when the rails accept it, otherwise the answer as it
+     * was. Never throws past its caller's try, never waits past its budget.
+     */
+    private async verifyAnswerClaims(opts: {
+        answer: string;
+        modeId: string | null;
+        question: string;
+        material: string;
+        turnKey: object;
+        signal: AbortSignal;
+        isSuperseded: () => boolean;
+        trace: PiLatencyTrace;
+    }): Promise<string> {
+        const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
+        const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer, surface: 'spoken' });
+        if (!kind || !opts.modeId) return opts.answer;
+        const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken', { noDocuments: cv.materialHasNoDocuments(opts.material) });
+        // The replayed answer call carries the material itself (its own user
+        // message comes first); without one, the V3 user message stands in.
+        const h: any = this.llmHelper;
+        const canReplay = Boolean(h.replayAnswerCall?.(opts.turnKey, ''));
+        const run = await cv.runClaimVerifier({
+            answer: opts.answer,
+            material: opts.material,
+            budgetMs: h.replayedAnswerHasImages?.(opts.turnKey) === true ? cv.CLAIM_VERIFIER_IMAGE_BUDGET_MS : cv.CLAIM_VERIFIER_BUDGET_MS,
+            startStream: (body, signal) => this.llmHelper.streamChat(...(canReplay
+                ? this.repairCallArgs(opts.turnKey, cv.claimVerifierDraftMessage(body), signal, system)
+                : this.repairCallArgs(undefined, cv.claimVerifierStandaloneMessage(opts.material, body), signal, system))) as AsyncGenerator<string>,
+            parentSignal: opts.signal,
+            isSuperseded: opts.isSuperseded,
+            clean: cleanAnswerArtifacts,
+            observe: secondaryStreamObserver('verification'),
+        });
+        console.log(`[ClaimVerifier] hotkey kind=${kind} ${run.changed ? 'edited' : 'kept'} (${run.outcome}) ${run.ms}ms`);
+        opts.trace.mark('repair_used', { reason: 'claim_verifier', outcome: run.outcome, changed: run.changed, ms: run.ms });
+        return run.text;
+    }
+
     private repairFirstUsefulMs(minMs: number = 7000, turnKey?: object): number {
         const h: any = this.llmHelper;
         const isUserEndpoint = typeof h?.isUsingUserEndpoint === 'function' ? h.isUsingUserEndpoint() === true : false;
@@ -3970,6 +4010,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        attachedCorpusTokens: _ctx.attachedCorpusTokens,
                         attachedFileNames: _ctx.attachedFileNames,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
@@ -6034,6 +6075,18 @@ export class IntelligenceEngine extends EventEmitter {
                 } catch (preErr: any) {
                     console.warn('[IntelligenceEngine] planning-preamble guard skipped:', preErr?.message || preErr);
                 }
+                // ACCESS LEAD (2026-09-30): "I don't have the notes in front of
+                // me, so…" before the question that moves things — llm/accessLead.ts.
+                try {
+                    const { stripAccessLead } = require('./llm/accessLead') as typeof import('./llm/accessLead');
+                    const al = stripAccessLead(fullAnswer, requestSnapshot.modeId);
+                    if (al.stripped) {
+                        fullAnswer = al.text;
+                        trace.mark('repair_used', { reason: 'access_lead_stripped' });
+                    }
+                } catch (alErr: any) {
+                    console.warn('[IntelligenceEngine] access-lead guard skipped:', alErr?.message || alErr);
+                }
             }
 
             // STEERING-TAIL STRIP (live session D, 2026-08-23): on a SMALL-TALK
@@ -6143,6 +6196,30 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 } catch (avErr: any) {
                     console.warn('[IntelligenceEngine] assistant-voice guard skipped:', avErr?.message);
+                }
+            }
+
+            // CLAIM VERIFIER (2026-09-30): an answer spoken as the user, their
+            // product or their company must not state what the material behind
+            // it does not — see llm/claimVerifier.ts for the measurements. One
+            // short edit pass on the answer's own replayed call, bounded by a
+            // total budget, kept only when the deterministic rails accept it.
+            if (fullAnswer && !isCodingAnswerType(answerPlan.answerType)
+                && !IntelligenceEngine.isNonAnswerSentinel(fullAnswer)
+                && requestSnapshot.v3Prompt && process.env.NATIVELY_CLAIM_VERIFIER !== '0') {
+                try {
+                    fullAnswer = await this.verifyAnswerClaims({
+                        answer: fullAnswer,
+                        modeId: requestSnapshot.modeId ?? null,
+                        question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                        material: requestSnapshot.v3Prompt.user ?? '',
+                        turnKey: whatToAnswerCancellationToken.signal,
+                        signal: whatToAnswerCancellationToken.signal,
+                        isSuperseded: isWtaSuperseded,
+                        trace,
+                    });
+                } catch (cvErr: any) {
+                    console.warn('[IntelligenceEngine] claim verifier skipped:', cvErr?.message);
                 }
             }
 
@@ -7132,6 +7209,8 @@ export class IntelligenceEngine extends EventEmitter {
         raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
         attachedSourceCount: number;
         attachedFileNames: string[];
+        /** referenceCorpusTokens(files): a small corpus is read whole (see mode-retrieval-port). */
+        attachedCorpusTokens: number | null;
         profileSourceCount: number;
         resolvedProfileSources: Array<{ role: string; id: string }>;
         extraAllowedSourceTypes: string[];
@@ -7142,7 +7221,7 @@ export class IntelligenceEngine extends EventEmitter {
         port: unknown; conversationWindow: (sec: number) => string;
     } | null {
         try {
-            const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { createModeRetrievalPort, attachmentSourceTypeExtensions, referenceCorpusTokens } = require('./context-intelligence/retrieval/mode-retrieval-port');
             const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
             const _mm = ModesManager.getInstance();
@@ -7268,6 +7347,7 @@ export class IntelligenceEngine extends EventEmitter {
                 meetingId: scopeMeetingId ?? meetingId,
                 attachedSourceCount: _files.length,
                 attachedFileNames: (_files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
+                attachedCorpusTokens: referenceCorpusTokens(_files as Array<{ content?: string }>),
                 profileSourceCount,
                 resolvedProfileSources,
                 extraAllowedSourceTypes: extraSourceTypes,
@@ -7354,6 +7434,7 @@ export class IntelligenceEngine extends EventEmitter {
                 modeUniqueId: ctx.modeUniqueId,
                 modeName: ctx.modeName,
                 attachedSourceCount: ctx.attachedSourceCount,
+                attachedCorpusTokens: ctx.attachedCorpusTokens,
                 attachedFileNames: ctx.attachedFileNames,
                 profileSourceCount: ctx.profileSourceCount,
                 resolvedProfileSources: ctx.resolvedProfileSources,
@@ -7900,6 +7981,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        attachedCorpusTokens: _ctx.attachedCorpusTokens,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
                         // See ClassificationInput.inLiveMeeting (task 7b, issue

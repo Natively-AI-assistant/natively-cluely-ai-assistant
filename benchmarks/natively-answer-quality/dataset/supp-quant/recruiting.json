@@ -1,0 +1,99 @@
+{
+  "mode": "recruiting",
+  "partition": "supp-quant",
+  "contexts": [
+    {
+      "id": "SQREC-CTX-1",
+      "kind": "grounded",
+      "title": "Corvane offer summary: Senior Data Engineer",
+      "file_name": "corvane-offer-summary-okafor.txt",
+      "text": "CORVANE LOGISTICS - OFFER SUMMARY (INTERNAL, RECRUITING)\nRole: Senior Data Engineer, Routing Platform. Candidate: Adaeze Okafor. Hiring manager: Tomasz Brandt. Prepared 28 September 2026 by Talent Acquisition.\n\nCompensation options (candidate chooses one)\nOption A\n- Base salary: $142,000\n- Target annual bonus: 12% of base (payout 0-200% of target based on company and individual results)\nOption B\n- Base salary: $152,000\n- Target annual bonus: 8% of base, same payout rules\nBoth options\n- Sign-on bonus: $15,000, paid in two parts: $9,000 in the first payroll and $6,000 after six months of employment. Repayable pro rata if the employee leaves within 12 months of starting.\n- Equity: restricted stock units worth $60,000 at grant, vesting in equal quarterly instalments over four years (no cliff), so $15,000 of grant value vests in each year of service.\n- For the offer letter, \"first-year cash\" = base + target bonus + sign-on. Equity is shown separately.\n- Offer letter figure, Option A: first-year cash $174,040.\n\nBenefits\n- Medical, dental and vision from day one; employee premium 10%.\n- 401(k) with 4% match, immediate vesting (not included in any compensation total).\n- 25 days PTO plus 10 public holidays.\n- $1,500 annual learning budget.\n\nLogistics\n- Location: Wharf Street office, hybrid, 2 days a week on site. Candidate lives locally; no relocation package applies.\n- Target start date: 2 November 2026. Background check in progress.\n- Offer expires 9 October 2026.\n\nApproval notes\n- Band for level: $128,000-$158,000 base. Option B sits near the top of the band; the hiring manager prefers Option A.\n- Any sign-on above $15,000 or equity above $60,000 needs VP approval (Grete Solberg).\n- Candidate's current package (as told to the recruiter): $118,000 base plus about 6% bonus.\n\nInterview feedback summary\nStrong on streaming pipelines and cost optimisation; weaker on stakeholder communication per panel 3. Hire recommendation: yes.",
+      "notes": "Chain c01: Option A full first year at target = 142,000 + 17,040 (12%) + 15,000 sign-on (both parts fall inside year one) + 15,000 vested RSU = 189,040; Option B = 152,000 + 12,160 (8%) + 15,000 + 15,000 = 194,160. Traps: counting the whole 60,000 grant in year one (234,040 / 239,160), counting only the first 9,000 sign-on part (183,040), applying 12% to Option B (200,240), adding the 401(k) match (explicitly excluded) or relocation (does not apply). SQREC-003 (consistent): letter first-year cash 174,040 = 142,000 + 17,040 + 15,000 sign-on; the candidate's 159,040 omits the sign-on; the letter is right."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SQREC-001",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Can you walk me through what a full first year adds up to on option A if I hit target bonus? Counting the sign-on and the stock that vests that year.",
+      "context_condition": "grounded",
+      "context_ref": "SQREC-CTX-1",
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "compensation",
+        "percent",
+        "chain"
+      ],
+      "expected_answer_type": "recruiter's spoken breakdown with a total",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$142,000",
+        "12% of base",
+        "$15,000 of grant value vests"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQREC-002",
+      "category": "compensation",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And the same thing for option B?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "arithmetic",
+        "compensation",
+        "percent",
+        "follow_up",
+        "chain",
+        "changed_quantity"
+      ],
+      "expected_answer_type": "recruiter's spoken breakdown with a total",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$152,000",
+        "8% of base"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQREC-003",
+      "category": "compensation",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "Candidate's pushing back: says the letter's first-year cash of 174,040 is wrong because 142k plus a 12% bonus is only 159,040. Is our letter wrong?",
+      "context_condition": "grounded",
+      "context_ref": "SQREC-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "consistent",
+        "compensation"
+      ],
+      "expected_answer_type": "private verdict for the recruiter with the reconciliation",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$174,040",
+        "Sign-on bonus: $15,000"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

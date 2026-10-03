@@ -1504,6 +1504,9 @@ const resolveJdSourceType = (
   return 'jd_summary_answer';
 };
 
+/** A spoken request for code, as opposed to code words in someone's story ("I haven't written much production code"). */
+const EXPLICIT_CODING_ASK_RE = /\b(?:solve|implement|write (?:a|an|the|me|some|out|code)|code (?:up|this|that|it)|reverse (?:a|an|the)|sort (?:a|an|the|this)|find (?:the|a|all) |merge (?:two|the)|design (?:a|an) (?:algorithm|function|data structure))\b/i;
+
 export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const rawQuestion = input.question || input.extractedQuestion?.latestQuestion || '';
   const question = rawQuestion.trim();
@@ -2077,6 +2080,21 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // and follow-up referents instead of collapsing every turn to lecture_answer.
     const docShape = classifyDocumentQuestionShape(question, input.extractedQuestion?.isFollowUp ? input.extractedQuestion?.followUpTarget || 'prior' : undefined);
     answerType = docShape === 'broad_overview' ? 'lecture_answer' : docShape;
+  }
+
+  // RECRUITING LIVE TURN (2026-09-30): the user runs the interview, so a heard
+  // turn is the CANDIDATE talking and the output is the interviewer's next
+  // words. A code word in the candidate's answer — "I haven't written much
+  // production code lately", "a cap on in-flight retries" (bare `queue`) — is
+  // not a coding task. Routed as one, both benchmark turns took the coding
+  // contract and came back as advice to the recruiter (judged 7.0 and 7.5).
+  // Typed requests ("give me a coding question to ask") keep their routing, and
+  // so does an EXPLICIT coding ask heard aloud ("solve two sum in python") —
+  // the W1-5 invariant: an explicit answer-type signal is never overridden by
+  // a mode. Only a turn with no request verb is demoted.
+  if (input.activeMode?.templateType === 'recruiting' && input.source === 'what_to_answer' && isCodingAnswerType(answerType)
+      && !EXPLICIT_CODING_ASK_RE.test(text)) {
+    answerType = 'general_meeting_answer';
   }
 
   // DESIGN FOLLOW-UP (2026-10-01). With a system design on the table, "add a

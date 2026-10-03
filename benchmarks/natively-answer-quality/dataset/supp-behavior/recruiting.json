@@ -1,0 +1,428 @@
+{
+  "mode": "recruiting",
+  "partition": "supp-behavior",
+  "contexts": [
+    {
+      "id": "SBREC-CTX-G1",
+      "kind": "grounded",
+      "title": "Recruiter brief - Senior Firmware Engineer, Motor Control",
+      "file_name": "fernhollow_fr2291_recruiter_brief.txt",
+      "text": "RECRUITER BRIEF - Senior Firmware Engineer, Motor Control\nFernhollow Robotics | Req FR-2291 | Owner: recruiter Ines Calderwood | Updated Sep 25\n\nTHE ROLE\nFernhollow builds autonomous mowers for golf courses and municipal parks. This hire joins the Motion Controls team and owns the brushless motor drive firmware on the M4 mower platform: current loops, field-oriented control, fault handling, and bring-up of the next motor controller board.\n\nTEAM\nMotion Controls is 7 firmware engineers plus a hardware liaison, led by engineering manager Keziah Adebayo-Lund. The team sits inside a 60-person robotics org.\n\nMUST-HAVES\n- 6+ years writing production embedded C.\n- Hands-on field-oriented control (FOC) for BLDC or PMSM motors, including tuning current loops on real hardware.\n- RTOS experience (FreeRTOS, Zephyr, or similar).\n- Comfortable with a scope and a logic analyzer.\n\nNICE-TO-HAVES\n- Functional safety work (IEC 61508 or ISO 13849).\n- Rust on microcontrollers.\n- Outdoor or agricultural equipment experience.\n\nWHERE AND HOW\nHybrid. Two anchor days in the Fremont lab, Tuesday and Wednesday, because the dynamometers and prototype boards live there. The other three days are flexible. Fully remote is not available for this role.\n\nBENEFITS HIGHLIGHTS (share freely)\n- Parental leave: 16 weeks fully paid for all parents, plus a 4-week phased return at a reduced schedule with full pay.\n- 20 days PTO plus a winter shutdown week.\n- 401(k) with a 5% match.\n- Sign-on bonus: up to $15,000, approved case by case by the VP of Engineering.\n- $1,500 yearly learning budget.\n\nINTERVIEW STEPS\n1. Recruiter screen, 30 minutes (this call).\n2. Hiring manager call with Keziah, 45 minutes.\n3. Onsite at Fremont, about 4 hours: an embedded C session, a control-theory whiteboard session, and a hardware debugging lab on a live motor rig, followed by lunch with the team.\n4. Decision within 5 business days of the onsite. References only after a verbal offer.\n\nCOMPENSATION\nDo not quote a range on the screen. The band is shared after the hiring manager call, once leveling is clear.\n\nSELLING POINTS\n- Real hardware that ships every season; firmware changes reach about 2,000 mowers in the field.\n- The team rebuilt its CI so every merge is flashed onto hardware-in-the-loop rigs overnight.\n- Low meeting load: one team meeting a week.\n\nSOURCING NOTES (internal, do not share)\n- Two candidates declined over the anchor days last month.\n- Keziah prefers people who can talk through a failure they debugged on hardware.\n- Do not discuss the Q3 reorg of the autonomy group.",
+      "notes": null
+    },
+    {
+      "id": "SBREC-CTX-C1",
+      "kind": "conflicting",
+      "title": "Intake notes - Req 4471 Data Engineer II",
+      "file_name": "req4471_intake_notes.txt",
+      "text": "INTAKE NOTES - Req 4471, Data Engineer II (updated after sync with hiring manager)\nCompany: Tanglewood Mutual Insurance | Recruiter: Obi Hartmann | Hiring manager: Delphine Sorensen\n\nHEADLINE\nLocation: Remote (US). Target start: January 12. Team of 5.\n\nFROM THE INTAKE CALL (Sep 10)\n- Joins the claims data team, which owns the pipelines feeding the fraud models and the actuarial warehouse.\n- Stack: dbt, Airflow, Snowflake, a few Python services.\n- Delphine wants someone who has owned a migration end to end, not just contributed to one.\n- Nice to have: insurance or claims domain knowledge. Not required.\n\nUPDATES FROM HM SYNC (Sep 26)\n- Delphine now needs someone in seat before the Dec 1 platform freeze so they can shadow the Snowflake cutover. Her words: 'January is too late.'\n- After the merge with the pricing analytics group, the new hire joins a combined team of 9.\n- Leadership wants data engineers in the Austin office 3 days a week starting next quarter. Remote exceptions need VP sign-off.\n\nINTERVIEW LOOP\nFour rounds: recruiter screen, SQL and modeling exercise, pipeline design with two engineers.\n\nCOMP\nBand: $128,000 - $150,000 base. Later note: band under review after the merge, do not share until confirmed.\n\nOTHER\n- Visa: case by case, check with HR before promising anything.\n- Candidates keep asking about on-call: one week in eight, business hours only.\n- Benefits deck is the 2025 version; HR says the 2026 one lands in November.\n- Headline section has not been updated since the intake call.",
+      "notes": "Contradictions: target start January 12 (headline) vs in seat before the Dec 1 platform freeze (HM sync); Remote (US) (headline) vs Austin office 3 days a week (HM sync); team of 5 (headline) vs combined team of 9 (HM sync); loop says four rounds but lists three; band is written down but then marked do-not-share."
+    },
+    {
+      "id": "SBREC-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Recruiting team Q4 offsite agenda",
+      "file_name": "recruiting_q4_offsite_agenda.txt",
+      "text": "RECRUITING TEAM - Q4 OFFSITE AGENDA\nThursday Oct 23, Lakeview room, 9:30 to 3:30\n\n9:30  Coffee and a quick round of wins from Q3\n10:00 Pipeline review by function (engineering, sales, operations). Bring your top three stuck reqs.\n11:00 Sourcing experiment readout: the referral bonus bump did not move referral volume; the alumni newsletter did, slightly.\n11:45 Calibration exercise: everyone scores the same three anonymized phone-screen notes, then we compare.\n12:30 Lunch (tacos; tell Rosalind about dietary needs by Monday)\n1:30  ATS cleanup: closing stale reqs, merging duplicate candidate profiles\n2:30  Interviewer training plan for Q1, including shadowing rules\n3:15  Wrap-up and owners for each follow-up\n\nPre-work: fill out the two-question survey on scheduling pain points by Oct 20.\nParking validation at the front desk. Remote folks get a dial-in link the day before.\nPlease block your calendar for the whole day and set an out-of-office reply; candidate calls should be moved to Wednesday or Friday.",
+      "notes": null
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SBREC-001",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Oh, one thing I wanted to ask. What's parental leave like there? We're, um, kind of thinking about it.",
+      "context_condition": "grounded",
+      "context_ref": "SBREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "brief_covers"
+      ],
+      "expected_answer_type": "recruiter's spoken answer from the brief",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "16 weeks fully paid",
+        "4-week phased return"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-002",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Is this actually hybrid, or is it one of those hybrid-on-paper things where everybody's in five days anyway?",
+      "context_condition": "grounded",
+      "context_ref": "SBREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "brief_covers",
+        "skeptical"
+      ],
+      "expected_answer_type": "recruiter's candid answer on the work arrangement",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "Tuesday and Wednesday",
+        "Fully remote is not available"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-003",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "easy",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Okay, cool. And what happens after this? Like, how many more rounds are there, who would I actually be talking to, and how long does it usually take to hear back?",
+      "context_condition": "grounded",
+      "context_ref": "SBREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "brief_covers",
+        "multi_part"
+      ],
+      "expected_answer_type": "recruiter's answer laying out the process from the brief",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "hardware debugging lab",
+        "5 business days",
+        "Keziah"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-004",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Do you guys sponsor visas? I'm on an H-1B right now, so I'd need a transfer.",
+      "context_condition": "grounded",
+      "context_ref": "SBREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "not_in_material",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "recruiter's honest reply that makes no sponsorship promise",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-005",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "I saw there's a sign-on bonus, which is great. But if I took it and then, say, left eight months in for whatever reason, would I have to pay it back?",
+      "context_condition": "grounded",
+      "context_ref": "SBREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "not_in_material",
+        "partial_coverage",
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "recruiter's reply that does not invent repayment terms",
+      "claim_trap": "support_policy",
+      "needles": [
+        "up to $15,000"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-006",
+      "category": "compensation",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "What's the band?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "short_turn",
+        "insufficient_info",
+        "no_doc"
+      ],
+      "expected_answer_type": "recruiter's reply that does not invent a salary range",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-007",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "How big's the team?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "short_turn",
+        "insufficient_info",
+        "no_doc"
+      ],
+      "expected_answer_type": "recruiter's reply without an invented headcount",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-008",
+      "category": "availability",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "When would you need someone to start? I'd have to give four weeks at my current place, just so you know.",
+      "context_condition": "conflicting",
+      "context_ref": "SBREC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "conflicting_doc",
+        "ambiguous",
+        "doc_conflicting"
+      ],
+      "expected_answer_type": "recruiter's reply that handles the conflicting start dates",
+      "claim_trap": "company_fact",
+      "needles": [
+        "January 12",
+        "Dec 1"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-009",
+      "category": "weak_response",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Honestly I'd call myself an expert in Kubernetes. I've done, like, basically everything you can do with it.",
+      "context_condition": "irrelevant",
+      "context_ref": "SBREC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "vague_answer",
+        "overclaim",
+        "probe_needed",
+        "irrelevant_doc"
+      ],
+      "expected_answer_type": "recruiter's probing question that tests the claim",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-010",
+      "category": "evaluation_request",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "was that migration answer actually strong or is she overselling it? be blunt",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Tell me about a project where you really owned the outcome."
+        },
+        {
+          "speaker": "other",
+          "text": "Sure. So the payments migration, we moved about forty merchants off the old gateway over, I want to say, three months."
+        },
+        {
+          "speaker": "other",
+          "text": "I set up the dual-run and I wrote the cutover checklist. The reconciliation side was more Priyanka's area, I mostly reviewed it."
+        },
+        {
+          "speaker": "user",
+          "text": "Got it, thanks."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "evaluation",
+        "typed_private"
+      ],
+      "expected_answer_type": "private candid evaluation for the recruiter citing the transcript",
+      "claim_trap": "none",
+      "needles": [
+        "dual-run",
+        "Priyanka"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-011",
+      "category": "follow_up_probing",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "give me one question to find out if he actually drove the on-call redesign or just rode along",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Anything you're especially proud of from the last year?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah, the on-call redesign. We went from pretty much everyone on one rotation to a tiered setup, and pages dropped a lot."
+        },
+        {
+          "speaker": "other",
+          "text": "I was a big part of that, for sure."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "probe_request",
+        "typed_private"
+      ],
+      "expected_answer_type": "one private probe question for the recruiter to ask",
+      "claim_trap": "none",
+      "needles": [
+        "tiered setup"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-012",
+      "category": "evaluation_request",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "ok quick read before I wrap: how does he stack up against the must-haves in the brief, what's missing, and what's one thing I should still ask in the last five minutes?",
+      "context_condition": "grounded",
+      "context_ref": "SBREC-CTX-G1",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Can you give me a quick rundown of your embedded background?"
+        },
+        {
+          "speaker": "other",
+          "text": "So about four years of embedded C, mostly on STM32 parts. Before that I was doing QA automation in Python for two years."
+        },
+        {
+          "speaker": "other",
+          "text": "On the motor side we used the vendor's FOC library. I mostly tuned the gains and handled the fault states."
+        },
+        {
+          "speaker": "other",
+          "text": "RTOS-wise, FreeRTOS on everything. I'm pretty comfortable on a scope."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "evaluation",
+        "typed_private",
+        "multi_part"
+      ],
+      "expected_answer_type": "private structured evaluation against the brief plus one probe",
+      "claim_trap": "personal_history",
+      "needles": [
+        "6+ years",
+        "field-oriented control",
+        "about four years of embedded C"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-013",
+      "category": "weak_response",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Yeah, so I led the migration to the new billing platform. It went really well, honestly. Everyone was happy with how it turned out.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "vague_answer",
+        "probe_needed"
+      ],
+      "expected_answer_type": "recruiter's next probing question",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBREC-014",
+      "category": "follow_up_probing",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "I mean, I was kind of the point person for everything. Coordinating, making sure it all came together, you know?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "vague_answer",
+        "probe_needed",
+        "follow_up",
+        "ambiguous"
+      ],
+      "expected_answer_type": "sharper recruiter probe on personal contribution",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    }
+  ]
+}

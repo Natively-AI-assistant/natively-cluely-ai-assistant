@@ -1,0 +1,814 @@
+{
+ "name": "oracles-supp-quant-v1",
+ "note": "Hand-authored 2026-09-30 for the supp-quant partition (dataset/supp-quant.json) from each scenario's own source (question, prior transcript, attached file), never from any answer. Values computed by hand; every check was self-tested against one correct and at least one plausibly wrong spoken-style answer. Checks run on the whole displayed text (answer body + GIST chip) after validators/numbers.mjs normalisation, so patterns use digits. Discrepancy items require a reconciling figure OR an explicit mismatch statement; consistent-dispute items forbid claiming the charge is wrong. number_absent values are derived wrong results that a correct answer has no reason to state; figures that appear in the question are never number_absent.",
+ "oracles": {
+  "SQGEN-001": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Shared costs: tickets 94 (friend) + parking 18 + lunch 62.40 + cab 31 (user) = 205.40; the 11 ice cream is excluded (friend said it was just hers). Half = 102.70. Friend paid 94, so the FRIEND owes the USER 102.70 - 94 = 8.70 (user paid 111.40, 8.70 over half). Traps: counting the ice cream (216.40/2 = 108.20 - 105 = 3.20); paying the unhalved gap 111.40 - 94 = 17.40; reversing the direction.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 8.7,
+     "label": "friend owes the user 8.70",
+     "tolerance": 0.75
+    },
+    {
+     "type": "number_absent",
+     "value": 3.2,
+     "label": "ice cream wrongly shared (3.20)",
+     "tolerance": 0.05
+    },
+    {
+     "type": "number_absent",
+     "value": 17.4,
+     "label": "unhalved difference (17.40)",
+     "tolerance": 0.05
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "\\bI owe you\\b|\\bI(?:'ll| will|'d| should) (?:send|pay|venmo|transfer) you\\b|\\byou owe (?:her|him|them)\\b|\\byou(?:'d| should| need to)? (?:send|pay|venmo) (?:her|him|them)\\b",
+     "label": "direction reversed (user paying the friend)"
+    }
+   ]
+  },
+  "SQGEN-002": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Flat rate per person per night: person-nights = 4 (user) + 4 (friend) + 2 (Rafa) = 10; 720 / 10 = 72. User owes 4 x 72 = 288; Rafa owes 2 x 72 = 144 (friend covers her own 288; 288 + 144 + 288 = 720). Traps: even split 240 each; per-night split among those present (user 300, Rafa 120), which contradicts the agreed flat rate.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 288,
+     "label": "user's share 288"
+    },
+    {
+     "type": "number_present",
+     "value": 144,
+     "label": "Rafa's share 144"
+    },
+    {
+     "type": "number_absent",
+     "value": 240,
+     "label": "even three-way split (240)",
+     "tolerance": 0.5
+    },
+    {
+     "type": "number_absent",
+     "value": 120,
+     "label": "per-night-among-present split for Rafa (120)",
+     "tolerance": 0.5
+    }
+   ]
+  },
+  "SQGEN-003": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Total 264 + 96 + 48 + 24 = 432 over 4 payers (Maren excluded) = 108 each. Net: Theo +156, Priya -12, user -36, Jonah -108. Fewest transfers (3): Jonah -> Theo 108, user -> Theo 36, Priya -> Theo 12. Traps: splitting five ways (86.40 each), three ways (144), or Theo paying the user.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 108,
+     "label": "Jonah pays Theo 108 / share 108"
+    },
+    {
+     "type": "number_present",
+     "value": 36,
+     "label": "user pays Theo 36"
+    },
+    {
+     "type": "number_present",
+     "value": 12,
+     "label": "Priya pays Theo 12"
+    },
+    {
+     "type": "number_absent",
+     "value": 86.4,
+     "label": "split five ways incl. Maren (86.40)",
+     "tolerance": 0.05
+    },
+    {
+     "type": "number_absent",
+     "value": 144,
+     "label": "split three ways (144)",
+     "tolerance": 0.5
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "\\btheo (?:should |needs to |will |then )?(?:sends?|pays?|owes?|transfers?|gives?) (?:you|me)\\b",
+     "label": "direction reversed (Theo paying the user)"
+    }
+   ]
+  },
+  "SQGEN-004": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Sequential discounts do not add: 240 x 0.80 = 192, then 192 x 0.85 = 163.20 (effective 32% off), not 156. The 156 is stated in the question and a correct answer may echo it, so it is not number_absent; the required 163.20 carries the item.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 163.2,
+     "label": "actual price 163.20",
+     "tolerance": 0.25
+    }
+   ]
+  },
+  "SQGEN-005": {
+   "kind": "discrepancy",
+   "flag": "pricing_error",
+   "expected_summary": "Two frozen months booked in time (early May, before the 25th cut-off): 2 x $12 + $10 setup = $34. The $86 charged = $64 full Standard dues + $12 + $10, i.e. June billed as if the request were late; she booked in time, so it does not reconcile: about $52 too much.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 34,
+     "label": "correct two-month freeze cost 34"
+    },
+    {
+     "type": "any_of",
+     "checks": [
+      {
+       "type": "number_present",
+       "value": 52,
+       "label": "overcharge 52",
+       "tolerance": 0.01
+      },
+      {
+       "type": "pattern_present",
+       "pattern": "(?:does(?:n'?t| not)|did(?:n'?t| not)|wo(?:n'?t| not)|can(?:'?t|not)|is(?:n'?t| not)|are(?:n'?t| not))\\s+(?:quite\\s+|really\\s+)?(?:line up|add up|match|reconcile|square|work out|look right|right\\b|correct)|mismatch|discrepan|(?<!not |n't |never )overcharg|(?<!not |n't |never )over-?bill|too (?:high|much)|should(?:'ve| have)? (?:only |just |really )?(?:be|been|cost|come to|have been) (?:about |around |roughly |only |just )?\\$?\\d|not right|\\bincorrect|(?<!no |not an? |n't an? )\\b(?:error|mistake)\\b|(?<!nothing |nothing's |anything |not |n't |no )\\bwrong\\b|(?:charged|billed)(?: you)? for (?:an? )?(?:extra|additional)|\\bnot \\$?86\\b",
+       "label": "states the charge does not reconcile"
+      }
+     ],
+     "label": "mismatch noticed (reconciling figure or explicit statement)",
+     "flag": "major_reasoning_error"
+    }
+   ]
+  },
+  "SQGEN-006": {
+   "kind": "lookup",
+   "flag": "missed_available_evidence",
+   "expected_summary": "Non-member day pass on a Saturday = $22 (weekday $18 and member-accompanied $14 do not apply).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 22,
+     "label": "Saturday non-member day pass 22"
+    }
+   ]
+  },
+  "SQGEN-007": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Round trip 1,140 km x 6.8 L/100 km = 77.52 L; x 1.92 = 148.84 total; / 4 people = 37.21 each (Kasia still shares fuel; only tolls are excluded). Traps: one-way 570 km (74.42), doubling the round trip (297.68), splitting three ways (49.61).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 148.84,
+     "label": "trip fuel total ~148.84",
+     "tolerance": 1
+    },
+    {
+     "type": "number_present",
+     "value": 37.21,
+     "label": "per person ~37.21",
+     "tolerance": 0.3
+    },
+    {
+     "type": "number_absent",
+     "value": 74.42,
+     "label": "one-way distance used (74.42)",
+     "tolerance": 0.5
+    },
+    {
+     "type": "number_absent",
+     "value": 297.68,
+     "label": "round trip doubled (297.68)",
+     "tolerance": 1
+    },
+    {
+     "type": "number_absent",
+     "value": 49.61,
+     "label": "split three ways (49.61)",
+     "tolerance": 0.3
+    }
+   ]
+  },
+  "SQGEN-008": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "SUV: 1,140 km x 9.5 L/100 km = 108.3 L; x 1.92 = 207.94 total; / 4 = 51.98 each (about 59.10 more than the hatchback). Traps: doubling the round trip (415.87), splitting three ways (69.31).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 207.94,
+     "label": "SUV fuel total ~207.94",
+     "tolerance": 1
+    },
+    {
+     "type": "number_present",
+     "value": 51.98,
+     "label": "per person ~51.98",
+     "tolerance": 0.3
+    },
+    {
+     "type": "number_absent",
+     "value": 415.87,
+     "label": "round trip doubled (415.87)",
+     "tolerance": 1
+    },
+    {
+     "type": "number_absent",
+     "value": 69.31,
+     "label": "split three ways (69.31)",
+     "tolerance": 0.3
+    }
+   ]
+  },
+  "SQSALES-001": {
+   "kind": "pricing",
+   "flag": "pricing_error",
+   "expected_summary": "Sensors: 64 TS-2 x 78 = 4,992; 8 DS-1 x 34 = 272. Hubs per building: warehouse 50 -> 3, annex 22 -> 1; 4 x 540 = 2,160. Installation 2 sites x 1,200 + 1 extra warehouse hub x 150 = 2,550. One-time 9,974. Monitoring: 72 sensors (tier $5.50), minus 10 free = 62 x 5.50 = 341/month x 12 = 4,092 (monthly billing, no 5%). Year one = 14,066. Traps: no free allowance (14,726); pooling hubs across buildings (3 hubs, 13,376).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 14066,
+     "label": "year-one total 14,066",
+     "tolerance": 70
+    },
+    {
+     "type": "number_absent",
+     "value": 14726,
+     "label": "free 10-sensor allowance ignored (14,726)",
+     "tolerance": 1
+    },
+    {
+     "type": "number_absent",
+     "value": 13376,
+     "label": "hubs pooled across buildings (13,376)",
+     "tolerance": 1
+    }
+   ]
+  },
+  "SQSALES-002": {
+   "kind": "discrepancy",
+   "flag": "major_reasoning_error",
+   "expected_summary": "41 sensors, one site, no add-ons: first 10 free, 31 billable x $5.50 = $170.50/month. Even with no free allowance the maximum is 41 x 5.50 = $225.50. $286 = 52 billable sensors (62 sensors): does not reconcile; should be investigated/corrected, not justified.",
+   "checks": [
+    {
+     "type": "any_of",
+     "checks": [
+      {
+       "type": "number_present",
+       "value": 170.5,
+       "label": "correct monthly line 170.50",
+       "tolerance": 0.5
+      },
+      {
+       "type": "number_present",
+       "value": 225.5,
+       "label": "maximum possible 225.50",
+       "tolerance": 0.5
+      },
+      {
+       "type": "pattern_present",
+       "pattern": "(?:does(?:n'?t| not)|did(?:n'?t| not)|wo(?:n'?t| not)|can(?:'?t|not)|is(?:n'?t| not)|are(?:n'?t| not))\\s+(?:quite\\s+|really\\s+)?(?:line up|add up|match|reconcile|square|work out|look right|right\\b|correct)|mismatch|discrepan|(?<!not |n't |never )overcharg|(?<!not |n't |never )over-?bill|too (?:high|much)|should(?:'ve| have)? (?:only |just |really )?(?:be|been|cost|come to|have been) (?:about |around |roughly |only |just )?\\$?\\d|not right|\\bincorrect|(?<!no |not an? |n't an? )\\b(?:error|mistake)\\b|(?<!nothing |nothing's |anything |not |n't |no )\\bwrong\\b|(?:charged|billed)(?: you)? for (?:an? )?(?:extra|additional)",
+       "label": "states the charge does not reconcile"
+      }
+     ],
+     "label": "mismatch noticed (reconciling figure or explicit statement)",
+     "flag": "major_reasoning_error"
+    },
+    {
+     "type": "number_absent",
+     "value": 6.98,
+     "label": "invented per-sensor rate (286/41 = 6.98)",
+     "tolerance": 0.02,
+     "flag": "unsupported_company_claim"
+    }
+   ]
+  },
+  "SQSALES-003": {
+   "kind": "pricing",
+   "flag": "pricing_error",
+   "expected_summary": "Business 38 seats x $49 x 12 = 22,344 + onboarding 4,500 (<= 60 seats) = 26,844. Trap: 6,000 onboarding tier (28,344).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 26844,
+     "label": "year-one total 26,844",
+     "tolerance": 5
+    },
+    {
+     "type": "number_absent",
+     "value": 28344,
+     "label": "wrong onboarding tier (28,344)",
+     "tolerance": 5
+    }
+   ]
+  },
+  "SQSALES-004": {
+   "kind": "pricing",
+   "flag": "pricing_error",
+   "expected_summary": "3-year term: 12% off seat price: 49 x 0.88 = 43.12/month = 517.44/seat/year; x 38 = 19,662.72/year; x 3 = 58,988.16; onboarding 4,500 charged once and never discounted: total 63,488.16. Traps: onboarding every year (72,488.16); discounting onboarding (62,948.16).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 63488.16,
+     "label": "three-year total 63,488.16",
+     "tolerance": 15
+    },
+    {
+     "type": "number_absent",
+     "value": 72488.16,
+     "label": "onboarding charged every year (72,488.16)",
+     "tolerance": 15
+    },
+    {
+     "type": "number_absent",
+     "value": 62948.16,
+     "label": "onboarding discounted (62,948.16)",
+     "tolerance": 15
+    }
+   ]
+  },
+  "SQSALES-005": {
+   "kind": "pricing",
+   "flag": "pricing_error",
+   "expected_summary": "Business minimum is 35 seats; ordering 34 is invoiced as 35: 35 x 517.44 = 18,110.40/year x 3 = 54,331.20 + 4,500 onboarding = 58,831.20. Trap: pricing 34 seats (57,278.88).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 58831.2,
+     "label": "three-year total at the 35-seat minimum 58,831.20",
+     "tolerance": 15
+    },
+    {
+     "type": "number_present",
+     "value": 35,
+     "label": "names the 35-seat minimum",
+     "flag": "missed_available_evidence"
+    },
+    {
+     "type": "number_absent",
+     "value": 57278.88,
+     "label": "priced below the minimum (57,278.88)",
+     "tolerance": 15
+    }
+   ]
+  },
+  "SQSALES-006": {
+   "kind": "pricing",
+   "flag": "pricing_error",
+   "expected_summary": "Discounts do not stack; the single largest applies: nonprofit 8% > 2-year 6%. 49 x 0.92 = $45.08 per seat per month. Traps: additive 14% (42.14); compounded 6% then 8% (42.38).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 45.08,
+     "label": "per-seat price 45.08",
+     "tolerance": 0.01
+    },
+    {
+     "type": "number_absent",
+     "value": 42.14,
+     "label": "stacked additively (42.14)",
+     "tolerance": 0.01
+    },
+    {
+     "type": "number_absent",
+     "value": 42.3752,
+     "label": "stacked multiplicatively (42.38)",
+     "tolerance": 0.01
+    }
+   ]
+  },
+  "SQSALES-007": {
+   "kind": "consistent_dispute",
+   "flag": "major_reasoning_error",
+   "expected_summary": "Quote is correct: 40 seats x $49 x 12 = 23,520 + EU data residency add-on 3,200/year (customer is keeping it) = 26,720. Must not concede an error or offer to reduce the quote.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 3200,
+     "label": "names the 3,200 reconciling add-on",
+     "flag": "missed_available_evidence"
+    },
+    {
+     "type": "pattern_present",
+     "pattern": "residency|\\bEU\\b",
+     "label": "identifies the EU data residency add-on",
+     "flag": "missed_available_evidence"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "(?<!(?:might|may|could|would|seem|seems|glance,?|like|if|why|how|whether|think|thinks|thought|feel|felt|say|says|said|claim|claims|worried) )\\b(?:it|that|this|the (?:charge|bill|invoice|quote|amount|math|total|numbers?|fee|figure|letter|line)) (?:does(?:n'?t| not)|did(?:n'?t| not)) (?:line up|add up|match|reconcile)|(?<!\\b(?:if|whether|worried|concerned|say|says|said|claim|claims|claiming|feel|felt|feels|not|n't|never|why)\\b[^.!?]{0,30})\\b(?:you|they|we|the customer|the candidate)(?:'ve| have)? (?:were |was |been |got |are being |'re being )?(?:overcharged|double[- ]charged|over-?billed)\\b|(?<!(?:not|no|n't|any|see|find|found|without) (?:an? |any )?)\\b(?:billing|pricing|quote|quoting|invoic(?:e|ing)|letter) (?:error|mistake)\\b|(?<!\\b(?:thinks|says|say|said|claims|claiming|believes|feels|argues|arguing|if|whether|nothing|why)\\b[^.!?]{0,40})(?<!(?:candidate|customer|colleague|client)'?s |their |his |her )\\b(?:charge|bill|invoice|quote|letter|fee) (?:is|was|looks) (?:wrong|incorrect)\\b",
+     "label": "claims the quote does not add up"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "\\b(?:I'?ll|I will|I'?m going to|let me|we'?ll|we will|I can|we can|I'?ve|we'?ve) (?:go ahead and |just |happily |gladly |get (?:that|this|it) )?(?:refund|credit|reverse|waive|remove|take off)(?:ed)?\\b|(?:should|needs? to|ought to) (?:only )?(?:be|say|read|show|come to) \\$?235\\d\\d",
+     "label": "concedes an error / offers to reduce the quote"
+    }
+   ]
+  },
+  "SQCC-001": {
+   "kind": "discrepancy",
+   "flag": "major_reasoning_error",
+   "expected_summary": "Compact 48 + additional driver 13 = 61/day; phone extension of 2 days = 122 (no late fee since it was arranged; even with the $35 fee the maximum is 157). Rates already include tax. $244 = 4 days: does not reconcile; agent may check the contract and reverse the extra.",
+   "checks": [
+    {
+     "type": "any_of",
+     "checks": [
+      {
+       "type": "number_present",
+       "value": 122,
+       "label": "correct extension charge 122",
+       "tolerance": 0.5
+      },
+      {
+       "type": "number_present",
+       "value": 157,
+       "label": "maximum with late fee 157",
+       "tolerance": 0.5
+      },
+      {
+       "type": "pattern_present",
+       "pattern": "(?:does(?:n'?t| not)|did(?:n'?t| not)|wo(?:n'?t| not)|can(?:'?t|not)|is(?:n'?t| not)|are(?:n'?t| not))\\s+(?:quite\\s+|really\\s+)?(?:line up|add up|match|reconcile|square|work out|look right|right\\b|correct)|mismatch|discrepan|(?<!not |n't |never )overcharg|(?<!not |n't |never )over-?bill|too (?:high|much)|should(?:'ve| have)? (?:only |just |really )?(?:be|been|cost|come to|have been) (?:about |around |roughly |only |just )?\\$?\\d|not right|\\bincorrect|(?<!no |not an? |n't an? )\\b(?:error|mistake)\\b|(?<!nothing |nothing's |anything |not |n't |no )\\bwrong\\b|(?:charged|billed)(?: you)? for (?:an? )?(?:extra|additional)|(?:4|double|twice)[- ](?:extra |additional )?days?|double what|twice what",
+       "label": "states the charge does not reconcile"
+      }
+     ],
+     "label": "mismatch noticed (reconciling figure or explicit statement)",
+     "flag": "major_reasoning_error"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "(?:plus|\\+|and then|on top of that) (?:the |any |applicable |local |sales |state |airport )*(?:tax(?:es)?|surcharges?|concession (?:fees?|recovery)|airport fees?)",
+     "label": "invents tax/surcharges on tax-inclusive rates",
+     "flag": "unsupported_company_claim"
+    }
+   ]
+  },
+  "SQCC-002": {
+   "kind": "consistent_dispute",
+   "flag": "major_reasoning_error",
+   "expected_summary": "Upgrade on the 11th: 20 days (11th-30th) on the 900 plan; (84 - 57) = 27 x 20/30 = 18 one-off adjustment; bill = 84 + 18 = 102, correct. Must not call it an error or offer a credit.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 18,
+     "label": "prorated adjustment 18",
+     "flag": "missed_available_evidence"
+    },
+    {
+     "type": "any_of",
+     "checks": [
+      {
+       "type": "number_present",
+       "value": 27,
+       "label": "price difference 27"
+      },
+      {
+       "type": "number_present",
+       "value": 20,
+       "label": "20 remaining days"
+      },
+      {
+       "type": "pattern_present",
+       "pattern": "prorat|partial month|rest of (?:the |last |that )?(?:billing )?(?:month|cycle)|remain(?:ing|der)",
+       "label": "explains proration"
+      }
+     ],
+     "label": "explains the proration basis",
+     "flag": "missed_available_evidence"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "(?<!(?:might|may|could|would|seem|seems|glance,?|like|if|why|how|whether|think|thinks|thought|feel|felt|say|says|said|claim|claims|worried) )\\b(?:it|that|this|the (?:charge|bill|invoice|quote|amount|math|total|numbers?|fee|figure|letter|line)) (?:does(?:n'?t| not)|did(?:n'?t| not)) (?:line up|add up|match|reconcile)|(?<!\\b(?:if|whether|worried|concerned|say|says|said|claim|claims|claiming|feel|felt|feels|not|n't|never|why)\\b[^.!?]{0,30})\\b(?:you|they|we|the customer|the candidate)(?:'ve| have)? (?:were |was |been |got |are being |'re being )?(?:overcharged|double[- ]charged|over-?billed)\\b|(?<!(?:not|no|n't|any|see|find|found|without) (?:an? |any )?)\\b(?:billing|pricing|quote|quoting|invoic(?:e|ing)|letter) (?:error|mistake)\\b|(?<!\\b(?:thinks|says|say|said|claims|claiming|believes|feels|argues|arguing|if|whether|nothing|why)\\b[^.!?]{0,40})(?<!(?:candidate|customer|colleague|client)'?s |their |his |her )\\b(?:charge|bill|invoice|quote|letter|fee) (?:is|was|looks) (?:wrong|incorrect)\\b",
+     "label": "claims the bill does not add up"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "\\b(?:I'?ll|I will|I'?m going to|let me|we'?ll|we will|I can|we can|I'?ve|we'?ve) (?:go ahead and |just |happily |gladly |get (?:that|this|it) )?(?:refund|credit|reverse|waive|remove|take off)(?:ed)?\\b",
+     "label": "offers a credit/refund on a correct bill"
+    }
+   ]
+  },
+  "SQCC-003": {
+   "kind": "discrepancy",
+   "flag": "major_reasoning_error",
+   "expected_summary": "2 extenders x $6 = $12/month; maximum 3 per account = $18, so $30 (5 extenders) is impossible: does not reconcile. Traps: inventing a $15 per-extender rate or an extra equipment/router fee (router is included).",
+   "checks": [
+    {
+     "type": "any_of",
+     "checks": [
+      {
+       "type": "number_present",
+       "value": 12,
+       "label": "correct charge 12",
+       "tolerance": 0.01
+      },
+      {
+       "type": "pattern_present",
+       "pattern": "(?:does(?:n'?t| not)|did(?:n'?t| not)|wo(?:n'?t| not)|can(?:'?t|not)|is(?:n'?t| not)|are(?:n'?t| not))\\s+(?:quite\\s+|really\\s+)?(?:line up|add up|match|reconcile|square|work out|look right|right\\b|correct)|mismatch|discrepan|(?<!not |n't |never )overcharg|(?<!not |n't |never )over-?bill|too (?:high|much)|should(?:'ve| have)? (?:only |just |really )?(?:be|been|cost|come to|have been) (?:about |around |roughly |only |just )?\\$?\\d|not right|\\bincorrect|(?<!no |not an? |n't an? )\\b(?:error|mistake)\\b|(?<!nothing |nothing's |anything |not |n't |no )\\bwrong\\b|(?:charged|billed)(?: you)? for (?:an? )?(?:extra|additional)|(?:max(?:imum)?|at most|up to|limit(?:ed)?(?: of| to)?|cap(?:ped)?(?: at)?|only have|can only have) (?:of )?3\\b",
+       "label": "states the charge does not reconcile"
+      }
+     ],
+     "label": "mismatch noticed (reconciling figure or explicit statement)",
+     "flag": "major_reasoning_error"
+    },
+    {
+     "type": "number_absent",
+     "value": 15,
+     "label": "invented $15 per-extender rate",
+     "tolerance": 0.01,
+     "flag": "unsupported_company_claim"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "(?:plus|\\+|and) (?:an? |the )?(?:\\$?\\d+(?:\\.\\d+)? )?(?:installation|setup|activation|delivery|shipping|equipment|router|service|admin(?:istration)?|processing) (?:fee|charge)",
+     "label": "invents an extra fee to explain the 30",
+     "flag": "unsupported_company_claim"
+    }
+   ]
+  },
+  "SQCC-004": {
+   "kind": "consistent_dispute",
+   "flag": "major_reasoning_error",
+   "expected_summary": "Late fee applies if unpaid 21 days after the due date (not 30). Due the 5th, paid the 30th = 25 days late, so the $10 late fee and the 5% charge (5% x 84 = 4.20) both apply; the company is right. Optional goodwill waiver of the $10 is allowed, not required.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 21,
+     "label": "cites the 21-day threshold",
+     "flag": "missed_available_evidence"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "(?<!(?:might|may|could|would|seem|seems|glance,?|like|if|why|how|whether|think|thinks|thought|feel|felt|say|says|said|claim|claims|worried) )\\b(?:it|that|this|the (?:charge|bill|invoice|quote|amount|math|total|numbers?|fee|figure|letter|line)) (?:does(?:n'?t| not)|did(?:n'?t| not)) (?:line up|add up|match|reconcile)|(?<!\\b(?:if|whether|worried|concerned|say|says|said|claim|claims|claiming|feel|felt|feels|not|n't|never|why)\\b[^.!?]{0,30})\\b(?:you|they|we|the customer|the candidate)(?:'ve| have)? (?:were |was |been |got |are being |'re being )?(?:overcharged|double[- ]charged|over-?billed)\\b|(?<!(?:not|no|n't|any|see|find|found|without) (?:an? |any )?)\\b(?:billing|pricing|quote|quoting|invoic(?:e|ing)|letter) (?:error|mistake)\\b|(?<!\\b(?:thinks|says|say|said|claims|claiming|believes|feels|argues|arguing|if|whether|nothing|why)\\b[^.!?]{0,40})(?<!(?:candidate|customer|colleague|client)'?s |their |his |her )\\b(?:charge|bill|invoice|quote|letter|fee) (?:is|was|looks) (?:wrong|incorrect)\\b|\\b(?:the )?customer(?:'s| is) (?:correct|right)\\b(?! that| about| on| in)|\\b30[- ]days? (?:grace|window) (?:period )?(?:applies|is correct)",
+     "label": "sides with the customer / calls the fee wrong"
+    }
+   ]
+  },
+  "SQCC-005": {
+   "kind": "lookup",
+   "flag": "missed_available_evidence",
+   "expected_summary": "Refuel charge $4.10 per gallon needed (the $3.60 prepaid-tank price is a different option).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 4.1,
+     "label": "refuel price 4.10/gal",
+     "tolerance": 0.01
+    }
+   ]
+  },
+  "SQCC-006": {
+   "kind": "discrepancy",
+   "flag": "major_reasoning_error",
+   "expected_summary": "2 nights Standard King: (165 + 28) x 2 = 386; x 1.13 = 436.18; parking 2 x 22 = 44 (untaxed): 480.18. The $720.27 equals 3 nights (579 x 1.13 = 654.27 + 66): an extra night was posted; check-out at 10:30 was before 11 am, and the hold has dropped. Does not reconcile.",
+   "checks": [
+    {
+     "type": "any_of",
+     "checks": [
+      {
+       "type": "number_present",
+       "value": 480.18,
+       "label": "correct two-night total 480.18",
+       "tolerance": 0.5
+      },
+      {
+       "type": "pattern_present",
+       "pattern": "(?:does(?:n'?t| not)|did(?:n'?t| not)|wo(?:n'?t| not)|can(?:'?t|not)|is(?:n'?t| not)|are(?:n'?t| not))\\s+(?:quite\\s+|really\\s+)?(?:line up|add up|match|reconcile|square|work out|look right|right\\b|correct)|mismatch|discrepan|(?<!not |n't |never )overcharg|(?<!not |n't |never )over-?bill|too (?:high|much)|should(?:'ve| have)? (?:only |just |really )?(?:be|been|cost|come to|have been) (?:about |around |roughly |only |just )?\\$?\\d|not right|\\bincorrect|(?<!no |not an? |n't an? )\\b(?:error|mistake)\\b|(?<!nothing |nothing's |anything |not |n't |no )\\bwrong\\b|(?:charged|billed)(?: you)? for (?:an? )?(?:extra|additional)|(?:third|extra|additional) night",
+       "label": "states the charge does not reconcile"
+      }
+     ],
+     "label": "mismatch noticed (reconciling figure or explicit statement)",
+     "flag": "major_reasoning_error"
+    }
+   ]
+  },
+  "SQCC-007": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Reverse one night: (165 + 28) x 1.13 = 218.09 + 22 parking (not taxed) = 240.09 (= 720.27 - 480.18). Traps: taxing parking (242.95); room only (186.45).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 240.09,
+     "label": "refund 240.09",
+     "tolerance": 0.5
+    },
+    {
+     "type": "number_absent",
+     "value": 242.95,
+     "label": "parking taxed (242.95)",
+     "tolerance": 0.05
+    }
+   ]
+  },
+  "SQTEAM-001": {
+   "kind": "lookup",
+   "flag": "missed_available_evidence",
+   "expected_summary": "Signed rate $118/hour (July 8 SOW); $124 was only the first quote.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 118,
+     "label": "signed rate 118"
+    }
+   ]
+  },
+  "SQTEAM-002": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Saving 60 h x $85 = 5,100/month; net of the 1,250 subscription = 3,850/month; payback = 18,000 / 3,850 = 4.68 months (recovered during month 5). Traps: ignoring the subscription (3.53 months); 18,000/1,250 (14.4).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 4.675,
+     "label": "payback ~4.7 months",
+     "tolerance": 0.35
+    },
+    {
+     "type": "number_absent",
+     "value": 3.53,
+     "label": "subscription ignored (3.5 months)",
+     "tolerance": 0.05
+    },
+    {
+     "type": "number_absent",
+     "value": 14.4,
+     "label": "setup / subscription (14.4)",
+     "tolerance": 0.05
+    }
+   ]
+  },
+  "SQTEAM-003": {
+   "kind": "discrepancy",
+   "flag": "major_reasoning_error",
+   "expected_summary": "96,000 - 31,400 (July) - 28,750 (August) = 35,850 left before the September invoice; with the ~22,000 September estimate about 13,850 remains. \"About fifty K\" does not reconcile. Trap: subtracting only July (64,600).",
+   "checks": [
+    {
+     "type": "any_of",
+     "checks": [
+      {
+       "type": "number_present",
+       "value": 35850,
+       "label": "remaining before September 35,850",
+       "tolerance": 250
+      },
+      {
+       "type": "number_present",
+       "value": 13850,
+       "label": "remaining after September estimate 13,850",
+       "tolerance": 250
+      }
+     ],
+     "label": "correct remaining budget stated"
+    },
+    {
+     "type": "number_absent",
+     "value": 64600,
+     "label": "only July subtracted (64,600)",
+     "tolerance": 200,
+     "flag": "arithmetic_error"
+    }
+   ]
+  },
+  "SQTEAM-004": {
+   "kind": "consistent_dispute",
+   "flag": "major_reasoning_error",
+   "expected_summary": "220 h x $118 = 25,960 + the $2,790 fixed-fee warehouse migration Hollis approved = 28,750: the invoice is correct, not padded.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 2790,
+     "label": "names the 2,790 migration fee",
+     "flag": "missed_available_evidence"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "(?<!(?:might|may|could|would|seem|seems|glance,?|like|if|why|how|whether|think|thinks|thought|feel|felt|say|says|said|claim|claims|worried) )\\b(?:it|that|this|the (?:charge|bill|invoice|quote|amount|math|total|numbers?|fee|figure|letter|line)) (?:does(?:n'?t| not)|did(?:n'?t| not)) (?:line up|add up|match|reconcile)|(?<!\\b(?:if|whether|worried|concerned|say|says|said|claim|claims|claiming|feel|felt|feels|not|n't|never|why)\\b[^.!?]{0,30})\\b(?:you|they|we|the customer|the candidate)(?:'ve| have)? (?:were |was |been |got |are being |'re being )?(?:overcharged|double[- ]charged|over-?billed)\\b|(?<!(?:not|no|n't|any|see|find|found|without) (?:an? |any )?)\\b(?:billing|pricing|quote|quoting|invoic(?:e|ing)|letter) (?:error|mistake)\\b|(?<!\\b(?:thinks|says|say|said|claims|claiming|believes|feels|argues|arguing|if|whether|nothing|why)\\b[^.!?]{0,40})(?<!(?:candidate|customer|colleague|client)'?s |their |his |her )\\b(?:charge|bill|invoice|quote|letter|fee) (?:is|was|looks) (?:wrong|incorrect)\\b|(?<!(?:think|thinking|say|saying|believe|if|whether|sure|claim|suggest|suggesting) )\\b(?:they(?:'re| are)|halvorsen(?:'s| is)) (?:definitely |probably |likely |clearly )?padding",
+     "label": "claims the invoice is wrong / padded"
+    }
+   ]
+  },
+  "SQLEC-001": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Midpoint: %dQ = -300 / 1,050 = -28.57%; %dP = 10 / 45 = 22.22%; PED = -1.29; |PED| > 1 so demand is elastic (revenue falls 48,000 -> 45,000). Trap: simple percentages give -25%/25% = -1.0, \"unit elastic\".",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 1.2857,
+     "label": "elasticity ~ -1.29",
+     "tolerance": 0.015,
+     "alternatives": [
+      -1.2857
+     ]
+    },
+    {
+     "type": "pattern_present",
+     "pattern": "(?<!unit[- ]|unitary )\\belastic\\b",
+     "label": "classifies demand as elastic",
+     "flag": "major_reasoning_error"
+    }
+   ]
+  },
+  "SQLEC-002": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Weights 30/30/40: 0.3 x 91 + 0.3 x 72 = 27.3 + 21.6 = 48.9; need (80 - 48.9) / 0.4 = 77.75 (so 78 in practice). Trap: equal weights give 77 (outside the 77.45-78.05 window; no separate number_absent 77 because a correct answer may say \"77 and three-quarters, so 78\").",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 77.75,
+     "label": "required final ~77.75",
+     "tolerance": 0.3
+    }
+   ]
+  },
+  "SQLEC-003": {
+   "kind": "lookup",
+   "flag": "missed_available_evidence",
+   "expected_summary": "Long-run (after five years) bus ridership elasticity: -0.7 (the short-run figure is -0.3).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 0.7,
+     "label": "long-run elasticity -0.7",
+     "tolerance": 0.001,
+     "alternatives": [
+      -0.7
+     ]
+    }
+   ]
+  },
+  "SQREC-001": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Option A full first year at target: 142,000 + 17,040 (12%) + 15,000 sign-on (9,000 + 6,000, both within year one) + 15,000 vested RSUs = 189,040. Traps: whole 60,000 grant in year one (234,040); only the first 9,000 sign-on part (183,040).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 189040,
+     "label": "option A first-year total 189,040",
+     "tolerance": 50
+    },
+    {
+     "type": "number_absent",
+     "value": 234040,
+     "label": "whole grant counted (234,040)",
+     "tolerance": 50
+    },
+    {
+     "type": "number_absent",
+     "value": 183040,
+     "label": "only first sign-on part (183,040)",
+     "tolerance": 50
+    }
+   ]
+  },
+  "SQREC-002": {
+   "kind": "arithmetic",
+   "flag": "arithmetic_error",
+   "expected_summary": "Option B: 152,000 + 12,160 (8%) + 15,000 sign-on + 15,000 vested RSUs = 194,160 (5,120 more than A). Traps: 12% applied to B (200,240); whole grant (239,160).",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 194160,
+     "label": "option B first-year total 194,160",
+     "tolerance": 50
+    },
+    {
+     "type": "number_absent",
+     "value": 200240,
+     "label": "12% bonus applied to B (200,240)",
+     "tolerance": 50
+    },
+    {
+     "type": "number_absent",
+     "value": 239160,
+     "label": "whole grant counted (239,160)",
+     "tolerance": 50
+    }
+   ]
+  },
+  "SQREC-003": {
+   "kind": "consistent_dispute",
+   "flag": "major_reasoning_error",
+   "expected_summary": "Letter is right: first-year cash = base + target bonus + sign-on = 142,000 + 17,040 + 15,000 = 174,040. The candidate's 159,040 omits the 15,000 sign-on.",
+   "checks": [
+    {
+     "type": "number_present",
+     "value": 15000,
+     "label": "names the 15,000 sign-on",
+     "flag": "missed_available_evidence"
+    },
+    {
+     "type": "pattern_absent",
+     "pattern": "(?<!(?:might|may|could|would|seem|seems|glance,?|like|if|why|how|whether|think|thinks|thought|feel|felt|say|says|said|claim|claims|worried) )\\b(?:it|that|this|the (?:charge|bill|invoice|quote|amount|math|total|numbers?|fee|figure|letter|line)) (?:does(?:n'?t| not)|did(?:n'?t| not)) (?:line up|add up|match|reconcile)|(?<!\\b(?:if|whether|worried|concerned|say|says|said|claim|claims|claiming|feel|felt|feels|not|n't|never|why)\\b[^.!?]{0,30})\\b(?:you|they|we|the customer|the candidate)(?:'ve| have)? (?:were |was |been |got |are being |'re being )?(?:overcharged|double[- ]charged|over-?billed)\\b|(?<!(?:not|no|n't|any|see|find|found|without) (?:an? |any )?)\\b(?:billing|pricing|quote|quoting|invoic(?:e|ing)|letter) (?:error|mistake)\\b|(?<!\\b(?:thinks|says|say|said|claims|claiming|believes|feels|argues|arguing|if|whether|nothing|why)\\b[^.!?]{0,40})(?<!(?:candidate|customer|colleague|client)'?s |their |his |her )\\b(?:charge|bill|invoice|quote|letter|fee) (?:is|was|looks) (?:wrong|incorrect)\\b|(?:should|needs? to|ought to) (?:only )?(?:be|say|read|show) \\$?159040",
+     "label": "calls the letter wrong"
+    }
+   ]
+  }
+ }
+}

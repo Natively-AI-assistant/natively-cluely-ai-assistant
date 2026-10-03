@@ -25,6 +25,7 @@ import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 import { classifyTurn, isBareFollowUp, stripSttFillers, isProspectiveJobQuestion } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 import { mergeRewrittenEvidence, type QueryRewriter, type QueryRewriteOutcome } from '../retrieval/llm-query-rewrite';
+import { SMALL_CORPUS_MAX_TOKENS } from '../retrieval/mode-retrieval-port';
 
 export interface AnswerRequest {
   requestId: string;
@@ -70,6 +71,9 @@ export interface AnswerRequest {
   profileOnlyDocuments?: boolean;
   /** How many files are attached to the MODE. Set by the engine bridge; absent = unknown = no scaling. */
   attachedSourceCount?: number;
+  /** Estimated tokens of the mode's attached text (mode-retrieval-port referenceCorpusTokens).
+   *  Set by the engine bridge; absent/null = unknown = no whole-corpus handling. */
+  attachedCorpusTokens?: number | null;
   /**
    * One bounded fast-model call that restates the question in the vocabulary a
    * document would use (see retrieval/llm-query-rewrite.ts). Injected by the engine
@@ -204,6 +208,9 @@ export function screenEnrichedQuery(query: string, screenText: string | undefine
 }
 
 /** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
+/** Room beside a whole small corpus for the meeting/screen evidence and the tags around each item. */
+export const SMALL_CORPUS_EVIDENCE_HEADROOM = 1000;
+
 /** Evidence capacity floor for a turn with two or more files attached to the mode. */
 export const MULTI_FILE_EVIDENCE = { accepted: 8, tokens: 2400 } as const;
 
@@ -274,8 +281,16 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   // the evidence gate decides what is admitted. META_REQUEST is refused before
   // retrieval as always, and only the MODE's own files count (a profile-only
   // turn has none).
+  // A SMALL corpus is read the same way in every mode (2026-09-30): the port
+  // hands it over whole (SMALL_CORPUS_MAX_TOKENS), so a turn the classifier
+  // would answer from general knowledge still sees the decision log or price
+  // sheet the meeting is about. Measured: "What's the crash-free bar?" with a
+  // 413-word decision log attached read nothing and answered "I don't have
+  // that number in front of me". No claim is added, exactly as below.
+  const smallCorpus = typeof req.attachedCorpusTokens === 'number'
+    && req.attachedCorpusTokens > 0 && req.attachedCorpusTokens <= SMALL_CORPUS_MAX_TOKENS;
   const sourcePrimaryTurn = cls.path === 'FAST' && !cls.shouldRetrieve
-    && policy.attachedMaterialIsPrimary === true
+    && (policy.attachedMaterialIsPrimary === true || smallCorpus)
     && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
     && !cls.questionTypes.includes('META_REQUEST')
     && policy.retrievalPolicy.enabled
@@ -358,7 +373,15 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     // budget is unchanged, only its pool grows.
     maximumCandidates: policy.retrievalPolicy.maximumCandidates * (cls.exhaustive && cls.shouldRetrieve ? 2 : 1),
     maximumAcceptedEvidence: acceptedBase * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
-    ...(multiFile ? { evidenceTokens: Math.max(policy.contextBudget.evidenceTokens, MULTI_FILE_EVIDENCE.tokens) } : {}),
+    // A whole small corpus must fit next to the meeting's evidence, or the
+    // packer drops the file outright (it skips an item that does not fit).
+    ...(multiFile || (smallCorpus && retrieves)
+      ? { evidenceTokens: Math.max(
+        policy.contextBudget.evidenceTokens,
+        multiFile ? MULTI_FILE_EVIDENCE.tokens : 0,
+        smallCorpus && retrieves ? (req.attachedCorpusTokens as number) + SMALL_CORPUS_EVIDENCE_HEADROOM : 0,
+      ) }
+      : {}),
     timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
     ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
   };
@@ -1378,7 +1401,7 @@ export async function orchestrate(
           });
         }
       }
-      const RETIRED_CLASS = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete']);
+      const RETIRED_CLASS = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete', 'expired', 'outdated']);
       const selectedRetired = [...selected.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
       const ignoredRetired = [...ignored.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
       turnDecision = {

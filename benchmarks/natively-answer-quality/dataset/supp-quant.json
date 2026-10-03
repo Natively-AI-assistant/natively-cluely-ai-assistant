@@ -1,0 +1,1438 @@
+{
+ "dataset_name": "natively-answer-quality-supp-quant",
+ "dataset_sha256": "95d28c2b42c7612f2ec3347c0378286f0340ba95df10e1cc50b179bdc776a51e",
+ "schema_version": 2,
+ "partition": "supp-quant",
+ "modes": [
+  {
+   "key": "general",
+   "name": "General"
+  },
+  {
+   "key": "sales",
+   "name": "Sales"
+  },
+  {
+   "key": "recruiting",
+   "name": "Recruiting"
+  },
+  {
+   "key": "team-meet",
+   "name": "Team Meet"
+  },
+  {
+   "key": "lecture",
+   "name": "Lecture"
+  },
+  {
+   "key": "call-center",
+   "name": "Call Center"
+  }
+ ],
+ "pi_profiles": [
+  {
+   "id": "PI-A",
+   "candidate_name": "Tobias Venkataraman",
+   "resume": {
+    "file_name": "Tobias_Venkataraman_Resume.txt",
+    "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+   },
+   "jd": {
+    "file_name": "Tallowmarket_Senior_Backend_Engineer_Payments_Ledger.txt",
+    "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+   },
+   "absent_facts": [
+    "willingness to relocate from Columbus, OH to Denver (the JD offers relocation assistance, the resume says nothing about relocating)",
+    "preference for remote, hybrid or on-site work",
+    "salary expectation or current compensation (the JD band is $172,000 - $208,000; the resume states no number)",
+    "reason for leaving Brindlecap Labs, Quillfeather Health, or Larkspur Freight",
+    "people-management experience or direct reports (he was tech lead of a 4-engineer + 1 QA working group, never a manager)",
+    "mentoring experience (the JD asks for it; the resume never mentions mentoring)",
+    "any conflict, disagreement, or failure story",
+    "any specific production incident or outage he handled",
+    "double-entry ledger, payments-platform, or PCI DSS experience (only carrier-settlement reconciliation is stated)",
+    "Stripe Connect or Adyen experience",
+    "Java or Kubernetes experience",
+    "promotions or titles other than those listed",
+    "GPA, honors, or graduation ranking",
+    "visa or work-authorization status",
+    "notice period, start date, or competing offers",
+    "why he wants to work at Tallowmarket or interest in food/agriculture"
+   ],
+   "notes": "Mid-level (about 6 years, Aug 2020 - present) Go/Kotlin backend engineer targeting Senior Backend Engineer, Payments & Ledger at Tallowmarket (fictional B2B farm-to-restaurant marketplace). Distinctive resume needles: Project Tern, Dockhand, Metronome, Sparrowhawk, 820 ms to 190 ms, 2.3 million events per day, 312 to 41 mismatches, 18.4% to 12.9% no-show rate, 14 incident runbooks, Ohio Valley Polytechnic University. Distinctive JD needles: Harrow ledger, $172,000 - $208,000, L5, Tuesday through Thursday in Denver LoDo, 02:00 Mountain Time settlement batch, one week in six on-call, Imani Castellanos. Deliberate gaps: JD nice-to-haves (ledger, PCI, Stripe Connect/Adyen) are not on the resume except Temporal (Metronome); the JD asks for mentoring, the resume never mentions it. Candidate lives in Columbus, OH; role is hybrid in Denver."
+  },
+  {
+   "id": "PI-B",
+   "candidate_name": "Dashiell Marrow",
+   "resume": {
+    "file_name": "Dashiell_Marrow_Resume.txt",
+    "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+   },
+   "jd": {
+    "file_name": "Nimbuscrest_Platform_Reliability_Engineer.txt",
+    "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+   },
+   "absent_facts": [
+    "explanation for the Feb 2026 - May 2026 employment gap between Cindervale Systems and Hollowbrook Data",
+    "reason for leaving Cindervale Systems after about 7 months",
+    "why the Hollowbrook Data role is a contract, or when the contract ends",
+    "salary expectation or current pay (the JD also states no salary or band)",
+    "willingness to relocate from Tacoma, WA to Portland, OR or to commute",
+    "willingness to travel to Frankfurt",
+    "preference for remote, hybrid or on-site work",
+    "people-management experience or direct reports",
+    "any conflict, disagreement, or failure story",
+    "any specific incident he handled as primary on-call, or any postmortem he wrote",
+    "Go proficiency (Go is not listed; the JD accepts Go, Python or Rust)",
+    "eBPF, Ceph, PostgreSQL operations, Pulumi, or PXE/bare-metal provisioning experience",
+    "GPA, honors, or scholarships",
+    "visa or work-authorization status",
+    "notice period, start date, or competing offers",
+    "any employer or technology from PI-A (Go services, Kafka, Kotlin, Larkspur Freight, Tallowmarket)"
+   ],
+   "notes": "Early-career (about 1.5 years full-time plus one internship) SRE/platform engineer targeting Platform Reliability Engineer (Early Career) at Nimbuscrest Cloud (fictional managed PostgreSQL + object storage provider on bare metal). Unexplained employment gap Feb 2026 - May 2026. Stack deliberately disjoint from PI-A (GCP/EKS, Rust, Python, Prometheus vs Go/Kotlin/Kafka) so stale-profile leakage is detectable. Distinctive resume needles: Kestrel, 17 Open Policy Agent rules, $41,300 to $29,800 per month, Lanternfish, 31% of p99 latency, 260 to 70 pages per month, 47-step wiki runbook, 34 minutes to 13 minutes, Tidepool Homelab, Brine, Puget Cascade University, CKA. Distinctive JD needles: about 9,000 customers, roughly 3,000 bare-metal hosts, 99.95% monthly availability, Fleet Reliability, Oyelaran Fitch, 90-minute take-home, two days a week in the Portland Pearl District office, Frankfurt travel. The JD deliberately contains NO salary or compensation information."
+  }
+ ],
+ "contexts": {
+  "SQCC-CTX-1": {
+   "id": "SQCC-CTX-1",
+   "kind": "grounded",
+   "title": "Ridgeway Car Rental rate card and fee policy",
+   "file_name": "ridgeway-rate-card-2026-08.txt",
+   "text": "RIDGEWAY CAR RENTAL - RATE CARD AND FEE POLICY\nDowntown and Airport branches. Effective 1 August 2026. All amounts include sales tax and airport concession recovery; nothing is added at checkout except the items listed here.\n\nDAILY AND WEEKLY RATES\n- Economy: $44 per day, $265 per week\n- Compact: $48 per day, $289 per week\n- Midsize: $57 per day, $342 per week\n- Minivan: $83 per day, $498 per week\nA rental day is 24 hours from the pickup time. Weekly rates apply to rentals of 5 to 7 days.\n\nEXTENSIONS AND LATE RETURNS\n- Extensions arranged by phone or app before the original return time are billed at the contract's daily rate for each extra day, plus any per-day extras on the contract for those days.\n- Returns up to 29 minutes past the end of a rental day are free. After 29 minutes, a full additional day is billed.\n- Unarranged late return (no extension requested): a one-time $35 late-return fee in addition to the extra day or days.\n\nPER-DAY EXTRAS\n- Additional driver: $13 per day\n- Driver aged 21 to 24: $27 per day\n- GPS unit: $11 per day, capped at $66 per rental\n- Child seat: $9 per day, capped at $54 per rental\n\nFUEL\nCars leave full. If a car comes back with less fuel than at pickup, we refill it at $4.10 per gallon needed. Alternatively, customers can buy a prepaid full tank at pickup for $3.60 per gallon of tank capacity, with no refund for unused fuel. Electric vehicles returned under 70% charge: $25 flat.\n\nDAMAGE, TOLLS AND CLEANING\nToll transponder use is billed at cost plus $3.95 per toll day. Excessive cleaning (sand, pet hair, smoke): $150. Lost key: $275. Damage is handled under the damage section of the rental agreement and is never charged to a card without a signed damage report.\n\nREFUNDS AND ADJUSTMENTS\nAgents may reverse an extension or late-return charge that was billed in error after checking the contract's actual return time. Refunds reach the card in 5 to 10 business days.",
+   "notes": "SQCC-001 (discrepancy): compact $48 + additional driver $13 = $61/day; a 2-day phone extension = $122 (arranged, so no $35 late fee; even with it the maximum is $157). Rates include tax and concession recovery, so 'plus taxes' is not an explanation. The stated $244 = 4 days x $61: does not reconcile. SQCC-005 (lookup): refuel $4.10 per gallon needed; prepaid $3.60 per gallon of tank capacity is the neighbouring-row trap.",
+   "mode": "call-center",
+   "sha256": "092ce5b8770ee193f9f2086b3871a180a683894ba7bacced6e3af4a4b2cc8832",
+   "word_count": 348
+  },
+  "SQCC-CTX-2": {
+   "id": "SQCC-CTX-2",
+   "kind": "grounded",
+   "title": "Brightline Fibre residential billing guide v4.2",
+   "file_name": "brightline-billing-guide-v4-2.txt",
+   "text": "BRIGHTLINE FIBRE - RESIDENTIAL BILLING GUIDE\nVersion 4.2, updated June 2026. For customer-care agents and customers.\n\n1. How bills work\nBills are issued on the 1st of each month and cover the coming month in advance. Payment is due on the 5th of that month (the due date). For billing purposes every month is treated as 30 days long, whatever the calendar says.\n\n2. Plans (monthly, taxes included)\n- Fibre 300: $57\n- Fibre 900: $84\n- Fibre 2G: $112\n- Voice line add-on: $9\nRouter rental is included in every plan.\n\n3. Changing plans mid-month\nUpgrades take effect the same day. The next bill includes (a) the new plan for the coming month and (b) a one-off adjustment for the rest of the current month: the difference between the new and old monthly price x (days remaining / 30). The day of the change counts as a day on the new plan, so a change on the 21st leaves 10 days (the 21st through the 30th). Downgrades take effect on the 1st of the next month with no adjustment.\n\n4. Equipment\n- Wi-Fi extender rental: $6 per extender per month. Maximum of 3 extenders per account.\n- Replacement router (lost or damaged): $95 one-off.\n- Unreturned equipment after cancellation: $95 per router, $40 per extender.\n\n5. Late payment\n- If any balance is still unpaid 21 days after the due date, a $10 late fee is added.\n- At the same point, a late payment charge of 5% of the overdue balance is added.\n- Neither applies if the balance is paid within 21 days of the due date. Agents may waive the $10 late fee once per 12 months as a goodwill gesture; the 5% charge cannot be waived.\n\n6. Moving home\nMoves within our network are free with 14 days' notice. Moves outside our network count as cancellation.\n\n7. Cancelling\n30 days' notice. The final bill is prorated to the cancellation date using the 30-day rule above. No early-termination fee on monthly plans; 18-month contract plans pay $15 for each remaining month.\n\n8. Service credits\nOutages over 24 hours earn a credit of 1/30 of the monthly plan price per full day, applied on request.",
+   "notes": "SQCC-002 (consistent): upgrade 300 -> 900 on the 11th: 20 days on the new plan (11th-30th, 30-day month); (84 - 57) x 20/30 = 18; bill = 84 + 18 = 102, correct. The worked example in section 3 deliberately uses the 21st, not the 11th. SQCC-003 (discrepancy): 2 extenders x $6 = $12; maximum 3 per account = $18; the stated $30 implies 5 extenders: does not reconcile; router is included, so no router fee explains it. SQCC-004 (consistent): paid 25 days after the due date (> 21) so the $10 late fee and 5% x 84 = 4.20 both apply; the customer's '30 days' is wrong; waiving the $10 once is optional goodwill, not an admission of error.",
+   "mode": "call-center",
+   "sha256": "f004ff97963a484a86d8b34ae1d98225ed1e887b59a56d659227843b3a6532bf",
+   "word_count": 368
+  },
+  "SQCC-CTX-3": {
+   "id": "SQCC-CTX-3",
+   "kind": "grounded",
+   "title": "Saltmarsh Harbour Hotel guest folio guide",
+   "file_name": "saltmarsh-folio-guide-2026-05.txt",
+   "text": "SALTMARSH HARBOUR HOTEL - GUEST FOLIO GUIDE\nFor front desk and reservations staff. Revised May 2026.\n\nROOM RATES (per night, before tax)\n- Standard Queen: $149\n- Standard King: $165\n- Harbour View King: $210\n- Two-Bedroom Suite: $340\nRates are per room, not per person, for up to two adults.\n\nNIGHTLY FEES\n- Resort fee: $28 per room per night. Covers Wi-Fi, pool, gym and the evening shuttle. Charged for every night of the stay.\n- Self-parking: $22 per night; valet: $36 per night. Parking is charged per night the vehicle is registered.\n- Pets: $45 per stay (not per night), maximum two pets.\n\nTAXES\nRoom rate and resort fee are taxed at 13% combined (state and city occupancy tax). Parking, pet fees and food and beverage are not subject to occupancy tax. Food and beverage tax is applied at the outlet.\n\nCHECK-IN AND CHECK-OUT\nCheck-in 4 pm; check-out 11 am. Late check-out until 2 pm: $40, subject to availability. Departures after 2 pm are charged one extra night at the booked rate, plus the resort fee and any parking for that night.\n\nDEPOSITS\nA pre-authorisation of one night's room, fees and tax plus $100 for incidentals is placed at check-in and released within 3 business days after departure. Guests sometimes see the hold and the final charge together; the hold is not a charge.\n\nFOLIO CORRECTIONS\nFront desk and reservations agents may reverse any night posted after the guest's recorded check-out date, together with its resort fee, tax and parking, without manager approval. Reversals of more than one night, or of charges already disputed with the card issuer, go to the duty manager.\n\nMINIBAR AND DINING\nMinibar items are posted the morning after consumption. Room service carries an 18% service charge and a $4 tray fee.\n\nLOYALTY\nHarbour Circle members earn 10 points per dollar on the room rate only.",
+   "notes": "Chain c01 (discrepancy): 2 nights Standard King: (165 + 28) x 2 = 386 x 1.13 = 436.18 + self-parking 2 x 22 = 44 -> 480.18. The stated 720.27 = 3 nights ((579 x 1.13 = 654.27) + 66): an extra night was posted. Check-out 10:30 is before 11 am, so no late-departure night; the hold has dropped off and hold + folio would not equal 720.27 anyway. Turn 2: reversal of one night = 193 x 1.13 = 218.09 + 22 parking (untaxed) = 240.09; agents may reverse one night after check-out date without a manager. Traps: taxing parking (242.95), room-only reversal (186.45).",
+   "mode": "call-center",
+   "sha256": "0e710d440e0c016a36462e1ee5da9a4613638e1404b7595ed115e3ae2a01e819",
+   "word_count": 312
+  },
+  "SQGEN-CTX-1": {
+   "id": "SQGEN-CTX-1",
+   "kind": "grounded",
+   "title": "Harbor Loft Climbing membership terms and fees",
+   "file_name": "harbor-loft-membership-terms.txt",
+   "text": "HARBOR LOFT CLIMBING - MEMBERSHIP TERMS AND FEES\nEffective 1 March 2026. Applies to both Harbor Loft locations (Quayside and Millrace).\n\n1. Monthly memberships\n- Standard (all hours): $64 per month.\n- Off-Peak (weekdays before 4 pm, weekends after 6 pm): $46 per month.\n- Student (valid student ID, all hours): $52 per month.\nDues are billed on the 1st of each month. New members pay a one-time $25 joining fee, waived during promotional weeks.\n\n2. Annual prepay\nPay 12 months up front and receive 10% off the monthly rate for your plan. Annual prepay is non-refundable after the first 14 days.\n\n3. Freezing your membership\nMembers may freeze for one to three full calendar months in any 12-month period. A frozen month is billed a $12 freeze fee on the 1st of that month instead of your normal dues. Each freeze request also carries a one-time $10 setup fee, charged when the freeze is booked. Freezes must be requested by the 25th of the month before the first frozen month; late requests start the following month. Medical freezes with a doctor's note have no setup fee.\n\n4. Cancelling\nGive 30 days' written notice through the member portal or at the front desk. Your final month's dues are charged as normal. Cancelling during a freeze ends the freeze on the cancellation date.\n\n5. Guest passes\nDay pass for non-members: $18 on weekdays, $22 on Saturdays, Sundays and public holidays. Member-accompanied guests pay $14 any day (limit two guests per visit). A 5-visit punch card costs $80 and never expires. All guests sign a waiver and watch the 6-minute safety video before climbing.\n\n6. Rentals\nShoes $6, harness $5, chalk bag $3, or all three for $11 per visit. Day lockers are free; overnight locker hire is $15 per month.\n\n7. Classes\nIntro to Bouldering (90 minutes): $38. Lead climbing course (three sessions): $165, members $140. Youth squad terms are priced separately; ask the front desk.\n\n8. Payment problems\nIf a dues payment fails we retry after 3 days. A second failure adds an $8 admin fee and suspends check-in until the balance is cleared.\n\nQuestions: members@harborloft.example or the front desk at either location.",
+   "notes": "SQGEN-005: Standard member froze June+July, booked in early May (before the 25th cut-off), charged 86. Policy: 2 x $12 + $10 setup = $34. 86 = one month at full Standard dues ($64) + one $12 freeze month + $10 setup, which only happens for a LATE request; she booked in time, so the charge does not reconcile (overcharge $52). The 'late requests start the following month' clause is a tempting but factually excluded justification. SQGEN-006: non-member Saturday day pass is $22; $18 (weekday) and $14 (member-accompanied) are neighbouring-row traps.",
+   "mode": "general",
+   "sha256": "e4f366f7d07364f140bc99d9c2d9f839e17430589589e760a9f5dfac59c09b68",
+   "word_count": 363
+  },
+  "SQLEC-CTX-1": {
+   "id": "SQLEC-CTX-1",
+   "kind": "grounded",
+   "title": "ECON 110 week 6 handout: price elasticity of demand",
+   "file_name": "econ110-week6-elasticity-handout.txt",
+   "text": "ECON 110 - PRINCIPLES OF MICROECONOMICS\nWeek 6 handout: price elasticity of demand. Prof. R. Ansbach, Fall 2026.\n\nCourse admin (reminder)\n- Grade weights: problem sets 30%, midterm 30%, final exam 40%. Your problem-set score is the average of your best 8 of 10 sets.\n- Final exam: Thursday 10 December, 9:00-12:00, Hollingworth Hall. A formula sheet is provided.\n- Office hours move to Tuesday 2-4 pm this week only.\n\n1. Definition\nPrice elasticity of demand (PED) measures how strongly quantity demanded responds to a change in price:\nPED = (% change in quantity demanded) / (% change in price).\nPED is negative for normal demand curves; we usually talk about its absolute value.\n- |PED| > 1: elastic (quantity responds more than proportionally)\n- |PED| = 1: unit elastic\n- |PED| < 1: inelastic\n\n2. Why we use the midpoint (arc) method\nSimple percentage changes depend on the direction you measure in: going from 10 to 12 is +20%, but going back from 12 to 10 is -16.7%. The midpoint method divides each change by the AVERAGE of the start and end values, so the answer is the same in both directions:\n% change in Q = (Q2 - Q1) / ((Q1 + Q2) / 2)\n% change in P = (P2 - P1) / ((P1 + P2) / 2)\nUse the midpoint method on problem sets and exams unless a question says otherwise.\n\n3. Worked example\nCoffee kiosk: price rises from $3.00 to $3.50, cups sold per day fall from 400 to 360.\n% change in Q = -40 / 380 = -10.5%\n% change in P = 0.50 / 3.25 = 15.4%\nPED = -0.68, so demand is inelastic. Revenue rises from $1,200 to $1,260.\n\n4. Estimates from the readings (Aldmere Transit Study; fictional data for class use)\n- City bus ridership, short run (first year after a fare change): -0.3\n- City bus ridership, long run (after five years): -0.7\n- Cinema tickets: -1.6\n- Cigarettes: -0.4\nLong-run demand is more elastic because people have time to find substitutes (move closer to work, buy a bike, car-pool).\n\n5. Elasticity and total revenue\nIf demand is elastic, a price increase reduces total revenue; if it is inelastic, a price increase raises total revenue.\n\n6. Common mistakes\nMixing up percentage points and percent; forgetting the negative sign; using simple percentage changes when the midpoint method is asked for.",
+   "notes": "SQLEC-001: midpoint: dQ = -300 / 1,050 = -28.57%; dP = 10 / 45 = 22.22%; PED = -1.29, elastic (revenue 48,000 -> 45,000). Trap: simple percentages give -25% / +25% = -1.0, 'unit elastic'. SQLEC-002: weights 30/30/40: 0.3 x 91 + 0.3 x 72 = 48.9; (80 - 48.9) / 0.4 = 77.75. Trap: equal weights give 77; 'best 8 of 10' is noise because the student states the average. SQLEC-003 (lookup): long-run bus ridership -0.7; the short-run -0.3 is the neighbouring-row trap.",
+   "mode": "lecture",
+   "sha256": "d2f43aad19cf3a7e6e7d53597d980383d36bd6d8f0b484140d3602a23caf3910",
+   "word_count": 400
+  },
+  "SQREC-CTX-1": {
+   "id": "SQREC-CTX-1",
+   "kind": "grounded",
+   "title": "Corvane offer summary: Senior Data Engineer",
+   "file_name": "corvane-offer-summary-okafor.txt",
+   "text": "CORVANE LOGISTICS - OFFER SUMMARY (INTERNAL, RECRUITING)\nRole: Senior Data Engineer, Routing Platform. Candidate: Adaeze Okafor. Hiring manager: Tomasz Brandt. Prepared 28 September 2026 by Talent Acquisition.\n\nCompensation options (candidate chooses one)\nOption A\n- Base salary: $142,000\n- Target annual bonus: 12% of base (payout 0-200% of target based on company and individual results)\nOption B\n- Base salary: $152,000\n- Target annual bonus: 8% of base, same payout rules\nBoth options\n- Sign-on bonus: $15,000, paid in two parts: $9,000 in the first payroll and $6,000 after six months of employment. Repayable pro rata if the employee leaves within 12 months of starting.\n- Equity: restricted stock units worth $60,000 at grant, vesting in equal quarterly instalments over four years (no cliff), so $15,000 of grant value vests in each year of service.\n- For the offer letter, \"first-year cash\" = base + target bonus + sign-on. Equity is shown separately.\n- Offer letter figure, Option A: first-year cash $174,040.\n\nBenefits\n- Medical, dental and vision from day one; employee premium 10%.\n- 401(k) with 4% match, immediate vesting (not included in any compensation total).\n- 25 days PTO plus 10 public holidays.\n- $1,500 annual learning budget.\n\nLogistics\n- Location: Wharf Street office, hybrid, 2 days a week on site. Candidate lives locally; no relocation package applies.\n- Target start date: 2 November 2026. Background check in progress.\n- Offer expires 9 October 2026.\n\nApproval notes\n- Band for level: $128,000-$158,000 base. Option B sits near the top of the band; the hiring manager prefers Option A.\n- Any sign-on above $15,000 or equity above $60,000 needs VP approval (Grete Solberg).\n- Candidate's current package (as told to the recruiter): $118,000 base plus about 6% bonus.\n\nInterview feedback summary\nStrong on streaming pipelines and cost optimisation; weaker on stakeholder communication per panel 3. Hire recommendation: yes.",
+   "notes": "Chain c01: Option A full first year at target = 142,000 + 17,040 (12%) + 15,000 sign-on (both parts fall inside year one) + 15,000 vested RSU = 189,040; Option B = 152,000 + 12,160 (8%) + 15,000 + 15,000 = 194,160. Traps: counting the whole 60,000 grant in year one (234,040 / 239,160), counting only the first 9,000 sign-on part (183,040), applying 12% to Option B (200,240), adding the 401(k) match (explicitly excluded) or relocation (does not apply). SQREC-003 (consistent): letter first-year cash 174,040 = 142,000 + 17,040 + 15,000 sign-on; the candidate's 159,040 omits the sign-on; the letter is right.",
+   "mode": "recruiting",
+   "sha256": "0f42e62ae2b57a92a68ed24426ac262c11f747017c2d423ef28106c02279e4b7",
+   "word_count": 309
+  },
+  "SQSALES-CTX-1": {
+   "id": "SQSALES-CTX-1",
+   "kind": "grounded",
+   "title": "Kestrel Fieldworks cold-chain monitoring price sheet",
+   "file_name": "kestrel-price-sheet-2026-07.txt",
+   "text": "KESTREL FIELDWORKS - COLD-CHAIN MONITORING\nPrice sheet for US customers, revision 2026-07. All prices USD, excluding sales tax.\n\nHARDWARE (one-time)\n- KG-4 gateway hub: $540 each. One hub supports up to 24 sensors of any type. Hubs talk over the building's own network and cannot serve sensors in a different building, so every building (site) needs its own hub or hubs.\n- TS-2 temperature and humidity sensor: $78 each.\n- DS-1 door-open sensor: $34 each. Door sensors count toward a hub's 24-sensor capacity.\n- Replacement batteries (4-pack): $19.\n\nINSTALLATION (one-time)\n- Standard installation: $1,200 per site. Covers mounting and commissioning of up to 2 hubs and all of their sensors.\n- Each additional hub at the same site: $150 installation.\n- After-hours installation (evenings or weekends), only when requested: add 25% to the installation price.\n\nMONITORING SUBSCRIPTION (recurring)\nBilled monthly per active sensor. Every account includes its first 10 sensors at no monitoring charge; the rate below applies to each sensor above those 10. The rate is set by the account's TOTAL sensor count and applies to every billable sensor (it is not graduated).\n- 1 to 100 sensors on the account: $5.50 per billable sensor per month\n- 101 to 250 sensors: $4.75 per billable sensor per month\n- 251 or more sensors: $4.00 per billable sensor per month\nAnnual prepay: 5% off monitoring when the full year is paid up front. Monthly billing has no discount.\n\nOPTIONAL ADD-ONS (recurring)\n- Cellular backup: $9 per hub per month.\n- Extended data retention (7 years instead of 2): $40 per account per month.\n- SMS alert bundle beyond 500 messages: $12 per additional 500.\n\nWARRANTY AND SUPPORT\nHubs and sensors carry a 3-year limited warranty. Sensors that fail calibration inside warranty are replaced at no charge; we cover shipping one way. Support is by email and phone, 7 am to 7 pm Central, Monday to Saturday; critical temperature alerts are routed 24/7.\n\nCONTRACT NOTES\nQuotes are valid for 30 days. Hardware ships within 10 business days of order. Monitoring begins on the day each sensor is first commissioned and is billed in full for that month. Sensors removed from service stop billing from the next calendar month once they are decommissioned in the dashboard.",
+   "notes": "SQSALES-001: hubs cannot be shared across buildings: warehouse 50 sensors -> 3 hubs, annex 14+8=22 -> 1 hub (pooling 72 sensors would wrongly give 3). Door sensors count toward capacity. Installation 2 x 1,200 + 1 extra warehouse hub x 150 = 2,550. First 10 sensors per ACCOUNT free; tier set by total (72 -> $5.50, not graduated); monthly billing so the 5% prepay discount does NOT apply; after-hours surcharge only if requested. Year one = 9,974 one-time + 341 x 12 = 14,066. SQSALES-002 (discrepancy): 41 sensors, one site, no add-ons -> 31 billable x 5.50 = 170.50/month; even ignoring the free 10 the maximum is 225.50; the stated 286 equals 52 billable sensors (62 sensors) and does not reconcile.",
+   "mode": "sales",
+   "sha256": "cfe6160164e80ba020d73f2a7d514a0c473a0bd6ac86dfe8d34d3c66e567f6d4",
+   "word_count": 374
+  },
+  "SQSALES-CTX-2": {
+   "id": "SQSALES-CTX-2",
+   "kind": "grounded",
+   "title": "Lumenpath order form terms and Q4 2026 price schedule",
+   "file_name": "lumenpath-order-form-q4-2026.txt",
+   "text": "LUMENPATH - ORDER FORM TERMS AND PRICE SCHEDULE\nField-team scheduling platform. Valid for orders signed 1 October to 31 December 2026. USD.\n\nPLANS\n- Team: $32 per seat per month, minimum 10 seats, monthly or annual billing.\n- Business: $49 per seat per month, minimum 35 seats, billed annually in advance (seat price x 12 x seats). If fewer than 35 seats are ordered, the invoice is for 35.\n- Enterprise: custom pricing, minimum 250 seats.\nSeats can be added mid-term and are prorated to the term end date. Seats cannot be reduced until renewal.\n\nONE-TIME ONBOARDING\n- Team: self-serve, no charge.\n- Business: $4,500 for accounts up to 60 seats; $6,000 for 61 seats or more. Onboarding is charged once, at the start of the first term, and is never discounted.\n\nMULTI-YEAR TERMS (Business and Enterprise)\n- 2-year term: 6% off the seat price for the whole term.\n- 3-year term: 12% off the seat price for the whole term, and the discounted seat price is locked for all three years.\nMulti-year terms are still invoiced one year at a time.\n\nOTHER DISCOUNTS\n- Registered nonprofits and schools: 8% off the seat price.\n- Discounts do not stack. Where more than one discount applies, only the single largest one is used.\n\nADD-ONS (annual, Business and Enterprise)\n- EU data residency: $3,200 per year per account.\n- Advanced routing: $6 per seat per month.\n- Premium support (1-hour response): 15% of annual seat fees.\n\nRENEWALS\nRenewals are quoted at the list price in effect on the renewal date, plus any add-ons active at that time. One-year renewals of accounts still on the 2025 price schedule are capped at a 7% increase per seat.\n\nPAYMENT\nInvoices are due Net 30. Card payments carry no surcharge. Late balances accrue 1% per month after 15 days' notice.\n\nSERVICE\nUptime target 99.9% measured monthly; service credits are described in the Service Level Addendum, not in this form. Customer data is exported on request within 10 business days of termination.",
+   "notes": "Chain c01: 38 seats Business 1-year = 38 x 49 x 12 = 22,344 + 4,500 onboarding = 26,844; 3-year: 49 x 0.88 = 43.12 -> 517.44/seat/yr x 38 = 19,662.72/yr x 3 = 58,988.16 + 4,500 once (never discounted) = 63,488.16; drop to 34 seats -> Business minimum 35 is invoiced -> 35 x 517.44 x 3 = 54,331.20 + 4,500 = 58,831.20. SQSALES-006: discounts do not stack; nonprofit 8% beats 2-year 6% -> 49 x 0.92 = 45.08 (stacked 42.14 / compounded 42.38 are wrong). SQSALES-007 (consistent): renewal 40 seats x 588 = 23,520 + EU data residency 3,200 = 26,720, the quote is correct. Noise: 7% renewal cap (applies to 2025-schedule accounts only), premium support 15%, advanced routing.",
+   "mode": "sales",
+   "sha256": "bbafb3cd021bc6136512db302ea27a77191735972420bd95cf505724454d5bf5",
+   "word_count": 335
+  },
+  "SQTEAM-CTX-1": {
+   "id": "SQTEAM-CTX-1",
+   "kind": "grounded",
+   "title": "Platform team Q3 budget and tooling review notes",
+   "file_name": "platform-q3-budget-review-2026-09-24.txt",
+   "text": "PLATFORM TEAM - Q3 BUDGET AND TOOLING REVIEW\nNotes, 24 September 2026. Present: Hollis (lead), Marguerite, Dev, Oyelaran, Sunniva. Notes by Sunniva.\n\n1. Contractor spend (Halvorsen Data)\n- Q3 contractor budget: $96,000 (July to September).\n- Rate: Halvorsen first quoted $124/hour; we signed at $118/hour in the July 8 SOW.\n- July invoice: $31,400 (paid).\n- August invoice: $28,750 (paid). Breakdown on the invoice: 220 hours at the SOW rate plus the fixed-fee warehouse migration of $2,790 that Hollis approved in July.\n- September invoice not received yet. Halvorsen's own estimate is about $22,000.\n- Hollis: no new contractor work starts before October without a budget check.\n\n2. Cloud spend\n- Annual cloud budget $240,000. Spend January to August: $153,600. Dev flagged the storage line rising 4% month on month since May.\n- Action: Dev to tag the three untagged staging clusters by Oct 3.\n\n3. CI tooling proposal (Pipewright)\n- Oyelaran presented Pipewright to replace the self-hosted runners.\n- Cost: $18,000 one-time setup and migration, then $1,250 per month subscription.\n- Expected saving: about 60 engineer-hours per month of runner maintenance and flaky-build triage. Finance's loaded engineering cost for planning is $85/hour.\n- Marguerite asked for a payback estimate before the October planning meeting. Decision deferred.\n\n4. Hiring\n- One backend req approved for Q4; the posting goes live Oct 6. Panel: Hollis, Dev, Marguerite.\n\n5. On-call\n- Rota changes from weekly to 4-day shifts starting Oct 13. Sunniva to update the pager schedule.\n\n6. Office move\n- Floor 5 move is Nov 2-3. Everyone packs desks by Oct 31.\n\nAction items\n- Sunniva: circulate these notes; update the pager schedule.\n- Dev: tag staging clusters; storage cost breakdown.\n- Oyelaran: Pipewright payback estimate; confirm SSO support.\n- Hollis: confirm the September Halvorsen invoice with finance when it lands.",
+   "notes": "SQTEAM-001 (lookup): signed rate $118/hour; $124 was only the first quote. SQTEAM-002: saving 60 x 85 = 5,100/month minus 1,250 subscription = 3,850 net; payback 18,000 / 3,850 = 4.68 months (ignoring the subscription gives 3.53; 18,000/1,250 = 14.4 is meaningless). SQTEAM-003 (discrepancy): 96,000 - 31,400 - 28,750 = 35,850 left before September; about 13,850 after the ~22,000 estimate; 'about fifty K left' does not reconcile. SQTEAM-004 (consistent): 220 x 118 = 25,960 + 2,790 approved migration fee = 28,750, the invoice is correct. Noise: cloud spend 153,600 of 240,000, hiring, on-call, office move.",
+   "mode": "team-meet",
+   "sha256": "59271de345924a91fc9a1a152fe196f388e9b59a35dd3f6e0be6cdf6f44257b1",
+   "word_count": 300
+  }
+ },
+ "items": [
+  {
+   "id": "SQCC-001",
+   "mode": "call-center",
+   "mode_name": "Call Center",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/call-center.json",
+   "category": "billing",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Hi, yeah, I extended my rental two days over the phone, it's the compact, and my wife's on it as an additional driver. Now there's a charge of two hundred forty-four dollars for the extension. The compact is forty-eight a day. How is that two days?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQCC-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "discrepancy",
+    "billing_dispute"
+   ],
+   "expected_answer_type": "agent response checking the charge against the rate card",
+   "claim_trap": "support_policy",
+   "needles": [
+    "Compact: $48 per day",
+    "Additional driver: $13 per day"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQCC-002",
+   "mode": "call-center",
+   "mode_name": "Call Center",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/call-center.json",
+   "category": "billing",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "I upgraded from the three hundred plan to the nine hundred on the eleventh of last month, and now my bill's a hundred and two dollars. The nine hundred plan is eighty-four. Why am I paying a hundred and two?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQCC-CTX-2",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "consistent",
+    "proration",
+    "billing_dispute"
+   ],
+   "expected_answer_type": "agent explanation of the bill amount",
+   "claim_trap": "support_policy",
+   "needles": [
+    "Fibre 900: $84",
+    "Fibre 300: $57",
+    "days remaining / 30"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQCC-003",
+   "mode": "call-center",
+   "mode_name": "Call Center",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/call-center.json",
+   "category": "billing",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "My bill has thirty dollars for Wi-Fi extenders. I've got two of them. I never asked for more. What's going on?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQCC-CTX-2",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "discrepancy",
+    "capacity",
+    "billing_dispute"
+   ],
+   "expected_answer_type": "agent response checking the equipment charge",
+   "claim_trap": "support_policy",
+   "needles": [
+    "$6 per extender per month",
+    "Maximum of 3 extenders"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQCC-004",
+   "mode": "call-center",
+   "mode_name": "Call Center",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/call-center.json",
+   "category": "policy_restriction",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "customer says the $10 late fee is wrong because we give 30 days. bill was 84, due the 5th, they paid on the 30th, and there's also a 4.20 charge. who's right?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQCC-CTX-2",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "consistent",
+    "percent",
+    "policy"
+   ],
+   "expected_answer_type": "private verdict for the agent with the policy basis",
+   "claim_trap": "support_policy",
+   "needles": [
+    "21 days after the due date",
+    "5% of the overdue balance"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQCC-005",
+   "mode": "call-center",
+   "mode_name": "Call Center",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/call-center.json",
+   "category": "policy_restriction",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "If I bring the car back and it's not full, what do you charge for the gas?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQCC-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "lookup"
+   ],
+   "expected_answer_type": "single fee from the rate card, speakable",
+   "claim_trap": "support_policy",
+   "needles": [
+    "$4.10 per gallon"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQCC-006",
+   "mode": "call-center",
+   "mode_name": "Call Center",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/call-center.json",
+   "category": "billing",
+   "difficulty": "hard",
+   "length_class": "long_multipart",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Hi, I stayed with you two nights, checked in on the twelfth and out on the fourteenth around ten thirty. Standard king at one sixty-five, and I had my car in self-parking both nights. My card's been charged seven hundred twenty dollars and twenty-seven cents, and the hold's already gone. Can you tell me why it's that much?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQCC-CTX-3",
+   "prior_transcript": null,
+   "conversation_id": "SQCC-c01",
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "discrepancy",
+    "tax",
+    "chain",
+    "billing_dispute"
+   ],
+   "expected_answer_type": "agent response checking the folio total",
+   "claim_trap": "support_policy",
+   "needles": [
+    "Standard King: $165",
+    "$28 per room per night",
+    "taxed at 13%"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQCC-007",
+   "mode": "call-center",
+   "mode_name": "Call Center",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/call-center.json",
+   "category": "refund",
+   "difficulty": "hard",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Okay. So how much am I getting back?",
+   "context_condition": "grounded",
+   "context_type": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "conversation_id": "SQCC-c01",
+   "turn_index": 2,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "discrepancy",
+    "tax",
+    "refund",
+    "follow_up",
+    "chain"
+   ],
+   "expected_answer_type": "refund amount with its makeup, speakable",
+   "claim_trap": "support_policy",
+   "needles": [
+    "Self-parking: $22 per night",
+    "taxed at 13%"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQGEN-001",
+   "mode": "general",
+   "mode_name": "General",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/general.json",
+   "category": "personal_conversation",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "So who owes who, and how much? I'll just send it tonight.",
+   "context_condition": "grounded",
+   "context_type": "transcript",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Okay, let me get Saturday straight before I forget. I got both festival tickets, that was ninety-four total."
+    },
+    {
+     "speaker": "user",
+     "text": "Right. And I paid the parking, eighteen, and lunch was on me too, sixty-two something. Sixty-two forty, I think."
+    },
+    {
+     "speaker": "other",
+     "text": "Yeah. And I bought that ice cream later, eleven bucks, but that was just mine, don't count it."
+    },
+    {
+     "speaker": "user",
+     "text": "Fair. The cab home was me as well, thirty-one."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "settle_up",
+    "who_owes_whom",
+    "spoken_numbers"
+   ],
+   "expected_answer_type": "direction and exact amount of the settle-up, speakable",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "ninety-four total",
+    "sixty-two forty",
+    "eleven bucks"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQGEN-002",
+   "mode": "general",
+   "mode_name": "General",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/general.json",
+   "category": "planning",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "So what do you and Rafa each owe me for the cabin?",
+   "context_condition": "grounded",
+   "context_type": "transcript",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Cabin's all paid, by the way. Seven hundred twenty for the four nights, it's on my card."
+    },
+    {
+     "speaker": "user",
+     "text": "Perfect. And Rafa only made it up for the last two nights, yeah?"
+    },
+    {
+     "speaker": "other",
+     "text": "Yeah, he drove up Friday. You and I were there all four."
+    },
+    {
+     "speaker": "user",
+     "text": "Then let's do what we said, one flat rate per person per night, so everyone pays for the nights they actually stayed."
+    },
+    {
+     "speaker": "other",
+     "text": "Works for me. Groceries were even, so forget those."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "settle_up",
+    "uneven_split"
+   ],
+   "expected_answer_type": "two amounts owed, speakable",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "seven hundred twenty",
+    "last two nights",
+    "per person per night"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQGEN-003",
+   "mode": "general",
+   "mode_name": "General",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/general.json",
+   "category": "planning",
+   "difficulty": "hard",
+   "length_class": "short",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "Work out who sends what to whom so we are all even, with the fewest transfers.",
+   "context_condition": "grounded",
+   "context_type": "transcript",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Theo here. For Maren's birthday I put the restaurant on my card, two sixty-four with tip."
+    },
+    {
+     "speaker": "other",
+     "text": "Priya. I got the gift, ninety-six."
+    },
+    {
+     "speaker": "user",
+     "text": "I did the cake, forty-eight, and the balloons and decorations, twenty-four."
+    },
+    {
+     "speaker": "other",
+     "text": "Jonah. I haven't paid for anything yet, so I'm the one catching up."
+    },
+    {
+     "speaker": "other",
+     "text": "And Maren's not paying for her own birthday, obviously. It's just the four of us splitting everything."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "settle_up",
+    "who_owes_whom",
+    "four_way",
+    "spoken_numbers"
+   ],
+   "expected_answer_type": "list of named transfers with amounts",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "two sixty-four",
+    "ninety-six",
+    "forty-eight"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQGEN-004",
+   "mode": "general",
+   "mode_name": "General",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/general.json",
+   "category": "decision_support",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Okay, this jacket's two forty, it's twenty percent off, and they're doing an extra fifteen percent off at the register today. So that's thirty-five percent off, like a hundred fifty-six, right?",
+   "context_condition": "none",
+   "context_type": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "percent",
+    "discount_stacking",
+    "false_premise"
+   ],
+   "expected_answer_type": "quick correction with the actual price",
+   "claim_trap": "none",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQGEN-005",
+   "mode": "general",
+   "mode_name": "General",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/general.json",
+   "category": "advice_request",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "So I froze my membership for June and July, booked it in the app back in early May, and they took eighty-six dollars for the freeze. I'm on standard. That's just what freezing costs, isn't it?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQGEN-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "discrepancy",
+    "policy",
+    "billing_dispute"
+   ],
+   "expected_answer_type": "check of the charge against the fee terms",
+   "claim_trap": "company_fact",
+   "needles": [
+    "$12 freeze fee",
+    "one-time $10 setup fee",
+    "by the 25th"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQGEN-006",
+   "mode": "general",
+   "mode_name": "General",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/general.json",
+   "category": "factual_question",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "How much is a day pass for a non-member on Saturday if she's climbing on her own?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQGEN-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "lookup"
+   ],
+   "expected_answer_type": "single price from the fee sheet",
+   "claim_trap": "company_fact",
+   "needles": [
+    "$22 on Saturdays"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQGEN-007",
+   "mode": "general",
+   "mode_name": "General",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/general.json",
+   "category": "planning",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "Fuel cost for the whole trip, and per person?",
+   "context_condition": "grounded",
+   "context_type": "transcript",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "So the drive's about five seventy each way... no wait, eleven forty total, that's the round trip."
+    },
+    {
+     "speaker": "user",
+     "text": "Round trip, yeah. My hatchback does about six point eight litres per hundred."
+    },
+    {
+     "speaker": "other",
+     "text": "And fuel's around one ninety-two a litre here, give or take."
+    },
+    {
+     "speaker": "other",
+     "text": "There's four of us going. Kasia said she'll cover the tolls herself, so leave those out."
+    }
+   ],
+   "conversation_id": "SQGEN-c01",
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "rate",
+    "spoken_numbers",
+    "chain"
+   ],
+   "expected_answer_type": "trip total and per-person share",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "eleven forty total",
+    "six point eight",
+    "one ninety-two a litre"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQGEN-008",
+   "mode": "general",
+   "mode_name": "General",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/general.json",
+   "category": "follow_up",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "What if we take Oskar's SUV instead? It does nine and a half per hundred.",
+   "context_condition": "grounded",
+   "context_type": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "conversation_id": "SQGEN-c01",
+   "turn_index": 2,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "rate",
+    "follow_up",
+    "chain",
+    "changed_quantity"
+   ],
+   "expected_answer_type": "recomputed total and per-person share",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "nine and a half per hundred",
+    "eleven forty total"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQLEC-001",
+   "mode": "lecture",
+   "mode_name": "Lecture",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/lecture.json",
+   "category": "formula",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Try this one yourselves. A concert venue raises ticket prices from forty to fifty dollars and attendance drops from twelve hundred to nine hundred a night. Midpoint method: what's the elasticity, and is demand elastic or inelastic here?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQLEC-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "percent",
+    "elasticity"
+   ],
+   "expected_answer_type": "worked calculation with the classification",
+   "claim_trap": "none",
+   "needles": [
+    "midpoint method",
+    "((Q1 + Q2) / 2)"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQLEC-002",
+   "mode": "lecture",
+   "mode_name": "Lecture",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/lecture.json",
+   "category": "exam_relevance",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "I have a 91 average on problem sets and got 72 on the midterm. What do I need on the final to finish with an 80?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQLEC-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "weighted_average"
+   ],
+   "expected_answer_type": "required final exam score with the working",
+   "claim_trap": "none",
+   "needles": [
+    "problem sets 30%",
+    "midterm 30%",
+    "final exam 40%"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQLEC-003",
+   "mode": "lecture",
+   "mode_name": "Lecture",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/lecture.json",
+   "category": "connect_earlier",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "And remember the transit numbers in your handout, what did the study find for bus ridership in the long run?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQLEC-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "lookup"
+   ],
+   "expected_answer_type": "single figure from the handout",
+   "claim_trap": "research_claim",
+   "needles": [
+    "long run (after five years): -0.7"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQREC-001",
+   "mode": "recruiting",
+   "mode_name": "Recruiting",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/recruiting.json",
+   "category": "candidate_asks_recruiter",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Can you walk me through what a full first year adds up to on option A if I hit target bonus? Counting the sign-on and the stock that vests that year.",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQREC-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": "SQREC-c01",
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "compensation",
+    "percent",
+    "chain"
+   ],
+   "expected_answer_type": "recruiter's spoken breakdown with a total",
+   "claim_trap": "company_fact",
+   "needles": [
+    "$142,000",
+    "12% of base",
+    "$15,000 of grant value vests"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQREC-002",
+   "mode": "recruiting",
+   "mode_name": "Recruiting",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/recruiting.json",
+   "category": "compensation",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "And the same thing for option B?",
+   "context_condition": "grounded",
+   "context_type": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "conversation_id": "SQREC-c01",
+   "turn_index": 2,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "compensation",
+    "percent",
+    "follow_up",
+    "chain",
+    "changed_quantity"
+   ],
+   "expected_answer_type": "recruiter's spoken breakdown with a total",
+   "claim_trap": "company_fact",
+   "needles": [
+    "$152,000",
+    "8% of base"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQREC-003",
+   "mode": "recruiting",
+   "mode_name": "Recruiting",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/recruiting.json",
+   "category": "compensation",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "Candidate's pushing back: says the letter's first-year cash of 174,040 is wrong because 142k plus a 12% bonus is only 159,040. Is our letter wrong?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQREC-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "consistent",
+    "compensation"
+   ],
+   "expected_answer_type": "private verdict for the recruiter with the reconciliation",
+   "claim_trap": "company_fact",
+   "needles": [
+    "$174,040",
+    "Sign-on bonus: $15,000"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQSALES-001",
+   "mode": "sales",
+   "mode_name": "Sales",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/sales.json",
+   "category": "pricing_question",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Okay, so two buildings. The main warehouse needs fifty temperature sensors, and the annex needs fourteen temperature sensors plus eight door sensors. What does year one cost us, all in? Paying monthly, no cellular backup.",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQSALES-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "capacity",
+    "one_time_vs_recurring",
+    "year_one_total",
+    "free_allowance",
+    "tiered_pricing"
+   ],
+   "expected_answer_type": "year-one total with its main components",
+   "claim_trap": "company_fact",
+   "needles": [
+    "up to 24 sensors",
+    "$1,200 per site",
+    "first 10 sensors"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQSALES-002",
+   "mode": "sales",
+   "mode_name": "Sales",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/sales.json",
+   "category": "objection_handling",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Quick billing question while I have you. We've had the same forty-one sensors at our one site since spring, no add-ons, and September's monitoring line came to two hundred eighty-six dollars. That's just the normal rate, right?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQSALES-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "discrepancy",
+    "billing_dispute"
+   ],
+   "expected_answer_type": "check of the invoice line against the price sheet",
+   "claim_trap": "company_fact",
+   "needles": [
+    "$5.50 per billable sensor",
+    "first 10 sensors"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQSALES-003",
+   "mode": "sales",
+   "mode_name": "Sales",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/sales.json",
+   "category": "pricing_question",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Alright, Business plan, thirty-eight seats, one-year term. What's the total for year one including onboarding?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQSALES-CTX-2",
+   "prior_transcript": null,
+   "conversation_id": "SQSALES-c01",
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "one_time_vs_recurring",
+    "year_one_total",
+    "chain"
+   ],
+   "expected_answer_type": "year-one total, speakable",
+   "claim_trap": "company_fact",
+   "needles": [
+    "$49 per seat per month",
+    "$4,500"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQSALES-004",
+   "mode": "sales",
+   "mode_name": "Sales",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/sales.json",
+   "category": "negotiation",
+   "difficulty": "hard",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "And if we signed the three-year term instead, what's the total across all three years?",
+   "context_condition": "grounded",
+   "context_type": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "conversation_id": "SQSALES-c01",
+   "turn_index": 2,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "multi_year",
+    "percent",
+    "follow_up",
+    "chain",
+    "changed_quantity"
+   ],
+   "expected_answer_type": "three-year total, speakable",
+   "claim_trap": "company_fact",
+   "needles": [
+    "12% off the seat price",
+    "charged once"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQSALES-005",
+   "mode": "sales",
+   "mode_name": "Sales",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/sales.json",
+   "category": "negotiation",
+   "difficulty": "hard",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "What if we drop to thirty-four seats on the three-year deal?",
+   "context_condition": "grounded",
+   "context_type": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "conversation_id": "SQSALES-c01",
+   "turn_index": 3,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "minimum_seats",
+    "follow_up",
+    "chain",
+    "changed_quantity"
+   ],
+   "expected_answer_type": "recomputed three-year total, speakable",
+   "claim_trap": "company_fact",
+   "needles": [
+    "minimum 35 seats",
+    "the invoice is for 35"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQSALES-006",
+   "mode": "sales",
+   "mode_name": "Sales",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/sales.json",
+   "category": "pricing_question",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "Prospect is a registered nonprofit and wants the 2-year term on Business. Do the 6% and the 8% stack? What's the per-seat monthly price?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQSALES-CTX-2",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "discount_stacking",
+    "percent"
+   ],
+   "expected_answer_type": "yes/no on stacking plus the per-seat price",
+   "claim_trap": "company_fact",
+   "needles": [
+    "Discounts do not stack",
+    "8% off the seat price"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQSALES-007",
+   "mode": "sales",
+   "mode_name": "Sales",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/sales.json",
+   "category": "objection_handling",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "So the renewal quote says twenty-six thousand seven hundred twenty. Forty seats at forty-nine a month is about twenty-three and a half. Where's the other three grand coming from? That doesn't look right to me.",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQSALES-CTX-2",
+   "prior_transcript": [
+    {
+     "speaker": "user",
+     "text": "So for the renewal, same forty seats on Business, one-year term?"
+    },
+    {
+     "speaker": "other",
+     "text": "Same forty, one year. We're not growing this year."
+    },
+    {
+     "speaker": "user",
+     "text": "And you're keeping EU data residency for the Lisbon team?"
+    },
+    {
+     "speaker": "other",
+     "text": "Yes, we have to, legal won't let us drop it."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "consistent",
+    "billing_dispute"
+   ],
+   "expected_answer_type": "reconciliation of the quote, speakable",
+   "claim_trap": "company_fact",
+   "needles": [
+    "$3,200 per year per account",
+    "twenty-six thousand seven hundred twenty",
+    "EU data residency"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQTEAM-001",
+   "mode": "team-meet",
+   "mode_name": "Team Meet",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/team-meet.json",
+   "category": "decisions",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Sorry, quick one, what hourly rate did we actually sign with Halvorsen? I've seen two numbers floating around.",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQTEAM-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "lookup"
+   ],
+   "expected_answer_type": "single figure from the notes, speakable",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "$118/hour"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQTEAM-002",
+   "mode": "team-meet",
+   "mode_name": "Team Meet",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/team-meet.json",
+   "category": "prioritization",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "user",
+   "surface": "typed",
+   "question": "How many months until Pipewright pays for itself, using the numbers in the notes?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQTEAM-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "payback",
+    "rate"
+   ],
+   "expected_answer_type": "payback period with the working",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "$18,000 one-time",
+    "$1,250 per month",
+    "$85/hour"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQTEAM-003",
+   "mode": "team-meet",
+   "mode_name": "Team Meet",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/team-meet.json",
+   "category": "risks",
+   "difficulty": "hard",
+   "length_class": "short",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Honestly I think we're fine on contractors, we've still got about fifty K of the Q3 budget left for September.",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQTEAM-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "discrepancy",
+    "budget"
+   ],
+   "expected_answer_type": "constructive correction with the remaining budget",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "$96,000",
+    "$31,400",
+    "$28,750"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  },
+  {
+   "id": "SQTEAM-004",
+   "mode": "team-meet",
+   "mode_name": "Team Meet",
+   "partition": "supp-quant",
+   "source_file": "supp-quant/team-meet.json",
+   "category": "disagreement",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "other",
+   "surface": "hotkey",
+   "question": "Can I flag something? Halvorsen's August invoice is twenty-eight seven fifty, but two hundred twenty hours at a hundred eighteen is only about twenty-six grand. Are they padding it?",
+   "context_condition": "grounded",
+   "context_type": "document",
+   "context_ref": "SQTEAM-CTX-1",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "cross_mode_test": false,
+   "cross_mode_group": null,
+   "tags": [
+    "arithmetic",
+    "consistent",
+    "budget"
+   ],
+   "expected_answer_type": "reconciliation of the invoice for the meeting",
+   "claim_trap": "meeting_history",
+   "needles": [
+    "$2,790",
+    "220 hours"
+   ],
+   "evidence_required": true,
+   "pi_ref": null,
+   "pi_eligible": false
+  }
+ ]
+}

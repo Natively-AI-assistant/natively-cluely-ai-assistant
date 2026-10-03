@@ -1,0 +1,24 @@
+{
+  "name": "oracles-conflict-sb-v1",
+  "note": "Authored 2026-09-30 from the supp-behavior contexts' own notes (the blind authors' listed contradictions), never from answers. Only items whose question turns directly on a contradicted or absent value; ambiguous-ideal items are left to the judge.",
+  "oracles": {
+    "SBLEC-001": { "kind": "rule_misapplied", "expected_summary": "Example 2 divides by n instead of sqrt(n): SE = 12 / sqrt(36) = 12 / 6 = 2 minutes, not 0.33.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 2, "label": "correct SE of 2 minutes" }, { "type": "pattern_present", "pattern": "wrong|incorrect|mistake|error|not right|isn'?t right|should be|sqrt|square root", "label": "says the example is wrong" } ] },
+    "SBLEC-002": { "kind": "rule_misapplied", "expected_summary": "The lecturer's example divides by n: the handout's own rule gives SE = 12 / 6 = 2 minutes (half-width near 4), so it is not 'extremely precise'.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 2, "label": "correct SE of 2 minutes" } ] },
+    "SBLEC-003": { "kind": "source_conflict", "expected_summary": "Section 1 is right: halving the SE needs four times the sample (SE scales with 1/sqrt(n)); the summary box's 'double' is wrong.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "pattern_present", "pattern": "quadrupl|four times|4 times|4x|times four|factor of four|factor of 4", "label": "quadruple, not double" } ] },
+    "SBJOB-004": { "kind": "source_conflict", "expected_summary": "The résumé (the candidate's own record) says p95 went to 190 ms; a conflicting doc says 210 ms.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 190, "label": "states 190 ms" } ] },
+    "SBSEM-001": { "kind": "source_conflict", "expected_summary": "No: 148 enrolled, 7 withdrew, 141 analysed.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 141, "label": "141 analysed" } ] },
+    "SBSEM-002": { "kind": "source_conflict", "expected_summary": "Results: 32-minute mean difference (sleep diaries) measured at week 10; the abstract's 23 minutes and 12 weeks disagree with the body.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 32, "label": "states the results' 32 minutes" }, { "type": "number_present", "value": 23, "label": "surfaces the abstract's 23 minutes" }, { "type": "pattern_present", "pattern": "week 10|10 weeks|tenth week|10th week", "label": "measured at week 10" } ] },
+    "SBSEM-003": { "kind": "source_conflict", "expected_summary": "The primary outcome was sleep diaries; actigraphy was a 40-nurse subsample (11 minutes, CI crossing zero), so the premise is wrong.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "pattern_present", "pattern": "diar(?:y|ies)", "label": "names sleep diaries as the primary measure" } ] },
+    "SBSEM-007": { "kind": "not_in_source", "expected_summary": "The study did not measure anything about honeybee colonies.", "flag": "unsupported_research_claim",
+      "checks": [ { "type": "pattern_present", "pattern": "(?:did ?n[o'’]?t|didn'?t|did not|no|not|never) (?:measure|track|collect|look at|record|study|assess)|outside (?:the|what)|beyond (?:the|what)|no data", "label": "says colonies were not measured" } ] },
+    "SBSEM-009": { "kind": "source_conflict", "expected_summary": "No: total visits were only 14% higher with a CI crossing 1; the 41% applies to solitary bees only.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 14, "label": "states the 14% total" }, { "type": "pattern_present", "pattern": "solitary", "label": "41% is solitary bees only" } ] }
+  }
+}
