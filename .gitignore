@@ -91,7 +91,7 @@ dist/
 
 # Compiled Apple Speech helper. Built explicitly for local development and
 # injected per target architecture during electron-builder afterPack.
-/resources/apple-speech/natively-apple-speech
+/resources/apple-speech/corespeechd-asr
 
 # husky auto-generated machinery — only the user-facing hook files
 # (e.g. .husky/pre-commit) are committed.

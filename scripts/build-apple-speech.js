@@ -18,7 +18,15 @@ const path = require('node:path');
 
 const MINIMUM_SDK_MAJOR = 26;
 const MINIMUM_MACOS_VERSION = '26.0';
-const HELPER_NAME = 'natively-apple-speech';
+// Helper binary name — derived from the per-platform disguise alias, NEVER the
+// brand. The helper is spawned as a child process, so its basename AND full path
+// show up in process enumeration; a "natively-*" name here leaks the brand right
+// next to the corespeechd disguise (a `natively` substring is exactly what a
+// scanner looks for). Sharing the alias prefix is safe for the same reason the
+// alias itself is: it collides with the real macOS corespeechd daemon.
+// MUST stay in sync with electron/audio/AppleSpeechSTT.ts and
+// scripts/verify-packaged-local-assets.mjs — guarded by apple-speech-build.test.mjs.
+const HELPER_NAME = `${require('./disguise-name.cjs').darwin}-asr`;
 
 function archToName(arch) {
   if (arch === 1 || arch === 'x64' || arch === 'x86_64') return 'x64';
@@ -91,7 +99,7 @@ function compileThin({ arch, source, output, sdkPath, run }) {
 }
 
 function compileUniversal({ source, output, sdkPath, run }) {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-apple-speech-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `${HELPER_NAME}-`));
   const arm64 = path.join(tempDir, `${HELPER_NAME}-arm64`);
   const x64 = path.join(tempDir, `${HELPER_NAME}-x64`);
   const merged = path.join(tempDir, HELPER_NAME);
