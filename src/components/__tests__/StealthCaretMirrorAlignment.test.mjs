@@ -11,8 +11,8 @@
 //   2. The mirror carried `appearance.inputStyle` — the input's translucent
 //      background — on TOP of the input, veiling the typed text while engaged;
 //      it snapped back to full contrast when the session ended.
-//   3. Nothing scrolled the unfocused input to its end, so long text ran the
-//      caret off the right edge.
+//   3. The mirror stayed on one flex row when the input became a textarea,
+//      and the unfocused input did not scroll down to newly appended text.
 //
 // Measured in Electron (dev:agent) after the fix: caret − end-of-text = 0px for
 // short, long (overflowing) and trailing-space text, dark and light.
@@ -51,8 +51,14 @@ describe('stealth caret mirror', () => {
         assert.ok(!/style=/.test(tag), 'the caret mirror must not take an inline style (inputStyle veils the text)');
     });
 
-    test('input and mirror are scrolled together to the insertion point', () => {
-        assert.match(TSX, /input\.scrollLeft = input\.scrollWidth;\s*mirror\.scrollLeft = input\.scrollLeft;/);
+    test('input and mirror share wrapping and the final visible line', () => {
+        const rule = CSS.match(/\.nat-caret-mirror\s*\{([^}]*)\}/)[1];
+        assert.match(rule, /display:\s*block/);
+        assert.match(rule, /white-space:\s*pre-wrap/);
+        assert.match(rule, /overflow-wrap:\s*break-word/);
+        assert.match(TSX, /input\.scrollTop = input\.scrollHeight;[\s\S]*mirror\.scrollTop = input\.scrollTop;/);
+        assert.match(TSX, /mirror\.style\.width = `\$\{input\.clientWidth \+ borders\}px`/);
+        assert.match(TSX, /new ResizeObserver\(syncCaretViewport\)/);
         assert.match(TSX, /ref=\{caretMirrorRef\}/);
     });
 });
