@@ -182,3 +182,24 @@ test('less free disk than the floor: no request is sent, and the queue sees its 
     if (d.m.freeDiskMb() >= 300) assert.equal((await d.m.chat(MSG)).ok, true);
   } finally { d.restore(); }
 });
+
+// Which judge: the identity is read once at import, so each case is its own process over the real module.
+test('the Opus judge is a separate series: its own cache key and its own files, and astra stays the default', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const ident = (judge) => {
+    const env = { ...process.env }; delete env.AQ_JUDGE; if (judge) env.AQ_JUDGE = judge;
+    const r = spawnSync(process.execPath, ['-e', `import(${JSON.stringify(pathToFileURL(path.join(HERE, 'client.mjs')).href)}).then((m) => console.log(JSON.stringify({ judge: m.JUDGE, model: m.JUDGE_MODEL, key: m.JUDGE_KEY, suffix: m.JUDGED_SUFFIX, cli: m.VIA_CLI })))`], { env, encoding: 'utf8' });
+    return { status: r.status, out: r.stdout.trim() ? JSON.parse(r.stdout) : null, err: r.stderr };
+  };
+  const astra = ident(null); const opus = ident('opus'); const other = ident('sonnet'); const fable = ident('fable');
+  assert.deepEqual(astra.out, { judge: 'astra', model: 'gpt-6-astra', key: 'gpt-6-astra', suffix: '.judged.jsonl', cli: false });
+  assert.deepEqual(other.out, astra.out, 'an unknown AQ_JUDGE value does not select another judge');
+  assert.equal(opus.out.model, 'claude-opus-5-5');
+  assert.equal(opus.out.cli, true);
+  assert.notEqual(opus.out.key, astra.out.key);
+  assert.notEqual(opus.out.suffix, astra.out.suffix);
+  assert.notEqual(opus.out.suffix, '.judged-fable.jsonl');
+  assert.match(opus.out.key, /^claude-opus-5-5\/effort-medium$/, 'the effort is part of the cache key');
+  assert.equal(fable.status, 2, 'the withdrawn Fable judge still refuses to run');
+  assert.match(fable.err, /withdrawn/);
+});

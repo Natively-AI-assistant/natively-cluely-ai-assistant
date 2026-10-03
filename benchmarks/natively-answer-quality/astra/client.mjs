@@ -44,12 +44,20 @@ if (process.env.AQ_JUDGE === 'fable') {
   console.error('judge unavailable: the Fable judge was withdrawn on 2026-10-02 (the judge is gpt-6-astra only). Unset AQ_JUDGE.');
   process.exit(2);
 }
-export const JUDGE = 'astra';
+// 2026-10-03 — Evin, on the two branches left out of the landing: "try those branchs side by side and see if its
+// required use claude opus 5.5 as the judge from claude code". AQ_JUDGE=opus selects Claude Opus 5.5 over the same
+// headless-CLI transport the Fable trial used. It is a second opinion on those branches only: gpt-6-astra stays the
+// default and the judge of record, and the Opus series has its own cache key and its own files, never pooled.
+export const JUDGE = process.env.AQ_JUDGE === 'opus' ? 'opus' : 'astra';
+/** A judge reached through the headless Claude Code CLI instead of AgentRouter (no key is read or sent). */
+export const VIA_CLI = JUDGE !== 'astra';
 export const FABLE_EFFORT = process.env.AQ_FABLE_EFFORT || 'medium';
-export const JUDGE_MODEL = JUDGE === 'fable' ? 'claude-fable-5-1' : 'gpt-6-astra';
+/** One fixed effort for the Opus judge: it is part of the cache key, so it cannot drift within a series. */
+export const CLI_EFFORT = 'medium';
+export const JUDGE_MODEL = JUDGE === 'opus' ? 'claude-opus-5-5' : 'gpt-6-astra';
 /** What the caches are keyed by. Unchanged for gpt-6-astra, so its existing cache stays valid. */
-export const JUDGE_KEY = JUDGE === 'fable' ? `${JUDGE_MODEL}/effort-${FABLE_EFFORT}` : JUDGE_MODEL;
-export const JUDGED_SUFFIX = JUDGE === 'fable' ? '.judged-fable.jsonl' : '.judged.jsonl';
+export const JUDGE_KEY = VIA_CLI ? `${JUDGE_MODEL}/effort-${CLI_EFFORT}` : JUDGE_MODEL;
+export const JUDGED_SUFFIX = JUDGE === 'opus' ? '.judged-opus.jsonl' : '.judged.jsonl';
 // 2026-10-02 04:35Z — Evin: "theres a second api key for agentrouter". The first key's ACCOUNT ran out of quota on
 // 2026-10-01 12:26Z and the 02:00Z batch did not restore it. Same gateway, same model id, same client header: the
 // judge does not change, only whose quota pays for the call. A key that reports its quota (or its ration batch)
@@ -139,7 +147,7 @@ export function keySpent(index) {
 
 /** Throws unless a successful probe against JUDGE_MODEL is on record. */
 export function assertProbeOk() {
-  if (JUDGE === 'fable') return { ok: true, model_listed: true, requested_model: JUDGE_MODEL, returned_model: JUDGE_MODEL, unsupported_params: [] };
+  if (VIA_CLI) return { ok: true, model_listed: true, requested_model: JUDGE_MODEL, returned_model: JUDGE_MODEL, unsupported_params: [] };
   const p = readProbe();
   if (!p || !p.ok || !p.model_listed || p.requested_model !== JUDGE_MODEL) {
     const why = !p ? 'no probe on record (run astra/probe.mjs)' : !p.model_listed ? `${JUDGE_MODEL} unavailable for this AgentRouter key` : 'last probe failed';
@@ -222,7 +230,7 @@ export function stopNewCalls(reason) {
 /** Set once a route rejects temperature=0 (spec §19: drop only the rejected optional parameter). */
 export let TEMPERATURE_REJECTED = false;
 export async function chat(messages, { maxTokens = 4000, temperature = 0, retries = 5, timeoutMs = 180000 } = {}) {
-  if (JUDGE === 'fable') return chatFable(messages, { retries: Math.min(retries, 3), timeoutMs: Math.max(timeoutMs, 300000) });
+  if (VIA_CLI) return chatFable(messages, { retries: Math.min(retries, 3), timeoutMs: Math.max(timeoutMs, 300000) });
   if (!RATIONED) { const mb = await diskRoom(); if (mb < DISK_FLOOR_MB) stopNewCalls(`disk nearly full (${Math.round(mb)} MB free)`); }
   if (RATIONED) return { ok: false, rationed: true, status: RATIONED.startsWith('disk') ? null : 402, error: RATIONED, requested_model: JUDGE_MODEL, attempts: 0, at: new Date().toISOString() };
   const probe = assertProbeOk();
@@ -285,7 +293,7 @@ export async function chat(messages, { maxTokens = 4000, temperature = 0, retrie
   return { ok: false, status: last?.status ?? null, error: scrub(last?.text ?? 'unknown').slice(0, 600), requested_model: JUDGE_MODEL, attempts: attempt + 1, at: new Date().toISOString() };
 }
 
-// ---- Fable through the headless CLI ----
+// ---- A Claude model through the headless CLI (built for the Fable trial; AQ_JUDGE=opus uses it) ----
 let FABLE_DIR = null;
 function fableSystemFile(system) {
   FABLE_DIR ??= fs.mkdtempSync(path.join(os.tmpdir(), 'aq-fable-judge-'));
@@ -296,7 +304,7 @@ function fableSystemFile(system) {
 function runClaude(system, prompt, timeoutMs) {
   return new Promise((resolve) => {
     const t0 = Date.now();
-    const args = ['-p', '--model', JUDGE_MODEL, '--effort', FABLE_EFFORT, '--safe-mode', '--tools', '', '--system-prompt-file', fableSystemFile(system), '--no-session-persistence', '--output-format', 'json'];
+    const args = ['-p', '--model', JUDGE_MODEL, '--effort', CLI_EFFORT, '--safe-mode', '--tools', '', '--system-prompt-file', fableSystemFile(system), '--no-session-persistence', '--output-format', 'json'];
     // CLAUDECODE etc. describe the parent session; the judge process gets none of it.
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^CLAUDE_CODE_|^CLAUDECODE$/.test(k)));
     const child = spawn('claude', args, { cwd: FABLE_DIR, env, stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' });
@@ -331,10 +339,10 @@ async function chatFable(messages, { retries = 3, timeoutMs = 300000 } = {}) {
         model_mismatch: !models.includes(JUDGE_MODEL), response_id: j.session_id ?? null, request_id: null,
         finish_reason: j.stop_reason ?? j.subtype ?? null,
         usage: j.usage ? { input_tokens: j.usage.input_tokens, cache_read_input_tokens: j.usage.cache_read_input_tokens, cache_creation_input_tokens: j.usage.cache_creation_input_tokens, output_tokens: j.usage.output_tokens } : null,
-        latency_ms: r.latencyMs, temperature: 'default', effort: FABLE_EFFORT, temperature_dropped: false, attempts: attempt + 1, at: new Date().toISOString(),
+        latency_ms: r.latencyMs, temperature: 'default', effort: CLI_EFFORT, temperature_dropped: false, attempts: attempt + 1, at: new Date().toISOString(),
       };
     }
-    if (FABLE_LIMIT_RE.test(text)) { RATIONED = `fable usage limit at ${new Date().toISOString()}: ${text.slice(0, 160)}`; console.error(`[fable] ${RATIONED} — stopping new judge calls`); break; }
+    if (FABLE_LIMIT_RE.test(text)) { RATIONED = `${JUDGE} usage limit at ${new Date().toISOString()}: ${text.slice(0, 160)}`; console.error(`[${JUDGE}] ${RATIONED} — stopping new judge calls`); break; }
     await sleep(Math.min(60000, 3000 * 2 ** attempt) * (0.75 + Math.random() * 0.5));
     attempt++;
   }

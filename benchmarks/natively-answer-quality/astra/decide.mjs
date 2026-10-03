@@ -12,9 +12,11 @@ import { readJsonl } from './store.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GAIN = 0.3;
-// AQ_JUDGE=fable reads the Fable series (its own replay files and abs-*-f1 sets); the two judges are never pooled.
+// AQ_JUDGE=fable reads the Fable series (its own replay files and abs-*-f1 sets), AQ_JUDGE=opus the Opus series
+// (replay files only; no absolute sets were judged by it); the judges are never pooled.
 const FABLE = process.env.AQ_JUDGE === 'fable';
-const JUDGED = FABLE ? '.judged-fable.jsonl' : '.judged.jsonl';
+const OPUS = process.env.AQ_JUDGE === 'opus';
+const JUDGED = FABLE ? '.judged-fable.jsonl' : OPUS ? '.judged-opus.jsonl' : '.judged.jsonl';
 
 function load(f) {
   const p = path.join(ROOT, f);
@@ -56,7 +58,7 @@ function pair(A, B, ids) {
 }
 const f2 = (x) => (x >= 0 ? '+' : '') + x.toFixed(2);
 
-console.log(`# Pre-registered decisions — judge ${FABLE ? 'claude-fable-5-1' : 'gpt-6-astra'} — ${new Date().toISOString()}\n`);
+console.log(`# Pre-registered decisions — judge ${FABLE ? 'claude-fable-5-1' : OPUS ? 'claude-opus-5-5 (effort medium)' : 'gpt-6-astra'} — ${new Date().toISOString()}\n`);
 console.log('## Prepared changes (dev replay pairs; rule: gain ≥ +0.3, interval excludes 0, hard fails not up)\n');
 console.log('| change | rows judged | base | variant | gain (95%) | hard fails | rows that moved | verdict |');
 console.log('|---|---:|---:|---:|---:|---:|---:|---|');
@@ -115,7 +117,7 @@ table(SECONDARY, false);
 console.log('\n## fix13 (refinement notice) against fix12 on the rows it re-ran\n');
 console.log('| split | rows judged | fix12 | fix13 | difference (95%) | hard fails | verdict |');
 console.log('|---|---:|---:|---:|---:|---:|---|');
-for (const [split, set, a, b] of [['dev', FABLE ? 'abs-dev-f1' : 'abs-dev-c2', 'aq2-dev-fix12c', 'aq2-dev-fix13'], ['holdout', FABLE ? 'abs-holdout-f1' : 'abs-holdout-c2', 'aq2-holdout-fix12c', 'aq2-holdout-fix13']]) {
+for (const [split, set, a, b] of [['dev', FABLE ? 'abs-dev-f1' : OPUS ? 'abs-dev-o1' : 'abs-dev-c2', 'aq2-dev-fix12c', 'aq2-dev-fix13'], ['holdout', FABLE ? 'abs-holdout-f1' : OPUS ? 'abs-holdout-o1' : 'abs-holdout-c2', 'aq2-holdout-fix12c', 'aq2-holdout-fix13']]) {
   const B = load(`astra/out/${set}/${b}.jsonl`);
   const ids = rowsOf(`results/${b}/natively_benchmark_full.jsonl`).map((r) => r.benchmark_id ?? r.id).filter(Boolean);
   const p = pair(load(`astra/out/${set}/${a}.jsonl`), B, [...new Set(ids)]);

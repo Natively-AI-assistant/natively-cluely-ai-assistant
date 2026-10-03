@@ -2082,3 +2082,52 @@ turns stays. Nothing is changed and nothing is built for it.** The judged pair q
   record nobody needs, billed to Evin's balance. The runs stay on disk; `node astra/arm.mjs <tag>` judges them if
   ever wanted.
 
+
+## A second judge for the two unmerged branches: Claude Opus 5.5, at Evin's request. Written 2026-10-03 07:57Z, before any Opus judgment exists
+
+After the landing, asked why `fix/aq-astra-i6` and `fix/aq-astra-i7` were left out, Evin wrote: "try those branchs
+side by side and see if its required use claude opus 5.5 as the judge from claude code".
+
+**Scope.** A second opinion on the four changes those two branches hold, and nothing else. gpt-6-astra stays the
+judge of record for everything in the report; this series is kept in its own files, is never pooled with astra's,
+and changes no number already reported. The Fable series stays withdrawn and is not read or cited here.
+
+**What is judged.** The same stored answers gpt-6-astra judged: the four deciding dev replay pairs, 288 distinct
+answers (an answer that is identical in both arms is judged once). Nothing is generated again, so the judge is the
+only thing that differs between the two columns.
+
+| change | branch | base file | variant file | rows | rows whose answer differs |
+|---|---|---|---|---:|---:|
+| Reasoning on typed Technical interview + Lecture turns | i7 | `think-off-til` | `think-low-til-typed` | 80 | 31 |
+| Looking for work, fallback rule v2 | i6 | `lfw-base` | `lfw-bridge-v2` | 40 | 26 |
+| Call Center, "no policy on file" notice, heard turns | i6 | `ccfin-base` | `ccfin-nopolicy-v1h` | 40 | 17 |
+| Sales, reply-shape notice, heard turns | i6 | `salesfin-base` | `salesfin-shape-v1h` | 40 | 14 |
+
+**The judge.** `claude-opus-5-5` through the headless Claude Code CLI (`AQ_JUDGE=opus`), effort `medium`, fixed.
+One fresh process per judgment, no tools, the charter as the whole system prompt, a neutral working directory, the
+parent session's environment removed: a judgment sees the charter and the envelope and nothing of this session. Same
+charter (v2 `c725615a54f6`), envelope, schema and official score as astra. Output: `results/replay/*.judged-opus.jsonl`.
+
+**Gates before any pair is read.**
+1. One probe judgment: the returned model is `claude-opus-5-5` (otherwise stop and report, no substitute); its input
+   size is what the charter plus the envelope come to (a much larger count would mean session text reached the
+   judge); the output parses.
+2. Calibration: at least 23 of the 25 pairs, or no verdict from this judge counts.
+
+**The rule, unchanged.** For each pair: gain at least +0.3, the 95 % interval excludes 0, hard fails not up. A pair
+with fewer than all its rows judged on both sides is INCOMPLETE and has no verdict.
+
+**How the result will be read (written before the data).**
+* These four already failed under astra. Scoring them again with another judge gives each a second chance, so one
+  pass among four by chance is plausible. A pass under Opus where astra said no is a disagreement between two
+  judges; it is reported to Evin and does not overturn astra's verdict by itself. Nothing is merged without him.
+* If a dev pair passes under Opus, its second gate is: reasoning, the holdout pair (`think-off-til-hold` against
+  `think-low-til-hold-typed`, aggregate only); Call Center, the confirmation half of I29 (final set, aggregate
+  only), which under astra was +0.18 (±0.25) and failed. Looking for work and Sales have no second set prepared.
+* Reasoning: a quality pass does not reopen the speed decision. Its cost stays next to it: first answer token
+  1.17 s without it, 2.49 s at low effort.
+* i6 carries three changes on one branch. A pass for one of them is not a reason to merge the branch whole.
+* The two judges' agreement on the same answers is reported with the verdicts (means, correlation, hard-fail
+  agreement).
+* Bias that stays: the answers are deepseek-flash's, but the notices and rules under test were written by a Claude
+  session and the second judge is a Claude model. Both arms of every pair share this.
