@@ -91,17 +91,25 @@ App branches:
   separate methods.
 * `218febf5`: a turn that carries a visual contract (a drawing, a chart, a table) is not put through the claim
   verifier, on the hotkey and the typed pass. Main's diagram wiring test requires one provider call on such a turn
-  and commits the answer as written; with the verifier running it was 149 of 158. On the dev set the diagram
-  resolver claims 3 of 360 questions (DJOB-011, DTECH-011, DTECH-012), one of them in a verified gate. One check
-  (an ordinary Team Meet turn with the design withheld) now counts answer calls and requires that no call carries
-  the design.
+  and commits the answer as written; with the verifier running it was 149 of 158. This is new production
+  behaviour: neither branch had it and the judge never scored it. Reverting it brings back those eight failures.
+  Estimated offline (the resolver and the planner called directly on each dev question, no design on the table;
+  not observed in the app): the resolver claims 3 of 360 dev questions (DJOB-011, DTECH-011, DTECH-012), one of
+  them in a verified gate. One assertion in the diagram feature's own test changed
+  (`tests/realtime-prompt/e2e-visual-catalog.cjs`, V19, an ordinary Team Meet turn with the design withheld): it
+  required exactly one provider call; it now requires one answer call and that no call, the verification
+  included, carries the design.
 * `0ff3f2e5`: the answer-relevance and scaffold-contamination suites switch the verifier off. They hand the
   provider a fixed queue of replies, and the verification call took the next one. These 4 failures were on
   `e000db4a` itself; that suite (`npm test`) had not been run on it.
 * Tests on the landed tree: type-checks (electron, premium, renderer) clean; `test:intelligence` 2,848 pass / 0
   fail; `test:llm` 5,940 / 0; `test:diagram` 1,105 + 226 / 0 and the wiring runs 78/78, 78/78, 158/158, 158/158;
-  harness 27 / 0; `npm test` 13,737 pass / 5 fail, the same 5 that fail on main in this checkout (4 need the model
-  weights that are missing from every checkout, 1 is `ActivationPolicyOrdering`).
+  harness 27 / 0; `npm test` 13,737 pass / 5 fail. Those five, run as single files on main (`5213d817`) in the
+  same checkout, fail the same way (4 need the model weights that are missing from every checkout, 1 is
+  `ActivationPolicyOrdering`); a full `npm test` was not run on main. `AdversarialNewInstall` E1 failed in the
+  single-file runs (on main too) and passed in the full run: flaky, and not from this work.
+* NOT run: `npm run build` (tsc + vite), any app launch, the renderer suites (`test:lib`, `test:components`;
+  nothing under `src/` changed), the Electron render checks of `test:diagram`, anything on Windows.
 * A full build output is 1.6 GB, 1.1 GB of it source maps; with under 2 GB free the suites were run against a
   build without maps (the build script run unchanged with `sourcemap: false`, from the scratchpad).
 
