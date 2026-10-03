@@ -2131,3 +2131,18 @@ with fewer than all its rows judged on both sides is INCOMPLETE and has no verdi
   agreement).
 * Bias that stays: the answers are deepseek-flash's, but the notices and rules under test were written by a Claude
   session and the second judge is a Claude model. Both arms of every pair share this.
+
+### The two gates, before any pair is judged (08:04Z)
+
+* **Probe.** The first probe judgment answered as `claude-opus-5-5` and parsed first time, but its input was 17,478
+  tokens where the charter and the envelope come to about 6,100. Cause: `advisorModel` in the user's Claude Code
+  settings, which safe mode keeps. The CLI gave the judge an `advisor` tool and the instruction to consult it
+  first, and one judgment became three model turns (message, advisor_message, message). Nothing of this session
+  reached the judge (asked to list its context, it reported the tool, an environment block and the account email;
+  no memory, no project instructions, no hook text), but that is not one judge call. Fixed in `astra/client.mjs`:
+  the setting is cleared for the judge's process only (`--settings {"advisorModel":""}`; the user's file is not
+  touched), and a judgment whose CLI result shows any turn other than `message` is refused and never cached. The
+  one cached judgment made with the advisor was deleted.
+* **Probe again:** returned model `claude-opus-5-5`, one turn, 6,619 input tokens (the CLI's own environment block
+  and account line are about 450 of them), parsed first time. Passes.
+* **Calibration:** 25 of 25 (need 23). Passes.

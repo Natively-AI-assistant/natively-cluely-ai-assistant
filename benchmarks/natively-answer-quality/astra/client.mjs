@@ -304,7 +304,11 @@ function fableSystemFile(system) {
 function runClaude(system, prompt, timeoutMs) {
   return new Promise((resolve) => {
     const t0 = Date.now();
-    const args = ['-p', '--model', JUDGE_MODEL, '--effort', CLI_EFFORT, '--safe-mode', '--tools', '', '--system-prompt-file', fableSystemFile(system), '--no-session-persistence', '--output-format', 'json'];
+    // advisorModel is a USER setting, which safe mode keeps: with it set, the CLI hands the judge an `advisor` tool and
+    // the instruction to consult it first, and a judgment became three model turns (measured 2026-10-03: message,
+    // advisor_message, message; 17.5k input tokens against 6.6k). Cleared for this process only, so a judgment is one
+    // call that sees the charter and the envelope; the user's settings file is not touched.
+    const args = ['-p', '--model', JUDGE_MODEL, '--effort', CLI_EFFORT, '--safe-mode', '--tools', '', '--settings', JSON.stringify({ advisorModel: '' }), '--system-prompt-file', fableSystemFile(system), '--no-session-persistence', '--output-format', 'json'];
     // CLAUDECODE etc. describe the parent session; the judge process gets none of it.
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^CLAUDE_CODE_|^CLAUDECODE$/.test(k)));
     const child = spawn('claude', args, { cwd: FABLE_DIR, env, stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' });
@@ -332,7 +336,11 @@ async function chatFable(messages, { retries = 3, timeoutMs = 300000 } = {}) {
     let j = null; try { j = JSON.parse(r.out); } catch { /* not JSON: an error line */ }
     const text = j ? String(j.result ?? '') : `${r.out}\n${r.err}`.trim();
     last = { status: r.code, text: text.slice(0, 600) };
-    if (r.code === 0 && j && j.is_error === false && typeof j.result === 'string' && j.result.trim()) {
+    // A judgment that consulted an advisor anyway is not this judge's: refused, never cached, tried again.
+    const turns = (j?.usage?.iterations ?? []).map((i) => i.type);
+    const advised = turns.some((t) => t !== 'message');
+    if (advised) last = { status: r.code, text: `the CLI ran extra model turns (${turns.join(', ')})` };
+    if (!advised && r.code === 0 && j && j.is_error === false && typeof j.result === 'string' && j.result.trim()) {
       const models = Object.keys(j.modelUsage ?? {});
       return {
         ok: true, content: j.result, requested_model: JUDGE_MODEL, returned_model: models.join(',') || null,
