@@ -237,20 +237,15 @@ exports.default = async function (context) {
     }
 
     const appOutDir = context.appOutDir;
-    const disguisedName = context.packager.appInfo.productFilename; // "corespeechd"
-    const brandName = 'Natively';
-    // After-pack renames corespeechd.app → Natively.app for Finder display
-    const appPath = path.join(appOutDir, `${brandName}.app`);
-
-    if (!fs.existsSync(appPath)) {
-        // Fallback: maybe rename hasn't happened yet (different hook order)
-        const fallbackPath = path.join(appOutDir, `${disguisedName}.app`);
-        if (fs.existsSync(fallbackPath)) {
-            console.log('[Ad-Hoc Signing] Using disguised bundle path (rename pending)');
-        }
-    }
-    // Use brandName for helper plist updates (helpers are inside the renamed bundle)
-    const appName = brandName;
+    // The bundle folder is named from productName (the darwin disguise alias,
+    // "corespeechd") — NOT the brand. appName is used as a path component to find
+    // the .app and its helper bundles, so it MUST be the on-disk folder name. The
+    // brand ("Natively") is applied separately as CFBundleDisplayName only (see
+    // enforceMainAppDisplayName) and the bundle is deliberately NEVER renamed to
+    // "Natively.app" (that would leak the brand into the on-disk path a proctoring
+    // scanner reads — the stealth-clean contract).
+    const appName = context.packager.appInfo.productFilename;
+    const appPath = path.join(appOutDir, `${appName}.app`);
 
     // ── Step 0: Verify packed native binaries match the target arch ──
     // MUST run before signing and before any early return (signed path returns
