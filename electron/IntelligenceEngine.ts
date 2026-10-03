@@ -4013,6 +4013,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
                         attachedCorpusTokens: _ctx.attachedCorpusTokens,
+                        profileWhole: _ctx.profileWhole,
                         attachedFileNames: _ctx.attachedFileNames,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
@@ -7220,6 +7221,8 @@ export class IntelligenceEngine extends EventEmitter {
         attachedFileNames: string[];
         /** referenceCorpusTokens(files): a small corpus is read whole (see mode-retrieval-port). */
         attachedCorpusTokens: number | null;
+        /** profileWholeInfo(docs): the résumé / JD are handed over whole (see profile-retrieval-port). */
+        profileWhole: { tokens: number; docs: number } | null;
         profileSourceCount: number;
         resolvedProfileSources: Array<{ role: string; id: string }>;
         extraAllowedSourceTypes: string[];
@@ -7262,13 +7265,14 @@ export class IntelligenceEngine extends EventEmitter {
             // site; additive, so a failure degrades to attachments only.
             let profilePort: unknown = null;
             let profileSourceCount = 0;
+            let profileWhole: { tokens: number; docs: number } | null = null;
             let resolvedProfileSources: Array<{ role: string; id: string }> = [];
             try {
                 if (policy.profileSources?.length) {
                     const { collectV3ProfileSources } = require('./services/knowledge/v3ProfileSources');
                     const collected = collectV3ProfileSources(this.llmHelper.getKnowledgeOrchestrator?.() ?? null);
                     if (collected.docs.length) {
-                        const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                        const { createProfileRetrievalPort, profileWholeInfo } = require('./context-intelligence/retrieval/profile-retrieval-port');
                         // Semantic arm over the documents' raw text (see v3ProfileSources).
                         const { buildProfileRawRetriever } = require('./services/knowledge/v3ProfileSources');
                         const profileRawRetriever = buildProfileRawRetriever(_mm, collected.docs, {
@@ -7284,6 +7288,7 @@ export class IntelligenceEngine extends EventEmitter {
                         });
                         if (profilePort) {
                             profileSourceCount = collected.docs.length;
+                            profileWhole = profileWholeInfo(collected.docs, policy.allowedSourceTypes, policy.profileSources);
                             resolvedProfileSources = collected.resolved;
                         }
                     }
@@ -7357,6 +7362,7 @@ export class IntelligenceEngine extends EventEmitter {
                 attachedSourceCount: _files.length,
                 attachedFileNames: (_files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
                 attachedCorpusTokens: referenceCorpusTokens(_files as Array<{ content?: string }>),
+                profileWhole,
                 profileSourceCount,
                 resolvedProfileSources,
                 extraAllowedSourceTypes: extraSourceTypes,
@@ -7444,6 +7450,7 @@ export class IntelligenceEngine extends EventEmitter {
                 modeName: ctx.modeName,
                 attachedSourceCount: ctx.attachedSourceCount,
                 attachedCorpusTokens: ctx.attachedCorpusTokens,
+                profileWhole: ctx.profileWhole,
                 attachedFileNames: ctx.attachedFileNames,
                 profileSourceCount: ctx.profileSourceCount,
                 resolvedProfileSources: ctx.resolvedProfileSources,
@@ -7991,6 +7998,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
                         attachedCorpusTokens: _ctx.attachedCorpusTokens,
+                        profileWhole: _ctx.profileWhole,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
                         // See ClassificationInput.inLiveMeeting (task 7b, issue

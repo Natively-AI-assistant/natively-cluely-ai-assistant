@@ -2008,12 +2008,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             let v3ProfilePort: unknown = null;
             let v3ProfileCounts = { profileResume: 0, profileJd: 0, profileFact: 0 };
             let v3ProfileResolved: Array<{ role: string; id: string }> = [];
+            let v3ProfileWhole: { tokens: number; docs: number } | null = null;
             try {
               if (policy.profileSources?.length) {
                 const { collectV3ProfileSources } = require('./services/knowledge/v3ProfileSources');
                 const collected = collectV3ProfileSources(llmHelper.getKnowledgeOrchestrator?.() ?? null);
                 if (collected.docs.length) {
-                  const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                  const { createProfileRetrievalPort, profileWholeInfo } = require('./context-intelligence/retrieval/profile-retrieval-port');
                   const v3ProfileRawRetriever = require('./services/knowledge/v3ProfileSources').buildProfileRawRetriever(mm, collected.docs, { tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'manual', meetingActive: () => appState.getIsMeetingActive() });
                   v3ProfilePort = createProfileRetrievalPort({
                     docs: collected.docs,
@@ -2024,6 +2025,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   });
                   if (v3ProfilePort) {
                     v3ProfileCounts = collected.counts;
+                    v3ProfileWhole = profileWholeInfo(collected.docs, policy.allowedSourceTypes, policy.profileSources);
                     v3ProfileResolved = collected.resolved;
                   }
                 }
@@ -2273,6 +2275,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               attachedSourceCount: files.length,
               attachedFileNames: (files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
               attachedCorpusTokens: referenceCorpusTokens(files as Array<{ content?: string }>),
+              profileWhole: v3ProfileWhole,
               profileSourceCount: v3ProfileCounts.profileResume + v3ProfileCounts.profileJd + v3ProfileCounts.profileFact,
               resolvedProfileSources: v3ProfileResolved,
               extraAllowedSourceTypes: extraSourceTypes,
