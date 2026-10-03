@@ -53,6 +53,23 @@ AQ_JUDGE=opus node evidence-rich/judge/judge-er.mjs --set base --runs evidence-r
 node evidence-rich/analyze.mjs --runs evidence-rich/results/er-dev-base --set base --judge opus
 ```
 
+### The report's tables
+
+```
+node evidence-rich/report/mode-table.mjs base dev cf holdout          # per-mode table, evidence-condition lines
+node evidence-rich/report/mode-slices.mjs e1 dev cf holdout           # Looking for work, Technical Interview, Sales, Call Center
+node evidence-rich/report/paired-builds.mjs base e1 holdout           # one build against another, same rows
+node evidence-rich/report/paired-delivery.mjs                         # delivered / not delivered, and their paired change
+node evidence-rich/report/claim-pass-effect.mjs base e1               # shown text against the streamed draft
+node evidence-rich/report/claim-pass-edits.mjs                        # cost of edits that drop a stated number
+node evidence-rich/report/claim-pass-gate.mjs e1 holdout              # E4, offline
+node evidence-rich/rail-offline.mjs --runs evidence-rich/results/er-dev-e1,evidence-rich/results/er-cf-e1   # E3, offline
+```
+
+`ER_JUDGE=astra` makes them read the canonical judge's files; the two judges are never pooled. Start reading at
+`docs/EVIDENCE-RICH-QUALITY.md`. State on 2026-10-03: E1 kept on `fix/er-pack-whole` (`bab77f33`), not on main; the
+gpt-6-astra chain is armed (`results/astra-chain.log`); raw run output is not committed.
+
 ## Judges
 
 * `gpt-6-astra` over AgentRouter: the canonical judge (`judge_status: canonical`).

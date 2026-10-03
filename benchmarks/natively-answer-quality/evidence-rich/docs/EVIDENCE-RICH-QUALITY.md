@@ -14,13 +14,16 @@ sent, so "retrieval" and "generation" are separated without a judge.
 
 ## 1. The answer
 
-**If users give Natively realistic Reference Files and Profile Intelligence, the kept build answers correctly
-about half the time, and the reason is not the answer model.** Every file is ingested without loss, but only about
-half of the facts a question needs are put into the prompt. When the fact is there, answers average 8.9; when it is
-not, 5.7. A one-constant change that hands a pack that fits over whole raised the share of needed facts in the
-prompt from 51 % to 96 % and the score from 7.4 to 8.2 on the blind set, with a faster first word on heard turns.
-Past that, the remaining loss is in the answer engine: the claim pass removes facts the files state, outdated
-files are sometimes treated as live, and the résumé is still served six passages at a time.
+**If users give Natively realistic Reference Files and Profile Intelligence, the kept build scores 7.4 of 10, well
+short of excellent, and two things hold it there.** First, every file is ingested without loss but only about half
+of the facts a question needs are put into the prompt: answers average 8.9 with the fact in the prompt and 5.7
+without. Second, even with the fact in the prompt the answers do not reach the bar (8.9 against a target of 9.2,
+and more than 5 % capped failures), which by the rule written before the data makes the verdict **A, answer
+engine** (section 2). A one-constant change that hands a pack that fits over whole raised the share of needed
+facts in the prompt from 51 % to 96 % and the score from 7.4 to 8.2 on the blind set, with a faster first word on
+heard turns. What is left after it is answer-engine work: the claim pass removes facts the files state, outdated
+files are sometimes preferred, absent facts get a neighbouring fact attached, and the résumé is still served six
+passages at a time.
 
 | | Baseline `e000db4a` | With the fix `bab77f33` |
 |---|---:|---:|
@@ -42,29 +45,56 @@ The targets are not met by either build. With the fix, four times as many rows h
 them is lower than the baseline's delivered mean, because the baseline's delivered rows were the easy ones
 (single-file facts: 9.28) and because the claim pass now edits many more correct answers (section 6).
 
-## 2. Verdict (the frame written before the data)
+## 2. Verdict (by the rule written before the data)
 
-The rule in `BASELINE-PLAN.md` names the bottleneck from D (mean with the evidence in the prompt), N (mean
-without), and s (share delivered).
+The rule is in `BASELINE-PLAN.md`, committed (`e66e92a7`) before any row was judged. It is read on dev +
+counterfactual and again on holdout. Verdict **A (answer engine)** applies when the mean of the rows with the
+evidence in the prompt is under 9.0, or when more than 5 % of those rows are hard fails. **B (retrieval)** needs
+that mean at 9.0 or more, under 90 % delivered, and a gap of 1.5 to the rows without the evidence.
 
-| | D | N | s | Hard fails where the needed evidence was not in the prompt (reference or profile) |
+| Baseline `e000db4a` | Mean, evidence in the prompt | Hard fails on those rows | Mean, evidence not in the prompt | Share in the prompt |
 |---|---:|---:|---:|---:|
-| Dev + counterfactual | 8.89 (±0.27) | 5.70 (±0.42) | 50 % | 44 of 61 |
-| Holdout | 8.95 (±0.40) | 5.60 (±0.54) | 46 % | 30 of 39 |
+| Dev + counterfactual | 8.89 (±0.27, n 129) | 7 of 129 (5.4 %) | 5.70 (±0.42, n 128) | 50 % |
+| Holdout | 8.95 (±0.40, n 66) | 5 of 66 (7.6 %) | 5.60 (±0.54, n 77) | 46 % |
 
-* By the letter of the rule this is **A (answer engine)**: D is under 9.0 on both sets. It is under by 0.11 and
-  0.05, inside its own interval. Every other condition of **B (retrieval)** holds: s is far under 90 %, N is more
-  than three points below D, and 74 of the 100 hard fails trace to evidence that never reached the prompt.
-* The two added checks make it a measurement. With the question held fixed and only its own files loaded, the
-  rows that had missed went 5.63 → 7.54 (+1.91 ±0.52), short of the 8.5 / +2.0 line I had set, because a long
-  single file is still served in passages (58 of 106 delivered). With the whole pack in the prompt (the fix) the
-  rows that had missed went 5.70 → 7.83 (+2.13 ±0.51) on dev + counterfactual and 5.60 → 7.79 (+2.19 ±0.67) on
-  holdout, and the rows that were already delivered did not move (0.00 ±0.33; holdout −0.36 ±0.57).
-* **So: D, mixed, and in this order.** Retrieval / context selection first (about two thirds of the loss). Then the
-  answer engine with the evidence in hand (claim pass, precedence, arithmetic). Then missing knowledge, which is
-  small in this corpus by construction and where Natively is mostly safe (7.45).
+**Verdict by the rule: A, answer-engine bottleneck.** Both of A's conditions are met on both sets. The mean misses
+9.0 by 0.11 and 0.05, which is inside its interval; the hard-fail condition does not depend on that margin. The
+fix confirms the letter instead of weakening it: with 96 % of the evidence delivered, the rows that have it
+average 8.48 and 7.7 % of them are hard fails.
+
+**My reading after the data (an interpretation, not the rule's output).** The rule can name retrieval only when
+the answer engine passes first, so it does not say where the largest loss is. Measured:
+
+* 74 of the baseline's 100 hard fails are on rows where the needed evidence was not in the prompt (reference or
+  profile); 26 are answer-engine failures of some kind.
+* Putting the pack in the prompt (the fix) moved the rows that had missed from 5.70 to 7.83 (+2.13 ±0.51) on dev +
+  counterfactual and from 5.60 to 7.79 (+2.19 ±0.67) on holdout. The rows that already had their evidence did not
+  move (0.00 ±0.33; holdout −0.36 ±0.57).
+* With the question held fixed and only its own files loaded (`supp-oracle-sources`), the rows that had missed
+  went 5.63 → 7.54 (+1.91 ±0.52), short of the 8.5 / +2.0 line I had set, because a long single file is still
+  served in passages (58 of 106 delivered).
+
+So the order of work I would take from this is: delivery first (built, section 9), then the answer engine, which
+is what the verdict names and what is left once delivery is fixed. Missing knowledge is third and small in this
+corpus by construction (missing-evidence rows 7.45).
+
+**Where the hard fails come from** (attributed by code from the prompt that was sent, `analyze.mjs`; dev +
+counterfactual + holdout):
+
+| Cause | Baseline (100) | With the fix (53) |
+|---|---:|---:|
+| Retrieval: needed fact not in the prompt | 55 | 2 |
+| Retrieval: a wrong file selected | 14 | 0 |
+| Profile evidence not in the prompt | 5 | 5 |
+| Answer generation: evidence in the prompt, answer wrong | 4 | 13 |
+| Precedence: outdated or draft source preferred, evidence in the prompt | 6 | 8 |
+| Missing knowledge: something invented where the evidence is absent | 11 | 17 |
+| Reasoning: arithmetic | 2 | 5 |
+| Role / surface: addressed to the wrong party | 3 | 3 |
 
 ## 3. Scores by mode (dev + counterfactual + holdout, 57 rows per mode)
+
+From `report/mode-table.mjs <build> dev cf holdout`.
 
 Baseline `e000db4a`:
 
@@ -99,6 +129,8 @@ With the fix `bab77f33`:
 A per-mode, per-condition cell holds 7–45 rows. Differences under about ±0.7 between two modes are not results.
 
 ## 4. Scores by evidence condition (all modes pooled, dev + counterfactual + holdout)
+
+From `report/mode-table.mjs` (the lines under the table) and `report/counterfactual-families.mjs`.
 
 | Condition | Baseline (n) | With the fix (n) |
 |---|---:|---:|
@@ -138,7 +170,8 @@ variant, usually the conflict or the absent one.
 ## 6. Why delivered evidence still falls short of 9.2: the claim pass
 
 The kept build's claim pass re-reads each spoken answer against the material and replaces it when it finds
-unsupported claims. Every replaced row's streamed draft was judged, so its effect is exact:
+unsupported claims. Every replaced row's streamed draft was judged, so its effect is exact (from
+`report/claim-pass-effect.mjs`, `report/claim-pass-edits.mjs`, `report/claim-pass-gate.mjs`):
 
 | Build, sets | Rows replaced | Shown − draft on replaced rows | … where the evidence was in the prompt | Whole effect on the mean | Hard fails without / with the pass |
 |---|---:|---:|---:|---:|---:|
@@ -161,7 +194,8 @@ do with it now is his.
 
 ## 7. The mode questions
 
-All figures: dev + counterfactual + holdout, both builds; (n; how many had the needed fact in the prompt).
+All figures: dev + counterfactual + holdout, both builds; (n; how many had the needed fact in the prompt). From
+`report/mode-slices.mjs <build> dev cf holdout`.
 
 **Looking for work:**
 
@@ -243,6 +277,44 @@ E1's costs: input tokens per turn 8,216 → 15,127 at the median on these packs;
 answers that attach a neighbouring fact to a question whose own fact is absent (hard fails on rows that need no
 document, dev + counterfactual 10 → 14; Lecture's missing-evidence rows fell from 7.5 to 5.5).
 
+## 9a. The twenty lowest-scoring answers that remain with the fix (dev + counterfactual only; holdout is never listed)
+
+From `analyze.mjs --runs er-dev-e1,er-cf-e1 --worst 20`. "In prompt" = every needed fact was in the prompt.
+
+| # | Case | Mode, condition | Score | In prompt | What went wrong |
+|---:|---|---|---:|---|---|
+| 1 | ER-D-TI-026 | Technical Interview, conflict | 1.3 | yes | Answered "what did you end up running" from the outdated v0.3 design (24 partitions) instead of the as-built 48; a third-person summary of the document |
+| 2 | ER-D-TI-024 | Technical Interview, single | 2.1 | no (résumé) | Claimed another company's on-call rotation from an onboarding checklist as the candidate's own; résumé figures not in the prompt |
+| 3 | ER-D-LFW-027 | Looking for work, conflict | 2.3 | no (résumé) | Used the outdated CV: migration "planned", 25 % expected saving; the current résumé's completed cutover and figures not in the prompt |
+| 4 | ER-D-LEC-027 | Lecture, missing | 2.6 | n/a | Asked about the economics final; gave the networks final's date and weight as if they were it |
+| 5 | ER-D-SALES-015 | Sales, multi-source | 2.6 | no | Yes/no plan question the files answer; deferred, asked the prospect questions, implied a feature on the wrong plan |
+| 6 | ER-CF-LEC-1D | Lecture, missing | 2.8 | n/a | Stated a weight and a date for the final that no loaded file holds |
+| 7 | ER-D-SALES-019 | Sales, conflict | 2.9 | yes | Gave the superseded 2025 discount limits as "the current list" |
+| 8 | ER-D-LEC-026 | Lecture, missing | 3.2 | n/a | "Yes, she did" about a topic absent from slides and notes, supported with real but unrelated details |
+| 9 | ER-CF-GEN-1C | General, conflict | 3.2 | yes | Flat "yes" attributed to the quote revision that says the opposite |
+| 10 | ER-D-LFW-020 | Looking for work, single | 3.6 | no (résumé) | Took the promotion date for the joining date; tenure wrong by a year |
+| 11 | ER-CF-GEN-1D | General, missing | 3.7 | n/a | Asserted hardware is included; no loaded file says so |
+| 12 | ER-D-CC-028 | Call Center, missing | 3.7 | n/a | Agent's private policy question answered with a customer line implying a replacement |
+| 13 | ER-D-SALES-009 | Sales, single | 3.8 | no | Deferred ("I'll confirm") on a limit the onboarding guide states |
+| 14 | ER-D-TEAM-015 | Team Meet, multi-source | 3.9 | yes | Arithmetic: seven open plus three new given as seven; the bar never stated |
+| 15 | ER-D-GEN-002 | General, single | 3.9 | yes | The reservation number was in the prompt; the settled text promises to look it up |
+| 16 | ER-D-LEC-003 | Lecture, single | 4.0 | yes | Said the notes give no count; they give 4 |
+| 17 | ER-D-LFW-010 | Looking for work, multi-source | 4.0 | no | Generic "why payments" answer; his stated reasons not in the prompt |
+| 18 | ER-D-CC-013 | Call Center, multi-source | 4.0 | yes | Never answered the credit question; asked for identification instead |
+| 19 | ER-D-GEN-016 | General, multi-source | 4.0 | yes | Never said who owes whom; a third-person status summary |
+| 20 | ER-D-GEN-028 | General, missing | 4.0 | n/a | Typed privately; answered with a line for someone else and a promise to fetch a booking |
+
+## 9b. Decisions this leaves with Evin
+
+| | Decision | What was measured |
+|---|---|---|
+| 1 | Land E1 (`fix/er-pack-whole`, `bab77f33`)? | Holdout 7.40 → 8.17; hard fails 39 → 15; heard first word 2,249 → 1,826 ms. Costs: about 7,000 more input tokens per turn on these packs; typed first word +123 ms; more wrong attribution on absent facts (Lecture missing-evidence rows 7.5 → 5.5). Reviewed but not executed on Windows; not run packaged |
+| 2 | The claim pass once files are in the prompt | It lowers the mean (−0.23 ±0.14 dev + counterfactual, −0.37 ±0.24 holdout) and still removes some capped failures (40 → 38, 21 → 15). Switching it off on those turns failed its rule (holdout hard fails 15 → 19). The open design question is a pass that cannot delete what the files state |
+| 3 | The 24,000-character cut of the material in the typed claim pass | With a whole pack in the prompt, the fact the answer rested on was past the cut on 17 of 39 typed rows checked (7.72 against 9.26) |
+| 4 | Hand the résumé and JD over whole (E2) | Needed profile facts reach the prompt in about a third of cases on either build; with them 9.2, without 6.6. Not built |
+| 5 | A way to mark a file as superseded | Conflict / stale rows are 6.4 on the kept build and 8.0 with the fix; Sales conflicts stay at 5.0 with both sheets in the prompt |
+| 6 | Streamed tool-call markup | One typed Sales turn (ER-D-SALES-019, baseline) streamed DeepSeek tool-call markup as answer text before it settled |
+
 ## 10. Performance (dev run of each build; median / 90th percentile)
 
 | | Baseline | With the fix |
@@ -303,7 +375,7 @@ packaging build; its latency is if anything overstated.
     neighbouring fact tempts (Lecture, Sales).
 22. **What should users upload?** Section 12.
 
-## 12. What Natively should ask users to provide (from the measured gains)
+## 12. Product configuration: what Natively should ask users to provide (from the measured gains)
 
 | Mode | Provide | Measured |
 |---|---|---|
@@ -342,3 +414,8 @@ infer that from dates.
 * Windows, a packaged build, and the text swap as a user sees it: not tested.
 * E1 ran while another session's packaging build was using the machine; the app and the supervisor were stopped
   from outside three times and resumed. No row was lost; latency comparability is weakened.
+* The streamed drafts are in the gpt-6-astra chain after the answers, so if its batch runs out first the
+  claim-pass findings (section 6, E3, E4) stay on the provisional judge alone.
+* The raw run output (`results/`, `judge/out/`, `judge/cache/`; about 110 MB) is not committed. It exists only in
+  the `aq-fix` worktree. Every table here is rebuilt from it by `analyze.mjs`, `pipeline-reports.mjs`,
+  `paired-er.mjs` and the scripts in `report/` (`ER_JUDGE=astra` reads the canonical judge's files instead).

@@ -5,7 +5,7 @@
 // Order: probe → calibration (35 of 38 needed, else stop: no batch is judged with an uncalibrated judge) →
 //        a 45-row sample already judged by Opus (the Astra/Opus agreement sample) → holdout of the baseline and of E1
 //        (blind, aggregates only) → dev rows whose evidence was required, both builds → counterfactual, both →
-//        the paired oracle-sources rows → isolation, both → the rest of dev.
+//        the streamed drafts of replaced rows → the paired oracle-sources rows → isolation, both → the rest of dev.
 // Everything goes to judge/out/base/<run>.astra.jsonl (never pooled with the .opus files) and results/astra-chain.log.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -48,6 +48,9 @@ const steps = [
   step('holdout, baseline (aggregates only)', 'er-holdout-base'), step('holdout, E1 (aggregates only)', 'er-holdout-e1'),
   step('dev, baseline: evidence conditions', 'er-dev-base', EV), step('dev, E1: evidence conditions', 'er-dev-e1', EV),
   step('counterfactual, baseline', 'er-cf-base'), step('counterfactual, E1', 'er-cf-e1'),
+  // the streamed drafts of the rows the claim pass replaced (what sections 6, E3 and E4 of the report rest on)
+  step('drafts: dev, E1', 'er-dev-e1', ['--draft']), step('drafts: holdout, E1', 'er-holdout-e1', ['--draft']), step('drafts: counterfactual, E1', 'er-cf-e1', ['--draft']),
+  step('drafts: dev, baseline', 'er-dev-base', ['--draft']), step('drafts: counterfactual, baseline', 'er-cf-base', ['--draft']),
   step('oracle-sources', 'er-os-base'),
   step('isolation, baseline', 'er-iso-base'), step('isolation, E1', 'er-iso-e1'),
   step('dev, baseline: the rest', 'er-dev-base'), step('dev, E1: the rest', 'er-dev-e1'),
