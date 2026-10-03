@@ -106,10 +106,15 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
 * `supp-oracle-sources` paired with the baseline: rows that had missed 5.63 → 7.54 (+1.91 ±0.52), under the 8.5 /
   +2.0 line set for it; rows already delivered +0.16 (±0.29).
 
-## 16:38–16:45 — report, figures re-derived
+## 16:38–16:50 — report, figures re-derived
 
 * `EVIDENCE-RICH-QUALITY.md` written. Its figures were recomputed from the row files before the commit; five that
   had been carried from notes were wrong and were corrected (total rows 1,341 not 1,541; recorded facts 1,776 not
   3,300; outdated-value-only cases with E1 1 of 68, not 0; two slice means that mixed sets).
 * gpt-6-astra: still not judged anything in this benchmark. The chain (`judge/astra-chain.mjs`) is left armed for
   the next batch window; its output goes to `judge/out/*/…astra.jsonl` and is never pooled with the Opus files.
+* Verdict stated by the rule committed before the data: A (answer engine), on both sets and on both of A's
+  conditions. The first draft of the report had called it "mixed"; that was my reading, not the rule's output, and
+  it is now a separate, labelled paragraph.
+* The scripts behind the report's tables moved from the session's scratch folder into `report/`, with
+  `ER_JUDGE=opus|astra`. The chain now also judges the streamed drafts.
