@@ -55,3 +55,51 @@ Fixes only for a root cause the baseline shows, each with its keep/revert rule w
 rows are judged, on a branch from `e000db4a`, never landed on main. If delivered rows already meet the targets and
 the remaining loss is evidence that never reaches the prompt or was never supplied, the result is the finding and
 no answer-prompt change is made.
+
+---
+
+# Addendum, 2026-10-03 14:50 UTC — three checks added after the dev rows were judged
+
+Written after the dev set (270 rows) and the counterfactual and isolation sets had been judged by the provisional
+judge, and before any of the three checks below was run or judged. What had been seen: dev overall 7.47; 8.98
+(±0.27, n 101) on rows whose needed evidence was in the prompt, 5.69 (±0.45, n 111) on rows where it was not; 36 of
+51 hard fails attributed to retrieval or a wrong file. The comparison "delivered vs not delivered" is between
+different questions (delivered rows are more often single-source), so it is a correlation. These checks turn it
+into a measurement.
+
+## 1. The question held fixed: `supp-oracle-sources`
+
+Every dev case whose oracle names a reference file is asked again with only the files its oracle names loaded in
+its mode (223 cases, built by `build-supp.mjs` from the frozen dev set; same question, oracle, profile state and
+upload path). Paired by case id with the baseline dev row.
+
+* P = the cases that were evidence-required and NOT delivered in the baseline.
+* **Retrieval is the cause** if, on P, the mean under `supp-oracle-sources` is at least 8.5 and the paired gain is
+  at least +2.0 with a 95 % interval that excludes 0.
+* **The answer engine is the cause** if, on P, the needed facts are in the prompt in at least 90 % of the cases under
+  `supp-oracle-sources` and the mean stays under 8.0.
+* Anything else is mixed and is reported with both numbers.
+* Control: on the cases delivered in both runs the paired difference should be within ±0.4. A larger change means
+  the smaller file set changes answers for another reason, and the read on P is then discounted by it.
+* Whether the corpus was read whole (≤ 1,400 tokens) or retrieved is recorded per row and reported for both.
+
+## 2. What the claim pass did to the drafts
+
+Among the dev rows that scored low although the evidence was in the prompt, several had a correct streamed draft
+that the claim pass replaced with a worse text (a computed figure removed; an outdated file presented as a live
+conflict). Measurement only, no change to the pass: every row of dev, counterfactual and isolation whose shown text
+differs from the streamed draft gets its DRAFT judged by the same judge, and "shown minus draft" is reported paired,
+overall and for conflict / stale cases.
+
+## 3. What counts as a leak
+
+A profile or cross-mode leak is counted only when the other profile's or the other mode's text was in the prompt
+that was sent. An answer that states such a fact with none of it in the prompt is an invented claim and is counted
+as fabrication. (Observed before this was written: the one `wrong_profile_used` flag in the isolation set,
+ER-ISO-015, had none of profile B's text in its prompt; its needle strings "NVDA" / "VoiceOver" are generic terms,
+an item defect of v1 that is reported, not edited.)
+
+## Latency
+
+Only the dev run is quoted for latency. The counterfactual, isolation and holdout runs overlapped with judge
+processes on the same machine.
