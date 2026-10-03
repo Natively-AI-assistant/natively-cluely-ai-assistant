@@ -219,15 +219,13 @@ test('runHook(darwin): DMG missing the framework binary → throws (build fails)
   );
 });
 
-test('runHook(darwin): codesign failure is advisory, not fatal (ad-hoc seal quirk)', async () => {
-  const built = [];
-  const warnings = [];
+test('runHook(darwin): codesign --verify failure is FATAL (invalid sig SIGTRAPs on macOS 27)', async () => {
   const view = healthyMountView('/out', '/mnt/corespeechd');
-  const deps = darwinDeps(view, { built, codesignOk: false });
-  deps.warn = (m) => warnings.push(m);
-  const result = await runHook({ artifactPaths: ['/out/x-mac.zip'] }, deps);
-  assert.deepEqual(result, ['/out/corespeechd-2.9.1-arm64.dmg']); // still succeeds
-  assert.ok(warnings.some((w) => /codesign --verify reported/.test(w)), warnings.join('; '));
+  const deps = darwinDeps(view, { codesignOk: false });
+  await assert.rejects(
+    () => runHook({ artifactPaths: ['/out/x-mac.zip'] }, deps),
+    /codesign --verify failed|FATAL/
+  );
 });
 
 test('runHook(darwin): detach runs even when verification throws nothing (cleanup)', async () => {

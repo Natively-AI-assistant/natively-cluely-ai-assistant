@@ -23,10 +23,10 @@
 //      leaks multi-GB scratch images. `hdiutil create` has no mount/AppleScript
 //      dance, so it is robust here.
 //   3. The produced DMG is mounted and verified: the framework binary must be
-//      present and non-empty (fatal if not). `codesign --verify` is advisory only
-//      — an ad-hoc dev build legitimately carries an imperfect seal (ad-hoc-sign.js
-//      re-signs .node files after --deep), which does not stop a local launch; the
-//      framework-binary check is the real gate.
+//      present and non-empty, AND `codesign --verify --deep` must pass. Both are
+//      FATAL — an invalid signature makes macOS 27 ignore the app's entitlements and
+//      SIGTRAP the main process at ElectronMain (V8 cannot set up JIT). A correctly
+//      signed ad-hoc build (scripts/ad-hoc-sign.js, no post---deep re-sign) passes.
 //
 // CROSS-PLATFORM: the DMG build + framework check are macOS-only (behind
 // platform==='darwin'). Windows has no Electron Framework bundle; its branch
@@ -183,13 +183,15 @@ async function runHook(buildResult, deps) {
         const probs = macAppProblems(appInDmg, view);
         for (const p of probs) problems.push(`${path.basename(outDmg)} → ${appName}: ${p}`);
         if (probs.length === 0) {
-          // Advisory only: an ad-hoc dev build's seal may be imperfect; that does not
-          // stop a local launch, and the framework-binary check above is the real gate.
+          // FATAL: an invalid signature (e.g. a sealed resource modified after the
+          // --deep seal — see scripts/ad-hoc-sign.js) makes macOS 27 ignore the app's
+          // entitlements and SIGTRAP the main process at ElectronMain (V8 cannot set up
+          // JIT). A correctly signed ad-hoc build passes `codesign --verify --deep`.
           const cs = deps.verifyCodesign(appInDmg);
           if (!cs.ok) {
-            warn(
-              `[verify-runtime] ${path.basename(outDmg)}: codesign --verify reported "${cs.message}" ` +
-                '(non-fatal for an ad-hoc dev build; the Electron Framework binary is present and the app will launch).'
+            problems.push(
+              `${path.basename(outDmg)}: codesign --verify failed — "${cs.message}" ` +
+                '(an invalid signature makes macOS 27 ignore entitlements and SIGTRAP the app at launch)'
             );
           }
         }

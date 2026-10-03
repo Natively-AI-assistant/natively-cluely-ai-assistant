@@ -135,6 +135,22 @@ test('macOS Dock/Finder show the brand while the executable stays disguised', ()
   }
 });
 
+test('ad-hoc-sign.js does NOT brand the MAIN app CFBundleName (Electron finds its helper by it)', () => {
+  // THE v2.9.1 LAUNCH CRASH THIS GUARDS: enforceMainAppDisplayName in ad-hoc-sign.js set
+  // the main app's CFBundleName to "Natively". Electron/Chromium derives its helper app
+  // name from the main bundle's CFBundleName, so it looked for "Natively Helper.app" — but
+  // the helpers are "<alias> Helper.app" — and the main process aborted at launch with
+  // electron_main_delegate_mac.mm "Unable to find helper app" (SIGTRAP at ElectronMain).
+  // CFBundleName must stay the disguise alias; only CFBundleDisplayName carries the brand.
+  const src = fs.readFileSync(path.join(repoRoot, 'scripts', 'ad-hoc-sign.js'), 'utf8');
+  assert.ok(
+    !/Set :CFBundleName ['"]Natively/.test(src),
+    'scripts/ad-hoc-sign.js must NOT set the MAIN app CFBundleName to the brand ("Natively"): ' +
+      'Electron locates its helper app by CFBundleName, so it must stay the disguise alias. ' +
+      'Brand the main app only via CFBundleDisplayName.'
+  );
+});
+
 test('committed productName stays the disguise alias (release builds use it verbatim)', () => {
   // THE REGRESSION THIS GUARDS: release-macos.yml invokes electron-builder
   // DIRECTLY (it hand-rolls stages to dodge a rimraf race, so package-app.js's

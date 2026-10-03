@@ -155,7 +155,16 @@ const HELPER_SUFFIXES = ['', ' (GPU)', ' (Renderer)', ' (Plugin)'];
 /**
  * Re-assert the BRAND display name on the MAIN app's Info.plist so Finder/Dock/Spotlight
  * show "Natively" while the executable/bundle stays "corespeechd" (the disguise).
- * This ensures CFBundleDisplayName="Natively" wins over the productName-based bundle name.
+ *
+ * ONLY CFBundleDisplayName is set. CFBundleName MUST stay the disguise alias
+ * (corespeechd, from productName): Electron/Chromium derives the helper app name from the
+ * main bundle's CFBundleName, so branding it makes Electron look for "Natively Helper.app"
+ * — which does not exist (the helpers are "corespeechd Helper.app") — and the main process
+ * aborts at launch (electron_main_delegate_mac.mm "Unable to find helper app" → SIGTRAP at
+ * ElectronMain). This was the v2.9.1 launch crash. The app still renames itself to
+ * "Natively" at runtime via app.setName, so the menu-bar name is branded regardless.
+ * (scripts/disguise-name.cjs and packaging-config.test.mjs both require CFBundleName to
+ * stay the alias.)
  */
 function enforceMainAppDisplayName(appOutDir, appName) {
     const mainAppPath = path.join(appOutDir, `${appName}.app`);
@@ -167,11 +176,12 @@ function enforceMainAppDisplayName(appOutDir, appName) {
     }
 
     try {
-        // CFBundleDisplayName = what Finder/Dock/Spotlight shows (BRAND)
+        // CFBundleDisplayName = what Finder/Dock/Spotlight shows (BRAND). Safe to brand.
         execSync(`/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Natively'" "${plistPath}"`, { stdio: 'pipe' });
-        // CFBundleName = fallback for older macOS / Dock tile (BRAND)
-        execSync(`/usr/libexec/PlistBuddy -c "Set :CFBundleName 'Natively'" "${plistPath}"`, { stdio: 'pipe' });
-        console.log('[Main Display] Main app CFBundleDisplayName/CFBundleName set to "Natively"');
+        // Do NOT touch CFBundleName — it must stay the disguise alias so Electron finds
+        // "<alias> Helper.app". Setting it to the brand is the "Unable to find helper app"
+        // launch crash.
+        console.log('[Main Display] Main app CFBundleDisplayName set to "Natively" (CFBundleName left as the disguise alias)');
     } catch (err) {
         console.warn('[Main Display] PlistBuddy warning for main app:', err.message);
     }
@@ -285,8 +295,10 @@ exports.default = async function (context) {
     // ── Step 2a: Sign the main app bundle with --deep first ──
     // --deep recurses into nested Mach-O binaries (frameworks, helpers, .node files).
     // It signs them with --sign - only (no custom entitlements on nested items).
-    // We MUST do this before signing the .node files with entitlements, because
-    // --deep would otherwise overwrite the entitlement-signed .node files.
+    // Sign the whole bundle ONCE, with --deep. The entitlements attach to the
+    // top-level executable (what V8's JIT needs); --deep ad-hoc-signs the nested
+    // frameworks, helpers, dylibs and .node. NOTHING is re-signed after this, so the
+    // bundle's seal stays valid.
     console.log(`[Ad-Hoc Signing] Signing main app ${appPath} with entitlements...`);
 
     try {
@@ -301,26 +313,19 @@ exports.default = async function (context) {
         throw error;
     }
 
-    // ── Step 2b: Re-sign .node binaries with entitlements AFTER --deep ──
-    // codesign --deep re-signs nested .node binaries without entitlements (it only
-    // applies entitlements to the top-level item). We re-sign them here AFTER --deep
-    // so the entitlements (JIT / library-validation) are preserved on the native
-    // module binary. (Screen/system-audio access is pure TCC — no entitlement.)
-    const unpackedNativeDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'native-module');
-    if (fs.existsSync(unpackedNativeDir)) {
-        const files = fs.readdirSync(unpackedNativeDir);
-        for (const file of files) {
-            if (file.endsWith('.node')) {
-                const nodePath = path.join(unpackedNativeDir, file);
-                console.log(`[Ad-Hoc Signing] Re-signing ${file} with entitlements (post --deep)...`);
-                try {
-                    execSync(`codesign --force ${hardenedOpt}--entitlements "${entitlementsPath}" --sign - "${nodePath}"`, { stdio: 'inherit' });
-                } catch (error) {
-                    console.error(`[Ad-Hoc Signing] Failed to sign ${file}:`, error);
-                }
-            }
-        }
-    }
+    // ── Do NOT re-sign the .node binaries after --deep (removed 2026-10-03). ──
+    // The previous code re-signed Contents/Resources/app.asar.unpacked/native-module/*.node
+    // with `codesign --force` AFTER the --deep bundle seal, to put JIT/library-validation
+    // entitlements on them. But that MODIFIES the files whose hashes --deep just sealed
+    // into the app's CodeResources, so the app's own signature becomes invalid
+    // ("a sealed resource is missing or invalid"). On macOS 27's stricter code-signing
+    // enforcement the invalid signature makes the app's entitlements be ignored and the
+    // main process SIGTRAPs at ElectronMain (V8 cannot set up JIT) — the v2.9.1
+    // post-framework-fix launch crash. The native .node addons are not V8 and need no JIT
+    // entitlement; under an ad-hoc, non-hardened-runtime build there is no library
+    // validation to disable either. --deep already ad-hoc-signs them, which is enough.
+    // Verified on macOS 27: without this step `codesign --verify --deep --strict` passes
+    // and the app launches cleanly.
 };
 
 // Exported for scripts/__tests__ — electron-builder only ever calls the default
