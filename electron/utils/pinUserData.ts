@@ -1,13 +1,7 @@
-// Pin the packaged app's userData to the historical "Natively" folder, BEFORE
-// any module reads app.getPath('userData') at import time.
-//
-// The on-disk app identity is disguised at build time (productName, sourced from
-// scripts/disguise-name.cjs → bundle/executable/helpers on macOS, exe + version
-// resource on Windows) so Activity Monitor, proc_pidpath and Task Manager never
-// show "Natively". The user profile, however, must stay in the historical
-// "Natively" folder — otherwise the first launch of a disguised build would look
-// in "~/…/<disguise name>" (e.g. corespeechd) and orphan every existing user's
-// settings, transcripts and credentials.
+// Pin the packaged app's userData to the disguise-named profile dir, BEFORE
+// any module reads app.getPath('userData') at import time. First launch after
+// the rename migrates the historical "Natively" folder (atomic rename —
+// cannot half-complete); every later launch is a no-op.
 //
 // WHY A SEPARATE MODULE (not an inline statement in main.ts): ES imports are
 // hoisted and evaluated in source order, and several modules read
@@ -21,10 +15,33 @@
 //
 // Packaged only: a dev instance already resolves to the npm name ("natively"),
 // which is the same case-insensitive folder. The NATIVELY_AGENT_USER_DATA
-// override is applied later, at main.ts module scope, and must still win in dev.
+// override is applied later, at main.ts module scope (dev only), and must
+// still win in dev.
+//
+// Migration safety contract lives in ./migrateUserData.ts — read it before
+// touching this file. Short version: atomic rename, never throws (aborts to
+// the legacy dir = today's pinned behavior), defers when an old-version
+// process is observed, never deletes anything.
 import { app } from 'electron';
+import fs from 'node:fs';
 import path from 'path';
+import { runProfileMigration } from './migrateUserData';
 
 if (app.isPackaged) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'Natively'));
+  const { dir } = runProfileMigration({
+    platform: process.platform,
+    isPackaged: true,
+    appDataDir: app.getPath('appData'),
+    join: path.join,
+    fs: {
+      existsSync: (p) => fs.existsSync(p),
+      readdirSync: (p) => fs.readdirSync(p).map(String),
+      renameSync: (o, n) => fs.renameSync(o, n),
+      rmdirSync: (p) => fs.rmdirSync(p),
+      writeFileSync: (p, d) => fs.writeFileSync(p, d),
+    },
+  });
+  if (dir) {
+    app.setPath('userData', dir);
+  }
 }

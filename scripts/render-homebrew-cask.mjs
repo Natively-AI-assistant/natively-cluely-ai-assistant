@@ -117,9 +117,16 @@ function renderCask({ tag, version, sha }) {
 
   # Paths are derived from package.json "name" (natively), NOT the "Natively"
   # product name, because that is what Electron's app.getName() returns and
-  # therefore what app.getPath('userData'|'logs'|'cache') resolves to. The
+  # therefore what app.getPath('userData'|'logs'|'cache') resolves to — EXCEPT
+  # userData, which the packaged app pins and migrates to the disguise name
+  # (see electron/utils/migrateUserData.ts). Both the historical "Natively"
+  # and the post-migration "corespeechd" profile dirs are zapped so uninstall
+  # is clean on either side of the migration (and on case-sensitive volumes,
+  # where the two casings are distinct dirs). The
   # preference domain uses build.appId instead. Verified against a real install.
   zap trash: [
+    "~/Library/Application Support/corespeechd",
+    "~/Library/Application Support/Natively",
     "~/Library/Application Support/natively",
     "~/Library/Caches/natively",
     "~/Library/Caches/natively-updater",

@@ -115,3 +115,33 @@
   `corespeechd Helper (Renderer)`; main plist holds exactly the 5 intended
   "Natively" strings (DisplayName + 4 usage strings), helper plist zero.
   extendInfo override confirmed to win over the builder default.
+
+## 2026-10-03 | lead | act (round 5: Final Round runtime-stealth ports)
+- action: port FR StealthService mechanics — 500ms idempotent content-protection loop (utils/stealthProtection.ts, injectable scheduler), show/restore per-window guards, creation-hook + _applyDisguise attach, start on toggle-ON/persisted-ON startup, stop on toggle-off
+- command_or_ref: typecheck:electron clean; build:electron OK; 72/72 focused tests (new stealthProtection 8/8)
+- result_summary: loop inert unless undetectable; all reads at event/tick time; timers unref'd; stealth-default-ON explicitly declined (keep OFF)
+- artifacts: [electron/utils/stealthProtection.ts, electron/utils/__tests__/stealthProtection.test.mjs, electron/main.ts]
+- evidence_ids: []
+- decision_delta: [protection_loop_ported, show_restore_guards, stealth_default_stays_off]
+- carry_forward_refs: [REVERSE_ENGINEERING_REPORT_CLUERY_PARAKEET.md §13/§15]
+- next: user-driven process title (takeaway #1) if wanted
+
+## 2026-10-03 | lead | act (round 5: profile-dir migration off the brand)
+- action: migrate packaged userData `Natively` → per-platform disguise dir (corespeechd/audiodg) once, atomically; closes the `--user-data-dir` argv leak HackerEarth v3.1.1 reads
+- command_or_ref: new electron/utils/migrateUserData.ts (pure decide + runner, injectable fs/scan) rewired through pinUserData.ts pre-lock; 24 contract tests incl. live ps-scanner smoke + real-fs end-to-end dry run
+- result_summary: atomic renameSync (cannot half-complete); never throws (aborts to legacy = today's pin); defers on live old main process (ps basename / tasklist image, helpers excluded) or scan failure; both-dirs adopts new; receipt marker; Keychain untouched by folder move (salt travels, key signature-bound, canary backstops); cleanup scripts + cask zap + docs cover both dirs
+- artifacts: [electron/utils/migrateUserData.ts, electron/utils/pinUserData.ts, electron/utils/__tests__/profileMigration.test.mjs, scripts/*clean*.sh, scripts/render-homebrew-cask.mjs, docs/homebrew-cask.md, report/findings.md]
+- evidence_ids: []
+- decision_delta: [profile_migrated_atomically, argv_leak_closed]
+- carry_forward_refs: [REVERSE_ENGINEERING_REPORT_CLUERY_PARAKEET.md §17.4/§17.5]
+- next: packaged-build verify with a real legacy profile; live HackerRank/SmartBrowser re-test
+
+## 2026-10-03 | lead | fix (full-suite fallout: funnel lifecycle invariant)
+- action: full npm test (13761 tests) surfaced 7 fails; bisected via git-stash pristine run — 6 pre-existing/environmental (activation-policy ordering, LocalEmbedding catalog + real-model worker needing on-disk .onnx assets absent on this machine, smoke adversarial markers, RetrievalScaleLexical todo), 1 real regression from the earlier stealth-networking work: setUndetectable toggle adds a second funnel stop site (toggle-ON silences egress) that the source-grep invariant pinned at 1
+- command_or_ref: node --test FunnelIpc2026_10_01 (22/22 after fix); affected-set re-run 143/143
+- result_summary: updated the invariant to pin the exact intended lifecycle (1 launch-start, 1 toggle-off restart, 1 toggle-on stop, 1 quit stop) — stricter, not weaker; meetingStarted/Ended single-call assertions now execute and pass
+- artifacts: [electron/services/__tests__/FunnelIpc2026_10_01.test.mjs]
+- evidence_ids: []
+- decision_delta: [funnel_invariant_updated_not_weakened]
+- carry_forward_refs: []
+- next: packaged-build verify with a real legacy profile; live HackerRank/SmartBrowser re-test

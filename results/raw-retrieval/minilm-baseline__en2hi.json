@@ -1,0 +1,1432 @@
+{
+ "model_id": "minilm-baseline",
+ "repo": "Xenova/all-MiniLM-L6-v2",
+ "revision": "751bff37182d3f1213fa05d7196b954e230abad9",
+ "license": "apache-2.0",
+ "dimensions": 384,
+ "pooling": "mean",
+ "query_prefix": "",
+ "document_prefix": "",
+ "space": "local:xenova/all-minilm-l6-v2:384",
+ "runtime": "transformers.js 3.8.1 / onnxruntime-node (worker_threads)",
+ "quantization": "q8",
+ "index": {
+  "file": "natively_refs__minilm-baseline__384d__v1__en2hi.sqlite",
+  "backend": "sqlite-vec vec0",
+  "distance_metric": "cosine",
+  "rows": 872,
+  "native": true
+ },
+ "corpus": {
+  "chunks": 872,
+  "queries": 56,
+  "sha256": "9f531ff2778df45ab68495233ff22a8bbf5c3ce308121d5184c88e95aaa565ef",
+  "chunkerVersion": 4
+ },
+ "indexing": {
+  "totalMs": 39796,
+  "chunksPerSec": 21.91,
+  "batchP50Ms": 319,
+  "batchP95Ms": 2574
+ },
+ "query_latency": {
+  "p50Ms": 4,
+  "p95Ms": 6
+ },
+ "memory_peak_rss_mb": 151,
+ "overall": {
+  "n": 56,
+  "r1": 0.0179,
+  "r5": 0.0179,
+  "r10": 0.0179,
+  "mrr": 0.0179,
+  "ndcg": 0.0054
+ },
+ "candidate_recall_at_pool": 0.1607,
+ "reranked": {
+  "n": 56,
+  "r1": 0.0179,
+  "r5": 0.0357,
+  "r10": 0.0357,
+  "mrr": 0.0238,
+  "ndcg": 0.0119
+ },
+ "rerank": {
+  "attempted": 56,
+  "succeeded": 56,
+  "poolSize": 50
+ },
+ "by_track": {
+  "text": {
+   "n": 37,
+   "r1": 0,
+   "r5": 0,
+   "r10": 0,
+   "mrr": 0,
+   "ndcg": 0
+  },
+  "code": {
+   "n": 2,
+   "r1": 0,
+   "r5": 0,
+   "r10": 0,
+   "mrr": 0,
+   "ndcg": 0
+  },
+  "negative": {
+   "n": 17,
+   "r1": 0.0588,
+   "r5": 0.0588,
+   "r10": 0.0588,
+   "mrr": 0.0588,
+   "ndcg": 0.0178
+  }
+ },
+ "code_r10": 0,
+ "cross_project_r10": null,
+ "perQuery": [
+  {
+   "query_id": "q0001",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0002",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0003",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0022",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0023",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0031",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0038",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0039",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0040",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0053",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0054",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0055",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0058",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0063",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0069",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0073",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0119",
+   "track": "code",
+   "categories": [
+    "code"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0120",
+   "track": "code",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0138",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0139",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0346",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0347",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0349",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0356",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0365",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 1,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0369",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0373",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0378",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0379",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0380",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.4103915680233244
+   }
+  },
+  {
+   "query_id": "q0383",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0384",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0392",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0403",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0404",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0405",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0409",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0410",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0426",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.2558209594125084
+   }
+  },
+  {
+   "query_id": "q0427",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0469",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0470",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0472",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0473",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0477",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0485",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0492",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0499",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0500",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0510",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0511",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0626",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0627",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0628",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0629",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0647",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "multilingual",
+    "semantic"
+   ],
+   "embedMs": 2,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  }
+ ]
+}

@@ -1,0 +1,615 @@
+{
+ "generatedAt": "2026-09-22T13:58:40.771Z",
+ "mixedScriptQuestions": 51,
+ "pureHindiQuestions": 69,
+ "models": {
+  "multilingual-e5-small": {
+   "hi2en": {
+    "n": 120,
+    "r1": 0.0833,
+    "r5": 0.2833,
+    "r10": 0.4333,
+    "mrr": 0.1724,
+    "reranked_r10": 0.2167
+   },
+   "hi2en-ctl": {
+    "n": 120,
+    "r1": 0.0917,
+    "r5": 0.2917,
+    "r10": 0.425,
+    "mrr": 0.1783,
+    "reranked_r10": 0.5667
+   },
+   "en2hi": {
+    "n": 56,
+    "r1": 0.0357,
+    "r5": 0.125,
+    "r10": 0.2321,
+    "mrr": 0.075,
+    "reranked_r10": 0.0714
+   },
+   "en2hi-ctl": {
+    "n": 56,
+    "r1": 0.2857,
+    "r5": 0.5,
+    "r10": 0.625,
+    "mrr": 0.3831,
+    "reranked_r10": 0.6786
+   },
+   "crossingCost": {
+    "hi2en": {
+     "r10": {
+      "n": 120,
+      "delta": 0.0083,
+      "ci": [
+       -0.0667,
+       0.0833
+      ],
+      "verdict": "noise"
+     },
+     "mrr": {
+      "n": 120,
+      "delta": -0.006,
+      "ci": [
+       -0.0508,
+       0.0411
+      ],
+      "verdict": "noise"
+     },
+     "rerankedR10": {
+      "n": 120,
+      "delta": -0.35,
+      "ci": [
+       -0.45,
+       -0.25
+      ],
+      "verdict": "worse"
+     },
+     "pureHindiR10": {
+      "n": 69,
+      "delta": -0.0145,
+      "ci": [
+       -0.1159,
+       0.087
+      ],
+      "verdict": "noise"
+     },
+     "mixedScriptR10": {
+      "n": 51,
+      "delta": 0.0392,
+      "ci": [
+       -0.0392,
+       0.1373
+      ],
+      "verdict": "noise"
+     }
+    },
+    "en2hi": {
+     "r10": {
+      "n": 56,
+      "delta": -0.3929,
+      "ci": [
+       -0.5179,
+       -0.2679
+      ],
+      "verdict": "worse"
+     },
+     "mrr": {
+      "n": 56,
+      "delta": -0.3081,
+      "ci": [
+       -0.4118,
+       -0.2144
+      ],
+      "verdict": "worse"
+     },
+     "rerankedR10": {
+      "n": 56,
+      "delta": -0.6071,
+      "ci": [
+       -0.7321,
+       -0.4643
+      ],
+      "verdict": "worse"
+     }
+    }
+   }
+  },
+  "qwen3-embedding-0.6b": {
+   "hi2en": {
+    "n": 120,
+    "r1": 0.0167,
+    "r5": 0.05,
+    "r10": 0.0917,
+    "mrr": 0.0311,
+    "reranked_r10": null
+   },
+   "hi2en-ctl": {
+    "n": 120,
+    "r1": 0.0667,
+    "r5": 0.1917,
+    "r10": 0.2833,
+    "mrr": 0.1154,
+    "reranked_r10": null
+   },
+   "crossingCost": {
+    "hi2en": {
+     "r10": {
+      "n": 120,
+      "delta": -0.1917,
+      "ci": [
+       -0.2667,
+       -0.1167
+      ],
+      "verdict": "worse"
+     },
+     "mrr": {
+      "n": 120,
+      "delta": -0.0843,
+      "ci": [
+       -0.13,
+       -0.0429
+      ],
+      "verdict": "worse"
+     },
+     "rerankedR10": {
+      "n": 120,
+      "delta": 0,
+      "ci": [
+       0,
+       0
+      ],
+      "verdict": "noise"
+     },
+     "pureHindiR10": {
+      "n": 69,
+      "delta": -0.2754,
+      "ci": [
+       -0.3913,
+       -0.1739
+      ],
+      "verdict": "worse"
+     },
+     "mixedScriptR10": {
+      "n": 51,
+      "delta": -0.0784,
+      "ci": [
+       -0.1765,
+       0.0196
+      ],
+      "verdict": "noise"
+     }
+    }
+   }
+  },
+  "arctic-l-v2": {
+   "hi2en": {
+    "n": 120,
+    "r1": 0.1,
+    "r5": 0.2833,
+    "r10": 0.4333,
+    "mrr": 0.1798,
+    "reranked_r10": null
+   },
+   "hi2en-ctl": {
+    "n": 120,
+    "r1": 0.1417,
+    "r5": 0.3583,
+    "r10": 0.5,
+    "mrr": 0.235,
+    "reranked_r10": null
+   },
+   "crossingCost": {
+    "hi2en": {
+     "r10": {
+      "n": 120,
+      "delta": -0.0667,
+      "ci": [
+       -0.125,
+       -0.0167
+      ],
+      "verdict": "worse"
+     },
+     "mrr": {
+      "n": 120,
+      "delta": -0.0552,
+      "ci": [
+       -0.0987,
+       -0.0165
+      ],
+      "verdict": "worse"
+     },
+     "rerankedR10": {
+      "n": 120,
+      "delta": 0,
+      "ci": [
+       0,
+       0
+      ],
+      "verdict": "noise"
+     },
+     "pureHindiR10": {
+      "n": 69,
+      "delta": -0.087,
+      "ci": [
+       -0.1594,
+       -0.0145
+      ],
+      "verdict": "worse"
+     },
+     "mixedScriptR10": {
+      "n": 51,
+      "delta": -0.0392,
+      "ci": [
+       -0.1176,
+       0.0392
+      ],
+      "verdict": "noise"
+     }
+    }
+   }
+  },
+  "mxbai-large-v1": {
+   "hi2en": {
+    "n": 120,
+    "r1": 0.0167,
+    "r5": 0.0583,
+    "r10": 0.1,
+    "mrr": 0.0336,
+    "reranked_r10": null
+   },
+   "hi2en-ctl": {
+    "n": 120,
+    "r1": 0.1,
+    "r5": 0.2833,
+    "r10": 0.3833,
+    "mrr": 0.1736,
+    "reranked_r10": null
+   },
+   "crossingCost": {
+    "hi2en": {
+     "r10": {
+      "n": 120,
+      "delta": -0.2833,
+      "ci": [
+       -0.375,
+       -0.1917
+      ],
+      "verdict": "worse"
+     },
+     "mrr": {
+      "n": 120,
+      "delta": -0.14,
+      "ci": [
+       -0.1964,
+       -0.0872
+      ],
+      "verdict": "worse"
+     },
+     "rerankedR10": {
+      "n": 120,
+      "delta": 0,
+      "ci": [
+       0,
+       0
+      ],
+      "verdict": "noise"
+     },
+     "pureHindiR10": {
+      "n": 69,
+      "delta": -0.3478,
+      "ci": [
+       -0.4783,
+       -0.2174
+      ],
+      "verdict": "worse"
+     },
+     "mixedScriptR10": {
+      "n": 51,
+      "delta": -0.1961,
+      "ci": [
+       -0.3137,
+       -0.098
+      ],
+      "verdict": "worse"
+     }
+    }
+   }
+  },
+  "minilm-baseline": {
+   "hi2en": {
+    "n": 120,
+    "r1": 0.0083,
+    "r5": 0.05,
+    "r10": 0.0667,
+    "mrr": 0.0241,
+    "reranked_r10": 0.125
+   },
+   "hi2en-ctl": {
+    "n": 120,
+    "r1": 0.0917,
+    "r5": 0.1833,
+    "r10": 0.2417,
+    "mrr": 0.1281,
+    "reranked_r10": 0.5
+   },
+   "en2hi": {
+    "n": 56,
+    "r1": 0.0179,
+    "r5": 0.0179,
+    "r10": 0.0179,
+    "mrr": 0.0179,
+    "reranked_r10": 0.0357
+   },
+   "en2hi-ctl": {
+    "n": 56,
+    "r1": 0.2321,
+    "r5": 0.375,
+    "r10": 0.5357,
+    "mrr": 0.3053,
+    "reranked_r10": 0.7143
+   },
+   "crossingCost": {
+    "hi2en": {
+     "r10": {
+      "n": 120,
+      "delta": -0.175,
+      "ci": [
+       -0.25,
+       -0.1
+      ],
+      "verdict": "worse"
+     },
+     "mrr": {
+      "n": 120,
+      "delta": -0.104,
+      "ci": [
+       -0.1561,
+       -0.056
+      ],
+      "verdict": "worse"
+     },
+     "rerankedR10": {
+      "n": 120,
+      "delta": -0.375,
+      "ci": [
+       -0.475,
+       -0.275
+      ],
+      "verdict": "worse"
+     },
+     "pureHindiR10": {
+      "n": 69,
+      "delta": -0.2029,
+      "ci": [
+       -0.3043,
+       -0.1014
+      ],
+      "verdict": "worse"
+     },
+     "mixedScriptR10": {
+      "n": 51,
+      "delta": -0.1373,
+      "ci": [
+       -0.2353,
+       -0.0588
+      ],
+      "verdict": "worse"
+     }
+    },
+    "en2hi": {
+     "r10": {
+      "n": 56,
+      "delta": -0.5179,
+      "ci": [
+       -0.6429,
+       -0.3929
+      ],
+      "verdict": "worse"
+     },
+     "mrr": {
+      "n": 56,
+      "delta": -0.2875,
+      "ci": [
+       -0.3909,
+       -0.1863
+      ],
+      "verdict": "worse"
+     },
+     "rerankedR10": {
+      "n": 56,
+      "delta": -0.6786,
+      "ci": [
+       -0.8036,
+       -0.5536
+      ],
+      "verdict": "worse"
+     }
+    }
+   }
+  }
+ },
+ "headToHead": {
+  "hi2en: multilingual-e5-small vs minilm-baseline": {
+   "r10": {
+    "n": 120,
+    "delta": 0.3667,
+    "ci": [
+     0.275,
+     0.4583
+    ],
+    "verdict": "better"
+   },
+   "mrr": {
+    "n": 120,
+    "delta": 0.1483,
+    "ci": [
+     0.105,
+     0.1967
+    ],
+    "verdict": "better"
+   },
+   "rerankedR10": {
+    "n": 120,
+    "delta": 0.0917,
+    "ci": [
+     0.0333,
+     0.1583
+    ],
+    "verdict": "better"
+   },
+   "pureHindiR10": {
+    "n": 69,
+    "delta": 0.3478,
+    "ci": [
+     0.2464,
+     0.4638
+    ],
+    "verdict": "better"
+   }
+  },
+  "hi2en: qwen3-embedding-0.6b vs minilm-baseline": {
+   "r10": {
+    "n": 120,
+    "delta": 0.025,
+    "ci": [
+     -0.0167,
+     0.0667
+    ],
+    "verdict": "noise"
+   },
+   "mrr": {
+    "n": 120,
+    "delta": 0.007,
+    "ci": [
+     -0.0071,
+     0.0228
+    ],
+    "verdict": "noise"
+   },
+   "rerankedR10": {
+    "n": 120,
+    "delta": -0.125,
+    "ci": [
+     -0.1833,
+     -0.0667
+    ],
+    "verdict": "worse"
+   },
+   "pureHindiR10": {
+    "n": 69,
+    "delta": -0.029,
+    "ci": [
+     -0.0725,
+     0
+    ],
+    "verdict": "noise"
+   }
+  },
+  "hi2en: arctic-l-v2 vs minilm-baseline": {
+   "r10": {
+    "n": 120,
+    "delta": 0.3667,
+    "ci": [
+     0.2833,
+     0.4583
+    ],
+    "verdict": "better"
+   },
+   "mrr": {
+    "n": 120,
+    "delta": 0.1557,
+    "ci": [
+     0.1081,
+     0.2096
+    ],
+    "verdict": "better"
+   },
+   "rerankedR10": {
+    "n": 120,
+    "delta": -0.125,
+    "ci": [
+     -0.1917,
+     -0.0667
+    ],
+    "verdict": "worse"
+   },
+   "pureHindiR10": {
+    "n": 69,
+    "delta": 0.3768,
+    "ci": [
+     0.2609,
+     0.4928
+    ],
+    "verdict": "better"
+   }
+  },
+  "hi2en: mxbai-large-v1 vs minilm-baseline": {
+   "r10": {
+    "n": 120,
+    "delta": 0.0333,
+    "ci": [
+     0.0083,
+     0.0667
+    ],
+    "verdict": "better"
+   },
+   "mrr": {
+    "n": 120,
+    "delta": 0.0095,
+    "ci": [
+     -0.0021,
+     0.0279
+    ],
+    "verdict": "noise"
+   },
+   "rerankedR10": {
+    "n": 120,
+    "delta": -0.125,
+    "ci": [
+     -0.1833,
+     -0.0667
+    ],
+    "verdict": "worse"
+   },
+   "pureHindiR10": {
+    "n": 69,
+    "delta": 0.0145,
+    "ci": [
+     0,
+     0.0435
+    ],
+    "verdict": "noise"
+   }
+  },
+  "en2hi: multilingual-e5-small vs minilm-baseline": {
+   "r10": {
+    "n": 56,
+    "delta": 0.2143,
+    "ci": [
+     0.1071,
+     0.3214
+    ],
+    "verdict": "better"
+   },
+   "mrr": {
+    "n": 56,
+    "delta": 0.0571,
+    "ci": [
+     0.0024,
+     0.1193
+    ],
+    "verdict": "better"
+   },
+   "rerankedR10": {
+    "n": 56,
+    "delta": 0.0357,
+    "ci": [
+     0,
+     0.0893
+    ],
+    "verdict": "noise"
+   }
+  }
+ }
+}

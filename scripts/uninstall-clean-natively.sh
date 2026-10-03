@@ -47,6 +47,7 @@ sleep 1
 
 # 2. Remove Application Support folders (current and legacy versions)
 echo -e "\n${CYAN}1. Clearing Application Support folders...${NC}"
+remove_dir "~/Library/Application Support/corespeechd"
 remove_dir "~/Library/Application Support/Natively"
 remove_dir "~/Library/Application Support/natively"
 remove_dir "~/Library/Application Support/answercue"

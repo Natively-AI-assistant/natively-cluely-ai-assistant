@@ -17,8 +17,9 @@ any path-resolving detector saw the brand.
    system process (`corespeechd` on macOS, `audiodg` on Windows; single source
    of truth `scripts/disguise-name.cjs`), so bundle + main exe + every helper +
    the Windows version resource all present a plausible system identity (the
-   exact layout IC ships, safe per E-004). `userData` pinned to `…/Natively`
-   so existing users' data is not orphaned.
+   exact layout IC ships, safe per E-004). `userData` migrated off the brand
+   to `…/corespeechd` (atomic once-only move; aborts/deferrals keep the old
+   dir) so `--user-data-dir` no longer leaks `Natively` into process listings.
 2. **Telemetry** — remote sinks (PostHog/Axiom/Sentry) are suppressed whenever
    undetectable is on, so a network proctor sees no third-party analytics
    endpoints (only local-jsonl).
@@ -54,15 +55,21 @@ any path-resolving detector saw the brand.
    draft used IC's own `systemcontainer`; it was refined to a *real* process
    per platform so the name is independently plausible, not just neutral.)
 
-2. **`electron/main.ts` — pin `userData` (packaged only).**
+2. **`electron/utils/pinUserData.ts` + `migrateUserData.ts` — pin + migrate `userData` (packaged only).**
    The profile dir is derived from the app name; renaming the app would move it
    to `…/corespeechd` and orphan every existing user's settings/transcripts/
-   credentials. Before the single-instance lock and before anything reads
-   `userData`, a packaged build now does
-   `app.setPath('userData', path.join(app.getPath('appData'), 'Natively'))`,
-   keeping the historical profile. Dev is untouched (it already resolves to the
-   npm name `natively`, the same case-insensitive folder), and the
-   `NATIVELY_AGENT_USER_DATA` override still wins.
+   credentials — and the old `…/Natively` path leaks the brand in every process
+   listing (`--user-data-dir=…/Natively`, which HackerEarth v3.1.1 reads). So
+   the first launch after the rename **migrates** the profile atomically
+   (`renameSync` within one parent dir — cannot half-complete) to the
+   per-platform disguise name, then pins there; later launches are no-ops.
+   Safety: never throws (aborts to the legacy dir), defers when an old-version
+   process is observed (ps basename / tasklist image match, main exe only) or
+   the liveness scan fails, never merges or deletes (both-dirs-nonempty adopts
+   the new one), leaves a receipt marker. Keychain/safeStorage is untouched by
+   a folder move (salt travels with the folder, OS key is signature-bound, and
+   the CredentialsManager key-canary backstops surprises). Dev is untouched,
+   and the `NATIVELY_AGENT_USER_DATA` override still wins.
 
 3. **`scripts/ad-hoc-sign.js` — `DISGUISE_BASE` tracks the per-platform name.**
    The helper executables are now `corespeechd Helper (X)` / `audiodg Helper (X)`;
@@ -107,10 +114,11 @@ any path-resolving detector saw the brand.
 
 ## What this does / does not change
 - **Does:** make the process name, executable path, helper names, (Windows)
-  version resource, window title, telemetry endpoints, and bundle identifier
-  all present a single plausible system identity — the same shape Interview
+  version resource, window title, telemetry endpoints, bundle identifier,
+  AND the profile dir (`--user-data-dir`) all present a single plausible
+  system identity — the same shape Interview
   Coder ships, extended to the runtime vectors IC also covers.
-- **Does not:** rename the user profile (pinned to `Natively`), or alter the
+- **Does not:** alter the
   runtime per-mode `process.title` feature (it still runs on top; the on-disk
   identity is now neutral regardless of mode).
 

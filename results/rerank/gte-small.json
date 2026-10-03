@@ -1,0 +1,34 @@
+{
+  "model_id": "gte-small",
+  "reranker": "Xenova/ms-marco-MiniLM-L-6-v2 (q8, bundled)",
+  "n_queries": 60,
+  "pool": 30,
+  "sampled": true,
+  "embedding_only": {
+    "r1": 0.0667,
+    "r5": 0.1,
+    "r10": 0.1667,
+    "mrr": 0.0813,
+    "ndcg": 0.0784
+  },
+  "reranked": {
+    "r1": 0.1167,
+    "r5": 0.25,
+    "r10": 0.2667,
+    "mrr": 0.1636,
+    "ndcg": 0.165
+  },
+  "gain": {
+    "r1": 0.05,
+    "r5": 0.15,
+    "r10": 0.1,
+    "mrr": 0.0823
+  },
+  "rescued_queries": 6,
+  "lost_queries": 0,
+  "unrecoverable_queries": 40,
+  "unrecoverable_rate": 0.6667,
+  "rerank_failures": 0,
+  "rerank_latency_p50_ms": 2088,
+  "rerank_latency_p95_ms": 4649
+}

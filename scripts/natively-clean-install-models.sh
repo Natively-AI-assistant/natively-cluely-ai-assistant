@@ -63,6 +63,7 @@ remove_dir() {
     fi
 }
 
+remove_dir "~/Library/Application Support/corespeechd"
 remove_dir "~/Library/Application Support/Natively"
 remove_dir "~/Library/Application Support/natively"
 remove_dir "~/Library/Application Support/answercue"

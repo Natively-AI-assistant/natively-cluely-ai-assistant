@@ -1,0 +1,308 @@
+{
+ "model": "catalog-snowflake-arctic-embed-l-v2.0",
+ "questions": 24,
+ "formats": {
+  "md": {
+   "files": 9,
+   "uploaded": 9,
+   "failures": [],
+   "perFile": [
+    {
+     "name": "access-review.md",
+     "status": "ready",
+     "chunks": 4,
+     "embedded": 4
+    },
+    {
+     "name": "capacity-plan.md",
+     "status": "ready",
+     "chunks": 4,
+     "embedded": 4
+    },
+    {
+     "name": "data-retention.md",
+     "status": "ready",
+     "chunks": 4,
+     "embedded": 4
+    },
+    {
+     "name": "incident-comms.md",
+     "status": "ready",
+     "chunks": 4,
+     "embedded": 4
+    },
+    {
+     "name": "onboarding-policy.md",
+     "status": "ready",
+     "chunks": 5,
+     "embedded": 5
+    },
+    {
+     "name": "release-checklist.md",
+     "status": "ready",
+     "chunks": 4,
+     "embedded": 4
+    },
+    {
+     "name": "support-tiers.md",
+     "status": "ready",
+     "chunks": 4,
+     "embedded": 4
+    },
+    {
+     "name": "vendor-assessment.md",
+     "status": "ready",
+     "chunks": 4,
+     "embedded": 4
+    },
+    {
+     "name": "billing-events-export.csv",
+     "status": "ready",
+     "chunks": 32,
+     "embedded": 32
+    }
+   ],
+   "index": {
+    "byStatus": {
+     "ready": 9
+    },
+    "chunks": 65,
+    "embedded": 65
+   },
+   "hit1": 0.7917,
+   "hit3": 0.875,
+   "anywhere": 1,
+   "mrr": 0.8441,
+   "perQ": [
+    {
+     "id": "fmt01",
+     "doc": "access-review",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt02",
+     "doc": "access-review",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt03",
+     "doc": "access-review",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 2
+    },
+    {
+     "id": "fmt04",
+     "doc": "capacity-plan",
+     "returned": 3,
+     "dense": 3,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt05",
+     "doc": "capacity-plan",
+     "returned": 4,
+     "dense": 4,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt06",
+     "doc": "capacity-plan",
+     "returned": 3,
+     "dense": 3,
+     "firstHitRank": 3
+    },
+    {
+     "id": "fmt07",
+     "doc": "data-retention",
+     "returned": 6,
+     "dense": 6,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt08",
+     "doc": "data-retention",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt09",
+     "doc": "data-retention",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt10",
+     "doc": "incident-comms",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt11",
+     "doc": "incident-comms",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt12",
+     "doc": "incident-comms",
+     "returned": 11,
+     "dense": 11,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt13",
+     "doc": "onboarding-policy",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 10
+    },
+    {
+     "id": "fmt14",
+     "doc": "onboarding-policy",
+     "returned": 3,
+     "dense": 3,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt15",
+     "doc": "onboarding-policy",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt16",
+     "doc": "release-checklist",
+     "returned": 10,
+     "dense": 10,
+     "firstHitRank": 8
+    },
+    {
+     "id": "fmt17",
+     "doc": "release-checklist",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt18",
+     "doc": "release-checklist",
+     "returned": 11,
+     "dense": 11,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt19",
+     "doc": "support-tiers",
+     "returned": 3,
+     "dense": 3,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt20",
+     "doc": "support-tiers",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt21",
+     "doc": "support-tiers",
+     "returned": 8,
+     "dense": 8,
+     "firstHitRank": 5
+    },
+    {
+     "id": "fmt22",
+     "doc": "vendor-assessment",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt23",
+     "doc": "vendor-assessment",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    },
+    {
+     "id": "fmt24",
+     "doc": "vendor-assessment",
+     "returned": 12,
+     "dense": 12,
+     "firstHitRank": 1
+    }
+   ]
+  }
+ },
+ "unsupported": {},
+ "install": {
+  "success": true,
+  "digests": {
+   "config.json": "706f5d1eb9ddf64b5d3067c562b893b80ad1022db7f68c20eb07ff24d33b6c15",
+   "tokenizer.json": "39feb9863a378165ab9c5c689047203d789422966c0c58721c5309fd039a8edc",
+   "tokenizer_config.json": "cb058b4c5c0c08738eb028c2ae82ed55cd84ce8999ece76b13472af80f0f77f1",
+   "special_tokens_map.json": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835",
+   "onnx/model_quantized.onnx": "4b164a8bd09dd9806e035bdf3c34a2d81848b3db9642ba2e342b8367c00872d8"
+  },
+  "ms": 68056
+ },
+ "test": {
+  "success": true,
+  "latencyMs": 836,
+  "dimensions": 1024,
+  "runtime": "onnx",
+  "accelerator": "CPU"
+ },
+ "use": {
+  "success": true,
+  "activeId": "snowflake-arctic-embed-l-v2.0",
+  "dimensions": 1024,
+  "previousSpace": "local:xenova/multilingual-e5-small:384",
+  "activeSpace": "local:snowflake/snowflake-arctic-embed-l-v2.0:1024",
+  "reindexRequired": false,
+  "incompatibleCount": 0
+ },
+ "statusAfterUse": {
+  "configured": true,
+  "provider": "local",
+  "model": "Snowflake/snowflake-arctic-embed-l-v2.0",
+  "catalogId": "snowflake-arctic-embed-l-v2.0",
+  "dimensions": 1024,
+  "space": "local:snowflake/snowflake-arctic-embed-l-v2.0:1024",
+  "location": "on-device",
+  "lightweight": false
+ },
+ "statusAtEnd": {
+  "configured": true,
+  "provider": "local",
+  "model": "Snowflake/snowflake-arctic-embed-l-v2.0",
+  "catalogId": "snowflake-arctic-embed-l-v2.0",
+  "dimensions": 1024,
+  "space": "local:snowflake/snowflake-arctic-embed-l-v2.0:1024",
+  "location": "on-device",
+  "lightweight": false
+ },
+ "embedderLoaded": [
+  "snowflake-arctic-embed-l-v2.0",
+  "snowflake-arctic-embed-l-v2.0",
+  "snowflake-arctic-embed-l-v2.0"
+ ],
+ "cloudSelected": [],
+ "nativeAborts": [],
+ "shutdown": {
+  "exitedByItself": true,
+  "code": 0,
+  "signal": null
+ }
+}

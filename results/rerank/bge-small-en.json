@@ -1,0 +1,34 @@
+{
+  "model_id": "bge-small-en",
+  "reranker": "Xenova/ms-marco-MiniLM-L-6-v2 (q8, bundled)",
+  "n_queries": 60,
+  "pool": 30,
+  "sampled": true,
+  "embedding_only": {
+    "r1": 0.0833,
+    "r5": 0.2,
+    "r10": 0.25,
+    "mrr": 0.1354,
+    "ndcg": 0.1393
+  },
+  "reranked": {
+    "r1": 0.15,
+    "r5": 0.3,
+    "r10": 0.3333,
+    "mrr": 0.2039,
+    "ndcg": 0.212
+  },
+  "gain": {
+    "r1": 0.0667,
+    "r5": 0.1,
+    "r10": 0.0833,
+    "mrr": 0.0685
+  },
+  "rescued_queries": 6,
+  "lost_queries": 1,
+  "unrecoverable_queries": 38,
+  "unrecoverable_rate": 0.6333,
+  "rerank_failures": 0,
+  "rerank_latency_p50_ms": 3702,
+  "rerank_latency_p95_ms": 4231
+}

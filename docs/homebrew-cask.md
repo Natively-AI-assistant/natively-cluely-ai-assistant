@@ -164,9 +164,13 @@ When you do submit to core, the same `natively.rb` is the PR — drop the
 removes user data. The paths are derived from Electron's `app.getName()`, which
 returns package.json's `name` (`natively`) — **not** the `Natively` product
 name — plus the `com.apple.corespeechd` app ID for the preference domain.
-Verified against a real install:
+The userData profile itself is pinned and migrated to the disguise name (see
+`electron/utils/migrateUserData.ts`), so the historical `Natively` dir and the
+post-migration `corespeechd` dir are both zapped. Verified against a real install:
 
 ```
+~/Library/Application Support/corespeechd
+~/Library/Application Support/Natively
 ~/Library/Application Support/natively
 ~/Library/Caches/natively
 ~/Library/Caches/natively-updater

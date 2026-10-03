@@ -1,0 +1,911 @@
+{
+ "model": "e5-small-v2",
+ "userData": "/var/folders/rr/s6z6gxfx68g48sbfn5g8_x2w0000gn/T/natively-live-corpus-e5-small-v2-1790022165039",
+ "uploads": {
+  "ok": 59,
+  "failed": [],
+  "ms": 208
+ },
+ "queries": [
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/README.md#4",
+     "vec": 0.7690319657014839,
+     "fts": 0.3110950251158071,
+     "score": 0.5858571894672132
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#5",
+     "vec": 0.7628571153851681,
+     "fts": 0.15714805963967718,
+     "score": 0.5205734930869717
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/src/database/queries.ts#0",
+     "vec": 0.6159208999482346,
+     "fts": 0.15308224546682964,
+     "score": 0.4307854381556726
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/long/product-specification.md#32",
+     "vec": 0.5556752537914104,
+     "fts": 0.14869493235870776,
+     "score": 0.3928831252183293
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/README-old.md#2",
+     "vec": 0.6471175703553581,
+     "fts": 0.14248682355493972,
+     "score": 0.4452652716351907
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/docs/long/product-specification.md#103",
+     "vec": 0.7253822737337449,
+     "fts": 0.15279108433552924,
+     "score": 0.4963457979744586
+    }
+   ],
+   "query_id": "q0001",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "ms": 744,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 1
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#30",
+     "vec": 0.6543759043848237,
+     "fts": 0.08574180983121772,
+     "score": 0.4269222665633813
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/src/api/projects.ts#0",
+     "vec": 0.7078826123961827,
+     "fts": 0.07481987100446628,
+     "score": 0.4546575158394961
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/tests/projects.test.ts#0",
+     "vec": 0.7046439423239815,
+     "fts": 0.05160858476779006,
+     "score": 0.44342979930150495
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/long/product-specification.md#143",
+     "vec": 0.6387283569087913,
+     "fts": 0.0971277125197224,
+     "score": 0.4220880991531637
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/long/product-specification.md#143",
+     "vec": 0.6387283569087913,
+     "fts": 0.0971277125197224,
+     "score": 0.4220880991531637
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/README.md#4",
+     "vec": 0.7531990155894059,
+     "fts": 0.1164401466145548,
+     "score": 0.4984954679994655
+    }
+   ],
+   "query_id": "q0002",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "ms": 640,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 6
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/product-specification.md#5",
+     "vec": 0.7458071673847164,
+     "fts": 0.19278909832971533,
+     "score": 0.5245999397627159
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#212",
+     "vec": 0.7431954606324265,
+     "fts": 0.3519494046171777,
+     "score": 0.586697038226327
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/tests/projects.test.ts#0",
+     "vec": 0.6678285776734372,
+     "fts": 0.19602055147385916,
+     "score": 0.47910536719360597
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/long/product-specification.md#166",
+     "vec": 0.7231340126387987,
+     "fts": 0.2231018694413075,
+     "score": 0.5231211553598022
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/README.md#4",
+     "vec": 0.7345731138601461,
+     "fts": 0.18934818741030243,
+     "score": 0.5164831432802086
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/docs/long/product-specification.md#104",
+     "vec": 0.7446207290240845,
+     "fts": 0.1518284298456531,
+     "score": 0.5075038093527119
+    }
+   ],
+   "query_id": "q0003",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "ms": 631,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 1
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#200",
+     "vec": 0.8570582766530497,
+     "fts": 0.5391569952974435,
+     "score": 0.7298977641108073
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#154",
+     "vec": 0.8487901222951878,
+     "fts": 0.31583484587499305,
+     "score": 0.6356080117271099
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#154",
+     "vec": 0.8487901222951878,
+     "fts": 0.31583484587499305,
+     "score": 0.6356080117271099
+    },
+    {
+     "rank": 4,
+     "chunk": null,
+     "vec": 0.6814172250859715,
+     "fts": 0.21332988350627013,
+     "score": 0.4941822884540909
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/src/auth/permissions.ts#1",
+     "vec": 0.6864481075135349,
+     "fts": 0.16523772654560917,
+     "score": 0.4779639551263646
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/src/config.ts#0",
+     "vec": 0.6027617677622434,
+     "fts": 0.15201783093340057,
+     "score": 0.42246419303070626
+    }
+   ],
+   "query_id": "q0004",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 653,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": null
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/product-specification.md#136",
+     "vec": 0.6631362967107781,
+     "fts": 0.22167880113188332,
+     "score": 0.4865532984792202
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#136",
+     "vec": 0.6631362967107781,
+     "fts": 0.22167880113188332,
+     "score": 0.4865532984792202
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#136",
+     "vec": 0.6631362967107781,
+     "fts": 0.22167880113188332,
+     "score": 0.4865532984792202
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/long/architecture-deep-dive.md#2",
+     "vec": 0.7413552461107227,
+     "fts": 0.08391885668159917,
+     "score": 0.47838069033907327
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/architecture.md#3",
+     "vec": 0.6916044643248118,
+     "fts": 0.11000015248748014,
+     "score": 0.4589627395898791
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/docs/long/product-specification.md#96",
+     "vec": 0.6666997920288251,
+     "fts": 0.12423852352256626,
+     "score": 0.44971528462632154
+    }
+   ],
+   "query_id": "q0005",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 727,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": null
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#199",
+     "vec": 0.862267391361325,
+     "fts": 0.5266844887282035,
+     "score": 0.7280342303080763
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#153",
+     "vec": 0.7971937537503956,
+     "fts": 0.3576018922490373,
+     "score": 0.6213570091498523
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#153",
+     "vec": 0.7971937537503956,
+     "fts": 0.3576018922490373,
+     "score": 0.6213570091498523
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/long/product-specification.md#109",
+     "vec": 0.767763502581984,
+     "fts": 0.3885759578348075,
+     "score": 0.6160884846831134
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-b/config/pipeline.yaml#3",
+     "vec": 0.6968369645348823,
+     "fts": 0.30056426926283397,
+     "score": 0.538327886426063
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/src/config.ts#1",
+     "vec": 0.6638397448308109,
+     "fts": 0.20888651030493344,
+     "score": 0.4818584510204599
+    }
+   ],
+   "query_id": "q0006",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 676,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 6
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#8",
+     "vec": 0.7676009628008295,
+     "fts": 0.1732314663032267,
+     "score": 0.5298531642017883
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/src/config.ts#1",
+     "vec": 0.6744399244330633,
+     "fts": 0.21551781191920105,
+     "score": 0.49087107942751845
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/architecture-deep-dive.md#5",
+     "vec": 0.6932391736158326,
+     "fts": 0.1530598508128062,
+     "score": 0.4771674444946221
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/src/database/client.ts#0",
+     "vec": 0.6809830112424717,
+     "fts": 0.15442657521060849,
+     "score": 0.4703604368297264
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/long/product-specification.md#109",
+     "vec": 0.7911000742016447,
+     "fts": 0.2894390081834619,
+     "score": 0.5904356477943715
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/docs/long/product-specification.md#109",
+     "vec": 0.7911000742016447,
+     "fts": 0.2894390081834619,
+     "score": 0.5904356477943715
+    }
+   ],
+   "query_id": "q0007",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 648,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 2
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#207",
+     "vec": 0.8442820421865607,
+     "fts": 0.5194985723081708,
+     "score": 0.7143686542352047
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#161",
+     "vec": 0.8243315931763668,
+     "fts": 0.3404363297723033,
+     "score": 0.6307734878147414
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#161",
+     "vec": 0.8243315931763668,
+     "fts": 0.3404363297723033,
+     "score": 0.6307734878147414
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/src/server.ts#0",
+     "vec": 0.6245805898243502,
+     "fts": 0.24182260256510243,
+     "score": 0.47147739492065105
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/long/observability-handbook.md#21",
+     "vec": 0.6280811194887569,
+     "fts": 0.06227879240597299,
+     "score": 0.40176018865564334
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/docs/billing-v2.md#4",
+     "vec": 0.6503833882989595,
+     "fts": 0,
+     "score": 0.3902300329793757
+    }
+   ],
+   "query_id": "q0008",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 740,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 4
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/src/server.ts#0",
+     "vec": 0.6234878778314472,
+     "fts": 0.18142163859149663,
+     "score": 0.446661382135467
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#161",
+     "vec": 0.7683373282079419,
+     "fts": 0.1458054487869382,
+     "score": 0.5193245764395403
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#161",
+     "vec": 0.7683373282079419,
+     "fts": 0.1458054487869382,
+     "score": 0.5193245764395403
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#77",
+     "vec": 0.7623411196925499,
+     "fts": 0.14386866265141307,
+     "score": 0.5149521368760951
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/deployment.md#2",
+     "vec": 0.6398846834796373,
+     "fts": 0.07109566832151776,
+     "score": 0.4123690774163895
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/src/database/client.ts#0",
+     "vec": 0.5652772904716484,
+     "fts": 0.06406760474217751,
+     "score": 0.36479341617986005
+    }
+   ],
+   "query_id": "q0009",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 637,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 1
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#14",
+     "vec": 0.7393178219175089,
+     "fts": 0.10710295428046569,
+     "score": 0.4864318748626916
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/src/auth/auth.ts#1",
+     "vec": 0.7506597579316525,
+     "fts": 0.20280878362210686,
+     "score": 0.5315193682078342
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/authentication.md#2",
+     "vec": 0.7363424562719706,
+     "fts": 0.1497060622209027,
+     "score": 0.5016878986515434
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/long/product-specification.md#100",
+     "vec": 0.6550654857471571,
+     "fts": 0.20484632795278296,
+     "score": 0.47497782262940746
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/long/product-specification.md#100",
+     "vec": 0.6550654857471571,
+     "fts": 0.20484632795278296,
+     "score": 0.47497782262940746
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/docs/long/product-specification.md#134",
+     "vec": 0.6408642612014795,
+     "fts": 0.15830515717356763,
+     "score": 0.44784061959031474
+    }
+   ],
+   "query_id": "q0010",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 673,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 3
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#203",
+     "vec": 0.8758266367876203,
+     "fts": 0.6451739574582512,
+     "score": 0.7835655650558727
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#157",
+     "vec": 0.8722265844448406,
+     "fts": 0.38215840296333925,
+     "score": 0.67619931185224
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#157",
+     "vec": 0.8722265844448406,
+     "fts": 0.38215840296333925,
+     "score": 0.67619931185224
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/src/auth/middleware.ts#0",
+     "vec": 0.6823228851287937,
+     "fts": 0.17506514049568087,
+     "score": 0.47941978727554857
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/long/product-specification.md#95",
+     "vec": 0.6223261111656593,
+     "fts": 0.18188399532857816,
+     "score": 0.44614926483082684
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/src/database/queries.ts#0",
+     "vec": 0.6235163903388067,
+     "fts": 0.058985687917776905,
+     "score": 0.39770410937039474
+    }
+   ],
+   "query_id": "q0011",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 646,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 4
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#203",
+     "vec": 0.8350918659013747,
+     "fts": 0.5294363517656991,
+     "score": 0.7128296602471045
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#157",
+     "vec": 0.8339883570267919,
+     "fts": 0.313603096223252,
+     "score": 0.6258342527053758
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#157",
+     "vec": 0.8339883570267919,
+     "fts": 0.313603096223252,
+     "score": 0.6258342527053758
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/src/auth/middleware.ts#0",
+     "vec": 0.6668936576478899,
+     "fts": 0.1077660344049845,
+     "score": 0.4432426083507277
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/src/database/queries.ts#0",
+     "vec": 0.634648006261732,
+     "fts": 0.0421812170926328,
+     "score": 0.39766129059409233
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/src/billing/invoices.ts#0",
+     "vec": 0.6247346508995375,
+     "fts": 0.013611948705568384,
+     "score": 0.38028557002194985
+    }
+   ],
+   "query_id": "q0012",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 671,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 4
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#204",
+     "vec": 0.8526931656050794,
+     "fts": 0.4319810765740679,
+     "score": 0.6844083299926749
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#158",
+     "vec": 0.8382264710535723,
+     "fts": 0.26866857034524066,
+     "score": 0.6104033107702397
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#158",
+     "vec": 0.8382264710535723,
+     "fts": 0.26866857034524066,
+     "score": 0.6104033107702397
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/src/billing/invoices.ts#1",
+     "vec": 0.7166118046156794,
+     "fts": 0.17814001594592838,
+     "score": 0.501223089147779
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/deployment.md#4",
+     "vec": 0.6879646932503682,
+     "fts": 0.20083019316128606,
+     "score": 0.49311089321473534
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/docs/long/observability-handbook.md#13",
+     "vec": 0.7216467138408877,
+     "fts": 0.1884167475842461,
+     "score": 0.5083547273382311
+    }
+   ],
+   "query_id": "q0013",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 632,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": null
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#74",
+     "vec": 0.8013978350974741,
+     "fts": 0.17124312268693156,
+     "score": 0.5493359501332571
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/long/product-specification.md#158",
+     "vec": 0.7901732213489553,
+     "fts": 0.1733108344452344,
+     "score": 0.5434282665874669
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/product-specification.md#158",
+     "vec": 0.7901732213489553,
+     "fts": 0.1733108344452344,
+     "score": 0.5434282665874669
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/billing-v2.md#3",
+     "vec": 0.7320609496470291,
+     "fts": 0.11806942941071148,
+     "score": 0.486464341552502
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/src/billing/invoices.ts#0",
+     "vec": 0.711888194825119,
+     "fts": 0.06180711535752926,
+     "score": 0.45185576303808306
+    },
+    {
+     "rank": 6,
+     "chunk": "projects/project-a/src/database/schema.sql#1",
+     "vec": 0.6441560431226393,
+     "fts": 0.09147095565215385,
+     "score": 0.4230820081344451
+    }
+   ],
+   "query_id": "q0014",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 637,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 5
+  },
+  {
+   "top": [
+    {
+     "rank": 1,
+     "chunk": "projects/project-a/src/billing/invoices.ts#0",
+     "vec": 0.7281158766203165,
+     "fts": 0.19549779876177822,
+     "score": 0.5150686454769012
+    },
+    {
+     "rank": 2,
+     "chunk": "projects/project-a/docs/billing-v2.md#3",
+     "vec": 0.7548665187946227,
+     "fts": 0.25705272010206653,
+     "score": 0.5557409993176002
+    },
+    {
+     "rank": 3,
+     "chunk": "projects/project-a/docs/long/data-platform-reference.md#304",
+     "vec": 0.7182228641274879,
+     "fts": 0.26543250784832445,
+     "score": 0.5371067216158225
+    },
+    {
+     "rank": 4,
+     "chunk": "projects/project-a/docs/long/product-specification.md#90",
+     "vec": 0.705172138594474,
+     "fts": 0.26992595425210497,
+     "score": 0.5310736648575264
+    },
+    {
+     "rank": 5,
+     "chunk": "projects/project-a/docs/long/observability-handbook.md#13",
+     "vec": 0.7054619476580494,
+     "fts": 0.22155375972421687,
+     "score": 0.5118986724845164
+    },
+    {
+     "rank": 6,
+     "chunk": null,
+     "vec": 0.646627050348703,
+     "fts": 0.21373629318162513,
+     "score": 0.4734707474818719
+    }
+   ],
+   "query_id": "q0015",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 665,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 1
+  }
+ ],
+ "setConfig": {
+  "success": true,
+  "activeSpace": "local:xenova/e5-small-v2@q8@mean@v1:384",
+  "reindexRequired": false
+ },
+ "embeddingStatus": {
+  "configured": true,
+  "provider": "local",
+  "model": "Xenova/e5-small-v2@q8@mean@v1",
+  "dimensions": 384,
+  "space": "local:xenova/e5-small-v2@q8@mean@v1:384",
+  "location": "on-device",
+  "lightweight": false
+ },
+ "index": {
+  "ms": 31689,
+  "files": 59,
+  "byStatus": {
+   "ready": 59
+  },
+  "chunks": 900,
+  "embedded": 900
+ },
+ "matchedSnippetRate": 0.9556,
+ "modelLoadedInApp": "Xenova/e5-small-v2",
+ "expectedModel": "Xenova/e5-small-v2",
+ "selfPoison": 0,
+ "cloudProviderSelected": [
+  "Selected provider: gemini"
+ ]
+}

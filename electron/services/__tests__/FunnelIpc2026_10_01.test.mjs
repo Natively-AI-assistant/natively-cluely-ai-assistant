@@ -366,7 +366,11 @@ describe('funnel telemetry hooks in main.ts', () => {
 
   test('the funnel starts once at launch and stops at quit', () => {
     assert.equal((main.match(/^\s*require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.start\(\);$/gm) || []).length, 1);
-    assert.equal((main.match(/^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.stop\(\); \} catch/gm) || []).length, 1);
+    // Two guarded stop sites: toggle-ON silences background egress mid-session
+    // and quit stops it for process exit. The toggle-off path restarts it
+    // (pinned below), so queued events still drain without a relaunch.
+    assert.equal((main.match(/^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.stop\(\); \} catch/gm) || []).length, 2);
+    assert.equal((main.match(/^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.start\(\); \} catch/gm) || []).length, 1);
   });
 
   test('a meeting start and a meeting end are each reported once, inside a try', () => {

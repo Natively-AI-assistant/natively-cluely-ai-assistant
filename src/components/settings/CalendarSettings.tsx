@@ -235,6 +235,25 @@ export const CalendarSettings: React.FC = () => {
       .catch(() => setDetect(was));
   }, []);
 
+  // Stealth-gated calendar polling: no calendar egress while undetectable
+  const [isDetectable, setIsDetectable] = useState(true);
+  useEffect(() => {
+    let eventSeen = false;
+    let disposeListener: (() => void) | undefined;
+    if (window.electronAPI?.onUndetectableChanged) {
+      disposeListener = window.electronAPI.onUndetectableChanged((undetectable) => {
+        eventSeen = true;
+        setIsDetectable(!undetectable);
+      });
+    }
+    if (window.electronAPI?.getUndetectable) {
+      window.electronAPI.getUndetectable()
+        .then((undetectable) => { if (!eventSeen) setIsDetectable(!undetectable); })
+        .catch(() => {});
+    }
+    return () => { if (disposeListener) disposeListener(); };
+  }, []);
+
   useEffect(() => {
     let live = true;
     window.electronAPI?.getCalendarStatus?.()
@@ -257,15 +276,15 @@ export const CalendarSettings: React.FC = () => {
   }), []);
 
   // While connected: the next 7 days, every minute (the Launcher's cadence), and
-  // the calendars they come from.
+  // the calendars they come from. Stealth-gated: no calendar egress while undetectable.
   const loadEvents = useCallback(() => window.electronAPI?.getUpcomingEvents?.()
     .then((list) => setEvents(list || []))
     .catch((err) => console.error('[CalendarSettings] Failed to fetch upcoming events:', err)), []);
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || !isDetectable) return;
     let live = true;
     void loadEvents();
-    const interval = window.setInterval(() => { if (live) void loadEvents(); }, 60_000);
+    const interval = window.setInterval(() => { if (live && isDetectable) void loadEvents(); }, 60_000);
     window.electronAPI?.getSyncedCalendars?.()
       .then((list) => { if (live) setCalendars(list || []); })
       .catch((err) => console.error('[CalendarSettings] Failed to fetch synced calendars:', err));

@@ -11493,6 +11493,15 @@ html[data-platform="linux"][data-window="launcher"] body {
   justify-content: center;
 }
 
+/* Stealth: while undetectable, custom tooltips don't render at all — in ANY
+   window. Driven by wireStealthTooltips (src/lib/stealthTooltips.mjs), which
+   sets data-tooltips="off" on <html>. Native `title` tooltips are a separate,
+   harder problem (OS windows outside content protection) handled by
+   nativeTooltipGuard.mjs; this covers the in-DOM kind. */
+html[data-tooltips='off'] .t-tt {
+  display: none !important;
+}
+
 .t-tt {
   position: absolute;
   top: calc(100% + 5px);

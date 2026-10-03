@@ -1353,6 +1353,7 @@ import {
 import { disguiseAppName } from './utils/disguiseAppName'
 import { disguiseIconRelativePath, shouldSetMacDockIcon } from './utils/disguiseIcon'
 import { createPageTitleGuard } from './utils/windowTitleGuard'
+import { createStealthProtectionLoop } from './utils/stealthProtection'
 import { resolveTrayIcon } from './utils/trayIcon'
 import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
@@ -2201,10 +2202,18 @@ export class AppState {
 
     // Prime the optional Hindsight long-term-memory server health cache (settings/env
     // config; Noop when unconfigured). Fire-and-forget — never blocks startup.
-    try {
-      const { HindsightManager } = require('./services/HindsightManager');
-      HindsightManager.getInstance().start().catch(() => { /* never blocks startup */ });
-    } catch { /* optional */ }
+    // Stealth: do NOT auto-start Hindsight while undetectable — a local server
+    // still does periodic health probes, and Cloud targets would open outbound
+    // HTTPS to api.hindsight.app, both of which break undetectable network
+    // silence. Toggle-off will (re)start it.
+    if (!this.isUndetectable) {
+      try {
+        const { HindsightManager } = require('./services/HindsightManager');
+        HindsightManager.getInstance().start().catch(() => { /* never blocks startup */ });
+      } catch { /* optional */ }
+    } else {
+      console.log('[HindsightManager] Undetectable mode: Skipping auto-start (toggle-off will start it)');
+    }
 
     this.setupIntelligenceEvents()
 
@@ -3021,6 +3030,10 @@ export class AppState {
     setTimeout(() => {
       if (process.env.NODE_ENV === "development") {
         console.log("[AutoUpdater] Development mode: Skipping auto check (use manual button)");
+      } else if (this.isUndetectable) {
+        // Stealth: no automatic egress (GitHub releases check). The manual
+        // "check for updates" button stays user-initiated and untouched.
+        console.log("[AutoUpdater] Undetectable mode: Skipping auto check (manual button still works)");
       } else {
         autoUpdater.checkForUpdatesAndNotify().catch(err => {
           console.error("[AutoUpdater] Failed to check for updates:", err);
@@ -8010,6 +8023,14 @@ export class AppState {
     this.cropperWindowHelper.setContentProtection(state)
     foreignWindowCaptureGuard?.sync(state)
 
+    // Content-protection re-assertion loop (Final Round StealthService pattern):
+    // setContentProtection is silently undoable (activation-policy flips,
+    // late-created windows), so while undetectable a 500ms idempotent loop
+    // keeps every window protected. Stopped on the way out; timers are
+    // unref'd so they can never keep the process alive.
+    if (state) this.startStealthProtectionLoop();
+    else this.stopStealthProtectionLoop()
+
     if (process.platform === 'win32') {
       this.windowHelper.syncOverlayInteractionPolicy();
       this.settingsWindowHelper.syncActivationPolicy();
@@ -8045,6 +8066,75 @@ export class AppState {
       telemetryService.configure({ sinks: buildTelemetrySinks(state, telemetrySinkDeps()) });
     } catch (err) {
       console.warn('[Stealth] telemetry sink reconfigure threw (non-fatal):', err);
+    }
+
+    // Stealth network policy: silence periodic/automatic egress while
+    // undetectable; restore on the way out. Queued events are RETAINED locally
+    // (outbox/funnel stop only halts dispatch) and drain on resume. Each leg is
+    // individually guarded — networking must never break a stealth toggle.
+    // Explicit user actions (manual update check, manual downloads, calendar
+    // connect) are untouched; product traffic (LLM answers) stays on the
+    // user's configured providers by design — this policy covers background /
+    // automatic traffic. STT is not swapped here (no round-5 hot-swap).
+    if (state) {
+      try { require('./services/UsageOutbox').usageOutbox.stop(); } catch (err) {
+        console.warn('[Stealth] usage-outbox stop threw (non-fatal):', err);
+      }
+      try { require('./services/FunnelTelemetry').funnelTelemetry.stop(); } catch (err) {
+        console.warn('[Stealth] funnel stop threw (non-fatal):', err);
+      }
+      try {
+        this.processingHelper.getLLMHelper().getModelVersionManager().stopScheduler();
+      } catch (err) {
+        console.warn('[Stealth] model-discovery scheduler stop threw (non-fatal):', err);
+      }
+      // Capture-mode diagnostics (LockedIn-style build gate): pre-2004
+      // Windows accepts the exclusion call but renders a black box, so log
+      // which invisibility this machine can actually deliver. Informational
+      // only — the protection calls are unchanged.
+      try {
+        const { resolveWindowsCaptureMode } = require('./utils/windowsCaptureMode');
+        const version = typeof process.getSystemVersion === 'function' ? process.getSystemVersion() : undefined;
+        console.log(
+          `[Stealth] capture mode: ${resolveWindowsCaptureMode(process.platform, version)} (${process.platform}${version ? ` ${version}` : ''})`,
+        );
+      } catch (err) {
+        console.warn('[Stealth] capture-mode resolve threw (non-fatal):', err);
+      }
+      // Pro reconciler skipped while stealth is on (see startup timer below)
+      // Toggle-off runs a catch-up reconcile in setUndetectable.
+      // Hindsight: stop local/Cloud server while stealth is on (health probes
+      // + Cloud HTTPS egress break undetectable network silence).
+      try { require('./services/HindsightManager').HindsightManager.getInstance().stopSync(); } catch (err) {
+        console.warn('[Stealth] Hindsight stop threw (non-fatal):', err);
+      }
+    } else {
+      try {
+        const { usageOutbox } = require('./services/UsageOutbox');
+        usageOutbox.start(() => CredentialsManager.getInstance().getNativelyApiKey());
+      } catch (err) {
+        console.warn('[Stealth] usage-outbox restart threw (non-fatal):', err);
+      }
+      try { require('./services/FunnelTelemetry').funnelTelemetry.start(); } catch (err) {
+        console.warn('[Stealth] funnel restart threw (non-fatal):', err);
+      }
+      try {
+        this.processingHelper.getLLMHelper().getModelVersionManager().resumeScheduler();
+      } catch (err) {
+        console.warn('[Stealth] model-discovery scheduler resume threw (non-fatal):', err);
+      }
+      // Catch-up license reconcile skipped while stealth was on (see startup
+      // timer below) — run it now that network is allowed again. Non-fatal.
+      try {
+        const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
+        void getProEntitlementReconciler().run('stealth-toggle-off');
+      } catch (err) {
+        console.warn('[Stealth] pro-reconcile catch-up threw (non-fatal):', err);
+      }
+      // Hindsight: restart local/Cloud server now that network is allowed again.
+      try { require('./services/HindsightManager').HindsightManager.getInstance().start().catch(() => {}); } catch (err) {
+        console.warn('[Stealth] Hindsight restart threw (non-fatal):', err);
+      }
     }
 
     // Cancel all pending disguise timers to prevent their app.setName() calls
@@ -8223,6 +8313,10 @@ export class AppState {
     // can arrive later than the toggle path's retry window. Extra isVisible()
     // re-checks are cheap and stop early via the isUndetectable guard.
     this.reassertUndetectableStealth(DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS);
+    // Persisted-ON launch: start the content-protection loop too (the toggle
+    // path starts it in setUndetectable, which a cold launch never passes
+    // through). Inert when not undetectable.
+    if (this.isUndetectable) this.startStealthProtectionLoop();
   }
 
   // Re-drive the app back to a fully-stealth state after any operation that can
@@ -8445,8 +8539,7 @@ export class AppState {
   // into the window title, clobbering the disguise — a proctor enumerating
   // window titles would read "Natively". In normal mode the guard is inert:
   // the page title "Natively" is the expected title there.
-  public guardWindowTitle(win: BrowserWindow | null | undefined): void {
-    if (!win || win.isDestroyed()) return;
+  public guardWindowTitle(win: BrowserWindow | null | undefined): void {    if (!win || win.isDestroyed()) return;
     const wc = win.webContents;
     const marker = wc as unknown as { __nativelyTitleGuard?: boolean };
     if (marker.__nativelyTitleGuard) return;
@@ -8456,6 +8549,46 @@ export class AppState {
       disguiseTitle: () => disguiseAppName(this.disguiseMode, process.platform).trim(),
       setTitle: (title) => { if (!win.isDestroyed()) win.setTitle(title); },
     }));
+  }
+
+  // Periodic content-protection backstop while undetectable (Final Round's
+  // StealthService pattern: creation hook + show/restore listeners + a 500ms
+  // idempotent re-apply loop). setContentProtection is set-once per window but
+  // silently undoable — activation-policy flips (dock hide/show) reset
+  // sharingType, and a lost creation-hook registration leaves a window bare.
+  // The loop only runs while undetectable and never throws; see
+  // utils/stealthProtection.ts.
+  private _stealthProtection = createStealthProtectionLoop({
+    isUndetectable: () => this.isUndetectable,
+    getWindows: () => this.stealthProtectedWindows(),
+  });
+
+  /** All windows under content-protection while undetectable. */
+  private stealthProtectedWindows(): Array<{ label: string; win: unknown }> {
+    return [
+      { label: 'launcher', win: this.windowHelper.getLauncherWindow() },
+      { label: 'overlay', win: this.windowHelper.getOverlayWindow() },
+      { label: 'overlay-pill', win: this.windowHelper.getPillWindow() },
+      { label: 'overlay-toggle', win: this.windowHelper.getToggleWindow() },
+      { label: 'settings', win: this.settingsWindowHelper.getSettingsWindow() },
+      { label: 'model-selector', win: this.modelSelectorWindowHelper.getWindow() },
+      { label: 'cropper', win: this.cropperWindowHelper.getCropperWindow() },
+    ];
+  }
+
+  /** Attach show/restore content-protection guards to one window (idempotent). */
+  public guardWindowProtection(win: BrowserWindow | null | undefined): void {
+    this._stealthProtection.attachWindow(win);
+  }
+
+  /** Start the periodic re-assertion loop. Idempotent; stealth-only. */
+  public startStealthProtectionLoop(): void {
+    this._stealthProtection.start();
+  }
+
+  /** Stop the periodic re-assertion loop. Idempotent. */
+  public stopStealthProtectionLoop(): void {
+    this._stealthProtection.stop();
   }
 
   private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
@@ -8526,6 +8659,7 @@ export class AppState {
     const launcher = this.windowHelper.getLauncherWindow();
     if (launcher && !launcher.isDestroyed()) {
       this.guardWindowTitle(launcher);
+      this.guardWindowProtection(launcher);
       launcher.setTitle(appName.trim());
       this.sendToWindow(launcher, 'disguise-changed', mode);
     }
@@ -8533,6 +8667,7 @@ export class AppState {
     const overlay = this.windowHelper.getOverlayWindow();
     if (overlay && !overlay.isDestroyed()) {
       this.guardWindowTitle(overlay);
+      this.guardWindowProtection(overlay);
       overlay.setTitle(appName.trim());
       this.sendToWindow(overlay, 'disguise-changed', mode);
     }
@@ -8540,6 +8675,7 @@ export class AppState {
     const settingsWin = this.settingsWindowHelper.getSettingsWindow();
     if (settingsWin && !settingsWin.isDestroyed()) {
       this.guardWindowTitle(settingsWin);
+      this.guardWindowProtection(settingsWin);
       settingsWin.setTitle(appName.trim());
       this.sendToWindow(settingsWin, 'disguise-changed', mode);
     }
@@ -8555,6 +8691,7 @@ export class AppState {
     const modelSelectorWin = this.modelSelectorWindowHelper.getWindow();
     if (modelSelectorWin && !modelSelectorWin.isDestroyed()) {
       this.guardWindowTitle(modelSelectorWin);
+      this.guardWindowProtection(modelSelectorWin);
       modelSelectorWin.setTitle(appName.trim());
       this.sendToWindow(modelSelectorWin, 'disguise-changed', mode);
     }
@@ -8562,6 +8699,7 @@ export class AppState {
     const cropperWin = this.cropperWindowHelper.getCropperWindow();
     if (cropperWin && !cropperWin.isDestroyed()) {
       this.guardWindowTitle(cropperWin);
+      this.guardWindowProtection(cropperWin);
       cropperWin.setTitle(appName.trim());
       this.sendToWindow(cropperWin, 'disguise-changed', mode);
     }
@@ -8745,7 +8883,9 @@ async function initializeApp() {
   // explicit cropper block in _applyDisguise instead.
   app.on('browser-window-created', (_event, win) => {
     try {
-      AppState.peekInstance()?.guardWindowTitle(win);
+      const appState = AppState.peekInstance();
+      appState?.guardWindowTitle(win);
+      appState?.guardWindowProtection(win);
     } catch (err) {
       console.error('[Main] browser-window-created title guard failed:', err);
     }

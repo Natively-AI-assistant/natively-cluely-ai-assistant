@@ -2287,6 +2287,11 @@ export class LLMHelper {
     return !!this.nativelyKey;
   }
 
+  /** Exposes the version manager for lifecycle control (stealth scheduler stop/resume). */
+  public getModelVersionManager(): ModelVersionManager {
+    return this.modelVersionManager;
+  }
+
   /**
    * Initialize the self-improving model version manager.
    * Should be called after all API keys are configured.

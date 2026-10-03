@@ -1,0 +1,1359 @@
+{
+ "model": "minilm",
+ "whisperModel": "onnx-community/parakeet-ctc-0.6b-ONNX",
+ "queryCount": 120,
+ "machine": {
+  "totalGB": 16,
+  "cpu": "Apple M4"
+ },
+ "steps": {
+  "enable-pro": {
+   "ok": true,
+   "value": {
+    "success": true,
+    "pro": true
+   },
+   "ms": 2
+  },
+  "stt-local-whisper": {
+   "ok": true,
+   "value": {
+    "success": true
+   },
+   "ms": 32
+  },
+  "mode": {
+   "ok": true,
+   "value": "mode_a0cec8b8-2073-4fa9-947e-52f9e90df130",
+   "ms": 15
+  },
+  "start-meeting": {
+   "ok": true,
+   "value": {
+    "success": true
+   },
+   "ms": 167
+  },
+  "upload": {
+   "ok": true,
+   "value": {
+    "ok": 59,
+    "of": 59
+   },
+   "ms": 192
+  },
+  "index-during-meeting": {
+   "ok": true,
+   "value": {
+    "byStatus": {
+     "ready": 59
+    },
+    "chunks": 900,
+    "embedded": 900
+   },
+   "ms": 22022
+  },
+  "queries-during-meeting": {
+   "ok": true,
+   "value": {
+    "ok": 120,
+    "dense": 120,
+    "of": 120
+   },
+   "ms": 18597
+  },
+  "end-meeting": {
+   "ok": true,
+   "value": {
+    "success": true
+   },
+   "ms": 415
+  }
+ },
+ "exited": null,
+ "embedderLoaded": "Xenova/all-MiniLM-L6-v2",
+ "whisperEvidence": [
+  "[LocalWhisperSTT] streaming profile for onnx-community/parakeet-ctc-0.6b-ONNX: interval=1500ms minAudio=800ms skipAgreement=false",
+  "[LocalWhisperSTT] streaming profile for onnx-community/parakeet-ctc-0.6b-ONNX: interval=1500ms minAudio=800ms skipAgreement=false",
+  "[LocalWhisperSTT] Cold-starting worker for onnx-community/parakeet-ctc-0.6b-ONNX",
+  "[LocalWhisperSTT] Cold-starting worker for onnx-community/parakeet-ctc-0.6b-ONNX",
+  "[WhisperWorker] Loading onnx-community/parakeet-ctc-0.6b-ONNX | providers=coreml,cpu | dtype=mixed:decoder_model=q8,decoder_model_merged=q8,decoder_with_p",
+  "[WhisperWorker] Loading onnx-community/parakeet-ctc-0.6b-ONNX | providers=coreml,cpu | dtype=mixed:decoder_model=q8,decoder_model_merged=q8,decoder_with_p",
+  "[WhisperWorker][diag] {\"cacheDir\":\"/private/var/folders/rr/s6z6gxfx68g48sbfn5g8_x2w0000gn/T/natively-live-meeting-minilm-1790030429547/whisper-models\",\"mo",
+  "[WhisperWorker][diag] {\"cacheDir\":\"/private/var/folders/rr/s6z6gxfx68g48sbfn5g8_x2w0000gn/T/natively-live-meeting-minilm-1790030429547/whisper-models\",\"mo"
+ ],
+ "rerankerLoaded": true,
+ "sttReady": [
+  "[LocalWhisperSTT/mic] worker ready in 1777ms",
+  "[LocalWhisperSTT/system] worker ready in 1777ms"
+ ],
+ "sttLoadErrors": [],
+ "gateRefusals": [],
+ "meetingStops": [],
+ "selfPoison": 0,
+ "crashes": [],
+ "cloudSelected": [],
+ "transcriptSegments": 0,
+ "byPhase": {
+  "boot": {
+   "samples": 2,
+   "peakTreeMB": 475,
+   "peakMainMB": 46,
+   "minAvailGB": 5.4
+  },
+  "idle": {
+   "samples": 16,
+   "peakTreeMB": 1625,
+   "peakMainMB": 46,
+   "minAvailGB": 3.76
+  },
+  "start-meeting": {
+   "samples": 1,
+   "peakTreeMB": 1604,
+   "peakMainMB": 46,
+   "minAvailGB": 4.31
+  },
+  "meeting-warm": {
+   "samples": 40,
+   "peakTreeMB": 3174,
+   "peakMainMB": 46,
+   "minAvailGB": 3.17
+  },
+  "index-during-meeting": {
+   "samples": 44,
+   "peakTreeMB": 2062,
+   "peakMainMB": 33,
+   "minAvailGB": 3.22
+  },
+  "queries-during-meeting": {
+   "samples": 37,
+   "peakTreeMB": 2176,
+   "peakMainMB": 33,
+   "minAvailGB": 3.39
+  },
+  "end-meeting": {
+   "samples": 1,
+   "peakTreeMB": 1898,
+   "peakMainMB": 33,
+   "minAvailGB": 2.59
+  },
+  "after": {
+   "samples": 10,
+   "peakTreeMB": 1901,
+   "peakMainMB": 31,
+   "minAvailGB": 2.51
+  }
+ },
+ "peakTreeMB": 3174,
+ "minAvailGB": 2.51,
+ "samples": [
+  {
+   "t": 1790030430063,
+   "phase": "boot",
+   "totalMB": 277.359375,
+   "mainMB": 46.375,
+   "processes": 2,
+   "availGB": 5.5035400390625
+  },
+  {
+   "t": 1790030430564,
+   "phase": "boot",
+   "totalMB": 474.6875,
+   "mainMB": 46.375,
+   "processes": 5,
+   "availGB": 5.396087646484375
+  },
+  {
+   "t": 1790030431065,
+   "phase": "idle",
+   "totalMB": 1164.734375,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 5.235137939453125
+  },
+  {
+   "t": 1790030431565,
+   "phase": "idle",
+   "totalMB": 1461.921875,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.427001953125
+  },
+  {
+   "t": 1790030432065,
+   "phase": "idle",
+   "totalMB": 1477.015625,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.3094482421875
+  },
+  {
+   "t": 1790030432566,
+   "phase": "idle",
+   "totalMB": 1488.859375,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.182037353515625
+  },
+  {
+   "t": 1790030433068,
+   "phase": "idle",
+   "totalMB": 1489.6875,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.2141265869140625
+  },
+  {
+   "t": 1790030433568,
+   "phase": "idle",
+   "totalMB": 1559.578125,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 3.8337860107421875
+  },
+  {
+   "t": 1790030434070,
+   "phase": "idle",
+   "totalMB": 1621.78125,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 3.763336181640625
+  },
+  {
+   "t": 1790030434572,
+   "phase": "idle",
+   "totalMB": 1623.296875,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 3.9133453369140625
+  },
+  {
+   "t": 1790030435073,
+   "phase": "idle",
+   "totalMB": 1624.1875,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.0466766357421875
+  },
+  {
+   "t": 1790030435574,
+   "phase": "idle",
+   "totalMB": 1623.03125,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.0145721435546875
+  },
+  {
+   "t": 1790030436074,
+   "phase": "idle",
+   "totalMB": 1623.0625,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.0117034912109375
+  },
+  {
+   "t": 1790030436575,
+   "phase": "idle",
+   "totalMB": 1623.859375,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.1338653564453125
+  },
+  {
+   "t": 1790030437077,
+   "phase": "idle",
+   "totalMB": 1622.640625,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.0750579833984375
+  },
+  {
+   "t": 1790030437576,
+   "phase": "idle",
+   "totalMB": 1623.109375,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.0906219482421875
+  },
+  {
+   "t": 1790030438078,
+   "phase": "idle",
+   "totalMB": 1623.6875,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.1605377197265625
+  },
+  {
+   "t": 1790030438578,
+   "phase": "idle",
+   "totalMB": 1625.15625,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.3658294677734375
+  },
+  {
+   "t": 1790030439079,
+   "phase": "start-meeting",
+   "totalMB": 1604.1875,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.3104095458984375
+  },
+  {
+   "t": 1790030439580,
+   "phase": "meeting-warm",
+   "totalMB": 1701.1875,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.445404052734375
+  },
+  {
+   "t": 1790030440080,
+   "phase": "meeting-warm",
+   "totalMB": 2105.8125,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.13409423828125
+  },
+  {
+   "t": 1790030440582,
+   "phase": "meeting-warm",
+   "totalMB": 2515.40625,
+   "mainMB": 46.375,
+   "processes": 11,
+   "availGB": 4.2179718017578125
+  },
+  {
+   "t": 1790030441082,
+   "phase": "meeting-warm",
+   "totalMB": 3173.71875,
+   "mainMB": 39.953125,
+   "processes": 11,
+   "availGB": 4.1667022705078125
+  },
+  {
+   "t": 1790030441584,
+   "phase": "meeting-warm",
+   "totalMB": 2884.984375,
+   "mainMB": 39.953125,
+   "processes": 12,
+   "availGB": 3.566009521484375
+  },
+  {
+   "t": 1790030442085,
+   "phase": "meeting-warm",
+   "totalMB": 2802.046875,
+   "mainMB": 39.953125,
+   "processes": 12,
+   "availGB": 3.5480804443359375
+  },
+  {
+   "t": 1790030442586,
+   "phase": "meeting-warm",
+   "totalMB": 2478.90625,
+   "mainMB": 39.953125,
+   "processes": 12,
+   "availGB": 3.342132568359375
+  },
+  {
+   "t": 1790030443087,
+   "phase": "meeting-warm",
+   "totalMB": 2298.859375,
+   "mainMB": 33.578125,
+   "processes": 12,
+   "availGB": 3.2116851806640625
+  },
+  {
+   "t": 1790030443588,
+   "phase": "meeting-warm",
+   "totalMB": 2275.765625,
+   "mainMB": 33.578125,
+   "processes": 12,
+   "availGB": 3.233367919921875
+  },
+  {
+   "t": 1790030444089,
+   "phase": "meeting-warm",
+   "totalMB": 2277.390625,
+   "mainMB": 33.578125,
+   "processes": 12,
+   "availGB": 3.3399505615234375
+  },
+  {
+   "t": 1790030444590,
+   "phase": "meeting-warm",
+   "totalMB": 2089.171875,
+   "mainMB": 33.578125,
+   "processes": 12,
+   "availGB": 3.2649078369140625
+  },
+  {
+   "t": 1790030445090,
+   "phase": "meeting-warm",
+   "totalMB": 2085.328125,
+   "mainMB": 33.578125,
+   "processes": 12,
+   "availGB": 3.2533721923828125
+  },
+  {
+   "t": 1790030445591,
+   "phase": "meeting-warm",
+   "totalMB": 2053.28125,
+   "mainMB": 33.578125,
+   "processes": 12,
+   "availGB": 3.2361907958984375
+  },
+  {
+   "t": 1790030446092,
+   "phase": "meeting-warm",
+   "totalMB": 2054.03125,
+   "mainMB": 33.8125,
+   "processes": 12,
+   "availGB": 3.2382049560546875
+  },
+  {
+   "t": 1790030446593,
+   "phase": "meeting-warm",
+   "totalMB": 2053.859375,
+   "mainMB": 33.8125,
+   "processes": 12,
+   "availGB": 3.2953338623046875
+  },
+  {
+   "t": 1790030447094,
+   "phase": "meeting-warm",
+   "totalMB": 2053.65625,
+   "mainMB": 33.8125,
+   "processes": 12,
+   "availGB": 3.4349212646484375
+  },
+  {
+   "t": 1790030447594,
+   "phase": "meeting-warm",
+   "totalMB": 2053.671875,
+   "mainMB": 33.8125,
+   "processes": 12,
+   "availGB": 3.4557647705078125
+  },
+  {
+   "t": 1790030448095,
+   "phase": "meeting-warm",
+   "totalMB": 2053.703125,
+   "mainMB": 33.8125,
+   "processes": 12,
+   "availGB": 3.4262542724609375
+  },
+  {
+   "t": 1790030448596,
+   "phase": "meeting-warm",
+   "totalMB": 2042.984375,
+   "mainMB": 33.8125,
+   "processes": 12,
+   "availGB": 3.3375244140625
+  },
+  {
+   "t": 1790030449098,
+   "phase": "meeting-warm",
+   "totalMB": 2044.921875,
+   "mainMB": 33.8125,
+   "processes": 12,
+   "availGB": 3.1739654541015625
+  },
+  {
+   "t": 1790030449598,
+   "phase": "meeting-warm",
+   "totalMB": 2045.359375,
+   "mainMB": 33.8125,
+   "processes": 12,
+   "availGB": 3.23297119140625
+  },
+  {
+   "t": 1790030450098,
+   "phase": "meeting-warm",
+   "totalMB": 2047.890625,
+   "mainMB": 33.578125,
+   "processes": 12,
+   "availGB": 3.2198028564453125
+  },
+  {
+   "t": 1790030450600,
+   "phase": "meeting-warm",
+   "totalMB": 1972.03125,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.3050537109375
+  },
+  {
+   "t": 1790030451101,
+   "phase": "meeting-warm",
+   "totalMB": 1971.453125,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.207183837890625
+  },
+  {
+   "t": 1790030451602,
+   "phase": "meeting-warm",
+   "totalMB": 1865.890625,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.1993408203125
+  },
+  {
+   "t": 1790030452103,
+   "phase": "meeting-warm",
+   "totalMB": 1863.640625,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.21661376953125
+  },
+  {
+   "t": 1790030452603,
+   "phase": "meeting-warm",
+   "totalMB": 1865.25,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.4962005615234375
+  },
+  {
+   "t": 1790030453104,
+   "phase": "meeting-warm",
+   "totalMB": 1865.453125,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.5607147216796875
+  },
+  {
+   "t": 1790030453605,
+   "phase": "meeting-warm",
+   "totalMB": 1866.625,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.6374969482421875
+  },
+  {
+   "t": 1790030454105,
+   "phase": "meeting-warm",
+   "totalMB": 1867.515625,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.690216064453125
+  },
+  {
+   "t": 1790030454607,
+   "phase": "meeting-warm",
+   "totalMB": 1868.34375,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.689239501953125
+  },
+  {
+   "t": 1790030455108,
+   "phase": "meeting-warm",
+   "totalMB": 1868.53125,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.7347564697265625
+  },
+  {
+   "t": 1790030455609,
+   "phase": "meeting-warm",
+   "totalMB": 1869.8125,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.7294769287109375
+  },
+  {
+   "t": 1790030456109,
+   "phase": "meeting-warm",
+   "totalMB": 1869.984375,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.701934814453125
+  },
+  {
+   "t": 1790030456611,
+   "phase": "meeting-warm",
+   "totalMB": 1870.015625,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.675933837890625
+  },
+  {
+   "t": 1790030457112,
+   "phase": "meeting-warm",
+   "totalMB": 1871.3125,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.6966400146484375
+  },
+  {
+   "t": 1790030457612,
+   "phase": "meeting-warm",
+   "totalMB": 1871.453125,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.70697021484375
+  },
+  {
+   "t": 1790030458114,
+   "phase": "meeting-warm",
+   "totalMB": 1869.21875,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.7303466796875
+  },
+  {
+   "t": 1790030458615,
+   "phase": "meeting-warm",
+   "totalMB": 1646.03125,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.317230224609375
+  },
+  {
+   "t": 1790030459115,
+   "phase": "meeting-warm",
+   "totalMB": 1646.40625,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.3103485107421875
+  },
+  {
+   "t": 1790030459615,
+   "phase": "index-during-meeting",
+   "totalMB": 2062.390625,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.2410736083984375
+  },
+  {
+   "t": 1790030460117,
+   "phase": "index-during-meeting",
+   "totalMB": 1754.640625,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.3765411376953125
+  },
+  {
+   "t": 1790030460618,
+   "phase": "index-during-meeting",
+   "totalMB": 1674.390625,
+   "mainMB": 32.609375,
+   "processes": 12,
+   "availGB": 3.377593994140625
+  },
+  {
+   "t": 1790030461119,
+   "phase": "index-during-meeting",
+   "totalMB": 1393.328125,
+   "mainMB": 32.59375,
+   "processes": 12,
+   "availGB": 3.2150726318359375
+  },
+  {
+   "t": 1790030461619,
+   "phase": "index-during-meeting",
+   "totalMB": 1474.140625,
+   "mainMB": 32.59375,
+   "processes": 12,
+   "availGB": 3.23809814453125
+  },
+  {
+   "t": 1790030462121,
+   "phase": "index-during-meeting",
+   "totalMB": 1678.03125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.2534027099609375
+  },
+  {
+   "t": 1790030462621,
+   "phase": "index-during-meeting",
+   "totalMB": 1670.953125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.3886566162109375
+  },
+  {
+   "t": 1790030463121,
+   "phase": "index-during-meeting",
+   "totalMB": 1673.171875,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.4196319580078125
+  },
+  {
+   "t": 1790030463621,
+   "phase": "index-during-meeting",
+   "totalMB": 1611.171875,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.4813232421875
+  },
+  {
+   "t": 1790030464122,
+   "phase": "index-during-meeting",
+   "totalMB": 1551.703125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.41827392578125
+  },
+  {
+   "t": 1790030464623,
+   "phase": "index-during-meeting",
+   "totalMB": 1500.75,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.3214874267578125
+  },
+  {
+   "t": 1790030465123,
+   "phase": "index-during-meeting",
+   "totalMB": 1516.53125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.352447509765625
+  },
+  {
+   "t": 1790030465624,
+   "phase": "index-during-meeting",
+   "totalMB": 1536.125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.4354095458984375
+  },
+  {
+   "t": 1790030466125,
+   "phase": "index-during-meeting",
+   "totalMB": 1584.25,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.5083465576171875
+  },
+  {
+   "t": 1790030466625,
+   "phase": "index-during-meeting",
+   "totalMB": 1555.859375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.573455810546875
+  },
+  {
+   "t": 1790030467126,
+   "phase": "index-during-meeting",
+   "totalMB": 1582.078125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.5944976806640625
+  },
+  {
+   "t": 1790030467628,
+   "phase": "index-during-meeting",
+   "totalMB": 1569.28125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.5552978515625
+  },
+  {
+   "t": 1790030468129,
+   "phase": "index-during-meeting",
+   "totalMB": 1566.8125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.32781982421875
+  },
+  {
+   "t": 1790030468629,
+   "phase": "index-during-meeting",
+   "totalMB": 1902.328125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.477783203125
+  },
+  {
+   "t": 1790030469129,
+   "phase": "index-during-meeting",
+   "totalMB": 1889.109375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.39263916015625
+  },
+  {
+   "t": 1790030469630,
+   "phase": "index-during-meeting",
+   "totalMB": 1891.484375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.50689697265625
+  },
+  {
+   "t": 1790030470131,
+   "phase": "index-during-meeting",
+   "totalMB": 1889.09375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.566192626953125
+  },
+  {
+   "t": 1790030470633,
+   "phase": "index-during-meeting",
+   "totalMB": 1894.15625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.683074951171875
+  },
+  {
+   "t": 1790030471133,
+   "phase": "index-during-meeting",
+   "totalMB": 1875.59375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.7335968017578125
+  },
+  {
+   "t": 1790030471634,
+   "phase": "index-during-meeting",
+   "totalMB": 1876.640625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.6923675537109375
+  },
+  {
+   "t": 1790030472135,
+   "phase": "index-during-meeting",
+   "totalMB": 1891.828125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.69952392578125
+  },
+  {
+   "t": 1790030472636,
+   "phase": "index-during-meeting",
+   "totalMB": 1885.328125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.48004150390625
+  },
+  {
+   "t": 1790030473138,
+   "phase": "index-during-meeting",
+   "totalMB": 1847.75,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.5368804931640625
+  },
+  {
+   "t": 1790030473638,
+   "phase": "index-during-meeting",
+   "totalMB": 1867.890625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.68548583984375
+  },
+  {
+   "t": 1790030474139,
+   "phase": "index-during-meeting",
+   "totalMB": 1874.671875,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.7136688232421875
+  },
+  {
+   "t": 1790030474640,
+   "phase": "index-during-meeting",
+   "totalMB": 1876.40625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.70703125
+  },
+  {
+   "t": 1790030475140,
+   "phase": "index-during-meeting",
+   "totalMB": 1873.640625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.6749267578125
+  },
+  {
+   "t": 1790030475641,
+   "phase": "index-during-meeting",
+   "totalMB": 1865.65625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.658233642578125
+  },
+  {
+   "t": 1790030476142,
+   "phase": "index-during-meeting",
+   "totalMB": 1858.359375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.6800689697265625
+  },
+  {
+   "t": 1790030476643,
+   "phase": "index-during-meeting",
+   "totalMB": 1847.390625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.6797332763671875
+  },
+  {
+   "t": 1790030477144,
+   "phase": "index-during-meeting",
+   "totalMB": 1888.984375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.707061767578125
+  },
+  {
+   "t": 1790030477645,
+   "phase": "index-during-meeting",
+   "totalMB": 1854.484375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.70684814453125
+  },
+  {
+   "t": 1790030478146,
+   "phase": "index-during-meeting",
+   "totalMB": 1850.453125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.708099365234375
+  },
+  {
+   "t": 1790030478646,
+   "phase": "index-during-meeting",
+   "totalMB": 1851.34375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.7125091552734375
+  },
+  {
+   "t": 1790030479148,
+   "phase": "index-during-meeting",
+   "totalMB": 1853.375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.7112884521484375
+  },
+  {
+   "t": 1790030479648,
+   "phase": "index-during-meeting",
+   "totalMB": 1866.65625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.711334228515625
+  },
+  {
+   "t": 1790030480150,
+   "phase": "index-during-meeting",
+   "totalMB": 1858.125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.7022705078125
+  },
+  {
+   "t": 1790030480651,
+   "phase": "index-during-meeting",
+   "totalMB": 1963.28125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.696685791015625
+  },
+  {
+   "t": 1790030481151,
+   "phase": "index-during-meeting",
+   "totalMB": 1842.84375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.74951171875
+  },
+  {
+   "t": 1790030481652,
+   "phase": "queries-during-meeting",
+   "totalMB": 2033.984375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.670135498046875
+  },
+  {
+   "t": 1790030482153,
+   "phase": "queries-during-meeting",
+   "totalMB": 2053.484375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.68524169921875
+  },
+  {
+   "t": 1790030482655,
+   "phase": "queries-during-meeting",
+   "totalMB": 2066.40625,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.69903564453125
+  },
+  {
+   "t": 1790030483155,
+   "phase": "queries-during-meeting",
+   "totalMB": 2063.296875,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.68109130859375
+  },
+  {
+   "t": 1790030483655,
+   "phase": "queries-during-meeting",
+   "totalMB": 2056.5,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.7149505615234375
+  },
+  {
+   "t": 1790030484155,
+   "phase": "queries-during-meeting",
+   "totalMB": 2088.921875,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.7301483154296875
+  },
+  {
+   "t": 1790030484656,
+   "phase": "queries-during-meeting",
+   "totalMB": 2054.484375,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.72479248046875
+  },
+  {
+   "t": 1790030485157,
+   "phase": "queries-during-meeting",
+   "totalMB": 2065.28125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.7238006591796875
+  },
+  {
+   "t": 1790030485659,
+   "phase": "queries-during-meeting",
+   "totalMB": 2104.46875,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.68017578125
+  },
+  {
+   "t": 1790030486160,
+   "phase": "queries-during-meeting",
+   "totalMB": 2126.3125,
+   "mainMB": 33.46875,
+   "processes": 12,
+   "availGB": 3.710296630859375
+  },
+  {
+   "t": 1790030486661,
+   "phase": "queries-during-meeting",
+   "totalMB": 2145.890625,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.6900634765625
+  },
+  {
+   "t": 1790030487161,
+   "phase": "queries-during-meeting",
+   "totalMB": 2080.265625,
+   "mainMB": 33.484375,
+   "processes": 12,
+   "availGB": 3.699554443359375
+  },
+  {
+   "t": 1790030487662,
+   "phase": "queries-during-meeting",
+   "totalMB": 1977.140625,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.3881988525390625
+  },
+  {
+   "t": 1790030488163,
+   "phase": "queries-during-meeting",
+   "totalMB": 1997.734375,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.410491943359375
+  },
+  {
+   "t": 1790030488664,
+   "phase": "queries-during-meeting",
+   "totalMB": 1978.546875,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.542999267578125
+  },
+  {
+   "t": 1790030489166,
+   "phase": "queries-during-meeting",
+   "totalMB": 2048.703125,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.568389892578125
+  },
+  {
+   "t": 1790030489666,
+   "phase": "queries-during-meeting",
+   "totalMB": 1992.390625,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.60748291015625
+  },
+  {
+   "t": 1790030490167,
+   "phase": "queries-during-meeting",
+   "totalMB": 2003.875,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.606231689453125
+  },
+  {
+   "t": 1790030490668,
+   "phase": "queries-during-meeting",
+   "totalMB": 2010.4375,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.5776214599609375
+  },
+  {
+   "t": 1790030491169,
+   "phase": "queries-during-meeting",
+   "totalMB": 2103.328125,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.6280670166015625
+  },
+  {
+   "t": 1790030491670,
+   "phase": "queries-during-meeting",
+   "totalMB": 2011.078125,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.65948486328125
+  },
+  {
+   "t": 1790030492171,
+   "phase": "queries-during-meeting",
+   "totalMB": 2033.140625,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.6631622314453125
+  },
+  {
+   "t": 1790030492672,
+   "phase": "queries-during-meeting",
+   "totalMB": 2011.625,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.66119384765625
+  },
+  {
+   "t": 1790030493173,
+   "phase": "queries-during-meeting",
+   "totalMB": 2116.890625,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.6650238037109375
+  },
+  {
+   "t": 1790030493674,
+   "phase": "queries-during-meeting",
+   "totalMB": 2091.84375,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.6754302978515625
+  },
+  {
+   "t": 1790030494174,
+   "phase": "queries-during-meeting",
+   "totalMB": 2107.625,
+   "mainMB": 33.4375,
+   "processes": 12,
+   "availGB": 3.627777099609375
+  },
+  {
+   "t": 1790030494675,
+   "phase": "queries-during-meeting",
+   "totalMB": 2126.234375,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.6754302978515625
+  },
+  {
+   "t": 1790030495176,
+   "phase": "queries-during-meeting",
+   "totalMB": 2068.171875,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.6757965087890625
+  },
+  {
+   "t": 1790030495677,
+   "phase": "queries-during-meeting",
+   "totalMB": 2130.1875,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.615203857421875
+  },
+  {
+   "t": 1790030496179,
+   "phase": "queries-during-meeting",
+   "totalMB": 2054.015625,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.658172607421875
+  },
+  {
+   "t": 1790030496679,
+   "phase": "queries-during-meeting",
+   "totalMB": 2053.484375,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.644287109375
+  },
+  {
+   "t": 1790030497181,
+   "phase": "queries-during-meeting",
+   "totalMB": 2104.84375,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.624908447265625
+  },
+  {
+   "t": 1790030497682,
+   "phase": "queries-during-meeting",
+   "totalMB": 2127.078125,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.676177978515625
+  },
+  {
+   "t": 1790030498181,
+   "phase": "queries-during-meeting",
+   "totalMB": 2175.609375,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.662628173828125
+  },
+  {
+   "t": 1790030498683,
+   "phase": "queries-during-meeting",
+   "totalMB": 2145.15625,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.683929443359375
+  },
+  {
+   "t": 1790030499184,
+   "phase": "queries-during-meeting",
+   "totalMB": 2085.21875,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.681884765625
+  },
+  {
+   "t": 1790030499685,
+   "phase": "queries-during-meeting",
+   "totalMB": 2093.25,
+   "mainMB": 33.453125,
+   "processes": 12,
+   "availGB": 3.6922760009765625
+  },
+  {
+   "t": 1790030500185,
+   "phase": "end-meeting",
+   "totalMB": 1897.859375,
+   "mainMB": 33.375,
+   "processes": 12,
+   "availGB": 2.5948944091796875
+  },
+  {
+   "t": 1790030500685,
+   "phase": "after",
+   "totalMB": 1900.5625,
+   "mainMB": 30.75,
+   "processes": 12,
+   "availGB": 2.5142059326171875
+  },
+  {
+   "t": 1790030501186,
+   "phase": "after",
+   "totalMB": 1795.71875,
+   "mainMB": 30.75,
+   "processes": 12,
+   "availGB": 2.620269775390625
+  },
+  {
+   "t": 1790030501688,
+   "phase": "after",
+   "totalMB": 1792.796875,
+   "mainMB": 29.875,
+   "processes": 12,
+   "availGB": 2.6547393798828125
+  },
+  {
+   "t": 1790030502188,
+   "phase": "after",
+   "totalMB": 1712.5,
+   "mainMB": 29.875,
+   "processes": 12,
+   "availGB": 2.8125762939453125
+  },
+  {
+   "t": 1790030502689,
+   "phase": "after",
+   "totalMB": 1753.1875,
+   "mainMB": 30.765625,
+   "processes": 12,
+   "availGB": 2.854644775390625
+  },
+  {
+   "t": 1790030503191,
+   "phase": "after",
+   "totalMB": 1726.796875,
+   "mainMB": 30.765625,
+   "processes": 12,
+   "availGB": 2.892974853515625
+  },
+  {
+   "t": 1790030503691,
+   "phase": "after",
+   "totalMB": 1734.4375,
+   "mainMB": 30.765625,
+   "processes": 12,
+   "availGB": 2.88592529296875
+  },
+  {
+   "t": 1790030504193,
+   "phase": "after",
+   "totalMB": 1712.953125,
+   "mainMB": 30.765625,
+   "processes": 12,
+   "availGB": 2.8341217041015625
+  },
+  {
+   "t": 1790030504694,
+   "phase": "after",
+   "totalMB": 1771.890625,
+   "mainMB": 30.765625,
+   "processes": 12,
+   "availGB": 2.8208465576171875
+  },
+  {
+   "t": 1790030505195,
+   "phase": "after",
+   "totalMB": 1753.78125,
+   "mainMB": 30.765625,
+   "processes": 12,
+   "availGB": 2.8446197509765625
+  }
+ ]
+}
