@@ -162,6 +162,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
             intentQuery: decision.resolvedQuestion,
             ...(decision.retrievalPlan.exhaustive ? { exhaustive: true } : {}),
             ...(typeof decision.retrievalPlan.evidenceTokens === 'number' ? { tokenBudget: decision.retrievalPlan.evidenceTokens } : {}),
+            ...(decision.retrievalPlan.wholeProfile === true ? { wholeProfile: true } : {}),
           });
           if (Array.isArray(got)) raw = got;
           else {

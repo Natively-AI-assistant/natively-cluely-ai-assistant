@@ -90,6 +90,8 @@ export interface BridgeInput {
   /** Estimated tokens of the active mode's attached text (referenceCorpusTokens);
    *  null when a file has no text yet. Lets a small corpus be read whole. */
   attachedCorpusTokens?: number | null;
+  /** profileWholeInfo(collected docs): the résumé / JD are handed over whole this turn; null = retrieval as before. */
+  profileWhole?: { tokens: number; docs: number } | null;
   /**
    * Bounded fast-model query rewrite for low-confidence retrieval — see
    * retrieval/llm-query-rewrite.ts. The CALLER binds the model (this module has
@@ -317,6 +319,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       profileOnlyDocuments: (input.attachedSourceCount ?? 0) === 0 && (input.profileSourceCount ?? 0) > 0,
       attachedSourceCount: input.attachedSourceCount,
       attachedCorpusTokens: input.attachedCorpusTokens ?? null,
+      profileWhole: input.profileWhole ?? null,
       queryRewriter: input.queryRewriter,
       attachedFileNames: input.attachedFileNames,
       screenText: input.screenText,

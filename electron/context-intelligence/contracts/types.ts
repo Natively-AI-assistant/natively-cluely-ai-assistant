@@ -256,6 +256,12 @@ export interface RetrievalPlan {
    * packer both read it, so the retriever and the prompt agree on the budget.
    */
   evidenceTokens?: number;
+  /**
+   * The résumé and the job description are handed over whole this turn, and the
+   * caps above already hold their room (orchestrator.decide, from the request's
+   * profileWhole). The profile port obeys it; absent, it retrieves passages as before.
+   */
+  wholeProfile?: boolean;
 }
 
 // ── The turn decision ───────────────────────────────────────────────────────

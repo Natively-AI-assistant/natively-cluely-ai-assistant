@@ -129,6 +129,8 @@ export interface ProfilePortInput {
    * chunks are used exactly as before.
    */
   rawRetriever?: (query: string, opts: { topK: number; timeoutMs?: number }) => Promise<RawRetrievedChunk[]>;
+  /** false keeps passages even for a profile that fits (PROFILE_WHOLE_MAX_TOKENS). Default: whole. */
+  wholeDocuments?: boolean;
 }
 
 export interface RawRetrievedChunk {
@@ -145,6 +147,57 @@ const TYPE_FOR_KIND: Record<ProfileDocKind, SourceType> = {
   jd: 'JOB_DESCRIPTION',
   fact: 'PROFILE_FACT',
 };
+
+// ── A PROFILE THAT FITS THE PROMPT IS HANDED OVER WHOLE (2026-10-03) ─────────
+//
+// Measured on the evidence-rich benchmark, with a 1,048-word résumé and a
+// 760-word job description loaded through Profile Intelligence: a turn carries
+// at most six profile passages out of about seventy, and of the rows whose
+// answer rests on a résumé or JD fact, every needed fact was in the prompt on
+// 13 of 33. With it there the answers scored 9.5, without it 6.6 ("I'll confirm
+// the before-and-after figures and come back to you", from a candidate whose
+// résumé states them). The two documents together are about 2,700 tokens.
+//
+// So when every registered résumé / JD has its raw text and together they fit
+// this size, a turn that reads the profile gets each PLANNED document as one
+// item holding its whole text, in place of that document's raw-text passages
+// and the semantic arm (no embed / rerank round trip). What does not change:
+// structured sections, cards, the complete-inventory sections that license
+// "X is not listed", derived facts, the planned-type gate (a turn that plans
+// only the résumé still gets no JD), and a larger profile, which keeps
+// retrieval exactly as it was. The plan makes the room (orchestrator.decide).
+//
+// 6,000 tokens: about ten pages of the two documents, and small enough that a
+// full reference pack (mode-retrieval-port WHOLE_PACK_MAX_TOKENS) plus the
+// profile stays under what the claim pass is shown
+// (llm/claimVerifier CLAIM_VERIFIER_MATERIAL_MAX_CHARS).
+/** Whole-profile threshold, in the packer's estimateTokens units (~4 chars/token). */
+export const PROFILE_WHOLE_MAX_TOKENS = 6000;
+/** The `section` of a whole-document item. */
+export const PROFILE_WHOLE_SECTION = 'Document (whole)';
+
+/**
+ * Size and count of the profile documents a mode would be handed whole, or null
+ * when they are not (a document without raw text, too large, none authorized).
+ * The callers pass it to the plan; the port applies the same rule to itself.
+ */
+export function profileWholeInfo(
+  docs: ReadonlyArray<Pick<ProfileDocLike, 'kind' | 'sourceId' | 'versionId' | 'rawText'>>,
+  allowedSourceTypes: readonly SourceType[],
+  profileSources: readonly SourceType[],
+): { tokens: number; docs: number } | null {
+  const authorized = new Set<SourceType>((profileSources ?? []).filter((t) => (allowedSourceTypes ?? []).includes(t)));
+  let tokens = 0; let count = 0;
+  for (const doc of docs ?? []) {
+    if (doc.kind !== 'resume' && doc.kind !== 'jd') continue;
+    if (!authorized.has(TYPE_FOR_KIND[doc.kind]) || !doc.sourceId || !doc.versionId) continue;
+    const raw = typeof doc.rawText === 'string' ? doc.rawText.trim() : '';
+    if (!raw) return null;                                       // size unknown: retrieval as before
+    tokens += Math.ceil(raw.length / 4);
+    count += 1;
+  }
+  return count > 0 && tokens <= PROFILE_WHOLE_MAX_TOKENS ? { tokens, docs: count } : null;
+}
 
 // ── deterministic section rendering ─────────────────────────────────────────
 
@@ -532,6 +585,9 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
   const chunkVersions = new Map<string, string>();
   const sourceScopes = new Map<string, EvidenceScope>();
   const chunks: PortChunk[] = [];
+  /** Raw text of each registered résumé / JD; `wholeBlocked` when one of them has none. */
+  const wholeTexts = new Map<string, { fileName: string; text: string }>();
+  let wholeBlocked = false;
 
   for (const doc of input.docs) {
     const mapped = TYPE_FOR_KIND[doc.kind];
@@ -602,6 +658,10 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
     }
 
     if (idx === 0) continue;                                    // nothing renderable ⇒ not registered
+    if (doc.kind === 'resume' || doc.kind === 'jd') {
+      if (raw) wholeTexts.set(doc.sourceId, { fileName: doc.fileName, text: raw });
+      else wholeBlocked = true;
+    }
     sourceTypes.set(doc.sourceId, mapped);
     activeVersions.set(doc.sourceId, doc.versionId);
     chunkVersions.set(doc.sourceId, doc.versionId);
@@ -609,6 +669,11 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
   }
 
   if (sourceTypes.size === 0) return null;
+
+  // Handed over whole (see PROFILE_WHOLE_MAX_TOKENS): every registered résumé /
+  // JD has raw text and together they fit.
+  const wholeTokens = [...wholeTexts.values()].reduce((n, d) => n + Math.ceil(d.text.length / 4), 0);
+  const wholeEligible = input.wholeDocuments !== false && !wholeBlocked && wholeTexts.size > 0 && wholeTokens <= PROFILE_WHOLE_MAX_TOKENS;
 
   // Corpus arbitration over THIS port's chunks (see orchestrator). Statistics
   // are built once per port — a port is constructed per turn from documents
@@ -631,7 +696,11 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
 
   const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; sourceTypes?: readonly SourceType[]; intentQuery?: string }): Promise<LegacyChunk[]> => {
+    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; sourceTypes?: readonly SourceType[]; intentQuery?: string; wholeProfile?: boolean }): Promise<LegacyChunk[]> => {
+      // Whole only when the PLAN says so: it is the plan that made the room for
+      // the documents (item cap, token budget). Without it the packer would cut
+      // them, so a caller that has not sized the profile gets passages as before.
+      const whole = wholeEligible && opts.wholeProfile === true;
       // Only the PLANNED types compete for the top-k (2026-09-11). Measured in
       // technical-interview: "Tell me about your education — degree, school,
       // coursework" planned [RESUME, …] without JOB_DESCRIPTION, but the JD's
@@ -726,7 +795,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       // chunk, BM25's hit went with it. The two arms fail differently; neither
       // may silence the other.
       let semanticRaw: RawRetrievedChunk[] = [];
-      if (input.rawRetriever) {
+      if (input.rawRetriever && !whole) {
         // A DEADLINE and a VOICE (review finding, reproduced): the arm was awaited
         // with no budget — a 6 s embedding stall held back BM25 evidence that was
         // already computed and the turn took 6,008 ms — and a throwing arm left
@@ -840,7 +909,18 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
         }
       }
 
-      return scoredChunks
+      // WHOLE: each document once, entire, in place of its passages. Score 1, like
+      // a reference file read whole: nothing here was ranked, and the document
+      // must not lose its place to the sections cut from it.
+      const wholeRows = whole
+        ? [...wholeTexts.entries()].map(([sourceId, d]) => ({
+          c: { sourceId, fileName: d.fileName, section: PROFILE_WHOLE_SECTION, text: d.text, chunkIndex: 200_000, boostKey: 'whole_document', completeInventory: false } as PortChunk,
+          score: 1,
+        }))
+        : [];
+
+      return (whole ? scoredChunks.filter((s) => s.c.boostKey !== 'raw_document') : scoredChunks)
+        .concat(wholeRows)
         .concat([...semanticByText.values()].map((row) => ({ ...row, i: -1 })))
         .filter((s) => s.score > 0.05)
         .filter((s) => !planned || planned.has(sourceTypes.get(s.c.sourceId) as SourceType))
@@ -865,7 +945,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
           // the record actually enumerates.
           metadata: c.completeInventory
             ? { completeInventory: true, ...(c.inventoryCategory ? { inventoryCategory: c.inventoryCategory } : {}) }
-            : {},
+            : (c.boostKey === 'whole_document' ? { wholeDocument: true } : {}),
         }));
     },
   });
