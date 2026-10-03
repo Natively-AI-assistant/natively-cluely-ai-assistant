@@ -1,4 +1,4 @@
-# Handoff — Natively 9-mode answer quality and speed (written 2026-10-03 06:20 UTC)
+# Handoff — Natively 9-mode answer quality and speed (written 2026-10-03 06:20 UTC; landing added 2026-10-03)
 
 Read this first in a new session. It says where things stand, what Evin has decided, where every file is, and how
 to run each tool. The long records it points to:
@@ -12,8 +12,10 @@ to run each tool. The long records it points to:
 
 ## 1. Where things stand
 
-* **Kept build: fix13 = app commit `e000db4a`, branch `fix/aq-astra-i5`. Not landed on main.** Nothing from this
-  work is on main; landing is Evin's decision.
+* **Kept build: fix13 = app commit `e000db4a`. LANDED on local main on 2026-10-03** (Evin: "commit and push
+  everything to local main"), not pushed to origin: merge `98caa240` (the kept build), merge `d8d32253` (this
+  harness), then `218febf5` and `0ff3f2e5` (section 4 says what those two are). **The scores below were measured
+  on `e000db4a`. The merged tree has not been measured**: main had moved 155 commits, the diagram feature among them.
 * **Scores, start → kept build, every answer judged on both sides (gpt-6-astra, charter v2):**
   dev 7.76 → 8.54 (+0.78 ±0.22), hard fails 89 → 37 of 360; holdout 7.92 → 8.47 (+0.55 ±0.25), 61 → 31 of 270.
 * **The 9.5-per-mode target is not reachable this way.** Answers with no flagged failure average 9.28 (dev) and
@@ -69,16 +71,39 @@ to run each tool. The long records it points to:
 
 | Worktree | Path | Branch / commit | Notes |
 |---|---|---|---|
-| Harness | `/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix` | `fix/aq-astra`, HEAD `34998ce7` (+ this file) | `benchmarks/natively-answer-quality/` is gitignored: new files need `git add -f` |
-| App | `/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix2` | checked out on `fix/aq-astra-i5` (`e000db4a`), clean, no build output | `npm run dev:agent` rebuilds `dist-electron` (1.3 GB) from the working tree |
-| Main checkout | `/Users/evin/natively-cluely-ai-assistant` | `main` at `e931e8ee`, with OTHER sessions' uncommitted changes | read-only for this work |
+| Harness | `/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix` | `fix/aq-astra`, fast-forwarded to main after the landing | `benchmarks/natively-answer-quality/` is gitignored: new files need `git add -f`. The raw run output, judge cache and app logs exist ONLY in this worktree (ignored, about 490 MB): do not remove it |
+| App | `/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix2` | checked out on `fix/aq-astra-i5` (`e000db4a`, the build that was measured), clean, no build output | `npm run dev:agent` rebuilds `dist-electron` (1.3 GB) from the working tree |
+| Main checkout | `/Users/evin/natively-cluely-ai-assistant` | `main`, which now contains the landing, with OTHER sessions' uncommitted changes | read-only for this work |
 
-App branches (all unmerged):
-* `fix/aq-astra-i5` = `e000db4a` — **the kept build** (fix13).
+App branches:
+* `fix/aq-astra-i5` = `e000db4a` — **the kept build** (fix13). Merged into main on 2026-10-03.
 * `fix/aq-astra-i6` = `c399f399` — Looking-for-work fallback rule + Call Center and Sales no-document notices. Not
   kept (rules failed).
 * `fix/aq-astra-i7` = `3b0c1a4f` — reasoning on typed Technical interview / Lecture turns. Not kept (rule failed, and
   Evin rejected reasoning). Its code comment and commit message cite the withdrawn Fable judge.
+
+`fix/aq-astra-i6` and `fix/aq-astra-i7` were NOT merged, on purpose: both are rejected candidates.
+
+**What the landing changed beyond the two merges** (main was at `5213d817`):
+* Two conflicts, each "both sides added at the same place", both kept. `AnswerPlanner`: the recruiting heard-turn
+  demotion runs before main's design follow-up and visual-turn routing, so the diagram resolver still decides a turn
+  with a design on the table. `IntelligenceEngine`: main's diagram repair helpers and the claim verifier pass are
+  separate methods.
+* `218febf5`: a turn that carries a visual contract (a drawing, a chart, a table) is not put through the claim
+  verifier, on the hotkey and the typed pass. Main's diagram wiring test requires one provider call on such a turn
+  and commits the answer as written; with the verifier running it was 149 of 158. On the dev set the diagram
+  resolver claims 3 of 360 questions (DJOB-011, DTECH-011, DTECH-012), one of them in a verified gate. One check
+  (an ordinary Team Meet turn with the design withheld) now counts answer calls and requires that no call carries
+  the design.
+* `0ff3f2e5`: the answer-relevance and scaffold-contamination suites switch the verifier off. They hand the
+  provider a fixed queue of replies, and the verification call took the next one. These 4 failures were on
+  `e000db4a` itself; that suite (`npm test`) had not been run on it.
+* Tests on the landed tree: type-checks (electron, premium, renderer) clean; `test:intelligence` 2,848 pass / 0
+  fail; `test:llm` 5,940 / 0; `test:diagram` 1,105 + 226 / 0 and the wiring runs 78/78, 78/78, 158/158, 158/158;
+  harness 27 / 0; `npm test` 13,737 pass / 5 fail, the same 5 that fail on main in this checkout (4 need the model
+  weights that are missing from every checkout, 1 is `ActivationPolicyOrdering`).
+* A full build output is 1.6 GB, 1.1 GB of it source maps; with under 2 GB free the suites were run against a
+  build without maps (the build script run unchanged with `sourcemap: false`, from the scratchpad).
 
 ## 5. How each mode stands (kept build)
 
@@ -242,8 +267,9 @@ Traps, each of which cost time once:
 ## 10. What is left, and whose it is
 
 For Evin (decisions, in the report's section 10):
-1. Land `fix/aq-astra-i5` (`e000db4a`)? It adds 0.5–0.7 s to the settled answer and swaps the shown text on
-   24–31 % of turns, for +0.55 on holdout. Kill switch: `NATIVELY_CLAIM_VERIFIER=0`.
+1. DONE 2026-10-03: `fix/aq-astra-i5` is on local main. Its known cost is unchanged: 0.5–0.7 s more to the settled
+   answer and the shown text swapped on 24–31 % of turns, for +0.55 on holdout. Kill switch:
+   `NATIVELY_CLAIM_VERIFIER=0`. Still open: a dev run on the merged main (not measured), and the push to origin.
 2. The personal answer bank (the only item that moves Looking for work toward 9).
 3. Code verification gating the coding answer.
 4. A larger dev set per mode, or samples per item, before any further round of small changes.

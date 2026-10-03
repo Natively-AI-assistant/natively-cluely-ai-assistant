@@ -99,7 +99,9 @@ hour on 2026-10-02 at Evin's request and withdrawn at Evin's request; its scores
 
 ## 1. Outcome
 
-* **Kept build: `fix13` = app commit `e000db4a` on branch `fix/aq-astra-i5`. Not landed on main.** fix13 is fix12
+* **Kept build: `fix13` = app commit `e000db4a` on branch `fix/aq-astra-i5`. Landed on local main on 2026-10-03
+  (merge `98caa240`; not pushed; every score here was measured before that merge, see the handoff, section 4).**
+  fix13 is fix12
   (`f0c3a263`) plus one prompt notice that touches 7 of 360 dev rows and 4 of 270 holdout rows.
 * **From main as it was at the start to the kept build, every answer judged on both sides:**
 
