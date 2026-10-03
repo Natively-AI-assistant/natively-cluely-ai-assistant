@@ -121,6 +121,10 @@ const contractOf = (c) => {
 };
 const OLD_TEMPLATE = /Clarify Requirements:|High-Level Design:|Core Components:/;
 const notCoding = (c) => !/<coding_contract>/.test(c.system) && !/verification_spec/.test(all(c));
+// The claim-verifier pass (llm/claimVerifier.ts) is a second provider call after an ordinary spoken answer in the
+// modes it covers. It is not an answer. A turn that carries a visual contract never gets one, so every
+// `calls.length === 1` below on such a turn also proves that.
+const isVerification = (c) => /^(?:MATERIAL|DRAFT REPLY):\n/.test(c.user);
 
 (async () => {
   out(`\n##### visual catalog · V3=${V3}  userData=${userData}`);
@@ -467,7 +471,9 @@ const notCoding = (c) => !/<coding_contract>/.test(c.system) && !/verification_s
     await ask(cloud, 'Draw a swimlane diagram of the refund process');
     const cloud2 = makeEngine([PROSE], cloud.session);
     r = await ask(cloud2, 'Add a finance lane that approves anything over 500');
-    check('V19', 'a provider: no design block, and no contract that points at one', r.calls.length === 1 && blocks(r.sent) === 0 && !/already on the table/.test(contractOf(r.sent)) && !all(r.sent).includes('Review request'), `calls=${r.calls.length} blocks=${blocks(r.sent)} contract=${contractOf(r.sent).slice(0, 200)}`);
+    // With the design withheld this is an ordinary Team Meet turn, so its answer is followed by the verification
+    // pass: one answer call, and NO call, the verification included, is handed the design or a contract that points at it.
+    check('V19', 'a provider: no design block, and no contract that points at one', r.calls.filter((c) => !isVerification(c)).length === 1 && r.calls.every((c) => blocks(c) === 0 && !/already on the table/.test(contractOf(c)) && !all(c).includes('Review request')), `calls=${r.calls.length} answers=${r.calls.filter((c) => !isVerification(c)).length} blocks=${r.calls.map(blocks).join('+')} contract=${contractOf(r.sent).slice(0, 200)}`);
     design = cloud2.session.getActiveDesign();
     check('V19', 'the design on the table is untouched by that turn', design && design.version === 1 && design.source === LANES, JSON.stringify(design));
     // The same two turns, answered by a model on this device.

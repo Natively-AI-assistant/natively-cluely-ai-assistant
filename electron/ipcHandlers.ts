@@ -2599,7 +2599,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             // llm/claimVerifier.ts). The row streamed as written; an accepted
             // edit replaces it through finalText on 'gemini-stream-done'. Not
             // on a screenshot turn: the edit would not see what the answer saw.
+            // Not on a turn that carries a visual contract either (same reason
+            // as the hotkey pass: one provider call, the answer kept as written).
             if (v3Stream.outcome.truncated !== true && finalText.trim() && !(imagePaths?.length)
+                && !manualDiagramTurn?.signals
                 && process.env.NATIVELY_CLAIM_VERIFIER !== '0') {
               try {
                 const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');

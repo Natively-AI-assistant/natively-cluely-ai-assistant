@@ -6204,8 +6204,15 @@ export class IntelligenceEngine extends EventEmitter {
             // it does not — see llm/claimVerifier.ts for the measurements. One
             // short edit pass on the answer's own replayed call, bounded by a
             // total budget, kept only when the deterministic rails accept it.
+            // Not on a turn that carries a visual contract (a drawing, a chart,
+            // a table of the app's computed values): that turn is one provider
+            // call and its answer is committed as written, which the wiring
+            // E2E asserts. The rails already refuse a fenced answer; a table
+            // has no fence, and an edit could not be checked against the
+            // contract. On the dev set the resolver claims 3 of 360 questions.
             if (fullAnswer && !isCodingAnswerType(answerPlan.answerType)
                 && !IntelligenceEngine.isNonAnswerSentinel(fullAnswer)
+                && !wtaDiagramTurn?.signals
                 && requestSnapshot.v3Prompt && process.env.NATIVELY_CLAIM_VERIFIER !== '0') {
                 try {
                     fullAnswer = await this.verifyAnswerClaims({
