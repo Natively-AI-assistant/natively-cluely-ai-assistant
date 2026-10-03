@@ -139,6 +139,7 @@
     "generateUpdatesFilesForAllChannels": true,
     "appId": "com.apple.corespeechd",
     "afterPack": "./scripts/after-pack.cjs",
+    "afterAllArtifactBuild": "./scripts/afterAllArtifactBuild.default.cjs",
     "productName": "Natively",
     "files": [
       "dist",
@@ -210,13 +211,6 @@
       "target": [
         {
           "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "dmg",
           "arch": [
             "x64",
             "arm64"
