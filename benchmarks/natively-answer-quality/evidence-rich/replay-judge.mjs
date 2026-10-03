@@ -67,6 +67,9 @@ if (cmd === 'prep') {
   line('all rows', R); line('rows where the two arms show different text', R.filter((r) => body(r.v[0].rec?.text ?? r.row.raw_answer) !== body(r.v[1].rec?.text ?? r.row.raw_answer)));
   line('evidence required and in the prompt', R.filter((r) => r.fn.evidence_required && r.fn.evidence_delivered === true)); line('evidence required, not in the prompt', R.filter((r) => r.fn.evidence_required && r.fn.evidence_delivered === false));
   line('need no document (missing + irrelevant)', R.filter((r) => ['missing_evidence', 'irrelevant_source'].includes(r.item.condition))); line('conflict / stale', R.filter((r) => r.item.condition === 'conflict_stale'));
+  const res = (r) => (r.item.oracle.known_conflicts ?? []).map((c) => c.resolution);
+  line("oracle: an UNRESOLVED conflict (must be surfaced)", R.filter((r) => res(r).includes('unresolved')));
+  line('oracle: conflict resolved (current / final / authoritative wins)', R.filter((r) => res(r).length && !res(r).includes('unresolved')));
   line('heard', R.filter((r) => r.row.surface !== 'typed')); line('typed', R.filter((r) => r.row.surface === 'typed'));
   if (!opt('blind')) for (const m of [...new Set(R.map((r) => r.item.mode))]) line(`mode ${m}`, R.filter((r) => r.item.mode === m));
 } else { console.error('prep | effect'); process.exit(2); }

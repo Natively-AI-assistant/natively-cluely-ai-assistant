@@ -333,3 +333,67 @@ If both pass, the one with the higher all-rows mean is taken; within 0.03 of eac
 **Holdout (aggregates only):** E5 and E6 are confirmed together by one run of the candidate build in the app:
 effect of the pass on the set's mean not below −0.10, hard fails not above E1's 15 by more than 2. If that fails,
 the two are separated by offline replays of the holdout drafts.
+
+### E6 — offline data and verdict (2026-10-03, provisional judge)
+
+Arms `e6-v1`, `e6-v2` (variants in `replay-variants/`), 96,000 cap, same 251 turns, read against the E5 96,000 arm.
+Replays that hit the 3.5 s budget in the first pass (5 in v1, 25 in v2, during a slow spell of the provider) were
+run again once at the comparison arm's concurrency; v1 then finished every pass, v2 still lost 9 (7 over budget, 2
+errors), which count as the draft kept, as they would in the app.
+
+| | E5 arm | v1 | v2 |
+|---|---:|---:|---:|
+| Mean, 333 rows | 8.50 | 8.56 | 8.51 |
+| Effect of the pass | +0.01 (±0.09) | +0.06 (±0.09) | +0.02 (±0.08) |
+| Hard fails / critical (drafts: 40) | 32 / 17 | 27 / 14 | 31 / 17 |
+| Passes naming a conflict | 13 | 5 | 3 |
+| Pass time, median / p90 | 1,199 / 1,743 ms | 1,239 / 1,814 ms | 1,342 / 2,054 ms |
+
+| Rule line | v1 | v2 |
+|---|---|---|
+| 1. All rows above the E5 arm, interval excludes 0 | +0.06 (±0.08): **no** | +0.01 (±0.09): **no** |
+| 2. Hard fails and critical not above | 32 → 27, 17 → 14: yes | 32 → 31, 17 → 17: yes |
+| 3. Unresolved conflicts (9 rows): not more than 0.3 lower, no new hard fail | +0.71, 2 → 0: yes | 0.00, 2 → 2: yes |
+| 4. Resolved conflicts (66 rows): not lower | +0.22 (±0.28): yes | +0.28 (±0.24): yes |
+| 5. Rows that need no document: not more than 0.15 lower | −0.03: yes | −0.15: yes (at the line) |
+
+**Verdict: neither is kept.** Line 1 fails for both: the gain on the mean is not distinguishable from zero on 333
+rows. v1 fails nothing else and takes five hard fails out (three of them critical); whether that is worth a wording
+change to a component Evin decided to keep is his call. It was not built into the app. v2 is not worth pursuing.
+
+---
+
+## E7 — a reference file's own date and version in the prompt (Evin: "App labels dates in the prompt")
+
+**Rule written before the candidate build was run in the app (commit time of this section is the record).**
+
+**Change (`fix/er-followups`, commit `9b8c99fa`).** The kept build already renders `status="…"` on evidence when a
+file declares itself retired, expired, a draft or outdated. A file's own date and version are now read too (the
+date next to a word that says so in the head, or from the file name; the version from the file name, else the title
+block) and rendered as `dated="…"` / `version="…"`; the precedence notice says that between two final documents the
+later one holds, and that a draft or an informal note never overrides a final document.
+
+*Contamination, stated plainly.* The detector was written against invented documents (its tests), then run once
+over the benchmark's 72 reference files to see what it yields: 28 dated, every date equal to the one the corpus
+authors recorded. That look showed versions read from a mention of another document, and one date read from an
+identifier in a file name; both were corrected by general rules (file name first for the version, title block only,
+no bare year from a file name), with tests on invented documents. Holdout questions run over these same files, so
+the labels were tuned with sight of the holdout's documents, though of none of its questions or answers.
+
+**What runs.** One run of the stack in the app, `fix/er-followups` = E1 + the markup fix + E5 + E7 (E6 is not in
+it), on dev + counterfactual, then holdout. Read against the E1 runs. "Draft" = the streamed answer before the
+claim pass (the shown answer where the pass changed nothing), judged on both builds.
+
+**Rule for E7 (the generator's drafts, dev + counterfactual).**
+1. Conflict / stale rows (53): hard fails of the drafts below E1's drafts (8), and the drafts' mean not more than
+   0.2 lower.
+2. All rows: drafts paired with E1's drafts not below −0.15.
+3. Rows that need no document: drafts not below −0.25.
+
+**Rule for the stack (E5 in the app; lines 5–7 of E5's rule).** Effect of the pass on the set's mean not below
+−0.10; all rows (shown) paired with E1 not below −0.15; last streamed token to settled text, median, not more than
+300 ms above E1's dev run.
+
+**Holdout (aggregates only).** E7: conflict / stale drafts' hard fails not above E1's drafts', all-rows drafts not
+below −0.15. Stack: effect of the pass not below −0.10, hard fails (shown) not above E1's 15 by more than 2.
+A failure of E7's lines drops E7 from the stack (it is its own commit); a failure of the stack's lines drops E5.
