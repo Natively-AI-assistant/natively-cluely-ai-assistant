@@ -265,9 +265,19 @@ describe('splash wiring', () => {
     assert.match(app, /if \(showWelcome\) cameFromWelcome\.current = true;/);
   });
 
-  test('the logo is the corrected equal-stroke mark shared with NativelyLogoMark', () => {
-    const mark = read('../NativelyLogoMark.tsx');
+  // The splash is frozen on the mark it was designed with: every stroke 68 wide. On 2026-10-03 the
+  // white logo everywhere else went to 75 and the owner asked for this animation to stay exactly as
+  // it is, so the splash and the app logo are no longer one path. Do not make them agree again by
+  // editing the splash.
+  test('the splash keeps its own equal-stroke mark (every stroke 68 wide)', () => {
     const d = renderer.match(/const MARK_D = '([^']+)'/)[1];
-    assert.ok(mark.includes(`d="${d}"`), 'the splash and the app logo have drifted apart');
+    assert.ok(d.includes('A338 338'), 'ring: outer radius 406, inner 338');
+    assert.ok(d.includes('M288 192.77 H356') && d.includes('M668 192.77 H736'), 'uprights 68 wide');
+  });
+
+  test('NativelyLogoMark draws the white logo master (brand/natively-mark-white.svg)', () => {
+    const mark = read('../NativelyLogoMark.tsx');
+    const master = read('../../../brand/natively-mark-white.svg').match(/ d="([^"]+)"/)[1];
+    assert.ok(mark.includes(`d="${master}"`), 'the app logo and its master have drifted apart');
   });
 });
