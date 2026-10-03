@@ -672,3 +672,23 @@ tests/e2e-modes/hosted-userdata-*/
 
 # Written by `npm run dev:agent` — per-worktree CDP port + session id.
 agent-browser.json
+
+# ── Local scratch / benchmark output / RE artifacts (untracked 2026-10-04) ──
+# The opencode sweep (9efd5e72) committed ~383k lines of benchmark JSON, runtime
+# sqlite DBs, and reverse-engineering scratch dumps into the repo. They were
+# untracked (kept on disk) and are ignored here so they do not creep back.
+/results/
+*.sqlite
+*.db
+/.serena/
+/work/
+/single.md
+/prompt
+/onnx-load-sentinel-embeddings.json
+/REVERSE_ENGINEERING_REPORT_CLUERY_PARAKEET.md
+/REVERSE_ENGINEERING_REPORT_CLUERY_PARAKEET.viewer.html
+/STEALTH_COMPARISON_NATIVELY.chart.pdf
+/STEALTH_COMPARISON_NATIVELY.viewer.html
+/stealth-comparison.html
+/cluely-*
+/start-button-cluely.png
