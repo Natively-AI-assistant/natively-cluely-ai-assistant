@@ -118,3 +118,12 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   it is now a separate, labelled paragraph.
 * The scripts behind the report's tables moved from the session's scratch folder into `report/`, with
   `ER_JUDGE=opus|astra`. The chain now also judges the streamed drafts.
+
+## 17:05–17:15 — Evin's decisions; E1 landed on local main
+
+* Evin chose: land E1 now on local main; redesign the claim pass then measure; raise the 24,000-character cut and
+  measure; the app labels dates in the prompt; find the cause of the streamed tool-call markup and fix it.
+* E1 cherry-picked onto main in a temporary worktree (`75eb98d6` → `9fce990b`), `typecheck:electron` clean,
+  `test:intelligence` 2,858 pass / 0 fail of 2,869, then `git merge --ff-only` in the main checkout; another
+  session's uncommitted files there were untouched (status identical before and after). Not pushed. The temporary
+  worktree was removed.

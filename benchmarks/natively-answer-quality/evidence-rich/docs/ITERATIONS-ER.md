@@ -100,8 +100,10 @@ irrelevant-source rows: 8.38 → 8.16 (−0.23 ±0.52). Isolation set on the E1 
 on all 559 rows of the E1 runs: no file of another mode in any prompt, no profile evidence in a mode that may not
 use it, no string of the other profile in any prompt or answer.
 
-**Verdict: E1 is kept**, as commit `bab77f33` on branch `fix/er-pack-whole` (from `e000db4a`). It is not on main and
-is not to be landed without Evin. Known costs: about 7,000 more input tokens per turn at the median on these packs;
+**Verdict: E1 is kept**, as commit `bab77f33` on branch `fix/er-pack-whole` (from `e000db4a`). Landed on LOCAL main
+on 2026-10-03 at 17:10 UTC on Evin's word ("Land now on local main"): `9fce990b`, a cherry-pick onto `75eb98d6`, not
+pushed; tests on that commit 2,858 pass / 0 fail, typecheck clean; main + E1 was not benchmarked. Undo: `git revert
+9fce990b`. Known costs: about 7,000 more input tokens per turn at the median on these packs;
 typed first word about 120 ms later; more wrong-attribution answers where the asked fact is absent but a
 neighbouring one is now in view (hard fails on rows that need no document, dev + counterfactual: 10 → 14). The
 judge was the provisional one; the gpt-6-astra chain re-judges these rows when its batch opens.
@@ -223,3 +225,49 @@ implemented. What stands as a measurement, on both sets: once the files are in t
 the average answer (dev + counterfactual −0.23 ±0.14, holdout −0.37 ±0.24) while still removing a few capped
 failures (dev + counterfactual 40 → 38, holdout 21 → 15). That is a trade for Evin to decide, with a better design
 of the pass (one that does not delete what the files state) as the alternative to switching it off.
+
+---
+
+## E5 — the claim pass is shown the whole prompt (heard and typed)
+
+**Rule written before any replay arm was run or judged (commit time of this section is the record).**
+
+**What was found (judge-free, from the recorded requests; `report/claim-pass-cut.mjs`).** The claim pass never sees
+more than the first 24,000 characters of the answer's prompt, on either surface: the typed pass cuts the material in
+`claimVerifierStandaloneMessage`, and the heard pass inherits the answer's prompt through `LLMHelper.replayAnswerCall`,
+which trims it at `REPLAYED_ANSWER_PROMPT_MAX_CHARS = 24000`. The earlier report named only the typed surface; that
+was incomplete. On the kept build the prompt exceeded 24,000 characters on 1 of 252 passes. With E1 it does on 302 of
+384 (median prompt 35,171 characters, max 48,716), so the pass judged most answers against a pack it could not see.
+
+| E1 runs, replaced rows (drafts judged) | n | shown − draft |
+|---|---:|---:|
+| the pass saw the whole prompt | 36 | +0.20 (±0.66) |
+| the pass saw a cut prompt | 130 | −1.09 (±0.40) |
+| edit dropped a number the prompt states, and the pass had not been shown that number | 39 | −2.25 (±0.87) |
+| edit dropped a number the pass had been shown | 40 | −1.47 (±0.61) |
+
+**Change.** A cap of its own for the claim pass, 96,000 characters, on both surfaces. The other repairs that inherit
+the answer's prompt (regeneration, document-grounded repair) keep 24,000. No prompt wording changes.
+
+**How it is measured.** Offline first, with `replay-claim-pass.mjs`: the pass is re-run on the drafts the E1 dev and
+counterfactual runs recorded, with the app's own function, system prompt (hash-checked), model, parameters, budget
+and rails. Two arms through the same harness, cut at 24,000 and at 96,000; a replay is never compared with what the
+app itself produced. Each arm's shown texts are judged where they are new (a text equal to the draft or to an
+already judged text reuses that judgment). Then one run in the app for confirmation.
+
+**Rule, offline (dev + counterfactual, 333 rows; "effect of the pass" = shown − draft, rows it did not change count 0).**
+
+1. Effect of the pass on the set's mean, 96,000 arm minus 24,000 arm: at least +0.10 with a 95 % interval that
+   excludes 0.
+2. Hard fails of the 96,000 arm not above the 24,000 arm's.
+3. Rows that need no document (missing evidence, irrelevant source): 96,000 arm not more than 0.15 below the 24,000 arm.
+4. The pass finishes inside its 3,500 ms budget at least as often as in the 24,000 arm, less 3 points at most (a
+   pass that times out keeps the draft, which would read as a gain without being one).
+
+**Rule, in the app (dev + counterfactual on the candidate branch; its drafts judged), read against the E1 runs.**
+
+5. Effect of the pass on the set's mean is not below −0.10 (E1 as built: −0.23 ±0.14).
+6. All rows, paired with E1: not below −0.15.
+7. Time from the last streamed token to the settled text, median, not more than 300 ms above E1's dev run.
+
+**Holdout (aggregates only):** line 5, and hard fails not above E1's 15 by more than 2. A failure at any step: not kept.
