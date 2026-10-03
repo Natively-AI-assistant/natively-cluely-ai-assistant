@@ -127,3 +127,55 @@ If kept, the same computation on the E1 holdout rows (aggregates only; their dra
 gain at least +0.5 with an interval that excludes 0, hard fails not up. Then it is implemented with unit tests
 and one app run confirms that the implementation rejects the same rows the offline computation rejected. A
 failure at any step: not kept.
+
+### E3 — data and verdict (2026-10-03 16:25 UTC; offline, provisional judge)
+
+`node evidence-rich/rail-offline.mjs --runs evidence-rich/results/er-dev-e1,evidence-rich/results/er-cf-e1`.
+333 rows; the shown text was replaced on 113 (all 113 drafts judged); the rail would reject the edit on 45.
+
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. At least 15 flipped rows, gain ≥ +1.0, interval excludes 0 | 45 rows, 7.08 → 8.33, +1.25 (±0.57); 22 better by more than 0.5, 4 worse | yes |
+| 2. Hard fails on flipped rows not up | 6 → 6 | yes |
+| 3. Flipped rows that need no document: change not below −0.3 | 4 rows, −0.54 | **no** |
+
+All rows with the rail: 8.26 → 8.43 (+0.17 ±0.09). On the 39 flipped rows with the evidence in the prompt: +1.46.
+
+**Verdict: not kept.** Line 3 fails, on four rows. On those rows the draft itself said things like "Nothing in what
+I've got says…" and the edit had improved it; the rail put the worse draft back because the edit had also removed a
+number. The direction is supported (the pass removes specifics the material states, and that costs about 1.2 on a
+sixth of the rows), the rail as specified is not the fix. Nothing was implemented.
+
+---
+
+## E4 — with the files in the prompt, the claim pass does not run (measured offline; a recommendation, not a build)
+
+**Written 2026-10-03 16:27 UTC, before any holdout row of the E1 build was judged.**
+
+**What was measured first (dev + counterfactual, drafts judged for every replaced row, so "pass off" is exact: the
+pass's kill switch shows the draft).**
+
+| Build | Claim pass | Mean | Hard fails | Critical |
+|---|---|---:|---:|---:|
+| baseline `e000db4a` | on every turn (as built) | 7.46 | 61 | 42 |
+| baseline | off | 7.46 (±0.09 against as built) | 79 | 56 |
+| E1 `bab77f33` | on every turn (as built) | 8.26 | 38 | 21 |
+| E1 | off | 8.50 (+0.23 ±0.14) | 40 | 22 |
+| E1 | only on turns with no reference-file evidence in the prompt | 8.50 (+0.24 ±0.14) | 38 | 20 |
+
+On the baseline build the pass does what it was kept for: it does not move the mean and it removes 18 hard fails,
+almost all on turns where the needed evidence had not reached the prompt and the draft had invented or half-quoted.
+On the E1 build, where the evidence is in the prompt, the pass has little left to remove (40 → 38) and its edits cost
+0.38 (±0.18) on the 233 rows with the evidence delivered: it lists as unsupported what the files state, and the
+rewrite defers ("I'll confirm and come back to you") or, twice on dev, replaces the current value with the outdated
+file's.
+
+**The gate.** The claim pass is skipped on a turn whose prompt holds reference-file evidence, and runs as today on
+every other turn (no file loaded, or profile / conversation only). It is only meaningful together with E1: on the
+baseline build the same gate gives back 15 of the 18 hard fails the pass removes (61 → 76).
+
+**Rule (offline composition on the E1 holdout rows, aggregates only; their drafts are judged first).** The gate is
+recommended only if, against the E1 build as built: the mean rises by at least +0.15 with a 95 % interval that
+excludes 0, hard fails do not rise, critical flags do not rise. It changes a component Evin decided to keep, so
+whatever the result it is his decision; it is not implemented or run in the app in this session unless the rule
+holds, and never landed.
