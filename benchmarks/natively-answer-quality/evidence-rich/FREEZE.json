@@ -1,0 +1,24 @@
+{
+ "name": "evidence-rich-v1",
+ "frozen_at": "2026-10-03T13:52:13.949Z",
+ "manifest_sha256": "8aa245098a930f64fc181bb8e30d6c851ef2fa93d89c3404f530b9277cf0cbf3",
+ "datasets": {
+  "dev": {
+   "items": 270,
+   "sha256": "aca272a802a30260e8187c9cf637ebfda9ab4ab54cd69f107ad819dba63d3413"
+  },
+  "holdout": {
+   "items": 180,
+   "sha256": "6f56606b3ce9a787bd88117ae425cf9b121fa35d1b25c1f3e864e7592178a5db"
+  },
+  "supp-counterfactual": {
+   "items": 63,
+   "sha256": "290bb3ab345325732d3dd3818fb70c816f52d41dcd0b7ef3eff4b1234ace4cae"
+  },
+  "supp-isolation": {
+   "items": 46,
+   "sha256": "1e2758f86572d64b13f1086b81192f8c2d420e042816b4a099a42433a6da35a9"
+  }
+ },
+ "evidence_files": 104
+}

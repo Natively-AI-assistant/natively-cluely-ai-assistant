@@ -1,0 +1,30 @@
+#mossgauge-release - channel export
+Exported by Saoirse Lindqvang on Tuesday 8 September 2026
+Range: Tuesday 1 September 2026 to Tuesday 8 September 2026
+----------------------------------------------------------------
+
+[Tue 1 Sep 09:12] Emeka Rautavaara: Halden asked again on the call yesterday whether reports can come out as spreadsheets. Could we get XLSX in for 3.0 alongside the other two formats? Their supervisors live in Excel.
+[Tue 1 Sep 09:20] Yevgenia Marchetti-Oduya: Possible but not cheap. The library I looked at handles merged cells badly. I'd guess three extra weeks on top of what we already have.
+[Tue 1 Sep 09:23] Emeka Rautavaara: Three weeks feels worth it to me. I'd say XLSX is a must for 3.0.
+[Tue 1 Sep 09:31] Saoirse Lindqvang: Not deciding in chat. Put it on the list for the scope review on the 9th.
+[Tue 1 Sep 11:02] Corbin Thistlewood: CI is red again on the Android emulator job. Same flaky screenshot comparison. Re-running.
+[Tue 1 Sep 11:40] Corbin Thistlewood: Green on the second run. I'll quarantine that job if it happens a third time this week.
+[Wed 2 Sep 10:15] Halvard Niemczyk: Welcome Ilka, who takes over Android from Monday. Be nice.
+[Wed 2 Sep 10:17] Ilka Vantongeren: Thanks all. I'll spend this week reading crash reports before I touch anything.
+[Wed 2 Sep 15:40] Dorrin Ashgrove-Patel: Thinking about launch day. For 2.4 we pushed to everyone at once and it was fine. I'd skip staging and go to 100% on day one again. It saves us two weeks of babysitting dashboards.
+[Wed 2 Sep 15:44] Corbin Thistlewood: 2.4 was a small release. This one rewrites sync. I'd want a slow start.
+[Wed 2 Sep 15:46] Dorrin Ashgrove-Patel: Fair, but then we need someone watching the numbers every day.
+[Wed 2 Sep 15:52] Tobiah Kessenich: If sync goes wrong with everyone on it, I am not the one phoning Corrimount.
+[Thu 3 Sep 09:05] Corbin Thistlewood: On the stability bar, can we just say 99.9% crash-free and be done? Half joking.
+[Thu 3 Sep 09:09] Ilka Vantongeren: Half joking is right. We'd never ship. Let's bring real numbers to the review.
+[Thu 3 Sep 13:30] Lucinda Farthingale: Photo annotation: is 8 photos per inspection enough? Tarnbrook crews attach more than that.
+[Thu 3 Sep 13:41] Saoirse Lindqvang: Noted. I'll ask the pilot candidates.
+[Fri 4 Sep 16:20] Yevgenia Marchetti-Oduya: Inkspindle sent the link to the production build but it needs the licence key. Who raised the purchase order?
+[Fri 4 Sep 16:25] Saoirse Lindqvang: Me. It's with finance.
+[Mon 7 Sep 09:01] Ilka Vantongeren: First day on Android proper. Top crash is the camera permission resume. Second is the sync worker on low-memory phones.
+[Mon 7 Sep 09:30] Dorrin Ashgrove-Patel: Can we keep one more release on the oldest Android version for the Corrimount crews? Some of their handsets are ancient.
+[Mon 7 Sep 09:36] Halvard Niemczyk: Platform floor was decided on 26 August. Not reopening it.
+[Mon 7 Sep 14:10] Emeka Rautavaara: Lunch on Thursday? The noodle place by the canal.
+[Mon 7 Sep 14:12] Lucinda Farthingale: In.
+[Tue 8 Sep 11:45] Saoirse Lindqvang: Agenda for tomorrow's scope review: export formats, stability bar, launch dates. Rollout approach moves to the week after.
+[Tue 8 Sep 11:47] Halvard Niemczyk: Please read Yevgenia's export estimate before the review so we don't spend the hour on it.

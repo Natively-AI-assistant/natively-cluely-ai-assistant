@@ -1,0 +1,1540 @@
+{
+  "mode": "general",
+  "world": "Ottilie Varnhagen and her partner Jorrit Aldemere own a townhouse at 14 Fennimore Row, Halden Cross, and rent the upstairs room to a lodger, Perry. In early October 2026 they are deciding whether to accept a kitchen renovation quote from Halvering & Stroud Kitchens (estimator Dunmore Kessane; Revision C of 22 September 2026 replaced a June Revision A), planning a long weekend at Marrowby Point from 22 to 25 October, having Jorrit's car's front brakes done at Tallowick Auto Service, and keeping an October household budget with a kitchen fund, a trip fund and an approved home improvement loan. Their homeowners association issued renovation rules in September 2026. The user of Natively is Ottilie, an ordinary person with no specialised role.",
+  "files": [
+    {
+      "id": "GEN-REF-RENO-QUOTE-REVC",
+      "mode": "general",
+      "filename": "HS-2291_Kitchen_Quote_RevC.pdf",
+      "source": "src/GEN-REF-RENO-QUOTE-REVC.md",
+      "format": "pdf",
+      "document_type": "contractor_quote",
+      "title": "Halvering & Stroud Kitchens — kitchen renovation quote HS-2291, Revision C",
+      "status": "current",
+      "effective_date": "2026-09-22",
+      "authority": 100,
+      "supersedes": [
+        "GEN-REF-RENO-QUOTE-REVA"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The contractor is Halvering & Stroud Kitchens; the quote was prepared by Dunmore Kessane, estimator.",
+          "doc_needles": [
+            "Dunmore Kessane, Estimator"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Quote HS-2291 Revision C was issued on Tuesday 22 September 2026.",
+          "doc_needles": [
+            "Revision: C",
+            "Tuesday 22 September 2026"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Demolition and site protection is priced at $1,900.",
+          "doc_needles": [
+            "$1,900"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Cabinetry (10 base, 8 wall and 1 tall pantry cabinet, soft-close hinges and drawer slides, crown molding, toe kicks, one pull-out waste unit, delivery and installation) is priced at $14,600.",
+          "doc_needles": [
+            "$14,600",
+            "one pull-out waste unit",
+            "full-extension soft-close drawer slides"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Decorative hardware is not part of the cabinetry price in Revision C: the owners supply their own knobs and pulls, and the contractor fits them at no extra charge if they are on site by the day cabinet installation begins.",
+          "doc_needles": [
+            "Decorative hardware is not part",
+            "supply their own knobs and pulls"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Countertops (3 cm quartz, about 46 sq ft, one undermount sink cutout) are priced at $5,300; the owners choose the slab before templating.",
+          "doc_needles": [
+            "$5,300",
+            "3 cm quartz"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The island (6 ft x 3 ft, two base cabinets, quartz top, one outlet, and the flooring patch under the old peninsula) is priced at $4,750.",
+          "doc_needles": [
+            "$4,750",
+            "6 ft x 3 ft"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The island line is optional and may be removed at any time before acceptance; the contract total and every percentage payment then adjust.",
+          "doc_needles": [
+            "removed at any time before acceptance"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The backsplash (ceramic subway tile, about 32 sq ft, straight lay) is priced at $2,150.",
+          "doc_needles": [
+            "$2,150",
+            "32 sq ft"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Plumbing and electrical is priced at $3,400: sink, disposal and dishwasher reconnected in their existing locations, four new countertop outlets, six recessed LED lights on a dimmer, and fitting of the appliances.",
+          "doc_needles": [
+            "$3,400",
+            "four new countertop outlets",
+            "six recessed LED lights"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The appliance allowance is $6,000 toward a range, range hood, dishwasher and refrigerator; it covers purchase only, overspend is billed at cost with no markup, and anything unspent is credited on the final invoice.",
+          "doc_needles": [
+            "$6,000",
+            "our cost with no markup"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Permit and inspection fees are $650.",
+          "doc_needles": [
+            "$650"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "The contract total is $38,750, with sales tax on materials included.",
+          "doc_needles": [
+            "$38,750"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Under-cabinet lighting, glass door inserts and interior organizers other than the pull-out waste unit are not included.",
+          "doc_needles": [
+            "Under-cabinet lighting",
+            "Glass door inserts"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Flooring (apart from the island patch), painting, a new sink or faucet, and any homeowner-association notifications or approvals are not included; the owners supply the sink and faucet.",
+          "doc_needles": [
+            "homeowner-association notifications or approvals",
+            "apart from the patch described"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The deposit due on acceptance is 20% of the contract total, which is $7,750.",
+          "doc_needles": [
+            "$7,750"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "40% of the contract total, $15,500, is due on delivery of the cabinets to site.",
+          "doc_needles": [
+            "$15,500"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "30% of the contract total, $11,625, is due on installation of the countertops.",
+          "doc_needles": [
+            "$11,625"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "10% of the contract total, $3,875, is due at the final walkthrough.",
+          "doc_needles": [
+            "$3,875"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Payment is by check or bank transfer; card payments carry a 2.9% processing fee added to the amount charged.",
+          "doc_needles": [
+            "2.9% processing fee"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "The deposit is refundable less a $500 administration fee if the owners cancel in writing before the cabinets are ordered; the cabinet order is placed within 3 business days of receiving the deposit, after which the deposit is non-refundable.",
+          "doc_needles": [
+            "$500 administration fee",
+            "within 3 business days"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Work starts on site on Monday 9 November 2026.",
+          "doc_needles": [
+            "Monday 9 November 2026"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Cabinet lead time is approximately 4 weeks from order.",
+          "doc_needles": [
+            "approximately 4 weeks from order"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Time on site is an estimated 5 working weeks with no work on 26 and 27 November; target completion is Tuesday 15 December 2026.",
+          "doc_needles": [
+            "Tuesday 15 December 2026",
+            "26 and 27 November"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Crew hours are 8:00 am to 4:30 pm, Monday to Friday.",
+          "doc_needles": [
+            "8:00 am to 4:30 pm"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "To hold the November start, the quote must be accepted and the deposit received by Friday 9 October 2026.",
+          "doc_needles": [
+            "Friday 9 October 2026"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "After 9 October the slot is released and the next available start is Monday 11 January 2027.",
+          "doc_needles": [
+            "Monday 11 January 2027"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "Prices in Revision C are held until 22 October 2026.",
+          "doc_needles": [
+            "held until 22 October 2026"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "The quote carries no contingency sum; unforeseen conditions are handled by a written change order priced at cost plus 15%, approved in writing before the work begins.",
+          "doc_needles": [
+            "cost plus 15%",
+            "carries no contingency sum"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "The contractor suggests owners keep roughly 8% of the contract total in reserve, about $3,100.",
+          "doc_needles": [
+            "about $3,100",
+            "roughly 8%"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "Workmanship is warranted for two years from the final walkthrough.",
+          "doc_needles": [
+            "warranted for two years"
+          ]
+        },
+        {
+          "id": "F32",
+          "statement": "Halvering & Stroud carries general liability cover of $2,000,000 and supplies a certificate of insurance on request.",
+          "doc_needles": [
+            "$2,000,000"
+          ]
+        },
+        {
+          "id": "F33",
+          "statement": "Revision C is signed for Halvering & Stroud by Dunmore Kessane (22 September 2026); the owner acceptance lines are blank, so the owners have not yet accepted it.",
+          "doc_needles": [
+            "Dunmore Kessane, 22 September 2026"
+          ]
+        },
+        {
+          "id": "F34",
+          "statement": "The cabinets carry the manufacturer's limited lifetime warranty and the quartz carries the fabricator's 15-year warranty.",
+          "doc_needles": [
+            "15-year warranty"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F5",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "hardware not included, owners supply",
+          "other_value": "hardware included, up to 38 knobs and pulls",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "$14,600, full-extension soft-close drawer slides",
+          "other_value": "$15,250, standard drawer slides",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "$1,900",
+          "other_value": "$1,700",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F6",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "3 cm quartz, $5,300",
+          "other_value": "2 cm quartz, $4,900",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F10",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "$3,400, four new outlets, six recessed lights",
+          "other_value": "$2,950, two new outlets, four recessed lights",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F12",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "$650",
+          "other_value": "$600",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F17",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "40% ($15,500) on cabinet delivery, 30% ($11,625) on countertops, 10% ($3,875) at walkthrough",
+          "other_value": "half the balance ($16,675) on cabinet delivery, the rest ($16,675) on completion",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F24",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "target completion Tuesday 15 December 2026",
+          "other_value": "target completion Friday 16 October 2026",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F7",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "6 ft x 3 ft, $4,750",
+          "other_value": "7 ft x 3 ft, $5,600",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F9",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "$2,150",
+          "other_value": "$1,850",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "$6,000",
+          "other_value": "$5,000",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F13",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "$38,750",
+          "other_value": "$37,850",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "20% = $7,750",
+          "other_value": "flat $4,500",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "GEN-REF-CONTRACTOR-EMAILS",
+          "this_value": "$7,750",
+          "other_value": "around 7,500 (ballpark in an email sent four days before Revision C was issued)",
+          "resolution": "authoritative_wins"
+        },
+        {
+          "fact": "F22",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "Monday 9 November 2026",
+          "other_value": "Monday 14 September 2026",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F26",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "Friday 9 October 2026",
+          "other_value": "Friday 17 July 2026",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F29",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "written change order at cost plus 15%",
+          "other_value": "time and materials at $85 per hour plus materials",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F31",
+          "with_file": "GEN-REF-RENO-QUOTE-REVA",
+          "this_value": "two years",
+          "other_value": "one year",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "Nothing in the quote says what happens if the work finishes after the target completion date: there is no penalty, credit or compensation clause, and no statement ruling one out.",
+        "The quote does not name a faucet, sink or hardware finish.",
+        "The quote does not say whether association approval is required; it only says notifications or approvals are the owners' responsibility.",
+        "The crew hours of 8:00 am to 4:30 pm are the contractor's own; nothing in the quote says the association allows an 8:00 am start.",
+        "The owners have not signed: the acceptance lines are blank.",
+        "The quote offers no discount for accepting early and states no price rise before 22 October 2026."
+      ]
+    },
+    {
+      "id": "GEN-REF-RENO-QUOTE-REVA",
+      "mode": "general",
+      "filename": "HS-2291_Kitchen_Quote.pdf",
+      "source": "src/GEN-REF-RENO-QUOTE-REVA.md",
+      "format": "pdf",
+      "document_type": "contractor_quote",
+      "title": "Halvering & Stroud Kitchens — kitchen renovation quote HS-2291, Revision A",
+      "status": "outdated",
+      "effective_date": "2026-06-18",
+      "authority": 40,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Quote HS-2291 Revision A was issued on Thursday 18 June 2026, prepared by Dunmore Kessane.",
+          "doc_needles": [
+            "Revision: A",
+            "Thursday 18 June 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "In Revision A the cabinetry price of $15,250 includes decorative hardware: up to 38 knobs and pulls from the standard brushed range, fitted.",
+          "doc_needles": [
+            "$15,250",
+            "up to 38 knobs and pulls",
+            "includes decorative hardware"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "In Revision A the island measures 7 ft x 3 ft with three base cabinets and is priced at $5,600.",
+          "doc_needles": [
+            "$5,600",
+            "7 ft x 3 ft"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "In Revision A the backsplash (about 28 sq ft) is priced at $1,850.",
+          "doc_needles": [
+            "$1,850",
+            "28 sq ft"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "In Revision A the appliance allowance is $5,000 toward a range, range hood and dishwasher; the existing refrigerator is reused.",
+          "doc_needles": [
+            "$5,000",
+            "existing refrigerator is reused"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "In Revision A the contract total is $37,850.",
+          "doc_needles": [
+            "$37,850"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "In Revision A the deposit on acceptance is a flat $4,500.",
+          "doc_needles": [
+            "$4,500"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "In Revision A work starts on site on Monday 14 September 2026.",
+          "doc_needles": [
+            "Monday 14 September 2026"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "In Revision A the quote had to be accepted and the deposit received by Friday 17 July 2026; the quote was valid for 30 days from issue.",
+          "doc_needles": [
+            "Friday 17 July 2026",
+            "valid for 30 days"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "In Revision A hidden conditions are billed on a time-and-materials basis at $85 per hour plus materials.",
+          "doc_needles": [
+            "$85 per hour"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "In Revision A workmanship is warranted for one year from completion.",
+          "doc_needles": [
+            "warranted for one year"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "In Revision A demolition and site protection is $1,700.",
+          "doc_needles": [
+            "$1,700"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "In Revision A half of the remaining balance, $16,675, is due on cabinet delivery and the remaining $16,675 on completion.",
+          "doc_needles": [
+            "$16,675"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "In Revision A target completion is Friday 16 October 2026.",
+          "doc_needles": [
+            "Friday 16 October 2026"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Revision A lists 10 base cabinets, 8 wall cabinets and 1 tall pantry cabinet, with standard drawer slides.",
+          "doc_needles": [
+            "standard drawer slides"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "In Revision A the countertops are 2 cm quartz with a built-up edge, priced at $4,900.",
+          "doc_needles": [
+            "$4,900",
+            "2 cm quartz"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "In Revision A plumbing and electrical is $2,950, with two new countertop outlets and four recessed LED lights.",
+          "doc_needles": [
+            "$2,950",
+            "two new countertop outlets",
+            "four recessed LED lights"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "In Revision A permit and inspection fees are $600.",
+          "doc_needles": [
+            "inspection fees. $600"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F2",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "hardware included, up to 38 knobs and pulls, cabinetry $15,250",
+          "other_value": "hardware not included, cabinetry $14,600",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "7 ft x 3 ft, $5,600",
+          "other_value": "6 ft x 3 ft, $4,750",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "$1,850",
+          "other_value": "$2,150",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "$5,000",
+          "other_value": "$6,000",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F6",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "$37,850",
+          "other_value": "$38,750",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F7",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "flat $4,500",
+          "other_value": "20% = $7,750",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F8",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "Monday 14 September 2026",
+          "other_value": "Monday 9 November 2026",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F9",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "Friday 17 July 2026",
+          "other_value": "Friday 9 October 2026",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F10",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "$85 per hour plus materials",
+          "other_value": "cost plus 15% by written change order",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "one year",
+          "other_value": "two years",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F12",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "$1,700",
+          "other_value": "$1,900",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F13",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "half the balance ($16,675) on cabinet delivery, the rest ($16,675) on completion",
+          "other_value": "40% ($15,500), 30% ($11,625), 10% ($3,875)",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F14",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "target completion Friday 16 October 2026",
+          "other_value": "target completion Tuesday 15 December 2026",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F15",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "standard drawer slides",
+          "other_value": "full-extension soft-close drawer slides",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "2 cm quartz, $4,900",
+          "other_value": "3 cm quartz, $5,300",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F17",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "$2,950, two new outlets, four recessed lights",
+          "other_value": "$3,400, four new outlets, six recessed lights",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F18",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "$600",
+          "other_value": "$650",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "Revision A is not marked as superseded anywhere in its own text; only its revision letter and June date show it is the older version.",
+        "Revision A says nothing about under-cabinet lighting, card fees or deposit refunds."
+      ]
+    },
+    {
+      "id": "GEN-REF-TRIP-PLAN",
+      "mode": "general",
+      "filename": "Marrowby_weekend_plan.docx",
+      "source": "src/GEN-REF-TRIP-PLAN.md",
+      "format": "docx",
+      "document_type": "trip_plan",
+      "title": "Marrowby Point long weekend plan",
+      "status": "current",
+      "effective_date": "2026-09-28",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The trip runs from Thursday 22 October to Sunday 25 October 2026.",
+          "doc_needles": [
+            "Sunday 25 October 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The outbound train leaves Halden Cross at 09:20 and arrives at Marrowby Junction at 11:35 on Thursday; two tickets at $38 each were bought on 12 September on Jorrit's card.",
+          "doc_needles": [
+            "Halden Cross 09:20",
+            "$38 each"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The train home leaves Marrowby Junction at 12:40 on Sunday.",
+          "doc_needles": [
+            "Marrowby Junction 12:40"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The rental car is with Brindlecar, reservation BRC-774102, in Jorrit's name, a compact automatic.",
+          "doc_needles": [
+            "BRC-774102",
+            "Brindlecar"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The car is picked up Thursday at 12:00 noon at the Marrowby Junction station desk and returned on Sunday by 12:00 noon.",
+          "doc_needles": [
+            "Pick up Thursday at 12:00 noon"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The car costs $56 per day for 3 days, taxes included, paid at pick-up ($168 in total).",
+          "doc_needles": [
+            "$56 per day for 3 days"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Brindlecar puts a $250 hold on the card, released when the car is returned.",
+          "doc_needles": [
+            "$250 hold"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The hotel is The Corrowick Inn, 3 Lanternhook Lane, Marrowby Point; confirmation CK-58213-M, booked under Aldemere; front desk 555-0187.",
+          "doc_needles": [
+            "CK-58213-M",
+            "The Corrowick Inn"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The room is $210 per night plus 10% lodging tax, $693 for the 3-night stay; the first night ($210) was paid as a deposit and the balance of $483 is charged at check-in.",
+          "doc_needles": [
+            "$693 for the stay",
+            "balance of $483"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Check-in is from 3:00 pm; bags can be left at the desk from noon.",
+          "doc_needles": [
+            "Check-in from 3:00 pm"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Check-out is 11:00 am; late check-out to 1:00 pm costs $30 if requested the night before.",
+          "doc_needles": [
+            "Check-out 11:00 am",
+            "costs $30"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The hotel can be cancelled free until 6:00 pm on Monday 19 October; after that the first night is kept.",
+          "doc_needles": [
+            "6:00 pm on Monday 19 October"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "The car park gate code is 4417# and the parking space is B-12 on the lower level.",
+          "doc_needles": [
+            "Gate code 4417#",
+            "B-12"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "The code 2290 is for the side door after 10:00 pm, not for the gate.",
+          "doc_needles": [
+            "2290"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "On Friday 23 October there is a lighthouse boat tour with Pellwick Charters at 9:15 am from Pier 2 (be there by 8:55); two tickets at $48 each are paid in full; booking PW-2217.",
+          "doc_needles": [
+            "Pellwick Charters",
+            "9:15 am from Pier 2",
+            "PW-2217"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "On Saturday 24 October there is a guided tidepool walk at 10:30 am at Skerry Cove, $22 each, cash to the guide on the day.",
+          "doc_needles": [
+            "$22 each",
+            "10:30 am"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "On Saturday at 2:00 pm there is kayak hire from Gullwing Paddle at $35 each; one $35 was paid as a deposit and the other $35 is due on the day.",
+          "doc_needles": [
+            "Gullwing Paddle",
+            "the other $35 is due"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Dinner on Saturday 24 October is at Saltmarrow Table at 7:45 pm, a table for two under Aldemere, reference SM-3306.",
+          "doc_needles": [
+            "Saltmarrow Table at 7:45 pm",
+            "SM-3306"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Saltmarrow Table charged a deposit of $40 per person ($80), which comes off the bill; cancelling less than 48 hours ahead forfeits the deposit.",
+          "doc_needles": [
+            "$40 per person",
+            "at least 48 hours ahead"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "$497 has been paid on the trip so far (train $76, hotel deposit $210, boat tour $96, kayak deposit $35, dinner deposit $80).",
+          "doc_needles": [
+            "Paid so far: $497"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Still to pay on the trip are the hotel balance ($483), the car hire ($168), the tidepool walk ($44) and the second kayak ($35), $730 in total, from the trip fund; the dinner bill and food come on top.",
+          "doc_needles": [
+            "Still to pay on the trip",
+            "trip fund in the household budget"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "If it rains on Friday afternoon the fallback is the Marrowby Maritime Museum at $12 each, no booking needed.",
+          "doc_needles": [
+            "Marrowby Maritime Museum"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The plan says nothing about breakfast at the inn, neither that it is included nor that it is not.",
+        "The plan gives no tipping guidance for the boat tour or any other activity.",
+        "The plan does not state the cost of dinner beyond the deposit.",
+        "The plan says nothing about how many room keys were requested."
+      ]
+    },
+    {
+      "id": "GEN-REF-BUDGET-OCT",
+      "mode": "general",
+      "filename": "household_budget_oct2026.csv",
+      "source": "src/GEN-REF-BUDGET-OCT.csv",
+      "format": "csv",
+      "document_type": "household_budget",
+      "title": "Household budget, October 2026",
+      "status": "current",
+      "effective_date": "2026-10-03",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The joint checking account opened October with $4,310.00.",
+          "doc_needles": [
+            "4310.00"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The kitchen fund (savings) holds $9,300.00 as of 1 October, reserved for the Halvering & Stroud job.",
+          "doc_needles": [
+            "9300.00",
+            "Kitchen fund (savings)"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The trip fund (savings) holds $900.00 as of 1 October, after the September bookings for Marrowby.",
+          "doc_needles": [
+            "Trip fund (savings)",
+            "900.00"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "A home improvement loan of $28,000.00 from Corvane Credit Union is approved; money can be drawn from 2026-10-26 and the first repayment is $412.00 on 2026-12-01.",
+          "doc_needles": [
+            "28000.00",
+            "drawn from 2026-10-26"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Perry's rent of $750.00 was received on 1 October.",
+          "doc_needles": [
+            "Perry rent"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "HOA dues are $285.00 a month, due on the 5th by autopay.",
+          "doc_needles": [
+            "285.00"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Electricity for September usage was $131.40, paid by Jorrit, split in thirds with Perry.",
+          "doc_needles": [
+            "131.40"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Gas for September usage was $48.60, paid by Ottilie, split in thirds with Perry.",
+          "doc_needles": [
+            "48.60"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Internet was $78.00, paid by Ottilie, split in thirds with Perry.",
+          "doc_needles": [
+            "78.00"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The home insurance annual premium (Brackwater Mutual, policy HB-66201) is $1,284.00, due 2026-10-20.",
+          "doc_needles": [
+            "1284.00",
+            "Home insurance annual premium"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Car insurance (Brackwater Mutual) is $118.00 a month, due 2026-10-08 by autopay.",
+          "doc_needles": [
+            "118.00"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The phone plan for two lines is $92.00, paid by Jorrit on 2026-10-18; Ottilie reimburses $46.00.",
+          "doc_needles": [
+            "Ottilie reimburses 46.00",
+            "92.00"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "The budget carries $350.00 for the car brake service, marked as Jorrit's guess made before the shop had looked at the car.",
+          "doc_needles": [
+            "350.00",
+            "Jorrit's guess"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "The kitchen deposit is planned for 2026-10-09 from the kitchen fund, with the amount left blank pending the accepted quote.",
+          "doc_needles": [
+            "Kitchen deposit - Halvering & Stroud"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Perry paid $140.00 to Grindlewood Plumbing on 2026-09-18 for the upstairs tap; it is owed to Perry and set against his share of the utilities.",
+          "doc_needles": [
+            "140.00",
+            "owed to Perry"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Lumenreel streaming is $15.99 a month and Tunewarren music is $16.99 a month.",
+          "doc_needles": [
+            "Lumenreel streaming",
+            "16.99"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "The mortgage is $1,865.00, paid on 1 October.",
+          "doc_needles": [
+            "1865.00"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "A property tax installment of $1,430.00 is due 2026-11-15 and a chimney sweep of $165.00 is booked for 2026-11-04; both are November costs.",
+          "doc_needles": [
+            "1430.00",
+            "165.00"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "The kitchen payment on cabinet delivery is expected in November and is to come mostly from the loan.",
+          "doc_needles": [
+            "to come mostly from the loan"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "The remaining Marrowby trip costs are to be paid from the trip fund.",
+          "doc_needles": [
+            "pay from the trip fund"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Perry's utilities share is one third of electricity, gas and internet, to settle by 2026-10-10.",
+          "doc_needles": [
+            "one third of electricity gas"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Expected income in October: Ottilie's pay $3,480.00 on the 15th and Jorrit's pay $3,120.00 on the 30th.",
+          "doc_needles": [
+            "3480.00",
+            "3120.00"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F13",
+          "with_file": "GEN-REF-CAR-ESTIMATE",
+          "this_value": "350.00 (a guess)",
+          "other_value": "$266.68 (written estimate, pads only)",
+          "resolution": "authoritative_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The budget does not state the kitchen deposit amount or the trip's remaining total; both cells are blank.",
+        "The streaming subscription rows say nothing about what anyone has watched."
+      ]
+    },
+    {
+      "id": "GEN-REF-CAR-ESTIMATE",
+      "mode": "general",
+      "filename": "Tallowick_Estimate_E-4471.pdf",
+      "source": "src/GEN-REF-CAR-ESTIMATE.md",
+      "format": "pdf",
+      "document_type": "service_estimate",
+      "title": "Tallowick Auto Service — repair estimate E-4471",
+      "status": "current",
+      "effective_date": "2026-09-30",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Estimate E-4471 from Tallowick Auto Service is dated Wednesday 30 September 2026, for Jorrit Aldemere's 2019 Sorrel Kestrel; the service advisor is Bexley Thorncastle.",
+          "doc_needles": [
+            "Wednesday 30 September 2026",
+            "Bexley Thorncastle"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The front brake pads have 2 mm of friction material left against a 3 mm replacement threshold and need replacing now.",
+          "doc_needles": [
+            "2 mm of friction material",
+            "Replacement is needed now"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The front rotors measure 26.4 mm against a minimum thickness of 25.0 mm (new rotors are 28.0 mm); runout is 0.03 mm against a 0.05 mm limit.",
+          "doc_needles": [
+            "26.4 mm",
+            "25.0 mm"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The front rotors are within specification and do not need to be replaced with this set of pads; they should be measured again at the next pad change.",
+          "doc_needles": [
+            "rotors are within specification"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The rear brake pads have 6 mm remaining and need no action; check again in about 10,000 miles.",
+          "doc_needles": [
+            "6 mm remaining"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Brake fluid moisture is 2.4%; a flush is recommended at 3.0% and is not needed today.",
+          "doc_needles": [
+            "Moisture content 2.4%"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Option 1, front pads only, is the recommended option and totals $266.68.",
+          "doc_needles": [
+            "$266.68",
+            "front pads only (recommended)"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Option 2, front pads and front rotors, totals $521.14 and is not required on the measurements.",
+          "doc_needles": [
+            "$521.14",
+            "it is not required"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Either option takes about an hour and a half; the customer can wait or be phoned when the car is ready.",
+          "doc_needles": [
+            "about an hour and a half"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The appointment is Tuesday 6 October 2026 with drop-off at 8:00 am.",
+          "doc_needles": [
+            "Tuesday 6 October 2026"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The estimate is valid for 14 days from 30 September 2026.",
+          "doc_needles": [
+            "valid for 14 days"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Brake parts and labor are warranted for 12 months or 12,000 miles.",
+          "doc_needles": [
+            "12 months or 12,000 miles"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "A cabin air filter ($38.00) and wiper blades ($31.00) are optional extras.",
+          "doc_needles": [
+            "$38.00",
+            "$31.00"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Labor is $128.00 per hour; the pad set is $94.00 and a pair of front rotors is $178.00.",
+          "doc_needles": [
+            "$128.00 per hour",
+            "$178.00"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F7",
+          "with_file": "GEN-REF-BUDGET-OCT",
+          "this_value": "$266.68 (written estimate, pads only)",
+          "other_value": "350.00 (Jorrit's guess in the budget)",
+          "resolution": "authoritative_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The estimate does not say the rotors are worn or unsafe; it says they are within specification."
+      ]
+    },
+    {
+      "id": "GEN-REF-CONTRACTOR-EMAILS",
+      "mode": "general",
+      "filename": "kitchen_emails_dunmore.txt",
+      "source": "src/GEN-REF-CONTRACTOR-EMAILS.txt",
+      "format": "txt",
+      "document_type": "email_thread",
+      "title": "Email thread with Dunmore Kessane about the kitchen (18 September to 1 October 2026)",
+      "status": "informal",
+      "effective_date": "2026-10-01",
+      "authority": 10,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "On 18 September 2026, before Revision C was issued, Dunmore wrote that the deposit would be around 7,500, a ballpark not to be held to the penny.",
+          "doc_needles": [
+            "around 7,500"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Dunmore says the island is best decided before signing; once the cabinets are ordered, removing it is a change order and the supplier takes 15% restocking on the two island cabinets.",
+          "doc_needles": [
+            "15% restocking"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "A herringbone tile pattern adds $380 in labor and is not on the quote yet.",
+          "doc_needles": [
+            "$380 in labor"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "From demolition day there is no sink for about 3 weeks, until the countertops are in and the plumber has been back; the stove and fridge go out the same day.",
+          "doc_needles": [
+            "no sink for about 3 weeks"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The contractor needs a 10-yard dumpster for the first week, dropped on the Monday and picked up that Friday.",
+          "doc_needles": [
+            "10-yard dumpster",
+            "picked up that Friday"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Dunmore is away Monday 5 to Wednesday 7 October; Mirella Aubrecht in the office can take the signed quote and the deposit and will place the cabinet order.",
+          "doc_needles": [
+            "Mirella Aubrecht",
+            "Monday 5th to Wednesday 7th October"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Two quartz samples are to be dropped at the house on Friday 23 October; someone needs to be in.",
+          "doc_needles": [
+            "Friday 23 October"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The crew will zip-wall the kitchen doorway and keep the dining room clear.",
+          "doc_needles": [
+            "zip-wall the kitchen doorway"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Dunmore can hold the slot only until the 9th.",
+          "doc_needles": [
+            "hold the slot until the 9th"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The 36-inch range hood costs $420 more than the standard 30-inch one and would come out of the appliance allowance.",
+          "doc_needles": [
+            "$420 more"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F1",
+          "with_file": "GEN-REF-RENO-QUOTE-REVC",
+          "this_value": "around 7,500 (ballpark, 18 September)",
+          "other_value": "$7,750 (Revision C, 22 September)",
+          "resolution": "authoritative_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The thread never says whether cabinet knobs or pulls are in the price.",
+        "The herringbone price is an offer in an email, not part of the quote.",
+        "The thread does not mention any remedy for late completion."
+      ]
+    },
+    {
+      "id": "GEN-REF-HOA-NOTICE",
+      "mode": "general",
+      "filename": "Fennimore_Row_HOA_Notice_2026-09.pdf",
+      "source": "src/GEN-REF-HOA-NOTICE.md",
+      "format": "pdf",
+      "document_type": "hoa_notice",
+      "title": "Fennimore Row Homeowners Association — interior renovation rules and 2027 assessments",
+      "status": "current",
+      "effective_date": "2026-09-01",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The notice is dated 1 September 2026, adopted by the Board on 25 August 2026, and applies to work beginning on or after 1 October 2026.",
+          "doc_needles": [
+            "1 September 2026",
+            "on or after 1 October 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Work that changes a structural or party wall, a shared plumbing stack, the roofline, a window or exterior door opening, or anything visible from outside needs written approval from the Architectural Committee, which answers within 30 days.",
+          "doc_needles": [
+            "Architectural Committee",
+            "answers within 30 days"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Interior work that touches none of those, including replacing a kitchen where fixtures stay on their existing supply and drain locations, does not need Committee approval.",
+          "doc_needles": [
+            "does not need Committee approval",
+            "existing supply and drain locations"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Such interior work needs a Renovation Notification Form filed with the management office at least 14 days before work begins.",
+          "doc_needles": [
+            "at least 14 days before",
+            "Renovation Notification Form"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The form must be accompanied by the contractor's name, license number and dates, and a certificate of liability insurance showing at least $1,000,000 in general liability cover naming the Association as certificate holder.",
+          "doc_needles": [
+            "$1,000,000",
+            "naming the Association"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Permitted working hours on weekdays are 8:30 am to 5:00 pm.",
+          "doc_needles": [
+            "8:30 am to 5:00 pm"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Saturday work is allowed from 10:00 am to 2:00 pm, quiet work only, with no demolition and no power saws.",
+          "doc_needles": [
+            "10:00 am to 2:00 pm",
+            "No demolition and no power saws"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "No contractor work is allowed on Sundays or federal holidays.",
+          "doc_needles": [
+            "Sundays or on federal holidays"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Owners are fined $75 for each day on which work takes place outside the permitted hours.",
+          "doc_needles": [
+            "fined $75"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "A dumpster may stand only on the owner's own driveway for no more than 7 consecutive days and must display a placard from the management office; a $200 refundable damage deposit is taken; it may not be left on the street or in the guest lot; without a placard the fine is $50 per day.",
+          "doc_needles": [
+            "7 consecutive days",
+            "$200 refundable damage deposit",
+            "fined $50 per day"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Contractors may use no more than two spaces in the guest lot; additional vehicles park on Harrowgate Road.",
+          "doc_needles": [
+            "no more than two spaces"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Monthly dues rise from $285 to $310 from 1 January 2027.",
+          "doc_needles": [
+            "from $285 to $310"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "A special assessment of $600 per unit for the roof reserve is payable in two installments of $300, due 1 February 2027 and 1 August 2027; it is billed separately and not collected by autopay.",
+          "doc_needles": [
+            "$600 per unit",
+            "due 1 February 2027"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "The annual meeting is on Thursday 12 November 2026 at 7:00 pm in the clubhouse; proxy forms are due by 5 November.",
+          "doc_needles": [
+            "Thursday 12 November 2026"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "The property manager is Ysolde Brackenridge at Calloway-Finch Property Management, phone 555-0119.",
+          "doc_needles": [
+            "Ysolde Brackenridge"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The notice does not grant exceptions to working hours or dumpster placement, and the owner cannot grant one on the Association's behalf."
+      ]
+    },
+    {
+      "id": "GEN-REF-HOUSE-NOTES",
+      "mode": "general",
+      "filename": "house_money_notes.md",
+      "source": "src/GEN-REF-HOUSE-NOTES.md",
+      "format": "md",
+      "document_type": "shared_expense_note",
+      "title": "House money: shared note between Ottilie, Jorrit and Perry",
+      "status": "informal",
+      "effective_date": "2026-10-01",
+      "authority": 10,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Perry's room is $750 a month, paid by transfer to the joint account on the 1st.",
+          "doc_needles": [
+            "$750 a month"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Electricity, gas and internet are split in thirds between Ottilie, Jorrit and Perry.",
+          "doc_needles": [
+            "split in thirds"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Water, HOA dues, insurance and the mortgage are Ottilie and Jorrit only.",
+          "doc_needles": [
+            "O and J only"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Each of the three puts $20 a month into a kitty for cleaning supplies.",
+          "doc_needles": [
+            "$20 each on the 1st"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Anything Perry pays for the house comes off what he owes for utilities; if it is more, he is paid the difference; it does not come off the rent.",
+          "doc_needles": [
+            "we pay him the difference",
+            "does not come off the rent"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "While the kitchen is out of action Perry pays $150 less rent for November and for December, returning to the normal amount in January.",
+          "doc_needles": [
+            "$150 less rent"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "On 18 September Perry paid Grindlewood Plumbing $140 for the leaking upstairs tap; it has not yet been squared.",
+          "doc_needles": [
+            "Grindlewood Plumbing $140"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "While Ottilie and Jorrit are away from 22 to 25 October, Perry waters the plants (not the orchid), brings in parcels and puts the bins out on Sunday night.",
+          "doc_needles": [
+            "water the plants (not the orchid)"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "On Friday 23 October Dunmore's office drops off two quartz samples; Perry takes them in and leaves them on the dining table.",
+          "doc_needles": [
+            "two quartz samples"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Perry is away from 20 to 29 November.",
+          "doc_needles": [
+            "20 to 29 November"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Until June 2026 Perry paid a flat $20 toward the internet; the thirds split has applied since July.",
+          "doc_needles": [
+            "flat $20 toward the internet"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Biscuit is fed twice a day, half a pouch each time.",
+          "doc_needles": [
+            "half a pouch each time"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The note does not state the amount of Perry's utilities share; it has to be worked out from the bills in the budget."
+      ]
+    }
+  ]
+}

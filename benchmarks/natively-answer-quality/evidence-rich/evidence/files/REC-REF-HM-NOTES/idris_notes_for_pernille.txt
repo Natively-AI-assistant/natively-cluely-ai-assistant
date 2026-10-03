@@ -1,0 +1,29 @@
+Notes for Pernille - Eng Lead (Ingestion) search
+Idris, Mon 28 Sept 2026, typed between meetings so excuse the mess
+
+The Vaskirk screen is next week. Things I'd like you to dig at:
+
+- The Kafka migration. The resume says "contributed", her meetup talk bio makes it sound like it was her show. I don't mind which is true, I mind that she's straight about it. Ask what she personally decided.
+
+- Has she actually managed someone out, or coached someone back from the edge? Everyone says they're a supportive manager. I want one real case with a beginning and an end.
+
+- Is she still writing Go, or has it been all meetings since she took the lead job? Either is fine. I just want to know before the panel so Tobiah can pitch his session right.
+
+- Why is she leaving Halcyard? I have no idea and there was nothing in her cover note. Please ask.
+
+On-call. I'm leaning towards taking the lead off the pager rota altogether once the new senior hire lands, so the lead becomes the escalation point instead of a regular slot. I have NOT cleared this with Yevgenia and the JD still says what it says. Please don't float it to candidates. If it happens I'll get the JD updated properly.
+
+Pay. If she's as good as the paper, I'd argue for the upper half of the range. Not my call alone though, Yevgenia signs.
+
+Timing. I'd love to have someone signed by mid-November so they're in the seat before the Sparrow retirement work gets heavy in January. That's a hope, not a promise to anyone.
+
+Panel. I've asked Tobiah to take the system design session and Maribel the incident retro one. Still need the cross-functional person, probably somebody from Customer Operations. Bartholomew is chasing calendars.
+
+Misc
+- She's in Madison. No idea whether she'd move. I'm not raising it myself, where people work from is a People Ops matter, not mine.
+- Handover: Maribel says she'll give the new lead two weeks of overlap, sitting in on standups and the planning session.
+- If she asks about the roadmap, the team brief is up to date, use that.
+- Remind me to send you the Sparrow one-pager, it explains why the old importer has to go.
+- I'm out Thursday and Friday this week (kid's school thing), back Monday.
+
+Thanks - I

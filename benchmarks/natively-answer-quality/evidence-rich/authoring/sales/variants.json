@@ -1,0 +1,80 @@
+[
+  {
+    "id": "SALES-REF-INTEGRATIONS-2026~sfaddon",
+    "base": "SALES-REF-INTEGRATIONS-2026",
+    "replace": [
+      {
+        "find": "| Operations, Enterprise | Included at no additional charge |",
+        "with": "| Operations, Enterprise | $250 per month add-on |"
+      },
+      {
+        "find": "The Salesforce connector is part of the Operations and Enterprise subscriptions and carries no connector fee.",
+        "with": "The Salesforce connector is a paid add-on for Operations and Enterprise subscriptions, priced at $250 per month."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F1",
+        "statement": "The Salesforce connector is a paid add-on at $250 per month on the Operations and Enterprise plans.",
+        "doc_needles": [
+          "$250 per month"
+        ]
+      }
+    ],
+    "note": "Salesforce moves from included at no charge to a $250 per month paid add-on (summary row and connector detail)."
+  },
+  {
+    "id": "SALES-REF-PRICING-2026~sfline",
+    "base": "SALES-REF-PRICING-2026",
+    "replace": [
+      {
+        "find": "| NetSuite connector | $400 per month | Enterprise only |",
+        "with": "| NetSuite connector | $400 per month | Enterprise only |\n| Salesforce connector | $250 per month | Operations, Enterprise |"
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F51",
+        "statement": "The current price list lists a Salesforce connector add-on at $250 per month for Operations and Enterprise.",
+        "doc_needles": [
+          "$250 per month",
+          "Salesforce connector"
+        ]
+      }
+    ],
+    "note": "Adds a Salesforce connector row at $250 per month to the add-ons table of the current price list. With the base integration matrix this makes two current documents disagree; with the ~sfaddon matrix both agree it is a paid add-on."
+  },
+  {
+    "id": "SALES-REF-IMPLEMENTATION-2026~guarantee",
+    "base": "SALES-REF-IMPLEMENTATION-2026",
+    "replace": [
+      {
+        "find": "| Operations, up to 200 vehicles | Guided | Typically 30 days |",
+        "with": "| Operations, up to 200 vehicles | Guided | 30 calendar days, covered by the 30-Day Go-Live Commitment |"
+      },
+      {
+        "find": "These durations are planning estimates drawn from completed projects. They are not commitments, and Kestravane does not write go-live dates into order forms. Where a customer needs a committed date, it is set out in a Statement of Work signed by the Director of Professional Services after a scoping call; account teams cannot commit to a date on their own.",
+        "with": "Apart from the 30-Day Go-Live Commitment, these durations are planning estimates drawn from completed projects. Under the 30-Day Go-Live Commitment, Kestravane guarantees go-live within 30 calendar days of the kickoff call for Operations rollouts of up to 200 vehicles, provided the customer supplies the vehicle list within 5 business days of the kickoff call and releases vehicles on the agreed installation days. If Kestravane misses the date for reasons within its control, the onboarding fee is refunded in full. The commitment is part of the standard Operations order form, and account teams may state it to customers and prospects. It does not apply to larger Operations fleets or to Enterprise rollouts."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F4",
+        "statement": "An Operations rollout of up to 200 vehicles goes live within 30 calendar days of kickoff and is covered by the 30-Day Go-Live Commitment.",
+        "doc_needles": [
+          "30-Day Go-Live Commitment"
+        ]
+      },
+      {
+        "fact": "F7",
+        "statement": "Kestravane guarantees go-live within 30 calendar days of the kickoff call for Operations rollouts of up to 200 vehicles, provided the customer supplies the vehicle list within 5 business days of kickoff and releases vehicles on the agreed installation days; if Kestravane misses the date for reasons within its control the onboarding fee is refunded in full; the commitment is in the standard Operations order form and account teams may state it; it does not apply to larger Operations fleets or Enterprise.",
+        "doc_needles": [
+          "guarantees go-live within 30 calendar days",
+          "refunded in full",
+          "account teams may state it"
+        ]
+      }
+    ],
+    "note": "The implementation guide gains an explicit, scoped 30-day go-live guarantee for Operations rollouts of up to 200 vehicles, with conditions and a remedy; the estimate-only paragraph is replaced."
+  }
+]

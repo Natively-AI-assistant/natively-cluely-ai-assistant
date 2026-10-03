@@ -1,0 +1,1456 @@
+{
+  "mode": "general",
+  "items": [
+    {
+      "id": "ER-H-GEN-001",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What time can we actually get into the room on Thursday?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Check-in is from 3 pm; bags can be left at the desk from noon. The train gets in at 11:35 and the car is collected at noon, so the bags can go in early.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F10",
+            "text": "Check-in is from 3:00 pm.",
+            "answer_needles": [
+              "3 pm",
+              "3:00",
+              "3pm",
+              "3 p.m.",
+              "three"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F10",
+            "text": "Bags can be left at the desk from noon."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 11:00 am (check-out) or 1:00 pm (late check-out) as the check-in time.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says early check-in is guaranteed.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "source_priority": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-002",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "dunmore's away next week isn't he, who gets the signed quote and the money",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Mirella Aubrecht in the Halvering & Stroud office takes the signed quote and the deposit while Dunmore is away from Monday 5 to Wednesday 7 October, and she places the cabinet order.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F6",
+            "text": "Mirella Aubrecht in the office takes the signed quote and the deposit.",
+            "answer_needles": [
+              "Mirella"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F6",
+            "text": "Dunmore is away Monday 5 to Wednesday 7 October."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F26",
+            "text": "The deadline is still Friday 9 October."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Names someone else or invents contact details.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the deadline moves because Dunmore is away.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-CONTRACTOR-EMAILS"
+        ],
+        "source_priority": [
+          "GEN-REF-CONTRACTOR-EMAILS"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-003",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how much extra would it be to have the rotors done as well as the pads",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Option 2 ($521.14) less Option 1 ($266.68) is $254.46 extra. The shop says the rotors do not need it.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F8",
+            "text": "Doing the rotors as well costs $254.46 more ($521.14 against $266.68).",
+            "answer_needles": [
+              "254.46",
+              "254.5",
+              "254",
+              "255"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F4",
+            "text": "The rotors are within specification, so the extra is optional."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the rotor parts price alone ($178) as the whole difference.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the rotors need replacing.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-CAR-ESTIMATE"
+        ],
+        "source_priority": [
+          "GEN-REF-CAR-ESTIMATE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "521.14 - 266.68",
+          "result": 254.46,
+          "unit": "USD",
+          "accepted_forms": [
+            "254.46",
+            "$254.46",
+            "254.5",
+            "about 254",
+            "about 255"
+          ],
+          "inputs": {
+            "521.14": "GEN-REF-CAR-ESTIMATE#F8",
+            "266.68": "GEN-REF-CAR-ESTIMATE#F7"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-004",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if i pay the kitchen deposit by card what does the fee come to",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "2.9% of the $7,750 deposit is $224.75, so $7,974.75 charged. Check or bank transfer has no fee.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F20",
+            "text": "The 2.9% card fee on the $7,750 deposit is $224.75.",
+            "answer_needles": [
+              "224.75",
+              "224.8",
+              "225"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F20",
+            "text": "Paying by check or bank transfer avoids the fee."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "text": "The total charged would be $7,974.75."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Works the fee out on the June quote's $4,500.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F7",
+            "answer_needles": [
+              "130.50",
+              "130.5"
+            ]
+          },
+          {
+            "text": "Works the fee out on the email's 7,500.",
+            "kind": "stale",
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F1",
+            "answer_needles": [
+              "217.50",
+              "217.5"
+            ]
+          },
+          {
+            "text": "Says there is no surcharge on cards (that is the auto shop's policy).",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-CONTRACTOR-EMAILS",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "deposit amount",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          },
+          {
+            "topic": "deposit amount",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-CONTRACTOR-EMAILS"
+            ],
+            "resolution": "authoritative_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "7750 * 0.029",
+          "result": 224.75,
+          "unit": "USD",
+          "accepted_forms": [
+            "224.75",
+            "$224.75",
+            "7,974.75",
+            "7974.75"
+          ],
+          "inputs": {
+            "7750": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "0.029": "GEN-REF-RENO-QUOTE-REVC#F20"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-005",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "whats this roof thing from the hoa going to cost us and when do we pay",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "A special assessment of $600 per unit, paid in two installments of $300 on 1 February 2027 and 1 August 2027. It is billed separately and autopay does not collect it. The rise in monthly dues to $310 is a separate item.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F13",
+            "text": "The special assessment is $600 per unit.",
+            "answer_needles": [
+              "600"
+            ]
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F13",
+            "text": "It is payable in two $300 installments on 1 February 2027 and 1 August 2027.",
+            "answer_needles": [
+              "February",
+              "Feb"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F13",
+            "text": "It is not collected by autopay."
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F12",
+            "text": "Separately, monthly dues rise from $285 to $310 in January 2027."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the $310 monthly dues as the roof assessment.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says autopay will take care of it.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-HOA-NOTICE"
+        ],
+        "source_priority": [
+          "GEN-REF-HOA-NOTICE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-006",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Ooh, nice. What have you two got lined up for the Friday?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The lighthouse boat tour with Pellwick Charters on Friday morning, 9:15 from the pier, about two and a half hours; the maritime museum if the afternoon is wet. Spoken, friendly, no booking numbers.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F15",
+            "text": "Friday is the lighthouse boat tour in the morning.",
+            "answer_needles": [
+              "lighthouse",
+              "boat"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F22",
+            "text": "The maritime museum is the wet-weather fallback for the afternoon."
+          },
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F15",
+            "text": "The tour leaves at 9:15 am."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Puts Saturday's plans (tidepool walk, kayaks, the Saltmarrow Table dinner) on Friday.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Invents activities that are not in the plan.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to a friend, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "source_priority": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-007",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "when does the car go in and how long is that brake estimate good for",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "date_arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Drop-off is Tuesday 6 October 2026 at 8:00 am. The estimate is dated 30 September and valid for 14 days, so it runs to 14 October 2026.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F10",
+            "text": "The car goes in on Tuesday 6 October 2026 at 8:00 am.",
+            "answer_needles": [
+              "6 October",
+              "October 6",
+              "Oct 6",
+              "6 Oct",
+              "6th",
+              "Tuesday"
+            ]
+          },
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F11",
+            "text": "The estimate is valid for 14 days from 30 September, so until 14 October 2026.",
+            "answer_needles": [
+              "14 October",
+              "October 14",
+              "Oct 14",
+              "14 Oct",
+              "14th"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Gives the kitchen quote's dates (9 October, 22 October) as the estimate's validity.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives a different appointment day or time.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-CAR-ESTIMATE"
+        ],
+        "source_priority": [
+          "GEN-REF-CAR-ESTIMATE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026, 9, 30) + days(14)",
+          "result": "2026-10-14",
+          "unit": "date",
+          "accepted_forms": [
+            "14 October",
+            "October 14",
+            "Oct 14",
+            "14 Oct",
+            "14th"
+          ],
+          "inputs": {
+            "date(2026, 9, 30)": "GEN-REF-CAR-ESTIMATE#F1",
+            "days(14)": "GEN-REF-CAR-ESTIMATE#F11"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-008",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Where do you want the dumpster? Okay if we just leave it on the street out front?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "rules",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No to the street. The association allows a dumpster only on the owner's own driveway, for at most 7 days in a row, with a placard from the management office ($200 refundable deposit). Dunmore's plan (dropped Monday, picked up Friday of the first week) is inside the limit. The user cannot grant an exception.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F10",
+            "text": "The dumpster has to go on their own driveway, not the street.",
+            "answer_needles": [
+              "driveway",
+              "drive"
+            ]
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F10",
+            "text": "It can stay no more than 7 consecutive days.",
+            "answer_needles": [
+              "7 days",
+              "seven days",
+              "a week",
+              "one week",
+              "7 consecutive",
+              "seven consecutive",
+              "7-day",
+              "seven-day"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F10",
+            "text": "It needs a placard from the management office, with a $200 refundable deposit."
+          },
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F5",
+            "text": "Dunmore planned a 10-yard dumpster for the first week, Monday to Friday, which is inside the limit."
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F10",
+            "text": "Without a placard the fine is $50 a day."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the street is fine.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Promises the association will allow it on the street or for longer.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "the user speaking aloud to the contractor, Dunmore, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-HOA-NOTICE",
+          "GEN-REF-CONTRACTOR-EMAILS"
+        ],
+        "source_priority": [
+          "GEN-REF-HOA-NOTICE",
+          "GEN-REF-CONTRACTOR-EMAILS"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-009",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "once the deposit's gone out of the kitchen fund how much of the cabinet delivery payment has to come from the loan, and will the loan money be there in time",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "arithmetic",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "After the $7,750 deposit the kitchen fund has $1,550 left. The cabinet-delivery payment is 40%, $15,500, so $13,950 has to come from the loan. The loan can be drawn from 26 October; cabinets take about 4 weeks from an order placed within 3 business days of the deposit, so delivery falls in November, after the loan is available.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F17",
+            "text": "$13,950 of the $15,500 cabinet-delivery payment has to come from the loan.",
+            "answer_needles": [
+              "13,950",
+              "13950"
+            ]
+          },
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F4",
+            "text": "The loan can be drawn from 26 October 2026, before the cabinets are due.",
+            "answer_needles": [
+              "26 October",
+              "October 26",
+              "Oct 26",
+              "26 Oct",
+              "26th",
+              "10-26"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F23",
+            "text": "Cabinets take about 4 weeks from order, so delivery is in November."
+          },
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F2",
+            "text": "The kitchen fund has $1,550 left after the deposit."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the June quote's $16,675 cabinet-delivery payment.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F13",
+            "answer_needles": [
+              "16,675",
+              "16675"
+            ]
+          },
+          {
+            "text": "Says the loan is not available until December.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-BUDGET-OCT"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-BUDGET-OCT",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "payment schedule",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "15500 - (9300 - 7750)",
+          "result": 13950,
+          "unit": "USD",
+          "accepted_forms": [
+            "13,950",
+            "13950",
+            "$13,950"
+          ],
+          "inputs": {
+            "15500": "GEN-REF-RENO-QUOTE-REVC#F17",
+            "9300": "GEN-REF-BUDGET-OCT#F2",
+            "7750": "GEN-REF-RENO-QUOTE-REVC#F16"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-010",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Is there anything your HOA needs from our side before we get going?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "rules",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Yes: a certificate of liability insurance showing at least $1,000,000 general liability and naming the Association as certificate holder, plus the license number and the start and finish dates for the notification form. Halvering & Stroud's $2,000,000 cover meets the requirement.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F5",
+            "text": "The association needs a certificate of liability insurance from the contractor, naming the Association.",
+            "answer_needles": [
+              "certificate",
+              "insurance"
+            ]
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F5",
+            "text": "The cover must be at least $1,000,000.",
+            "answer_needles": [
+              "1,000,000",
+              "1 million",
+              "one million",
+              "a million",
+              "$1M",
+              "1M"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F5",
+            "text": "Also the license number and the expected start and finish dates."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F32",
+            "text": "Halvering & Stroud's $2,000,000 cover is enough."
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F4",
+            "text": "It all goes in with the notification form 14 days before work starts."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the Architectural Committee has to approve the job.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the association needs nothing from the contractor.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "the user speaking aloud to the contractor, Dunmore, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-HOA-NOTICE",
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-HOA-NOTICE",
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-011",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "whos looking after the house while we're in marrowby and is anything booked to turn up",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "cross_document",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Perry: plants (not the orchid), parcels, bins out on Sunday night, and Biscuit's feeding. On Friday 23 October Dunmore's office drops off two quartz samples and Perry takes them in.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOUSE-NOTES#F8",
+            "text": "Perry looks after the house while they are away.",
+            "answer_needles": [
+              "Perry"
+            ]
+          },
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F7",
+            "text": "Two quartz samples are being dropped off on Friday 23 October.",
+            "answer_needles": [
+              "sample"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-HOUSE-NOTES#F8",
+            "text": "Plants except the orchid, parcels, bins out Sunday night."
+          },
+          {
+            "fact": "GEN-REF-HOUSE-NOTES#F12",
+            "text": "Biscuit is fed twice a day."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says cabinets or appliances are being delivered while they are away.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says nobody is covering the house.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-HOUSE-NOTES",
+          "GEN-REF-CONTRACTOR-EMAILS",
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "source_priority": [
+          "GEN-REF-HOUSE-NOTES",
+          "GEN-REF-CONTRACTOR-EMAILS",
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-012",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how long do they guarantee their own work for",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "outdated_vs_current",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Two years from the final walkthrough, per the current revision. The June quote said one year.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F31",
+            "text": "Workmanship is warranted for two years from the final walkthrough.",
+            "answer_needles": [
+              "two years",
+              "2 years",
+              "two-year",
+              "2-year",
+              "24 months"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F34",
+            "text": "Cabinets have the manufacturer's limited lifetime warranty and the quartz a 15-year fabricator warranty."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives one year.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F11",
+            "answer_needles": [
+              "one year",
+              "1 year",
+              "one-year",
+              "1-year",
+              "12 months"
+            ]
+          },
+          {
+            "text": "Gives the 15-year quartz warranty as the workmanship warranty.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "workmanship warranty",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-013",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What are they charging you for the tile behind the counters?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "outdated_vs_current",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "$2,150 in the current revision, for about 32 sq ft laid straight. The June figure of $1,850 is out of date. Herringbone would add $380 but is not on the quote.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F9",
+            "text": "The backsplash is priced at $2,150.",
+            "answer_needles": [
+              "2,150",
+              "2150",
+              "twenty-one fifty",
+              "two thousand one hundred",
+              "twenty-one hundred and fifty"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F3",
+            "text": "A herringbone pattern would add $380 in labor; it is not on the quote yet."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the June price of $1,850.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F4",
+            "answer_needles": [
+              "1,850",
+              "1850"
+            ]
+          },
+          {
+            "text": "Gives $2,530 as the quoted price, as if herringbone were already included.",
+            "kind": "fabrication",
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F3"
+          }
+        ],
+        "expected_role": "the user speaking aloud to a friend, first person, as an ordinary person with no specialised role",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA",
+          "GEN-REF-CONTRACTOR-EMAILS"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "backsplash price",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-014",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if they find something nasty behind a wall how does that get billed",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "outdated_vs_current",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "By written change order at the contractor's cost plus 15%, and the work does not start until it is approved in writing. The quote has no contingency in it; the contractor suggests keeping about 8% ($3,100) aside. The June quote's $85-an-hour time-and-materials wording no longer applies.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F29",
+            "text": "Unforeseen work is billed by written change order at cost plus 15%.",
+            "answer_needles": [
+              "15%",
+              "15 percent",
+              "fifteen percent",
+              "15 per cent"
+            ]
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F29",
+            "text": "It does not begin until the owners approve it in writing.",
+            "answer_needles": [
+              "writing",
+              "written",
+              "approv",
+              "sign off"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F30",
+            "text": "The contractor suggests about 8% in reserve, roughly $3,100."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F29",
+            "text": "There is no contingency sum in the quote."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the June quote's $85 per hour time-and-materials rate.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F10",
+            "answer_needles": [
+              "$85",
+              "85 per hour",
+              "85 an hour",
+              "85/hour"
+            ]
+          },
+          {
+            "text": "Says a contingency is already included in the price.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "billing of unforeseen conditions",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-015",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And would you like one key card or two?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "casual_decision",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A present choice at the front desk. 'Two, please' or 'one is fine' are both right; one short spoken line. No booking details need reading out.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says it cannot answer because nothing covers it.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Claims the booking already specifies the number of keys.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Reads out the confirmation number, gate code or prices unprompted.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to the hotel front desk clerk, first person, as an ordinary person with no specialised role",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Two keys is a natural choice for two guests."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-016",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "whats a normal tip for the guide on a boat tour like that",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "General knowledge: roughly 10 to 20 percent of the ticket price, or a few dollars per person, in cash, if the tour was good. The plan says nothing about tipping. Using the $48 ticket price to give a rough dollar figure is fine.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says the booking includes gratuity or states a tipping policy for Pellwick Charters.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says it cannot answer because the plan does not cover tipping.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "explain",
+        "expected_response_type": "private_advice",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "A rough figure such as $5 to $10 each based on the $48 tickets."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-017",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Did you get up to anything fun over the weekend?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-none",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "small_talk",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "There is no single factual answer. The judged behaviour is a natural, short spoken reply that a person could say and that invents no personal history: no named show, film, outing or event presented as something the user actually did. Keeping it light, being non-committal, or turning the ask back to the other person is all fine. It must not sound like an AI system reporting missing context. Nothing is loaded.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Describes a specific activity, place or event as something the user did.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Names people the user spent the weekend with.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to a friend, first person, as an ordinary person with no specialised role",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "A vague, true-to-anyone reply ('pretty quiet one, to be honest') followed by turning the ask around."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-018",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Does the inn do breakfast, or are we fending for ourselves in the mornings?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "missing_fact",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The plan does not say either way. The reply admits not knowing in a natural way and offers to check (ring the front desk or look at the booking). It must not say breakfast is included and must not say it is not.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F8",
+            "text": "The front desk number is 555-0187."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says breakfast is included.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the inn does not serve breakfast or that it is not included.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Invents a breakfast time, price or venue.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "defer_to_verify",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting they find a cafe by the harbor as a fallback, without claiming the plan says so."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-019",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What time's the dinner on Saturday again?",
+      "prior_transcript": null,
+      "conversation_id": "ER-H-GEN-019-C",
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "direct_retrieval",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "7:45 pm at Saltmarrow Table, table for two under Aldemere.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F18",
+            "text": "Dinner is at 7:45 pm on Saturday at Saltmarrow Table.",
+            "answer_needles": [
+              "7:45",
+              "7.45",
+              "quarter to eight",
+              "seven forty-five",
+              "seven forty five"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F18",
+            "text": "The table is under Aldemere."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives another time from the plan (2:00 pm kayaks, 10:30 am walk, 9:15 am boat).",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "source_priority": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-H-GEN-020",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And how late can we pull out of that and still keep what we put down?",
+      "prior_transcript": null,
+      "conversation_id": "ER-H-GEN-019-C",
+      "turn_index": 2,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "date_arithmetic",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "'That' is the Saturday dinner. They must cancel at least 48 hours ahead, so by 7:45 pm on Thursday 22 October, the day they arrive, or the $80 deposit ($40 each) is kept.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F19",
+            "text": "The dinner must be cancelled at least 48 hours ahead, which is by 7:45 pm on Thursday 22 October.",
+            "answer_needles": [
+              "Thursday",
+              "22 October",
+              "October 22",
+              "Oct 22",
+              "22nd"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F19",
+            "text": "The deposit at stake is $80, $40 each."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the hotel's cutoff (6 pm on Monday 19 October) as the dinner's.",
+            "kind": "fabrication",
+            "fact": "GEN-REF-TRIP-PLAN#F12",
+            "answer_needles": [
+              "19 October",
+              "October 19",
+              "Oct 19",
+              "19th"
+            ]
+          },
+          {
+            "text": "Answers about the hotel or the car instead of the dinner.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-TRIP-PLAN",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "GEN-REF-TRIP-PLAN",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "datetime(2026, 10, 24, 19, 45) - hours(48)",
+          "result": "2026-10-22T19:45",
+          "unit": "datetime",
+          "accepted_forms": [
+            "Thursday",
+            "22 October",
+            "October 22",
+            "Oct 22",
+            "22nd"
+          ],
+          "inputs": {
+            "datetime(2026, 10, 24, 19, 45)": "GEN-REF-TRIP-PLAN#F18",
+            "hours(48)": "GEN-REF-TRIP-PLAN#F19"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

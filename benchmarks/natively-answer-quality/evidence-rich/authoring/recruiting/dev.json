@@ -1,0 +1,2436 @@
+{
+  "mode": "recruiting",
+  "items": [
+    {
+      "id": "ER-D-REC-001",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Before we get too deep, can I just ask what this pays? I don't want to waste your time or mine.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "salary_question",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The candidate asks for pay. The recruiter states the posted base range, $172,000 to $198,000, and may add that where an offer lands depends on experience and internal equity and that a bonus and equity come on top. The recruiter does not promise a figure or a position in the range.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F2",
+            "text": "The posted base salary range is $172,000 to $198,000 per year.",
+            "answer_needles": [
+              "172",
+              "one seventy-two",
+              "one seventy two",
+              "hundred seventy-two",
+              "hundred and seventy-two",
+              "hundred seventy two",
+              "hundred and seventy two"
+            ]
+          },
+          {
+            "fact": "REC-REF-JD-2026#F2",
+            "text": "The top of the range is $198,000.",
+            "answer_needles": [
+              "198",
+              "one ninety-eight",
+              "one ninety eight",
+              "hundred ninety-eight",
+              "hundred and ninety-eight",
+              "hundred ninety eight",
+              "hundred and ninety eight"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F17",
+            "text": "Placement in the range depends on experience and internal equity."
+          },
+          {
+            "fact": "REC-REF-JD-2026#F18",
+            "text": "The role is also eligible for an annual bonus and an equity grant."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F25",
+            "text": "Recruiters share the posted range in the first conversation when asked."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Promises a specific base figure, or says she would come in at the top of the range.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Quotes a range other than $172,000 to $198,000.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the range cannot be shared or must be checked first, although it is posted and recruiters share it on request.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_then_scope_authority",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-JD-2026"
+        ],
+        "source_priority": [
+          "REC-REF-JD-2026",
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning the 12% bonus target for lead level as extra context.",
+          "Asking what she is expecting, after giving the range."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-002",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And who's the boss here, like who would I actually be answering to day to day?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "role_question",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The recruiter says the role reports to Idris Halvorsen-Peake, Director of Data Platform.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F12",
+            "text": "The lead reports to Idris Halvorsen-Peake, Director of Data Platform.",
+            "answer_needles": [
+              "Idris",
+              "Halvorsen-Peake",
+              "Director of Data Platform"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F13",
+            "text": "Idris reports to Yevgenia Marlowe-Okafor, VP of Engineering."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the role reports directly to the VP of Engineering, or names Tobiah Raskovic or Maribel Oyelaran-Fitch as the manager.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_candidate_question",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "source_priority": [
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that Idris is the hiring manager she would meet at the next stage."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-003",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "remind me why this req is open, she's going to ask",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "role_question",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Private reminder for the recruiter: the previous lead, Maribel Oyelaran-Fitch, moved internally in July 2026 to start the Device Gateway team. Nobody left the company; she is still in the group and has offered to hand over.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F14",
+            "text": "The previous lead, Maribel Oyelaran-Fitch, moved in July 2026 to start the Device Gateway team.",
+            "answer_needles": [
+              "Maribel",
+              "Oyelaran-Fitch",
+              "Device Gateway"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F14",
+            "text": "She is still in the group and has offered to hand over in person."
+          },
+          {
+            "fact": "REC-REF-HM-NOTES#F11",
+            "text": "The hiring manager's notes mention two weeks of overlap."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the previous lead left the company, resigned or was let go.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the reason is not known.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "source_priority": [
+          "REC-REF-TEAM-BRIEF-2026",
+          "REC-REF-HM-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Offering a one-line version the recruiter can say aloud."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-004",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What are you all running under the hood? Is it a JVM shop, or...?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "candidate_question",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The recruiter answers from the team brief: services are written in Go (not a JVM shop), on self-managed Kafka on Kubernetes, with ClickHouse and PostgreSQL, on AWS. A short spoken answer, not a full inventory.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F15",
+            "text": "Services are written in Go, so it is not a JVM shop.",
+            "answer_needles": []
+          },
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F16",
+            "text": "The streaming backbone is Apache Kafka, self-managed on Kubernetes.",
+            "answer_needles": [
+              "Kafka"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F17",
+            "text": "ClickHouse for time-series storage and PostgreSQL for metadata."
+          },
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F18",
+            "text": "AWS, us-east-2 primary; Terraform and Grafana."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the team works mainly in Java or another JVM language (Java is on the candidate's resume, not in the team's stack).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Lists technologies that are not in the brief (for example Flink, Pulsar, Snowflake) as part of the stack.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_candidate_question",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "source_priority": [
+          "REC-REF-TEAM-BRIEF-2026",
+          "REC-REF-JD-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-005",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Say I come up and do the panel on Tuesday the 20th of October. When would I actually hear how it went?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "next_step_question",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The debrief is held within 2 business days of the panel (by Thursday 22 October) and the candidate is told the outcome within 3 business days after the debrief, so at the latest by Tuesday 27 October. The recruiter gives that date as the outer limit and does not promise a positive outcome.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F14",
+            "text": "She hears the panel outcome by Tuesday 27 October 2026 at the latest (debrief within 2 business days, outcome within 3 business days after the debrief).",
+            "answer_needles": [
+              "27th",
+              "October 27",
+              "Oct 27",
+              "27 October",
+              "the 27",
+              "following Tuesday",
+              "27 Oct",
+              "Tuesday the 27"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F13",
+            "text": "The debrief is within 2 business days of the panel loop (by Thursday 22 October)."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F9",
+            "text": "If the panel goes well the next step is the executive conversation."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a different latest date (for example 22 October or 23 October as the day she is told).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Promises an offer or a positive result by that date.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Says most processes take about five weeks, from the 2025 overview.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F21",
+            "answer_needles": [
+              "five weeks"
+            ]
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "source_priority": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying it is often sooner than the outer limit."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2026-10-20 (Tue) + 2 business days = 2026-10-22 (Thu, debrief); + 3 business days = 2026-10-27 (Tue, outcome)",
+          "result": "2026-10-27",
+          "unit": "date (latest day the candidate is told)",
+          "accepted_forms": [
+            "October 27",
+            "Oct 27",
+            "27 October",
+            "27th",
+            "the 27",
+            "following Tuesday",
+            "27 Oct",
+            "Tuesday the 27"
+          ],
+          "inputs": {
+            "panel_date": "CONVERSATION",
+            "debrief_within_business_days": "REC-REF-PROCESS-GUIDE-2026#F13",
+            "outcome_within_business_days_after_debrief": "REC-REF-PROCESS-GUIDE-2026#F14",
+            "business_day_rule": "REC-REF-PROCESS-GUIDE-2026#F16"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-006",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Oh, loads. I mean, I basically made the whole thing way more reliable. It was night and day compared to when I took over.",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "What changed on the pipeline while you were running it?"
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "vague_achievement",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The candidate gave a vague achievement. Natively gives the recruiter a short probe that makes the claim verifiable under the scorecard's evidence standard: what number moved, and what she personally decided or did. It is the recruiter's next line, not an answer.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F16",
+            "text": "The probe asks for specifics that make the claim verifiable: a measurable result (what changed, by how much) and/or what she personally did or decided.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F17",
+            "text": "If she stays at 'we', ask for her own part."
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F7",
+            "text": "The resume's latency figure (4.2 s to 900 ms) can anchor the probe."
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F9",
+            "text": "The resume's incident record can anchor the probe."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Role inversion: continues or answers in the candidate's voice (a first-person account of the candidate's own work or history) instead of giving the recruiter the next thing to say.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States a reliability or uptime figure for her pipeline as fact; the resume gives none.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Accepts the claim and moves to a different topic without asking for specifics.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "recruiter/interviewer speaking to the candidate: the next thing the recruiter says (a probe), never the candidate's own answer",
+        "expected_action": "probe_candidate",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "REC-REF-SCORECARD-2026"
+        ],
+        "source_priority": [
+          "REC-REF-SCORECARD-2026",
+          "REC-REF-RESUME-VASKIRK"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Using a past-tense prompt such as 'what was the number before and after?'."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-007",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "I think they'd say supportive. I'm really a people-first leader, and honestly I've never had any real problems on my teams.",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "How would the people who report to you describe you as a manager?"
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "leadership_probe",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The must-have for people management needs evidence that she has handled at least one underperformance case. 'Never had problems' gives none. Natively gives the recruiter a past-tense probe for one concrete case of someone not meeting expectations and what she did.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F11",
+            "text": "The probe asks for a concrete past case of an underperforming or struggling team member and what she did about it.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F3",
+            "text": "Past-tense behavioral prompt rather than a hypothetical."
+          },
+          {
+            "fact": "REC-REF-HM-NOTES#F3",
+            "text": "The hiring manager also wants one real case."
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F10",
+            "text": "The resume mentions hiring 3 engineers and one promotion."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Role inversion: continues or answers in the candidate's voice (a first-person account of the candidate's own work or history) instead of giving the recruiter the next thing to say.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States that she has, or has not, handled an underperformance case; neither the resume nor the conversation says.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter/interviewer speaking to the candidate: the next thing the recruiter says (a probe), never the candidate's own answer",
+        "expected_action": "probe_candidate",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "REC-REF-SCORECARD-2026"
+        ],
+        "source_priority": [
+          "REC-REF-SCORECARD-2026",
+          "REC-REF-HM-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking about a hard feedback conversation or a performance plan as the concrete case."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-008",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "ok scoring her now. technical 3, leadership 4, ownership 3, communication 2. does that clear the bar to move her on?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "scorecard",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Weighted score = 3 x 0.35 + 4 x 0.30 + 3 x 0.20 + 2 x 0.15 = 3.15. The rule is 3.0 or higher with no dimension rated 1, so she advances; the 2 in communication does not block her.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F9",
+            "text": "The weighted score is 3.15, which is at or above 3.0, and no dimension is rated 1, so she advances.",
+            "answer_needles": [
+              "3.15"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F5",
+            "text": "Technical depth 35%."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F6",
+            "text": "People leadership 30%."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F7",
+            "text": "Ownership 20%."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F8",
+            "text": "Communication 15%."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses a plain average (3.0) or other weights instead of the scorecard's weights.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the 2 in communication blocks her; only a rating of 1 blocks.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the bar cannot be worked out.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-SCORECARD-2026"
+        ],
+        "source_priority": [
+          "REC-REF-SCORECARD-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "3*0.35 + 4*0.30 + 3*0.20 + 2*0.15",
+          "result": 3.15,
+          "unit": "weighted score on the 1-4 scale",
+          "accepted_forms": [
+            "3.15"
+          ],
+          "inputs": {
+            "technical_weight": "REC-REF-SCORECARD-2026#F5",
+            "leadership_weight": "REC-REF-SCORECARD-2026#F6",
+            "ownership_weight": "REC-REF-SCORECARD-2026#F7",
+            "communication_weight": "REC-REF-SCORECARD-2026#F8",
+            "ratings": "CONVERSATION"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-009",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "is it ok to ask what she's on at halcyard right now?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "recruiter_responsibility",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "No. The process guide says recruiters do not ask about current or past pay; they ask what the candidate is expecting instead.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F27",
+            "text": "Recruiters do not ask about current or past pay; ask what she is expecting instead.",
+            "answer_needles": [
+              "expect",
+              "looking for",
+              "hoping for",
+              "target range",
+              "target comp"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F25",
+            "text": "The recruiter can share the posted range and ask whether it fits."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says it is fine to ask her current salary.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States her current pay as known.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_advice",
+        "source_ids": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "source_priority": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting a wording such as 'what range are you looking for?'.",
+          "Mentioning as general background that many places restrict pay-history asks."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-010",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what do i owe her and the team once we hang up? timings pls",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "recruiter_responsibility",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "From the process guide: a follow-up email to the candidate the same day with next steps; the scorecard submitted within 24 hours; an outcome to the candidate within 2 business days of the recruiter screen. Moving the stage in Greenhollow within 1 business day of an outcome is optional detail.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F29",
+            "text": "Follow-up email to the candidate the same day, summarising next steps.",
+            "answer_needles": [
+              "same day",
+              "today",
+              "end of day",
+              "end of the day",
+              "EOD",
+              "tonight"
+            ]
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F30",
+            "text": "Scorecard submitted within 24 hours of the conversation.",
+            "answer_needles": [
+              "24 hours",
+              "24h",
+              "24-hour",
+              "24 hrs",
+              "twenty-four hours",
+              "within a day",
+              "by tomorrow"
+            ]
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F12",
+            "text": "An outcome to the candidate within 2 business days of the recruiter screen.",
+            "answer_needles": [
+              "2 business days",
+              "two business days",
+              "2 working days",
+              "two working days",
+              "two days",
+              "2 biz days",
+              "two-business-day",
+              "2-business-day",
+              " 2 days"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F31",
+            "text": "Keep Greenhollow current and move the stage within 1 business day of an outcome."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives deadlines that are not in the guide (for example a 48-hour scorecard window).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses the 3-business-day figure, which belongs to the panel outcome, for the recruiter screen.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "source_priority": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-011",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How much would I be on the road for this? I've got two kids, so I need to know.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "role_question",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The recruiter says travel is to the Chattanooga hub for planning weeks, up to four trips a year.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F10",
+            "text": "Travel is to the Chattanooga hub for planning weeks, up to four trips per year.",
+            "answer_needles": [
+              "four",
+              "4 trips",
+              "4 times",
+              "4 a year",
+              "once a quarter",
+              "quarterly",
+              "4 planning",
+              "4 per year",
+              "4x",
+              "4 weeks a year"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F6",
+            "text": "Chattanooga is the engineering hub."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says there is no travel.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives a travel percentage or number of trips that is not in the job description.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_candidate_question",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-JD-2026"
+        ],
+        "source_priority": [
+          "REC-REF-JD-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying each trip is a planning week."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-012",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Sure. So I led the migration off RabbitMQ onto Kafka, the whole thing end to end, about a year of work.",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "I saw a Kafka migration on your resume. Walk me through that one."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "candidate_inconsistency",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "She says she led the whole migration. Her resume says she contributed to a 9-engineer program led by the platform architect and owned the consumer-side cutover for 14 services. Natively gives the recruiter a probe on her direct contribution that surfaces the gap without accusing her; the scorecard says to ask the candidate to reconcile and not to assume which version is right.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The reply follows up on her claim that she led the whole migration, asking for her own role, contribution or decisions.",
+            "answer_needles": []
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F5",
+            "text": "The reply reflects that the resume describes her as contributing to a 9-engineer program led by the platform architect, not as leading it, and asks her to square the two.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F6",
+            "text": "The resume says she owned the consumer-side cutover for 14 services."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F18",
+            "text": "Note both versions and ask her to reconcile; do not assume which is right."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F16",
+            "text": "Evidence standard: own role, size of effort, one personal decision, a measurable result."
+          },
+          {
+            "fact": "REC-REF-HM-NOTES#F2",
+            "text": "The hiring manager wants to know what she personally decided."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Role inversion: continues or answers in the candidate's voice (a first-person account of the candidate's own work or history) instead of giving the recruiter the next thing to say.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Tells the candidate, or the recruiter as fact, that she is exaggerating or that the resume version is the true one.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Accepts 'I led it' and moves on with no follow-up on her own contribution.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "recruiter/interviewer speaking to the candidate: the next thing the recruiter says (a probe), never the candidate's own answer",
+        "expected_action": "probe_candidate",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "REC-REF-RESUME-VASKIRK",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "REC-REF-RESUME-VASKIRK",
+          "CONVERSATION",
+          "REC-REF-SCORECARD-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking who the overall lead was and what she decided herself.",
+          "A brief private note to the recruiter that the resume says 'contributed'."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-013",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Um, about five years now, give or take.",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "And how long have you been managing people directly?"
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "experience_verification",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "She says about five years of managing people. The resume shows line management only from March 2023 (about three and a half years); from June 2020 to February 2023 she was a Senior Software Engineer who mentored 2 juniors with no line responsibility, which the role does not count. Natively gives a probe that asks which roles she is counting and when she first had direct reports. Even the resume's figure clears the 2-year minimum, so this is a verification, not a rejection.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The reply follows up on the 'about five years' claim by asking which roles or period she is counting, or when she first had formal line responsibility.",
+            "answer_needles": []
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F2",
+            "text": "The reply reflects that the resume shows the team-lead role with line management starting in March 2023.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F15",
+            "text": "Before that she mentored 2 junior engineers with no line responsibility."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F19",
+            "text": "Mentoring and tech-lead work without line responsibility do not count."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F18",
+            "text": "Note both versions and ask her to reconcile."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Role inversion: continues or answers in the candidate's voice (a first-person account of the candidate's own work or history) instead of giving the recruiter the next thing to say.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says or implies she fails the 2-year management minimum; about three and a half years clears it.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States as fact that she is misrepresenting her experience.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter/interviewer speaking to the candidate: the next thing the recruiter says (a probe), never the candidate's own answer",
+        "expected_action": "probe_candidate",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "REC-REF-RESUME-VASKIRK",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "REC-REF-RESUME-VASKIRK",
+          "CONVERSATION",
+          "REC-REF-SCORECARD-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "A private aside that the resume supports roughly three and a half years."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-014",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Yeah, so latency. We got p99 down under half a second, mostly by, you know, tuning Kafka.",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Tell me about a performance problem you fixed yourself."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "technical_probe",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "She says p99 went under half a second by 'tuning Kafka'. The resume says 4.2 s to 900 ms, by redesigning partition keys and introducing micro-batching in the Go consumers. Natively gives a technical probe: what exactly she changed and why, and which figure is right. It does not supply the technical story for her.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The reply asks what specifically she changed (the 'tuning'), in her own words, and what she personally did.",
+            "answer_needles": []
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F7",
+            "text": "The reply reflects the resume's version (4.2 s down to 900 ms, via partition-key redesign and micro-batching) and probes the difference from 'under half a second'.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F16",
+            "text": "Evidence standard: own role, one personal decision, a measurable result."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F18",
+            "text": "Note both versions and ask her to reconcile."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Role inversion: continues or answers in the candidate's voice (a first-person account of the candidate's own work or history) instead of giving the recruiter the next thing to say.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Explains, as if known, technical steps she took that are not on the resume.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Declares one of the two figures the true one.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter/interviewer speaking to the candidate: the next thing the recruiter says (a probe), never the candidate's own answer",
+        "expected_action": "probe_candidate",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "REC-REF-RESUME-VASKIRK",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "REC-REF-RESUME-VASKIRK",
+          "CONVERSATION",
+          "REC-REF-SCORECARD-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking how she chose the new partition key or what the batching trade-off was."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-015",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Honestly, I'd need two-oh-five to make a move. Is that something you could do for the right person?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "salary_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The posted range tops out at $198,000, so 205 is above it. Per the process guide the recruiter may not promise pay outside the posted range; anything outside it needs the VP of Engineering and the Head of People Operations before it is even mentioned. The recruiter is straight about the top of the range, does not promise, does not flatly rule it out, and says who decides. The hiring manager's private wish to argue for the upper half of the range is not relayed.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F2",
+            "text": "The reply makes clear that 205 is above the posted range, which tops out at $198,000 (naming the $198,000 top is the natural way to say it).",
+            "answer_needles": [
+              "198",
+              "one ninety-eight",
+              "one ninety eight",
+              "hundred ninety-eight",
+              "hundred and ninety-eight",
+              "hundred ninety eight",
+              "hundred and ninety eight"
+            ]
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28",
+            "text": "The recruiter cannot promise pay outside the posted range; that needs approval above the recruiter, and she says so without committing.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F22",
+            "text": "Outside-range pay needs the VP of Engineering and the Head of People Operations."
+          },
+          {
+            "fact": "REC-REF-JD-2026#F18",
+            "text": "Bonus and equity come on top of base."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says 205 can be done, is likely, or will be approved.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Tells the candidate the hiring manager intends to push for the top or upper half of the range.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-HM-NOTES#F7"
+          },
+          {
+            "text": "Says flatly that going above the range is impossible; the guide describes an approval path rather than a ban.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_then_scope_authority",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-JD-2026",
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "source_priority": [
+          "REC-REF-JD-2026",
+          "REC-REF-PROCESS-GUIDE-2026",
+          "REC-REF-HM-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Pointing to total compensation (12% bonus target, equity) as part of the picture.",
+          "Asking whether the top of the range would work for her."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-016",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "on paper does she clear the hard requirements? quick rundown before i write this up",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "scorecard",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Private rundown of the required list against the resume: about ten years of backend/data work since August 2016 (needs 7); line management since March 2023, about three and a half years (needs 2); production Kafka at Halcyard; incident commander for 6 Sev-1 incidents. All four clear on paper, and so does the fifth required item, fluency in a compiled backend language (Go: the client library and the Go consumers), which may be mentioned. Still unverified: an underperformance case and explaining trade-offs, which the resume cannot show. Short, not a document dump.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F17",
+            "text": "Experience: about ten years since August 2016, above the 7-year requirement.",
+            "answer_needles": [
+              "ten years",
+              "10 years",
+              "2016",
+              "10+"
+            ]
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F2",
+            "text": "People management: line responsibility since March 2023, about three and a half years, above the 2-year requirement.",
+            "answer_needles": [
+              "2023",
+              "3.5",
+              "three and a half",
+              "3 years",
+              "three years",
+              "3½"
+            ]
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F5",
+            "text": "Streaming: production Kafka experience at Halcyard.",
+            "answer_needles": [
+              "Kafka"
+            ]
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F9",
+            "text": "Incident command: incident commander for 6 Sev-1 incidents.",
+            "answer_needles": [
+              "Sev-1",
+              "Sev 1",
+              "Sev1",
+              "incident command"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F11",
+            "text": "An underperformance case is required and is not evidenced on the resume."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F13",
+            "text": "Explaining trade-offs can only be judged live."
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F21",
+            "text": "Go is on her skills list, which covers the fifth required item (fluency in a compiled backend language)."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says she has handled an underperformance case; the resume does not say so.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says she fails a required item that the resume supports (for example the management minimum).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Counts the Senior Software Engineer years as line management.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-JD-2026",
+          "REC-REF-RESUME-VASKIRK",
+          "REC-REF-SCORECARD-2026"
+        ],
+        "source_priority": [
+          "REC-REF-JD-2026",
+          "REC-REF-SCORECARD-2026",
+          "REC-REF-RESUME-VASKIRK"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Flagging the 'led' versus 'contributed' wording on the migration as something to verify."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-017",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "does that fit our range or is it over?",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "So where would you need to be on base for this to make sense?"
+        },
+        {
+          "speaker": "other",
+          "text": "Look, I'll just tell you where I am. I'm at one eighty-one base today, and I'd want at least ten percent on top of that to make a move."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "salary_question",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "She volunteered $181,000 and wants at least 10% more: 181,000 x 1.10 = $199,100. The posted range tops out at $198,000, so her ask is about $1,100 above the top. Above-range pay needs the VP of Engineering and the Head of People Operations before it is mentioned to her, so the recruiter should not agree to it.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "Her ask works out to $199,100 (181,000 plus 10%).",
+            "answer_needles": [
+              "199,100",
+              "199.1",
+              "199100",
+              "199k",
+              "199 k"
+            ]
+          },
+          {
+            "fact": "REC-REF-JD-2026#F2",
+            "text": "That is above the top of the posted range, $198,000 (by about $1,100).",
+            "answer_needles": [
+              "198",
+              "hundred ninety-eight",
+              "hundred and ninety-eight",
+              "hundred ninety eight",
+              "hundred and ninety eight"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F22",
+            "text": "Base pay outside the posted range needs the VP of Engineering and the Head of People Operations before it is mentioned to a candidate."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F21",
+            "text": "Anything above the midpoint also needs Total Rewards sign-off."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the ask fits inside the range.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Advises the recruiter to tell her the figure can be met.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-JD-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "REC-REF-JD-2026",
+          "CONVERSATION",
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Noting it is only just over, and that bonus and equity sit on top."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "181000 * 1.10",
+          "result": 199100,
+          "unit": "USD (her minimum base ask)",
+          "accepted_forms": [
+            "199,100",
+            "199100",
+            "199.1k",
+            "199.1K",
+            "199.1",
+            "199k"
+          ],
+          "inputs": {
+            "current_base": "CONVERSATION",
+            "uplift": "CONVERSATION",
+            "range_top": "REC-REF-JD-2026#F2"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-018",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "My wife and I are hoping for a second kid next year, so... what do you do for the parent who isn't giving birth?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "benefits_question",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Two Total Rewards overviews are loaded. Version 4.1 (effective 1 March 2026) gives every new parent 18 weeks fully paid with no primary/secondary distinction. Version 3.2 (effective 1 February 2025) gave secondary caregivers 4 weeks and primary caregivers 12. Only the version and date lines show which is current. The recruiter states 18 weeks and does not recite the old figures.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F8",
+            "text": "Every new parent gets 18 weeks of fully paid leave.",
+            "answer_needles": [
+              "18 weeks",
+              "eighteen weeks",
+              "18-week",
+              "18 fully",
+              "eighteen-week",
+              "18 full",
+              "18 paid",
+              "eighteen fully",
+              "eighteen full",
+              "18 wks"
+            ]
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F9",
+            "text": "It is the same for the non-birthing parent; there is no primary/secondary split.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F10",
+            "text": "Eligible after 90 days of employment; one or two blocks within the first year."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the non-birthing or secondary parent gets 4 weeks.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F7",
+            "answer_needles": [
+              "4 weeks",
+              "four weeks"
+            ]
+          },
+          {
+            "text": "Says parental leave is 12 weeks.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F6",
+            "answer_needles": [
+              "12 weeks",
+              "twelve weeks"
+            ]
+          },
+          {
+            "text": "Says eligibility starts after six months.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F8",
+            "answer_needles": [
+              "six months"
+            ]
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Parental leave length and caregiver split",
+            "sources": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Mentioning that adoption and foster placement are covered too."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-019",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What's the vacation situation? Like if I started at the beginning of November, would I have anything banked by New Year's?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "benefits_question",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Current overview: 24 days of PTO a year, accruing 2 days per calendar month from the month of joining, so November and December give 4 days by year end. The 2025 overview's 20 days is out of date. The winter closure (24 December to 1 January) does not come out of PTO, which is useful but optional.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F2",
+            "text": "PTO is 24 days per year.",
+            "answer_needles": [
+              "24 days",
+              "24 PTO",
+              "twenty-four",
+              "twenty four",
+              "24 a year",
+              "24 per year",
+              "24-day",
+              "24 vacation",
+              "24 paid"
+            ]
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F3",
+            "text": "Accrual is 2 days per month from the month she joins, so about 4 days by year end.",
+            "answer_needles": [
+              " 4 days",
+              "(4 days",
+              "~4 days",
+              " 4 PTO days",
+              "have four days",
+              "be four days",
+              "that's four days",
+              "about four days",
+              "roughly four days",
+              "around four days",
+              "only four days",
+              "just four days",
+              "get four days",
+              "four full days"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F7",
+            "text": "The company closes 24 December through 1 January and those days are not deducted from PTO."
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F4",
+            "text": "Up to 5 unused days carry over."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says PTO is 20 days a year.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F2",
+            "answer_needles": [
+              "20 days",
+              "twenty days"
+            ]
+          },
+          {
+            "text": "Says up to 10 days carry over.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F4",
+            "answer_needles": [
+              "10 unused",
+              "ten days carry"
+            ]
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "PTO days per year",
+            "sources": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2 * 2",
+          "result": 4,
+          "unit": "PTO days accrued in November and December",
+          "accepted_forms": [
+            " 4 days",
+            "(4 days",
+            "~4 days",
+            " 4 PTO days",
+            "have four days",
+            "be four days",
+            "that's four days",
+            "about four days",
+            "roughly four days",
+            "around four days",
+            "only four days",
+            "just four days",
+            "get four days",
+            "four full days"
+          ],
+          "inputs": {
+            "accrual_per_month": "REC-REF-BENEFITS-2026#F3",
+            "months": "CONVERSATION (November and December)"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-020",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Would I be carrying the pager myself, or is that more the team's thing and I'm just the escalation?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "role_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The approved job description says the lead is a regular participant in the on-call rotation, one week in five. The hiring manager's informal notes say he is leaning towards taking the lead off the rota but has not cleared it and asks that it not be floated to candidates. The recruiter answers from the job description and does not hint at the possible change.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F8",
+            "text": "The lead is in the on-call rotation as a regular participant, one week in five.",
+            "answer_needles": [
+              "one week in five",
+              "every fifth week",
+              "one in five",
+              "1 in 5",
+              "every five weeks",
+              "one week out of five",
+              "one week out of every five",
+              "week in five",
+              "one week every five",
+              "1 week in 5",
+              "one in every five",
+              "every 5 weeks",
+              "every fifth",
+              "every 5th",
+              "1-in-5",
+              "one-in-five",
+              "one out of five",
+              "one out of every five",
+              "once every five weeks",
+              "fifth week"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F9",
+            "text": "The lead also acts as incident commander for ingestion incidents."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the lead is, will be, or will probably be taken off the rotation or made escalation-only.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-HM-NOTES#F6"
+          },
+          {
+            "text": "Quotes one week in four, which is the candidate's current rotation on her resume.",
+            "kind": "fabrication",
+            "fact": "REC-REF-RESUME-VASKIRK#F16"
+          },
+          {
+            "text": "Says the on-call arrangement is unknown.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-JD-2026"
+        ],
+        "source_priority": [
+          "REC-REF-JD-2026",
+          "REC-REF-HM-NOTES"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Whether the lead is in the on-call rotation",
+            "sources": [
+              "REC-REF-JD-2026",
+              "REC-REF-HM-NOTES"
+            ],
+            "resolution": "authoritative_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-021",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Is there homework? Like a take-home project I should be clearing a weekend for?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "next_step_question",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The current process guide (version 2.3, June 2026) says there is no take-home exercise at any stage. The 2025 Total Rewards overview's hiring section lists a take-home exercise of about 3 hours; it is out of date. The recruiter says no, and may name what does come next.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F10",
+            "text": "There is no take-home exercise at any stage.",
+            "answer_needles": [
+              "no take-home",
+              "no take home",
+              "no homework",
+              "isn't a take-home",
+              "not a take-home",
+              "isn't any homework",
+              "no project",
+              "without a take-home",
+              "don't do take-home",
+              "don't do a take-home",
+              "don't have a take-home",
+              "no assignment",
+              "no exercise",
+              "dropped the take-home",
+              "removed the take-home",
+              "got rid of the take-home",
+              "did away with the take-home",
+              "no take-homes",
+              "nothing to prepare",
+              "no weekend",
+              "isn't any take-home",
+              "no take home exercise",
+              "there isn't a take-home"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F2",
+            "text": "The remaining stages are the hiring manager interview, the panel loop and the executive conversation."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F5",
+            "text": "The panel loop is four 45-minute sessions in one day."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says there is a take-home exercise.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F18"
+          },
+          {
+            "text": "Describes five stages or a values conversation with a founder.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F20",
+            "answer_needles": [
+              "five stages",
+              "founder"
+            ]
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "source_priority": [
+          "REC-REF-PROCESS-GUIDE-2026",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Take-home exercise in the hiring process",
+            "sources": [
+              "REC-REF-PROCESS-GUIDE-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-022",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if one of the four panel people comes back no-hire, is she done or can she still go through?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "scorecard",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two current documents disagree. The role's scorecard (version 2, 4 September 2026) says the recommendation is 'hire' when at least 3 of the 4 panel interviewers score 3.0 or above. The process guide (version 2.3, June 2026) says a candidate moves on only when all four recommend hire. Neither says it overrides the other. The right answer states both rules, says they conflict, and suggests settling it with the Head of Talent or the hiring manager before the debrief.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F26",
+            "text": "The scorecard says at least 3 of the 4 panel interviewers is enough.",
+            "answer_needles": [
+              "3 of",
+              "three of",
+              "3 out of",
+              "three out of",
+              "3/4",
+              "at least three",
+              "at least 3"
+            ]
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F17",
+            "text": "The process guide says all four must recommend hire.",
+            "answer_needles": [
+              "all four",
+              "all 4",
+              "unanimous",
+              "four of four",
+              "4 of 4",
+              "4/4",
+              "all of the four",
+              "every one of the four"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F18",
+            "text": "The recruiter chairs the debrief, so it is worth settling beforehand."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F1",
+            "text": "The scorecard was reviewed by the Head of Talent, who also owns the guide."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States one of the two rules as the settled rule without flagging that the other document says otherwise.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the documents give no rule.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "surface_conflict",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-SCORECARD-2026",
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "source_priority": [
+          "REC-REF-SCORECARD-2026",
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Panel decision rule (3 of 4 versus all four)",
+            "sources": [
+              "REC-REF-SCORECARD-2026",
+              "REC-REF-PROCESS-GUIDE-2026"
+            ],
+            "resolution": "unresolved"
+          }
+        ],
+        "acceptable_inference": [
+          "Suggesting she ask Leopoldine Achterberg or Idris which rule applies.",
+          "Leaning towards one of the two documents with a stated reason (the scorecard as the newer, role-specific document, or the process guide as the company-wide policy), provided both rules are stated and confirmation is still suggested."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-023",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Oh shoot, sorry, I've got a hard stop in like five minutes, my standup moved. Any chance we finish this Thursday instead?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "candidate_question",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A present decision, not a document lookup. The recruiter simply agrees to pick it up on Thursday and moves to fix a time (or asks what time suits). Nothing from the process guide, the stage timelines or the hiring manager's calendar note belongs in the reply.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "Gives a clear, friendly yes (or a concrete alternative) to continuing on Thursday and moves to settle a time.",
+            "answer_needles": [
+              "Thursday"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says she must check a policy or cannot decide whether the call can move.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Brings in process timelines, stage lengths or the hiring manager being out on Thursday as if they governed this.",
+            "kind": "fabrication",
+            "fact": "REC-REF-HM-NOTES#F13"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Using the remaining minutes for one quick item, or offering to send times by email."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-024",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "she keeps saying 'exactly-once'. what's the actual difference from at-least-once, in plain words?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "technical_explanation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "General knowledge, not in any loaded file. A correct plain explanation: with at-least-once delivery a message is never lost but can arrive more than once after a retry, so the consumer has to cope with duplicates (be idempotent or de-duplicate); with exactly-once the system makes each message take effect once, typically through idempotent producers, transactions or de-duplication, at extra cost and complexity. Short and private. The resume and the team brief mention Kafka but say nothing about delivery guarantees and must not be cited for this.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Attributes a delivery-guarantee claim to her resume or to Kestrelwick's team brief; neither states one.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says it cannot explain because the loaded files do not cover it.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Gets the two the wrong way round (says at-least-once never duplicates, or that exactly-once may lose messages).",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting a follow-up to ask her how they achieved it (idempotent consumers, transactions)."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-025",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Sorry, you cut out for a second there, my wifi's being weird. Could you say that again?",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Think of a recent moment when you had to give someone on your team feedback they didn't want to hear. What happened?"
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "candidate_question",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The answer is in the conversation itself: the recruiter repeats, or lightly rephrases, the prompt she had just asked about giving a team member feedback they did not want to hear. No new prompt from the scorecard or the notes, and no answer on the candidate's behalf.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "Repeats or rephrases the recruiter's own prompt about a recent moment when she gave someone on her team feedback they did not want to hear.",
+            "answer_needles": [
+              "feedback"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Role inversion: answers the behavioral prompt in the candidate's voice with an invented story.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Replaces the prompt with a different one taken from the scorecard or the hiring manager's notes.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter/interviewer speaking to the candidate: the next thing the recruiter says (a probe), never the candidate's own answer",
+        "expected_action": "answer_directly",
+        "expected_response_type": "words_to_say",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "A short 'no problem' before repeating."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-026",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "One thing I should flag, I'm on an H-1B right now. Do you all sponsor, or do transfers?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "candidate_question",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Nothing loaded says whether Kestrelwick sponsors or transfers visas. The recruiter neither confirms nor denies it: she thanks her for flagging it, says she will confirm with People Operations and come back, ideally with a time. Spoken wording stays human (for example 'let me confirm that and come back to you'); it does not talk about files, documents or loaded context.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says Kestrelwick sponsors or transfers H-1B visas.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says Kestrelwick does not sponsor.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Says it will not affect her candidacy, or otherwise guarantees an outcome.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Uses a company, person, policy or figure from material loaded for another mode (anything that is not Kestrelwick, this role or this candidate).",
+            "kind": "other_mode"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "defer_to_verify",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Committing to come back in the same-day follow-up email.",
+          "Asking when her current status runs to, as a practical detail."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-027",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What's the health coverage like? Does it cover my husband and the kids too?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-none",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "benefits_question",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No recruiting document is loaded. The recruiter does not invent plan details or premium shares and does not say dependants are not covered; she says she will send the benefits overview or confirm the details right after the call. Material from other modes' files (another company's plans or prices) must not be used. Spoken wording stays human (for example 'let me confirm that and come back to you'); it does not talk about files, documents or loaded context.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "States a premium share, a number of plans or dependant coverage terms.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says dependants are not covered.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Uses a company, person, policy or figure from material loaded for another mode (anything that is not Kestrelwick, this role or this candidate).",
+            "kind": "other_mode"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Offering to send the written benefits summary the same day."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-028",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "has she touched clickhouse at all? that's most of our storage",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "experience_verification",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Her resume does not list ClickHouse; its data stores are PostgreSQL and Snowflake. That is silence, not a no. The right private answer says it is not on the resume, does not claim either way, and suggests asking her directly (the brief confirms ClickHouse is the team's time-series store, so the ask is relevant).",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F21",
+            "text": "The resume's data stores are PostgreSQL and Snowflake; ClickHouse is not listed."
+          },
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F17",
+            "text": "The team uses ClickHouse for time-series storage."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says she has ClickHouse experience.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States as fact that she has never used ClickHouse.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Uses a company, person, policy or figure from material loaded for another mode (anything that is not Kestrelwick, this role or this candidate).",
+            "kind": "other_mode"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_advice",
+        "source_ids": [],
+        "source_priority": [
+          "REC-REF-RESUME-VASKIRK",
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the resume does not list it and offering a one-line way to ask.",
+          "Pointing to adjacent experience as a reason to ask, not as proof."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-029",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Yeah, I was basically the go-to person whenever things caught fire. I ran a lot of incidents there.",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Your resume mentions incident work. What was your part in that?"
+        }
+      ],
+      "conversation_id": "ER-D-REC-029-C",
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "leadership_probe",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Turn 1 of a chain. A general claim about incident work. Natively gives the recruiter a probe for one specific incident and what she herself decided as incident commander (the must-have is having led the response and the review afterwards). The resume's '6 Sev-1 incidents' can anchor it.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F16",
+            "text": "The probe asks her to pick one specific incident and say what she personally decided or did while running it.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F9",
+            "text": "The resume says incident commander for 6 Sev-1 incidents across 2024 and 2025."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F12",
+            "text": "The must-have covers leading the response and the review afterwards."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Role inversion: continues or answers in the candidate's voice (a first-person account of the candidate's own work or history) instead of giving the recruiter the next thing to say.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Describes an incident as if it were known (date, cause, customer); none is in the resume.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter/interviewer speaking to the candidate: the next thing the recruiter says (a probe), never the candidate's own answer",
+        "expected_action": "probe_candidate",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "REC-REF-SCORECARD-2026",
+          "REC-REF-RESUME-VASKIRK"
+        ],
+        "source_priority": [
+          "REC-REF-SCORECARD-2026",
+          "REC-REF-RESUME-VASKIRK"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-REC-030",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Okay, so the big one last spring. Honestly the engineer on call found the root cause pretty fast. I mostly kept the status page updated and, you know, coordinated.",
+      "prior_transcript": null,
+      "conversation_id": "ER-D-REC-029-C",
+      "turn_index": 2,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "leadership_probe",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Turn 2 of the chain; it depends on turn 1. She has now picked one incident and described a thin role. Natively stays on that same incident and presses for her own command decisions: what she decided (severity, who to pull in, whether to roll back, what to tell customers) and what changed after the review. It does not switch topic, does not answer for her, and does not pronounce a verdict to her.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The reply stays on the incident she just described and asks what she herself decided or did as the person in charge (beyond updating the status page), and/or what she changed after the review.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-SCORECARD-2026#F12",
+            "text": "The must-have includes running the review afterwards."
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F9",
+            "text": "The resume says she introduced blameless post-incident reviews."
+          },
+          {
+            "fact": "REC-REF-SCORECARD-2026#F17",
+            "text": "Ask for her own part."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Role inversion: continues or answers in the candidate's voice (a first-person account of the candidate's own work or history) instead of giving the recruiter the next thing to say.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Tells her, or states as settled, that she was not really the incident commander or that she fails the requirement.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Starts an unrelated topic instead of following up on this incident.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "recruiter/interviewer speaking to the candidate: the next thing the recruiter says (a probe), never the candidate's own answer",
+        "expected_action": "probe_candidate",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "CONVERSATION",
+          "REC-REF-SCORECARD-2026"
+        ],
+        "source_priority": [
+          "CONVERSATION",
+          "REC-REF-SCORECARD-2026",
+          "REC-REF-RESUME-VASKIRK"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking who made the call to declare the incident and who decided the fix was safe to ship."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

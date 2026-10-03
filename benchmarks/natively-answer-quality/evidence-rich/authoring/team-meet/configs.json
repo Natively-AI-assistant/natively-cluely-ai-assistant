@@ -1,0 +1,91 @@
+[
+  {
+    "id": "team-meet-full",
+    "mode": "team-meet",
+    "base": true,
+    "files": [
+      "TEAM-REF-SPRINT-STATUS-S41",
+      "TEAM-REF-ROADMAP-V4",
+      "TEAM-REF-DECISION-LOG",
+      "TEAM-REF-RISK-REGISTER",
+      "TEAM-REF-MEETING-NOTES-0928",
+      "TEAM-REF-SPRINT-REPORT-S37",
+      "TEAM-REF-CHAT-EXPORT",
+      "TEAM-REF-ROLLOUT-GATES-DRAFT"
+    ]
+  },
+  {
+    "id": "team-meet-cf-offline-kept",
+    "mode": "team-meet",
+    "files": [
+      "TEAM-REF-SPRINT-STATUS-S41",
+      "TEAM-REF-ROADMAP-V4",
+      "TEAM-REF-DECISION-LOG~offkept",
+      "TEAM-REF-RISK-REGISTER",
+      "TEAM-REF-MEETING-NOTES-0928",
+      "TEAM-REF-SPRINT-REPORT-S37",
+      "TEAM-REF-CHAT-EXPORT",
+      "TEAM-REF-ROLLOUT-GATES-DRAFT"
+    ]
+  },
+  {
+    "id": "team-meet-cf-offline-pending",
+    "mode": "team-meet",
+    "files": [
+      "TEAM-REF-SPRINT-STATUS-S41",
+      "TEAM-REF-ROADMAP-V4",
+      "TEAM-REF-DECISION-LOG~offpending",
+      "TEAM-REF-RISK-REGISTER",
+      "TEAM-REF-MEETING-NOTES-0928",
+      "TEAM-REF-SPRINT-REPORT-S37",
+      "TEAM-REF-CHAT-EXPORT",
+      "TEAM-REF-ROLLOUT-GATES-DRAFT"
+    ]
+  },
+  {
+    "id": "team-meet-cf-offline-norecord",
+    "mode": "team-meet",
+    "files": [
+      "TEAM-REF-SPRINT-STATUS-S41",
+      "TEAM-REF-ROADMAP-V4",
+      "TEAM-REF-DECISION-LOG~offnorecord",
+      "TEAM-REF-RISK-REGISTER",
+      "TEAM-REF-MEETING-NOTES-0928",
+      "TEAM-REF-SPRINT-REPORT-S37",
+      "TEAM-REF-CHAT-EXPORT",
+      "TEAM-REF-ROLLOUT-GATES-DRAFT"
+    ]
+  },
+  {
+    "id": "team-meet-cf-freeze-slipped",
+    "mode": "team-meet",
+    "files": [
+      "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+      "TEAM-REF-ROADMAP-V4",
+      "TEAM-REF-DECISION-LOG",
+      "TEAM-REF-RISK-REGISTER",
+      "TEAM-REF-MEETING-NOTES-0928",
+      "TEAM-REF-SPRINT-REPORT-S37",
+      "TEAM-REF-CHAT-EXPORT",
+      "TEAM-REF-ROLLOUT-GATES-DRAFT"
+    ]
+  },
+  {
+    "id": "team-meet-cf-freeze-nostatus",
+    "mode": "team-meet",
+    "files": [
+      "TEAM-REF-ROADMAP-V4",
+      "TEAM-REF-DECISION-LOG",
+      "TEAM-REF-RISK-REGISTER",
+      "TEAM-REF-MEETING-NOTES-0928",
+      "TEAM-REF-SPRINT-REPORT-S37",
+      "TEAM-REF-CHAT-EXPORT",
+      "TEAM-REF-ROLLOUT-GATES-DRAFT"
+    ]
+  },
+  {
+    "id": "team-meet-none",
+    "mode": "team-meet",
+    "files": []
+  }
+]

@@ -1,0 +1,1813 @@
+{
+  "mode": "call-center",
+  "world": "Brindlewatch is a fictional consumer company (warehouse in the invented town of Tolliver Falls, US) that sells home security cameras - Lantern Cam (indoor), Eave Cam (outdoor, battery) and Trek Cam (portable, cellular) - with Keep subscriptions (Basic, Plus, Pro; monthly or annual) and a cellular add-on, Roam Link, that charges per-camera, per-calendar-day Roam Day fees abroad. The user is a Tier 1 Customer Care agent on live calls. The pack is the agent's policy shelf: verification, refunds, shipping, account recovery, privacy and camera access, escalation, billing and travel rates, an outage and troubleshooting guide, and a 2025 Support Policy Handbook that is outdated on verification and refunds. Two current documents genuinely disagree on how long Identity Review takes (3 vs 5 business days). All names, people and policies are invented.",
+  "files": [
+    {
+      "id": "CC-REF-VERIFICATION-2026",
+      "mode": "call-center",
+      "filename": "Brindlewatch_Account_Verification_Standard_v4.2.pdf",
+      "source": "src/CC-REF-VERIFICATION-2026.md",
+      "format": "pdf",
+      "document_type": "policy",
+      "title": "Brindlewatch Account Verification Standard v4.2",
+      "status": "current",
+      "effective_date": "2026-06-15",
+      "authority": 100,
+      "supersedes": [
+        "CC-REF-HANDBOOK-V2"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Standard verification requires the caller to give 3 of the 5 listed identifiers correctly before anything account-specific is discussed.",
+          "doc_needles": [
+            "3 of the 5 identifiers"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The five identifiers are: full name on the account, login e-mail address, billing postal code, last four digits of the payment card on file, and the serial number of a registered camera.",
+          "doc_needles": [
+            "Serial number of a registered camera",
+            "Billing postal code"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Agents never ask for a password, a full card number, an expiry date or a security code.",
+          "doc_needles": [
+            "Never ask for a password"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "After 2 failed attempts in the same contact the agent stops; the account is locked for phone and chat verification for 24 hours and the caller is pointed to Identity Review.",
+          "doc_needles": [
+            "After 2 failed attempts",
+            "verification for 24 hours"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Step-up verification is a 6-digit one-time code sent to the phone number or e-mail address on file; it expires after 10 minutes.",
+          "doc_needles": [
+            "6-digit one-time code",
+            "expires after 10 minutes"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Step-up verification is required before changing the login e-mail, adding or removing an Authorised Contact, filing a recordings Deletion Request, changing the delivery address on an open order, or closing the account.",
+          "doc_needles": [
+            "filing a recordings Deletion Request",
+            "delivery address on an open order"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Only the account holder or a registered Authorised Contact may be helped with an account; spouses, partners, children, parents, housemates, landlords and installers are third parties however much they know and wherever they live.",
+          "doc_needles": [
+            "Everyone else is a third party",
+            "spouses, partners, children, parents"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "With a third party the agent gives general product and policy information only, does not confirm that an account exists, and invites them to have the account holder call or to be registered as an Authorised Contact.",
+          "doc_needles": [
+            "general product and policy information only"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "An account can have up to 2 Authorised Contacts, added by the account holder in the app or on a verified call after a step-up code.",
+          "doc_needles": [
+            "up to 2 Authorised Contacts"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "An Authorised Contact is verified by their own name plus a 4-digit contact PIN.",
+          "doc_needles": [
+            "4-digit contact PIN"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "An Authorised Contact may get troubleshooting help, check order status and billing status, and ask for a carrier trace.",
+          "doc_needles": [
+            "Check order status and billing status",
+            "Ask for a carrier trace"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "An Authorised Contact may not change the login e-mail or password, receive a reset link, change the payment method, delete recordings, request a refund or close the account.",
+          "doc_needles": [
+            "Change the payment method",
+            "or receive a reset link",
+            "Delete recordings, request a refund"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Power of attorney, guardianship and accounts of customers who have died are handled by Tier 2 Account Integrity on documents; Tier 1 makes no change.",
+          "doc_needles": [
+            "Power of attorney, guardianship"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "A customer who cannot reach the e-mail on file is verified with 3 of 5 identifiers and then sent the step-up code by text message to the phone number on file; after that the login e-mail can be changed.",
+          "doc_needles": [
+            "step-up code by text message"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "With no phone number on file the route is Identity Review (form IR-7): government photo ID plus proof of purchase or a photo of a camera's serial label, decided by Tier 2 Account Integrity.",
+          "doc_needles": [
+            "government photo ID",
+            "form IR-7"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The Verification Standard tells agents to say Identity Review takes up to 5 business days.",
+          "doc_needles": [
+            "allow up to 5 business days"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "A Tier 1 agent never changes a login e-mail without a confirmed step-up code or an approved IR-7.",
+          "doc_needles": [
+            "never changes a login e-mail"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "A call through a telephone relay service or video relay interpreter is treated as the customer speaking; the relay operator is not asked to verify.",
+          "doc_needles": [
+            "video relay interpreter",
+            "relay operator"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "On an assisted call a helper may speak for the account holder provided the account holder is present and consents, by voice or by replying YES to the consent message sent to the phone or e-mail on file.",
+          "doc_needles": [
+            "is present and consents",
+            "replying YES"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "The helper may relay the account holder's identifiers, and the consent covers that call only.",
+          "doc_needles": [
+            "Consent covers that call only"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Any customer may continue by live chat or by e-mail to the address on file, which agents offer unprompted when hearing is the difficulty; one-time codes can go by text message.",
+          "doc_needles": [
+            "continue by live chat",
+            "when hearing is the difficulty"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Reset links, one-time codes and security notices are sent only to the contact details on file, including during an assisted call, and never to a helper's e-mail address or phone.",
+          "doc_needles": [
+            "never to a helper's e-mail address",
+            "never where credentials go"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "A helper who needs lasting access is set up as an Authorised Contact or through a Shared Access invitation, which gives view-only access to chosen cameras.",
+          "doc_needles": [
+            "Shared Access invitation",
+            "view-only access to chosen cameras"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Customers who need more time can book a 45-minute accessibility appointment on Tuesday and Thursday afternoons.",
+          "doc_needles": [
+            "45-minute accessibility appointment"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "A business account is verified through its named administrator; other employees are third parties.",
+          "doc_needles": [
+            "administrator named on it"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "Ticket notes record which identifiers were used, never their values.",
+          "doc_needles": [
+            "never their values"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "The Verification Standard is version 4.2, effective 15 June 2026, and replaces earlier verification guidance including section 2 of the Support Policy Handbook.",
+          "doc_needles": [
+            "Effective 15 June 2026",
+            "Support Policy Handbook"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F1",
+          "with_file": "CC-REF-HANDBOOK-V2",
+          "this_value": "3 of the 5",
+          "other_value": "2 of the 4",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "CC-REF-HANDBOOK-V2",
+          "this_value": "After 2 failed attempts",
+          "other_value": "up to three attempts",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F7",
+          "with_file": "CC-REF-HANDBOOK-V2",
+          "this_value": "Everyone else is a third party",
+          "other_value": "as if they were the account",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F22",
+          "with_file": "CC-REF-HANDBOOK-V2",
+          "this_value": "never to a helper's e-mail address",
+          "other_value": "alternate e-mail address",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "CC-REF-RECOVERY-2026",
+          "this_value": "up to 5 business days",
+          "other_value": "up to 3 business days",
+          "resolution": "unresolved"
+        }
+      ],
+      "must_not_infer": [
+        "Nothing here says an Authorised Contact may change the plan or cancel a subscription; the list of what they may do is troubleshooting, order and billing status, and carrier traces.",
+        "Nothing here lets an agent send a reset link or code to a helper, relative or Authorised Contact.",
+        "Nothing here describes how to transfer an account to a new owner.",
+        "The accessibility appointment is a scheduling option, not a different verification standard."
+      ]
+    },
+    {
+      "id": "CC-REF-REFUND-2026",
+      "mode": "call-center",
+      "filename": "Brindlewatch_Refund_and_Cancellation_Policy.pdf",
+      "source": "src/CC-REF-REFUND-2026.md",
+      "format": "pdf",
+      "document_type": "policy",
+      "title": "Brindlewatch Refund and Cancellation Policy v3.1",
+      "status": "current",
+      "effective_date": "2026-07-01",
+      "authority": 100,
+      "supersedes": [
+        "CC-REF-HANDBOOK-V2"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Subscriptions billed through a phone's app store cannot be refunded by Brindlewatch; the customer has to ask the app store.",
+          "doc_needles": [
+            "ask the app store"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Cameras bought from a retail partner go back to the retailer under the retailer's rules.",
+          "doc_needles": [
+            "go back to the retailer"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "An annual plan charge (first purchase or renewal) is refunded in full if the customer asks within 30 days of the charge date.",
+          "doc_needles": [
+            "within 30 days of the charge"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "After the annual refund window there is no refund for the unused part of the term; the plan stays active until the term ends and auto-renew can be switched off.",
+          "doc_needles": [
+            "unused part of the term",
+            "auto-renew can be switched off"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "A monthly plan gets no refund for a partial month; cancelling stops the next charge and the plan runs to the end of the paid month.",
+          "doc_needles": [
+            "No refund for a partial month"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "A monthly renewal charge is refunded in full if the customer cancels within 48 hours of that charge.",
+          "doc_needles": [
+            "within 48 hours of that charge"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Renewal reminders are e-mailed 21 days and again 3 days before an annual renewal; not seeing one does not extend the refund window.",
+          "doc_needles": [
+            "21 days before the renewal date",
+            "does not extend the refund window"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Moving to a cheaper plan during an annual term gives a credit of (old annual price - new annual price) / 12 x full months remaining, as account credit and not paid back to the card.",
+          "doc_needles": [
+            "/ 12 x full months remaining",
+            "not paid back to the card"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "A camera bought directly can be returned for any reason within 60 days of the delivery date.",
+          "doc_needles": [
+            "within 60 days of the delivery"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Original shipping is refunded only for a defective camera; the return label is free if defective, otherwise $8 is deducted from the refund.",
+          "doc_needles": [
+            "$8 is deducted"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "A subscription bought in the same order as a camera returned in time is refunded in full as well.",
+          "doc_needles": [
+            "refunded in full as well"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Cameras carry a 2-year limited warranty against defects (repair or replace).",
+          "doc_needles": [
+            "2-year limited warranty"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "A refund goes back to the original payment method only, never to a different card, a bank account, a gift card or another person.",
+          "doc_needles": [
+            "original payment method and nowhere else"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "If the original card was closed or replaced the card issuer normally forwards the refund; if the issuer returns the money, Billing Operations (Tier 2) arranges a cheque or account credit.",
+          "doc_needles": [
+            "card issuer normally forwards",
+            "arranges a cheque or account credit"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Card refunds take 5 to 7 business days after approval.",
+          "doc_needles": [
+            "5 to 7 business days"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Digital-wallet refunds take up to 3 business days, direct bank debit up to 10 business days, account credit the same day.",
+          "doc_needles": [
+            "up to 10 business days"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Refund exceptions (charged after a confirmed cancellation, death of the account holder, defective camera awaiting replacement, documented billing error) each need a supervisor's approval whatever the amount.",
+          "doc_needles": [
+            "charged after a cancellation",
+            "supervisor's approval whatever the amount"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Forgetting to cancel, not using the service, moving home or switching brand are not exceptions.",
+          "doc_needles": [
+            "not using the service"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "A duplicate charge (same plan, same amount, same day) is reversed by a Tier 1 agent on the spot, whatever the amount.",
+          "doc_needles": [
+            "duplicate charge",
+            "reverses it on the spot"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "A Tier 1 agent may approve refunds that the policy plainly allows up to $150 per request.",
+          "doc_needles": [
+            "up to $150 per request"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "A supervisor (Team Lead) approves refunds above $150 and up to $500, and every exception.",
+          "doc_needles": [
+            "above $150 and up to $500"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "The Billing Operations manager approves refunds above $500 and any refund by cheque.",
+          "doc_needles": [
+            "Refunds above $500"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "When a refund needs a supervisor the Tier 1 agent submits it and tells the customer it is submitted, that a supervisor decides, and that the decision arrives by e-mail within 2 business days, without saying or implying it will be approved.",
+          "doc_needles": [
+            "by e-mail within 2 business days",
+            "does not say or imply"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "If the customer has already disputed the charge with their bank, the agent does not refund and routes the ticket to Billing Operations.",
+          "doc_needles": [
+            "disputed the charge with their bank"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "The Refund and Cancellation Policy is version 3.1, effective 1 July 2026.",
+          "doc_needles": [
+            "Effective 1 July 2026"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "Gift subscriptions cannot be refunded once activated.",
+          "doc_needles": [
+            "Gift subscriptions"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F3",
+          "with_file": "CC-REF-HANDBOOK-V2",
+          "this_value": "within 30 days of the charge",
+          "other_value": "within 45 days",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "CC-REF-HANDBOOK-V2",
+          "this_value": "No refund for a partial month",
+          "other_value": "pro rata",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F15",
+          "with_file": "CC-REF-HANDBOOK-V2",
+          "this_value": "5 to 7 business days",
+          "other_value": "10 to 14 business days",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F20",
+          "with_file": "CC-REF-HANDBOOK-V2",
+          "this_value": "up to $150 per request",
+          "other_value": "$250",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "This policy does not mention the 2025 handbook; that it prevails is decidable only from its later date and version.",
+        "A supervisor being able to approve an exception does not let a Tier 1 agent promise it.",
+        "Nothing here says a stolen or lost camera is replaced, and nothing says it is not; the warranty wording covers defects only.",
+        "Nothing here gives a refund for not using the service.",
+        "The 60-day camera return window is not the subscription refund window."
+      ]
+    },
+    {
+      "id": "CC-REF-SHIPPING-2026",
+      "mode": "call-center",
+      "filename": "Shipping_and_Delivery_Policy_May2026.docx",
+      "source": "src/CC-REF-SHIPPING-2026.md",
+      "format": "docx",
+      "document_type": "policy",
+      "title": "Shipping and Delivery Policy (revision of 4 May 2026)",
+      "status": "current",
+      "effective_date": "2026-05-04",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Standard delivery is estimated at 4 to 7 business days and costs $6.95, free on orders of $75 or more.",
+          "doc_needles": [
+            "4 to 7 business days",
+            "orders of $75 or more"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Expedited delivery is estimated at 2 to 3 business days and costs $14.95.",
+          "doc_needles": [
+            "2 to 3 business days",
+            "$14.95"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Next Business Day delivery costs $29.00 and applies when ordered by 1:00 pm Central.",
+          "doc_needles": [
+            "1:00 pm Central"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Canada gets Standard delivery only, 8 to 12 business days, $19.50, with import duties paid by the customer.",
+          "doc_needles": [
+            "8 to 12 business days",
+            "$19.50"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Standard and Expedited parcels travel with Corvane Parcel, Next Business Day with Halberd Air; PO boxes get Standard only.",
+          "doc_needles": [
+            "Corvane Parcel",
+            "Halberd Air"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Brindlewatch does not guarantee a delivery date on any method; agents quote the estimated range and do not promise a particular day.",
+          "doc_needles": [
+            "do not guarantee a delivery date",
+            "do not promise a particular day"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "If a Next Business Day order arrives late its $29.00 shipping charge is refunded automatically; late Standard and Expedited orders are not compensated.",
+          "doc_needles": [
+            "shipping charge is refunded automatically"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "For a delivered-but-missing parcel the agent first confirms the address and asks the customer to check with the household, neighbours, building office and around the property.",
+          "doc_needles": [
+            "with neighbours"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The customer waits 48 hours from the delivered scan, because carriers sometimes scan before dropping off.",
+          "doc_needles": [
+            "48 hours from the delivered scan"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "After those 48 hours a Tier 1 agent opens a carrier trace.",
+          "doc_needles": [
+            "opens a carrier trace"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "A delivered-but-missing parcel must be reported within 14 calendar days of the delivered scan; later reports go to a supervisor.",
+          "doc_needles": [
+            "within 14 calendar days"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "A carrier trace takes up to 6 business days and the customer is e-mailed when the carrier answers.",
+          "doc_needles": [
+            "up to 6 business days"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "If the trace does not find the parcel the customer chooses a replacement sent Expedited at no charge or a refund to the original payment method.",
+          "doc_needles": [
+            "replacement sent Expedited at no charge"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "A Tier 1 agent may approve the replacement or refund for orders up to $300; above that a supervisor approves.",
+          "doc_needles": [
+            "orders up to $300"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "No replacement or refund is issued before the trace closes.",
+          "doc_needles": [
+            "before the trace closes"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "A second delivered-but-missing claim on the same account within 12 months is passed to Tier 2 Order Integrity and any replacement is sent signature required.",
+          "doc_needles": [
+            "passed to Tier 2 Order Integrity",
+            "within 12 months"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "With no delivered scan and no tracking movement for 5 business days (10 for Canada) the parcel is treated as lost and a Tier 1 agent sends a replacement straight away without a trace.",
+          "doc_needles": [
+            "no movement for 5 business days",
+            "sends a replacement straight away"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Brindlewatch carries the risk until the carrier records delivery at the address the customer gave.",
+          "doc_needles": [
+            "carries the risk until the carrier"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "If the customer entered a wrong address: a parcel that comes back is resent for a $6.95 reshipping fee; a parcel delivered to the address as entered is the customer's responsibility and no free replacement is sent.",
+          "doc_needles": [
+            "$6.95 reshipping fee",
+            "no free replacement is sent"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "For freight forwarders and parcel-receiving services, responsibility ends when the parcel is delivered to the forwarder.",
+          "doc_needles": [
+            "delivered to the forwarder"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Orders over $400 are sent with signature required.",
+          "doc_needles": [
+            "Orders over $400"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Damage must be reported within 7 calendar days of delivery with photos; a replacement and a prepaid label are sent.",
+          "doc_needles": [
+            "within 7 calendar days of delivery"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "The delivery address can be changed, after step-up verification, until the order status shows Label created; afterwards only through the carrier's redirect service.",
+          "doc_needles": [
+            "order status shows Label created"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "The Shipping and Delivery Policy is the revision of 4 May 2026.",
+          "doc_needles": [
+            "Revision of 4 May 2026"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "A delivery estimate, or an expected date on the tracking page, is not a guarantee.",
+        "Next Business Day refunds its shipping charge when late; that is not a delivery guarantee.",
+        "Nothing here covers theft of a camera after it was delivered and installed.",
+        "Nothing here says what happens on a third delivered-but-missing claim."
+      ]
+    },
+    {
+      "id": "CC-REF-RECOVERY-2026",
+      "mode": "call-center",
+      "filename": "Password_and_Account_Recovery_Procedure_v2.3.docx",
+      "source": "src/CC-REF-RECOVERY-2026.md",
+      "format": "docx",
+      "document_type": "procedure",
+      "title": "Password and Account Recovery Procedure v2.3",
+      "status": "current",
+      "effective_date": "2026-04-20",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Agents cannot see, read out or set a customer's password; they can trigger a reset e-mail from the console.",
+          "doc_needles": [
+            "cannot see, read out or set",
+            "trigger a reset e-mail"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The reset link goes to the login e-mail address on file; any exception is set by the Account Verification Standard.",
+          "doc_needles": [
+            "login e-mail address on file"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "A reset link expires 30 minutes after it is sent.",
+          "doc_needles": [
+            "expires 30 minutes after"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The reset e-mail can take up to 5 minutes to arrive; the customer should look in junk and promotions folders before another is sent.",
+          "doc_needles": [
+            "up to 5 minutes to arrive"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "No more than 5 reset e-mails can be sent to one account in 24 hours.",
+          "doc_needles": [
+            "No more than 5 reset e-mails"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The Recovery Procedure tells agents to say Identity Review takes up to 3 business days.",
+          "doc_needles": [
+            "allow up to 3 business days"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "A customer who cannot get into the e-mail on file is sent a one-time code by text message to the phone on file; then the login e-mail is changed and the reset sent there.",
+          "doc_needles": [
+            "one-time code by text message"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Two-step sign-in comes with 10 single-use backup codes; a customer with no authenticator and no codes goes through Identity Review, and agents cannot switch two-step sign-in off.",
+          "doc_needles": [
+            "10 backup codes",
+            "cannot switch two-step sign-in off"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "After 6 failed sign-in attempts the account locks for 15 minutes and agents cannot lift the lock.",
+          "doc_needles": [
+            "After 6 failed sign-in attempts",
+            "locks for 15 minutes"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "When a login e-mail was changed without the customer's knowledge, Tier 1 does not change it back, does not send a reset to either address, does not remove devices, and escalates at once to the Trust & Security desk as Priority 1.",
+          "doc_needles": [
+            "do not change the e-mail back",
+            "Security desk as Priority 1"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Security freezes the account (signs out every session, pauses Shared Access) and restores it to its owner.",
+          "doc_needles": [
+            "signs out every session"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "When a login e-mail is changed the previous address receives a notice with a \"This wasn't me\" link that works for 7 days and reverses the change immediately.",
+          "doc_needles": [
+            "The link works for 7 days",
+            "reverses the change immediately"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "For 72 hours after any change of login e-mail, deleting recordings, removing cameras and changing the payment method are blocked.",
+          "doc_needles": [
+            "For 72 hours after any change",
+            "deleting recordings, removing cameras"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "A sign-in from a new device sends an alert e-mail; the customer can use Sign out everywhere, and an alert the customer cannot explain goes to the Trust & Security desk.",
+          "doc_needles": [
+            "Sign out everywhere"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Shared Access lets the account holder invite up to 4 guests who can watch live view and clips but cannot change settings, delete anything or see billing.",
+          "doc_needles": [
+            "up to 4 guests"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The Password and Account Recovery Procedure is version 2.3, effective 20 April 2026.",
+          "doc_needles": [
+            "Effective 20 April 2026"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F6",
+          "with_file": "CC-REF-VERIFICATION-2026",
+          "this_value": "up to 3 business days",
+          "other_value": "up to 5 business days",
+          "resolution": "unresolved"
+        }
+      ],
+      "must_not_infer": [
+        "Nothing here lets an agent set, read or reveal a password.",
+        "The 72-hour block and the 7-day reversal link are not a promise of when Security will restore an account.",
+        "Shared Access guests are not Authorised Contacts."
+      ]
+    },
+    {
+      "id": "CC-REF-PRIVACY-2026",
+      "mode": "call-center",
+      "filename": "Brindlewatch_Privacy_and_Camera_Access_Policy_v5.pdf",
+      "source": "src/CC-REF-PRIVACY-2026.md",
+      "format": "pdf",
+      "document_type": "policy",
+      "title": "Brindlewatch Privacy and Camera Access Policy v5.0",
+      "status": "current",
+      "effective_date": "2026-03-01",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "No Brindlewatch employee or contractor, at any tier, can watch a customer's live view; no internal tool opens a live stream.",
+          "doc_needles": [
+            "can watch a customer's live view",
+            "no internal tool that opens"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The live stream is encrypted between the camera and the devices signed in to the customer's account.",
+          "doc_needles": [
+            "encrypted between the camera"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Recorded clips are stored encrypted; Tier 1 agents cannot open, play or download a clip and the console shows no video, still images or audio.",
+          "doc_needles": [
+            "cannot open, play or download",
+            "no still images and no audio"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "With Share with Support the customer shares one clip, which can be viewed for 72 hours only by the Tier 2 Device Diagnostics engineer assigned to the ticket; every viewing is logged and the customer can withdraw the share.",
+          "doc_needles": [
+            "Share with Support",
+            "viewed for 72 hours",
+            "Every viewing is logged"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Staff can see a recording in only two situations: the customer shares it, or the law requires it.",
+          "doc_needles": [
+            "only two situations"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Agents can see whether a camera is online, when it was last online, firmware version, the plan and the daily count of motion events.",
+          "doc_needles": [
+            "how many motion events"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Keep Basic clips are kept for 14 days.",
+          "doc_needles": [
+            "14 days"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Keep Plus clips are kept for 30 days.",
+          "doc_needles": [
+            "Keep Plus"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Keep Pro clips are kept for 60 days.",
+          "doc_needles": [
+            "60 days"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Cancelling a plan does not delete the clips already recorded; each stays until its own retention period runs out.",
+          "doc_needles": [
+            "does not delete the clips",
+            "own retention period runs out"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Customers delete their own recordings in the app under Settings > Privacy > Delete all recordings, after entering the account password.",
+          "doc_needles": [
+            "Delete all recordings",
+            "asks for the account password"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Deleted clips disappear from the account immediately, are erased from primary storage within 24 hours and from backups within 30 days; deletion cannot be undone.",
+          "doc_needles": [
+            "disappear from the account immediately",
+            "primary storage within 24 hours",
+            "from backups within 30 days"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Agents cannot delete recordings from the support console.",
+          "doc_needles": [
+            "Agents cannot delete recordings"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "If the customer cannot use the app the Tier 1 agent completes step-up verification and files a Deletion Request (form DR-2); the Privacy Office carries it out within 4 business days and confirms by e-mail.",
+          "doc_needles": [
+            "form DR-2",
+            "within 4 business days"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Erasing an entire account is a separate request to the Privacy Office, completed within 30 calendar days.",
+          "doc_needles": [
+            "within 30 calendar days"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Recordings under a legal preservation order are held until it ends; Tier 1 agents are not told which accounts and refer enquiries to the Privacy Office.",
+          "doc_needles": [
+            "legal preservation order"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Every request from police, a government body, a court or a lawyer is handled only by the Legal Response team at legalresponse@brindlewatch.example.",
+          "doc_needles": [
+            "legalresponse@brindlewatch.example",
+            "Legal Response team"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "A Tier 1 agent who gets such a call does not confirm whether the person named has an account, shares nothing, gives the Legal Response address and logs the call.",
+          "doc_needles": [
+            "does not confirm whether the person"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Recordings are handed over only in response to a search warrant or court order; a subpoena obtains basic account details only, never video.",
+          "doc_needles": [
+            "search warrant or court order",
+            "never video"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Where there is imminent danger of death or serious physical injury, Legal Response alone may disclose without a court order and can be reached around the clock.",
+          "doc_needles": [
+            "imminent danger of death"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "The account holder is told before disclosure unless the law forbids it.",
+          "doc_needles": [
+            "unless the law forbids it"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "A customer who wants the police to have their own footage can download the clips and hand them over themselves.",
+          "doc_needles": [
+            "hand them over themselves"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Sound recording is off by default on Eave Cam.",
+          "doc_needles": [
+            "Sound recording is off by default"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Familiar Faces is opt-in and its data can be erased by the customer.",
+          "doc_needles": [
+            "Familiar Faces"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Brindlewatch does not sell customer data or video.",
+          "doc_needles": [
+            "do not sell customer data"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "The Privacy and Camera Access Policy is version 5.0, effective 1 March 2026.",
+          "doc_needles": [
+            "Effective 1 March 2026"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "Nothing here says in which country, region or data centre video is stored, or which cloud provider is used.",
+        "Nothing here names a security or privacy certification (SOC 2, ISO 27001, GDPR or CCPA status).",
+        "'Disappear from the account immediately' does not mean erased everywhere immediately: primary storage takes up to 24 hours and backups up to 30 days.",
+        "Tier 1 agents cannot view a clip even when the customer shares it; only the assigned Tier 2 engineer can."
+      ]
+    },
+    {
+      "id": "CC-REF-ESCALATION-2026",
+      "mode": "call-center",
+      "filename": "Support_Escalation_Matrix_v6.docx",
+      "source": "src/CC-REF-ESCALATION-2026.md",
+      "format": "docx",
+      "document_type": "handbook",
+      "title": "Customer Care Escalation Matrix v6",
+      "status": "current",
+      "effective_date": "2026-08-10",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Tier 1 verifies callers, handles plan and billing enquiries, plan changes, refunds within its limit, order status, carrier traces and the six troubleshooting steps; most contacts should end at Tier 1.",
+          "doc_needles": [
+            "should end at Tier 1"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "A device fault goes to Tier 2 Device Diagnostics when all six troubleshooting steps are done and the fault remains, when the light is solid red, or when it is the customer's third contact about the same fault within 14 days even if the steps were not all repeated.",
+          "doc_needles": [
+            "All six troubleshooting steps are done",
+            "third contact about the same fault"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Tier 2 Account Integrity takes Identity Review (IR-7), power of attorney or guardianship, and accounts of holders who have died.",
+          "doc_needles": [
+            "power of attorney or guardianship"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Tier 2 Billing Operations takes refunds that cannot reach the original payment method, chargebacks, invoice errors and travel-charge disputes beyond the first-trip courtesy.",
+          "doc_needles": [
+            "travel-charge dispute beyond the first-trip courtesy"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Tier 2 Order Integrity takes a second delivered-but-missing claim within 12 months and suspected reselling or fraud.",
+          "doc_needles": [
+            "second delivered-but-missing claim"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Tier 2 handover is a warm transfer Monday to Saturday, 8:00 am to 8:00 pm Central; outside those hours a ticket, with first contact within 1 business day.",
+          "doc_needles": [
+            "8:00 am to 8:00 pm Central",
+            "first contact within 1 business day"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Before handing over the agent writes up what was reported, steps done, and firmware version and light colour for a device fault.",
+          "doc_needles": [
+            "firmware version and light colour"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Tier 1 never contacts Engineering; only Tier 2 opens an Engineering case, when a defect is reproduced on 5 or more accounts on the same firmware version or recordings have been lost.",
+          "doc_needles": [
+            "Tier 1 never contacts Engineering",
+            "5 or more accounts"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Engineering has no customer-facing response target; agents do not quote a fix date or a firmware release date.",
+          "doc_needles": [
+            "do not quote a fix date"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Security cases go straight from Tier 1 to the Trust & Security desk, not through Tier 2; the desk is staffed 24 hours a day, every day, and every case is Priority 1.",
+          "doc_needles": [
+            "not routed through Tier 2",
+            "staffed 24 hours a day"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Security triggers: someone else in the account or watching cameras, login e-mail changed without the customer, an unfamiliar voice through a camera's speaker, an unrecognised device in the Devices list, danger from someone with access, a reported security weakness.",
+          "doc_needles": [
+            "an unfamiliar voice has come through",
+            "the login e-mail was changed"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The agent warm-transfers and stays on the line until Security answers; if nobody answers within 10 minutes the agent opens a Priority 1 ticket and tells the customer Security will call back within 1 hour.",
+          "doc_needles": [
+            "until Security answers",
+            "within 10 minutes",
+            "call back within 1 hour"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "In security cases the agent does not troubleshoot, reset passwords or remove devices.",
+          "doc_needles": [
+            "Do not troubleshoot, reset passwords"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "If a customer asks for a supervisor the agent never refuses; if none is free a supervisor calls back within 4 business hours.",
+          "doc_needles": [
+            "Never refuse",
+            "calls back within 4 business hours"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "A refund above the Tier 1 approval limit, or any refund exception, goes to a supervisor.",
+          "doc_needles": [
+            "above the Tier 1 approval limit"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "A Tier 1 agent may give a goodwill credit of up to $25, once per account in any 3 months; more needs a supervisor.",
+          "doc_needles": [
+            "goodwill credit of up to $25",
+            "in any 3 months"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "If the customer threatens legal action or the press, the case goes to a supervisor, who informs Legal Response.",
+          "doc_needles": [
+            "threatens legal action"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "A caller who remains abusive after 2 warnings goes to a supervisor.",
+          "doc_needles": [
+            "abusive after 2 warnings"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Deletion and data-copy requests go to the Privacy Office; anything from police, courts or lawyers goes to Legal Response and is never handled on the call.",
+          "doc_needles": [
+            "never handled on the call"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "When escalating, the agent gives the ticket number, the team name and that team's response target, and does not promise an outcome or a resolution time.",
+          "doc_needles": [
+            "Do not promise an outcome",
+            "the ticket number"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "The Escalation Matrix is version 6, effective 10 August 2026.",
+          "doc_needles": [
+            "Effective 10 August 2026"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "If unsure which Tier 2 desk applies the agent asks in the Tier 2 duty channel before transferring.",
+          "doc_needles": [
+            "Tier 2 duty channel"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "A response target is when a team first responds, not when the problem is resolved.",
+        "This document does not state the Tier 1 refund approval limit as an amount.",
+        "An upset or angry caller is not an abusive caller.",
+        "Nothing here gives customers a fix date or an Engineering contact."
+      ]
+    },
+    {
+      "id": "CC-REF-BILLING-TRAVEL-2026",
+      "mode": "call-center",
+      "filename": "Brindlewatch_Billing_Guide_and_Roam_Link_Rates_2026.pdf",
+      "source": "src/CC-REF-BILLING-TRAVEL-2026.md",
+      "format": "pdf",
+      "document_type": "pricing",
+      "title": "Brindlewatch Billing Guide and Roam Link Rates v2.4",
+      "status": "current",
+      "effective_date": "2026-02-01",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Keep Basic costs $6 per month or $60 per year, covers 1 camera and keeps 14 days of clips.",
+          "doc_needles": [
+            "$6 per month",
+            "$60 per year"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Keep Plus costs $13 per month or $130 per year, covers up to 5 cameras and keeps 30 days of clips.",
+          "doc_needles": [
+            "$13 per month",
+            "$130 per year"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Keep Pro costs $22 per month or $220 per year, covers up to 20 cameras and keeps 60 days of clips plus continuous recording.",
+          "doc_needles": [
+            "$22 per month",
+            "$220 per year"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Without a plan a camera gives live view and alerts but nothing is recorded.",
+          "doc_needles": [
+            "nothing is recorded"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "A monthly plan bills on the same day of each month as it started, or the last day of a shorter month.",
+          "doc_needles": [
+            "same day of each month"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Moving up on a monthly plan takes effect at once and is charged (new monthly price - old monthly price) x days remaining / 30, every month being treated as 30 days.",
+          "doc_needles": [
+            "x days remaining / 30",
+            "treated as 30 days"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Moving down on a monthly plan takes effect on the next billing date with no credit for the current month.",
+          "doc_needles": [
+            "no credit for the current month"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Roam Link costs $5 per camera per month and covers the United States.",
+          "doc_needles": [
+            "$5 per camera per month"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Each Trek Cam on Roam Link includes 3 GB of data per month, not shared between cameras.",
+          "doc_needles": [
+            "3 GB of data per month",
+            "not shared between cameras"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Extra Roam Link data is $4 per GB, with a part GB rounded up to a whole one.",
+          "doc_needles": [
+            "$4 per GB",
+            "rounded up to a whole one"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The Zone 1 (Canada, Mexico) Roam Day fee is $10 per camera per day.",
+          "doc_needles": [
+            "$10 per camera per day",
+            "Canada, Mexico"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The Zone 2 (United Kingdom, Ireland, European Union) Roam Day fee is $15 per camera per day.",
+          "doc_needles": [
+            "$15 per camera per day"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Roam Day fees are capped per camera per billing cycle at $60 in Zone 1 and $90 in Zone 2; the cap counts Roam Day fees only.",
+          "doc_needles": [
+            "$90",
+            "cap counts Roam Day fees only"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "A Roam Week pass costs $45 per camera in Zone 1 and $70 per camera in Zone 2 and covers one camera for 7 consecutive calendar days from activation.",
+          "doc_needles": [
+            "$45 per camera",
+            "$70 per camera",
+            "7 consecutive calendar days"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "A Roam Week pass has to be activated before the camera first connects abroad and cannot be added to a trip afterwards.",
+          "doc_needles": [
+            "before the camera first connects abroad"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Days abroad outside the pass's 7 days are charged as Roam Days.",
+          "doc_needles": [
+            "are charged as Roam Days"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "A Roam Day is a calendar day, midnight to midnight in the account's home time zone, not a 24-hour period from first connection.",
+          "doc_needles": [
+            "A day is a calendar day",
+            "home time zone"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Any connection to a partner network on a day, however short, makes it a Roam Day.",
+          "doc_needles": [
+            "however short"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Each Trek Cam is charged Roam Day fees separately.",
+          "doc_needles": [
+            "Each Trek Cam is charged separately"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "A camera that is switched off or set to Wi-Fi only is not charged.",
+          "doc_needles": [
+            "set to Wi-Fi only"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Roam Link does not work outside the United States, Zone 1 and Zone 2.",
+          "doc_needles": [
+            "does not work in other countries"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Invoice lines read ROAM DAY Z1 or ROAM DAY Z2 and the quantity is camera-days.",
+          "doc_needles": [
+            "ROAM DAY Z1",
+            "quantity is camera-days"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "A Roam Day charge is correct when the connection log shows the camera on a partner network that day; Tier 1 agents see the camera-day count but not the log.",
+          "doc_needles": [
+            "but not the log"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "First-trip courtesy: if the invoice is the account's first ever with Roam Day fees, a Tier 1 agent may credit up to $30 of them, once per account.",
+          "doc_needles": [
+            "credit up to $30",
+            "First-trip courtesy"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Any larger travel-charge adjustment, or a second request, goes to Billing Operations (Tier 2), and the agent does not say what Billing Operations will decide.",
+          "doc_needles": [
+            "Any larger adjustment",
+            "what Billing Operations will decide"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "A failed charge is retried 3, 6 and 10 days after the failed charge; if the day-10 retry fails the plan is suspended.",
+          "doc_needles": [
+            "3, 6 and 10 days after",
+            "day-10 retry"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "After suspension live view keeps working and recorded clips are kept for 30 days, then deleted; paying within that time restores plan and clips.",
+          "doc_needles": [
+            "kept for 30 days after suspension"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "Customers in Canada are billed in US dollars.",
+          "doc_needles": [
+            "billed in US dollars"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "The Billing Guide is version 2.4, effective 1 February 2026.",
+          "doc_needles": [
+            "Effective 1 February 2026"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "Data used abroad comes out of the same monthly allowance.",
+          "doc_needles": [
+            "same monthly allowance"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "Nothing here mentions discounts for seniors, students, military or multi-year terms, or a planned price change.",
+        "Nothing here says a Roam Day charge can be waived beyond the one-time $30 first-trip courtesy by a Tier 1 agent.",
+        "Nothing here contains a refund window for subscriptions.",
+        "The cap applies per camera per billing cycle and to Roam Day fees only, not to a Roam Week pass."
+      ]
+    },
+    {
+      "id": "CC-REF-TROUBLESHOOTING-2026",
+      "mode": "call-center",
+      "filename": "Outage_and_Troubleshooting_Guide.md",
+      "source": "src/CC-REF-TROUBLESHOOTING-2026.md",
+      "format": "md",
+      "document_type": "guide",
+      "title": "Outage and Troubleshooting Guide (revised 1 September 2026)",
+      "status": "current",
+      "effective_date": "2026-09-01",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Agents open the Incident Board before touching the customer's setup.",
+          "doc_needles": [
+            "Open the Incident Board"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Severity 1 means live view or recording is unavailable for more than 10% of cameras in a region.",
+          "doc_needles": [
+            "more than 10% of cameras"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Severity 2 means the service works but is degraded (late notifications, slow clip loading).",
+          "doc_needles": [
+            "late notifications, slow clip loading"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "During an open incident agents do not run device steps or factory resets, say there is a known incident, and give a fix time only if the Incident Board shows one, never an estimate of their own.",
+          "doc_needles": [
+            "Incident Board shows one",
+            "never estimate one yourself"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Customers can follow incident updates at status.brindlewatch.example.",
+          "doc_needles": [
+            "status.brindlewatch.example"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "When a Severity 1 incident lasts more than 24 hours in a row, affected subscribers are credited 10% of their monthly plan fee for each full 24 hours, up to a maximum of 50%.",
+          "doc_needles": [
+            "for each full 24 hours",
+            "maximum of 50%"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Annual subscribers get the same outage-credit percentages of one-twelfth of the annual price.",
+          "doc_needles": [
+            "one-twelfth of the annual price"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The outage credit is applied automatically on the next invoice; customers need not ask, agents do not add it by hand, and Severity 2 incidents carry no credit.",
+          "doc_needles": [
+            "applied automatically on the next invoice",
+            "do not add it by hand"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Light meanings: solid green online, blinking blue pairing, solid amber starting up (up to 90 seconds), blinking red no network connection.",
+          "doc_needles": [
+            "No network connection",
+            "up to 90 seconds"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "A solid red light means a hardware fault: stop and escalate to Tier 2 Device Diagnostics.",
+          "doc_needles": [
+            "Hardware fault - stop here"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "An Eave Cam needs its battery above 15% to reconnect.",
+          "doc_needles": [
+            "battery above 15%"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Lantern Cam (2nd generation) and Eave Cam connect on 2.4 GHz only; Lantern Cam (3rd generation) uses 2.4 or 5 GHz; a 5 GHz-only router will not work with a 2.4 GHz camera.",
+          "doc_needles": [
+            "connect on 2.4 GHz only",
+            "only a 5 GHz network"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Router restart: unplug for 30 seconds, plug back in, wait 3 minutes.",
+          "doc_needles": [
+            "Unplug it for 30 seconds",
+            "wait 3 minutes"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Signal in Device Health should read -67 dBm or stronger.",
+          "doc_needles": [
+            "-67 dBm or stronger"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Factory reset: hold the reset button for 12 seconds until the light blinks amber, then pair again in the app.",
+          "doc_needles": [
+            "for 12 seconds",
+            "until the light blinks amber"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "A factory reset clears the camera's Wi-Fi settings and activity zones; it does not delete recordings already in the cloud and does not change the plan.",
+          "doc_needles": [
+            "Wi-Fi settings and activity zones",
+            "does not delete recordings already"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "If the camera is still offline after step 6 the agent escalates to Tier 2 Device Diagnostics with light colour, firmware version and steps done.",
+          "doc_needles": [
+            "still offline after step 6"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Current firmware: Lantern Cam 3rd generation 4.8.2, Lantern Cam 2nd generation 4.5.9 (final release), Eave Cam 3.11.0, Trek Cam 2.6.1.",
+          "doc_needles": [
+            "4.8.2",
+            "2.6.1",
+            "4.5.9 (final release)"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Cameras update themselves between 2:00 am and 4:00 am local time when idle; a customer cannot force an update.",
+          "doc_needles": [
+            "2:00 am and 4:00 am"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Eave Cam firmware 3.10.4 made night vision flicker; it is corrected in 3.11.0.",
+          "doc_needles": [
+            "3.10.4",
+            "corrected in 3.11.0"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "For late notifications the app must be version 7.3 or newer.",
+          "doc_needles": [
+            "version 7.3 or newer"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "If live view will not load although the camera is online, check for a VPN; reinstalling the app does not affect recordings.",
+          "doc_needles": [
+            "on a VPN"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "A Trek Cam on cellular should show SIM status Active and at least two signal bars.",
+          "doc_needles": [
+            "at least two signal bars"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "An Eave Cam charge typically lasts 4 to 6 months; below -10 C it drains faster and it will not charge below 0 C.",
+          "doc_needles": [
+            "4 to 6 months",
+            "Below -10 C"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "The Outage and Troubleshooting Guide was revised 1 September 2026.",
+          "doc_needles": [
+            "Revised 1 September 2026"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "Nothing here gives a time by which an incident will be fixed.",
+        "A factory reset is not an account transfer and does not delete cloud recordings.",
+        "The outage credit counts full 24-hour periods only and is not added by agents."
+      ]
+    },
+    {
+      "id": "CC-REF-HANDBOOK-V2",
+      "mode": "call-center",
+      "filename": "Brindlewatch_Support_Policy_Handbook.pdf",
+      "source": "src/CC-REF-HANDBOOK-V2.md",
+      "format": "pdf",
+      "document_type": "handbook",
+      "title": "Brindlewatch Support Policy Handbook v2.0 (March 2025)",
+      "status": "outdated",
+      "effective_date": "2025-03-10",
+      "authority": 40,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The 2025 handbook asked for 2 of 4 identifiers (name, login e-mail, billing postal code, last four card digits).",
+          "doc_needles": [
+            "2 of the 4 identifiers"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The 2025 handbook allowed up to three verification attempts, then a hand-off to the Team Lead.",
+          "doc_needles": [
+            "up to three attempts"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The 2025 handbook let a spouse or another adult at the billing address who passed verification be helped as if they were the account holder.",
+          "doc_needles": [
+            "as if they were the account",
+            "another adult living at"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The 2025 handbook let the agent send a reset link to an alternate e-mail address provided by the caller once verification was passed.",
+          "doc_needles": [
+            "alternate e-mail address"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The 2025 handbook gave a full refund on annual plans within 45 days of the charge.",
+          "doc_needles": [
+            "within 45 days"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The 2025 handbook refunded the unused days of a monthly plan pro rata on cancellation.",
+          "doc_needles": [
+            "pro rata"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The 2025 handbook said refunds reach the customer in 10 to 14 business days.",
+          "doc_needles": [
+            "10 to 14 business days"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The 2025 handbook let an agent approve a refund of up to $250 alone.",
+          "doc_needles": [
+            "$250"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The 2025 handbook said not to leave a caller on hold for more than 2 minutes without coming back.",
+          "doc_needles": [
+            "more than 2 minutes"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The Support Policy Handbook is version 2.0, effective 10 March 2025, with its next review scheduled for March 2026.",
+          "doc_needles": [
+            "Effective 10 March 2025",
+            "Version 2.0"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The 2025 handbook asked for three wrap-up lines on every ticket.",
+          "doc_needles": [
+            "three lines"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The handbook does not say it has been replaced; only its 2025 date, version 2.0 and lapsed review date show that it is outdated.",
+        "Its verification, reset-destination and refund rules no longer apply."
+      ]
+    }
+  ]
+}

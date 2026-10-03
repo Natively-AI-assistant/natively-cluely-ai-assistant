@@ -204,13 +204,15 @@ async function uploadFile(modeKey, id) {
   const rec = { at: new Date().toISOString(), run_id: runId, mode: modeKey, evidence_id: id, filename: f.filename, format: f.format, status: f.status, file_uploaded: !!r?.success, error: r?.success ? null : (r?.error ?? 'unknown'), upload_ms: Date.now() - t0 };
   if (r?.success) {
     const content = String(r.file?.content ?? '');
-    const nc = norm(content);
-    const needles = (f.facts ?? []).flatMap((x) => (x.doc_needles ?? []).map((n) => ({ fact: x.id, needle: n, survived: nc.includes(norm(n)) })));
+    // Whitespace removed on both sides: a PDF line wrap or a break after a hyphen is not a lost fact.
+    const sq = (t) => norm(String(t ?? '').replace(/--\s*\d+\s*of\s*\d+\s*--/g, ' ').replace(/\[Page \d+\]/g, ' ')).replace(/\s+/g, '');
+    const nc = sq(content);
+    const needles = (f.facts ?? []).flatMap((x) => (x.doc_needles ?? []).map((n) => ({ fact: x.id, needle: n, survived: nc.includes(sq(n)) })));
     Object.assign(rec, {
       app_file_id: r.file.id, binary_sha_matches: r.file.binarySha256 === f.sha256, content_sha256: r.file.contentSha256 ?? null, extracted_chars: content.length, extracted_chars_trimmed: content.trim().length,
       page_count: r.file.pageCount ?? null, extracted_page_count: r.file.extractedPageCount ?? null, file_parse_success: content.trim().length > 0,
       needles_total: needles.length, needles_survived: needles.filter((n) => n.survived).length, needles_lost: needles.filter((n) => !n.survived).map((n) => `${n.fact}:${n.needle}`),
-      facts_total: (f.facts ?? []).length, facts_fully_survived: (f.facts ?? []).filter((x) => (x.doc_needles ?? []).every((n) => nc.includes(norm(n)))).length,
+      facts_total: (f.facts ?? []).length, facts_fully_survived: (f.facts ?? []).filter((x) => (x.doc_needles ?? []).every((n) => nc.includes(sq(n)))).length,
     });
     reg[modeKey].set(id, { appId: r.file.id, fileName: f.filename, contentChars: content.trim().length });
   }
@@ -364,7 +366,9 @@ if (todo.length && WARM > 0) {
   }
 }
 
-const uiFormat = (turns) => turns.map((t) => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.text}`).slice(-20).join('\n');
+// The overlay's own chat context: what the user typed and what Natively answered. A line that was HEARD is not a chat
+// message (it is in the transcript, which a chain does not reset), so it is left out here.
+const uiFormat = (turns) => turns.filter((t) => t.role === 'user' || t.role === 'assistant').map((t) => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.text}`).slice(-20).join('\n');
 const spoken = (a) => (a ?? '').replace(/\[\[GIST\]\][\s\S]*$/, '').trim();
 let order = existing.length, activeMode = null, unverifiedStreak = 0;
 const startedRun = Date.now();
@@ -408,11 +412,12 @@ for (const unit of todo) {
     const first = (item.turn_index ?? 1) === 1;
     if (first && !item.no_reset) { await app.resetSession(c); if (item.prior_transcript) await app.injectLines(c, item.prior_transcript); }
     else if (first && item.no_reset) { if (item.prior_transcript) await app.injectLines(c, item.prior_transcript); }
-    else if (item.surface === 'hotkey') {
-      const last = history.filter((h) => h.role === 'assistant').at(-1);
-      priorTurns = history.map((h) => ({ role: h.role === 'assistant' ? 'user_spoken_answer' : 'other_party', text: h.role === 'assistant' ? spoken(h.text) : h.text }));
-      if (spoken(last?.text)) await app.injectLines(c, [{ speaker: 'user', text: spoken(last.text) }]);
-    } else priorTurns = history.map((h) => ({ role: h.role, text: h.role === 'assistant' ? spoken(h.text) : h.text }));
+    else {
+      priorTurns = history.map((h) => ({ role: h.role, text: h.role === 'assistant' ? spoken(h.text) : h.text }));
+      // A heard turn follows: the user said the previous answer aloud (that is what the hotkey answer is for), so it is in the transcript.
+      const last = history.at(-1);
+      if (item.surface === 'hotkey' && last?.role === 'assistant' && history.at(-2)?.role === 'other' && spoken(last.text)) await app.injectLines(c, [{ speaker: 'user', text: spoken(last.text) }]);
+    }
     await app.clearRecorder(c);
     const off = logSize();
     let m;

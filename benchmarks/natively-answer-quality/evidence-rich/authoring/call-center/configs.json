@@ -1,0 +1,93 @@
+[
+  {
+    "id": "call-center-full",
+    "mode": "call-center",
+    "base": true,
+    "files": [
+      "CC-REF-VERIFICATION-2026",
+      "CC-REF-REFUND-2026",
+      "CC-REF-SHIPPING-2026",
+      "CC-REF-RECOVERY-2026",
+      "CC-REF-PRIVACY-2026",
+      "CC-REF-ESCALATION-2026",
+      "CC-REF-BILLING-TRAVEL-2026",
+      "CC-REF-TROUBLESHOOTING-2026",
+      "CC-REF-HANDBOOK-V2"
+    ]
+  },
+  {
+    "id": "call-center-none",
+    "mode": "call-center",
+    "files": []
+  },
+  {
+    "id": "call-center-cf-refund-window90",
+    "mode": "call-center",
+    "files": [
+      "CC-REF-VERIFICATION-2026",
+      "CC-REF-REFUND-2026~window90",
+      "CC-REF-SHIPPING-2026",
+      "CC-REF-RECOVERY-2026",
+      "CC-REF-PRIVACY-2026",
+      "CC-REF-ESCALATION-2026",
+      "CC-REF-BILLING-TRAVEL-2026",
+      "CC-REF-TROUBLESHOOTING-2026",
+      "CC-REF-HANDBOOK-V2"
+    ]
+  },
+  {
+    "id": "call-center-cf-refund-dormant",
+    "mode": "call-center",
+    "files": [
+      "CC-REF-VERIFICATION-2026",
+      "CC-REF-REFUND-2026~dormant",
+      "CC-REF-SHIPPING-2026",
+      "CC-REF-RECOVERY-2026",
+      "CC-REF-PRIVACY-2026",
+      "CC-REF-ESCALATION-2026",
+      "CC-REF-BILLING-TRAVEL-2026",
+      "CC-REF-TROUBLESHOOTING-2026",
+      "CC-REF-HANDBOOK-V2"
+    ]
+  },
+  {
+    "id": "call-center-cf-no-refund-policy",
+    "mode": "call-center",
+    "files": [
+      "CC-REF-VERIFICATION-2026",
+      "CC-REF-SHIPPING-2026",
+      "CC-REF-RECOVERY-2026",
+      "CC-REF-PRIVACY-2026",
+      "CC-REF-ESCALATION-2026",
+      "CC-REF-BILLING-TRAVEL-2026",
+      "CC-REF-TROUBLESHOOTING-2026"
+    ]
+  },
+  {
+    "id": "call-center-cf-reset-helper",
+    "mode": "call-center",
+    "files": [
+      "CC-REF-VERIFICATION-2026~helperreset",
+      "CC-REF-REFUND-2026",
+      "CC-REF-SHIPPING-2026",
+      "CC-REF-RECOVERY-2026",
+      "CC-REF-PRIVACY-2026",
+      "CC-REF-ESCALATION-2026",
+      "CC-REF-BILLING-TRAVEL-2026",
+      "CC-REF-TROUBLESHOOTING-2026",
+      "CC-REF-HANDBOOK-V2"
+    ]
+  },
+  {
+    "id": "call-center-cf-no-verification",
+    "mode": "call-center",
+    "files": [
+      "CC-REF-REFUND-2026",
+      "CC-REF-SHIPPING-2026",
+      "CC-REF-PRIVACY-2026",
+      "CC-REF-ESCALATION-2026",
+      "CC-REF-BILLING-TRAVEL-2026",
+      "CC-REF-TROUBLESHOOTING-2026"
+    ]
+  }
+]

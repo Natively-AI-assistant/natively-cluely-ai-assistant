@@ -1,0 +1,529 @@
+{
+  "mode": "looking-for-work",
+  "families": [
+    {
+      "family": "ER-CF-LFW-1",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Would you be willing to relocate for this role? And how flexible are you on location more generally?",
+      "prior_transcript": null,
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "relocation",
+      "difficulty": "hard",
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "lfw-a-cf-reloc-yes",
+          "pi_state": "A",
+          "pi_condition": "resume_jd_relevant_ref",
+          "evidence_state": "notes_say_yes",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "His notes say yes with no conditions: he would move to Bengaluru for this role, and he is flexible beyond it (any city for the right team: Mumbai, Pune again, Delhi NCR, or abroad if the work is good). The answer is a clear yes to this role and a clear yes to being flexible in general, with no restriction added. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+            "required_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES~reloc-yes#F7",
+                "text": "Yes: he is willing to relocate and would move to Bengaluru for this role, with no conditions.",
+                "answer_needles": [
+                  "yes",
+                  "happy to",
+                  "open to",
+                  "willing",
+                  "absolutely"
+                ]
+              },
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES~reloc-yes#F10",
+                "text": "He is flexible on location in general: he would move to other cities (Mumbai, Pune again, Delhi NCR) or abroad for the right team.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES~reloc-yes#F11",
+                "text": "He would need about four weeks after joining and wants to know what the relocation help covers."
+              },
+              {
+                "fact": "PI-A-JD#F9",
+                "text": "Relocation assistance is available."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says he is not willing to relocate.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Adds a restriction that these notes do not contain (only Bengaluru, only certain cities, not abroad).",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+                "kind": "other_profile",
+                "answer_needles": [
+                  "Lumenquay",
+                  "Pebblekit",
+                  "Fernlatch",
+                  "Dialbench",
+                  "Hollowpine",
+                  "Inkwharf",
+                  "Velmonte",
+                  "Ondaverde",
+                  "Porto",
+                  "Rotterdam"
+                ]
+              }
+            ],
+            "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "LFW-REF-A-INTERVIEW-NOTES~reloc-yes",
+              "PI-A-JD"
+            ],
+            "source_priority": [
+              "LFW-REF-A-INTERVIEW-NOTES~reloc-yes",
+              "PI-A-JD",
+              "PI-A-RESUME"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "lfw-a-cf-reloc-no",
+          "pi_state": "A",
+          "pi_condition": "resume_jd_relevant_ref",
+          "evidence_state": "notes_say_not_relocating",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "His notes say no: he is not relocating and needs to stay in Hyderabad at least through 2027, so he is not flexible on location either. The answer says so plainly and early, and may ask whether a Hyderabad-based arrangement with a few days a month in the Bengaluru office is possible. It must not say yes or hint that he might move later. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+            "required_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES~reloc-no#F7",
+                "text": "No: he is not relocating, for this role or generally; he needs to stay in Hyderabad at least through 2027.",
+                "answer_needles": [
+                  "Hyderabad"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES~reloc-no#F10",
+                "text": "He asks whether someone based in Hyderabad who comes to the Bengaluru office a few days each month would be considered."
+              },
+              {
+                "fact": "PI-A-JD#F8",
+                "text": "The posting says the role is not open to fully remote candidates."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says he is willing to move to Bengaluru.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Hints that he might relocate later, which his notes tell him not to do.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+                "kind": "other_profile",
+                "answer_needles": [
+                  "Lumenquay",
+                  "Pebblekit",
+                  "Fernlatch",
+                  "Dialbench",
+                  "Hollowpine",
+                  "Inkwharf",
+                  "Velmonte",
+                  "Ondaverde",
+                  "Porto",
+                  "Rotterdam"
+                ]
+              }
+            ],
+            "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "LFW-REF-A-INTERVIEW-NOTES~reloc-no",
+              "PI-A-JD"
+            ],
+            "source_priority": [
+              "LFW-REF-A-INTERVIEW-NOTES~reloc-no",
+              "PI-A-JD",
+              "PI-A-RESUME"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "lfw-a-full",
+          "pi_state": "A",
+          "pi_condition": "resume_jd_relevant_ref",
+          "evidence_state": "notes_say_only_bengaluru_or_hyderabad",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "His notes say only Bengaluru or Hyderabad: he would move to Bengaluru for this role, and beyond that he is not flexible for now (not Mumbai, Delhi NCR, Pune again or anywhere outside India). So the answer is yes for this role, and an honest limit on the general part: Bengaluru or Hyderabad, nowhere else for the time being. It must not turn into an unconditional yes. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+            "required_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES#F7",
+                "text": "Yes for this role: he would move to Bengaluru.",
+                "answer_needles": [
+                  "Bengaluru",
+                  "Bangalore"
+                ]
+              },
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES#F10",
+                "text": "Beyond that he is not flexible for now: only Bengaluru or Hyderabad, not other cities and not outside India.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES#F11",
+                "text": "About four weeks after joining to move; wants to know what the relocation help covers."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says he is not willing to relocate.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Says he is open to relocating anywhere, or that he is flexible on location in general.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+                "kind": "other_profile",
+                "answer_needles": [
+                  "Lumenquay",
+                  "Pebblekit",
+                  "Fernlatch",
+                  "Dialbench",
+                  "Hollowpine",
+                  "Inkwharf",
+                  "Velmonte",
+                  "Ondaverde",
+                  "Porto",
+                  "Rotterdam"
+                ]
+              }
+            ],
+            "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "LFW-REF-A-INTERVIEW-NOTES",
+              "PI-A-JD"
+            ],
+            "source_priority": [
+              "LFW-REF-A-INTERVIEW-NOTES",
+              "PI-A-JD",
+              "PI-A-RESUME"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "D",
+          "evidence_config": "lfw-a-cf-reloc-absent-band-first",
+          "pi_state": "A",
+          "pi_condition": "resume_jd_relevant_ref",
+          "evidence_state": "no_preference_supplied",
+          "condition": "missing_evidence",
+          "oracle": {
+            "expected_behavior_note": "His notes are loaded but contain no relocation or location preference. The résumé says he lives in Hyderabad and the posting says the role is Bengaluru hybrid with relocation assistance; neither says what he wants, for this role or in general. The answer must not commit him either way on either part. A useful, natural reply acknowledges the facts (based in Hyderabad, role in Bengaluru) and asks what the relocation assistance covers, or gives him a line to complete. It must not sound like a system reporting missing data.",
+            "required_facts": [],
+            "optional_facts": [],
+            "forbidden_claims": [
+              {
+                "text": "States a settled willingness to relocate (yes, yes to certain cities, or flexible anywhere) as his preference.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "States that he will not relocate.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+                "kind": "other_profile",
+                "answer_needles": [
+                  "Lumenquay",
+                  "Pebblekit",
+                  "Fernlatch",
+                  "Dialbench",
+                  "Hollowpine",
+                  "Inkwharf",
+                  "Velmonte",
+                  "Ondaverde",
+                  "Porto",
+                  "Rotterdam"
+                ]
+              }
+            ],
+            "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+            "expected_action": "decline_to_invent_stay_useful",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Noting that he is based in Hyderabad and that the role is in Bengaluru three days a week.",
+              "Asking what the relocation assistance covers before answering.",
+              "Saying he knew the role was in Bengaluru when he applied and is glad to talk it through, without stating a decision."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    },
+    {
+      "family": "ER-CF-LFW-2",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What are you looking for in terms of compensation?",
+      "prior_transcript": null,
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "salary_expectation",
+      "difficulty": "hard",
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "lfw-a-full",
+          "pi_state": "A",
+          "pi_condition": "resume_jd_relevant_ref",
+          "evidence_state": "notes_state_range",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "His notes state the ask: INR 58 to 64 lakh fixed a year, with stock on top; fixed pay matters more to him than options. The answer gives that range. It does not reveal his floor (55 lakh). Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+            "required_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES#F13",
+                "text": "He is looking for INR 58 to 64 lakh fixed a year, plus stock.",
+                "answer_needles": [
+                  "58 to 64",
+                  "58-64",
+                  "58 and 64",
+                  "58 lakh",
+                  "58 LPA",
+                  "58L",
+                  "fifty-eight",
+                  "INR 58",
+                  "₹58",
+                  "fifty eight"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES#F15",
+                "text": "Fixed pay matters more to him than options."
+              },
+              {
+                "fact": "PI-A-JD#F37",
+                "text": "The posting says the L5 band is shared in the recruiter call."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Gives a different figure, or volunteers his floor of 55 lakh as the ask.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "55 lakh",
+                  "55 LPA"
+                ]
+              },
+              {
+                "text": "Answers in euros, which is the other candidate's currency.",
+                "kind": "other_profile",
+                "answer_needles": [
+                  "€",
+                  "euros",
+                  "88,000"
+                ]
+              },
+              {
+                "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+                "kind": "other_profile",
+                "answer_needles": [
+                  "Lumenquay",
+                  "Pebblekit",
+                  "Fernlatch",
+                  "Dialbench",
+                  "Hollowpine",
+                  "Inkwharf",
+                  "Velmonte",
+                  "Ondaverde"
+                ]
+              }
+            ],
+            "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "LFW-REF-A-INTERVIEW-NOTES"
+            ],
+            "source_priority": [
+              "LFW-REF-A-INTERVIEW-NOTES",
+              "PI-A-JD"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "lfw-a-cf-reloc-absent-band-first",
+          "pi_state": "A",
+          "pi_condition": "resume_jd_relevant_ref",
+          "evidence_state": "notes_prefer_band_first",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "His notes say he has no number yet and does not want to name one first: he should ask for the L5 band, which the posting says is shared on the recruiter call, and if pushed say only that fixed pay matters more to him than options. The answer names no figure and asks for the band. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+            "required_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES~reloc-absent-band-first#F13",
+                "text": "He would like to hear the L5 band first and names no figure.",
+                "answer_needles": [
+                  "band",
+                  "range"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LFW-REF-A-INTERVIEW-NOTES~reloc-absent-band-first#F15",
+                "text": "Fixed pay matters more to him than options."
+              },
+              {
+                "fact": "PI-A-JD#F37",
+                "text": "The posting says the L5 band is shared in the recruiter call."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Names a salary figure or range.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "lakh",
+                  "rupee",
+                  "₹"
+                ]
+              },
+              {
+                "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+                "kind": "other_profile",
+                "answer_needles": [
+                  "Lumenquay",
+                  "Pebblekit",
+                  "Fernlatch",
+                  "Dialbench",
+                  "Hollowpine",
+                  "Inkwharf",
+                  "Velmonte",
+                  "Ondaverde"
+                ]
+              }
+            ],
+            "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "LFW-REF-A-INTERVIEW-NOTES~reloc-absent-band-first",
+              "PI-A-JD"
+            ],
+            "source_priority": [
+              "LFW-REF-A-INTERVIEW-NOTES~reloc-absent-band-first",
+              "PI-A-JD"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "looking-for-work-none",
+          "pi_state": "A",
+          "pi_condition": "resume_jd",
+          "evidence_state": "no_candidate_notes",
+          "condition": "missing_evidence",
+          "oracle": {
+            "expected_behavior_note": "Only the résumé and the posting are loaded; neither states a salary or an expectation. The answer must not name a figure. A natural, useful reply asks for the L5 band (the posting says it is shared in the recruiter call) or says he would like to understand the whole package first. It must not sound like a system reporting missing data.",
+            "required_facts": [],
+            "optional_facts": [],
+            "forbidden_claims": [
+              {
+                "text": "Names a salary figure or range, current or expected.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "lakh",
+                  "rupee",
+                  "₹"
+                ]
+              },
+              {
+                "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+                "kind": "other_profile",
+                "answer_needles": [
+                  "Lumenquay",
+                  "Pebblekit",
+                  "Fernlatch",
+                  "Dialbench",
+                  "Hollowpine",
+                  "Inkwharf",
+                  "Velmonte",
+                  "Ondaverde"
+                ]
+              }
+            ],
+            "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+            "expected_action": "decline_to_invent_stay_useful",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Asking for the L5 band, which the posting says is shared in the recruiter call.",
+              "Saying fixed pay and stock would both matter, without numbers."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    }
+  ]
+}

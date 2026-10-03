@@ -1,0 +1,2669 @@
+{
+  "mode": "looking-for-work",
+  "items": [
+    {
+      "id": "ER-D-LFW-001",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "You've been tech lead there a couple of years and it sounds like it's going well. So what's got you looking around?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "grounded_single",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "reason_for_leaving",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "He gives his two real reasons from his own notes: the platform work is done and the roadmap is now mostly carrier integrations, and Quillhaven has no Staff level so the only step up is management. Short, nothing negative about the team or his manager. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F1",
+            "text": "The platform work is finished; since Skeinrouter shipped the roadmap is mostly carrier integrations (11 of 14 items in 2026).",
+            "answer_needles": [
+              "integration"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F2",
+            "text": "Quillhaven's ladder has no Staff level; after Senior / Tech Lead the next step is Engineering Manager.",
+            "answer_needles": [
+              "staff",
+              "ladder",
+              "engineering manager",
+              "management",
+              "IC track",
+              "no level"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F3",
+            "text": "He is not leaving because of people; he likes the team and his manager."
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F38",
+            "text": "He does not want line management for the next two or three years."
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F19",
+            "text": "The pull toward a domain where a wrong number matters."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Invents a reason that is not in his notes (pay, a bad manager, layoffs, burnout, a conflict).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Speaks negatively about Quillhaven, the team or his manager.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME",
+          "PI-A-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Linking the two reasons to what this role offers (a Staff level above L5, a correctness-critical domain)."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-002",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "they always ask about a weakness. which one did I settle on, and what have I actually done about it",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "grounded_single",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "weakness",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Gives the weakness he wrote down, with its evidence and the fix: he holds on to the critical path (reviewed every delivery-path change himself, became the bottleneck with a 2.5-day median review wait), and since January 2026 two designated approvers handle it while he reviews only design-level changes, bringing the wait to about 7 hours.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F22",
+            "text": "He holds on to the critical path: he reviewed every delivery-path change himself and by late 2025 the median review wait was 2.5 days.",
+            "answer_needles": [
+              "2.5 days",
+              "2.5-day",
+              "two and a half days",
+              "bottleneck"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F23",
+            "text": "Since January 2026 two engineers are designated approvers and he reviews only design-level changes; the median wait is about 7 hours.",
+            "answer_needles": [
+              "7 hours",
+              "seven hours",
+              "approver"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Substitutes a generic weakness that is not in his notes (perfectionism, working too hard, public speaking).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde",
+              "date picker",
+              "intake board"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-003",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Tell me about a time you and another engineer just couldn't agree on a design. What was it about?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D-LFW-003-C",
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "followup",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "behavioural_disagreement",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Tells the real partition-key disagreement from his notes: the Platform staff engineer wanted the Skeinrouter topic keyed by carrier ID, he wanted shipment ID because the top 3 carriers produce 38% of events, and a replay of two days of production traffic settled it (14 minutes behind with carrier keys). Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F24",
+            "text": "The disagreement was with a staff engineer on Platform over the partition key: carrier ID against shipment ID.",
+            "answer_needles": [
+              "carrier ID",
+              "carrier id",
+              "by carrier",
+              "carrier key",
+              "per carrier",
+              "per-carrier",
+              "carrier-id",
+              "carrier keys",
+              "on carrier"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F25",
+            "text": "His concern was skew: the top 3 carriers produce 38% of all events.",
+            "answer_needles": [
+              "38%",
+              "38 percent",
+              "38 per cent",
+              "thirty-eight"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F26",
+            "text": "He replayed two days of production traffic through both schemes; with carrier keys the busiest partition ran 14 minutes behind at peak.",
+            "answer_needles": [
+              "14 minutes",
+              "fourteen minutes",
+              "14-minute"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F16",
+            "text": "Skeinrouter ended up with 48 partitions keyed by shipment ID."
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F27",
+            "text": "Her rate-limiting point was right and he built a per-carrier throttle into the delivery layer."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Tells a different disagreement, or adds people, numbers or outcomes that are in neither his notes nor his résumé.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde",
+              "Azinhal"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-004",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And with hindsight, is there anything you'd have done differently there?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D-LFW-003-C",
+      "turn_index": 2,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "followup",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "behavioural_disagreement",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Continues the same story (the partition-key disagreement from the previous turn) with the lesson he actually wrote down: they argued in doc comments for a week before he proposed the replay, and he should have proposed the experiment on day one. He may add that her rate-limiting point was right and he built the per-carrier throttle. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F27",
+            "text": "They argued in doc comments for a week before the replay; his lesson is to propose the experiment on day one, not day seven.",
+            "answer_needles": [
+              "week",
+              "day one",
+              "earlier",
+              "sooner",
+              "straight away",
+              "from the start",
+              "first day"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F27",
+            "text": "Her rate-limiting point was right, so he built a per-carrier throttle into the webhook delivery layer."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Switches to a different story or invents a lesson unrelated to the partition-key disagreement.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-005",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "This team's in the office three days a week here in Bengaluru, and I see you're in Hyderabad. How's that going to work?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "multi_source",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "relocation_hybrid",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Combines his notes with the posting: he would move to Bengaluru for this role, and three office days suit him (he already does two at Quillhaven). He may add that he would need about four weeks after joining to move and ask what the relocation assistance covers. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F7",
+            "text": "He would move to Bengaluru for this role.",
+            "answer_needles": [
+              "move",
+              "relocat",
+              "shift"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F9",
+            "text": "Three days a week in an office suits him; he already does two office days at Quillhaven.",
+            "answer_needles": []
+          },
+          {
+            "fact": "PI-A-JD#F7",
+            "text": "The role is hybrid: three days a week in the Bengaluru office.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F11",
+            "text": "About four weeks after joining to move; wants to know what the relocation help covers."
+          },
+          {
+            "fact": "PI-A-JD#F9",
+            "text": "Relocation assistance is available."
+          },
+          {
+            "fact": "PI-A-RESUME#F2",
+            "text": "He lives in Hyderabad."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says he is not willing to relocate, or asks to stay remote in Hyderabad.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Says he is open to relocating anywhere; his notes limit it to Bengaluru or Hyderabad.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde",
+              "Porto",
+              "Rotterdam"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-JD",
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-JD",
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-006",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "interview is nearly over. what were the things I wanted to ask them? give me the three that matter most",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "grounded_single",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "candidate_asks",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Returns asks from his own prepared list in the research notes, not generic ones. Any three of the five are fine: whether the Java settlement engine is staying or moving to Go; how many pages the primary gets in a normal week and what month-end is like; which kinds of break remain and the plan to reach the target; what L5 to L6 looks like and how many Staff engineers there are; what changed after the June settlement delay. He noted not to raise leave or the learning budget in round one.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-COMPANY-RESEARCH#F17",
+            "text": "At least three of his five prepared asks (Java settlement engine; pages per week and month-end; kinds of break and the plan; L5 to L6 and Staff engineers; what changed after the June delay).",
+            "answer_needles": [
+              "java",
+              "pages",
+              "month-end",
+              "month end",
+              "break",
+              "to L6",
+              "staff",
+              "june"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-COMPANY-RESEARCH#F18",
+            "text": "Pages per week for the primary and month-end load."
+          },
+          {
+            "fact": "LFW-REF-A-COMPANY-RESEARCH#F19",
+            "text": "Which kinds of break remain and the plan."
+          },
+          {
+            "fact": "LFW-REF-A-COMPANY-RESEARCH#F20",
+            "text": "L5 to L6 in practice and the number of Staff engineers."
+          },
+          {
+            "fact": "LFW-REF-A-COMPANY-RESEARCH#F21",
+            "text": "What changed after the June settlement delay."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Offers only generic asks (culture, growth, a typical day) and none from his list.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde",
+              "accessibility statement",
+              "team weeks",
+              "support captain"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LFW-REF-A-COMPANY-RESEARCH"
+        ],
+        "source_priority": [
+          "LFW-REF-A-COMPANY-RESEARCH",
+          "PI-A-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-007",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Say we got an offer out to you by the twentieth of this month. When's the earliest you could actually be here?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "conflict_stale",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "notice_period_start_date",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "His notes hold two notice figures: a 30 Aug line (60 days, from the offer letter) and a dated 27 Sep update after he checked with People Ops (90 days on the senior grade, no buyout). The later one is current. Resigning on 20 October 2026 and serving 90 days ends on 18 January 2027, so the earliest start is the second half of January. He must not use the 60-day figure (which would give 19 December) or promise a buyout. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F39",
+            "text": "His notice period is 90 days, with no buyout.",
+            "answer_needles": [
+              "90 days",
+              "90-day",
+              "ninety days",
+              "ninety-day",
+              "three months",
+              "3 months"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F39",
+            "text": "From an offer on 20 October 2026 that puts the earliest start around 18 January 2027.",
+            "answer_needles": [
+              "january"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Uses the superseded 60-day notice, which would put the start around 19 December.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F12",
+            "answer_needles": [
+              "December 19",
+              "19 December",
+              "19th of December",
+              "Dec 19",
+              "18 December",
+              "December 18",
+              "20 December",
+              "December 20"
+            ]
+          },
+          {
+            "text": "Promises a buyout or an earlier release that his notes say is not available.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Notice period",
+            "sources": [
+              "LFW-REF-A-INTERVIEW-NOTES"
+            ],
+            "resolution": "current_wins",
+            "note": "Inside one document: the 30 Aug line says 60 days, the dated 27 Sep update says 90 days."
+          }
+        ],
+        "acceptable_inference": [
+          "Rounding to \"mid to late January\" or \"the second half of January\".",
+          "Assuming he resigns on the day the offer arrives."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "20 October 2026 + 90 days",
+          "result": "2027-01-18",
+          "unit": "date",
+          "accepted_forms": [
+            "18 January",
+            "January 18",
+            "18th of January",
+            "Jan 18",
+            "18 Jan",
+            "19 January",
+            "January 19",
+            "19th of January",
+            "17 January",
+            "January 17",
+            "mid-January",
+            "mid January",
+            "middle of January",
+            "third week of January",
+            "second half of January",
+            "late January",
+            "around the 18th",
+            "20 January",
+            "January 20",
+            "20th of January"
+          ],
+          "inputs": {
+            "offer_date": "CONVERSATION (20 October 2026)",
+            "notice_days": "LFW-REF-A-INTERVIEW-NOTES#F39"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-008",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if they ask whether I see myself moving into people management, what's my line",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "conflict_stale",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "leadership_preference",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "His notes contain an older line (30 Aug: open to the EM track) and a dated 22 Sep update that replaces it: after covering his manager's one-to-ones and appraisals for six weeks he decided against line management for at least two or three years; he wants to stay hands-on, lead designs, guide a few engineers and aim at Staff. The line to say reflects the update, and fits the role (no line-management duties, L6 is Staff).",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F38",
+            "text": "No line management for at least the next two or three years; hands-on, leading designs, guiding a few engineers, aiming at Staff.",
+            "answer_needles": [
+              "staff",
+              "hands-on",
+              "hands on",
+              "individual contributor",
+              "not management",
+              "no line management"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-JD#F20",
+            "text": "The role guides 2 to 3 engineers and has no line-management duties."
+          },
+          {
+            "fact": "PI-A-JD#F10",
+            "text": "L6 is Staff Engineer."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says he is open to the engineering-manager track.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F6"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-JD"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Management track",
+            "sources": [
+              "LFW-REF-A-INTERVIEW-NOTES"
+            ],
+            "resolution": "current_wins",
+            "note": "Inside one document: the 30 Aug line is superseded by the dated 22 Sep update."
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-009",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Are you in process anywhere else right now? Any offers on the table we should know about?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "missing_evidence",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "absent_other_offers",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Nothing loaded says whether he has other interviews or offers, so the answer must neither claim any nor deny them. A useful reply stays truthful and human: for example that he is being selective and that this is the role he has prepared for, leaving the specifics for him to state. It must not sound like a system reporting missing data.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "States that he has other offers or interviews, names companies, or gives a deadline.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States that he has no other offers or is not talking to anyone else.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying he is being selective and that this role is the one he has done the homework on (his research notes support that).",
+          "A short line he can complete with his real situation."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-010",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Freight to ledgers is a bit of a jump, though. Why payments?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "condition": "multi_source",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "motivation_domain",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Uses his own stated motivation with the résumé fact behind it: the bugs that stayed with him were the ones where a number was wrong, like the seat double bookings he fixed at Tessarine (37 a month to fewer than 2). He is honest that he has no professional payments experience. He may mention tallybook only as a weekend project. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F19",
+            "text": "What pulls him is correctness: the bugs that stayed with him were the ones where a number was wrong, like the seat double bookings at Tessarine.",
+            "answer_needles": [
+              "double booking",
+              "double-booking",
+              "seat",
+              "wrong"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F18",
+            "text": "He does not pretend otherwise: it is a jump, and he has no professional payments experience. Agreeing that it is a jump conveys this; he need not recite it.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F35",
+            "text": "Advisory locks took double bookings from 37 a month to fewer than 2."
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F20",
+            "text": "tallybook, a weekend double-entry ledger project."
+          },
+          {
+            "fact": "LFW-REF-A-COMPANY-RESEARCH#F16",
+            "text": "Correctness is the product at Ostrakel."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Claims professional payments, ledger, banking or reconciliation experience.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents tallybook as professional or production experience.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME",
+          "LFW-REF-A-COMPANY-RESEARCH"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-011",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So what's keeping you busy at the moment, day to day?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "condition": "grounded_single",
+      "pi_condition": "profile_b",
+      "category": "current_role",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Answers from her CV: Lead Frontend Engineer at Lumenquay, leading the frontend chapter of 18 engineers across 5 squads while working in the booking squad, running the Pebblekit design system; Dialbench and the accessibility triage are fair additions. Nothing from the other candidate. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "PI-B-RESUME#F9",
+            "text": "She leads the frontend chapter (18 engineers across 5 squads) at Lumenquay and works day to day in the booking squad.",
+            "answer_needles": [
+              "Lumenquay",
+              "chapter"
+            ]
+          },
+          {
+            "fact": "PI-B-RESUME#F13",
+            "text": "She founded and leads Pebblekit, the design system.",
+            "answer_needles": [
+              "Pebblekit",
+              "design system"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-B-RESUME#F24",
+            "text": "Dialbench, the experimentation toolkit."
+          },
+          {
+            "fact": "PI-B-RESUME#F36",
+            "text": "The weekly accessibility triage."
+          },
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F1",
+            "text": "About 60% of her hours go to coordination."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Invents current work that is not on her CV (real-time, AI or backend platform projects).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core",
+              "Hyderabad",
+              "Kafka pipeline"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI-B-RESUME"
+        ],
+        "source_priority": [
+          "PI-B-RESUME",
+          "LFW-REF-B-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-012",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "they asked if I'd ever move to rotterdam or if remote is the plan. what do I say",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "condition": "multi_source",
+      "pi_condition": "profile_b",
+      "category": "relocation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Her notes are firm: she is staying in Porto and is not moving to Rotterdam, so remote within Europe is a condition. Travel is fine: the four team weeks the posting describes are a plus, and up to about six weeks of travel a year works. The line to say is a clear no to relocating and a clear yes to the team weeks.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F6",
+            "text": "She is staying in Porto and not relocating; remote within Europe is a condition.",
+            "answer_needles": [
+              "Porto",
+              "remote",
+              "staying",
+              "not moving",
+              "not relocating"
+            ]
+          },
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F7",
+            "text": "The four team weeks are welcome; up to about six weeks of travel a year works.",
+            "answer_needles": [
+              "team week",
+              "four weeks",
+              "4 weeks",
+              "six weeks",
+              "travel"
+            ]
+          },
+          {
+            "fact": "PI-B-JD#F10",
+            "text": "The team meets in Rotterdam for 4 team weeks a year.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-B-JD#F9",
+            "text": "The Rotterdam hub is optional."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says she would relocate to Rotterdam or is open to moving.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core",
+              "Bengaluru",
+              "Hyderabad"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "LFW-REF-B-INTERVIEW-NOTES",
+          "PI-B-JD"
+        ],
+        "source_priority": [
+          "LFW-REF-B-INTERVIEW-NOTES",
+          "PI-B-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-013",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Before we go further, so nobody wastes time: what are you looking for in base salary?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "condition": "conflict_stale",
+      "pi_condition": "profile_b",
+      "category": "salary_expectation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Her notes hold an 18 Aug first thought (EUR 78,000 to 82,000) and a dated 26 Sep addition that replaces it (EUR 88,000 to 95,000 base, and not to bring up the earlier figure). The answer gives the revised range in euros. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F29",
+            "text": "She is asking for EUR 88,000 to 95,000 base.",
+            "answer_needles": [
+              "88,000",
+              "88.000",
+              "88 000",
+              "88k",
+              "88 to 95",
+              "88-95",
+              "88 and 95",
+              "eighty-eight",
+              "88 thousand",
+              "eighty eight",
+              "€88"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-B-JD#F31",
+            "text": "The posting says the band is shared in the intro call."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the superseded August figure of EUR 78,000 to 82,000.",
+            "kind": "stale",
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F11",
+            "answer_needles": [
+              "78,000",
+              "78.000",
+              "78k",
+              "78 to 82",
+              "82,000",
+              "82k"
+            ]
+          },
+          {
+            "text": "Answers in rupees or lakh, which is the other candidate's expectation.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "lakh",
+              "rupee",
+              "₹"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-B-INTERVIEW-NOTES"
+        ],
+        "source_priority": [
+          "LFW-REF-B-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Salary ask",
+            "sources": [
+              "LFW-REF-B-INTERVIEW-NOTES"
+            ],
+            "resolution": "current_wins",
+            "note": "Inside one document: the 18 Aug figure is superseded by the dated 26 Sep addition."
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-014",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Have you shipped anything multiplayer yourself? Live cursors, shared editing, that sort of thing.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "condition": "multi_source",
+      "pi_condition": "profile_b",
+      "category": "jd_gap_realtime",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Honest handling of a stated requirement she does not meet: she has never shipped multiplayer. What she can truthfully offer is the learning project from her notes (a shared checklist on Yjs built over four evenings in September, which she calls a toy), which happens to be the same technology the posting names. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F12",
+            "text": "She has never shipped multiplayer or real-time collaborative features.",
+            "answer_needles": []
+          },
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F13",
+            "text": "She built a shared checklist on Yjs over four evenings in September to learn; it is a toy.",
+            "answer_needles": [
+              "Yjs"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-B-JD#F13",
+            "text": "Hollowpine's real-time layer is Yjs over WebSockets."
+          },
+          {
+            "fact": "PI-B-JD#F19",
+            "text": "Shipped real-time work is a stated requirement."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Claims to have shipped real-time collaborative, multiplayer or WebSocket features.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents the Yjs checklist as production experience.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-B-INTERVIEW-NOTES",
+          "PI-B-JD"
+        ],
+        "source_priority": [
+          "LFW-REF-B-INTERVIEW-NOTES",
+          "PI-B-RESUME",
+          "PI-B-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-015",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "why am I leaving lumenquay - give me the short version I can say out loud",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "condition": "grounded_single",
+      "pi_condition": "profile_b",
+      "category": "reason_for_leaving",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Gives her own two reasons in a form she can say: the lead role turned into coordination (about 60% of her hours; she shipped 2 product features herself in a year) and she misses building; and the 2027 roadmap is integrations with practice-management systems with little new interface work, while she wants multiplayer and assistant-interface problems. Not framed as an escape.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F1",
+            "text": "The lead role became coordination, about 60% of her hours, and she misses building.",
+            "answer_needles": [
+              "60%",
+              "60 percent",
+              "60 per cent",
+              "coordinat"
+            ]
+          },
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F2",
+            "text": "The 2027 roadmap is integrations with practice-management systems, with almost no new interface work.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F3",
+            "text": "She is not unhappy with anyone."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Invents a reason that is not in her notes (pay, a conflict, layoffs).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core",
+              "Staff level",
+              "carrier integrations"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "words_to_say",
+        "source_ids": [
+          "LFW-REF-B-INTERVIEW-NOTES"
+        ],
+        "source_priority": [
+          "LFW-REF-B-INTERVIEW-NOTES",
+          "PI-B-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-016",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "fernlatch experiment - how many points did completion gain in the end, and how far ahead was it when rodrigo wanted to ship early?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "condition": "multi_source",
+      "pi_condition": "profile_b",
+      "category": "experiment_numbers",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Two sources: the CV gives booking completion from 61.2% to 66.8%, a gain of 5.6 points over the six-week run; her notes say the new flow was ahead by 8.1 points at two weeks, when the product manager wanted to ship. The two numbers must not be swapped.",
+        "required_facts": [
+          {
+            "fact": "PI-B-RESUME#F23",
+            "text": "Final gain: 66.8% minus 61.2% is 5.6 points.",
+            "answer_needles": [
+              "5.6",
+              "5,6"
+            ]
+          },
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F18",
+            "text": "At two weeks the new flow was ahead by 8.1 points.",
+            "answer_needles": [
+              "8.1",
+              "8,1"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Reports the week-two 8.1 points as the final gain, or invents another figure.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI-B-RESUME",
+          "LFW-REF-B-INTERVIEW-NOTES"
+        ],
+        "source_priority": [
+          "PI-B-RESUME",
+          "LFW-REF-B-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "66.8 - 61.2",
+          "result": 5.6,
+          "unit": "percentage points",
+          "accepted_forms": [
+            "5.6",
+            "5,6"
+          ],
+          "inputs": {
+            "after": "PI-B-RESUME#F23",
+            "before": "PI-B-RESUME#F23"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-017",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Tell me about a time you and your manager disagreed about something that mattered. How did it play out?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A",
+      "condition": "missing_evidence",
+      "pi_condition": "resume_jd",
+      "category": "behavioural_no_notes",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Only the résumé and the posting are loaded and neither contains a disagreement with a manager. The answer must not manufacture one (no invented manager, topic, dates or outcome). It should stay useful: a truthful opening the candidate can complete with his real example, optionally anchored to documented scope such as running the weekly design review. It must not sound like a system reporting missing data.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Narrates a specific disagreement with a manager (who, what, when, how it ended) that is in no loaded source.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses names or details from reference files that are not loaded here.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "Senthurvel",
+              "Charuhas",
+              "Rekulvara"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "A first-person structure the candidate fills with his own example.",
+          "Mentioning résumé-backed scope (tech lead of four, weekly design review, production-readiness sign-off) without inventing a conflict."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-018",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Roughly forty percent of what this team maintains is Java on Spring Boot. Where are you with Java?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A",
+      "condition": "multi_source",
+      "pi_condition": "resume_jd",
+      "category": "jd_gap_java",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Honest gap handling from résumé plus posting: his production languages are Go and Kotlin (Kotlin on Ktor at Tessarine is his JVM experience); Java is not on his résumé, so he must not claim production Java or Spring Boot. The posting asks for Go or Java and willingness to work in both, so stating that willingness is right. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F41",
+            "text": "His production languages are Go and Kotlin; Java is not among them.",
+            "answer_needles": [
+              "Kotlin"
+            ]
+          },
+          {
+            "fact": "PI-A-RESUME#F31",
+            "text": "His JVM experience is Kotlin on Ktor at Tessarine.",
+            "answer_needles": []
+          },
+          {
+            "fact": "PI-A-JD#F22",
+            "text": "The role asks for Go or Java in production and willingness to work in both; he is willing.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-JD#F14",
+            "text": "The settlement engine and reconciliation jobs are Java 21 on Spring Boot."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Claims production Java or Spring Boot experience.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses details from his notes, which are not loaded here (the toy ledger, reading the Debezium source).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "tallybook"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI-A-RESUME",
+          "PI-A-JD"
+        ],
+        "source_priority": [
+          "PI-A-RESUME",
+          "PI-A-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying Java would be a ramp-up and that Kotlin gives him familiarity with the JVM."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-019",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "That event pipeline you led. What did the numbers look like before and after?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A",
+      "condition": "grounded_single",
+      "pi_condition": "resume_jd",
+      "category": "resume_project_scale",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Gives the Skeinrouter results from the résumé: peak throughput from 9,000 to 41,000 events per second and p99 end-to-end latency from 870 ms to 140 ms; the duplicate-webhook drop is a fair addition. It must not borrow the other latency pairs on the résumé. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F14",
+            "text": "Peak throughput went from 9,000 to 41,000 events per second.",
+            "answer_needles": [
+              "41,000",
+              "41k",
+              "41 thousand",
+              "forty-one thousand",
+              "41000",
+              "41 000",
+              "forty one thousand"
+            ]
+          },
+          {
+            "fact": "PI-A-RESUME#F15",
+            "text": "p99 end-to-end latency went from 870 ms to 140 ms.",
+            "answer_needles": [
+              "140 ms",
+              "140ms",
+              "140 milliseconds",
+              "hundred and forty",
+              "hundred forty",
+              "140 millisecond"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F19",
+            "text": "Duplicate webhooks from 0.6% of deliveries to under 0.01%."
+          },
+          {
+            "fact": "PI-A-RESUME#F12",
+            "text": "It replaced a cron job that polled every 60 seconds."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives another project's latency pair (Farecrest's 480 ms to 95 ms) as Skeinrouter's.",
+            "kind": "fabrication",
+            "fact": "PI-A-RESUME#F33",
+            "answer_needles": [
+              "480 ms",
+              "480ms"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-020",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how long have I been at quillhaven as of this month? years and months",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A-RESUME",
+      "condition": "grounded_single",
+      "pi_condition": "resume_only",
+      "category": "tenure_calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "From the résumé: he joined Quillhaven in March 2023, so in October 2026 that is 3 years 7 months (43 months). Counting both end months gives 3 years 8 months, which is also acceptable. The 2 years 6 months since April 2024 is his time as senior and tech lead, not his time at the company.",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F9",
+            "text": "He joined Quillhaven in March 2023; to October 2026 that is 3 years 7 months.",
+            "answer_needles": [
+              "7 months",
+              "seven months",
+              "43 months",
+              "44 months",
+              "8 months",
+              "eight months",
+              "three and a half"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Gives only the time since April 2024 (2 years 6 months) as his time at the company.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Mentions the target company or role, which is not loaded here.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "Ostrakel",
+              "Ledger Core"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(2026 * 12 + 10) - (2023 * 12 + 3)",
+          "result": 43,
+          "unit": "months",
+          "accepted_forms": [
+            "3 years 7 months",
+            "3 years and 7 months",
+            "3 years, 7 months",
+            "three years and seven months",
+            "three years, seven months",
+            "three years seven months",
+            "43 months",
+            "44 months",
+            "3 years 8 months",
+            "3 years and 8 months",
+            "three years and eight months",
+            "three and a half years"
+          ],
+          "inputs": {
+            "start": "PI-A-RESUME#F9",
+            "today": "October 2026"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-021",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Say you're adding a brand-new notifications service next quarter. Kafka or RabbitMQ, which way do you lean and why?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A-RESUME",
+      "condition": "irrelevant_source",
+      "pi_condition": "resume_only",
+      "category": "present_judgment",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "A present technical judgment, not a biographical fact: he should pick one and give sound reasons (ordering and replay needs, fan-out, operational cost, what the team already runs). Either choice is acceptable if reasoned. He may draw on résumé-backed experience (moving booking events from RabbitMQ to Kafka at Tessarine, Skeinrouter) but must not invent history, and must not refuse for lack of a source.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Invents employers, incidents or metrics that are not on the résumé to justify the choice.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Declines to give a recommendation, or says it lacks the information to choose.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Mentions the target company or role, which is not loaded here.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "Ostrakel",
+              "Ledger Core"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Referring to his real RabbitMQ-to-Kafka move at Tessarine or to Skeinrouter.",
+          "Asking one clarifying point about ordering or volume while still giving a lean."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-022",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "whats the on call setup for this job, and do they give any time back after",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A-JD",
+      "condition": "grounded_single",
+      "pi_condition": "jd_only",
+      "category": "role_facts",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "From the posting: primary on-call for Ledger Core one week in six, around the clock, with a compensatory day off after each on-call week.",
+        "required_facts": [
+          {
+            "fact": "PI-A-JD#F19",
+            "text": "On-call is one week in six as primary, around the clock.",
+            "answer_needles": [
+              "one week in six",
+              "one in six",
+              "every six weeks",
+              "every sixth week",
+              "1 in 6",
+              "six weeks",
+              "week in six",
+              "out of six",
+              "sixth week",
+              "1-in-6",
+              "one-in-six"
+            ]
+          },
+          {
+            "fact": "PI-A-JD#F19",
+            "text": "There is a compensatory day off after each on-call week.",
+            "answer_needles": [
+              "day off",
+              "compensatory"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Gives the candidate's own rota (one week in five); no résumé is loaded here.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "one week in five",
+              "one in five"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde",
+              "support captain",
+              "every 7 weeks"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI-A-JD"
+        ],
+        "source_priority": [
+          "PI-A-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-023",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Let's start simple. What are you doing in your current role?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A-JD",
+      "condition": "missing_evidence",
+      "pi_condition": "jd_only",
+      "category": "history_without_resume",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Only the posting is loaded; nothing describes the candidate's current job. The answer must not invent an employer, title, team or projects, and must not present the advertised role's duties as his present job. It should stay useful: a first-person opening the candidate completes with his real role, shaped toward what the posting asks for.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Invents a current employer, title, team size, projects or metrics.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents the advertised role's duties (the ledger, reconciliation, the idempotency layer) as what he does today.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States résumé details although no résumé is loaded.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Tessarine",
+              "Farecrest"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "A structure oriented to the posting (backend in Go or Java, PostgreSQL, Kafka, on-call) that he fills with his own facts."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-024",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And what notice do you have to give where you are now?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-irrelevant",
+      "pi_state": "A",
+      "condition": "missing_evidence",
+      "pi_condition": "resume_jd_irrelevant_ref",
+      "category": "notice_period_irrelevant_doc",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The only reference file loaded is the rental summary for his flat, which has a tenancy notice period (2 months) and a lock-in date. Neither is an employment notice period, and the résumé and posting state none. The answer must not give a figure; a natural reply is that he will confirm the exact notice with his employer and come back with a date.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Uses the tenancy notice or lock-in from the rental summary as his job notice period.",
+            "kind": "fabrication",
+            "fact": "LFW-REF-IRRELEVANT#F5",
+            "answer_needles": [
+              "two months",
+              "2 months",
+              "30 November",
+              "lock-in"
+            ]
+          },
+          {
+            "text": "States any employment notice period.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "90 days",
+              "ninety days",
+              "60 days",
+              "sixty days",
+              "30 days"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying he will check his contract and confirm the exact figure."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-025",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "If you joined us, what would you want to get done in your first month?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-irrelevant",
+      "pi_state": "A",
+      "condition": "irrelevant_source",
+      "pi_condition": "resume_jd_irrelevant_ref",
+      "category": "present_judgment",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "A present professional judgment that needs no historical source: a sensible first-month plan (learn the ledger and reconciliation domain, read the Java settlement code, shadow on-call before carrying the pager, ship something small). Tailoring it to the posting and to his real strengths is good. The rental summary has nothing to do with it and must not appear; he must not claim payments or Java experience he does not have.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says it cannot answer without more information.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Claims payments, ledger or production Java experience while describing the plan.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Drags in the rental summary (the flat, the lease, rent, moving house).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "Sarayu",
+              "lock-in",
+              "38,500",
+              "tenancy"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Tailoring the plan to the posting (ledger write path, reconciliation break rate, Go and Java).",
+          "Mentioning résumé-backed strengths he would lean on."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-026",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Are you carrying a pager today? How often does your turn come round?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-conflict",
+      "pi_state": "A",
+      "condition": "conflict_stale",
+      "pi_condition": "profile_conflicting_ref",
+      "category": "oncall_old_cv",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The current résumé says primary on-call for the dispatch domain one week in five. An older CV export in the reference files (dated 18 January 2024) says secondary on-call, one week in four; it is out of date. The posting's rota (one week in six) is the role's, not his. Spoken naturally in the first person, never \"according to my notes\" or \"my résumé says\".",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F20",
+            "text": "He is primary on-call for the dispatch domain one week in five.",
+            "answer_needles": [
+              "one week in five",
+              "one in five",
+              "every five weeks",
+              "every fifth week",
+              "1 in 5",
+              "five weeks",
+              "week in five",
+              "out of five",
+              "fifth week",
+              "1-in-5",
+              "one-in-five"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F20",
+            "text": "Incident commander for 9 Sev-1 and Sev-2 incidents since April 2024."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the old CV rota: secondary on-call, one week in four.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-OLD-RESUME#F5",
+            "answer_needles": [
+              "one week in four",
+              "one in four",
+              "every four weeks",
+              "every fourth week",
+              "secondary on-call"
+            ]
+          },
+          {
+            "text": "Gives the posting's rota (one week in six) as his own.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "PI-A-RESUME",
+          "LFW-REF-A-OLD-RESUME"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "On-call rota",
+            "sources": [
+              "PI-A-RESUME",
+              "LFW-REF-A-OLD-RESUME"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-027",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "they're asking whether the postgres migration actually finished and what it saves per year. numbers please",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-conflict",
+      "pi_state": "A",
+      "condition": "conflict_stale",
+      "pi_condition": "profile_conflicting_ref",
+      "category": "migration_old_cv",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Current résumé: Marrowgate finished (one 11-minute read-only window, no data loss, no rollback) and database spend went from USD 18,400 to USD 12,700 a month, 31% lower; that is USD 5,700 a month, USD 68,400 a year. The older CV export says the migration is in progress, 2.1 TB in 380 tables, with an expected saving of about 25%; those are out of date.",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F29",
+            "text": "The cutover is done: one 11-minute read-only window, no data loss, no rollback.",
+            "answer_needles": [
+              "11-minute",
+              "11 minute",
+              "eleven-minute",
+              "eleven minute",
+              "11 min",
+              "finished",
+              "completed",
+              "done"
+            ]
+          },
+          {
+            "fact": "PI-A-RESUME#F30",
+            "text": "Database spend fell from USD 18,400 to USD 12,700 a month: USD 68,400 a year.",
+            "answer_needles": [
+              "68,400",
+              "68400",
+              "68.4",
+              "68k",
+              "about 68",
+              "nearly 70",
+              "almost 70"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F27",
+            "text": "2.3 TB in 410 tables across 6 shards."
+          },
+          {
+            "fact": "PI-A-RESUME#F26",
+            "text": "It ran from August 2023 to February 2024."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the migration is still in progress, or cites 2.1 TB or 380 tables.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-OLD-RESUME#F3",
+            "answer_needles": [
+              "2.1 TB",
+              "2.1TB",
+              "380 tables",
+              "still in progress"
+            ]
+          },
+          {
+            "text": "Cites the expected saving of about 25% from the old CV.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-OLD-RESUME#F4",
+            "answer_needles": [
+              "25%"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "PI-A-RESUME",
+          "LFW-REF-A-OLD-RESUME"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Marrowgate status, size and saving",
+            "sources": [
+              "PI-A-RESUME",
+              "LFW-REF-A-OLD-RESUME"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(18400 - 12700) * 12",
+          "result": 68400,
+          "unit": "USD per year",
+          "accepted_forms": [
+            "68,400",
+            "68400",
+            "68.4k",
+            "68.4 thousand",
+            "68k",
+            "about 68",
+            "roughly 68",
+            "nearly 70",
+            "almost 70"
+          ],
+          "inputs": {
+            "before_per_month": "PI-A-RESUME#F30",
+            "after_per_month": "PI-A-RESUME#F30"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-028",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So why are you thinking about leaving your current job?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "pi_condition": "no_pi",
+      "category": "reason_for_leaving_no_profile",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Nothing is loaded: no résumé, no posting, no notes. The answer must not invent an employer, a role or a reason for leaving, and must not reuse either synthetic candidate's facts. It should still help: a short, honest first-person opening about what he wants next that the candidate completes himself. It must not sound like a system reporting missing data.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Invents a specific reason for leaving, an employer, a role or a history.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses candidate A's facts although no profile is loaded.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          },
+          {
+            "text": "Uses candidate B's facts although no profile is loaded.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate answering the interviewer aloud, in the first person; no profile is loaded",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "A neutral scaffold (\"it is less about leaving than about what I want next: ...\") the candidate fills in."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-029",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Quick hypothetical. Two services both want to write to the same table. How do you sort out who owns it?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "pi_condition": "no_pi",
+      "category": "present_judgment",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "A professional reasoning question that needs no personal source: one service should own the table and the other should go through its API or consume its events; shared writes are the thing to remove. Any sound reasoning is acceptable. It must not invent a personal anecdote, employer or project to illustrate, and must not refuse.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Invents a personal anecdote, employer, project or metric to illustrate the point.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Declines to answer or says it has no information.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Uses candidate A's facts although no profile is loaded.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          },
+          {
+            "text": "Uses candidate B's facts although no profile is loaded.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate answering the interviewer aloud, in the first person; no profile is loaded",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "General engineering reasoning about single ownership, APIs, events and migration steps."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LFW-030",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Okay. You mentioned you lead a team. How big is it, and is what you do today mostly batch?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Give me the short version of your background."
+        },
+        {
+          "speaker": "user",
+          "text": "Sure. About eight years in data engineering, the last three at a logistics startup where I lead a team of three. Mostly Spark and Airflow, batch pipelines."
+        },
+        {
+          "speaker": "other",
+          "text": "And what's drawing you to this role?"
+        },
+        {
+          "speaker": "user",
+          "text": "Mainly that I want to move from batch into streaming. I've done one small Flink proof of concept and I liked it."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "pi_condition": "no_pi",
+      "category": "conversation_grounded",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No profile is loaded, but the candidate said the facts earlier in this conversation: he leads a team of three, and his work is mostly Spark and Airflow batch pipelines; he wants to move into streaming and has done one small Flink proof of concept. The answer repeats those consistently and adds nothing that was not said.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "He leads a team of three.",
+            "answer_needles": [
+              "three",
+              "team of 3",
+              "of 3"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "Today his work is mostly batch: Spark and Airflow pipelines.",
+            "answer_needles": [
+              "batch",
+              "Spark",
+              "Airflow"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "He wants to move into streaming and has done one small Flink proof of concept."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Adds details that were not said (company name, team growth, metrics, production streaming experience).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses candidate A's facts although no profile is loaded.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          },
+          {
+            "text": "Uses candidate B's facts although no profile is loaded.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate answering the interviewer aloud, in the first person; no profile is loaded",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

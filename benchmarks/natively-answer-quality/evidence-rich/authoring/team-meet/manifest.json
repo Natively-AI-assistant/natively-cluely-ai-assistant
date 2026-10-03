@@ -1,0 +1,1604 @@
+{
+  "mode": "team-meet",
+  "world": "Farrowgate Systems is a fictional software company. Its mobile team builds Mossgauge, an inspection app that utility field crews use on Android and iOS to record site visits, photograph defects and file reports. The pack describes release 3.0 in early October 2026: Sprint 41 (28 September to 9 October) is in its second week, the feature freeze is planned for Friday 9 October, release candidate 1 for Wednesday 14 October, a closed beta with three pilot customers from 15 to 28 October, store submission on Thursday 29 October and launch (start of a staged Android rollout) on Tuesday 3 November. THE USER is Ilka Vantongeren, Android lead and release captain for 3.0: she owns the Android workstream (since Monday 7 September 2026, taking over from Petra Hollowbrook), owns risks R-01 and R-07, makes the go/no-go call with the product manager and may halt or resume the rollout, but may not change the rollout stages without Halvard Niemczyk's approval. The other people in the meetings are colleagues: Halvard Niemczyk (engineering manager), Saoirse Lindqvang (product manager, keeps the decision log), Dorrin Ashgrove-Patel (iOS lead, store submission), Tobiah Kessenich (backend and sync), Yevgenia Marchetti-Oduya (report export), Lucinda Farthingale (photo annotation, sync cover), Corbin Thistlewood (QA lead) and Emeka Rautavaara (design). The live meeting in the items is the weekly team sync of Monday 5 October 2026. The decision log is the approved source of record; the Sprint 37 report (14 August 2026) is outdated; the channel export (1 to 8 September 2026) is informal chat that predates the decisions; the rollout gates note is an unapproved draft. Natively is never told who the user is except through the question or the heard conversation, so items that expect a first-person answer address the user by name.",
+  "files": [
+    {
+      "id": "TEAM-REF-SPRINT-STATUS-S41",
+      "mode": "team-meet",
+      "filename": "mossgauge-sprint41-status.md",
+      "source": "src/TEAM-REF-SPRINT-STATUS-S41.md",
+      "format": "md",
+      "document_type": "sprint_status",
+      "title": "Mossgauge 3.0 - Sprint 41 status (as of 2 October 2026)",
+      "status": "current",
+      "effective_date": "2026-10-02",
+      "authority": 80,
+      "supersedes": [
+        "TEAM-REF-SPRINT-REPORT-S37"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Sprint 41 runs from Monday 28 September to Friday 9 October 2026.",
+          "doc_needles": [
+            "28 September to Friday 9"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The status is as of Friday 2 October 2026, the end of week 1 of the sprint.",
+          "doc_needles": [
+            "Friday 2 October 2026"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Overall status is green with two amber workstreams (export and store submission prep); the team is on track for the feature freeze on Friday 9 October, and export is the only amber workstream that touches the freeze.",
+          "doc_needles": [
+            "on track for the feature freeze",
+            "freeze on Friday 9 October"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Sprint 41 has 84 points committed.",
+          "doc_needles": [
+            "Committed: 84 points"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "52 points are done in Sprint 41 as of 2 October.",
+          "doc_needles": [
+            "Done: 52 points"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "21 points are in progress and 11 points are not started.",
+          "doc_needles": [
+            "In progress: 21 points",
+            "Not started: 11 points"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The Android client workstream is owned by Ilka Vantongeren, is 85% complete, green, and due Thursday 8 October with no blocker.",
+          "doc_needles": [
+            "Ilka Vantongeren",
+            "85%"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The iOS client workstream is owned by Dorrin Ashgrove-Patel, is 90% complete, green, and due Thursday 8 October.",
+          "doc_needles": [
+            "90%"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Report export (PDF and CSV) is owned by Yevgenia Marchetti-Oduya, is 70% complete, amber, and due Wednesday 7 October.",
+          "doc_needles": [
+            "70%"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Export is blocked by defect MG-2291: the Inkspindle PDF renderer drops embedded fonts for site names in non-Latin scripts, which print as empty boxes.",
+          "doc_needles": [
+            "MG-2291",
+            "drops embedded fonts"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The Inkspindle licence problem is closed: finance approved the purchase order on Thursday 1 October.",
+          "doc_needles": [
+            "approved the Inkspindle purchase order"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Inkspindle has promised patch 4.2.1 for Tuesday 6 October.",
+          "doc_needles": [
+            "patch 4.2.1"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Yevgenia is preparing a workaround that bundles Noto fonts with the app, adding about 6 MB to the download.",
+          "doc_needles": [
+            "6 MB"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "CSV export is finished and has passed QA.",
+          "doc_needles": [
+            "CSV export is finished"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Sync API v3 is owned by Tobiah Kessenich, is 95% complete, green, and due Tuesday 6 October.",
+          "doc_needles": [
+            "95%"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The sprint status says the Sync API v3 production cut-over is booked for Tuesday 6 October.",
+          "doc_needles": [
+            "booked for Tuesday 6 October"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Photo annotation, owned by Lucinda Farthingale, is 100% complete and was closed on Wednesday 30 September.",
+          "doc_needles": [
+            "Closed Wednesday 30 September"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Regression and release QA is owned by Corbin Thistlewood, is 55% complete, green, and due Friday 9 October.",
+          "doc_needles": [
+            "55%"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Store submission prep is owned by Dorrin Ashgrove-Patel, is 30% complete, amber, due Thursday 29 October, and is blocked because the Play Data safety form is waiting on the updated third-party SDK list from Tobiah.",
+          "doc_needles": [
+            "30%",
+            "Play Data safety form"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "There are no open P0 defects on either platform or the backend.",
+          "doc_needles": [
+            "Open P0 defects: none"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Open P1 defects: 4 on Android, 2 on iOS and 1 on the backend (7 in total).",
+          "doc_needles": [
+            "4 on Android, 2 on iOS"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Crash-free sessions on beta build b6 since it reached the beta track (an early figure, not yet seven days) are 99.2% on Android.",
+          "doc_needles": [
+            "99.2%"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Crash-free sessions on beta build b6 since it reached the beta track (an early figure, not yet seven days) are 99.6% on iOS.",
+          "doc_needles": [
+            "99.6%"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "MG-2240, the camera-permission resume crash, is fixed and shipped in beta build b6 on Thursday 1 October.",
+          "doc_needles": [
+            "shipped in b6"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Tobiah Kessenich is on leave from Monday 12 October and back on Monday 19 October.",
+          "doc_needles": [
+            "leave from Monday 12 October"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "Sprint 42 runs from Monday 12 October to Friday 23 October and covers release candidate support and the closed beta.",
+          "doc_needles": [
+            "Sprint 42 runs"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "The launch date on the roadmap is unchanged.",
+          "doc_needles": [
+            "roadmap is unchanged"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "Sprint 40 closed at 78 of 81 points.",
+          "doc_needles": [
+            "78 of 81"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "The two remaining Android crash clusters are the sync worker running out of memory on low-RAM devices and the map tile cache; fixes are planned for beta build b7.",
+          "doc_needles": [
+            "map tile cache",
+            "planned for beta build b7"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "The full regression pass before the freeze starts on Wednesday 7 October.",
+          "doc_needles": [
+            "full regression pass"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "The Sprint 41 review and demo is on Friday 9 October at 15:00.",
+          "doc_needles": [
+            "at 15:00"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F7",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "Ilka Vantongeren",
+          "other_value": "Petra Hollowbrook",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "Friday 9 October",
+          "other_value": "Friday 18 September",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F9",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "70%",
+          "other_value": "20%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F9",
+          "with_file": "TEAM-REF-MEETING-NOTES-0928",
+          "this_value": "70%",
+          "other_value": "45%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "TEAM-REF-MEETING-NOTES-0928",
+          "this_value": "approved the Inkspindle purchase order",
+          "other_value": "waiting for finance approval",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F22",
+          "with_file": "TEAM-REF-MEETING-NOTES-0928",
+          "this_value": "99.2%",
+          "other_value": "98.9%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "TEAM-REF-RISK-REGISTER",
+          "this_value": "booked for Tuesday 6 October",
+          "other_value": "cut-over planned for Thursday 8 October",
+          "resolution": "unresolved"
+        }
+      ],
+      "must_not_infer": [
+        "Nothing here says the Android workstream will certainly meet the crash-free bar; it is 0.3 points short on beta build b6.",
+        "Nothing here says what happens if export misses its date; the contingency is in the risk register.",
+        "The status of 2 October does not say whether Tobiah has since sent the SDK list.",
+        "Nothing here mentions legal review, licence cost, or languages of the release notes."
+      ]
+    },
+    {
+      "id": "TEAM-REF-ROADMAP-V4",
+      "mode": "team-meet",
+      "filename": "Mossgauge_3.0_Roadmap_v4.pdf",
+      "source": "src/TEAM-REF-ROADMAP-V4.md",
+      "format": "pdf",
+      "document_type": "roadmap",
+      "title": "Mossgauge 3.0 Roadmap, version 4",
+      "status": "current",
+      "effective_date": "2026-09-14",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Roadmap version 4 was approved on Monday 14 September 2026 by Halvard Niemczyk and Saoirse Lindqvang and supersedes version 3 of 20 July 2026.",
+          "doc_needles": [
+            "Approved Monday 14 September 2026",
+            "Supersedes version 3"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "At the start of September the app had roughly 48,000 active devices: 31,000 on Android and 17,000 on iOS.",
+          "doc_needles": [
+            "48,000 active devices",
+            "31,000 on Android",
+            "17,000 on iOS"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Dark theme ships in 3.0, follows the system setting on both platforms, and has no in-app switch.",
+          "doc_needles": [
+            "No in-app switch"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Milestone M2, feature freeze, is planned for Friday 9 October.",
+          "doc_needles": [
+            "Friday 9 October"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Milestone M3, release candidate 1, is planned for Wednesday 14 October.",
+          "doc_needles": [
+            "M3 Release candidate 1"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Milestone M4, the closed beta with three pilot customers, runs from Thursday 15 October to Wednesday 28 October.",
+          "doc_needles": [
+            "15 October to Wednesday 28 October",
+            "three pilot customers"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Milestone M5, store submission to both stores, is planned for Thursday 29 October.",
+          "doc_needles": [
+            "Thursday 29 October"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Milestone M6, launch (rollout begins), is planned for Tuesday 3 November.",
+          "doc_needles": [
+            "Tuesday 3 November"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Milestone M7, maintenance release 3.0.1, is planned for Tuesday 1 December.",
+          "doc_needles": [
+            "Tuesday 1 December"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Three working days are allowed for store review between submission and launch; if review takes longer, launch moves day for day.",
+          "doc_needles": [
+            "three working days"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Candidates for 3.1 (target February 2027, not committed) are an Android tablet layout, saved export templates and a supervisor sign-off flow.",
+          "doc_needles": [
+            "February 2027"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Ilka Vantongeren is the Android lead and release captain.",
+          "doc_needles": [
+            "Android lead and release captain"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Version 4 moved launch out by two weeks and feature freeze by three weeks after the 9 September scope review, and added the maintenance release.",
+          "doc_needles": [
+            "moved out by two weeks"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "The decision log is the source of record for what is in and out of the release; the roadmap lists themes only.",
+          "doc_needles": [
+            "source of record"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Photo annotation ships on phone and iPad.",
+          "doc_needles": [
+            "Phone and iPad"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Halvard chairs the weekly release review on Wednesdays; the weekly team sync is on Mondays.",
+          "doc_needles": [
+            "weekly release review on Wednesdays"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Milestone M1, design complete, was done on Thursday 27 August.",
+          "doc_needles": [
+            "Thursday 27 August"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Sync API v3 must be running in production before the closed beta starts.",
+          "doc_needles": [
+            "before the closed beta starts"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Pricing, customer contracts and the supervisor web console are not part of this roadmap.",
+          "doc_needles": [
+            "supervisor web console"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F4",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "Friday 9 October",
+          "other_value": "Friday 18 September",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F8",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "Tuesday 3 November",
+          "other_value": "Tuesday 20 October",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The roadmap gives planned dates only; it does not say whether the team is currently on track.",
+        "It does not give the date on which the rollout reaches every device; that has to be derived from the stage durations in the decision log.",
+        "It does not list export formats, tag types, the crash-free figure or rollout stages; those are in the decision log.",
+        "Launch on 3 November depends on store review; nothing here guarantees the date."
+      ]
+    },
+    {
+      "id": "TEAM-REF-DECISION-LOG",
+      "mode": "team-meet",
+      "filename": "mossgauge-decision-log.md",
+      "source": "src/TEAM-REF-DECISION-LOG.md",
+      "format": "md",
+      "document_type": "decision_log",
+      "title": "Mossgauge 3.0 decision log",
+      "status": "current",
+      "effective_date": "2026-09-30",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The decision log is maintained by Saoirse Lindqvang and was last updated on Wednesday 30 September 2026.",
+          "doc_needles": [
+            "Last updated Wednesday 30 September 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "D-011: 3.0 clients talk only to Sync API v3; the v2 endpoints stay up for 2.x clients until at least the end of January 2027.",
+          "doc_needles": [
+            "end of January 2027"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "D-012: PDF export uses the Inkspindle renderer on both platforms; rendering HTML to PDF with each platform's print engine was rejected because page breaks differed; the licence is annual and held by Product.",
+          "doc_needles": [
+            "page breaks differed",
+            "licence is annual"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "D-013: the asset tag scanner reads QR codes and Code 128 barcodes; Data Matrix tags are deferred.",
+          "doc_needles": [
+            "Code 128",
+            "Data Matrix tags are deferred"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "D-014: 3.0 supports Android 10 (API level 29) and later and iOS 16 and later.",
+          "doc_needles": [
+            "Android 10 (API level 29)",
+            "iOS 16 and later"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "D-014: at the time of the decision 3.8% of active Android devices and 2.1% of active iOS devices were below the new minimum.",
+          "doc_needles": [
+            "3.8%",
+            "2.1%"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "D-014: iPad gets an adapted layout; Android tablets run the phone layout in 3.0, and a dedicated tablet layout is a candidate for 3.1.",
+          "doc_needles": [
+            "iPad gets an adapted layout",
+            "run the phone layout"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "D-015: Ilka Vantongeren owns the Android workstream from Monday 7 September 2026 and is the release captain for 3.0.",
+          "doc_needles": [
+            "owns the Android workstream",
+            "Monday 7 September"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "D-016 (decided Wednesday 9 September 2026): offline mode is cut from 3.0 and moved to 3.1.",
+          "doc_needles": [
+            "Offline mode is cut from 3.0",
+            "moved to 3.1"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "D-016: the reason is that conflict handling in Sync API v3 is not ready for edits made without a connection (five more weeks of work); crews keep the 2.x behaviour, where an inspection opens without signal only if it was loaded earlier in the same session.",
+          "doc_needles": [
+            "five more weeks",
+            "loaded earlier in the same session"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "D-017: 3.0 exports inspection reports as PDF and CSV only; XLSX is not in 3.0 and will be looked at again for 3.1.",
+          "doc_needles": [
+            "PDF and CSV only",
+            "XLSX is not in 3.0"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "D-017: an export covers one inspection or a batch of up to 50 inspections.",
+          "doc_needles": [
+            "up to 50 inspections"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "D-017: exports are generated on the device and shared through the system share sheet; there is no emailed export from the server in 3.0.",
+          "doc_needles": [
+            "system share sheet"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "D-018: the crash-free bar for 3.0 is 99.5% crash-free sessions on each platform, measured over the trailing seven days on the build being judged.",
+          "doc_needles": [
+            "99.5%"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "D-019: a build can be declared a release candidate only with zero open P0 defects and no more than three open P1 defects in total across Android, iOS and the backend; P2 defects do not block.",
+          "doc_needles": [
+            "no more than three open P1"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "D-020: Android goes out as a staged rollout: 5% of devices for 3 days, 25% for 4 days, 50% for 7 days, then 100%.",
+          "doc_needles": [
+            "5% of Android devices",
+            "25% for 4 days",
+            "50% for 7 days"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "D-020: iOS uses the App Store phased release over seven days.",
+          "doc_needles": [
+            "phased release over seven days"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "D-020: the rollout is halted if crash-free sessions on the release build fall below 99.1% in any stage, or if any P0 defect is opened.",
+          "doc_needles": [
+            "99.1%"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "D-020: the release captain may halt and resume the rollout, but changing the stage sizes or durations needs approval from Halvard Niemczyk at the release review.",
+          "doc_needles": [
+            "needs approval from Halvard Niemczyk",
+            "may halt and resume"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "D-020: a full release to every user on launch day was considered and rejected.",
+          "doc_needles": [
+            "considered and rejected"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "D-020: the go/no-go call is made on Monday 2 November by the release captain together with the product manager.",
+          "doc_needles": [
+            "Monday 2 November"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "D-021: the closed beta runs with three pilot customers: Halden Valley Water, Corrimount Gas Networks and Tarnbrook Power.",
+          "doc_needles": [
+            "Halden Valley Water",
+            "Corrimount Gas Networks",
+            "Tarnbrook Power"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "D-021: a fourth customer, Ostwick Rail Maintenance, declined because of its own change freeze; each pilot customer nominates up to 25 crew members.",
+          "doc_needles": [
+            "Ostwick Rail Maintenance",
+            "up to 25 crew members"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "D-022: an inspection can hold up to 12 annotated photos in 3.0, stored at a maximum of 2048 pixels on the long edge.",
+          "doc_needles": [
+            "12 annotated photos"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Proposals raised in chat or in draft documents are not decisions until they are entered in the log.",
+          "doc_needles": [
+            "not decisions until"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "D-020: a rollout stage advances only if the crash-free bar in D-018 is met at the end of the stage.",
+          "doc_needles": [
+            "A stage advances only"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "D-014: devices on older systems stay on the 2.x line, which receives security fixes only.",
+          "doc_needles": [
+            "security fixes only"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F5",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "Android 10 (API level 29)",
+          "other_value": "Android 9",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "iOS 16 and later",
+          "other_value": "iOS 15",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F8",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "owns the Android workstream",
+          "other_value": "Petra Hollowbrook",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "PDF and CSV only",
+          "other_value": "PDF, CSV and XLSX",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "TEAM-REF-CHAT-EXPORT",
+          "this_value": "XLSX is not in 3.0",
+          "other_value": "XLSX is a must for 3.0",
+          "resolution": "authoritative_wins"
+        },
+        {
+          "fact": "F14",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "99.5%",
+          "other_value": "99.0%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F14",
+          "with_file": "TEAM-REF-ROLLOUT-GATES-DRAFT",
+          "this_value": "99.5%",
+          "other_value": "99.7%",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F14",
+          "with_file": "TEAM-REF-CHAT-EXPORT",
+          "this_value": "99.5%",
+          "other_value": "99.9%",
+          "resolution": "authoritative_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "TEAM-REF-SPRINT-REPORT-S37",
+          "this_value": "5% of Android devices",
+          "other_value": "full release to all users",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "TEAM-REF-ROLLOUT-GATES-DRAFT",
+          "this_value": "25% for 4 days",
+          "other_value": "40%",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "TEAM-REF-CHAT-EXPORT",
+          "this_value": "5% of Android devices",
+          "other_value": "100% on day one",
+          "resolution": "authoritative_wins"
+        },
+        {
+          "fact": "F18",
+          "with_file": "TEAM-REF-ROLLOUT-GATES-DRAFT",
+          "this_value": "99.1%",
+          "other_value": "99.4%",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F24",
+          "with_file": "TEAM-REF-CHAT-EXPORT",
+          "this_value": "12 annotated photos",
+          "other_value": "8 photos per inspection",
+          "resolution": "authoritative_wins"
+        }
+      ],
+      "must_not_infer": [
+        "Nothing here gives the cost of the Inkspindle licence.",
+        "Nothing here says the release captain may change the rollout stages alone; that needs Halvard Niemczyk's approval at the release review.",
+        "Nothing here gates the rollout on ANR rate or sync errors; those appear only in an unapproved draft.",
+        "The log does not say whether legal has reviewed the store listings, or which languages the release notes use.",
+        "XLSX being looked at again for 3.1 is not a commitment to ship it in 3.1."
+      ]
+    },
+    {
+      "id": "TEAM-REF-RISK-REGISTER",
+      "mode": "team-meet",
+      "filename": "Mossgauge_3.0_risk_register.csv",
+      "source": "src/TEAM-REF-RISK-REGISTER.csv",
+      "format": "csv",
+      "document_type": "risk_register",
+      "title": "Mossgauge 3.0 risk register (reviewed 2 October 2026)",
+      "status": "current",
+      "effective_date": "2026-10-02",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "R-01, Android crash-free sessions below the release bar at release candidate, has likelihood 4, impact 4, score 16 (the highest in the register) and is owned by Ilka Vantongeren.",
+          "doc_needles": [
+            "R-01",
+            "4,4,16"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "R-01 contingency: hold the start of the Android rollout by one week while iOS launches on schedule.",
+          "doc_needles": [
+            "by one week"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "R-02, PDF export font defect MG-2291 not fixed before feature freeze, has score 12 and is owned by Yevgenia Marchetti-Oduya.",
+          "doc_needles": [
+            "R-02",
+            "3,4,12"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "R-02 contingency: launch with CSV export only and deliver PDF export in maintenance release 3.0.1.",
+          "doc_needles": [
+            "Launch with CSV export only"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "R-02 trigger: no fix merged by end of Wednesday 7 October.",
+          "doc_needles": [
+            "end of Wednesday 7 October"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "R-02 mitigation: Inkspindle patch 4.2.1 and, in parallel, a workaround that bundles Noto fonts with the app.",
+          "doc_needles": [
+            "bundles Noto fonts"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "R-03, store review delayed or build rejected, has score 8, is owned by Dorrin Ashgrove-Patel, is mitigated by an expedited-review request, and its contingency is that launch moves day for day.",
+          "doc_needles": [
+            "R-03",
+            "expedited-review request"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The risk register says the Sync API v3 production cut-over is planned for Thursday 8 October.",
+          "doc_needles": [
+            "cut-over planned for Thursday 8 October"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "R-04 mitigation: dual-write to v2 and v3 for 14 days after the cut-over.",
+          "doc_needles": [
+            "for 14 days"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "R-04 contingency: roll back to the v2 endpoints within 30 minutes.",
+          "doc_needles": [
+            "within 30 minutes"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "R-06 mitigation: Lucinda Farthingale shadows the sync on-call from Monday 5 October and covers during Tobiah's leave.",
+          "doc_needles": [
+            "Lucinda Farthingale shadows"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "R-07 mitigation: cap the sync batch at 200 records on devices with under 3 GB of RAM.",
+          "doc_needles": [
+            "200 records"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "R-08, regression suite runtime delaying release candidate sign-off, is owned by Corbin Thistlewood and mitigated by running the suite in parallel on four device farms.",
+          "doc_needles": [
+            "four device farms"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "R-09 is closed: the Inkspindle purchase order is approved and the licence is valid to 31 July 2027.",
+          "doc_needles": [
+            "31 July 2027"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "R-10, Play Data safety form incomplete at store submission: the contingency is to submit iOS first and Android when the form is complete; the trigger is the form not being complete by Monday 26 October.",
+          "doc_needles": [
+            "Submit iOS first",
+            "Monday 26 October"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "R-05 trigger: fewer than 10 active crew members at a customer in the first week of the closed beta.",
+          "doc_needles": [
+            "Fewer than 10 active crew"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Every row of the register was last reviewed on 2 October 2026.",
+          "doc_needles": [
+            "2 Oct 2026"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "R-04, Sync API v3 production cut-over corrupting or duplicating records for 2.x clients, has score 10 and is owned by Tobiah Kessenich.",
+          "doc_needles": [
+            "R-04",
+            "2,5,10"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "R-06, single point of knowledge on sync while Tobiah is on leave in release candidate week, has score 10 and is owned by Halvard Niemczyk; Tobiah is reachable by phone for P0 defects only.",
+          "doc_needles": [
+            "R-06",
+            "5,2,10"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "R-05 contingency: extend the beta for that customer only; the launch date holds.",
+          "doc_needles": [
+            "Extend the beta for that customer"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "R-07 contingency: disable background sync on the affected models.",
+          "doc_needles": [
+            "Disable background sync"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "R-07, low-memory Android 10 devices running out of memory in the sync worker, has score 9, is owned by Ilka Vantongeren, and its trigger is more than 1 in 200 sessions on those models ending in a crash.",
+          "doc_needles": [
+            "R-07",
+            "1 in 200 sessions"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F8",
+          "with_file": "TEAM-REF-SPRINT-STATUS-S41",
+          "this_value": "cut-over planned for Thursday 8 October",
+          "other_value": "booked for Tuesday 6 October",
+          "resolution": "unresolved"
+        }
+      ],
+      "must_not_infer": [
+        "A contingency is a plan for if the trigger fires; it is not a decision that has been taken.",
+        "The register does not say that any trigger has fired.",
+        "Nothing here says who decides whether to invoke the CSV-only contingency."
+      ]
+    },
+    {
+      "id": "TEAM-REF-MEETING-NOTES-0928",
+      "mode": "team-meet",
+      "filename": "weekly-sync-notes-2026-09-28.txt",
+      "source": "src/TEAM-REF-MEETING-NOTES-0928.txt",
+      "format": "txt",
+      "document_type": "meeting_notes",
+      "title": "Mossgauge weekly team sync notes, 28 September 2026",
+      "status": "current",
+      "effective_date": "2026-09-28",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The notes are from the weekly team sync of Monday 28 September 2026 and were taken by Corbin Thistlewood.",
+          "doc_needles": [
+            "Monday 28 September 2026",
+            "Notes taken by: Corbin Thistlewood"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Sprint 40 closed at 78 of 81 points.",
+          "doc_needles": [
+            "78 of 81"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "On 28 September Yevgenia reported export at 45% complete.",
+          "doc_needles": [
+            "45%"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "On 28 September PDF work was stopped because the Inkspindle licence purchase order was still waiting for finance approval.",
+          "doc_needles": [
+            "waiting for finance approval"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "On 28 September Ilka reported Android crash-free sessions of 98.9% on beta build b5.",
+          "doc_needles": [
+            "98.9%"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The largest Android crash cluster on 28 September was the camera-permission resume crash MG-2240, and Ilka took the fix.",
+          "doc_needles": [
+            "MG-2240",
+            "Ilka took the fix"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The full regression suite takes 6 hours 40 minutes; Corbin aims to get it under 4 hours by splitting it across device farms.",
+          "doc_needles": [
+            "6 hours 40 minutes",
+            "under 4 hours"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The retro for Sprint 41 will be on Monday 12 October at 10:00, before Sprint 42 planning.",
+          "doc_needles": [
+            "Monday 12 October at 10:00"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Emeka's mock-ups for an Android tablet layout are parked until 3.1 planning.",
+          "doc_needles": [
+            "parked until 3.1 planning"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Action A1: Ilka Vantongeren fixes MG-2240, the camera-permission resume crash, due Thursday 1 October.",
+          "doc_needles": [
+            "due Thursday 1 October"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Action A2: Yevgenia Marchetti-Oduya chases finance for the Inkspindle purchase order, due Wednesday 30 September.",
+          "doc_needles": [
+            "due Wednesday 30 September"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Action A3: Tobiah Kessenich sends the updated SDK list to Dorrin, due Monday 5 October.",
+          "doc_needles": [
+            "due Monday 5 October"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Action A4: Corbin Thistlewood gets the regression suite under 4 hours, due Thursday 8 October.",
+          "doc_needles": [
+            "A4 - Corbin Thistlewood"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Action A5: Saoirse Lindqvang sends the beta invitation list to the pilot customers, due Thursday 8 October.",
+          "doc_needles": [
+            "A5 - Saoirse Lindqvang"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Action A6: Dorrin Ashgrove-Patel prepares store listing screenshots for both stores, due Thursday 15 October.",
+          "doc_needles": [
+            "due Thursday 15 October"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Action A7: Halvard Niemczyk confirms cover for Tobiah's leave, due Wednesday 7 October.",
+          "doc_needles": [
+            "A7 - Halvard Niemczyk"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "The next weekly sync is on Monday 5 October 2026 at 14:00.",
+          "doc_needles": [
+            "Next sync: Monday 5 October"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Sprint 41 was planned at 84 points.",
+          "doc_needles": [
+            "84 points"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Lucinda finishes photo annotation and then picks up sync on-call shadowing.",
+          "doc_needles": [
+            "sync on-call shadowing"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "The Play Data safety form needs an up-to-date list of third-party SDKs, which Tobiah has because the sync client pulled in two new libraries.",
+          "doc_needles": [
+            "two new libraries"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Saoirse confirmed that the pilot group is settled; invitations go out once the crews are nominated.",
+          "doc_needles": [
+            "pilot group is settled"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F3",
+          "with_file": "TEAM-REF-SPRINT-STATUS-S41",
+          "this_value": "45%",
+          "other_value": "70%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "TEAM-REF-SPRINT-STATUS-S41",
+          "this_value": "waiting for finance approval",
+          "other_value": "approved the Inkspindle purchase order",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "TEAM-REF-SPRINT-STATUS-S41",
+          "this_value": "98.9%",
+          "other_value": "99.2%",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The notes record the position on 28 September; the sprint status of 2 October is newer wherever the two differ (export percentage, export blocker, Android crash-free figure).",
+        "The notes do not say whether any action was completed.",
+        "No notes rota is recorded; the notes only say who took them on 28 September.",
+        "Nobody is assigned to demo or walk a pilot customer through the beta build."
+      ]
+    },
+    {
+      "id": "TEAM-REF-SPRINT-REPORT-S37",
+      "mode": "team-meet",
+      "filename": "Mossgauge_Sprint37_Report.pdf",
+      "source": "src/TEAM-REF-SPRINT-REPORT-S37.md",
+      "format": "pdf",
+      "document_type": "sprint_report",
+      "title": "Mossgauge 3.0 - Sprint 37 report (14 August 2026)",
+      "status": "outdated",
+      "effective_date": "2026-08-14",
+      "authority": 40,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The Sprint 37 report is dated Friday 14 August 2026 and covers 3 to 14 August 2026.",
+          "doc_needles": [
+            "Report date: Friday 14 August 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Sprint 37 finished at 58 of 76 committed points.",
+          "doc_needles": [
+            "58 of 76"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "In August the plan of record had the feature freeze on Friday 18 September.",
+          "doc_needles": [
+            "Friday 18 September"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "In August the plan of record had launch on Tuesday 20 October.",
+          "doc_needles": [
+            "Tuesday 20 October"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "In August the Android client was owned by Petra Hollowbrook and was 42% complete.",
+          "doc_needles": [
+            "Petra Hollowbrook",
+            "42%"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "In August the iOS client, owned by Dorrin Ashgrove-Patel, was 58% complete.",
+          "doc_needles": [
+            "58%"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "In August report export covered PDF, CSV and XLSX, was owned by Yevgenia Marchetti-Oduya and was 20% complete.",
+          "doc_needles": [
+            "PDF, CSV and XLSX",
+            "20%"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "In August Sync API v3, owned by Tobiah Kessenich, was 65% complete.",
+          "doc_needles": [
+            "65%"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "In August photo annotation was with Emeka Rautavaara at 48% (design and prototype).",
+          "doc_needles": [
+            "48%"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "In August the minimum systems were Android 9 and iOS 15.",
+          "doc_needles": [
+            "Android 9",
+            "iOS 15"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "In August the stability bar was 99.0% crash-free sessions.",
+          "doc_needles": [
+            "99.0%"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "In August the release approach was a full release to all users on launch day.",
+          "doc_needles": [
+            "full release to all users"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "In August there were 11 open P1 defects (Android 6, iOS 3, backend 2).",
+          "doc_needles": [
+            "Open P1: 11"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "In August asset tag scanning was at 15%.",
+          "doc_needles": [
+            "15%"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "In August the Android team was one engineer short until September.",
+          "doc_needles": [
+            "one engineer short"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Sprint 38 ran from Monday 17 August to Friday 28 August.",
+          "doc_needles": [
+            "Sprint 38 runs"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F5",
+          "with_file": "TEAM-REF-SPRINT-STATUS-S41",
+          "this_value": "Petra Hollowbrook",
+          "other_value": "Ilka Vantongeren",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "TEAM-REF-ROADMAP-V4",
+          "this_value": "Friday 18 September",
+          "other_value": "Friday 9 October",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "TEAM-REF-ROADMAP-V4",
+          "this_value": "Tuesday 20 October",
+          "other_value": "Tuesday 3 November",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F7",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "PDF, CSV and XLSX",
+          "other_value": "PDF and CSV only",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F10",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "Android 9",
+          "other_value": "Android 10 (API level 29)",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "99.0%",
+          "other_value": "99.5%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F12",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "full release to all users",
+          "other_value": "5% of Android devices",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "Everything in this report describes mid-August 2026 and has been overtaken by the roadmap version 4, the decision log and the Sprint 41 status."
+      ]
+    },
+    {
+      "id": "TEAM-REF-CHAT-EXPORT",
+      "mode": "team-meet",
+      "filename": "mossgauge-release-channel-export.txt",
+      "source": "src/TEAM-REF-CHAT-EXPORT.txt",
+      "format": "txt",
+      "document_type": "chat_export",
+      "title": "#mossgauge-release channel export, 1 to 8 September 2026",
+      "status": "informal",
+      "effective_date": "2026-09-08",
+      "authority": 10,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The channel export was made by Saoirse Lindqvang on Tuesday 8 September 2026 and covers 1 to 8 September 2026.",
+          "doc_needles": [
+            "Exported by Saoirse Lindqvang"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "In chat on 1 September Emeka Rautavaara proposed getting XLSX export into 3.0 because Halden asked for spreadsheets, and called it a must.",
+          "doc_needles": [
+            "XLSX in for 3.0",
+            "XLSX is a must for 3.0"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Yevgenia estimated three extra weeks for XLSX.",
+          "doc_needles": [
+            "three extra weeks"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Saoirse said the XLSX proposal would not be decided in chat and put it on the list for the scope review on the 9th.",
+          "doc_needles": [
+            "Not deciding in chat"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "In chat on 2 September Dorrin proposed skipping staging and going to 100% on day one, as for 2.4.",
+          "doc_needles": [
+            "100% on day one"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "In chat on 3 September Corbin half-jokingly suggested a 99.9% crash-free bar.",
+          "doc_needles": [
+            "99.9%"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "On 2 September Halvard welcomed Ilka, who takes over Android from Monday.",
+          "doc_needles": [
+            "takes over Android from Monday"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "On 3 September Lucinda asked whether 8 photos per inspection is enough.",
+          "doc_needles": [
+            "8 photos per inspection"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "On 7 September Dorrin asked to keep one more release on the oldest Android version; Halvard replied that the platform floor was decided on 26 August and would not be reopened.",
+          "doc_needles": [
+            "Platform floor was decided"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "On 4 September Saoirse said she raised the Inkspindle purchase order and that it was with finance.",
+          "doc_needles": [
+            "It's with finance"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The scope review agenda of 9 September was export formats, stability bar and launch dates; the rollout approach moved to the week after.",
+          "doc_needles": [
+            "Rollout approach moves"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F2",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "XLSX is a must for 3.0",
+          "other_value": "XLSX is not in 3.0",
+          "resolution": "authoritative_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "100% on day one",
+          "other_value": "5% of Android devices",
+          "resolution": "authoritative_wins"
+        },
+        {
+          "fact": "F6",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "99.9%",
+          "other_value": "99.5%",
+          "resolution": "authoritative_wins"
+        }
+      ],
+      "must_not_infer": [
+        "Nothing proposed in this chat is a decision; the decision log records what was decided afterwards."
+      ]
+    },
+    {
+      "id": "TEAM-REF-ROLLOUT-GATES-DRAFT",
+      "mode": "team-meet",
+      "filename": "Rollout_gates_v2_DRAFT.docx",
+      "source": "src/TEAM-REF-ROLLOUT-GATES-DRAFT.md",
+      "format": "docx",
+      "document_type": "proposal",
+      "title": "Rollout gates v2 - DRAFT (proposed for the 14 October 2026 release review)",
+      "status": "draft",
+      "effective_date": "2026-10-14",
+      "authority": 20,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The rollout gates v2 note is a draft for discussion and is not approved.",
+          "doc_needles": [
+            "DRAFT for discussion",
+            "Not approved"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The draft proposes Android stages of 10% for 2 days, 40% for 5 days, then everyone.",
+          "doc_needles": [
+            "10%",
+            "40%"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The draft proposes raising the crash-free sessions bar to 99.7% on each platform.",
+          "doc_needles": [
+            "99.7%"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The draft proposes halting the rollout if crash-free sessions fall below 99.4% at any stage.",
+          "doc_needles": [
+            "99.4%"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The draft proposes an ANR gate on Android: halt if the ANR rate goes above 0.3% of sessions.",
+          "doc_needles": [
+            "0.3% of sessions",
+            "ANR gate"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The draft proposes a sync error gate: halt if more than 1 in 500 sync attempts fail.",
+          "doc_needles": [
+            "1 in 500"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The draft estimates roughly one more week of Android stabilisation (judging by beta build b5) and two days of work for an ANR dashboard.",
+          "doc_needles": [
+            "two days of work"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "The draft proposes no change to the iOS phased release, the go/no-go meeting, or who can halt the rollout.",
+          "doc_needles": [
+            "What I am not proposing"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The draft itself says that until the release review accepts the changes, the decision log stands.",
+          "doc_needles": [
+            "the decision log stands"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Feedback so far: Dorrin supports fewer stages, Tobiah wants the sync error gate, Ilka has not yet reviewed the proposal.",
+          "doc_needles": [
+            "has not yet reviewed"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The draft was written by Corbin Thistlewood, circulated on Wednesday 30 September 2026 and is proposed for the release review on Wednesday 14 October 2026.",
+          "doc_needles": [
+            "release review on Wednesday 14 October"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F3",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "99.7%",
+          "other_value": "99.5%",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "99.4%",
+          "other_value": "99.1%",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F2",
+          "with_file": "TEAM-REF-DECISION-LOG",
+          "this_value": "40%",
+          "other_value": "25% for 4 days",
+          "resolution": "final_wins"
+        }
+      ],
+      "must_not_infer": [
+        "None of the proposed stages or gates is in force; the approved rules are in the decision log."
+      ]
+    }
+  ]
+}

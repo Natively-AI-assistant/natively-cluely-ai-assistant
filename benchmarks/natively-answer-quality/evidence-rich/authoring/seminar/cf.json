@@ -1,0 +1,476 @@
+{
+  "mode": "seminar",
+  "families": [
+    {
+      "family": "ER-CF-SEM-1",
+      "surface": "hotkey",
+      "speaker": "other",
+      "category": "external_validity",
+      "difficulty": "hard",
+      "question": "Has this been checked anywhere outside that one group of schools? A second site, an outside dataset, anything?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "seminar-cf-ext-yes",
+          "pi_state": "none",
+          "evidence_state": "paper_says_yes_with_number",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "The paper reports a second-site check, so the presenter says yes, with its scope: TERN was run without re-tuning on the Holmrigg College campus (12 units, 60 fault episodes), where it reached an F1 of 0.72 with a median delay of 47 minutes. It is one small site, lower than the 0.87 at home, and other climates and building types remain open.",
+            "required_facts": [
+              {
+                "fact": "SEM-REF-PAPER-FINAL~extyes#F23",
+                "text": "TERN was run without re-tuning on a second site, the Holmrigg College campus, and reached an F1 of 0.72 there.",
+                "answer_needles": [
+                  "0.72",
+                  ".72",
+                  "Holmrigg"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SEM-REF-PAPER-FINAL~extyes#F23",
+                "text": "12 units, 60 labelled fault episodes, 39 detected, median detection delay 47 minutes."
+              },
+              {
+                "fact": "SEM-REF-PAPER-FINAL~extyes#F1",
+                "text": "On the home estate's held-out buildings the F1 is 0.87."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says no second site or external dataset was evaluated.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Inflates the check: claims the same performance as on the home estate, several external sites, or validation in other climates or building types.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Presents the CrossEstate consortium's three-site figures or the Tolland corpus as the study's own external validation.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SEM-REF-PAPER-FINAL~extyes"
+            ],
+            "source_priority": [
+              "SEM-REF-PAPER-FINAL~extyes",
+              "SEM-REF-APPENDIX",
+              "SEM-REF-SLIDES",
+              "SEM-REF-RELATED-NOTES"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Adding that one small campus does not establish general transfer."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "seminar-full",
+          "pi_state": "none",
+          "evidence_state": "paper_says_no_listed_as_limitation",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "The paper lists this as a limitation, so the presenter says no: all data come from a single estate and TERN was not evaluated on a second estate or on any external dataset; how well it transfers is unknown.",
+            "required_facts": [
+              {
+                "fact": "SEM-REF-PAPER-FINAL#F23",
+                "text": "TERN was not evaluated on a second estate or on any external dataset; all data come from a single estate and transfer is unknown.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SEM-REF-RELATED-NOTES#F10",
+                "text": "Another group's detector lost F1 when moved to external sites (0.75 to 0.59), which is other people's evidence, not the study's."
+              },
+              {
+                "fact": "SEM-REF-RELATED-NOTES#F11",
+                "text": "A public corpus is noted as a candidate for an external check in a journal version."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Claims a second site, an external dataset or an independent replication was evaluated.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Presents the CrossEstate consortium's three-site figures, Corvane-Net's office campus or the Tolland corpus as the study's own external validation.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Asserts that the result will hold elsewhere.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SEM-REF-PAPER-FINAL"
+            ],
+            "source_priority": [
+              "SEM-REF-PAPER-FINAL",
+              "SEM-REF-SLIDES",
+              "SEM-REF-RELATED-NOTES"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Mentioning that an external check is intended as future work."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "seminar-cf-ext-conflict",
+          "pi_state": "none",
+          "evidence_state": "paper_and_appendix_conflict",
+          "condition": "conflict_stale",
+          "oracle": {
+            "expected_behavior_note": "Two current documents disagree: the paper's limitations say TERN was not evaluated on a second estate or any external dataset, while the supplementary material reports a second-site check at the Holmrigg College campus with an F1 of 0.72. The answer must not settle it one way: it should say the main paper treats the work as single-estate and that the supplement reports one small second-site run (F1 0.72), which should be treated as preliminary until the two are reconciled.",
+            "required_facts": [
+              {
+                "fact": "SEM-REF-PAPER-FINAL#F23",
+                "text": "The paper states that TERN was not evaluated on a second estate or on any external dataset.",
+                "answer_needles": []
+              },
+              {
+                "fact": "SEM-REF-APPENDIX~extcheck#F24",
+                "text": "The supplementary material reports a second-site check at the Holmrigg College campus with an F1 of 0.72.",
+                "answer_needles": [
+                  "0.72",
+                  ".72",
+                  "Holmrigg"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SEM-REF-APPENDIX~extcheck#F24",
+                "text": "12 units, 60 labelled fault episodes, 39 detected, median delay 47 minutes."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says flatly that nothing outside the estate was ever run, ignoring the supplement.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Presents the second-site figure as established external validation without noting that the paper itself lists the single estate as a limitation.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Presents another group's multi-site figures as the study's own.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+            "expected_action": "surface_conflict",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SEM-REF-PAPER-FINAL",
+              "SEM-REF-APPENDIX~extcheck"
+            ],
+            "source_priority": [
+              "SEM-REF-PAPER-FINAL",
+              "SEM-REF-APPENDIX~extcheck"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "whether TERN was evaluated on a second site",
+                "sources": [
+                  "SEM-REF-PAPER-FINAL",
+                  "SEM-REF-APPENDIX~extcheck"
+                ],
+                "resolution": "unresolved"
+              }
+            ],
+            "acceptable_inference": [
+              "Describing the second-site run as a small supplementary check rather than a headline result."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "D",
+          "evidence_config": "seminar-notes-only",
+          "pi_state": "none",
+          "evidence_state": "paper_not_loaded_only_related_work_notes",
+          "condition": "missing_evidence",
+          "oracle": {
+            "expected_behavior_note": "Only the related-work reading notes are loaded, and they hold other groups' results. Nothing loaded reports an external evaluation of the study's own method, so the presenter must not claim one and must not borrow the CrossEstate consortium's three-site figures. The honest reply is that it cannot be confirmed from what is to hand; the notes only mark a public corpus as a candidate for a future external check.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "SEM-REF-RELATED-NOTES#F11",
+                "text": "The Tolland Open AHU Corpus is noted as a candidate for an external check in a journal version; the conversion script is not written."
+              },
+              {
+                "fact": "SEM-REF-RELATED-NOTES#F10",
+                "text": "The CrossEstate study is another consortium's detector validated on three sites."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Claims the study's method was validated on a second site or an external dataset, with or without a number.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Presents the CrossEstate figures (0.75 at home, 0.59 on external sites) as the study's own.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says the method has been run on the Tolland corpus.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+            "expected_action": "decline_to_invent_stay_useful",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [
+              "SEM-REF-RELATED-NOTES"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Saying an external check on a public corpus is being considered for a later version.",
+              "Citing the CrossEstate result explicitly as another group's evidence that single-site numbers shrink elsewhere.",
+              "Saying that, as far as the notes to hand show, no external check has been run yet (they list one only as a candidate for a later version), without asserting it as a settled fact about the study."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    },
+    {
+      "family": "ER-CF-SEM-2",
+      "surface": "hotkey",
+      "speaker": "other",
+      "category": "headline_result",
+      "difficulty": "medium",
+      "question": "Give me the headline, then. How long does it take your system to notice a fault?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "seminar-full",
+          "pi_state": "none",
+          "evidence_state": "final_paper_and_draft_loaded",
+          "condition": "conflict_stale",
+          "oracle": {
+            "expected_behavior_note": "The presenter gives the final figure: a median detection delay of 34 minutes on the held-out buildings. The 48 minutes in the March draft abstract and the March export is superseded and is not offered.",
+            "required_facts": [
+              {
+                "fact": "SEM-REF-PAPER-FINAL#F3",
+                "text": "The median detection delay is 34 minutes.",
+                "answer_needles": [
+                  "34",
+                  "thirty-four",
+                  "thirty four"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SEM-REF-PAPER-FINAL#F6",
+                "text": "The rule set in use takes a median of 126 minutes."
+              },
+              {
+                "fact": "SEM-REF-PAPER-FINAL#F3",
+                "text": "The interquartile range is 21 to 58 minutes."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Gives 48 minutes, the draft figure, as the headline.",
+                "kind": "draft",
+                "fact": "SEM-REF-ABSTRACT-DRAFT#F3",
+                "answer_needles": [
+                  "48 min",
+                  "forty-eight"
+                ]
+              },
+              {
+                "text": "Gives Corvane-Net's 19 minutes or any other group's delay as the study's own.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+            "expected_action": "prefer_current_source",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SEM-REF-PAPER-FINAL"
+            ],
+            "source_priority": [
+              "SEM-REF-PAPER-FINAL",
+              "SEM-REF-RESULTS-TABLE",
+              "SEM-REF-SLIDES",
+              "SEM-REF-RESULTS-EXPORT-MARCH",
+              "SEM-REF-ABSTRACT-DRAFT"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "TERN median detection delay on the held-out buildings",
+                "sources": [
+                  "SEM-REF-PAPER-FINAL",
+                  "SEM-REF-RESULTS-TABLE",
+                  "SEM-REF-SLIDES",
+                  "SEM-REF-ABSTRACT-DRAFT",
+                  "SEM-REF-RESULTS-EXPORT-MARCH"
+                ],
+                "resolution": "final_wins"
+              }
+            ],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "seminar-draft-only",
+          "pi_state": "none",
+          "evidence_state": "draft_abstract_only",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "The only loaded source for the study's own delay is the draft abstract, which says 48 minutes and whose notes say the figures are from a March run and are expected to move. The presenter may give 48 minutes but must flag it as a preliminary draft figure to be confirmed against the final results, not state it as the final result.",
+            "required_facts": [
+              {
+                "fact": "SEM-REF-ABSTRACT-DRAFT#F3",
+                "text": "The draft abstract gives a median detection delay of 48 minutes.",
+                "answer_needles": [
+                  "48",
+                  "forty-eight",
+                  "forty eight"
+                ]
+              },
+              {
+                "fact": "SEM-REF-ABSTRACT-DRAFT#F5",
+                "text": "That figure is preliminary: it comes from the March run and was expected to change.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SEM-REF-ABSTRACT-DRAFT#F1",
+                "text": "The abstract is DRAFT v0.3 dated 20 March 2026."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "States 48 minutes as the final, confirmed result with no caveat.",
+                "kind": "draft",
+                "fact": "SEM-REF-ABSTRACT-DRAFT#F3"
+              },
+              {
+                "text": "States some other figure as the final result; nothing loaded gives one.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "34 min",
+                  "thirty-four"
+                ]
+              },
+              {
+                "text": "Gives Corvane-Net's 19 minutes or MineRule-V's hours as the study's own delay.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+            "expected_action": "answer_then_scope_authority",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SEM-REF-ABSTRACT-DRAFT"
+            ],
+            "source_priority": [
+              "SEM-REF-ABSTRACT-DRAFT",
+              "SEM-REF-RELATED-NOTES"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Offering to confirm the final figure from the paper."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "seminar-notes-only",
+          "pi_state": "none",
+          "evidence_state": "no_own_result_loaded",
+          "condition": "missing_evidence",
+          "oracle": {
+            "expected_behavior_note": "Only the related-work reading notes are loaded; they hold other groups' delays (Corvane-Net 19 minutes, MineRule-V 3.4 hours) and no figure for the study's own method. The presenter must not invent a delay and must not borrow another group's; the reply should say the exact figure needs to be read from the results.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "SEM-REF-RELATED-NOTES#F4",
+                "text": "The 19-minute figure in the notes is Corvane-Net's, reported by its authors on their own data."
+              },
+              {
+                "fact": "SEM-REF-RELATED-NOTES#F1",
+                "text": "None of the figures in the notes was measured on the study's data."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "States a detection delay for the study's own system.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "34 min",
+                  "48 min",
+                  "thirty-four",
+                  "forty-eight"
+                ]
+              },
+              {
+                "text": "Gives Corvane-Net's 19 minutes or MineRule-V's 3.4 hours as the study's own delay.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+            "expected_action": "decline_to_invent_stay_useful",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [
+              "SEM-REF-RELATED-NOTES"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Pointing to the results slide or paper for the exact figure."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    }
+  ]
+}

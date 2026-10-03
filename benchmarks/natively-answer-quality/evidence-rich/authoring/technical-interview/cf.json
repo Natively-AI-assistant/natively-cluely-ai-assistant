@@ -1,0 +1,641 @@
+{
+ "mode": "technical-interview",
+ "families": [
+  {
+   "family": "ER-CF-TI-1",
+   "surface": "hotkey",
+   "speaker": "other",
+   "category": "project_scale",
+   "difficulty": "hard",
+   "question": "What sort of scale did your service handle on a normal day? I mean typical volume, not only the peak.",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I'd like to go deeper on the project where you were the tech lead."
+    }
+   ],
+   "variants": [
+    {
+     "variant": "A",
+     "evidence_config": "ti-a-full",
+     "pi_state": "A",
+     "pi_condition": "resume_jd_relevant_ref",
+     "condition": "grounded_single",
+     "evidence_state": "profile_a_deepdive",
+     "oracle": {
+      "expected_behavior_note": "First person as Advik: on a typical weekday the pipeline carries about 620 million events, about 7,200 a second averaged over the day (13,000 to 15,000 through the working day); the peak is 41,000 a second. The typical-day figure is what was asked for.",
+      "required_facts": [
+       {
+        "fact": "TI-REF-A-PROJECT-DEEPDIVE#F8",
+        "text": "About 620 million events on a typical weekday (the same volume stated as a rate: about 7,200 events per second averaged over the day). Either form answers the question.",
+        "answer_needles": [
+         "620 million",
+         "620M",
+         "620 m",
+         "620,000,000",
+         "7,200",
+         "7200",
+         "7.2k",
+         "7.2 thousand",
+         "7.2 k"
+        ]
+       }
+      ],
+      "optional_facts": [
+       {
+        "fact": "TI-REF-A-PROJECT-DEEPDIVE#F9",
+        "text": "About 7,200 events per second averaged over a day."
+       },
+       {
+        "fact": "TI-REF-A-PROJECT-DEEPDIVE#F10",
+        "text": "13,000 to 15,000 per second through the working day."
+       },
+       {
+        "fact": "TI-REF-A-PROJECT-DEEPDIVE#F11",
+        "text": "Peak 41,000 per second."
+       },
+       {
+        "fact": "PI-A-RESUME#F6",
+        "text": "About 1,900 carriers."
+       }
+      ],
+      "forbidden_claims": [
+       {
+        "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+        "kind": "other_profile",
+        "fact": "PI-B-RESUME#F18",
+        "answer_needles": [
+         "Lumenquay",
+         "Fernlatch",
+         "Pebblekit",
+         "Dialbench",
+         "Velmonte",
+         "Ondaverde",
+         "Farolim"
+        ]
+       },
+       {
+        "text": "Gives only the peak, or multiplies the peak into a daily total.",
+        "kind": "fabrication",
+        "answer_needles": [
+         "3.5 billion",
+         "3.54 billion"
+        ]
+       },
+       {
+        "text": "Gives the booking-flow figures that belong to the other candidate.",
+        "kind": "fabrication",
+        "fact": "TI-REF-B-PROJECT-DEEPDIVE#F2",
+        "answer_needles": [
+         "52,000",
+         "booking sessions"
+        ]
+       }
+      ],
+      "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+      "expected_action": "answer_directly",
+      "expected_response_type": "spoken_reply",
+      "source_ids": [
+       "TI-REF-A-PROJECT-DEEPDIVE"
+      ],
+      "source_priority": [
+       "TI-REF-A-PROJECT-DEEPDIVE"
+      ],
+      "known_conflicts": [],
+      "acceptable_inference": [],
+      "requires_calculation": false,
+      "calculation_oracle": null,
+      "requires_code_validation": false,
+      "code_oracle": null
+     }
+    },
+    {
+     "variant": "B",
+     "evidence_config": "ti-b-full",
+     "pi_state": "B",
+     "pi_condition": "profile_b",
+     "condition": "grounded_single",
+     "evidence_state": "profile_b_deepdive",
+     "oracle": {
+      "expected_behavior_note": "First person as Catarina: about 52,000 booking sessions started on a typical weekday (launch-quarter figure), 78% of them on a phone; the busiest hour, Monday morning, saw about 6,900 sessions; the product serves about 2,700 clinics.",
+      "required_facts": [
+       {
+        "fact": "TI-REF-B-PROJECT-DEEPDIVE#F2",
+        "text": "About 52,000 booking sessions started on a typical weekday.",
+        "answer_needles": [
+         "52,000",
+         "52k",
+         "52 thousand",
+         "52000",
+         "fifty-two thousand",
+         "fifty two thousand"
+        ]
+       }
+      ],
+      "optional_facts": [
+       {
+        "fact": "TI-REF-B-PROJECT-DEEPDIVE#F3",
+        "text": "Busiest hour about 6,900 sessions."
+       },
+       {
+        "fact": "TI-REF-B-PROJECT-DEEPDIVE#F4",
+        "text": "78% on a phone; weekends roughly 40% of a weekday."
+       },
+       {
+        "fact": "PI-B-RESUME#F7",
+        "text": "About 2,700 clinics."
+       }
+      ],
+      "forbidden_claims": [
+       {
+        "text": "Answers with the other candidate's facts (the backend profile: his employer, projects or numbers).",
+        "kind": "other_profile",
+        "fact": "PI-A-RESUME#F12",
+        "answer_needles": [
+         "Quillhaven",
+         "Skeinrouter",
+         "Marrowgate",
+         "Tessarine",
+         "Farecrest",
+         "Thorambath",
+         "Ostrakel"
+        ]
+       },
+       {
+        "text": "Gives the event-pipeline figures that belong to the other candidate.",
+        "kind": "fabrication",
+        "fact": "TI-REF-A-PROJECT-DEEPDIVE#F8",
+        "answer_needles": [
+         "620 million",
+         "41,000",
+         "events per second"
+        ]
+       },
+       {
+        "text": "Gives the six-week experiment session totals as daily volume.",
+        "kind": "fabrication",
+        "answer_needles": [
+         "853,400",
+         "852,100"
+        ]
+       }
+      ],
+      "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+      "expected_action": "answer_directly",
+      "expected_response_type": "spoken_reply",
+      "source_ids": [
+       "TI-REF-B-PROJECT-DEEPDIVE"
+      ],
+      "source_priority": [
+       "TI-REF-B-PROJECT-DEEPDIVE"
+      ],
+      "known_conflicts": [],
+      "acceptable_inference": [],
+      "requires_calculation": false,
+      "calculation_oracle": null,
+      "requires_code_validation": false,
+      "code_oracle": null
+     }
+    },
+    {
+     "variant": "C",
+     "evidence_config": "ti-a-cf-traffic",
+     "pi_state": "A",
+     "pi_condition": "resume_jd_relevant_ref",
+     "condition": "grounded_single",
+     "evidence_state": "profile_a_deepdive_patched_traffic",
+     "oracle": {
+      "expected_behavior_note": "First person as Advik, from the notes that are loaded: about 480 million events on a typical weekday, about 5,600 a second averaged over the day; the peak is 41,000 a second.",
+      "required_facts": [
+       {
+        "fact": "TI-REF-A-PROJECT-DEEPDIVE~traffic#F8",
+        "text": "About 480 million events on a typical weekday (the same volume stated as a rate: about 5,600 events per second averaged over the day). Either form answers the question.",
+        "answer_needles": [
+         "480 million",
+         "480M",
+         "480 m",
+         "480,000,000",
+         "5,600",
+         "5600",
+         "5.6k",
+         "5.6 thousand",
+         "5.6 k"
+        ]
+       }
+      ],
+      "optional_facts": [
+       {
+        "fact": "TI-REF-A-PROJECT-DEEPDIVE~traffic#F9",
+        "text": "About 5,600 events per second averaged over a day."
+       },
+       {
+        "fact": "TI-REF-A-PROJECT-DEEPDIVE~traffic#F11",
+        "text": "Peak 41,000 per second."
+       },
+       {
+        "fact": "PI-A-RESUME#F6",
+        "text": "About 1,900 carriers."
+       }
+      ],
+      "forbidden_claims": [
+       {
+        "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+        "kind": "other_profile",
+        "fact": "PI-B-RESUME#F18",
+        "answer_needles": [
+         "Lumenquay",
+         "Fernlatch",
+         "Pebblekit",
+         "Dialbench",
+         "Velmonte",
+         "Ondaverde",
+         "Farolim"
+        ]
+       },
+       {
+        "text": "States 620 million a day or 7,200 a second, which the loaded notes do not say.",
+        "kind": "fabrication",
+        "answer_needles": [
+         "620 million",
+         "7,200"
+        ]
+       },
+       {
+        "text": "Gives only the peak, or multiplies the peak into a daily total.",
+        "kind": "fabrication",
+        "answer_needles": [
+         "3.5 billion",
+         "3.54 billion"
+        ]
+       }
+      ],
+      "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+      "expected_action": "answer_directly",
+      "expected_response_type": "spoken_reply",
+      "source_ids": [
+       "TI-REF-A-PROJECT-DEEPDIVE~traffic"
+      ],
+      "source_priority": [
+       "TI-REF-A-PROJECT-DEEPDIVE~traffic"
+      ],
+      "known_conflicts": [],
+      "acceptable_inference": [],
+      "requires_calculation": false,
+      "calculation_oracle": null,
+      "requires_code_validation": false,
+      "code_oracle": null
+     }
+    },
+    {
+     "variant": "D",
+     "evidence_config": "ti-a-noproject",
+     "pi_state": "A",
+     "pi_condition": "resume_jd_irrelevant_ref",
+     "condition": "missing_evidence",
+     "evidence_state": "no_project_reference",
+     "oracle": {
+      "expected_behavior_note": "The project notes are not loaded. The résumé holds the peak (throughput from 9,000 to 41,000 events per second) and the size of the customer base (about 1,900 carriers) but no typical-day volume or average rate. First person as Advik: he says what he knows, is clear that it is the peak, and does not put a number on a normal day; an honest line such as wanting to check the exact daily figure is right. He must not invent a daily volume and must not multiply the peak into one. The résumé's 55,000 tickets a day belongs to his previous employer's ticketing platform; mentioning it as that is acceptable, passing it off as this pipeline's volume is not.",
+      "required_facts": [],
+      "optional_facts": [
+       {
+        "fact": "PI-A-RESUME#F14",
+        "text": "Peak throughput 41,000 events per second, up from 9,000."
+       },
+       {
+        "fact": "PI-A-RESUME#F6",
+        "text": "About 1,900 regional trucking carriers."
+       },
+       {
+        "fact": "PI-A-RESUME#F11",
+        "text": "Previous employer's platform: about 55,000 tickets a day (a different system)."
+       }
+      ],
+      "forbidden_claims": [
+       {
+        "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+        "kind": "other_profile",
+        "fact": "PI-B-RESUME#F18",
+        "answer_needles": [
+         "Lumenquay",
+         "Fernlatch",
+         "Pebblekit",
+         "Dialbench",
+         "Velmonte",
+         "Ondaverde",
+         "Farolim"
+        ]
+       },
+       {
+        "text": "States a typical-day volume or an average rate as fact.",
+        "kind": "fabrication",
+        "answer_needles": [
+         "620 million",
+         "480 million",
+         "7,200",
+         "5,600"
+        ]
+       },
+       {
+        "text": "Multiplies the peak rate by the seconds in a day and presents it as normal volume.",
+        "kind": "fabrication",
+        "answer_needles": [
+         "3.5 billion",
+         "3.54 billion"
+        ]
+       },
+       {
+        "text": "Gives a daily figure that belongs to something else as this pipeline's normal volume: the hiring company's 2.6 million transactions a day from the job description, or a volume from the design brief.",
+        "kind": "fabrication",
+        "fact": "PI-A-JD#F12",
+        "answer_needles": [
+         "2.6 million",
+         "180 million"
+        ]
+       },
+       {
+        "text": "Refuses in assistant language instead of giving him something he can say.",
+        "kind": "over_deferral",
+        "answer_needles": []
+       }
+      ],
+      "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+      "expected_action": "decline_to_invent_stay_useful",
+      "expected_response_type": "spoken_reply",
+      "source_ids": [],
+      "source_priority": [],
+      "known_conflicts": [],
+      "acceptable_inference": [
+       "Giving the peak and the number of carriers as what he can state for certain."
+      ],
+      "requires_calculation": false,
+      "calculation_oracle": null,
+      "requires_code_validation": false,
+      "code_oracle": null
+     }
+    }
+   ]
+  },
+  {
+   "family": "ER-CF-TI-2",
+   "surface": "hotkey",
+   "speaker": "other",
+   "category": "system_design",
+   "difficulty": "medium",
+   "question": "Given the availability you've been asked to hit on the redirect path, how much downtime does that leave you in a month?",
+   "prior_transcript": null,
+   "variants": [
+    {
+     "variant": "A",
+     "evidence_config": "ti-a-full",
+     "pi_state": "A",
+     "pi_condition": "resume_jd_relevant_ref",
+     "condition": "grounded_single",
+     "evidence_state": "brief_says_99_95",
+     "oracle": {
+      "expected_behavior_note": "The brief sets redirect availability at 99.95% per month and a month at 30 days: 43,200 minutes x 0.05% = 21.6 minutes of downtime a month (about 22 minutes when rounded). He states the target and the number. An answer that takes an average calendar month instead (30.44 days, about 21.9 minutes) has the right target and the right method but not the convention the brief states: a small miss, not a wrong target.",
+      "required_facts": [
+       {
+        "fact": "TI-REF-SYSDESIGN-BRIEF#F9",
+        "text": "Redirect availability is 99.95% per month.",
+        "answer_needles": [
+         "99.95",
+         "three and a half nines"
+        ]
+       }
+      ],
+      "optional_facts": [
+       {
+        "fact": "TI-REF-SYSDESIGN-BRIEF#F1",
+        "text": "A month is 30 days."
+       },
+       {
+        "fact": "TI-REF-SYSDESIGN-BRIEF#F10",
+        "text": "The creation API is 99.9%, a separate target."
+       }
+      ],
+      "forbidden_claims": [
+       {
+        "text": "Uses another target for the redirect path (99.9% of the creation API, or 99.99%).",
+        "kind": "fabrication",
+        "answer_needles": [
+         "4.32"
+        ]
+       },
+       {
+        "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+        "kind": "other_profile",
+        "fact": "PI-B-RESUME#F18",
+        "answer_needles": [
+         "Lumenquay",
+         "Fernlatch",
+         "Pebblekit",
+         "Dialbench",
+         "Velmonte",
+         "Ondaverde",
+         "Farolim"
+        ]
+       }
+      ],
+      "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+      "expected_action": "answer_with_calculation",
+      "expected_response_type": "spoken_reply",
+      "source_ids": [
+       "TI-REF-SYSDESIGN-BRIEF"
+      ],
+      "source_priority": [
+       "TI-REF-SYSDESIGN-BRIEF"
+      ],
+      "known_conflicts": [],
+      "acceptable_inference": [],
+      "requires_calculation": true,
+      "calculation_oracle": {
+       "expression": "30 * 24 * 60 * (1 - 0.9995)",
+       "result": 21.6,
+       "unit": "minutes per month",
+       "accepted_forms": [
+        "21.6",
+        "21 minutes 36",
+        "21 minutes and 36",
+        "about 22 minutes",
+        "roughly 22 minutes",
+        "just under 22 minutes",
+        "22 minutes",
+        "22 min",
+        "twenty-two minutes",
+        "21 min 36",
+        "21m 36",
+        "21m36",
+        "1,296 seconds",
+        "1296 seconds"
+       ],
+       "inputs": {
+        "availability": "TI-REF-SYSDESIGN-BRIEF#F9",
+        "days_per_month": "TI-REF-SYSDESIGN-BRIEF#F1"
+       },
+       "wrong_results_common": [
+        "4.32"
+       ]
+      },
+      "requires_code_validation": false,
+      "code_oracle": null
+     }
+    },
+    {
+     "variant": "B",
+     "evidence_config": "ti-a-cf-avail",
+     "pi_state": "A",
+     "pi_condition": "resume_jd_relevant_ref",
+     "condition": "grounded_single",
+     "evidence_state": "brief_says_99_99",
+     "oracle": {
+      "expected_behavior_note": "The brief sets redirect availability at 99.99% per month and a month at 30 days: 43,200 minutes x 0.01% = 4.32 minutes of downtime a month, a little over four minutes. He states the target and the number. An answer that takes an average calendar month instead (30.44 days, about 4.38 minutes) has the right target and the right method but not the convention the brief states: a small miss, not a wrong target.",
+      "required_facts": [
+       {
+        "fact": "TI-REF-SYSDESIGN-BRIEF~avail#F9",
+        "text": "Redirect availability is 99.99% per month.",
+        "answer_needles": [
+         "99.99",
+         "four nines",
+         "4 nines"
+        ]
+       }
+      ],
+      "optional_facts": [
+       {
+        "fact": "TI-REF-SYSDESIGN-BRIEF~avail#F1",
+        "text": "A month is 30 days."
+       },
+       {
+        "fact": "TI-REF-SYSDESIGN-BRIEF~avail#F10",
+        "text": "The creation API is 99.9%, a separate target."
+       }
+      ],
+      "forbidden_claims": [
+       {
+        "text": "Uses 99.95% (21.6 minutes) or the creation API's 99.9% for the redirect path.",
+        "kind": "fabrication",
+        "answer_needles": [
+         "21.6"
+        ]
+       },
+       {
+        "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+        "kind": "other_profile",
+        "fact": "PI-B-RESUME#F18",
+        "answer_needles": [
+         "Lumenquay",
+         "Fernlatch",
+         "Pebblekit",
+         "Dialbench",
+         "Velmonte",
+         "Ondaverde",
+         "Farolim"
+        ]
+       }
+      ],
+      "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+      "expected_action": "answer_with_calculation",
+      "expected_response_type": "spoken_reply",
+      "source_ids": [
+       "TI-REF-SYSDESIGN-BRIEF~avail"
+      ],
+      "source_priority": [
+       "TI-REF-SYSDESIGN-BRIEF~avail"
+      ],
+      "known_conflicts": [],
+      "acceptable_inference": [],
+      "requires_calculation": true,
+      "calculation_oracle": {
+       "expression": "30 * 24 * 60 * (1 - 0.9999)",
+       "result": 4.32,
+       "unit": "minutes per month",
+       "accepted_forms": [
+        "4.32",
+        "4.3 minutes",
+        "4.3 min",
+        "4 minutes 19",
+        "a little over four minutes",
+        "just over four minutes",
+        "just over 4 minutes",
+        "about 4.3 min",
+        "roughly 4.3 min",
+        "around 4.3 min",
+        "4 minutes and 19",
+        "4 min 19",
+        "4m 19",
+        "4m19",
+        "a little over 4 minutes",
+        "a bit over four minutes",
+        "a bit over 4 minutes",
+        "259 seconds",
+        "259.2 seconds"
+       ],
+       "inputs": {
+        "availability": "TI-REF-SYSDESIGN-BRIEF~avail#F9",
+        "days_per_month": "TI-REF-SYSDESIGN-BRIEF~avail#F1"
+       },
+       "wrong_results_common": [
+        "21.6"
+       ]
+      },
+      "requires_code_validation": false,
+      "code_oracle": null
+     }
+    },
+    {
+     "variant": "C",
+     "evidence_config": "technical-interview-none",
+     "pi_state": "A",
+     "pi_condition": "resume_jd",
+     "condition": "missing_evidence",
+     "evidence_state": "no_brief",
+     "oracle": {
+      "expected_behavior_note": "No brief is loaded, so no availability target has been given to him. He must not state a target as the one he was asked to hit. He stays useful: asks which target is meant, or names an assumption out loud and gives the arithmetic for it (in a 30-day month 99.9% is 43.2 minutes, 99.95% is 21.6 minutes, 99.99% is 4.32 minutes).",
+      "required_facts": [],
+      "optional_facts": [],
+      "forbidden_claims": [
+       {
+        "text": "States one availability target as the requirement he was given, without marking it as an assumption.",
+        "kind": "fabrication",
+        "answer_needles": []
+       },
+       {
+        "text": "Refuses in assistant language instead of giving him something he can say.",
+        "kind": "over_deferral",
+        "answer_needles": []
+       },
+       {
+        "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+        "kind": "other_profile",
+        "fact": "PI-B-RESUME#F18",
+        "answer_needles": [
+         "Lumenquay",
+         "Fernlatch",
+         "Pebblekit",
+         "Dialbench",
+         "Velmonte",
+         "Ondaverde",
+         "Farolim"
+        ]
+       }
+      ],
+      "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+      "expected_action": "decline_to_invent_stay_useful",
+      "expected_response_type": "spoken_reply",
+      "source_ids": [],
+      "source_priority": [],
+      "known_conflicts": [],
+      "acceptable_inference": [
+       "Giving the downtime for several common targets as an illustration.",
+       "Asking the interviewer to confirm the target."
+      ],
+      "requires_calculation": false,
+      "calculation_oracle": null,
+      "requires_code_validation": false,
+      "code_oracle": null
+     }
+    }
+   ]
+  }
+ ]
+}

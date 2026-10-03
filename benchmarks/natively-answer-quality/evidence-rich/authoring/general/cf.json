@@ -1,0 +1,392 @@
+{
+  "mode": "general",
+  "families": [
+    {
+      "family": "ER-CF-GEN-1",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Hang on, the handles and knobs, are those part of what we're paying them for?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "general-cf-hw-yes",
+          "pi_state": "none",
+          "evidence_state": "says_yes",
+          "oracle": {
+            "expected_behavior_note": "The current revision says decorative hardware is part of the cabinetry price, supplied and fitted. The reply is a plain yes.",
+            "required_facts": [
+              {
+                "fact": "GEN-REF-RENO-QUOTE-REVC~hwincl#F5",
+                "text": "Yes: knobs and pulls are part of the cabinetry price, supplied and fitted.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "GEN-REF-RENO-QUOTE-REVC~hwincl#F5",
+                "text": "They come from the contractor's standard brushed range."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says hardware is not included or that they have to buy their own.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Says it is unclear or needs checking, when both revisions say it is included.",
+                "kind": "over_deferral"
+              }
+            ],
+            "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "GEN-REF-RENO-QUOTE-REVC~hwincl"
+            ],
+            "source_priority": [
+              "GEN-REF-RENO-QUOTE-REVC~hwincl",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "general-full",
+          "pi_state": "none",
+          "evidence_state": "says_no",
+          "oracle": {
+            "expected_behavior_note": "The current revision excludes hardware: they supply their own knobs and pulls and the crew fits them free if they are on site by cabinet installation day. The June quote included it, which is out of date. The reply is a plain no with the one useful detail.",
+            "required_facts": [
+              {
+                "fact": "GEN-REF-RENO-QUOTE-REVC#F5",
+                "text": "No: hardware is not in the price; they supply their own knobs and pulls.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "GEN-REF-RENO-QUOTE-REVC#F5",
+                "text": "The crew fits owner-supplied hardware at no charge if it is on site by cabinet installation day."
+              },
+              {
+                "fact": "GEN-REF-RENO-QUOTE-REVA#F2",
+                "text": "The June quote did include it."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says hardware is included.",
+                "kind": "stale",
+                "fact": "GEN-REF-RENO-QUOTE-REVA#F2"
+              },
+              {
+                "text": "Invents a price for the hardware.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+            "expected_action": "prefer_current_source",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "GEN-REF-RENO-QUOTE-REVC"
+            ],
+            "source_priority": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "cabinet hardware",
+                "sources": [
+                  "GEN-REF-RENO-QUOTE-REVC",
+                  "GEN-REF-RENO-QUOTE-REVA"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "general-cf-hw-conflict",
+          "pi_state": "none",
+          "evidence_state": "signed_quote_and_contractor_email_conflict",
+          "oracle": {
+            "expected_behavior_note": "The signed Revision C says hardware is not part of the price, but Dunmore's email of 1 October, sent after the quote, says the knobs and pulls are in the price. The reply surfaces that: on paper no, Dunmore has since said yes, so get it written into the quote before signing. It must not settle on a flat yes. A flat no that ignores the email is incomplete rather than false: it misses the second required fact.",
+            "required_facts": [
+              {
+                "fact": "GEN-REF-RENO-QUOTE-REVC#F5",
+                "text": "The quote as written does not include hardware.",
+                "answer_needles": []
+              },
+              {
+                "fact": "GEN-REF-CONTRACTOR-EMAILS~hwyes#F11",
+                "text": "Dunmore has since said by email that the knobs and pulls are in the price, so it needs putting in writing on the quote before they sign.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "GEN-REF-RENO-QUOTE-REVC#F26",
+                "text": "There is time to get it reissued before the 9 October deadline."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says flatly that hardware is included, with no mention that the signed quote says otherwise.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says the quote has already been amended to include hardware.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+            "expected_action": "surface_conflict",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-CONTRACTOR-EMAILS~hwyes"
+            ],
+            "source_priority": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-CONTRACTOR-EMAILS~hwyes",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "cabinet hardware",
+                "sources": [
+                  "GEN-REF-RENO-QUOTE-REVC",
+                  "GEN-REF-CONTRACTOR-EMAILS~hwyes"
+                ],
+                "resolution": "authoritative_wins"
+              },
+              {
+                "topic": "cabinet hardware",
+                "sources": [
+                  "GEN-REF-RENO-QUOTE-REVC",
+                  "GEN-REF-RENO-QUOTE-REVA"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [
+              "Leaning on the written quote as what counts until it is amended."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "D",
+          "evidence_config": "general-cf-noquotes",
+          "pi_state": "none",
+          "evidence_state": "no_relevant_file",
+          "oracle": {
+            "expected_behavior_note": "Neither quote is loaded and nothing else says whether hardware is in the price. The reply says, as a person would, that they would need to check the quote or ask Dunmore. It must not say yes and must not say no.",
+            "required_facts": [],
+            "optional_facts": [],
+            "forbidden_claims": [
+              {
+                "text": "Says hardware is included.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says hardware is not included.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "States a hardware price or count.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+            "expected_action": "defer_to_verify",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Offering to look at the quote or ask Dunmore before they sign."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    },
+    {
+      "family": "ER-CF-GEN-2",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Want us to swap the rotors too while the wheels are off, or leave them be?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "general-full",
+          "pi_state": "none",
+          "evidence_state": "rotors_within_spec",
+          "oracle": {
+            "expected_behavior_note": "The estimate says the rotors are within specification (26.4 mm against a 25.0 mm minimum) and Option 1, pads only, is recommended. The reply: leave them, just the pads.",
+            "required_facts": [
+              {
+                "fact": "GEN-REF-CAR-ESTIMATE#F4",
+                "text": "Leave the rotors: they are within specification, so pads only.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "GEN-REF-CAR-ESTIMATE#F3",
+                "text": "26.4 mm against a 25.0 mm minimum."
+              },
+              {
+                "fact": "GEN-REF-CAR-ESTIMATE#F4",
+                "text": "Measure them again at the next pad change."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the rotors are below minimum or have to be replaced.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Declines to decide.",
+                "kind": "over_deferral"
+              }
+            ],
+            "expected_role": "the user speaking aloud to the service advisor at the auto shop, first person, as an ordinary person with no specialised role",
+            "expected_action": "make_current_decision",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "GEN-REF-CAR-ESTIMATE"
+            ],
+            "source_priority": [
+              "GEN-REF-CAR-ESTIMATE"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Choosing to replace them anyway is tolerable only if the reply does not claim they need it."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "general-cf-rotors-worn",
+          "pi_state": "none",
+          "evidence_state": "rotors_below_minimum",
+          "oracle": {
+            "expected_behavior_note": "The estimate says the rotors measure 24.6 mm, below the 25.0 mm minimum, and must be replaced with the pads; Option 2 ($521.14) is recommended. The reply: yes, do the rotors as well.",
+            "required_facts": [
+              {
+                "fact": "GEN-REF-CAR-ESTIMATE~rotorsworn#F4",
+                "text": "Yes, replace the rotors too: they are below the minimum thickness.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "GEN-REF-CAR-ESTIMATE~rotorsworn#F3",
+                "text": "24.6 mm against a 25.0 mm minimum."
+              },
+              {
+                "fact": "GEN-REF-CAR-ESTIMATE~rotorsworn#F8",
+                "text": "Pads and rotors total $521.14."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says to leave the rotors or that they are within specification.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Gives 26.4 mm as the measurement.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "26.4"
+                ]
+              }
+            ],
+            "expected_role": "the user speaking aloud to the service advisor at the auto shop, first person, as an ordinary person with no specialised role",
+            "expected_action": "make_current_decision",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "GEN-REF-CAR-ESTIMATE~rotorsworn"
+            ],
+            "source_priority": [
+              "GEN-REF-CAR-ESTIMATE~rotorsworn"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "general-cf-noestimate",
+          "pi_state": "none",
+          "evidence_state": "no_relevant_file",
+          "oracle": {
+            "expected_behavior_note": "No estimate is loaded. This is still a present decision the user can make: a sensible reply either asks what the rotors measured and says to replace them only if they are under the minimum or scored, or simply chooses. It must not quote a measurement or a price as if known, and must not sound like a system reporting missing files.",
+            "required_facts": [],
+            "optional_facts": [],
+            "forbidden_claims": [
+              {
+                "text": "States a rotor thickness, minimum, or price as fact.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says the estimate recommends one option.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says it cannot answer because no document is loaded.",
+                "kind": "over_deferral"
+              }
+            ],
+            "expected_role": "the user speaking aloud to the service advisor at the auto shop, first person, as an ordinary person with no specialised role",
+            "expected_action": "make_current_decision",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "'Only if they're under spec, what did they measure?' is an ideal reply.",
+              "Simply choosing pads only, or both, without inventing facts is acceptable.",
+              "Mentioning that they had pencilled in about $350 for the brakes as their own guess is supported by the budget; it must not be presented as the shop's price."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    }
+  ]
+}

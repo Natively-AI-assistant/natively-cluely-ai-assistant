@@ -1,0 +1,2248 @@
+{
+  "mode": "lecture",
+  "world": "Tavish Orrenby is a second-year student at the fictional Tarnhollow University, taking three courses in Autumn term 2026: CNW 2140 Computer Networks (Dr. Oleska Brantigern), ECN 1620 Prices, Markets and Money (Prof. Tobiah Kessandru) and BIO 1380 Cells, Energy and Heredity (Dr. Maelis Underhaye). His Lecture-mode reference files are the lecture 7 slide deck on TCP congestion control, the networks lecturer's running notes on DNS and HTTP with follow-ups from lecture 7, this year's and last year's CNW 2140 syllabus, the economics lecture 5 slides on inflation and monetary policy, the economics professor's notes on elasticity, this year's and last year's ECN 1620 formula sheet, and the biology lecture notes on cellular respiration and Mendelian genetics. Each lecturer uses course-specific conventions (an initial window of 2 segments and a 1,200-byte MSS; queries-only DNS counting; the midpoint method with positive elasticities; a 'classroom rule' with weights 0.5 and 0.25 and a neutral rate of 1%; 30 ATP per glucose; a marsh-beetle cross with R/r notation), their own worked examples, and a few loose statements that the notes later pin down. There is no syllabus for ECN 1620 or BIO 1380 in the pack. Everything is fictional.",
+  "files": [
+    {
+      "id": "LEC-REF-CNW-SLIDES-L07",
+      "mode": "lecture",
+      "filename": "CNW2140_L07_Congestion_Control.pdf",
+      "source": "src/LEC-REF-CNW-SLIDES-L07.md",
+      "format": "pdf",
+      "document_type": "lecture_slides",
+      "title": "CNW 2140 Lecture 7: TCP congestion control (slide deck with presenter remarks)",
+      "status": "current",
+      "effective_date": "2026-09-29",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Lecture 7 of CNW 2140, on TCP congestion control, was given by Dr. Oleska Brantigern on Tuesday 29 September 2026.",
+          "doc_needles": [
+            "Tuesday 29 September 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "In CNW 2140, cwnd and ssthresh are counted in segments, never in bytes.",
+          "doc_needles": [
+            "counted in segments"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "In every worked example in CNW 2140 the MSS is 1,200 bytes.",
+          "doc_needles": [
+            "the MSS is 1,200 bytes"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The course's initial window (IW) is 2 segments (not 1 as in older textbooks, not 10 as on many current servers).",
+          "doc_needles": [
+            "(IW) is 2 segments"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Time is counted in rounds, and one round is one RTT.",
+          "doc_needles": [
+            "One round is one RTT"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "In slow start every ACK grows cwnd by one segment, so cwnd doubles each round.",
+          "doc_needles": [
+            "cwnd doubles each round"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The lecturer's reading of the name: slow start is slow to start, not slow to grow; the name contrasts it with pre-1988 senders that opened with the whole receiver window at once.",
+          "doc_needles": [
+            "not slow to grow",
+            "whole receiver window at once"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Slow start ends when cwnd reaches ssthresh or when a loss is detected, whichever comes first.",
+          "doc_needles": [
+            "ends when cwnd reaches ssthresh"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Clamp rule of the course: slow start never overshoots the threshold; next cwnd = min(2 x cwnd, ssthresh).",
+          "doc_needles": [
+            "min(2 x cwnd, ssthresh)"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The lecturer describes slow start as the aggressive phase, not the cautious one.",
+          "doc_needles": [
+            "It is the aggressive one"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The congestion avoidance slide says only: at or above ssthresh, additive increase, +1.",
+          "doc_needles": [
+            "additive increase, +1"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "ssthresh is described as the sender's memory of roughly where trouble began last time.",
+          "doc_needles": [
+            "memory of roughly where trouble began"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "After three duplicate ACKs the course rule is: ssthresh = cwnd / 2, then cwnd = ssthresh, and the sender carries on in congestion avoidance.",
+          "doc_needles": [
+            "then cwnd = ssthresh"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "After a retransmission timeout the course rule is: ssthresh = cwnd / 2, then cwnd = IW, and the sender goes back to slow start.",
+          "doc_needles": [
+            "then cwnd = IW"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Halves are rounded down and ssthresh is never set below 2 segments.",
+          "doc_needles": [
+            "never set below 2 segments"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Course simplification: the 3-segment window inflation of full Reno fast recovery is skipped; the window lands on the new ssthresh in one move.",
+          "doc_needles": [
+            "inflates the window by 3 segments",
+            "in one move"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "The lecture 7 trace starts with IW = 2 segments, initial ssthresh = 16 segments, MSS = 1,200 bytes and RTT = 80 ms.",
+          "doc_needles": [
+            "initial ssthresh = 16 segments"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "In the trace, rounds 1 to 4 are slow start with cwnd 2, 4, 8 and 16.",
+          "doc_needles": [
+            "Round 3: cwnd = 8",
+            "Round 4: cwnd = 16"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "In the trace, rounds 5 to 8 are congestion avoidance with cwnd 17, 18, 19 and 20.",
+          "doc_needles": [
+            "Round 5: cwnd = 17",
+            "Round 8: cwnd = 20"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Three duplicate ACKs arrive in round 8 of the trace; round 9 has cwnd = 10 and ssthresh = 10.",
+          "doc_needles": [
+            "Round 9: cwnd = 10",
+            "ssthresh = 10"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "In the trace, cwnd is 11 in round 10 and 12 in round 11, and the retransmission timer expires in round 11.",
+          "doc_needles": [
+            "Round 11: cwnd = 12"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "After the timeout in the trace, round 12 has cwnd = 2 and ssthresh = 6.",
+          "doc_needles": [
+            "Round 12: cwnd = 2",
+            "ssthresh = 6"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "After the timeout the trace goes cwnd 4 in round 13, 6 in round 14 (clamped at ssthresh) and 7 in round 15 (congestion avoidance).",
+          "doc_needles": [
+            "Round 14: cwnd = 6",
+            "Round 15: cwnd = 7"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Lab 3 starts from the lecture 7 trace and asks students to extend it by ten rounds.",
+          "doc_needles": [
+            "extend it by ten rounds"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "In the sawtooth the window swings between W / 2 and W, where W is the window at which loss occurs, so the average window is 0.75 x W.",
+          "doc_needles": [
+            "window is therefore 0.75"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "The throughput formula used in the course is throughput = 0.75 x W x MSS / RTT.",
+          "doc_needles": [
+            "0.75 x W x MSS"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "Slide example: W = 20 segments, MSS = 1,200 bytes, RTT = 80 ms gives an average window of 15 segments, 18,000 bytes per round, 225,000 bytes per second, 1.8 Mbit/s.",
+          "doc_needles": [
+            "1.8 Mbit/s",
+            "225,000 bytes per second"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "The course does not use the square-root loss formula (Mathis and colleagues); it is on the further reading list only.",
+          "doc_needles": [
+            "square-root loss formula"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "Smoothed RTT is updated as SRTT = 7/8 x SRTT + 1/8 x sample.",
+          "doc_needles": [
+            "7/8 x SRTT"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "The timeout value is RTO = SRTT + 4 x RTTVAR.",
+          "doc_needles": [
+            "SRTT + 4 x RTTVAR"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "Slide example: SRTT = 80 ms and RTTVAR = 15 ms give RTO = 140 ms.",
+          "doc_needles": [
+            "RTO = 140 ms"
+          ]
+        },
+        {
+          "id": "F32",
+          "statement": "Each time the retransmission timer expires, the RTO doubles (exponential backoff).",
+          "doc_needles": [
+            "the RTO doubles"
+          ]
+        },
+        {
+          "id": "F33",
+          "statement": "Course convention: exercises ignore the 1-second minimum RTO that real stacks apply.",
+          "doc_needles": [
+            "1-second minimum RTO"
+          ]
+        },
+        {
+          "id": "F34",
+          "statement": "The lecturer's picture for AIMD is the staircase and the cliff: climb one step per round, fall half the height on a loss.",
+          "doc_needles": [
+            "the staircase and the cliff"
+          ]
+        },
+        {
+          "id": "F35",
+          "statement": "The AIMD slide states, without qualification, that AIMD is fair.",
+          "doc_needles": [
+            "AIMD is fair."
+          ]
+        },
+        {
+          "id": "F36",
+          "statement": "Lecture 8 is TCP reliability and retransmission; the reading is Halloway and Minch, sections 6.3 to 6.5.",
+          "doc_needles": [
+            "sections 6.3 to 6.5"
+          ]
+        },
+        {
+          "id": "F37",
+          "statement": "The lecture opens with the 1986 collapse story: throughput between two sites 400 yards apart fell from 32 kbit/s to 40 bit/s.",
+          "doc_needles": [
+            "32 kbit/s to 40 bit/s"
+          ]
+        },
+        {
+          "id": "F38",
+          "statement": "RTT variation is updated as RTTVAR = 3/4 x RTTVAR + 1/4 x the absolute difference between SRTT and the sample.",
+          "doc_needles": [
+            "3/4 x RTTVAR"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The slides do not mention CUBIC, BBR, ECN marking or any congestion control variant other than the simplified Reno-style rules.",
+        "The slides give no exam date, exam weight or lab deadline.",
+        "The slides do not say what '+1' on the congestion avoidance slide is counted per; the lecturer's notes do."
+      ]
+    },
+    {
+      "id": "LEC-REF-CNW-NOTES-W3-4",
+      "mode": "lecture",
+      "filename": "CNW2140_Lecturer_Notes_Weeks3-4.docx",
+      "source": "src/LEC-REF-CNW-NOTES-W3-4.md",
+      "format": "docx",
+      "document_type": "professor_notes",
+      "title": "CNW 2140 lecturer's notes, weeks 3 and 4 (DNS, HTTP, follow-ups from lecture 7)",
+      "status": "current",
+      "effective_date": "2026-09-30",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The lecturer's notes for lectures 5 to 7 were last edited on Wednesday 30 September 2026.",
+          "doc_needles": [
+            "Wednesday 30 September 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The name resolved in every DNS example of the course is portal.tarnhollow.example.",
+          "doc_needles": [
+            "the same name: portal.tarnhollow.example"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The campus recursive resolver in the example is at 10.40.0.53.",
+          "doc_needles": [
+            "10.40.0.53"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The authoritative server for the zone is ns1.tarnhollow.example.",
+          "doc_needles": [
+            "ns1.tarnhollow.example"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "In CNW 2140 a cold lookup costs 4 queries: laptop to campus resolver, resolver to root, resolver to TLD, resolver to authoritative.",
+          "doc_needles": [
+            "costs 4 queries"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Textbooks that give 8 for the same exchange count the replies as well; the course counts queries only.",
+          "doc_needles": [
+            "We count queries only"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The example returns an A record, 203.0.113.48, with a TTL of 300 seconds.",
+          "doc_needles": [
+            "203.0.113.48",
+            "TTL of 300 seconds"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "'Think five minutes' was not a rule about DNS: the 300 seconds belongs to this one record and was chosen by whoever runs the zone.",
+          "doc_needles": [
+            "belongs to this one record"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The NS records for tarnhollow.example carry a TTL of 86,400 seconds (one day).",
+          "doc_needles": [
+            "86,400 seconds"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "A warm lookup within the TTL costs 1 query from the laptop and none upstream.",
+          "doc_needles": [
+            "none upstream"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Once the A record has expired but the NS records are still cached, the resolver skips the root and the TLD and goes straight to ns1.",
+          "doc_needles": [
+            "goes straight to ns1"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "NXDOMAIN replies are cached; in the course's zone the negative-caching time is 900 seconds, taken from the SOA record.",
+          "doc_needles": [
+            "900 seconds"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "www.tarnhollow.example is a CNAME for portal.tarnhollow.example and costs no extra query in the example, because the same authoritative server returns the CNAME and the A record in one reply.",
+          "doc_needles": [
+            "costs no extra query",
+            "in one reply"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "'DNS is UDP' needs a footnote: queries use UDP port 53 by default, but a reply over 1,232 bytes (the course's limit) gets the TC flag and the resolver repeats the query over TCP.",
+          "doc_needles": [
+            "1,232 bytes",
+            "TC flag"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Zone transfers between name servers always use TCP.",
+          "doc_needles": [
+            "always use TCP"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The Lab 4 sandbox resolver is at 10.40.0.54 and empties its cache every 60 seconds.",
+          "doc_needles": [
+            "10.40.0.54"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "The timetable page is one HTML file plus 11 embedded objects (8 images, 2 scripts, 1 stylesheet): 12 objects in all.",
+          "doc_needles": [
+            "11 embedded objects",
+            "12 objects in all"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Round-trip counting convention: opening a TCP connection costs 1 RTT, each request with its response costs 1 RTT, and TLS and transmission time are ignored until lecture 12.",
+          "doc_needles": [
+            "connection costs 1 RTT",
+            "We ignore TLS"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "In the HTTP lecture the RTT was 50 ms.",
+          "doc_needles": [
+            "the RTT was 50 ms"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Non-persistent HTTP, one object at a time: 2 RTT per object, 24 RTT for the page, 1,200 ms.",
+          "doc_needles": [
+            "24 RTT",
+            "1,200 ms"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Persistent HTTP without pipelining: 13 RTT for the page, 650 ms.",
+          "doc_needles": [
+            "13 RTT",
+            "650 ms"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Parallel non-persistent connections: the HTML is fetched first on its own connection, then up to 6 connections at a time for the embedded objects, each batch costing 2 RTT; the total was left for students to work out.",
+          "doc_needles": [
+            "up to 6 connections",
+            "Each batch costs 2 RTT"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "In the demo the short address /tt replied 301 Moved Permanently and redirected to /timetable.",
+          "doc_needles": [
+            "301 Moved Permanently"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "In the demo the second load of the stylesheet replied 304 Not Modified, because the browser sent If-None-Match with the ETag v7-a41c and the file had not changed.",
+          "doc_needles": [
+            "304 Not Modified",
+            "v7-a41c"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "The lecturer also showed a 503 from enrolment week, when the portal was overloaded.",
+          "doc_needles": [
+            "503 from enrolment week"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "The stylesheet carries Cache-Control: max-age=600, so the browser does not ask for ten minutes and then revalidates with the ETag.",
+          "doc_needles": [
+            "max-age=600"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "'HTTP is stateless, full stop' was too strong: the protocol is stateless, but the portal knows the user because the browser sends the sid cookie with every request; the state lives in the cookie and the server's session store.",
+          "doc_needles": [
+            "sid cookie",
+            "session store"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "HTTP/2 multiplexes many streams over one connection, but one lost TCP segment still stalls every stream.",
+          "doc_needles": [
+            "stalls every stream"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "HTTP/3 over QUIC is lecture 12 and will not be on the midterm.",
+          "doc_needles": [
+            "will not be on the midterm"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "'+1' on the congestion avoidance slide means plus one segment per round (per RTT), not per ACK; per ACK the growth is 1/cwnd of a segment.",
+          "doc_needles": [
+            "Plus one segment per round",
+            "1/cwnd of a segment"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "In the throughput example, 20 is the peak window, the window at which the loss happens; not the average and not the starting value.",
+          "doc_needles": [
+            "20 is the peak"
+          ]
+        },
+        {
+          "id": "F32",
+          "statement": "'AIMD is fair' means fair between flows with similar round-trip times; a flow with a shorter RTT ends up with the larger share.",
+          "doc_needles": [
+            "similar round-trip times"
+          ]
+        },
+        {
+          "id": "F33",
+          "statement": "According to the lecturer's notes of 30 September, the midterm covers everything up to and including lecture 7, and lecture 8 will be examined in the final only.",
+          "doc_needles": [
+            "up to and including lecture 7",
+            "examined in the final only"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F33",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2026",
+          "this_value": "up to and including lecture 7",
+          "other_value": "Covers lectures 1 to 8",
+          "resolution": "unresolved"
+        }
+      ],
+      "must_not_infer": [
+        "The notes do not give the weight or the date of the midterm or of the final exam.",
+        "The notes do not say that the statement about midterm scope replaces the syllabus.",
+        "The notes do not state the total for the parallel-connection case; it was left as an exercise.",
+        "Nothing here says a 300-second TTL is typical of DNS records in general."
+      ]
+    },
+    {
+      "id": "LEC-REF-CNW-SYLLABUS-2026",
+      "mode": "lecture",
+      "filename": "CNW2140_Syllabus_Autumn2026.pdf",
+      "source": "src/LEC-REF-CNW-SYLLABUS-2026.md",
+      "format": "pdf",
+      "document_type": "syllabus",
+      "title": "CNW 2140 Computer Networks course syllabus, Autumn term 2026, version 1.1",
+      "status": "current",
+      "effective_date": "2026-09-01",
+      "authority": 100,
+      "supersedes": [
+        "LEC-REF-CNW-SYLLABUS-2025"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "This is the CNW 2140 syllabus for Autumn term 2026, version 1.1, issued Tuesday 1 September 2026.",
+          "doc_needles": [
+            "Autumn term 2026",
+            "Version 1.1"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Dr. Oleska Brantigern's office hours are Wednesday 14:00 to 15:30 in room HV 3.07, no appointment needed.",
+          "doc_needles": [
+            "Wednesday 14:00 to 15:30"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The teaching assistant is Juno Feathersmythe; lab drop-in is Monday 16:00 to 17:00 in room HV 1.22.",
+          "doc_needles": [
+            "Juno Feathersmythe",
+            "Monday 16:00 to 17:00"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Lectures are on Tuesday and Thursday, 10:00 to 11:30, in room HV 2.14 of the Hale-Voss Building.",
+          "doc_needles": [
+            "Tuesday and Thursday, 10:00 to 11:30",
+            "room HV 2.14"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The lab session is Friday 13:00 to 15:00 in HV 1.22.",
+          "doc_needles": [
+            "Friday 13:00 to 15:00"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "There are 22 lectures; teaching starts on Tuesday 8 September 2026 and the last lecture is on Thursday 26 November 2026.",
+          "doc_needles": [
+            "Tuesday 8 September 2026",
+            "Thursday 26 November 2026"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Lecture 7 (Tuesday 29 September) is TCP congestion control and lecture 8 (Thursday 1 October) is TCP reliability and retransmission.",
+          "doc_needles": [
+            "TCP congestion control"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Lecture 10 (Thursday 8 October) is Routing inside a network.",
+          "doc_needles": [
+            "Routing inside a network"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Lecture 12 (Thursday 15 October) is TLS, QUIC and HTTP/3.",
+          "doc_needles": [
+            "TLS, QUIC and HTTP/3"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Tuesday 20 October is a revision session with no new material.",
+          "doc_needles": [
+            "Tuesday 20 October"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Labs are worth 20% of the course mark: five labs at 4% each.",
+          "doc_needles": [
+            "Labs: 20%",
+            "4% each"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The midterm exam is worth 25% of the course mark and is on Thursday 22 October 2026, in the lecture slot, 80 minutes.",
+          "doc_needles": [
+            "Thursday 22 October 2026",
+            "Midterm exam: 25%"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "According to the syllabus, the midterm covers lectures 1 to 8.",
+          "doc_needles": [
+            "Covers lectures 1 to 8",
+            "Thursday 22 October 2026"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "The group project is worth 15% of the course mark; groups of three; report due Friday 27 November 2026.",
+          "doc_needles": [
+            "Group project: 15%",
+            "Friday 27 November 2026"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "The final exam is worth 40% of the course mark.",
+          "doc_needles": [
+            "Final exam: 40%"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The final exam is on Tuesday 15 December 2026, 09:00 to 12:00, in Sports Hall B, and covers the whole course.",
+          "doc_needles": [
+            "Tuesday 15 December 2026",
+            "09:00 to 12:00",
+            "Sports Hall B"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "To pass, a student needs an overall mark of at least 50 and at least 45 out of 100 in the final exam.",
+          "doc_needles": [
+            "at least 45 out of 100"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "The midterm is closed book; for the final exam a student may bring one A4 sheet, handwritten on both sides; calculators are not allowed.",
+          "doc_needles": [
+            "one A4 sheet, handwritten",
+            "the midterm is closed book"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Lab reports are submitted through the course site by 17:00 on the due date.",
+          "doc_needles": [
+            "by 17:00 on the due date"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Lab 3 (TCP trace analysis) is due Friday 16 October 2026.",
+          "doc_needles": [
+            "Friday 16 October 2026"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Lab 4 (build a DNS resolver) is due Friday 6 November 2026.",
+          "doc_needles": [
+            "Friday 6 November 2026"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Lab 1 is due Friday 18 September 2026, Lab 2 Friday 2 October 2026 and Lab 5 Friday 20 November 2026.",
+          "doc_needles": [
+            "Friday 2 October 2026",
+            "Friday 20 November 2026"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Late policy: a late lab report loses 10 marks out of 100 for each day or part of a day after the deadline, for up to 3 days; after 3 days it scores zero.",
+          "doc_needles": [
+            "loses 10 marks out of 100",
+            "up to 3 days"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Extensions are granted only through the School office, not by the lecturer or the teaching assistant.",
+          "doc_needles": [
+            "only through the School office"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Regrade requests must reach the teaching assistant within 7 days of the mark being released.",
+          "doc_needles": [
+            "within 7 days"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "The course text is Halloway and Minch, Networks from the Wire Up, 3rd edition.",
+          "doc_needles": [
+            "3rd edition"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F2",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Wednesday 14:00 to 15:30",
+          "other_value": "Monday 11:00 to 12:30",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Juno Feathersmythe",
+          "other_value": "Corwin Ashgrove-Lund",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Tuesday and Thursday, 10:00 to 11:30",
+          "other_value": "Monday and Wednesday, 14:00 to 15:30",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Labs: 20%",
+          "other_value": "Labs: 15%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F12",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Thursday 22 October 2026",
+          "other_value": "Wednesday 29 October 2025",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F14",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Group project: 15%",
+          "other_value": "Group project: 10%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F15",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Final exam: 40%",
+          "other_value": "Final exam: 50%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Tuesday 15 December 2026",
+          "other_value": "Thursday 11 December 2025",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F18",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "one A4 sheet, handwritten",
+          "other_value": "both exams are closed book",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F20",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Friday 16 October 2026",
+          "other_value": "Friday 17 October 2025",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F23",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "loses 10 marks out of 100",
+          "other_value": "loses 5 marks out of 100",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F26",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "3rd edition",
+          "other_value": "2nd edition",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Friday 13:00 to 15:00",
+          "other_value": "Friday 10:00 to 12:00",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F6",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Tuesday 8 September 2026",
+          "other_value": "Monday 8 September 2025",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F16",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "09:00 to 12:00",
+          "other_value": "14:00 to 16:00",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F21",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Friday 6 November 2026",
+          "other_value": "Friday 7 November 2025",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F22",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "Friday 2 October 2026",
+          "other_value": "Friday 3 October 2025",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F23",
+          "with_file": "LEC-REF-CNW-SYLLABUS-2025",
+          "this_value": "up to 3 days",
+          "other_value": "up to 5 days",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F13",
+          "with_file": "LEC-REF-CNW-NOTES-W3-4",
+          "this_value": "Covers lectures 1 to 8",
+          "other_value": "up to and including lecture 7",
+          "resolution": "unresolved"
+        }
+      ],
+      "must_not_infer": [
+        "The syllabus covers CNW 2140 only; it says nothing about the dates or weights of ECN 1620 or BIO 1380 assessments.",
+        "The lecture plan gives titles only; it does not say what any lecture contains.",
+        "Nothing here says the lecturer may grant an extension or waive the late penalty."
+      ]
+    },
+    {
+      "id": "LEC-REF-CNW-SYLLABUS-2025",
+      "mode": "lecture",
+      "filename": "CNW2140_Course_Syllabus.pdf",
+      "source": "src/LEC-REF-CNW-SYLLABUS-2025.md",
+      "format": "pdf",
+      "document_type": "syllabus",
+      "title": "CNW 2140 Computer Networks course syllabus, Autumn term 2025, version 2.0",
+      "status": "outdated",
+      "effective_date": "2025-09-01",
+      "authority": 40,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "This is the CNW 2140 syllabus for Autumn term 2025, version 2.0, issued Monday 1 September 2025.",
+          "doc_needles": [
+            "Autumn term 2025",
+            "Version 2.0"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "In 2025 the lecturer's office hours were Monday 11:00 to 12:30.",
+          "doc_needles": [
+            "Monday 11:00 to 12:30"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "In 2025 the teaching assistant was Corwin Ashgrove-Lund and lab drop-in was Thursday 16:00 to 17:00.",
+          "doc_needles": [
+            "Corwin Ashgrove-Lund",
+            "Thursday 16:00 to 17:00"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "In 2025 lectures were on Monday and Wednesday, 14:00 to 15:30, in room HV 1.05.",
+          "doc_needles": [
+            "Monday and Wednesday, 14:00 to 15:30",
+            "room HV 1.05"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "In 2025 labs were worth 15% of the course mark: five labs at 3% each.",
+          "doc_needles": [
+            "Labs: 15%",
+            "3% each"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "In 2025 the midterm exam was worth 25% and was on Wednesday 29 October 2025.",
+          "doc_needles": [
+            "Wednesday 29 October 2025"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "In 2025 the group project was worth 10% of the course mark; report due Friday 28 November 2025.",
+          "doc_needles": [
+            "Group project: 10%",
+            "Friday 28 November 2025"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "In 2025 the final exam was worth 50% of the course mark.",
+          "doc_needles": [
+            "Final exam: 50%"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "In 2025 the final exam was on Thursday 11 December 2025, 14:00 to 16:00, in Examination Hall 1.",
+          "doc_needles": [
+            "Thursday 11 December 2025",
+            "14:00 to 16:00",
+            "Examination Hall 1"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The 2025 syllabus states only an overall pass mark of at least 50 and no minimum for the final exam.",
+          "doc_needles": [
+            "overall mark of at least 50"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "In 2025 both exams were closed book.",
+          "doc_needles": [
+            "both exams are closed book"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "In 2025 Lab 3 (TCP trace analysis) was due Friday 17 October 2025.",
+          "doc_needles": [
+            "Friday 17 October 2025"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "2025 late policy: 5 marks out of 100 per day or part of a day, for up to 5 days; after 5 days zero.",
+          "doc_needles": [
+            "loses 5 marks out of 100",
+            "up to 5 days"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "In 2025 the course text was the 2nd edition of Halloway and Minch.",
+          "doc_needles": [
+            "2nd edition"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "The 2025 syllabus says the midterm covers lectures 1 to 8.",
+          "doc_needles": [
+            "Covers lectures 1 to 8"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "In 2025 the lab session was Friday 10:00 to 12:00.",
+          "doc_needles": [
+            "Friday 10:00 to 12:00"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "In 2025 teaching started on Monday 8 September 2025 and the last lecture was on Wednesday 26 November 2025.",
+          "doc_needles": [
+            "Monday 8 September 2025",
+            "Wednesday 26 November 2025"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "In 2025 Lab 4 (build a DNS resolver) was due Friday 7 November 2025.",
+          "doc_needles": [
+            "Friday 7 November 2025"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "In 2025 Lab 1 was due Friday 19 September 2025, Lab 2 Friday 3 October 2025 and Lab 5 Friday 21 November 2025.",
+          "doc_needles": [
+            "Friday 3 October 2025",
+            "Friday 21 November 2025"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "Nothing in this document applies to the Autumn 2026 run of the course; it is last year's syllabus and is identifiable only by its term and issue date."
+      ]
+    },
+    {
+      "id": "LEC-REF-ECN-SLIDES-L05",
+      "mode": "lecture",
+      "filename": "ECN1620_Lecture05_Inflation_Monetary_Policy.pdf",
+      "source": "src/LEC-REF-ECN-SLIDES-L05.md",
+      "format": "pdf",
+      "document_type": "lecture_slides",
+      "title": "ECN 1620 Lecture 5: Inflation and monetary policy (slides)",
+      "status": "current",
+      "effective_date": "2026-09-30",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Lecture 5 of ECN 1620, on inflation and monetary policy, was given by Prof. Tobiah Kessandru on Wednesday 30 September 2026.",
+          "doc_needles": [
+            "Wednesday 30 September 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The running case of the course is the small open economy of Norvale: currency the crown, central bank the Norvale Reserve Board (NRB).",
+          "doc_needles": [
+            "Norvale Reserve Board (NRB)"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "ECN 1620 defines inflation as a sustained rise in the general price level.",
+          "doc_needles": [
+            "rise in the general price level"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "In ECN 1620 'sustained' means lasting at least two consecutive quarters; a one-off jump in prices is a price-level shock, not inflation.",
+          "doc_needles": [
+            "at least two consecutive quarters",
+            "price-level shock"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Course bands: mild is below 3% a year, moderate is 3% to below 10%, high is 10% a year or more, hyperinflation is 50% a month or more.",
+          "doc_needles": [
+            "mild is below 3% a year",
+            "50% a month or more"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The Norvale student basket in base year 2024: rent 700, food 300, transport 90, phone and data 60, books 100; total 1,250 crowns.",
+          "doc_needles": [
+            "Total 1,250 crowns",
+            "rent 700"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The same basket cost 1,300 crowns in 2025 and 1,365 crowns in 2026.",
+          "doc_needles": [
+            "1,300 crowns in 2025",
+            "1,365 crowns in 2026"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "CPI is 100.0 in 2024, 104.0 in 2025 and 109.2 in 2026.",
+          "doc_needles": [
+            "104.0 in 2025",
+            "109.2 in 2026"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Inflation in 2026 is 5.0% (from 104.0 to 109.2).",
+          "doc_needles": [
+            "Inflation in 2026 is 5.0%"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Inflation is always measured from the previous year's index, not from the base year.",
+          "doc_needles": [
+            "not from the base year"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "In this course inflation means CPI inflation unless a problem says GDP deflator.",
+          "doc_needles": [
+            "unless a problem says GDP deflator"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The course's demand-pull example is the 2021 Norvale housing grant.",
+          "doc_needles": [
+            "2021 Norvale housing grant"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "The course's cost-push example is the 2023 Port Selby harbour strike, which raised the cost of everything imported.",
+          "doc_needles": [
+            "2023 Port Selby harbour strike"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Quantity-equation example: Norvale's money supply grows 7%, velocity is flat, real output grows 2%, so predicted inflation is 5%.",
+          "doc_needles": [
+            "money supply grows 7%",
+            "Predicted inflation: 5%"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Real rate = nominal rate - inflation is the approximation, used whenever inflation is below 10%; at 10% or more the exact form (1 + nominal) = (1 + real) x (1 + inflation) is used.",
+          "doc_needles": [
+            "whenever inflation is below 10%",
+            "use the exact form"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Example: a Norvale savings account pays 3.5%; with inflation at 5.0% the saver's real return is -1.5%.",
+          "doc_needles": [
+            "savings account pays 3.5%",
+            "real return is -1.5%"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "The slide states, without saying which rate, that real rates are negative right now.",
+          "doc_needles": [
+            "Real rates are negative right now."
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "The NRB's inflation target is 2%.",
+          "doc_needles": [
+            "Inflation target: 2%"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "The NRB's policy rate today is 4.25%.",
+          "doc_needles": [
+            "Policy rate today: 4.25%"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "The Board meets 8 times a year.",
+          "doc_needles": [
+            "meets 8 times a year"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "The NRB's tools are the policy rate (the main one), open market operations, the reserve requirement (8% in Norvale) and forward guidance.",
+          "doc_needles": [
+            "8% in Norvale",
+            "forward guidance"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "The classroom rule: policy rate = neutral real rate + inflation + 0.5 x (inflation - target) + 0.25 x output gap.",
+          "doc_needles": [
+            "0.25 x output gap"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "The classroom rule uses a neutral real rate of 1% and a target of 2%.",
+          "doc_needles": [
+            "neutral real rate of 1%"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "The classroom rule is a Taylor-type rule with the course's own weights; in ECN 1620 exams students use the classroom weights, not the numbers of Taylor's 1993 paper.",
+          "doc_needles": [
+            "use the classroom weights"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "Norvale today: inflation 5.0%, output gap -2%; the classroom rule gives 7.0%.",
+          "doc_needles": [
+            "output gap -2%",
+            "= 7.0%"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "The slide states that the NRB is behind the curve, without saying by how much or relative to what.",
+          "doc_needles": [
+            "The NRB is behind the curve."
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "The course names four transmission channels: interest-rate, credit, exchange-rate and expectations.",
+          "doc_needles": [
+            "Four channels",
+            "the exchange-rate channel"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "Lags: borrowing responds within 1 to 2 quarters; the course's rule of thumb for the full effect on inflation is 6 quarters.",
+          "doc_needles": [
+            "within 1 to 2 quarters",
+            "is 6 quarters"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "Money multiplier = 1 / reserve ratio; with Norvale's 8% it is 12.5.",
+          "doc_needles": [
+            "that is 12.5"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "Example: 200 crowns of new reserves can support up to 2,500 crowns of deposits.",
+          "doc_needles": [
+            "2,500 crowns of deposits"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "Unexpected inflation moves wealth from lenders to borrowers.",
+          "doc_needles": [
+            "from lenders to borrowers"
+          ]
+        },
+        {
+          "id": "F32",
+          "statement": "Next week's lecture 6, on Wednesday 7 October, is unemployment and the Phillips curve.",
+          "doc_needles": [
+            "unemployment and the Phillips curve",
+            "Wednesday 7 October"
+          ]
+        },
+        {
+          "id": "F33",
+          "statement": "Problem set 3 is due Wednesday 14 October.",
+          "doc_needles": [
+            "Wednesday 14 October"
+          ]
+        },
+        {
+          "id": "F34",
+          "statement": "The slides list shoe-leather costs and menu costs among the costs of inflation.",
+          "doc_needles": [
+            "Shoe-leather costs",
+            "Menu costs"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F22",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "0.25 x output gap",
+          "other_value": "0.5 x output gap",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F23",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "neutral real rate of 1%",
+          "other_value": "neutral real rate of 2%",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The slides do not say which rate 'real rates are negative right now' refers to; the professor's notes do.",
+        "The slides do not give any ECN 1620 exam date or assessment weight.",
+        "The slides do not cover comparative advantage, trade, or the Phillips curve itself (only that it is next week's topic)."
+      ]
+    },
+    {
+      "id": "LEC-REF-ECN-NOTES-L3-5",
+      "mode": "lecture",
+      "filename": "ECN1620_Kessandru_Notes_L3-L5.md",
+      "source": "src/LEC-REF-ECN-NOTES-L3-5.md",
+      "format": "md",
+      "document_type": "professor_notes",
+      "title": "ECN 1620 professor's notes, lectures 3 to 5 (elasticity; follow-ups on inflation and monetary policy)",
+      "status": "current",
+      "effective_date": "2026-10-01",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Prof. Kessandru's notes for lectures 3 to 5 were last edited on Thursday 1 October 2026.",
+          "doc_needles": [
+            "Thursday 1 October 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Lecture 3 of ECN 1620, on elasticity, was on Wednesday 16 September 2026.",
+          "doc_needles": [
+            "Wednesday 16 September 2026"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Every percentage change in an elasticity calculation in this course uses the midpoint method: the change divided by the average of the old and new values.",
+          "doc_needles": [
+            "uses the midpoint method"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The professor's reason for the midpoint method: it gives the same number in both directions (price rise or price cut).",
+          "doc_needles": [
+            "same number in both directions"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Price elasticity of demand is reported as a positive number in this course; the minus sign is dropped.",
+          "doc_needles": [
+            "we report a positive number"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "For cross-price and income elasticity the sign is kept because it carries the information.",
+          "doc_needles": [
+            "the sign carries the information"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Demand is elastic above 1, inelastic below 1, unit elastic at exactly 1.",
+          "doc_needles": [
+            "unit elastic at exactly 1"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Worked example 1: the campus cafe Brindle & Oat raised the price of a flat white from 3.00 to 3.60 crowns.",
+          "doc_needles": [
+            "from 3.00 to 3.60 crowns"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "In worked example 1 daily sales fell from 440 cups to 360.",
+          "doc_needles": [
+            "from 440 cups to 360"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "In worked example 1 the quantity change is 20% (80 on an average of 400) and the price change is 18.2% (0.60 on an average of 3.30).",
+          "doc_needles": [
+            "average of 400, so 20%",
+            "so 18.2%"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "In worked example 1 the elasticity is 1.10 and demand is elastic.",
+          "doc_needles": [
+            "Elasticity: 1.10"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "In worked example 1 revenue was 1,320 crowns a day before and 1,296 after; revenue fell when the price rose.",
+          "doc_needles": [
+            "1,320 crowns a day",
+            "1,296 after"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Worked example 2: the monthly bus pass rose from 38 to 42 crowns and sales fell from 1,050 passes to 950.",
+          "doc_needles": [
+            "from 38 to 42 crowns",
+            "from 1,050 passes to 950"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "In worked example 2 the elasticity is 1.00 (unit elastic) and revenue is 39,900 crowns before and after.",
+          "doc_needles": [
+            "Elasticity: 1.00",
+            "39,900 crowns"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "The bus pass example was chosen to show a price rise that leaves revenue exactly where it was.",
+          "doc_needles": [
+            "leaves revenue exactly where it was"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The professor's mnemonic for the determinants of elasticity is SPLAT: substitutes, proportion of income, luxury or necessity, addictive or habitual, time.",
+          "doc_needles": [
+            "SPLAT",
+            "proportion of income",
+            "addictive or habitual"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Cross-price example: oat milk went up 10% and flat white sales fell 4%; cross-price elasticity is -0.4, complements.",
+          "doc_needles": [
+            "Cross-price elasticity is -0.4"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Income example: student stipends rose 10% and instant noodle sales fell 3%; income elasticity is -0.3, an inferior good.",
+          "doc_needles": [
+            "Income elasticity is -0.3"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Tax example: a tax of 0.50 crowns per cup; buyers pay 0.30 more, sellers keep 0.20 less; buyers carry 60% of it.",
+          "doc_needles": [
+            "tax of 0.50 crowns per cup",
+            "buyers carry 60%"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "The tax example shows that demand for coffee near campus is less elastic than supply.",
+          "doc_needles": [
+            "less elastic than supply"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "'Elasticity is just the slope' was said too loosely and is wrong: on a straight-line demand curve the slope is the same everywhere but elasticity is above 1 at high prices and below 1 at low prices.",
+          "doc_needles": [
+            "slope is the same everywhere"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "'Behind the curve' means the Board's actual policy rate is below the rate that the classroom rule prescribes for today's inflation and output gap; the distance between the two is how far behind it is.",
+          "doc_needles": [
+            "the classroom rule prescribes"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "'Real rates are negative right now' referred to the policy rate in real terms (the policy rate less current inflation), not to the savings account on the same slide.",
+          "doc_needles": [
+            "policy rate less current inflation",
+            "not talking about the savings account"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "'Always and everywhere a monetary phenomenon' is Friedman's line; the course's position is that in the long run sustained inflation needs money growth, and in the short run it can start from demand or from costs.",
+          "doc_needles": [
+            "from demand or from costs"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "The 6 quarters lag is a rule of thumb for Norvale, not a law of nature; larger and more closed economies are usually slower.",
+          "doc_needles": [
+            "not a law of nature"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "Lecture 4 (market failure) has its own handout and is not covered in these notes.",
+          "doc_needles": [
+            "market failure"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F3",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "uses the midpoint method",
+          "other_value": "starting value as the base",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "we report a positive number",
+          "other_value": "Keep the minus sign",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The notes do not state the numerical size of the 'behind the curve' gap or of the negative real policy rate; those need the slide values.",
+        "The notes do not cover comparative advantage or trade.",
+        "The notes give no ECN 1620 exam date or weight."
+      ]
+    },
+    {
+      "id": "LEC-REF-ECN-FORMULAS-2026",
+      "mode": "lecture",
+      "filename": "ECN1620_Formula_Sheet.pdf",
+      "source": "src/LEC-REF-ECN-FORMULAS-2026.md",
+      "format": "pdf",
+      "document_type": "formula_sheet",
+      "title": "ECN 1620 formula sheet, version 2026.2",
+      "status": "current",
+      "effective_date": "2026-09-14",
+      "authority": 100,
+      "supersedes": [
+        "LEC-REF-ECN-FORMULAS-2025"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "This is version 2026.2 of the ECN 1620 formula sheet, issued Monday 14 September 2026.",
+          "doc_needles": [
+            "Version 2026.2",
+            "Monday 14 September 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Students may bring one unmarked printed copy of the formula sheet to the midterm and to the final exam.",
+          "doc_needles": [
+            "one unmarked printed copy"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Percentage change = (new - old) / average of old and new, x 100: the midpoint method, used for every elasticity.",
+          "doc_needles": [
+            "average of old and new",
+            "Use it for every elasticity"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "PED = % change in quantity demanded / % change in price, reported as a positive number.",
+          "doc_needles": [
+            "Report PED as a positive number"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Elastic: PED above 1; unit elastic: PED equal to 1; inelastic: PED below 1.",
+          "doc_needles": [
+            "Elastic: PED above 1"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Cross-price elasticity keeps its sign: positive means substitutes, negative means complements.",
+          "doc_needles": [
+            "Keep the sign. Positive: substitutes"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Income elasticity keeps its sign: negative is an inferior good, between 0 and 1 a necessity, above 1 a luxury.",
+          "doc_needles": [
+            "Between 0 and 1: necessity"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "CPI in year t = cost of the basket in year t / cost of the basket in the base year, x 100.",
+          "doc_needles": [
+            "basket in the base year"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Inflation rate = (CPI this year - CPI last year) / CPI last year, x 100.",
+          "doc_needles": [
+            "CPI last year, x 100"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Real rate = nominal rate - inflation when inflation is below 10%; at 10% or more the exact form (1 + nominal) = (1 + real) x (1 + inflation).",
+          "doc_needles": [
+            "when inflation is below 10%"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Money multiplier = 1 / reserve ratio.",
+          "doc_needles": [
+            "1 / reserve ratio"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Classroom rule: policy rate = neutral real rate + inflation + 0.5 x (inflation - target) + 0.25 x output gap.",
+          "doc_needles": [
+            "Classroom rule",
+            "0.25 x output gap"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "The classroom rule uses a neutral real rate of 1% and a target of 2% unless told otherwise.",
+          "doc_needles": [
+            "neutral real rate of 1%"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Rule of 70: years to double = 70 / annual growth rate in percent.",
+          "doc_needles": [
+            "Rule of 70",
+            "70 / annual growth rate"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Rounding: elasticities to 2 decimal places.",
+          "doc_needles": [
+            "Elasticities: 2 decimal places"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Rounding: rates and percentages to 1 decimal place.",
+          "doc_needles": [
+            "Rates and percentages: 1 decimal place"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Round only at the end and carry at least four significant figures through the working.",
+          "doc_needles": [
+            "four significant figures"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "The output gap is actual output less potential output, as a percentage of potential; a negative gap means producing below potential.",
+          "doc_needles": [
+            "actual output less potential output"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "A bare number earns no method marks; the method must be stated in one line first.",
+          "doc_needles": [
+            "earns no method marks"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Real value = nominal value / CPI, x 100.",
+          "doc_needles": [
+            "nominal value / CPI"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Money amounts are rounded to whole crowns unless the problem is stated in cents.",
+          "doc_needles": [
+            "whole crowns"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F2",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "one unmarked printed copy",
+          "other_value": "may not bring your own copy",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "average of old and new",
+          "other_value": "starting value as the base",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "Report PED as a positive number",
+          "other_value": "Keep the minus sign",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F5",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "Elastic: PED above 1",
+          "other_value": "Elastic: PED below -1",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F12",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "0.25 x output gap",
+          "other_value": "0.5 x output gap",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F13",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "neutral real rate of 1%",
+          "other_value": "neutral real rate of 2%",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F15",
+          "with_file": "LEC-REF-ECN-FORMULAS-2025",
+          "this_value": "Elasticities: 2 decimal places",
+          "other_value": "All results: 1 decimal place",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The sheet gives no exam date and no assessment weight.",
+        "The sheet does not say that handwritten notes may be brought; only an unmarked printed copy of the sheet itself."
+      ]
+    },
+    {
+      "id": "LEC-REF-ECN-FORMULAS-2025",
+      "mode": "lecture",
+      "filename": "ECN1620_Formula_Sheet_final.pdf",
+      "source": "src/LEC-REF-ECN-FORMULAS-2025.md",
+      "format": "pdf",
+      "document_type": "formula_sheet",
+      "title": "ECN 1620 formula sheet, version 2025.1",
+      "status": "outdated",
+      "effective_date": "2025-09-15",
+      "authority": 40,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "This is version 2025.1 of the ECN 1620 formula sheet, issued Monday 15 September 2025.",
+          "doc_needles": [
+            "Version 2025.1",
+            "Monday 15 September 2025"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "In 2025 the sheet was printed on the back page of the exam papers and students could not bring their own copy.",
+          "doc_needles": [
+            "may not bring your own copy"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "2025 method: percentage change = (new - old) / old, x 100, using the starting value as the base.",
+          "doc_needles": [
+            "starting value as the base"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "2025 convention: keep the minus sign on PED.",
+          "doc_needles": [
+            "Keep the minus sign"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "2025 classification: elastic if PED is below -1, unit elastic at -1, inelastic between -1 and 0.",
+          "doc_needles": [
+            "Elastic: PED below -1"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "2025 Taylor rule: policy rate = neutral real rate + inflation + 0.5 x (inflation - target) + 0.5 x output gap.",
+          "doc_needles": [
+            "Taylor rule",
+            "0.5 x output gap"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The 2025 rule uses a neutral real rate of 2% and a target of 2%.",
+          "doc_needles": [
+            "neutral real rate of 2%"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "2025 rounding: all results to 1 decimal place.",
+          "doc_needles": [
+            "All results: 1 decimal place"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The 2025 sheet gives the same real-rate rule: approximation below 10% inflation, exact form at 10% or more.",
+          "doc_needles": [
+            "when inflation is below 10%"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The 2025 sheet gives the same CPI and inflation-rate formulas.",
+          "doc_needles": [
+            "CPI last year, x 100"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The 2025 sheet gives the same money multiplier, 1 / reserve ratio.",
+          "doc_needles": [
+            "1 / reserve ratio"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The 2025 sheet defines the output gap as actual output less potential output, as a percentage of potential.",
+          "doc_needles": [
+            "actual output less potential output"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "This is last year's sheet; it is identifiable only by its version line and issue date, and its filename ends in 'final'.",
+        "The 2025 sheet has no doubling-time rule."
+      ]
+    },
+    {
+      "id": "LEC-REF-BIO-NOTES-L8-9",
+      "mode": "lecture",
+      "filename": "BIO1380_Lecture_Notes_L8-L9.docx",
+      "source": "src/LEC-REF-BIO-NOTES-L8-9.md",
+      "format": "docx",
+      "document_type": "professor_notes",
+      "title": "BIO 1380 lecture notes, lectures 8 and 9 (cellular respiration; Mendelian genetics)",
+      "status": "current",
+      "effective_date": "2026-10-02",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Dr. Maelis Underhaye's notes for BIO 1380 lectures 8 and 9 were posted on Friday 2 October 2026.",
+          "doc_needles": [
+            "Friday 2 October 2026"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Lecture 8, on cellular respiration, was on Thursday 24 September 2026.",
+          "doc_needles": [
+            "Thursday 24 September 2026"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The four stages and their places: glycolysis in the cytosol; pyruvate oxidation and the citric acid cycle in the mitochondrial matrix; oxidative phosphorylation on the inner mitochondrial membrane.",
+          "doc_needles": [
+            "Glycolysis, in the cytosol",
+            "inner mitochondrial membrane"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The lecturer says 'citric acid cycle'; the course text calls it the Krebs cycle.",
+          "doc_needles": [
+            "calls it the Krebs cycle"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "Glycolysis yields 2 ATP net (4 made, 2 spent) and 2 NADH per glucose.",
+          "doc_needles": [
+            "2 ATP net"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Pyruvate oxidation yields 2 NADH and 2 carbon dioxide per glucose.",
+          "doc_needles": [
+            "Pyruvate oxidation: 2 NADH"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The citric acid cycle (two turns) yields 2 ATP, 6 NADH, 2 FADH2 and 4 carbon dioxide per glucose.",
+          "doc_needles": [
+            "2 ATP, 6 NADH, 2 FADH2"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Exchange rates used in BIO 1380: 2.5 ATP for each NADH made inside the mitochondrion and 1.5 ATP for each FADH2.",
+          "doc_needles": [
+            "2.5 ATP for each NADH",
+            "1.5 ATP for each FADH2"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Shuttle convention: the course assumes the glycerol-phosphate shuttle, so each of the 2 NADH from glycolysis is worth 1.5 ATP.",
+          "doc_needles": [
+            "glycerol-phosphate shuttle",
+            "is worth 1.5 ATP"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The course total is 30 ATP per glucose (2 + 3 + 5 + 2 + 15 + 3).",
+          "doc_needles": [
+            "30 ATP per glucose"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Older textbook figures of 36 or 38 must not be used in this course.",
+          "doc_needles": [
+            "print 36 or 38"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "For each NADH, Complex I pumps 4 protons, Complex III pumps 4 and Complex IV pumps 2: 10 protons.",
+          "doc_needles": [
+            "That is 10 protons"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "FADH2 hands its electrons to Complex II, which pumps nothing, so only 6 protons are pumped.",
+          "doc_needles": [
+            "misses Complex I: 6 protons"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "ATP synthase needs 4 protons per ATP: 3 to turn the rotor and 1 to bring the phosphate in.",
+          "doc_needles": [
+            "4 protons per ATP"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Hence 10 / 4 = 2.5 ATP per NADH and 6 / 4 = 1.5 ATP per FADH2.",
+          "doc_needles": [
+            "10 / 4 = 2.5"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The lecturer's picture: the electron transport chain is a row of pumps filling a reservoir (the proton gradient); ATP synthase is the turbine in the dam wall; oxygen is the river below the dam.",
+          "doc_needles": [
+            "turbine in the dam wall",
+            "river below the dam"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Cyanide blocks Complex IV; in the dam picture the outflow gate is shut and the pumps stall.",
+          "doc_needles": [
+            "outflow gate is shut"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "DNP (2,4-dinitrophenol) is a hole in the dam wall: protons leak back without passing the turbine; oxygen use goes up, ATP output goes down, the energy leaves as heat.",
+          "doc_needles": [
+            "hole in the dam wall",
+            "energy leaves as heat"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Fermentation yields 2 ATP per glucose, all from glycolysis; its real job is to turn NADH back into NAD+ so glycolysis can keep running.",
+          "doc_needles": [
+            "Fermentation yields 2 ATP per glucose",
+            "back into NAD+"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Yeast make ethanol and carbon dioxide; muscle cells make lactate.",
+          "doc_needles": [
+            "muscle cells make lactate"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "The balloon flask demonstration: baker's yeast with 10 g of sucrose in 100 mL of water at 35 degrees C, a balloon over the neck; after 20 minutes the balloon stood upright; the gas is carbon dioxide.",
+          "doc_needles": [
+            "10 g of sucrose",
+            "35 degrees C",
+            "After 20 minutes"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "'Oxygen is where the energy comes from' was said too quickly: oxygen is the final electron acceptor, the bottom of the hill, not the fuel.",
+          "doc_needles": [
+            "final electron acceptor",
+            "bottom of the hill"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "'No oxygen, no ATP' is wrong as it stands: oxidative phosphorylation stops but glycolysis carries on making ATP.",
+          "doc_needles": [
+            "glycolysis carries on making ATP"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "Lecture 9, on Mendelian genetics, was on Thursday 1 October 2026.",
+          "doc_needles": [
+            "Thursday 1 October 2026"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "The classroom organism is the marsh beetle: R (russet) is dominant over r (grey); S (spotted) is dominant over s (plain).",
+          "doc_needles": [
+            "R (russet) is dominant",
+            "S (spotted) is dominant"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "Notation in BIO 1380: the two alleles are written with a slash, dominant first, as in R/r; phenotype ratios are written with the dominant class first.",
+          "doc_needles": [
+            "with a slash, dominant first"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "R/r x R/r gives genotypes 1 : 2 : 1 and phenotypes 3 : 1.",
+          "doc_needles": [
+            "phenotypes 3 : 1"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "This year's class count for R/r x R/r was 152 offspring: 114 russet and 38 grey.",
+          "doc_needles": [
+            "152 offspring",
+            "114 russet and 38 grey"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "'Half of them are carriers' meant half of all the offspring are R/r; among the russet beetles alone, two-thirds are carriers.",
+          "doc_needles": [
+            "two-thirds of them are carriers"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "A backcross to the recessive parent (R/r x r/r) gives 1 : 1 and is used to tell R/R from R/r; a single grey offspring shows the russet parent is R/r.",
+          "doc_needles": [
+            "Backcross to the recessive parent",
+            "A single grey offspring"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "R/r S/s x R/r S/s, with the genes on different chromosomes, gives phenotypes 9 : 3 : 3 : 1.",
+          "doc_needles": [
+            "9 : 3 : 3"
+          ]
+        },
+        {
+          "id": "F32",
+          "statement": "In a brood of 320 the expected numbers are 180 russet spotted, 60 russet plain, 60 grey spotted and 20 grey plain.",
+          "doc_needles": [
+            "brood of 320",
+            "20 grey plain"
+          ]
+        },
+        {
+          "id": "F33",
+          "statement": "The lecturer says 'partial dominance' where the course text says incomplete dominance; snapdragon red x white gives pink, and pink x pink gives 1 red : 2 pink : 1 white.",
+          "doc_needles": [
+            "I say partial dominance",
+            "2 pink : 1 white"
+          ]
+        },
+        {
+          "id": "F34",
+          "statement": "Hardy-Weinberg: p + q = 1 and p squared + 2pq + q squared = 1, where q squared is the frequency of the recessive phenotype.",
+          "doc_needles": [
+            "2pq + q squared = 1"
+          ]
+        },
+        {
+          "id": "F35",
+          "statement": "Pond example: grey beetles are 16% of the pond population, so q = 0.4 and p = 0.6, and carriers (2pq) are 48%.",
+          "doc_needles": [
+            "16% of the pond population",
+            "which is 48%"
+          ]
+        },
+        {
+          "id": "F36",
+          "statement": "Dominant does not mean common: dominance describes how an allele shows in a heterozygote, not its frequency.",
+          "doc_needles": [
+            "Dominant does not mean common"
+          ]
+        },
+        {
+          "id": "F37",
+          "statement": "Fruit fly white eye is recessive and X-linked; carrier female x red-eyed male gives half of the sons white-eyed and none of the daughters.",
+          "doc_needles": [
+            "half of the sons are white-eyed"
+          ]
+        },
+        {
+          "id": "F38",
+          "statement": "Quiz 3 covers lectures 7 to 9 and takes the first 15 minutes of class on Thursday 8 October.",
+          "doc_needles": [
+            "Quiz 3 covers lectures",
+            "Thursday 8 October"
+          ]
+        },
+        {
+          "id": "F39",
+          "statement": "Lecture 10 of BIO 1380 is linkage and recombination.",
+          "doc_needles": [
+            "linkage and recombination"
+          ]
+        },
+        {
+          "id": "F40",
+          "statement": "The course text is Pellowe and Strand, Life at the Cell Scale; where the lecturer's wording differs, students use hers.",
+          "doc_needles": [
+            "Pellowe and Strand"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The notes do not say what quiz 3, or any BIO 1380 assessment, is worth.",
+        "The notes do not cover photosynthesis, mitosis or meiosis.",
+        "The notes do not state how many of the 30 ATP come from oxidative phosphorylation, nor the ratio of aerobic to fermentation yield; those have to be worked out."
+      ]
+    }
+  ]
+}

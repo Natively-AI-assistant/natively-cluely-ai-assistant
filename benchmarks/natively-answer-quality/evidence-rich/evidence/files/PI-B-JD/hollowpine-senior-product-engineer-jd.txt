@@ -1,0 +1,76 @@
+Senior Product Engineer — Collaborative AI Workspace
+Hollowpine Labs
+Rotterdam, Netherlands / Remote (Europe) | Full-time | Posted 22 September 2026 | Ref HPL-2026-031
+
+
+ABOUT HOLLOWPINE LABS
+
+Hollowpine Labs makes Inkwharf, a collaborative workspace where teams write, plan and sketch together, with an AI assistant built into the document instead of bolted on beside it. We are 85 people, Series B funded, and Inkwharf is used by about 8,500 teams.
+
+
+THE TEAM
+
+You will join Workspace Surface, the squad that owns the editor, the multiplayer layer and the assistant's in-document interface. The squad is 7 engineers, 2 designers and 1 product manager. You will report to Jorrit Aldewyck, Head of Product Engineering.
+
+Product engineers here are close to the customer: you sit in on research calls, write the experiment plan, ship the feature and read the result.
+
+
+WHAT YOU WILL WORK ON
+
+- Real-time UI. Presence, live cursors, comments and conflict-free editing on our CRDT layer (Yjs over WebSockets), in documents with up to 50 people editing at once.
+- AI UX. Streamed assistant responses inside the document, inline suggestions the user can accept, reject or undo, citations back to the source blocks, and honest states for slow, partial or failed generations.
+- Accessibility. The whole workspace to WCAG 2.2 AA, including the hard part: making a multiplayer editor usable with a screen reader.
+- Experimentation. We ship behind flags and run around 10 experiments a quarter. Our activation metric is a first shared document within 7 days of sign-up.
+- Performance. Interaction delay under 200 ms at p75 on a 500-block document, and an initial JavaScript payload under 350 kB.
+
+
+WHAT WE NEED
+
+- 6+ years of professional frontend or product engineering, including at least 4 years of React and TypeScript in production.
+- You have shipped real-time collaborative or multiplayer features (WebSockets, CRDTs or operational transforms).
+- Accessibility work that goes beyond linting: you have taken a complex interface through an audit and fixed what it found.
+- You have designed, run and read product experiments, and can say when a result should not be trusted.
+- A record of measured frontend performance improvements on real devices.
+- Product judgement: you can turn a vague customer problem into a small first version.
+
+
+NICE TO HAVE
+
+- You have shipped LLM-powered features: streaming interfaces, prompt iteration, or evaluation work with a model team.
+- Experience with a rich-text editor framework (ProseMirror, Tiptap or Lexical).
+- You have built or maintained a design system.
+- Some Node.js. Our backend-for-frontend is a Node.js service that product engineers change regularly.
+- Canvas or WebGL rendering.
+
+
+HOW WE WORK
+
+The role is remote within Europe, in time zones UTC-1 to UTC+3, with core hours from 10:00 to 15:00 CET. The Rotterdam hub is open to anyone who wants a desk but nobody is required to use it. The whole team meets in Rotterdam for 4 team weeks a year, with travel and hotel paid.
+
+There is no pager rotation. Each engineer is support captain for one week every 7 weeks, during working hours only.
+
+You need the right to work in the European Union. We are not able to sponsor visas for this role.
+
+
+HIRING PROCESS
+
+1. Intro call, 25 minutes.
+2. Pairing session, 90 minutes, on a small React exercise in your own editor.
+3. Product and design critique, 45 minutes, with a designer and the product manager.
+4. Conversations with two future teammates.
+
+Most candidates finish the process in two weeks.
+
+
+BENEFITS
+
+- 28 days of holiday a year.
+- Home-office budget of EUR 1,500 in your first year.
+- Learning budget of EUR 2,000 a year.
+- Share options for every employee.
+
+The salary band is shared in the intro call.
+
+Apply at careers.hollowpine.example with a CV and two or three things you have shipped. No cover letter needed.
+
+Hollowpine Labs is an equal-opportunity employer.

@@ -1,0 +1,138 @@
+[
+  {
+    "id": "REC-REF-TEAM-BRIEF-2026~ic",
+    "base": "REC-REF-TEAM-BRIEF-2026",
+    "replace": [
+      {
+        "find": "The Engineering Lead has 4 direct reports: two senior engineers, one mid-level engineer and one associate engineer.",
+        "with": "The Engineering Lead is an individual-contributor role and has no direct reports. The team's four engineers (two senior, one mid-level, one associate) report to the Director of Data Platform."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F9",
+        "statement": "The Engineering Lead, Ingestion Platform is an individual-contributor role and has no direct reports; the team's four engineers report to the Director of Data Platform.",
+        "doc_needles": [
+          "has no direct reports",
+          "individual-contributor role"
+        ]
+      }
+    ],
+    "note": "The lead role moves from 4 direct reports to an individual-contributor role with none."
+  },
+  {
+    "id": "REC-REF-JD-2026~ic",
+    "base": "REC-REF-JD-2026",
+    "replace": [
+      {
+        "find": "As Engineering Lead you are both the team's line manager and its senior technical voice. We expect roughly 60% of your week to go to people and delivery leadership and 40% to hands-on work: design reviews, code review and incident response.",
+        "with": "As Engineering Lead you are the team's senior technical voice. This is an individual-contributor role with no direct reports. We expect roughly 60% of your week to go to hands-on work and 40% to technical direction: design reviews, code review and incident response."
+      },
+      {
+        "find": "- Line-manage the engineers on the Ingestion Platform team: weekly 1:1s, growth plans, performance reviews and hiring.",
+        "with": "- Give technical direction to the engineers on the Ingestion Platform team; line management of the team stays with the Director of Data Platform."
+      },
+      {
+        "find": "- At least 2 years of direct people management, including hiring and performance reviews. Mentoring, or tech-lead work without line responsibility, does not count toward this.",
+        "with": "- At least 2 years as the technical lead of a team of engineers, with or without line responsibility."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F5",
+        "statement": "The lead is expected to spend roughly 60% of the week on hands-on work and 40% on technical direction.",
+        "doc_needles": [
+          "roughly 60% of your week"
+        ]
+      },
+      {
+        "fact": "F6",
+        "statement": "The Engineering Lead is an individual-contributor role with no direct reports; line management of the team stays with the Director of Data Platform.",
+        "doc_needles": [
+          "with no direct reports",
+          "line management of the team stays"
+        ]
+      },
+      {
+        "fact": "F12",
+        "statement": "Required: at least 2 years as the technical lead of a team of engineers, with or without line responsibility.",
+        "doc_needles": [
+          "with or without line responsibility"
+        ]
+      }
+    ],
+    "note": "Job description rewritten so the role is an individual contributor, consistent with the ~ic team brief."
+  },
+  {
+    "id": "REC-REF-SCORECARD-2026~ic",
+    "base": "REC-REF-SCORECARD-2026",
+    "replace": [
+      {
+        "find": "- Direct people management: at least 2 years with line responsibility, including hiring, and has handled at least one underperformance case.",
+        "with": "- Technical leadership: at least 2 years as the technical lead of a team, and has coached at least one engineer through a difficult stretch."
+      },
+      {
+        "find": "- Fewer than 2 years of direct people management. Mentoring and tech-lead work without line responsibility do not count.",
+        "with": "- Fewer than 2 years as the technical lead of a team."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F11",
+        "statement": "Must-have: technical leadership - at least 2 years as the technical lead of a team, and has coached at least one engineer through a difficult stretch.",
+        "doc_needles": [
+          "Technical leadership: at least 2 years"
+        ]
+      },
+      {
+        "fact": "F19",
+        "statement": "Disqualifier: fewer than 2 years as the technical lead of a team.",
+        "doc_needles": [
+          "Fewer than 2 years"
+        ]
+      }
+    ],
+    "note": "Scorecard rewritten so it asks for technical leadership rather than line management, consistent with the ~ic job description and team brief."
+  },
+  {
+    "id": "REC-REF-JD-2026~seven",
+    "base": "REC-REF-JD-2026",
+    "replace": [
+      {
+        "find": "- Line-manage the engineers on the Ingestion Platform team:",
+        "with": "- Line-manage the seven engineers on the Ingestion Platform team:"
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F6",
+        "statement": "The Engineering Lead line-manages the seven engineers on the Ingestion Platform team.",
+        "doc_needles": [
+          "seven engineers"
+        ]
+      }
+    ],
+    "note": "Job description now states seven direct reports, which conflicts with the team brief's four; both documents are current and dated 1 September 2026."
+  },
+  {
+    "id": "REC-REF-BENEFITS-2026~remote",
+    "base": "REC-REF-BENEFITS-2026",
+    "replace": [
+      {
+        "find": "Fully remote arrangements are limited to roles marked remote-eligible on the requisition. People-manager roles are not remote-eligible.",
+        "with": "Fully remote arrangements are open to every engineering role, including people-manager roles, from any US state. Remote employees travel to Duluth for one week each quarter."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F12",
+        "statement": "Fully remote arrangements are open to every engineering role, including people-manager roles, from any US state; remote employees travel to Duluth for one week each quarter.",
+        "doc_needles": [
+          "including people-manager roles",
+          "one week each quarter"
+        ]
+      }
+    ],
+    "note": "Location policy changes from manager roles not remote-eligible to fully remote allowed with a quarterly week in Duluth."
+  }
+]

@@ -1,0 +1,491 @@
+{
+  "mode": "recruiting",
+  "families": [
+    {
+      "family": "ER-CF-REC-1",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And how many people would actually report to me in this role?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "rec-full",
+          "pi_state": "none",
+          "evidence_state": "team_brief_says_four",
+          "oracle": {
+            "expected_behavior_note": "The team brief says the Engineering Lead has 4 direct reports (two senior, one mid-level, one associate engineer), with one more senior opening approved for the first quarter of 2027. The recruiter says four. The sister teams' sizes (6 and 5) and the candidate's own current team of 5 are not the answer.",
+            "required_facts": [
+              {
+                "fact": "REC-REF-TEAM-BRIEF-2026#F9",
+                "text": "Four people report to the role.",
+                "answer_needles": [
+                  "four",
+                  "4 direct",
+                  "4 engineers",
+                  "4 people",
+                  "4 reports"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "REC-REF-TEAM-BRIEF-2026#F9",
+                "text": "Two senior engineers, one mid-level and one associate."
+              },
+              {
+                "fact": "REC-REF-TEAM-BRIEF-2026#F11",
+                "text": "One further senior opening is approved for the first quarter of 2027."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Gives 5 or 6, the sizes of the sister teams or of the candidate's current team.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says the number is not known or must be checked.",
+                "kind": "over_deferral"
+              },
+              {
+                "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+            "expected_action": "answer_candidate_question",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "REC-REF-TEAM-BRIEF-2026"
+            ],
+            "source_priority": [
+              "REC-REF-TEAM-BRIEF-2026",
+              "REC-REF-JD-2026"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "rec-cf-reports-ic",
+          "pi_state": "none",
+          "evidence_state": "says_none_individual_contributor",
+          "condition": "grounded_single",
+          "oracle": {
+            "expected_behavior_note": "Here both the team brief and the job description say the Engineering Lead is an individual-contributor role with no direct reports; the team's four engineers report to the Director of Data Platform and the lead gives technical direction. The recruiter says nobody reports to the role directly.",
+            "required_facts": [
+              {
+                "fact": "REC-REF-TEAM-BRIEF-2026~ic#F9",
+                "text": "Nobody reports to the role; it is an individual-contributor role.",
+                "answer_needles": [
+                  "no direct reports",
+                  "individual contributor",
+                  "individual-contributor",
+                  "nobody",
+                  "no one",
+                  "none",
+                  "no reports",
+                  "wouldn't have direct reports",
+                  "IC role"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "REC-REF-TEAM-BRIEF-2026~ic#F9",
+                "text": "The team's four engineers report to the Director of Data Platform."
+              },
+              {
+                "fact": "REC-REF-JD-2026~ic#F6",
+                "text": "The lead gives technical direction; line management stays with the Director."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says four (or any number of) people report to the role.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says the number is not known.",
+                "kind": "over_deferral"
+              },
+              {
+                "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+            "expected_action": "answer_candidate_question",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "REC-REF-TEAM-BRIEF-2026~ic",
+              "REC-REF-JD-2026~ic"
+            ],
+            "source_priority": [
+              "REC-REF-TEAM-BRIEF-2026~ic",
+              "REC-REF-JD-2026~ic",
+              "REC-REF-SCORECARD-2026~ic"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "rec-cf-reports-conflict",
+          "pi_state": "none",
+          "evidence_state": "current_files_conflict",
+          "oracle": {
+            "expected_behavior_note": "Two current documents with the same date disagree: the team brief says 4 direct reports, the job description says the lead line-manages seven engineers. Nothing says which is right. The recruiter does not present one number as settled: she says it is a team she would manage directly, that she wants to confirm the exact headcount with the hiring manager, and may give both figures (four to seven). Spoken wording stays human (for example 'let me confirm that and come back to you'); it does not talk about files, documents or loaded context.",
+            "required_facts": [
+              {
+                "fact": "REC-REF-TEAM-BRIEF-2026#F9",
+                "text": "The reply does not state a single number as settled; it says the exact count needs confirming with the hiring manager (it may mention four and seven as the figures she has).",
+                "answer_needles": [
+                  "confirm",
+                  "double-check",
+                  "double check",
+                  "verify",
+                  "check",
+                  "make sure",
+                  "get you the exact",
+                  "come back"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "REC-REF-TEAM-BRIEF-2026#F9",
+                "text": "The team brief says 4 direct reports."
+              },
+              {
+                "fact": "REC-REF-JD-2026~seven#F6",
+                "text": "The job description says seven engineers."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "States four as the definite number with no caveat.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "States seven as the definite number with no caveat.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says nobody reports to the role.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+            "expected_action": "surface_conflict",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "REC-REF-TEAM-BRIEF-2026",
+              "REC-REF-JD-2026~seven"
+            ],
+            "source_priority": [
+              "REC-REF-TEAM-BRIEF-2026",
+              "REC-REF-JD-2026~seven"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Number of direct reports",
+                "sources": [
+                  "REC-REF-TEAM-BRIEF-2026",
+                  "REC-REF-JD-2026~seven"
+                ],
+                "resolution": "unresolved"
+              }
+            ],
+            "acceptable_inference": [
+              "Saying 'somewhere between four and seven, let me get you the exact number'."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "D",
+          "evidence_config": "rec-cf-reports-absent",
+          "pi_state": "none",
+          "evidence_state": "no_team_document",
+          "oracle": {
+            "expected_behavior_note": "The team brief is not loaded. The job description says the lead line-manages the team's engineers but gives no headcount, and no other document gives one. The recruiter can say it is a people-management role with direct reports, gives no number, and says she will confirm the headcount with the hiring manager. The candidate's own team of 5 on her resume is not Kestrelwick's number. Spoken wording stays human (for example 'let me confirm that and come back to you'); it does not talk about files, documents or loaded context.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "REC-REF-JD-2026#F6",
+                "text": "The role line-manages the engineers on the Ingestion Platform team; no number is given."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "States a specific number of direct reports as fact (for example 4, the 5 from the candidate's resume, or a number guessed from the one-week-in-five on-call cadence, which does not establish the headcount).",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says nobody reports to the role.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Uses a company, person, policy or figure from material loaded for another mode (anything that is not Kestrelwick, this role or this candidate).",
+                "kind": "other_mode"
+              },
+              {
+                "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+            "expected_action": "defer_to_verify",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [
+              "REC-REF-JD-2026"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Saying she will have direct reports and that the hiring manager will give the exact number."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    },
+    {
+      "family": "ER-CF-REC-2",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "I'm settled in Madison and I'd really rather not uproot the family. Could I do this fully remote?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "rec-full",
+          "pi_state": "none",
+          "evidence_state": "current_says_hybrid_manager_roles_not_remote",
+          "condition": "conflict_stale",
+          "oracle": {
+            "expected_behavior_note": "The current overview (version 4.1, 2026) says Kestrelwick is hybrid, with Duluth and Chattanooga employees in the office Tuesday, Wednesday and Thursday, and that people-manager roles are not remote-eligible. This is a people-manager role based in Duluth, so the honest answer is no, not fully remote: three days a week in the Duluth office. The 2025 overview's remote-first wording is out of date. The recruiter does not hint at an exception.",
+            "required_facts": [
+              {
+                "fact": "REC-REF-BENEFITS-2026#F12",
+                "text": "This role cannot be done fully remotely: people-manager roles are not remote-eligible.",
+                "answer_needles": []
+              },
+              {
+                "fact": "REC-REF-BENEFITS-2026#F11",
+                "text": "It is hybrid: in the Duluth office Tuesday, Wednesday and Thursday.",
+                "answer_needles": [
+                  "Tuesday",
+                  "three days",
+                  "3 days",
+                  "Tue"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "REC-REF-JD-2026#F3",
+                "text": "The role is based in Duluth."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the company is remote-first or that she can work from any of 23 states.",
+                "kind": "stale",
+                "fact": "REC-REF-BENEFITS-2025#F9",
+                "answer_needles": [
+                  "23 states",
+                  "23 US states"
+                ]
+              },
+              {
+                "text": "Offers or hints at an exception to the location policy.",
+                "kind": "unauthorized_promise",
+                "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+              },
+              {
+                "text": "States a relocation package.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+            "expected_action": "prefer_current_source",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-JD-2026"
+            ],
+            "source_priority": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-JD-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Remote work for this role",
+                "sources": [
+                  "REC-REF-BENEFITS-2026",
+                  "REC-REF-BENEFITS-2025"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [
+              "Acknowledging that this may be a deal-breaker and asking whether hybrid in Duluth could work."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "rec-cf-remote-ok",
+          "pi_state": "none",
+          "evidence_state": "current_says_remote_allowed",
+          "oracle": {
+            "expected_behavior_note": "Here the current overview says fully remote arrangements are open to every engineering role, including people-manager roles, from any US state, and that remote employees travel to Duluth for one week each quarter. The recruiter says yes, it can be done remotely from Madison, with a week in Duluth each quarter.",
+            "required_facts": [
+              {
+                "fact": "REC-REF-BENEFITS-2026~remote#F12",
+                "text": "Yes: the role can be done fully remotely, people-manager roles included.",
+                "answer_needles": []
+              },
+              {
+                "fact": "REC-REF-BENEFITS-2026~remote#F12",
+                "text": "Remote employees travel to Duluth for one week each quarter.",
+                "answer_needles": [
+                  "each quarter",
+                  "every quarter",
+                  "a quarter",
+                  "per quarter",
+                  "quarterly"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "REC-REF-JD-2026#F10",
+                "text": "The role also travels to Chattanooga up to four times a year."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the role must be in the Duluth office three days a week or cannot be remote.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says she needs to check whether remote is possible.",
+                "kind": "over_deferral"
+              },
+              {
+                "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+            "expected_action": "answer_candidate_question",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "REC-REF-BENEFITS-2026~remote"
+            ],
+            "source_priority": [
+              "REC-REF-BENEFITS-2026~remote",
+              "REC-REF-JD-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "rec-cf-remote-absent",
+          "pi_state": "none",
+          "evidence_state": "no_location_policy_loaded",
+          "oracle": {
+            "expected_behavior_note": "Neither Total Rewards overview is loaded. The job description says the role is located in Duluth and that the working arrangement follows the company location policy, which is not available; the brief only says the team is based in Duluth. The recruiter neither says fully remote is fine nor rules it out: she says the role is based in Duluth and that she will confirm what the location policy allows and come back. Spoken wording stays human (for example 'let me confirm that and come back to you'); it does not talk about files, documents or loaded context.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "REC-REF-JD-2026#F3",
+                "text": "The role's location is Duluth, Minnesota."
+              },
+              {
+                "fact": "REC-REF-JD-2026#F20",
+                "text": "The working arrangement follows the company location policy."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says fully remote is fine.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says remote is not possible or that she would have to relocate.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "States a number of office days.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Uses a company, person, policy or figure from material loaded for another mode (anything that is not Kestrelwick, this role or this candidate).",
+                "kind": "other_mode"
+              },
+              {
+                "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+                "kind": "fabrication"
+              }
+            ],
+            "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+            "expected_action": "defer_to_verify",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [
+              "REC-REF-JD-2026"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Saying the role is based in Duluth and promising a clear answer in the follow-up email."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    }
+  ]
+}

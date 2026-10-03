@@ -1,0 +1,60 @@
+HOLLOWPINE LABS / INKWHARF - research notes
+collected 20 to 27 September 2026
+
+
+COMPANY
+
+Founded in 2021 in Rotterdam by Fenna Ruyschenaar (CEO, a designer by training) and Tobias Kwintsheul (CTO). Funding so far: seed of EUR 2 million in 2021, Series A of EUR 9 million in 2023, Series B of EUR 31 million in February 2026 led by Vossenaar Capital. That makes EUR 42 million raised in total. Headcount and customer numbers are in the posting; I found nothing public that disagrees with them.
+
+They hire across Europe and say so on the careers page. Two of the people on the team page are in Lisbon, which is nice to know and proves nothing.
+
+
+PRODUCT
+
+Inkwharf puts documents, plans and sketches in one workspace. The assistant arrived with Inkwharf 3.0 in November 2025. Undo for assistant suggestions was added in March 2026, according to the changelog. The editor is built on ProseMirror with Yjs bindings, according to their engineering blog.
+
+Pricing on the public page:
+- Team: EUR 9 per seat per month
+- Business: EUR 16 per seat per month
+- The assistant is included in Business and costs EUR 4 per seat extra on Team
+- Free tier for up to 5 editors
+
+Competitors people mention: Notemeadow (much bigger, American) and Quillbase (open source, self-hosted).
+
+
+ACCESSIBILITY - WHAT I SAW
+
+Their accessibility statement, last updated January 2026, says the product is "partially conformant" with WCAG 2.1 AA. Two known gaps are listed: live cursors are not announced, and keyboard focus can get stuck in the comment sidebar.
+
+My own half hour with VoiceOver on the free tier, 27 September: the accept and reject buttons on an assistant suggestion have no accessible name, and presence avatars are read out as "image" once per person in the document. Both are fixable. This is the distance between where they are and what the posting asks for, and it is the part of the job I could start on in the first week.
+
+
+PEOPLE
+
+Jorrit Aldewyck, who would be my manager, was on a podcast in June 2026. The line I wrote down: "we hire product engineers who are willing to kill their own feature". Before Hollowpine he led the web team at a mapping company.
+
+
+ENGINEERING BLOG
+
+"Fifty cursors": how they check large documents. 50 headless browsers in CI type into one document while typing latency is measured. Flaky at first, they say; it took them 3 months to trust it.
+
+"Streaming without lying": the assistant shows partial text as it arrives but marks a paragraph as unconfirmed until the whole answer is in. A short post, and the best thing I read about them.
+
+
+WHY THIS ONE
+
+Making a multiplayer editor usable with a screen reader is an unsolved and very visible problem, and it is exactly where my audit and certification background is worth something. They run experiments as a habit and not as a ceremony. And the assistant's failure states are a design problem I would enjoy, even though I have not built one.
+
+
+TO ASK
+
+- Who owns the accessibility statement, and is there a date for full conformance?
+- How do you judge the assistant inside an experiment: what is the metric when an answer is plausible but wrong?
+- How are the team weeks scheduled, and are the dates known a year ahead?
+- What does a support captain week actually involve?
+- How much of the editor is custom ProseMirror plugin code?
+
+
+LOGISTICS
+
+Intro call on Tuesday 6 October 2026 at 14:00 Lisbon time with their recruiter, Maud.

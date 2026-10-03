@@ -1,0 +1,53 @@
+[
+ {
+  "id": "TI-REF-A-PROJECT-DEEPDIVE~traffic",
+  "base": "TI-REF-A-PROJECT-DEEPDIVE",
+  "replace": [
+   {
+    "find": "about 620 million events",
+    "with": "about 480 million events"
+   },
+   {
+    "find": "about 7,200 events per second",
+    "with": "about 5,600 events per second"
+   }
+  ],
+  "facts_changed": [
+   {
+    "fact": "F8",
+    "statement": "On a typical weekday Skeinrouter carries about 480 million events.",
+    "doc_needles": [
+     "about 480 million events"
+    ]
+   },
+   {
+    "fact": "F9",
+    "statement": "Averaged over a full day the pipeline carries about 5,600 events per second.",
+    "doc_needles": [
+     "about 5,600 events per second"
+    ]
+   }
+  ],
+  "note": "Typical weekday volume and the day average are lower (480 million, 5,600 per second); the peak, which the résumé also states, is unchanged."
+ },
+ {
+  "id": "TI-REF-SYSDESIGN-BRIEF~avail",
+  "base": "TI-REF-SYSDESIGN-BRIEF",
+  "replace": [
+   {
+    "find": "| Availability of redirects | 99.95% per month |",
+    "with": "| Availability of redirects | 99.99% per month |"
+   }
+  ],
+  "facts_changed": [
+   {
+    "fact": "F9",
+    "statement": "System A: availability of redirects is 99.99% per month.",
+    "doc_needles": [
+     "99.99% per month"
+    ]
+   }
+  ],
+  "note": "The redirect availability target is 99.99% instead of 99.95%."
+ }
+]
