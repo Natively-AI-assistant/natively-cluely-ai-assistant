@@ -198,3 +198,28 @@ test('the mac DMG keeps the disguise alias as its file and volume name', () => {
   assert.equal(pkg.build?.dmg?.artifactName, '${productName}-${version}-${arch}.${ext}');
   assert.equal(pkg.build?.dmg?.title, '${productName}');
 });
+
+test('sqlite-vec and its platform packages resolve to one version, and the fetch script follows the lockfile', () => {
+  // THE REGRESSION THIS GUARDS (found 2026-10-04): scripts/ensure-sqlite-vec.js
+  // hardcoded '0.1.7-alpha.2' and skipped any package that already existed, so
+  // after the lockfile moved to 0.1.9 an Intel build made on Apple Silicon shipped
+  // the 0.1.9 wrapper with a 0.1.7-alpha.2 extension. sqlite-vec pins its platform
+  // packages to its own exact version, so all of them must agree.
+  const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package-lock.json'), 'utf8'));
+  const wanted = lock.packages?.['node_modules/sqlite-vec']?.version;
+  assert.ok(wanted, 'package-lock.json must pin sqlite-vec');
+  for (const name of ['sqlite-vec-darwin-arm64', 'sqlite-vec-darwin-x64', 'sqlite-vec-windows-x64']) {
+    assert.equal(
+      lock.packages?.[`node_modules/${name}`]?.version,
+      wanted,
+      `${name} must be locked at the sqlite-vec version (${wanted})`
+    );
+  }
+
+  const src = fs.readFileSync(path.join(repoRoot, 'scripts', 'ensure-sqlite-vec.js'), 'utf8');
+  assert.ok(
+    !/SQLITE_VEC_VERSION\s*=\s*['"`]/.test(src),
+    'scripts/ensure-sqlite-vec.js must not hardcode a version; it reads package-lock.json'
+  );
+  assert.match(src, /package-lock\.json/, 'scripts/ensure-sqlite-vec.js must read the version from package-lock.json');
+});
