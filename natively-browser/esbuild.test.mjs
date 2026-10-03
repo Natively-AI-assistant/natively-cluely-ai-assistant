@@ -31,6 +31,9 @@ await build({
     path.join(rootDir, 'src', 'meeting-tabs.ts'),
     // What the Meet reader reads from a Meet page.
     path.join(rootDir, 'src', 'meet-dom.ts'),
+    // Shared DOM helpers for the extractors, and origin match-pattern derivation.
+    path.join(rootDir, 'src', 'capture', 'extractors', 'dom-helpers.ts'),
+    path.join(rootDir, 'src', 'capture', 'originPattern.ts'),
   ],
   bundle: true,
   outdir: path.join(rootDir, 'dist-test'),
