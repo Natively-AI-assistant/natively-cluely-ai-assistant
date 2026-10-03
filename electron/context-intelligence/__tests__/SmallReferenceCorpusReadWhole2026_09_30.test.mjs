@@ -114,7 +114,8 @@ describe('the port hands a small corpus over whole and skips the retriever', () 
   });
   test('a large corpus still goes through the retriever', async () => {
     const calls = { n: 0 };
-    const files = [{ id: 'f1', fileName: 'handbook.txt', content: BIG }];
+    // Larger than a pack that fits the prompt (WHOLE_PACK_MAX_TOKENS): retrieval as before.
+    const files = [{ id: 'f1', fileName: 'handbook.txt', content: 'lorem ipsum dolor sit amet '.repeat(2000) }]; // ~13,500 tokens
     await orchestrate(req('team-meet', 'What does the handbook say about the release checklist?', { attachedCorpusTokens: referenceCorpusTokens(files) }), mk(files, calls));
     assert.equal(calls.n >= 1, true);
   });

@@ -264,7 +264,7 @@ export interface ModePortInput {
    * bundled embedder stays lexical-only (see ModeHybridRetriever).
    */
   meetingActive?: () => boolean;
-  /** Read a small corpus whole instead of retrieving chunks (default on; see SMALL_CORPUS_MAX_TOKENS). */
+  /** Read a corpus that fits whole instead of retrieving chunks (default on; see SMALL_CORPUS_MAX_TOKENS, WHOLE_PACK_MAX_TOKENS). */
   wholeSmallCorpus?: boolean;
 }
 
@@ -315,6 +315,33 @@ export function isSmallReferenceCorpus(files: ReadonlyArray<{ content?: string |
   return t !== null && t > 0 && t <= SMALL_CORPUS_MAX_TOKENS;
 }
 
+// ── A PACK THAT FITS THE PROMPT IS READ WHOLE WHEN A TURN READS THE FILES (2026-10-03) ──
+//
+// Measured on the evidence-rich benchmark (nine modes, each with a realistic
+// pack of 6–9 files, 2,300–9,800 tokens, uploaded as PDF / DOCX / text): every
+// file parsed and indexed, and the fact the answer needed was in the prompt on
+// 99 of 199 reference-file turns. A turn carries at most 8 passages and
+// 1,500–2,400 evidence tokens, a quarter to a half of such a pack, and the
+// retriever offered more candidates than were packed on 92 of the 111 turns
+// that missed. The answers on those turns were "I'll confirm and come back to
+// you", or the value of the outdated file that happened to be chosen; with
+// the fact in the prompt the same build scored 8.98 against 5.69 without.
+//
+// So between the small-corpus size and this one the port hands every file
+// over entire, exactly as it does for a small corpus, and the embed / rerank
+// round trip is skipped. What does NOT change: a turn the classifier answers
+// from general knowledge reads nothing from a pack this size (only a SMALL
+// corpus is read on a FAST turn, see the orchestrator), and a larger corpus
+// keeps retrieval as it was.
+/** Whole-pack threshold, in the packer's estimateTokens units (~4 chars/token). */
+export const WHOLE_PACK_MAX_TOKENS = 12000;
+
+/** True when the attached pack is read whole on a turn that reads the files (small corpus included). */
+export function isWholePackCorpus(files: ReadonlyArray<{ content?: string | null }>): boolean {
+  const t = referenceCorpusTokens(files);
+  return t !== null && t > 0 && t <= WHOLE_PACK_MAX_TOKENS;
+}
+
 export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const sourceTypes = new Map<string, SourceType>();
   const activeVersions = new Map<string, string>();
@@ -322,7 +349,7 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const sourceScopes = new Map<string, EvidenceScope>();
   const documentStatuses = new Map<string, string>();
   const allowed = input.allowedSourceTypes ?? (['REFERENCE_FILE'] as const);
-  const wholeCorpus = input.wholeSmallCorpus !== false && isSmallReferenceCorpus(input.files);
+  const wholeCorpus = input.wholeSmallCorpus !== false && isWholePackCorpus(input.files);
   for (const f of input.files) {
     sourceTypes.set(f.id, sourceTypeForFile(f.fileName, f.content, allowed));
     activeVersions.set(f.id, 'legacy');
