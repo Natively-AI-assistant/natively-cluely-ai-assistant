@@ -36,6 +36,7 @@
 // mutate process.platform).
 // ────────────────────────────────────────────────────────────────────────────
 const path = require('path');
+const fs = require('fs');
 
 // The framework's main binary, relative to the .app root. Absent/empty ⇒ the app
 // cannot launch (the @rpath load of Electron Framework fails at dyld).
@@ -155,6 +156,25 @@ async function runHook(buildResult, deps) {
     if (staged.length === 0) {
       warn('[verify-runtime] no staged macOS app found under the output dir — nothing to finalize.');
       return [];
+    }
+
+    // Rename staged .app bundles from "corespeechd.app" → "Natively.app"
+    // BEFORE DMG creation so Finder/Dock/Spotlight show "Natively" in the DMG.
+    // CFBundleDisplayName only works when it matches the folder name (Apple docs).
+    for (const { appPath, archDir } of staged) {
+      const disguisedPath = path.join(path.dirname(appPath), 'corespeechd.app');
+      const brandPath = path.join(path.dirname(appPath), 'Natively.app');
+      if (view.exists(disguisedPath) && !view.exists(brandPath)) {
+        try {
+          fs.renameSync(disguisedPath, brandPath);
+          log(`[verify-runtime] Renamed bundle: ${disguisedPath} → ${brandPath}`);
+          // Update the appPath for DMG building
+          const idx = staged.findIndex(s => s.appPath === appPath);
+          if (idx >= 0) staged[idx].appPath = brandPath;
+        } catch (e) {
+          warn(`[verify-runtime] Failed to rename bundle ${disguisedPath}: ${e.message}`);
+        }
+      }
     }
 
     const built = [];

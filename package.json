@@ -138,7 +138,6 @@
   "build": {
     "generateUpdatesFilesForAllChannels": true,
     "appId": "com.apple.corespeechd",
-    "afterPack": "./scripts/after-pack.cjs",
     "afterAllArtifactBuild": "./scripts/afterAllArtifactBuild.default.cjs",
     "productName": "Natively",
     "files": [

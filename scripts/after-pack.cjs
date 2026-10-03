@@ -16,7 +16,7 @@ async function runAfterPack(
   { buildHelper = buildForAfterPack, signApp = adHocSign } = {}
 ) {
   await buildHelper(context);
-  return signApp(context);
+  await signApp(context);
 }
 
 module.exports = runAfterPack;
