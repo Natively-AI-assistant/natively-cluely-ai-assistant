@@ -506,3 +506,45 @@ Both hold → land `fix/er-followups-on-main` on local main (re-applied and re-t
 E5's lines fail → the fixes stay on their branch. E1's lines fail → tell Evin before anything else (`git revert
 9fce990b` is the way back). The chain judges these three holdout runs and their drafts first; if its batch closes
 before they are complete, nothing is decided and it continues from the cache on the next batch.
+
+---
+
+## E2 — the résumé and the job description are handed over whole (Evin: "Build and measure")
+
+**Rule written before any E2 code existed and before any E2 row (commit time of this section is the record).**
+
+**Why.** In the two profile modes a turn gets at most six profile passages out of about seventy. On the control
+(`s3` = E1 + markup fix + E5), of the 20 dev + counterfactual rows whose oracle rests on a résumé or JD fact, every
+needed fact was in the prompt on 8; on the holdout 5 of 13. With the fact in the prompt those rows score 9.5,
+without it 6.6 (section 15 of the quality report). The two documents together are about 2,700 tokens.
+
+**Change (branch `fix/er-profile-whole`, from `742a7170`).** When every registered résumé / JD has its raw text
+and together they are at most 6,000 tokens, a turn that reads the profile gets each planned document as ONE item
+holding its whole text, in place of that document's raw-text passages and the semantic arm; the plan's item cap
+grows by the number of documents and its token budget by their size, on top of E1's room for the pack. Unchanged:
+structured sections, cards, the complete-inventory sections that license "X is not listed" answers, derived facts,
+the planned-type gate (a turn that plans only the résumé still gets no JD), modes that do not hydrate the profile,
+and a profile above 6,000 tokens. 6,000 keeps a full pack plus the profile under the claim pass's 96,000 characters.
+
+**Control.** The `s3` runs, including an isolation run made for this purpose on `742a7170` before any edit
+(`er-iso-s3`). **Candidate:** run tag `s4`; dev and counterfactual restricted to Looking for work and Technical
+Interview (74 rows; no other mode builds a profile port), the isolation set whole (46 rows), then the holdout's
+40 rows of those two modes.
+
+**Rule, judge-free (dev + counterfactual; `report/profile-rows.mjs s3 s4 dev cf`).**
+1. Rows that need a profile fact: every needed fact in the prompt on at least 17 of 20 (control: 8).
+2. No claim-pass request cut (control: 0).
+3. Isolation set, by code: no string of the other profile in any prompt or answer, no profile evidence in a mode
+   that may not use it, no profile text in a prompt after the user deleted it.
+
+**Rule, judged (provisional judge), paired with `s3`.**
+4. Rows that need a profile fact: gain at least +1.0 with a 95 % interval that excludes 0.
+5. All Looking-for-work and Technical-Interview rows: not below −0.15; hard fails not up.
+6. Rows of those modes that need no profile fact (missing personal evidence included): not below −0.3; hard fails
+   not up.
+7. Isolation set against `er-iso-s3`: not below −0.3; hard fails not up.
+8. Heard first word in the two modes, median: not more than 150 ms above the control's.
+
+**Holdout (aggregates only, 40 rows):** rows that need a profile fact gain more than +0.5; all rows not below
+−0.15; hard fails not up. A failure at any step: not kept. Nothing lands without Evin; E2 is its own decision,
+outside the "after Astra" gate.
