@@ -106,6 +106,7 @@ const iso = {
   pi_rows: answered.filter((r) => PI_MODES.has(r.item.mode) && r.fn.pi_loaded).length,
   other_profile_in_prompt: answered.filter((r) => r.fn.wrong_profile_reached_prompt).length,
   other_profile_in_answer: answered.filter((r) => (r.obj?.flags ?? []).includes('wrong_profile_used')).length,
+  other_profile_in_answer_with_prompt_leak: answered.filter((r) => (r.obj?.flags ?? []).includes('wrong_profile_used') && r.fn.wrong_profile_reached_prompt).length,
   pi_string_in_answer_non_pi_mode: answered.filter((r) => (r.obj?.flags ?? []).includes('pi_leak')).length,
   other_mode_string_in_answer: answered.filter((r) => (r.obj?.flags ?? []).includes('cross_mode_reference_leak')).length,
   residue_after_profile_overwrite: answered.filter((r) => (r.row.pi_other_profile_residue ?? []).length).length,
@@ -114,7 +115,7 @@ out.isolation = iso;
 console.log(`\n# isolation (code checks on ${iso.rows} answered rows)`);
 console.log(`another mode's file in the prompt: ${iso.cross_mode_file_in_prompt} · unknown file in the prompt: ${iso.unknown_file_in_prompt} · reference evidence with no file loaded: ${iso.reference_evidence_with_no_file_loaded}`);
 console.log(`PI loaded while in a non-PI mode: ${iso.pi_loaded_rows_in_non_pi_modes} rows, PI evidence in their prompt: ${iso.pi_evidence_in_non_pi_mode_prompt}, PI string in their answer: ${iso.pi_string_in_answer_non_pi_mode}`);
-console.log(`PI rows ${iso.pi_rows}: other profile's strings in the prompt ${iso.other_profile_in_prompt}, in the answer ${iso.other_profile_in_answer}; rows run after a profile overwrite that left residue in the stored profile: ${iso.residue_after_profile_overwrite}`);
+console.log(`PI rows ${iso.pi_rows}: other profile's strings in the prompt ${iso.other_profile_in_prompt}, in the answer ${iso.other_profile_in_answer} (of which with that text in the prompt: ${iso.other_profile_in_answer_with_prompt_leak}); rows run after a profile overwrite that left residue in the stored profile: ${iso.residue_after_profile_overwrite}`);
 console.log(`another mode's fixed string in the answer (isolation items): ${iso.other_mode_string_in_answer}`);
 
 // ---- 5. latency and stalls ----
@@ -190,7 +191,10 @@ if (set) {
     if (r.fn.evidence_required && r.fn.fact_survived_parse === false) return 'A ingestion (fact lost in parse)';
     if (r.fn.evidence_required && r.fn.pi_fact_reached_prompt === false && r.fn.doc_fact_reached_prompt !== false) return 'E/F profile evidence not in prompt';
     if (r.fn.evidence_required && r.fn.evidence_delivered === false) return r.fn.wrong_source_retrieved ? 'C wrong source selected' : 'B retrieval (fact not in prompt)';
-    if (r.j.official.flags.some((f) => ['wrong_profile_used', 'pi_leak', 'cross_mode_reference_leak'].includes(f))) return 'F isolation / leakage';
+    // A leak is a leak only when the other profile's / mode's text was in the prompt; otherwise the claim was invented.
+    if (r.j.official.flags.some((f) => ['wrong_profile_used', 'pi_leak', 'cross_mode_reference_leak'].includes(f))) {
+      return (r.fn.wrong_profile_reached_prompt || r.fn.cross_mode_source_in_prompt.length || r.fn.pi_in_forbidden_mode_prompt) ? 'F isolation / leakage (the other text was in the prompt)' : 'H generation: invented a claim that resembles another profile or mode (none of it was in the prompt)';
+    }
     if (r.j.official.flags.some((f) => ['stale_source_preferred', 'draft_source_preferred', 'source_conflict_ignored'].includes(f))) return 'D precedence (evidence in prompt)';
     if (r.j.official.flags.some((f) => ['arithmetic_error', 'pricing_error'].includes(f))) return 'J arithmetic';
     if (r.j.official.flags.includes('code_incorrect')) return 'K coding';
