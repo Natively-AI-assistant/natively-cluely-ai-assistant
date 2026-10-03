@@ -2078,4 +2078,7 @@ Shown the four options in plain terms and the clean re-run (heard first word 1.0
 0.81 s without; passages identical on 89 of 93 rows), Evin answered: "keep as today". **The awaited rerank on heard
 turns stays. Nothing is changed and nothing is built for it.** The judged pair queued for 11:00 UTC (`rron1`,
 `rroff1`) no longer decides anything; it still runs, as a record.
+* 04:45Z: chain `b1100c` disarmed. With the decision made, judging `rron1` / `rroff1` (about 265 calls) would be a
+  record nobody needs, billed to Evin's balance. The runs stay on disk; `node astra/arm.mjs <tag>` judges them if
+  ever wanted.
 
