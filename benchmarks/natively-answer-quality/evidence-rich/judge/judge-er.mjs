@@ -96,7 +96,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const lim = limiter(conc);
   for (const dir of runs) {
     const run = loadRun(dir);
-    const outFile = path.join(outDir, `${path.basename(dir)}.${JUDGE_TAG}.jsonl`);
+    // --draft: judge the STREAMED text of the rows whose shown text was replaced by the claim pass (what the user read
+    // first), into its own file. The envelope is the same; only the answer differs.
+    const draft = !!opt('draft');
+    if (draft) { run.rows = run.rows.filter((r) => r.answer_differs_raw_vs_rendered && String(r.raw_answer ?? '').trim()).map((r) => ({ ...r, rendered_answer: null })); run.rowsById = { ...run.rowsById, ...Object.fromEntries(run.rows.map((r) => [r.benchmark_id, r])) }; }
+    const outFile = path.join(outDir, `${path.basename(dir)}${draft ? '.draft' : ''}.${JUDGE_TAG}.jsonl`);
     const done = opt('force') ? new Set() : new Set(readJsonl(outFile).filter((j) => j.ok).map((j) => j.benchmark_id));
     let todo = run.rows.filter((row) => {
       const it = run.ds.byId[row.benchmark_id];
