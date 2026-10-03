@@ -127,3 +127,34 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   `test:intelligence` 2,858 pass / 0 fail of 2,869, then `git merge --ff-only` in the main checkout; another
   session's uncommitted files there were untouched (status identical before and after). Not pushed. The temporary
   worktree was removed.
+
+## 17:15–19:15 — the four follow-ups Evin chose (branch `fix/er-followups` in `er-fix1`, nothing landed)
+
+* **Root cause of the claim-pass loss found (17:20).** The pass is shown only the first 24,000 characters of the
+  answer's prompt on both surfaces, not only on the typed one as first reported. Offline harness built
+  (`replay-claim-pass.mjs`, `replay-judge.mjs`): it rebuilds the app's own request (equal to the recorded one on
+  every replay) and its system prompt (the recorder kept only a hash; the app's language suffix was recovered from
+  a recorded answer prompt and the rebuilt prompt matches the hash on every row).
+* **Markup defect (17:40).** No tool was declared on the request. The prompt's calculation notice asks for hidden
+  working inside `[[CALC]]`; once in 334 such turns the model wrote it as its own tool-call markup, which the stream
+  filter did not know. 24 replays of the recorded request: 0 reproductions. Fixed in the filter with tests
+  (`d503ae4f`); on 783 recorded answers the fixed filter changes only that one.
+* **E5 (cap 96,000 for the claim pass): offline pass (18:05), commit `441ed80a`.**
+* **E6 (CONFLICT step): fails its first line (18:20); not built.** Some replays timed out during a slow spell of
+  the provider and were run again once.
+* **E7 (date / version labels), commit `9b8c99fa`: failed in the app (18:30) and reverted (`742a7170`).** A holdout
+  run of that build had been started early and was stopped at 32 rows, unjudged; its folder was deleted.
+* **E5 in the app (run `s3`): dev + counterfactual pass (19:15).** The dev run was killed from outside at 130 rows
+  (load average above 20, memory pressure from another session's build) and resumed. A launcher process left over
+  from that restart was stopped by hand before the holdout run.
+* The machine was shared with another session's builds throughout; latency figures of `s2` / `s3` carry that.
+
+## 19:15–19:55 — holdout of `s3`, verdict
+
+* Holdout 19:14–19:30 (180 rows, none unverified), judged blind. E5's holdout lines hold: the pass's effect
+  −0.37 → 0.00, hard fails 15 → 15. **E5 kept on `fix/er-followups`; not on main.**
+* Tests on the branch head `742a7170`: `test:intelligence` 2,806 pass / 0 fail of 2,817; `node --test
+  electron/llm/__tests__/*.test.mjs` 5,472 pass / 0 fail of 5,490; `typecheck:electron` clean.
+* Cherry-pick check against main in a throwaway worktree (removed): the markup fix applies cleanly; E5 conflicts in
+  `LLMHelper.replayAnswerCall`, where main has a later change to the same lines. Nothing was landed.
+* The gpt-6-astra chain was re-armed with the `s3` runs and their drafts added (`results/astra-chain.log`).

@@ -455,3 +455,34 @@ resumed; 333 rows answered, none unverified.
 
 The offline replay had predicted +0.01 for the pass's effect; the app measured −0.01. **Dev + counterfactual: E5
 passes. It goes to the holdout.**
+
+### E5 — holdout confirmation and verdict (2026-10-03 19:50 UTC; aggregates only; provisional judge)
+
+Run `er-holdout-s3` on `742a7170` (180 rows, all answered, none unverified), judged blind, read against
+`er-holdout-e1` with `report/stack-vs.mjs e1 s3 holdout --blind`.
+
+| | E1 | s3 |
+|---|---:|---:|
+| Shown, all rows | 8.17 | 8.71 (+0.54 ±0.28) |
+| Drafts, all rows (same generator: run-to-run noise) | 8.54 | 8.70 (+0.16 ±0.20) |
+| Effect of the claim pass (shown − draft) | −0.37 (±0.24) | 0.00 (±0.12) |
+| Hard fails / critical (shown) | 15 / 8 | 15 / 5 |
+| Hard fails, drafts → shown | 21 → 15 | 16 → 15 |
+| Answers the pass replaced | 57 | 32 |
+| Conflict / stale rows (shown) | 7.81 | 8.86 |
+| Last streamed token → settled text, median | 1,156 ms | 986 ms |
+
+| Holdout rule | Measured | Holds |
+|---|---|---|
+| Effect of the pass on the set's mean not below −0.10 | 0.00 (±0.12) | yes |
+| Hard fails (shown) not above E1's 15 by more than 2 | 15 | yes |
+
+About 0.16 of the +0.54 is the two runs' drafts differing; the pass's own share is the −0.37 → 0.00.
+Against the kept build `e000db4a` on the same blind set: 7.40 → 8.71 (+1.30 ±0.39), hard fails 39 → 15, critical
+19 → 5.
+
+**Verdict: E5 is kept**, as commit `441ed80a` on `fix/er-followups` (with the markup fix `d503ae4f`; the branch
+head `742a7170` has the labels reverted). Tests on the head: `test:intelligence` 2,806 pass / 0 fail, the llm suite
+5,472 pass / 0 fail, `typecheck:electron` clean. **Not on main.** On main `d503ae4f` cherry-picks cleanly;
+`441ed80a` conflicts in `LLMHelper.replayAnswerCall` (main carries a later change to the same lines) and needs a
+two-line resolution. The judge was the provisional one; the gpt-6-astra chain is armed to re-judge these runs.
