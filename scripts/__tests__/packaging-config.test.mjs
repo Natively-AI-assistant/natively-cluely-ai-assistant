@@ -223,3 +223,23 @@ test('sqlite-vec and its platform packages resolve to one version, and the fetch
   );
   assert.match(src, /package-lock\.json/, 'scripts/ensure-sqlite-vec.js must read the version from package-lock.json');
 });
+
+test('the macOS native build pins its deployment target instead of taking Rust\'s default', () => {
+  // THE REGRESSION THIS GUARDS (found 2026-10-04): Rust links x86_64-apple-darwin
+  // for macOS 10.12 by default. At that target the linker records the Swift
+  // overlay libraries as `@rpath/libswiftCoreMedia.dylib`, the app provides no
+  // such rpath, and the Intel slice of the audio module fails at dlopen — while
+  // the arm64 slice (default 11.0) works, so nothing fails on the build machine.
+  const src = fs.readFileSync(path.join(repoRoot, 'scripts', 'build-native.js'), 'utf8');
+  assert.match(
+    src,
+    /MACOSX_DEPLOYMENT_TARGET:\s*process\.env\.MACOSX_DEPLOYMENT_TARGET\s*\|\|\s*MACOS_DEPLOYMENT_TARGET/,
+    'scripts/build-native.js must pass MACOSX_DEPLOYMENT_TARGET to the napi build on macOS'
+  );
+  const pinned = /const MACOS_DEPLOYMENT_TARGET = '(\d+)\.(\d+)'/.exec(src);
+  assert.ok(pinned, 'scripts/build-native.js must define MACOS_DEPLOYMENT_TARGET');
+  assert.ok(
+    Number(pinned[1]) >= 11,
+    `MACOS_DEPLOYMENT_TARGET is ${pinned[1]}.${pinned[2]}; below 10.15 the Swift overlay libraries are linked by @rpath`
+  );
+});
