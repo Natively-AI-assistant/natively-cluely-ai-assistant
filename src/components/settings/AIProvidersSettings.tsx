@@ -2058,6 +2058,8 @@ interface AipModelListProps {
      */
     visionControl?: boolean;
     visionId?: (modelId: string) => string;
+    /** Timestamp when this catalog was last dynamically fetched. */
+    lastFetchedAt?: number;
 }
 
 /** Above this many models, a filter field appears. */
@@ -2083,6 +2085,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
     onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
     catalogIsComplete = false, pickOnly = false, visionControl = false, visionId,
+    lastFetchedAt,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
@@ -2312,6 +2315,11 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                     catalogIsComplete uses to silence the built-in note. */}
                                 {refreshing ? t('Fetching...') : (showFilterBar || catalogIsComplete) ? t('Refresh') : t('Fetch all models')}
                             </button>
+                        )}
+                        {lastFetchedAt && lastFetchedAt > 0 && (
+                            <span className="text-[10px] aip-muted ml-auto self-center shrink-0">
+                                {t('Synced')} {new Date(lastFetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                         )}
                         </div>
 
@@ -3439,6 +3447,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // CredentialsManager so it survives the settings-tab switch that unmounts this
     // panel (SettingsOverlay renders it behind `activeTab === 'ai-providers' &&`).
     const [cloudFetchedModels, setCloudFetchedModels] = useState<Record<string, AipModelEntry[]>>({});
+    const [cloudFetchedAt, setCloudFetchedAt] = useState<Record<string, number>>({});
     const [modelSaveError, setModelSaveError] = useState<Record<string, boolean>>({});
 
     // Status
@@ -3842,7 +3851,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setDisabledProviders(Array.isArray(creds.disabledProviders) ? creds.disabledProviders : []);
                     setCloudEnabledModelsState(creds.cloudEnabledModels || {});
                     window.electronAPI?.getCloudFetchedModels?.()
-                        .then((res: { models?: Record<string, AipModelEntry[]> }) => { if (res?.models) setCloudFetchedModels(res.models); })
+                        .then((res: { models?: Record<string, AipModelEntry[]>; fetchedAt?: Record<string, number> }) => {
+                            if (res?.models) setCloudFetchedModels(res.models);
+                            if (res?.fetchedAt) setCloudFetchedAt(res.fetchedAt);
+                        })
                         .catch(() => {});
                     setPreferredModels(pm);
 
@@ -3928,6 +3940,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         if (window.electronAPI?.onCredentialsChanged) {
             // @ts-ignore
             unsubs.push(window.electronAPI.onCredentialsChanged(() => {
+                loadCredentials();
+            }));
+        }
+        if (window.electronAPI?.onLiveCatalogUpdated) {
+            unsubs.push(window.electronAPI.onLiveCatalogUpdated(() => {
                 loadCredentials();
             }));
         }
@@ -5652,6 +5669,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 onResetModels={() => handleResetModels(id)}
                                 onSetDefaultModel={(modelId) => handleSetDefaultModel(id, modelId)}
                                 hasCatalog={(cloudFetchedModels[id]?.length ?? 0) > 0}
+                                fetchedAt={cloudFetchedAt[id]}
                                 modelSaveError={!!modelSaveError[id]}
                                 onSaveKey={async () => { await handleSaveKey(id, keyValue, setKeyValue); }}
                                 onRemoveKey={() => handleRemoveKey(id, setKeyValue)}
