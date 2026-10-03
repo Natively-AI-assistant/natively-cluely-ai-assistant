@@ -372,7 +372,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "sharp": "^0.34.5",
-    "sqlite-vec": "^0.1.7-alpha.2",
+    "sqlite-vec": "^0.1.9",
     "tesseract.js": "^5.0.5",
     "thinking-orbs": "^0.2.0",
     "tree-kill": "^1.2.2",
@@ -382,9 +382,9 @@
   },
   "optionalDependencies": {
     "@vectorize-io/hindsight-client": "^0.8.6",
-    "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",
-    "sqlite-vec-darwin-x64": "^0.1.7-alpha.2",
-    "sqlite-vec-windows-x64": "^0.1.7-alpha.2"
+    "sqlite-vec-darwin-arm64": "^0.1.9",
+    "sqlite-vec-darwin-x64": "^0.1.9",
+    "sqlite-vec-windows-x64": "^0.1.9"
   },
   "overrides": {
     "onnxruntime-node": "1.22.0",
