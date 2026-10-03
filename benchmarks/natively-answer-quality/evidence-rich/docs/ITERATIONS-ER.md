@@ -7,7 +7,7 @@ then the data and the verdict. A candidate that fails its rule is not kept, what
 
 ## E1 — a pack that fits the prompt is read whole on a turn that reads the files
 
-**Written 2026-10-03 15:00 UTC. No E1 row existed; the app had not been run on this branch.**
+**Written 2026-10-03, committed 14:57 UTC (`da60373d`). No E1 row existed; the app had not been run on this branch.**
 
 **Root cause it addresses (class B, retrieval / context selection).** Baseline dev, 199 reference-evidence cases:
 files uploaded, parsed and indexed in 100 %; the right file in the prompt in 82.6 %; every needed fact in the prompt
@@ -53,7 +53,7 @@ at least +0.5 with an interval that excludes 0, and hard fails not up; a failure
 
 Nothing is landed on main either way.
 
-### E1 — data, dev + counterfactual (2026-10-03 16:20 UTC; provisional judge, Claude Opus 5.5)
+### E1 — data, dev + counterfactual (2026-10-03, committed 16:15 UTC; provisional judge, Claude Opus 5.5)
 
 Runs `er-dev-e1`, `er-cf-e1` on `bab77f33` (270 + 63 rows, all answered), paired with `er-dev-base`, `er-cf-base`.
 
@@ -85,13 +85,34 @@ What else it shows:
 **Verdict on dev + counterfactual: every line holds. E1 goes to the holdout confirmation** (aggregates only; rule
 written above: evidence-required rows gain at least +0.5 with an interval that excludes 0, hard fails not up).
 
+### E1 — holdout confirmation and verdict (2026-10-03, 16:38 UTC; aggregates only; provisional judge)
+
+Run `er-holdout-e1` on `bab77f33` (180 rows, all answered), paired with `er-holdout-base`.
+
+| Holdout rule | Measured | Holds |
+|---|---|---|
+| Evidence-required rows: paired gain ≥ +0.5, interval excludes 0 | 7.15 → 8.16, **+1.01 (±0.49)**, n 143 | yes |
+| Hard fails not up | 39 → 15 (critical 19 → 8) | yes |
+
+All holdout rows: 7.40 → 8.17 (+0.77 ±0.41). Every needed reference fact in the prompt: 66 / 135 → 132 / 135.
+Conflict / stale rows: 6.04 → 7.81 (+1.77 ±1.17); rows flagged stale / draft preferred 8 → 2. Missing-evidence and
+irrelevant-source rows: 8.38 → 8.16 (−0.23 ±0.52). Isolation set on the E1 build (46 rows): 7.42 → 8.25, and by code
+on all 559 rows of the E1 runs: no file of another mode in any prompt, no profile evidence in a mode that may not
+use it, no string of the other profile in any prompt or answer.
+
+**Verdict: E1 is kept**, as commit `bab77f33` on branch `fix/er-pack-whole` (from `e000db4a`). It is not on main and
+is not to be landed without Evin. Known costs: about 7,000 more input tokens per turn at the median on these packs;
+typed first word about 120 ms later; more wrong-attribution answers where the asked fact is absent but a
+neighbouring one is now in view (hard fails on rows that need no document, dev + counterfactual: 10 → 14). The
+judge was the provisional one; the gpt-6-astra chain re-judges these rows when its batch opens.
+
 ---
 
 ## E3 — a number the material states is not an unsupported claim (a rail on the claim pass's edit)
 
 (E2, handing the résumé and job description over whole, is described in the report as a proposal; it was not built.)
 
-**Written 2026-10-03 16:22 UTC, before the rail's effect was computed on any row.** What had been seen: per-category
+**Written 2026-10-03, committed 16:15 UTC (`1ba9036e`), before the rail's effect was computed on any row.** What had been seen: per-category
 means of "shown minus draft" on the 91 dev rows of the E1 run whose shown text the claim pass replaced (drafts
 judged by the same judge): all 91 rows −0.66 (±0.45); the 57 with the evidence in the prompt −1.19 (±0.60); edits
 that drop a number −1.36 (25 rows) and −3.33 when they also add a deferral (4 rows); edits that keep every number
@@ -128,7 +149,7 @@ gain at least +0.5 with an interval that excludes 0, hard fails not up. Then it 
 and one app run confirms that the implementation rejects the same rows the offline computation rejected. A
 failure at any step: not kept.
 
-### E3 — data and verdict (2026-10-03 16:25 UTC; offline, provisional judge)
+### E3 — data and verdict (2026-10-03, committed 16:18 UTC; offline, provisional judge)
 
 `node evidence-rich/rail-offline.mjs --runs evidence-rich/results/er-dev-e1,evidence-rich/results/er-cf-e1`.
 333 rows; the shown text was replaced on 113 (all 113 drafts judged); the rail would reject the edit on 45.
@@ -150,7 +171,7 @@ sixth of the rows), the rail as specified is not the fix. Nothing was implemente
 
 ## E4 — with the files in the prompt, the claim pass does not run (measured offline; a recommendation, not a build)
 
-**Written 2026-10-03 16:27 UTC, before any holdout row of the E1 build was judged.**
+**Written 2026-10-03, committed 16:18 UTC (`cb41785f`), before any holdout row of the E1 build was judged.**
 
 **What was measured first (dev + counterfactual, drafts judged for every replaced row, so "pass off" is exact: the
 pass's kill switch shows the draft).**
@@ -179,3 +200,26 @@ recommended only if, against the E1 build as built: the mean rises by at least +
 excludes 0, hard fails do not rise, critical flags do not rise. It changes a component Evin decided to keep, so
 whatever the result it is his decision; it is not implemented or run in the app in this session unless the rule
 holds, and never landed.
+
+### E4 — data and verdict (2026-10-03, 16:38 UTC; offline composition on the E1 holdout rows, aggregates only)
+
+180 rows; shown text replaced on 57 (all 57 drafts judged); 161 rows have reference-file evidence in the prompt.
+
+| | Mean | against as built | Hard fails | Critical |
+|---|---:|---:|---:|---:|
+| E1 as built (pass on every turn) | 8.17 | | 15 | 8 |
+| pass off | 8.54 | +0.37 (±0.24) | 21 | 9 |
+| the gate (pass only where no reference file is in the prompt) | 8.56 | **+0.39 (±0.23)** | **19** | 8 |
+
+| Rule line | Holds |
+|---|---|
+| Mean rises by at least +0.15, interval excludes 0 | yes (+0.39 ±0.23) |
+| Hard fails do not rise | **no** (15 → 19) |
+| Critical flags do not rise | yes (8 → 8) |
+
+**Verdict: not recommended as specified.** On the holdout the gate raises the mean and also lets four more hard
+fails through; on dev + counterfactual it had raised the mean by +0.24 with hard fails unchanged. It was not
+implemented. What stands as a measurement, on both sets: once the files are in the prompt, the claim pass lowers
+the average answer (dev + counterfactual −0.23 ±0.14, holdout −0.37 ±0.24) while still removing a few capped
+failures (dev + counterfactual 40 → 38, holdout 21 → 15). That is a trade for Evin to decide, with a better design
+of the pass (one that does not delete what the files state) as the alternative to switching it off.
