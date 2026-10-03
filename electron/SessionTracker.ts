@@ -94,6 +94,8 @@ export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    /** Which surface produced an assistant turn. Absent for legacy callers. */
+    surface?: ConversationSurface;
     /** STT provider id (WTA audit F9, additive; absent on legacy/assistant items). */
     sttProvider?: string;
     /** Punctuation provenance (WTA audit F9, additive; see TranscriptSegment). */
@@ -489,7 +491,8 @@ export class SessionTracker {
         this.contextItems.push({
             role: 'assistant',
             text: cleanText,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            surface,
         });
 
         // Also add to fullTranscript so it persists in the session history (and summaries)
