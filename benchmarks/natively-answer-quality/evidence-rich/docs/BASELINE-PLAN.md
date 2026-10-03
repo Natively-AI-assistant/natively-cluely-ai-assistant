@@ -1,6 +1,6 @@
 # Baseline of evidence-rich-v1 — how it will be read (written before any row was judged)
 
-Written 2026-10-03 14:00 UTC, while the first run was in progress and before any judgment existed. The only data
+Written 2026-10-03, committed 13:54 UTC (`e66e92a7`), as the first run was being started and before any judgment existed. The only data
 seen before this was a 21-row rehearsal on a scratch copy of seven packs (rig check; its numbers are not results).
 
 ## What runs
@@ -58,7 +58,7 @@ no answer-prompt change is made.
 
 ---
 
-# Addendum, 2026-10-03 14:50 UTC — three checks added after the dev rows were judged
+# Addendum, 2026-10-03, committed 14:45 UTC (`86e31940`) — three checks added after the dev rows were judged
 
 Written after the dev set (270 rows) and the counterfactual and isolation sets had been judged by the provisional
 judge, and before any of the three checks below was run or judged. What had been seen: dev overall 7.47; 8.98

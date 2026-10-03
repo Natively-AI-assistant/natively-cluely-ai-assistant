@@ -88,3 +88,28 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   average 5–7). The run was resumed at 15:45; rows already written are kept.
 * Consequence: the E1 runs did not have the machine to themselves. Their latency is reported with that caveat and
   cannot be held against the baseline dev run as strictly as rule 6 of E1 intended.
+
+## 14:57–16:38 — candidate E1 (`fix/er-pack-whole`, `bab77f33`), and what was measured about the claim pass
+
+* Rule committed `da60373d` at 14:57, before the branch's app was started. Worktree `er-fix1`, own clone of
+  `node_modules` (same arm64 repair), model weights copied in.
+* Runs on E1: dev 270 (15:20–16:02 with the interruptions above), counterfactual 63, holdout 180 (16:08–16:25),
+  isolation 46 (–16:31). 559 rows, every row answered, none unverified, generator direct DeepSeek on every row.
+* Dev + counterfactual: all six rule lines hold (data committed `1ba9036e`, 16:15). Holdout judged blind after that:
+  evidence-required rows +1.01 (±0.49), hard fails 39 → 15. **E1 kept on its branch; not on main.**
+* The streamed draft of every replaced row was judged on both builds (baseline dev + counterfactual 86; E1 dev +
+  counterfactual 113, holdout 57), so "claim pass off" is exact per row.
+* E3 (a rail on the claim pass), rule committed `1ba9036e` before its effect was computed: fails its third line;
+  not kept. E4 (skip the claim pass when reference files are in the prompt), rule committed `cb41785f` before any
+  E1 holdout row was judged: raises the holdout mean by +0.39 (±0.23) and lets four more hard fails through; fails
+  its second line; not recommended as specified. Neither was implemented in the app.
+* `supp-oracle-sources` paired with the baseline: rows that had missed 5.63 → 7.54 (+1.91 ±0.52), under the 8.5 /
+  +2.0 line set for it; rows already delivered +0.16 (±0.29).
+
+## 16:38–16:45 — report, figures re-derived
+
+* `EVIDENCE-RICH-QUALITY.md` written. Its figures were recomputed from the row files before the commit; five that
+  had been carried from notes were wrong and were corrected (total rows 1,341 not 1,541; recorded facts 1,776 not
+  3,300; outdated-value-only cases with E1 1 of 68, not 0; two slice means that mixed sets).
+* gpt-6-astra: still not judged anything in this benchmark. The chain (`judge/astra-chain.mjs`) is left armed for
+  the next batch window; its output goes to `judge/out/*/…astra.jsonl` and is never pooled with the Opus files.

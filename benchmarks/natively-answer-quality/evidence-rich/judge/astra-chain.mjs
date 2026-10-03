@@ -3,8 +3,9 @@
 // It waits for the pool to open, then spends the batch in the order that matters most, and stops at the first 402.
 //   nohup node evidence-rich/judge/astra-chain.mjs --not-before 2026-10-04T02:00:00Z [--wait-ms 43200000] &
 // Order: probe → calibration (35 of 38 needed, else stop: no batch is judged with an uncalibrated judge) →
-//        a 45-row sample already judged by Opus (the Astra/Opus agreement sample) → dev rows whose evidence was required
-//        → the paired oracle-sources rows → counterfactual → isolation → holdout (aggregates only) → the rest of dev.
+//        a 45-row sample already judged by Opus (the Astra/Opus agreement sample) → holdout of the baseline and of E1
+//        (blind, aggregates only) → dev rows whose evidence was required, both builds → counterfactual, both →
+//        the paired oracle-sources rows → isolation, both → the rest of dev.
 // Everything goes to judge/out/base/<run>.astra.jsonl (never pooled with the .opus files) and results/astra-chain.log.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -39,15 +40,18 @@ const dev = JSON.parse(fs.readFileSync(path.join(ER, 'datasets', 'dev.json'), 'u
 const sample = [];
 for (const m of dev.modes.map((x) => x.key)) sample.push(...dev.items.filter((i) => i.mode === m).map((i) => i.id).sort((a, b) => crypto.createHash('sha256').update(a).digest('hex').localeCompare(crypto.createHash('sha256').update(b).digest('hex'))).slice(0, 5));
 const J = path.join(HERE, 'judge-er.mjs'); const R = (r) => `evidence-rich/results/${r}`;
+const EV = ['--condition', 'grounded_single,multi_source,conflict_stale,followup'];
+const step = (label, r, extra = []) => [label, [J, '--set', 'base', '--runs', R(r), ...extra, ...(/holdout/.test(r) ? ['--blind'] : []), '--concurrency', '3']];
+// What decides whether the kept candidate (E1) stands comes first: the blind holdout pair, then the dev pair.
 const steps = [
   ['agreement sample (45 dev rows)', [J, '--set', 'base', '--runs', R('er-dev-base'), '--ids', sample.join(','), '--concurrency', '3']],
-  ['dev: evidence conditions', [J, '--set', 'base', '--runs', R('er-dev-base'), '--condition', 'grounded_single,multi_source,conflict_stale,followup', '--concurrency', '3']],
-  ['oracle-sources', [J, '--set', 'base', '--runs', R('er-os-base'), '--concurrency', '3']],
-  ['counterfactual', [J, '--set', 'base', '--runs', R('er-cf-base'), '--concurrency', '3']],
-  ['isolation', [J, '--set', 'base', '--runs', R('er-iso-base'), '--concurrency', '3']],
-  ['holdout (aggregates only)', [J, '--set', 'base', '--runs', R('er-holdout-base'), '--blind', '--concurrency', '3']],
-  ['dev: the rest', [J, '--set', 'base', '--runs', R('er-dev-base'), '--concurrency', '3']],
-  ...(opt('extra-runs') ? String(opt('extra-runs')).split(',').map((r) => [`extra ${r}`, [J, '--set', 'base', '--runs', R(r), '--concurrency', '3']]) : []),
+  step('holdout, baseline (aggregates only)', 'er-holdout-base'), step('holdout, E1 (aggregates only)', 'er-holdout-e1'),
+  step('dev, baseline: evidence conditions', 'er-dev-base', EV), step('dev, E1: evidence conditions', 'er-dev-e1', EV),
+  step('counterfactual, baseline', 'er-cf-base'), step('counterfactual, E1', 'er-cf-e1'),
+  step('oracle-sources', 'er-os-base'),
+  step('isolation, baseline', 'er-iso-base'), step('isolation, E1', 'er-iso-e1'),
+  step('dev, baseline: the rest', 'er-dev-base'), step('dev, E1: the rest', 'er-dev-e1'),
+  ...(opt('extra-runs') ? String(opt('extra-runs')).split(',').map((r) => step(`extra ${r}`, r)) : []),
 ];
 for (const [label, argv] of steps) {
   if (!fs.existsSync(path.join(ER, 'results', argv[4].split('/').at(-1), 'rows.jsonl'))) { log(`skip ${label}: run not found`); continue; }
