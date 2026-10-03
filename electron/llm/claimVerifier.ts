@@ -256,9 +256,25 @@ export function claimVerifierDraftMessage(draftBody: string): string {
   return `DRAFT REPLY:\n${String(draftBody ?? '').trim()}`;
 }
 
+/**
+ * How much of the answer's prompt the pass may see, on both surfaces (2026-10-03).
+ *
+ * It was 24,000 characters everywhere: here for the typed pass, and through
+ * LLMHelper.replayAnswerCall for the heard one. On the kept build the prompt was
+ * longer on 1 of 252 passes. With a reference pack that fits handed over whole
+ * it is on 302 of 384 (median 35,171, max 48,716), so the pass judged answers
+ * against a pack it could not see and removed what the files state ("Yes, it's
+ * BRC-774102" → "I'll pull up the reservation number"): edits made on a cut
+ * prompt cost 1.09 (±0.40) each, edits made on a whole one +0.20. Replayed on the
+ * same 251 drafts, same model, budget and rails: effect of the pass −0.21 (±0.13)
+ * at 24,000, +0.01 (±0.09) at this cap; hard fails 33 → 32; every pass inside its
+ * budget in both arms (median 1.12 s → 1.20 s).
+ */
+export const CLAIM_VERIFIER_MATERIAL_MAX_CHARS = 96000;
+
 /** The whole verifier message when the answer call cannot be replayed: the V3 user message is the material. */
 export function claimVerifierStandaloneMessage(material: string, draftBody: string): string {
-  return `MATERIAL:\n${String(material ?? '').slice(0, 24000)}\n\n---\n${claimVerifierDraftMessage(draftBody)}`;
+  return `MATERIAL:\n${String(material ?? '').slice(0, CLAIM_VERIFIER_MATERIAL_MAX_CHARS)}\n\n---\n${claimVerifierDraftMessage(draftBody)}`;
 }
 
 // ── acceptance rails ────────────────────────────────────────────────────────

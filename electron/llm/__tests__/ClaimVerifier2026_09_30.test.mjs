@@ -386,7 +386,8 @@ describe('where the pass sits in the what-to-answer pipeline', () => {
   test('runs on the answer\'s replayed call under its own system prompt, through the shared runner', () => {
     const body = ENGINE.slice(ENGINE.indexOf('private async verifyAnswerClaims('), ENGINE.indexOf('private repairFirstUsefulMs('));
     assert.match(body, /cv\.runClaimVerifier\(\{/);
-    assert.match(body, /this\.repairCallArgs\(opts\.turnKey, cv\.claimVerifierDraftMessage\(body\), signal, system\)/);
+    // 2026-10-03: the pass asks for its own, larger cap on the inherited prompt (ClaimVerifierSeesWholePrompt2026_10_03).
+    assert.match(body, /this\.repairCallArgs\(opts\.turnKey, cv\.claimVerifierDraftMessage\(body\), signal, system, \[\], cv\.CLAIM_VERIFIER_MATERIAL_MAX_CHARS\)/);
     assert.match(body, /cv\.claimVerifierSystemPrompt\(opts\.modeId, 'spoken', \{ noDocuments: cv\.materialHasNoDocuments\(opts\.material\) \}\)/);
     assert.ok(CLAIM_VERIFIER_BUDGET_MS >= 2000 && CLAIM_VERIFIER_BUDGET_MS <= 5000);
   });
