@@ -25,7 +25,7 @@ import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 import { classifyTurn, isBareFollowUp, stripSttFillers, isProspectiveJobQuestion } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 import { mergeRewrittenEvidence, type QueryRewriter, type QueryRewriteOutcome } from '../retrieval/llm-query-rewrite';
-import { SMALL_CORPUS_MAX_TOKENS } from '../retrieval/mode-retrieval-port';
+import { SMALL_CORPUS_MAX_TOKENS, WHOLE_PACK_MAX_TOKENS } from '../retrieval/mode-retrieval-port';
 
 export interface AnswerRequest {
   requestId: string;
@@ -214,6 +214,9 @@ export const SMALL_CORPUS_EVIDENCE_HEADROOM = 1000;
 /** Evidence capacity floor for a turn with two or more files attached to the mode. */
 export const MULTI_FILE_EVIDENCE = { accepted: 8, tokens: 2400 } as const;
 
+/** Tags and separators around one whole file in the evidence block, in packer tokens. */
+export const WHOLE_PACK_ITEM_OVERHEAD = 120;
+
 /** Best-evidence score under which a non-FULL first pass counts as low-confidence (see the rewrite trigger). */
 const LOW_CONFIDENCE_TOP_SCORE = 0.3;
 
@@ -315,9 +318,19 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     && !cls.questionTypes.includes('META_REQUEST')
     && policy.retrievalPolicy.enabled
     && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
-  const acceptedBase = multiFile
+  // A pack larger than a small corpus that still fits the prompt is handed over
+  // whole by the mode port on a turn that retrieves (WHOLE_PACK_MAX_TOKENS).
+  // Each file is then ONE evidence item, so the pack rides ON TOP of the turn's
+  // normal capacity: the item cap grows by the file count and the token budget
+  // by the pack's size, and the résumé, the job description and the meeting
+  // keep the room they had. A FAST turn is not widened: it reads nothing here.
+  const wholePack = retrieves && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
+    && typeof req.attachedCorpusTokens === 'number'
+    && req.attachedCorpusTokens > SMALL_CORPUS_MAX_TOKENS && req.attachedCorpusTokens <= WHOLE_PACK_MAX_TOKENS;
+  const packFiles = wholePack ? Math.max(1, req.attachedSourceCount ?? 1) : 0;
+  const acceptedBase = (multiFile
     ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
-    : policy.retrievalPolicy.maximumAcceptedEvidence;
+    : policy.retrievalPolicy.maximumAcceptedEvidence) + packFiles;
 
   // A source-primary turn reads the reference files, plus the meeting when one
   // is live (the meeting rule above would otherwise have been the whole plan).
@@ -375,12 +388,12 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     maximumAcceptedEvidence: acceptedBase * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
     // A whole small corpus must fit next to the meeting's evidence, or the
     // packer drops the file outright (it skips an item that does not fit).
-    ...(multiFile || (smallCorpus && retrieves)
+    ...(multiFile || (smallCorpus && retrieves) || wholePack
       ? { evidenceTokens: Math.max(
         policy.contextBudget.evidenceTokens,
         multiFile ? MULTI_FILE_EVIDENCE.tokens : 0,
         smallCorpus && retrieves ? (req.attachedCorpusTokens as number) + SMALL_CORPUS_EVIDENCE_HEADROOM : 0,
-      ) }
+      ) + (wholePack ? (req.attachedCorpusTokens as number) + WHOLE_PACK_ITEM_OVERHEAD * packFiles : 0) }
       : {}),
     timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
     ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
