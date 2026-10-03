@@ -2012,3 +2012,34 @@ turns it changes; it cannot show a gain.
 line. That is the slowest thing a user can see in the answer path; it was 6 of 120 turns in a bad ten minutes.
 Not investigated further here.
 
+## What the rerank and the embedder cost on this Mac — CPU, memory, GPU (2026-10-03 04:21Z)
+
+Evin: "how much cpu time and running on this mac, how spike cpu, gpu, ram usage … also how time for result, tfft".
+`node tools/local-model-cost.mjs` — the two bundled models loaded as the app's workers load them (transformers.js
+on onnxruntime-node, local files, q8) with the app's own session bounds (`electron/utils/onnxThreadConfig.ts`: one
+intra-op thread, one inter-op, sequential, no memory arena). Apple M4, 10 cores, 16 GB; one process, nothing else
+running.
+
+| | wall p50 / p90 | CPU time | cores busy | memory |
+|---|---:|---:|---:|---|
+| reranker, load | 85 ms | 102 ms | | +90 MB |
+| rerank of 5 passages (about 110 words each) | 87 / 117 ms | 86 ms | 1.0 | |
+| rerank of 10 | 168 / 182 ms | 167 ms | 1.0 | |
+| rerank of 20 | 341 / 370 ms | 340 ms | 1.0 | |
+| rerank of 30 (the app's candidate pool) | 541 / 574 ms | 529 ms | 1.0 | process peaks at 441 MB during the batch |
+| embedder, load | 445 ms | 649 ms | | +496 MB |
+| one question embedded | 6 / 7 ms | 6 ms | 1.0 | |
+
+* The rerank is one core fully busy for its whole duration, about 17 ms per passage; the 250 ms measured in the app
+  (405 ms p90) is 15–24 passages. No GPU: neither model requests a GPU execution provider.
+* The memory is paid once, when the models load, not per rerank; a rerank adds a transient peak while its batch is
+  in memory.
+* Query embedding is not the cost (6 ms).
+
+**First attempt at the re-run was stopped.** A zsh quoting slip of mine (`$run:l…` is a zsh modifier) gave the run
+the wrong name and all nine modes; and in that run the app's AI Providers pane switched Codex CLI on by itself —
+it does that when it finds a `codex login` session on the machine — so profile extraction went through an LLM
+("Structured generation succeeded with Codex CLI") instead of the deterministic path every earlier run used. The
+partial run is deleted. The relaunch names the run correctly and starts the app with `CODEX_HOME` pointing at an
+empty directory; a run that logs any Codex line, or more than two stalled rows, is not accepted and is run again.
+
