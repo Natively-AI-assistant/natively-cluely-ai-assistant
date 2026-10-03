@@ -7,9 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { chat, limiter, JUDGE_MODEL, assertProbeOk, scrub } from './client.mjs';
+import { chat, limiter, JUDGE_KEY, assertProbeOk, scrub } from './client.mjs';
 import { buildEnvelope, answerOf, splitGist } from './envelope.mjs';
-import { CHARTER, CHARTER_VERSION, loadRun, stripFence, checkJudgment } from './judge.mjs';
+import { CHARTER, CHARTER_VERSION, loadRun, stripFence, checkJudgment, saved } from './judge.mjs';
+import { readJsonl, readJsonOrNull, writeAtomic, appendLine } from './store.mjs';
 import { officialScore, DIMENSIONS } from './score.mjs';
 import { validate } from '../validators/index.mjs';
 
@@ -43,7 +44,7 @@ export async function judgePair(userText, { maxTokens = 6000 } = {}) {
   const system = CHARTER + PAIR_INSTRUCTIONS;
   const messages = [{ role: 'system', content: system }, { role: 'user', content: userText }];
   const r1 = await chat(messages, { maxTokens });
-  const meta = (r) => ({ requested_model: r.requested_model, returned_model: r.returned_model ?? null, model_mismatch: r.model_mismatch ?? null, request_id: r.request_id ?? null, response_id: r.response_id ?? null, latency_ms: r.latency_ms ?? null, usage: r.usage ?? null, at: r.at });
+  const meta = (r) => ({ requested_model: r.requested_model, returned_model: r.returned_model ?? null, model_mismatch: r.model_mismatch ?? null, request_id: r.request_id ?? null, response_id: r.response_id ?? null, latency_ms: r.latency_ms ?? null, usage: r.usage ?? null, temperature: r.temperature ?? null, temperature_dropped: r.temperature_dropped ?? null, at: r.at });
   if (!r1.ok) return { ok: false, error: r1.error, calls: [meta(r1)] };
   let obj = null; try { obj = JSON.parse(stripFence(r1.content)); } catch { /* repair */ }
   let c = checkPair(obj);
@@ -77,7 +78,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (!rowB || !item || (ids && !ids.has(item.id)) || (modes && !modes.has(item.mode))) continue;
     for (let k = 0; k < repeats; k++) todo.push({ item, rowA, rowB, k });
   }
-  const already = new Set((fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []).filter((r) => r.ok).map((r) => r.jid));
+  const already = new Set(readJsonl(outFile).filter((r) => r.ok).map((r) => r.jid));
   for (let i = todo.length - 1; i >= 0; i--) if (already.has(`${todo[i].item.id}#${todo[i].k}`)) todo.splice(i, 1);
   console.log(`${todo.length} pairwise judgments to do (charter ${CHARTER_VERSION})`);
   await Promise.all(todo.map(({ item, rowA, rowB, k }) => lim(async () => {
@@ -90,10 +91,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const la = mk(L), rb = mk(R);
     const env = buildEnvelope({ item, ds: A.ds, answer: answerOf(L.row), rowsById: null, validator: null });
     const text = pairText(env, la, rb);
-    const key = sha(['pair', CHARTER_VERSION, JUDGE_MODEL, text, k].join('\u0000'));
+    const key = sha(['pair', CHARTER_VERSION, JUDGE_KEY, text, k].join('\u0000'));
     const cf = path.join(cacheDir, key + '.json');
-    let res = fs.existsSync(cf) ? JSON.parse(fs.readFileSync(cf, 'utf8')) : null;
-    if (!res) { res = await judgePair(text); if (res.ok) fs.writeFileSync(cf, JSON.stringify(res)); }
+    let res = readJsonOrNull(cf);
+    if (!res) { res = await judgePair(text); if (res.ok) saved(() => writeAtomic(cf, JSON.stringify(res))); }
     const jid = `${item.id}#${k}`;
     mapping.items[jid] = { A: L.run, B: R.run };
     let rec = { jid, benchmark_id: item.id, mode: item.mode, repeat: k, ok: res.ok, error: res.error ?? null, calls: res.calls };
@@ -104,10 +105,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         a_run: { judgment: byRun.a, official: officialScore({ ...byRun.a }, item.mode, (L.run === 'a' ? la : rb).v) },
         b_run: { judgment: byRun.b, official: officialScore({ ...byRun.b }, item.mode, (L.run === 'b' ? la : rb).v) } };
     }
-    fs.appendFileSync(outFile, JSON.stringify(rec) + '\n');
-    fs.writeFileSync(mapFile, JSON.stringify(mapping));
+    saved(() => { appendLine(outFile, rec); writeAtomic(mapFile, JSON.stringify(mapping)); });
   })));
-  const recs = fs.readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((r) => r.ok);
+  const recs = readJsonl(outFile).filter((r) => r.ok);
   const w = { a: 0, b: 0, tie: 0 }; for (const r of recs) w[r.winner]++;
   console.log(`preferences: ${A.header.run_id} ${w.a} | ${B.header.run_id} ${w.b} | tie ${w.tie}`);
 }

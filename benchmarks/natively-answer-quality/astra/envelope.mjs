@@ -117,7 +117,9 @@ function conversation(item, ds, rowsById) {
  * Build the judge's user message for ONE answer. `validator` is the deterministic validator
  * result for this answer (or null). Returns { text, parts } — parts are hashed for the cache.
  */
-export function buildEnvelope({ item, ds, answer, rowsById = null, validator = null }) {
+/** A reply that places something on a day relative to now ("so that's tomorrow", "due today"). */
+export const RELATIVE_DAY_RE = /\b(?:tomorrow|yesterday|(?:due|is|was|that'?s|until|by|as of|ends?|expires?|expired|signed) today|today is|earlier today|later today)\b/i;
+export function buildEnvelope({ item, ds, answer, rowsById = null, validator = null, generatedAt = null }) {
   const { lines, head } = conversation(item, ds, rowsById);
   const heard = item.speaker === 'other';
   const r = ROLES[item.mode];
@@ -143,6 +145,12 @@ export function buildEnvelope({ item, ds, answer, rowsById = null, validator = n
   sec.push(`OBJECTIVE VALIDATOR RESULTS:\n${validator ? JSON.stringify(validator, null, 1) : '(no deterministic validator applies)'}`);
   sec.push(`ANSWER TO EVALUATE:\n${body || '(empty response)'}`);
   if (gist) sec.push(`GIST CHIP (separate UI summary chip shown with the answer; not spoken):\n${gist}`);
+  // The judge reads "today" as the day it is judging on (2026-10-01: a reply generated on 30 September saying "1 October,
+  // so that's tomorrow" was scored a factual error a day later). Stated only when the reply uses a relative day, so every
+  // other item keeps its cached judgment.
+  const when = generatedAt && !Number.isNaN(Date.parse(generatedAt)) && RELATIVE_DAY_RE.test(`${body}\n${gist ?? ''}`)
+    ? new Date(generatedAt).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : null;
+  if (when) sec.push(`WHEN THE REPLY WAS GENERATED: ${when} (the user's local date). Read "today", "tomorrow" and "yesterday" in the reply against this date, not the date you are judging on.`);
   return { text: sec.join('\n\n'), oracle, body, gist };
 }
 

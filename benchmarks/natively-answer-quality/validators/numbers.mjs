@@ -36,6 +36,9 @@ export function normaliseNumbers(text) {
   });
   s = s.replace(/(\d),(\d{3})(?!\d)/g, '$1$2').replace(/(\d),(\d{3})(?!\d)/g, '$1$2');
   s = s.replace(/\b(\d+(?:\.\d+)?)\s*[kK]\b/g, (_, n) => String(Number(n) * 1000));
+  // Digits followed by a scale word ("2 million", "1.5 billion", "3 thousand"): the spoken form models use for
+  // large counts. Without this, "the hidden cases go up to 2 million windows" read as 2 (DTECH-023, 2026-09-30).
+  s = s.replace(/\b(\d+(?:\.\d+)?)\s+(thousand|million|billion)\b/gi, (_, n, sc) => String(Math.round(Number(n) * SCALES[sc.toLowerCase()])));
   return s;
 }
 

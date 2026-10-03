@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // External judge (gpt-6-astra via AgentRouter) — absolute scoring of one or more runs.
 //   node astra/judge.mjs --set <name> --runs results/<run>[,results/<run2>] [--ids A,B] [--mode m1,m2]
-//                        [--repeat 3] [--concurrency 3] [--dry]
+//                        [--repeat 3] [--concurrency 3] [--dry] [--sample N] [--force]
 // Output: astra/out/<set>/<run_id>.jsonl — one line per (item, repeat) with the parsed judgment, the official
 // score (astra/score.mjs), validator result, and model-integrity metadata. The judge never sees run ids.
 // Cache: astra/cache/<sha>.json keyed by charter version + model + mode + question + envelope + answer + repeat.
@@ -9,17 +9,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { chat, limiter, JUDGE_MODEL, assertProbeOk, scrub } from './client.mjs';
+import { chat, limiter, JUDGE_KEY, assertProbeOk, scrub, stopNewCalls } from './client.mjs';
+import { readJsonl, readJsonOrNull, writeAtomic, appendLine } from './store.mjs';
 import { buildEnvelope, answerOf } from './envelope.mjs';
 import { officialScore, DIMENSIONS, FLAGS } from './score.mjs';
 import { validate } from '../validators/index.mjs';
+import { samplePerMode } from './sample.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
 export const CHARTER = fs.readFileSync(path.join(HERE, 'CHARTER.md'), 'utf8');
 export const CHARTER_VERSION = crypto.createHash('sha256').update(CHARTER).digest('hex').slice(0, 12);
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
-const readJsonl = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+/** Save a judgment (cache file or output line). A failed write — a full disk — stops new judge calls instead of
+ *  ending the step with the calls in flight lost; what was not saved is judged again in the next batch. */
+export function saved(write) {
+  try { write(); return true; } catch (e) { stopNewCalls(`disk nearly full (a judgment could not be saved: ${e.code ?? 'write failed'})`); return false; }
+}
 
 const VERDICTS = new Set(['excellent', 'good', 'mixed', 'poor', 'hard_fail']);
 export function stripFence(t) {
@@ -56,7 +62,7 @@ export async function judgeOnce(system, user, { maxTokens = 4000 } = {}) {
   if (chk.ok) return { ok: true, judgment: parsed, unknownFlags: chk.unknownFlags, calls: [meta(r1), meta(r2)], repaired: true };
   return { ok: false, error: 'judge output invalid after one repair: ' + chk.problems.join('; '), calls: [meta(r1), meta(r2)], raw: scrub(r2.content).slice(0, 2000) };
 }
-const meta = (r) => ({ requested_model: r.requested_model, returned_model: r.returned_model ?? null, model_mismatch: r.model_mismatch ?? null, response_id: r.response_id ?? null, request_id: r.request_id ?? null, latency_ms: r.latency_ms ?? null, usage: r.usage ?? null, finish_reason: r.finish_reason ?? null, attempts: r.attempts, at: r.at, status: r.ok ? 200 : r.status ?? null });
+const meta = (r) => ({ requested_model: r.requested_model, key_var: r.key_var ?? null, returned_model: r.returned_model ?? null, model_mismatch: r.model_mismatch ?? null, response_id: r.response_id ?? null, request_id: r.request_id ?? null, latency_ms: r.latency_ms ?? null, usage: r.usage ?? null, finish_reason: r.finish_reason ?? null, temperature: r.temperature ?? null, temperature_dropped: r.temperature_dropped ?? null, attempts: r.attempts, at: r.at, status: r.ok ? 200 : r.status ?? null });
 
 export function loadRun(dir) {
   const header = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
@@ -69,14 +75,15 @@ export async function judgeRow({ run, row, repeat = 0, cacheDir }) {
   const item = run.items[row.benchmark_id];
   const answer = answerOf(row);
   const validator = validate(item, answer, run.ds);
-  const env = buildEnvelope({ item, ds: run.ds, answer, rowsById: run.rowsById, validator: validator.verdict === 'n/a' ? null : validator });
-  const key = sha([CHARTER_VERSION, JUDGE_MODEL, item.mode, item.question, env.text, answer, repeat].join('\u0000'));
+  const env = buildEnvelope({ item, ds: run.ds, answer, rowsById: run.rowsById, validator: validator.verdict === 'n/a' ? null : validator, generatedAt: row.started_at ?? null });
+  const key = sha([CHARTER_VERSION, JUDGE_KEY, item.mode, item.question, env.text, answer, repeat].join('\u0000'));
   const cf = path.join(cacheDir, key + '.json');
-  if (fs.existsSync(cf)) return { ...JSON.parse(fs.readFileSync(cf, 'utf8')), cached: true };
+  const hit = readJsonOrNull(cf); // a cache file cut short reads as not cached
+  if (hit) return { ...hit, cached: true };
   const res = await judgeOnce(CHARTER, env.text);
   const out = { key, charter_version: CHARTER_VERSION, benchmark_id: row.benchmark_id, mode: item.mode, repeat, validator, ...res };
   if (res.ok) out.official = officialScore(res.judgment, item.mode, validator);
-  if (res.ok) fs.writeFileSync(cf, JSON.stringify(out)); // failures are never cached
+  if (res.ok) saved(() => writeAtomic(cf, JSON.stringify(out))); // failures are never cached
   return out;
 }
 
@@ -87,6 +94,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const runs = String(opt('runs', '')).split(',').filter(Boolean).map((r) => path.resolve(ROOT, r));
   const ids = opt('ids') ? new Set(String(opt('ids')).split(',')) : null;
   const modes = opt('mode') ? new Set(String(opt('mode')).split(',')) : null;
+  const sample = opt('sample') ? Number(opt('sample')) : null;
   const repeats = Number(opt('repeat', 1));
   const conc = Number(opt('concurrency', 3));
   if (!opt('dry')) { try { assertProbeOk(); } catch (e) { console.error(String(e.message)); process.exit(2); } }
@@ -95,12 +103,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const lim = limiter(conc);
   for (const dir of runs) {
     const run = loadRun(dir);
-    const outFile = path.join(outDir, `${run.header.run_id}.jsonl`);
-    const done = new Set(readJsonl(outFile).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.repeat}`));
+    // Named after the run DIRECTORY: a composite run (tools/compose-run.mjs) keeps the run_id of the run it was built
+    // from, and two composites judged into one set would otherwise share a file (and each other's "done" rows).
+    const outFile = path.join(outDir, `${path.basename(dir)}.jsonl`);
+    // --force: judge again even when the out file holds a judgment (the cache still answers an unchanged envelope).
+    const done = opt('force') ? new Set() : new Set(readJsonl(outFile).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.repeat}`));
     const todo = [];
+    const picked = sample ? samplePerMode(run.rows.map((r) => r.benchmark_id).filter((id) => run.items[id]), (id) => run.items[id].mode, sample) : null;
     for (const row of run.rows) {
       const it = run.items[row.benchmark_id];
-      if (!it || (ids && !ids.has(row.benchmark_id)) || (modes && !modes.has(it.mode))) continue;
+      if (!it || (ids && !ids.has(row.benchmark_id)) || (modes && !modes.has(it.mode)) || (picked && !picked.has(row.benchmark_id))) continue;
       for (let k = 0; k < repeats; k++) if (!done.has(`${row.benchmark_id}#${k}`)) todo.push([row, k]);
     }
     console.log(`${run.header.run_id}: ${todo.length} judgments to do (charter ${CHARTER_VERSION})`);
@@ -108,7 +120,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     let n = 0, fail = 0, mismatch = 0;
     await Promise.all(todo.map(([row, k]) => lim(async () => {
       const j = await judgeRow({ run, row, repeat: k, cacheDir });
-      fs.appendFileSync(outFile, JSON.stringify(j) + '\n');
+      saved(() => appendLine(outFile, j));
       n++; if (!j.ok) fail++; if (j.calls?.some((c) => c.model_mismatch)) mismatch++;
       if (n % 20 === 0 || !j.ok) console.log(`  ${n}/${todo.length} ${j.ok ? '' : 'FAIL ' + row.benchmark_id + ' ' + j.error}`);
     })));

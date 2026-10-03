@@ -441,7 +441,7 @@
             },
             {
               "type": "pattern_present",
-              "pattern": "2025|expired|out of date|outdated|older (?:partner )?sheet|old (?:partner )?sheet|valid through|superseded|no longer current|current (?:price|pricing|sheet|list)"
+              "pattern": "2025|expired|out of date|outdated|older (?:partner )?sheet|old (?:partner )?sheet|valid through|superseded|no longer current|current (?:price|pricing|sheet|list)|ran (?:through|until|to the end of)|end of last year|still (?:the )?current|confirm (?:it\\u0027s |that it\\u0027s |what\\u0027s )?(?:still )?current"
             }
           ]
         },
@@ -465,7 +465,7 @@
         },
         {
           "type": "pattern_present",
-          "pattern": "2025|expired|out of date|outdated|older (?:partner )?sheet|old (?:partner )?sheet|valid through|superseded|no longer current|current (?:price|pricing|sheet|list)",
+          "pattern": "2025|expired|out of date|outdated|older (?:partner )?sheet|old (?:partner )?sheet|valid through|superseded|no longer current|current (?:price|pricing|sheet|list)|ran (?:through|until|to the end of)|end of last year|still (?:the )?current|confirm (?:it\\u0027s |that it\\u0027s |what\\u0027s )?(?:still )?current",
           "label": "notes the sheet is out of date / confirms current terms",
           "flag": "reference_conflict_ignored"
         }

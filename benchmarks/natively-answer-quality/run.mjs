@@ -102,8 +102,28 @@ const F = {
 const readJsonl = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
 const systems = fs.existsSync(F.systems) ? JSON.parse(fs.readFileSync(F.systems, 'utf8')) : {};
 
+// A row that did not get a real answer: a transport error, or the app's own canned provider-failure line (the app
+// reports success for those, so they read as answers). 2026-09-30: a network outage produced 52 such rows in one
+// dev run (27 "Connection error.", 25 "The answer didn't come through from the AI provider…").
+export const APP_FALLBACK_RE = /didn.t come through from the AI provider|couldn.t generate an answer just now|No answer came back this time/i;
+const failedRow = (r) => r.success === false || APP_FALLBACK_RE.test(String(r.rendered_answer ?? r.raw_answer ?? ''));
+
 let existing = readJsonl(F.rows);
 if (opt('resume')) {
+  // Failed rows are re-run: set aside (kept, not deleted) with their whole chain, then treated like a partial chain.
+  const failedIds = new Set(existing.filter(failedRow).map(r => r.benchmark_id));
+  const failedChains = new Set(existing.filter(r => failedIds.has(r.benchmark_id) && r.conversation_id).map(r => r.conversation_id));
+  const drop = (r) => failedIds.has(r.benchmark_id) || (r.conversation_id && failedChains.has(r.conversation_id));
+  if (failedIds.size) {
+    const moved = existing.filter(drop);
+    fs.appendFileSync(F.aside, moved.map(r => JSON.stringify(r)).join('\n') + '\n');
+    existing = existing.filter(r => !drop(r));
+    fs.writeFileSync(F.rows, existing.map(r => JSON.stringify(r)).join('\n') + (existing.length ? '\n' : ''));
+    const movedIds = new Set(moved.map(r => r.benchmark_id));
+    const keptWire = readJsonl(F.wire).filter(r => !movedIds.has(r.benchmark_id));
+    fs.writeFileSync(F.wire, keptWire.map(r => JSON.stringify(r)).join('\n') + (keptWire.length ? '\n' : ''));
+    console.log(`resume: set ${moved.length} rows aside (${failedIds.size} failed, with their chains) to re-run`);
+  }
   // A chain is only trustworthy whole. Move partial chains aside (kept, not deleted) and re-run them.
   const byChain = {};
   for (const r of existing) if (r.conversation_id) (byChain[r.conversation_id] ??= []).push(r);

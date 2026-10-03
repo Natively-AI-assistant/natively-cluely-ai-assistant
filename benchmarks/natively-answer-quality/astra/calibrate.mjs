@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Judge calibration gate (spec §38): gpt-6-astra must prefer the obvious `good` answer in >= 18 of 20 pairs
+// Judge calibration gate (spec §38): gpt-6-astra must prefer the obvious `good` answer in >= 90% of the pairs (18 of 20; 23 of 25 since v2)
 // before it is used as an optimisation arbiter. Labels are randomised per pair; results in astra/out/calibration/.
 //   node astra/calibrate.mjs [--repeat 1]
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { assertProbeOk, limiter, readProbe } from './client.mjs';
+import { assertProbeOk, limiter, readProbe, JUDGE, JUDGE_KEY } from './client.mjs';
 import { buildEnvelope } from './envelope.mjs';
 import { judgePair, pairText } from './ab.mjs';
 import { CHARTER_VERSION } from './judge.mjs';
@@ -18,7 +18,7 @@ const profiles = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'dataset', 'pi
 const ds = { contexts: cal.contexts, pi_profiles: profiles, items: [] };
 try { assertProbeOk(); } catch (e) { console.error(String(e.message)); process.exit(2); }
 const outDir = path.join(HERE, 'out', 'calibration'); fs.mkdirSync(outDir, { recursive: true });
-const lim = limiter(3);
+const lim = limiter(JUDGE === 'fable' ? 4 : 3);
 const results = [];
 await Promise.all(cal.pairs.map((p) => lim(async () => {
   const item = { id: p.id, category: p.class, difficulty: 'easy', surface: p.item.speaker === 'other' ? 'hotkey' : 'typed', tags: [], pi_ref: null, pi_eligible: false, context_ref: null, prior_transcript: null, conversation_id: null, turn_index: 1, ...p.item };
@@ -35,8 +35,9 @@ await Promise.all(cal.pairs.map((p) => lim(async () => {
 })));
 results.sort((x, y) => x.id.localeCompare(y.id));
 const correct = results.filter((r) => r.correct).length;
-const summary = { at: new Date().toISOString(), charter_version: CHARTER_VERSION, probe: { returned_model: readProbe()?.returned_model ?? null }, correct, total: results.length, pass: correct >= 18, results };
-fs.writeFileSync(path.join(outDir, `calibration-${Date.now()}.json`), JSON.stringify(summary, null, 1));
+const need = Math.ceil(results.length * 0.9);
+const summary = { at: new Date().toISOString(), judge: JUDGE_KEY, charter_version: CHARTER_VERSION, probe: { returned_model: JUDGE === 'fable' ? null : readProbe()?.returned_model ?? null }, correct, total: results.length, need, pass: correct >= need, results };
+fs.writeFileSync(path.join(outDir, `calibration-${JUDGE === 'fable' ? 'fable-' : ''}${Date.now()}.json`), JSON.stringify(summary, null, 1));
 for (const r of results) console.log(`${r.correct ? 'OK  ' : 'MISS'} ${r.id} ${r.class.padEnd(28)} want ${r.want} got ${r.got} ${r.strength ?? ''} ${r.correct ? '' : '— ' + String(r.reason).slice(0, 140)}`);
-console.log(`\ncalibration: ${correct}/${results.length} ${summary.pass ? 'PASS (>= 18)' : 'FAIL (< 18) — do not optimise against this judge'}`);
+console.log(`\ncalibration: ${correct}/${results.length} ${summary.pass ? `PASS (>= ${need})` : `FAIL (< ${need}) — do not optimise against this judge`}`);
 process.exit(summary.pass ? 0 : 1);
