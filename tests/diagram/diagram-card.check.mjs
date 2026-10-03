@@ -90,7 +90,7 @@ window.electronAPI = {
   }),
   cancelDiagramRepair: async (id) => { calls.cancel.push(id); return true; },
   acceptDiagramRepair: async (payload) => { calls.accept.push(payload); return true; },
-  exportDiagram: async (payload) => { calls.export.push({ format: payload.format, name: payload.name, head: String(payload.data).slice(0, 40), length: String(payload.data).length }); return { saved: true, fileName: 'x.' + payload.format }; },
+  exportDiagram: async (payload) => { calls.export.push({ format: payload.format, name: payload.name, head: String(payload.data).slice(0, 40), length: String(payload.data).length, arrival: String(payload.data).includes('data-arrival') }); return { saved: true, fileName: 'x.' + payload.format }; },
 };
 
 const roots = new Map();
@@ -171,7 +171,7 @@ window.__card = {
               mounted: Boolean(fig),
               state: fig ? fig.getAttribute('data-diagram-state') : null,
               artifactId: fig ? fig.getAttribute('data-diagram-artifact') : null,
-              label: fig ? fig.querySelector('.diagram-card__label')?.textContent : null,
+              label: fig ? fig.querySelector('[role="tab"]')?.textContent : null,
               text: fig ? fig.textContent : '',
               hasImg: Boolean(img),
               imgLoaded: Boolean(img && img.complete && img.naturalWidth > 0),
@@ -237,9 +237,9 @@ window.__card = {
     check('the drawing is the block that was given', s.imgSvg.includes('Producer') && s.imgSvg.includes('Delivery') && s.imgSvg.includes('enqueue'), s.imgSvg.slice(0, 120));
     // The description lives in the image's alt text only: a hidden caption would
     // repeat the answer's lead sentence in the selectable text (found by the overlay check).
-    check('title and accessible description come from the answer, without repeating it as text', s.label === 'Diagram' && s.imgAlt === "Diagram. I'd queue every send." && s.caption == null, JSON.stringify({ label: s.label, alt: s.imgAlt, caption: s.caption }));
+    check('the first tab names the card, and the description comes from the answer without repeating it as text', s.label === 'Diagram' && s.imgAlt === "Diagram. I'd queue every send." && s.caption == null, JSON.stringify({ label: s.label, alt: s.imgAlt, caption: s.caption }));
     check('no spinner is left once it is drawn', s.spinner === 0, String(s.spinner));
-    check('it fits the card', s.imgWidth <= s.viewportWidth + 0.5 && s.viewportHeight <= 420, JSON.stringify({ img: s.imgWidth, viewport: s.viewportWidth, h: s.viewportHeight }));
+    check('it fits the card', s.imgWidth <= s.viewportWidth + 0.5 && s.viewportHeight <= 560, JSON.stringify({ img: s.imgWidth, viewport: s.viewportWidth, h: s.viewportHeight }));
     check('a valid diagram never asks for a repair', (await calls()).repair.length === 0);
 
     // Optional: DIAGRAM_CHECK_SHOTS=<dir> saves what the card looks like, for a human to look at.
@@ -296,15 +296,28 @@ window.__card = {
     });
     check('a plain wheel is not captured and does not zoom (the chat scrolls)', wheel.plainPrevented === false && wheel.afterPlain === wheel.w0, JSON.stringify(wheel));
     check('ctrl+wheel (pinch) zooms and is consumed', wheel.pinchPrevented === true && wheel.afterPinch > wheel.w0, JSON.stringify(wheel));
+    // A pinch is a gesture: the drawing follows it at once, with no easing.
+    check('a pinch is not eased (the drawing stays under the fingers)', await run(() => !document.querySelector('#a .diagram-card__viewport').classList.contains('is-easing')), '');
     await click('a', 'Zoom in');
-    const zoomed = await run(() => new Promise((r) => setTimeout(() => r(document.querySelector('#a img.diagram-card__img').getBoundingClientRect().width), 60)));
+    // A button is a step: it eases (250 ms), so the size is read after that.
+    const stepped = await run(() => new Promise((r) => setTimeout(() => r({ easing: document.querySelector('#a .diagram-card__viewport').classList.contains('is-easing'), readout: document.querySelector('#a .diagram-card__fit').textContent.trim() }), 40)));
+    const zoomed = await run(() => new Promise((r) => setTimeout(() => r(document.querySelector('#a img.diagram-card__img').getBoundingClientRect().width), 400)));
     check('the Zoom in button zooms further', zoomed > wheel.afterPinch, `${wheel.afterPinch} → ${zoomed}`);
+    check('a stepped zoom eases, and the header says how far in the drawing is', stepped.easing === true && /^\d{3}%$/.test(stepped.readout) && stepped.readout !== '100%', JSON.stringify(stepped));
     await click('a', 'Fit to card');
-    const fitted = await run(() => new Promise((r) => setTimeout(() => r(document.querySelector('#a img.diagram-card__img').getBoundingClientRect().width), 60)));
-    check('Fit returns to the fitted size', Math.abs(fitted - wheel.w0) < 0.5, `${fitted} vs ${wheel.w0}`);
+    const fitted = await run(() => new Promise((r) => setTimeout(() => r({ width: document.querySelector('#a img.diagram-card__img').getBoundingClientRect().width, readout: document.querySelector('#a .diagram-card__fit').textContent.trim(), easing: document.querySelector('#a .diagram-card__viewport').classList.contains('is-easing') }), 400)));
+    check('Fit returns to the fitted size', Math.abs(fitted.width - wheel.w0) < 0.5 && fitted.readout === '100%' && fitted.easing === false, `${JSON.stringify(fitted)} vs ${wheel.w0}`);
+    const atRest = await run(() => new Promise((r) => setTimeout(() => { const group = [...document.querySelectorAll('#a .diagram-card__zoom .diagram-card__icon-btn')]; r(group.map((b) => ({ what: b.getAttribute('aria-label'), disabled: b.disabled, opacity: getComputedStyle(b).opacity, width: b.getBoundingClientRect().width }))); }, 400)));
+    check('at fit only the plus shows: minus and the readout are hidden but keep their place', atRest.length === 3 && atRest[0].opacity === '0' && atRest[1].opacity === '0' && atRest[0].width > 0 && atRest[1].width > 0 && atRest[2].disabled === false && Number(atRest[2].opacity) > 0.5, JSON.stringify(atRest));
 
     // ── 4. export ───────────────────────────────────────────────────────────
     console.log('export');
+    // The row stays in the document so it can close as it opened; closed, nothing in it can be reached.
+    const closedRow = await run(() => {
+      const row = document.querySelector('#a .diagram-card__export');
+      return { inert: row.inert === true, height: row.getBoundingClientRect().height, open: row.getAttribute('data-open') };
+    });
+    check('the closed export row takes no room and is inert', closedRow.inert && closedRow.height < 1 && closedRow.open === 'false', JSON.stringify(closedRow));
     for (const format of ['SVG', 'PNG', 'Mermaid (.mmd)']) {
       await click('a', 'Export');
       await run(
@@ -321,6 +334,8 @@ window.__card = {
     }
     const exported = (await calls()).export;
     check('SVG export carries the accepted drawing', exported[0]?.format === 'svg' && exported[0].head.startsWith('<svg'), JSON.stringify(exported[0]));
+    // Arrival motion is for the screen only: a file whose parts start invisible would be an empty picture.
+    check('no export carries the arrival motion', exported.length === 3 && exported.every((e) => e.arrival === false), JSON.stringify(exported.map((e) => e.arrival)));
     check('PNG export is a real PNG (base64)', exported[1]?.format === 'png' && exported[1].head.startsWith('iVBORw0KGgo') && exported[1].length > 500, JSON.stringify(exported[1]));
     check('.mmd export carries the source', exported[2]?.format === 'mmd' && exported[2].head.startsWith('flowchart LR'), JSON.stringify(exported[2]));
 
@@ -445,6 +460,7 @@ window.__card = {
     s = await settle('o', 'img');
     check('a newer source wins over an older render finishing late', s.imgSvg.includes('Gamma') && !s.imgSvg.includes('Service number'), s.imgSvg.slice(0, 100));
     check('and the card is retitled for it', s.label === 'Sequence diagram', String(s.label));
+    check('the header has no separate label beside the tabs', await run(() => document.querySelectorAll('.diagram-card__label').length === 0));
 
     await render('d1', { artifactId: 'ma:d0', source: GOOD, complete: true, streaming: false });
     await render('d2', { artifactId: 'mb:d0', source: GOOD, complete: true, streaming: false });
@@ -520,7 +536,7 @@ window.__card = {
     x = await extra('chart');
     check('the Data tab shows the same numbers as a table', x.table === 'Month Revenue (USD) Now 10,000 Month 1 10,500 Month 2 11,025 Month 3 11,576.25', x.table);
     check('…and the payload, indented', s.source && s.source.includes('"compute": {\n    "kind": "compound_growth"'), String(s.source).slice(0, 160));
-    await click('chart', 'Chart');
+    await click('chart', 'Forecast');
     await settle('chart', 'img');
 
     await run(() => { window.__card.calls.export.length = 0; });
@@ -582,7 +598,7 @@ window.__card = {
     x = await extra('chen');
     check('a Chen model is drawn with its real symbols', s.imgLoaded && s.label === 'ER diagram (Chen)' && s.imgSvg.includes('chen-weak') && s.imgSvg.includes('chen-identifying') && s.imgSvg.includes('chen-partial-key-underline'), JSON.stringify({ label: s.label, state: s.state }));
     check('a constraint nobody stated is listed under the drawing, not drawn', x.notes.some((n) => /^Not stated, so not drawn: Whether every Product takes part/.test(n)), JSON.stringify(x.notes));
-    check('it exports as SVG, PNG and JSON (its model), under Diagram / Source tabs', JSON.stringify(x.tabs) === '["Diagram","Source"]' && x.copyTitle === 'Copy source', JSON.stringify(x));
+    check('it exports as SVG, PNG and JSON (its model), under its own name and a Source tab', JSON.stringify(x.tabs) === '["ER diagram (Chen)","Source"]' && x.copyTitle === 'Copy source', JSON.stringify(x));
     await click('chen', 'Export');
     check('…never as Mermaid', JSON.stringify((await extra('chen')).exportButtons) === '["SVG","PNG","JSON"]', JSON.stringify((await extra('chen')).exportButtons));
 
@@ -615,7 +631,7 @@ window.__card = {
     const md = await run(() => {
       const host = document.getElementById('md-chart');
       const fig = host.querySelector('figure.diagram-card');
-      return { kind: fig?.getAttribute('data-diagram-kind'), chunks: [...host.querySelectorAll('.md-chunk')].map((n) => n.textContent.trim()), label: fig?.querySelector('.diagram-card__label')?.textContent, raw: /natively-chart/.test(host.innerText) };
+      return { kind: fig?.getAttribute('data-diagram-kind'), chunks: [...host.querySelectorAll('.md-chunk')].map((n) => n.textContent.trim()), label: fig?.querySelector('[role="tab"]')?.textContent, raw: /natively-chart/.test(host.innerText) };
     });
     check('a saved answer shows its chart as a card, between its own prose, with no raw payload', md.kind === 'chart' && md.label === 'Forecast' && md.chunks.length === 2 && md.chunks[0] === 'Scenario.' && !md.raw, JSON.stringify(md));
     // A diagram made only of placeholders is not drawn at all.
@@ -648,10 +664,14 @@ window.__card = {
     const reduced = await run(() => ({
       card: getComputedStyle(document.querySelector('#a figure.diagram-card')).transitionDuration,
       tab: getComputedStyle(document.querySelector('#a .diagram-card__tab')).transitionDuration,
+      // Everything the card moves: the tab pill, the export row, the drawing's entrance.
+      pill: getComputedStyle(document.querySelector('#a .diagram-card__tab-pill')).transitionDuration,
+      row: getComputedStyle(document.querySelector('#a .diagram-card__export')).transitionDuration,
+      drawing: getComputedStyle(document.querySelector('#a img.diagram-card__img')).animationName,
       visible: document.querySelector('#a img.diagram-card__img').getBoundingClientRect().width > 0,
     }));
     win.webContents.debugger.detach();
-    check('with reduced motion the card has no transitions and stays visible', normal !== '0s' && reduced.card === '0s' && reduced.tab === '0s' && reduced.visible, JSON.stringify({ normal, reduced }));
+    check('with reduced motion the card has no transitions and stays visible', normal !== '0s' && reduced.card === '0s' && reduced.tab === '0s' && reduced.pill === '0s' && reduced.row === '0s' && reduced.drawing === 'none' && reduced.visible, JSON.stringify({ normal, reduced }));
 
     // ── 11. cleanup ─────────────────────────────────────────────────────────
     console.log('cleanup');

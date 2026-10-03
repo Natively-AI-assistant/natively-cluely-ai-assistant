@@ -84,13 +84,39 @@ export function diagramsEnabledNow(): boolean {
   return enabledValue;
 }
 
+/** The reader asked the system for less motion. */
+export function prefersReducedMotion(): boolean {
+  try {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
 // ── colours ─────────────────────────────────────────────────────────────────
 
-function parseRgb(color: string): [number, number, number, number] | null {
-  const m = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)/i.exec(color);
-  if (!m) return null;
-  const alpha = m[4] === undefined ? 1 : m[4].endsWith('%') ? Number.parseFloat(m[4]) / 100 : Number.parseFloat(m[4]);
-  return [Number(m[1]), Number(m[2]), Number(m[3]), Number.isFinite(alpha) ? alpha : 1];
+type Rgba = [number, number, number, number];
+
+const RGB_RE = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)/gi;
+// What `color-mix()` computes to: channels from 0 to 1.
+const SRGB_RE = /color\(\s*srgb\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)(?:\s*\/\s*([\d.]+%?))?\s*\)/gi;
+
+const alphaOf = (raw: string | undefined): number => {
+  if (raw === undefined) return 1;
+  const value = raw.endsWith('%') ? Number.parseFloat(raw) / 100 : Number.parseFloat(raw);
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+};
+
+/** Every colour written in a computed value (one for a colour, several for a gradient). */
+function parseColors(value: string): Rgba[] {
+  const out: Rgba[] = [];
+  for (const m of value.matchAll(RGB_RE)) out.push([Number(m[1]), Number(m[2]), Number(m[3]), alphaOf(m[4])]);
+  for (const m of value.matchAll(SRGB_RE)) out.push([Number(m[1]) * 255, Number(m[2]) * 255, Number(m[3]) * 255, alphaOf(m[4])]);
+  return out.filter((c) => c.every(Number.isFinite));
+}
+
+function parseRgb(color: string): Rgba | null {
+  return parseColors(color)[0] ?? null;
 }
 
 const hex = (n: number): string => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0');
@@ -101,6 +127,48 @@ const mix = (fg: [number, number, number], bg: [number, number, number], alpha: 
 
 export const DIAGRAM_DARK_SURFACE: [number, number, number] = [17, 19, 24];
 export const DIAGRAM_LIGHT_SURFACE: [number, number, number] = [255, 255, 255];
+
+const over = (top: Rgba, under: [number, number, number]): [number, number, number] => [
+  top[0] * top[3] + under[0] * (1 - top[3]),
+  top[1] * top[3] + under[1] * (1 - top[3]),
+  top[2] * top[3] + under[2] * (1 - top[3]),
+];
+
+/**
+ * The colour the drawing actually sits on: every background painted between
+ * the window and the card, laid one over the other. A gradient counts as the
+ * mean of its stops, and what shows through a translucent window is taken to
+ * be `base` (nothing here can see the desktop).
+ *
+ * The card's fills used to be mixed against one fixed dark and one fixed
+ * light surface. Measured in the overlay (2026-10-03), the real surface is
+ * rgb(30, 32, 37) in the default dark theme, (40, 40, 49) in modern and
+ * (64, 68, 74) in liquid-glass over a light desktop — against an assumed
+ * (17, 19, 24). So a box was invisible in the first and a near-black block,
+ * darker than the card it sat on, in the last.
+ */
+export function diagramSurfaceFor(element: Element | null, base: [number, number, number]): [number, number, number] {
+  let surface = base;
+  try {
+    if (!element || typeof getComputedStyle !== 'function') return surface;
+    const chain: Element[] = [];
+    for (let node: Element | null = element; node && chain.length < 64; node = node.parentElement) chain.push(node);
+    for (const node of chain.reverse()) {
+      const style = getComputedStyle(node);
+      const colour = parseRgb(style.backgroundColor);
+      if (colour && colour[3] > 0) surface = over(colour, surface);
+      const image = style.backgroundImage;
+      if (image && image !== 'none' && image.includes('gradient')) {
+        const stops = parseColors(image);
+        if (stops.length) {
+          const mean = stops.reduce<Rgba>((sum, c) => [sum[0] + c[0] / stops.length, sum[1] + c[1] / stops.length, sum[2] + c[2] / stops.length, sum[3] + c[3] / stops.length], [0, 0, 0, 0]);
+          if (mean[3] > 0) surface = over(mean, surface);
+        }
+      }
+    }
+  } catch { /* the fixed surface */ }
+  return surface;
+}
 
 /**
  * The palette for a diagram, derived from the text colour the card actually
@@ -118,14 +186,20 @@ export function diagramColorsFor(element: Element | null): DiagramThemeColors {
   } catch { /* default dark palette */ }
   const luminance = (0.2126 * text[0] + 0.7152 * text[1] + 0.0722 * text[2]) / 255;
   const dark = luminance > 0.55; // light text ⇒ dark panel
-  const surface = dark ? DIAGRAM_DARK_SURFACE : DIAGRAM_LIGHT_SURFACE;
+  const surface = diagramSurfaceFor(element, dark ? DIAGRAM_DARK_SURFACE : DIAGRAM_LIGHT_SURFACE);
+  // A box is a little lighter than what it sits on, in both themes: a veil of
+  // the text colour on a dark panel, of white on a light one (there the text
+  // colour would darken it, and a white card on a tinted page reads as paper).
+  const lift: [number, number, number] = dark ? text : [255, 255, 255];
   return {
     text: toHex(text[0], text[1], text[2]),
     muted: mix(text, surface, 0.68),
-    nodeFill: mix(text, surface, dark ? 0.1 : 0.05),
+    nodeFill: mix(lift, surface, dark ? 0.085 : 0.6),
     stroke: mix(text, surface, 0.5),
-    groupFill: mix(text, surface, dark ? 0.05 : 0.03),
-    accent: dark ? '#7aa2f7' : '#2563eb',
+    groupFill: mix(lift, surface, dark ? 0.04 : 0.3),
+    // The app's accent (periwinkle 300 on dark, 600 on light), not a borrowed blue.
+    accent: dark ? '#95aff6' : '#4967d3',
+    surface: toHex(surface[0], surface[1], surface[2]),
     dark,
   };
 }

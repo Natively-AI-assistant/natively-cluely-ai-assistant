@@ -2632,9 +2632,27 @@ body {
    interface theme, in the overlay and in the launcher alike — so the card
    needs no theme branches of its own. Text colours come from the surrounding
    card; muted parts use currentColor at reduced opacity for the same reason.
-   Hover states change colour only (no movement). */
+   Hover states change colour only (no movement); what moves is what changed:
+   the view, the size of the card, the zoom, a confirmation. */
 /* @diagram-card:start */
 .diagram-card {
+  /* Motion. Durations, eases and distances are transitions.dev's shared scale
+     (quick 150 / fast 250 / medium 350 / slow 400, smooth-out, 4px, 2px blur),
+     named by what they are used for and kept on the card so nothing outside it
+     changes. Opening is slower than closing; a hover changes colour only. */
+  --dc-quick: 150ms;
+  --dc-fast: 250ms;
+  --dc-medium: 350ms;
+  --dc-slow: 400ms;
+  --dc-stagger: 40ms;
+  --dc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Secondary text and hairlines, from the card's own text colour so they hold
+     in every colour theme × interface theme. 72% keeps secondary text above
+     4.5:1 on the light panel, where --overlay-text-muted measured 2.76:1. */
+  --dc-quiet: color-mix(in srgb, currentColor 72%, transparent);
+  --dc-hairline: color-mix(in srgb, currentColor 11%, transparent);
+  --dc-wash: color-mix(in srgb, currentColor 7%, transparent);
+  --dc-accent: var(--accent-primary, currentColor);
   margin: 12px 0;
   border-width: 1px;
   border-style: solid;
@@ -2643,7 +2661,7 @@ body {
   min-width: 0;
   max-width: 100%;
   opacity: 1;
-  transition: opacity 150ms ease-out;
+  transition: opacity var(--dc-fast) ease-out;
 }
 
 @starting-style {
@@ -2659,51 +2677,58 @@ body {
 }
 
 .diagram-card__head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 32px;
+  min-height: 34px;
   padding: 4px 6px 4px 12px;
   border-bottom-width: 1px;
   border-bottom-style: solid;
 }
 
-.diagram-card__label {
-  flex: none;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  color: var(--overlay-text-muted, currentColor);
-  white-space: nowrap;
-}
-
+/* The two views. The highlight is one pill that slides between them
+   (transitions.dev #16): its place is written by the card, the move is here. */
 .diagram-card__tabs {
+  position: relative;
   display: flex;
   gap: 2px;
   padding: 2px;
   border-radius: 8px;
-  background: color-mix(in srgb, currentColor 6%, transparent);
+  background: var(--dc-wash);
+}
+
+.diagram-card__tab-pill {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 0;
+  height: calc(100% - 4px);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  pointer-events: none;
+  transition: transform var(--dc-fast) var(--dc-ease), width var(--dc-fast) var(--dc-ease);
+  will-change: transform;
 }
 
 .diagram-card__tab {
+  position: relative;
+  z-index: 1;
   padding: 2px 9px;
   border-radius: 6px;
   font-size: 11px;
   line-height: 16px;
   color: inherit;
-  opacity: 0.62;
-  transition: opacity 120ms ease-out, background-color 120ms ease-out;
+  opacity: 0.72;
+  transition: opacity var(--dc-quick) ease-out;
 }
 
 .diagram-card__tab:hover {
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 .diagram-card__tab[aria-selected='true'] {
   opacity: 1;
-  background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .diagram-card__actions {
@@ -2722,8 +2747,8 @@ body {
   height: 24px;
   border-radius: 6px;
   color: inherit;
-  opacity: 0.6;
-  transition: opacity 120ms ease-out, background-color 120ms ease-out;
+  opacity: 0.68;
+  transition: opacity var(--dc-quick) ease-out, background-color var(--dc-quick) ease-out, transform 90ms ease-out;
 }
 
 .diagram-card__icon-btn:hover:not(:disabled) {
@@ -2731,46 +2756,210 @@ body {
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
+/* A press is felt, a hover is not: the button gives a little under the finger. */
+.diagram-card__icon-btn:active:not(:disabled) {
+  transform: scale(0.92);
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.diagram-card__icon-btn[aria-expanded='true'] {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
 .diagram-card__icon-btn:disabled {
-  opacity: 0.25;
+  opacity: 0.3;
   cursor: default;
+}
+
+/* Zoom: out, how far in the drawing is (press it to fit again), in. */
+.diagram-card__zoom {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+  padding-right: 6px;
+  border-right: 1px solid var(--dc-hairline);
+}
+
+.diagram-card__icon-btn.diagram-card__fit {
+  width: auto;
+  min-width: 42px;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+.diagram-card__zoom-value {
+  display: inline-block;
+}
+
+/* At fit there is nothing to zoom out of and nothing to read: only the plus
+   shows. Minus and the readout keep their place, so nothing moves when they
+   fade in on the first zoom. */
+.diagram-card__zoom .diagram-card__icon-btn:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A stepped zoom (a button, a double-click) pops the new figure in
+   (transitions.dev #02); a pinch changes it every frame, so it only counts. */
+.diagram-card__zoom.is-stepped .diagram-card__zoom-value {
+  animation: diagram-card-number-in var(--dc-fast) var(--dc-ease) backwards;
+}
+
+/* Two icons in one slot (transitions.dev #09): Copy becomes a tick and back. */
+.diagram-card__swap {
+  position: relative;
+  display: inline-grid;
+}
+
+.diagram-card__swap > * {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  transition: opacity var(--dc-fast) ease-in-out, filter var(--dc-fast) ease-in-out, transform var(--dc-fast) ease-in-out;
+}
+
+.diagram-card__swap[data-state='a'] > [data-icon='b'],
+.diagram-card__swap[data-state='b'] > [data-icon='a'] {
+  opacity: 0;
+  filter: blur(2px);
+  transform: scale(0.25);
+}
+
+.diagram-card__ok {
+  /* Green that leans toward the text colour, so it stays readable on a light
+     panel (plain #34d399 measured under 2:1 there). */
+  color: color-mix(in srgb, #22c55e 74%, currentColor);
 }
 
 .diagram-card__note {
   margin-right: 4px;
   font-size: 11px;
-  opacity: 0.7;
+  color: var(--dc-quiet);
   white-space: nowrap;
+  /* transitions.dev #04, the entering half: the words rise 4px out of a blur. */
+  animation: diagram-card-number-in var(--dc-quick) ease-in-out backwards;
 }
 
+/* Work in progress (writing, drawing, fixing, updating): one hairline along
+   the header's lower edge, in the app's accent. It says "busy" where the eye
+   already is, and the body keeps its room for what is coming. */
+.diagram-card__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1.5px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dc-medium) ease-out;
+}
+
+.diagram-card__progress::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 36%;
+  background: linear-gradient(90deg, transparent, var(--dc-accent) 50%, transparent);
+  animation: diagram-card-progress 1.3s linear infinite;
+  animation-play-state: paused;
+}
+
+.diagram-card[data-busy='true'] .diagram-card__progress {
+  opacity: 0.9;
+  transition-duration: var(--dc-quick);
+}
+
+.diagram-card[data-busy='true'] .diagram-card__progress::before {
+  animation-play-state: running;
+}
+
+/* Export: a row that opens under the header (transitions.dev #21 — the grid
+   row grows from 0fr, so no height is measured). It stays in the document
+   closed and inert, so it can close as smoothly as it opened. */
 .diagram-card__export {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dc-fast) var(--dc-ease);
+}
+
+.diagram-card__export[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+
+.diagram-card__export-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.diagram-card__export-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--overlay-code-border, color-mix(in srgb, currentColor 12%, transparent));
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--overlay-code-border, var(--dc-hairline));
 }
 
 .diagram-card__text-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 9px;
+  padding: 3px 10px;
   border-radius: 6px;
   font-size: 11.5px;
   line-height: 16px;
   color: inherit;
   background: color-mix(in srgb, currentColor 8%, transparent);
-  transition: background-color 120ms ease-out, opacity 120ms ease-out;
+  transition: background-color var(--dc-quick) ease-out, opacity var(--dc-quick) ease-out, filter var(--dc-quick) ease-out, transform 90ms ease-out;
 }
 
 .diagram-card__text-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, currentColor 14%, transparent);
+  background: color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.diagram-card__text-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  background: color-mix(in srgb, currentColor 20%, transparent);
 }
 
 .diagram-card__text-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* The formats arrive one after the other as the row opens, and leave together. */
+.diagram-card__export .diagram-card__text-btn {
+  opacity: 0;
+  filter: blur(2px);
+}
+
+.diagram-card__export[data-open='true'] .diagram-card__text-btn {
+  opacity: 1;
+  filter: blur(0);
+  transition-duration: var(--dc-fast), var(--dc-fast), var(--dc-fast), 90ms;
+}
+
+.diagram-card__export[data-open='true'] .diagram-card__text-btn:disabled {
+  opacity: 0.4;
+}
+
+.diagram-card__export[data-open='true'] .diagram-card__text-btn:nth-child(2) { transition-delay: 0ms, var(--dc-stagger), var(--dc-stagger), 0ms; }
+.diagram-card__export[data-open='true'] .diagram-card__text-btn:nth-child(3) { transition-delay: 0ms, calc(var(--dc-stagger) * 2), calc(var(--dc-stagger) * 2), 0ms; }
+.diagram-card__export[data-open='true'] .diagram-card__text-btn:nth-child(n + 4) { transition-delay: 0ms, calc(var(--dc-stagger) * 3), calc(var(--dc-stagger) * 3), 0ms; }
+
+/* Everything under the header. When the card changes what it shows, this box
+   moves to the new height (the card animates it; see DiagramArtifact) instead
+   of jumping. `clip`, not `hidden`: it must not become a scroll container. */
+.diagram-card__body {
+  overflow: clip;
+}
+
+/* Its own formatting context: the drawing's margin must count in its height. */
+.diagram-card__body-inner {
+  display: flow-root;
 }
 
 /* The drawing is an <img> positioned inside a fixed-height window. A plain
@@ -2803,32 +2992,61 @@ body {
   user-select: none;
   -webkit-user-drag: none;
   transform-origin: 0 0;
+  /* `backwards` only: a held last frame would override the dimmed state below. */
+  animation: diagram-card-fade-in var(--dc-quick) ease-out backwards;
+  transition: opacity var(--dc-fast) ease-out;
+}
+
+/* A stepped zoom eases to its new size. Never while dragging or pinching:
+   there the drawing has to stay under the finger. */
+.diagram-card__viewport.is-easing .diagram-card__img {
+  transition: opacity var(--dc-fast) ease-out, width var(--dc-fast) var(--dc-ease), height var(--dc-fast) var(--dc-ease), transform var(--dc-fast) var(--dc-ease);
 }
 
 .diagram-card__viewport.is-previous .diagram-card__img {
   opacity: 0.4;
 }
 
+/* The version that was showing, leaving as its replacement comes in. */
+.diagram-card__ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  animation: diagram-card-ghost-out var(--dc-fast) ease-out backwards;
+}
+
 .diagram-card__status {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 72px;
+  min-height: 88px;
   padding: 12px;
+  animation: diagram-card-fade-in var(--dc-fast) ease-out backwards;
 }
 
 .diagram-card__status-text {
   font-size: 12px;
 }
 
-.diagram-card__ok {
-  color: #34d399;
-}
-
 .diagram-card__status--over {
   position: absolute;
   inset: 0;
   min-height: 0;
+}
+
+/* Over a dimmed drawing the words get a plate, or they run into its labels. */
+.diagram-card__status-plate {
+  display: inline-flex;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--dc-hairline);
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .diagram-card__source {
@@ -2843,13 +3061,14 @@ body {
 
 .diagram-card__fallback {
   padding: 12px 14px;
+  animation: diagram-card-fade-in var(--dc-fast) ease-out backwards;
 }
 
 .diagram-card__fallback-text {
   margin: 0 0 8px;
   font-size: 12.5px;
   line-height: 1.45;
-  opacity: 0.8;
+  color: var(--dc-quiet);
 }
 
 .diagram-card__fallback-actions {
@@ -2857,23 +3076,23 @@ body {
   gap: 6px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .diagram-card,
-  .diagram-card__tab,
-  .diagram-card__icon-btn,
-  .diagram-card__text-btn {
-    transition: none;
-  }
-}
 /* Chart / notation cards: the data behind the picture, and what it rests on. */
 .diagram-card__data {
   max-height: 420px;
   overflow: auto;
+  /* The other view arrives out of a slight blur (transitions.dev #07 values). */
+  animation: diagram-card-pane-in var(--dc-fast) ease-in-out backwards;
+}
+
+/* More below: the last lines fade instead of being cut mid-letter. */
+.diagram-card__data.is-clipped {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent);
 }
 
 .diagram-card__table-wrap {
   overflow-x: auto;
-  padding: 8px 12px 0;
+  padding: 8px 14px 2px;
 }
 
 .diagram-card__table {
@@ -2885,28 +3104,48 @@ body {
 
 .diagram-card__table th,
 .diagram-card__table td {
-  padding: 3px 12px 3px 0;
+  padding: 5px 22px 5px 0;
   text-align: right;
   font-weight: 400;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-bottom: 1px solid var(--dc-hairline);
+}
+
+.diagram-card__table th:last-child,
+.diagram-card__table td:last-child {
+  padding-right: 2px;
 }
 
 .diagram-card__table thead th {
+  padding-top: 3px;
+  font-size: 11px;
   font-weight: 600;
-  opacity: 0.8;
+  color: var(--dc-quiet);
+}
+
+.diagram-card__table tbody tr:last-child > * {
+  border-bottom-color: transparent;
 }
 
 .diagram-card__table th:first-child {
   text-align: left;
 }
 
+/* What the table above was computed from, set apart from it. */
+.diagram-card__table-wrap + .diagram-card__source {
+  margin-top: 8px;
+  border-top: 1px solid var(--dc-hairline);
+  color: var(--dc-quiet);
+}
+
 .diagram-card__notes {
   list-style: none;
-  margin: 0;
-  padding: 0 12px 9px;
+  margin: 0 12px;
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--dc-hairline);
   font-size: 11.5px;
-  line-height: 1.45;
-  opacity: 0.72;
+  line-height: 1.5;
+  color: var(--dc-quiet);
+  animation: diagram-card-fade-in var(--dc-fast) ease-out backwards;
 }
 
 .diagram-card__notes li {
@@ -2914,6 +3153,69 @@ body {
   padding: 0;
 }
 
+@keyframes diagram-card-fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes diagram-card-pane-in {
+  from { opacity: 0; filter: blur(2px); }
+}
+
+@keyframes diagram-card-number-in {
+  from { opacity: 0; filter: blur(2px); transform: translateY(4px); }
+}
+
+@keyframes diagram-card-ghost-out {
+  from { opacity: 0.4; }
+  to { opacity: 0; filter: blur(2px); }
+}
+
+@keyframes diagram-card-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(278%); }
+}
+
+/* Reduced motion: every state is still shown, none of it moves. `!important`
+   because a state selector above (`[data-open='true']`, `.is-easing`) would
+   otherwise outrank a plain `transition: none`. */
+@media (prefers-reduced-motion: reduce) {
+  .diagram-card,
+  .diagram-card__tab,
+  .diagram-card__tab-pill,
+  .diagram-card__icon-btn,
+  .diagram-card__text-btn,
+  .diagram-card__swap > *,
+  .diagram-card__progress,
+  .diagram-card__export,
+  .diagram-card__img,
+  .diagram-card__viewport.is-easing .diagram-card__img {
+    transition: none !important;
+  }
+
+  .diagram-card__img,
+  .diagram-card__ghost,
+  .diagram-card__status,
+  .diagram-card__fallback,
+  .diagram-card__data,
+  .diagram-card__notes,
+  .diagram-card__note,
+  .diagram-card__zoom.is-stepped .diagram-card__zoom-value,
+  .diagram-card__progress::before {
+    animation: none !important;
+  }
+
+  .diagram-card__icon-btn:active:not(:disabled),
+  .diagram-card__text-btn:active:not(:disabled) {
+    transform: none;
+  }
+
+  /* Busy is still shown: a still line the width of the header. */
+  .diagram-card__progress::before {
+    width: 100%;
+    background: var(--dc-accent);
+    opacity: 0.5;
+  }
+}
 /* @diagram-card:end */
 
 .overlay-chip-surface {

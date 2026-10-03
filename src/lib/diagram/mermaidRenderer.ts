@@ -36,6 +36,12 @@ export interface DiagramThemeColors {
   groupFill: string;
   /** Accent used for sequence activations and state markers. */
   accent: string;
+  /**
+   * The colour the drawing sits on, when the caller knows it. A label that
+   * lies on a connector is backed with it, so the line stops at the words
+   * without the label looking like one more box.
+   */
+  surface?: string;
   /** True for a dark panel; only steers Mermaid's contrast maths. */
   dark: boolean;
 }
@@ -118,7 +124,7 @@ export function isMermaidLoaded(): boolean {
 }
 
 export function diagramThemeKey(colors: DiagramThemeColors): string {
-  return [colors.text, colors.muted, colors.nodeFill, colors.stroke, colors.groupFill, colors.accent, colors.dark ? 'd' : 'l'].join('|');
+  return [colors.text, colors.muted, colors.nodeFill, colors.stroke, colors.groupFill, colors.accent, colors.surface ?? '', colors.dark ? 'd' : 'l'].join('|');
 }
 
 function hashString(text: string): string {
@@ -135,9 +141,23 @@ export function diagramCacheKey(source: string, colors: DiagramThemeColors): str
   return `${hashString(source)}:${source.length}:${hashString(diagramThemeKey(colors))}`;
 }
 
+/** `a` moved `t` of the way to `b`; both `#rrggbb`. Anything else comes back as `a`. */
+function blendHex(a: string, b: string, t: number): string {
+  const parse = (value: string): number[] | null => (/^#[0-9a-f]{6}$/i.test(value) ? [1, 3, 5].map((i) => Number.parseInt(value.slice(i, i + 2), 16)) : null);
+  const x = parse(a);
+  const y = parse(b);
+  if (!x || !y) return a;
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
+}
+
 function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
   const key = diagramThemeKey(colors);
   if (initialisedThemeKey === key) return;
+  // Three weights of line, so a drawing reads in the order it is used: the
+  // connectors (what goes where) are the strongest, a box's own outline is
+  // quieter, and a label lying on a connector is quieter than a box's name.
+  const border = blendHex(colors.stroke, colors.nodeFill, 0.38);
+  const labelBack = colors.surface ?? colors.nodeFill;
   mermaid.initialize({
     startOnLoad: false,
     // 'strict': labels are text, click handlers are off.
@@ -150,23 +170,56 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
     maxEdges: 200,
     theme: 'base',
     // App-owned CSS, built only from the palette above (never from model
-    // text; `themeCSS` is in the `secure` list). Edge labels get an opaque chip
-    // in the node colour so the connector does not run through the words, and
-    // boxes take the app's soft corner.
+    // text; `themeCSS` is in the `secure` list). Boxes take the app's soft
+    // corner. A label that lies on a line (a connector's, a message's) is
+    // outlined in the surface colour, so the line stops at the letters. It
+    // used to sit on an opaque rectangle in the node colour, which read as one
+    // more small box, and showed as a dark block wherever the panel is not the
+    // colour that rectangle assumed (measured: 24 levels off on liquid-glass
+    // over a light desktop). An outline that hugs the letters is hard to see
+    // even when the surface is only known roughly, which it is under glass.
     themeCSS: [
-      `.edgeLabel rect, .labelBkg { fill: ${colors.nodeFill}; opacity: 1; }`,
-      `.edgeLabel { background-color: ${colors.nodeFill}; }`,
+      // (`.edgeLabel .label rect` is spelled out because state diagrams set
+      // their label box with that selector, which outranks the shorter one.)
+      '.edgeLabel rect, .edgeLabel .label rect, .labelBkg { fill: none; opacity: 0; }',
+      '.edgeLabel { background-color: transparent; }',
+      `.edgeLabel text, .edgeLabel tspan { fill: ${colors.muted}; }`,
+      // Sequence diagrams set `stroke: none` on the inner tspan of a condition
+      // ("[provider accepts]"), so the outline has to be given to it by name,
+      // or a lifeline runs straight through the words. A class diagram's
+      // multiplicities ("0..1") lie on the lines in the same way.
+      `.edgeLabel text, .edgeTerminals text, .messageText, .loopText, .loopText > tspan, .sectionTitle, .sectionTitle > tspan { paint-order: stroke fill; stroke: ${labelBack}; stroke-width: 5px; stroke-linejoin: round; }`,
+      `.flowchart-link, .transition, .relation { stroke-width: 1.25px; }`,
       '.node rect, .cluster rect, rect.actor, .note rect { rx: 6px; ry: 6px; }',
+      // Sequence: the frame round an alt / loop is a quiet hairline, so nested
+      // frames do not pile up into a thick dotted band.
+      `.loopLine { stroke: ${border}; stroke-width: 1px; stroke-dasharray: 3 3; }`,
+      // A lifeline is the ruling of the page, not the content: Mermaid draws it
+      // 2 px wide, heavier than the messages that cross it.
+      `.actor-line { stroke: ${border}; stroke-width: 1px; }`,
       // Mind map: the root is drawn in the same quiet fill as every other node
       // (Mermaid's default gives it a saturated fill with dark text).
-      `.section-root rect, .section-root path, .section-root circle, .section-root polygon { fill: ${colors.groupFill}; stroke: ${colors.stroke}; }`,
+      `.section-root rect, .section-root path, .section-root circle, .section-root polygon { fill: ${colors.groupFill}; stroke: ${border}; }`,
       `.section-root text, .mindmap-node text { fill: ${colors.text}; }`,
+      // Mind map branches: Mermaid draws them up to 17 px wide by depth, in the
+      // node's own fill. They are connectors, so they get a connector's weight
+      // and colour, and each node gets the outline every other box has (in
+      // place of the underline, which only read as one with a coloured fill).
+      `path[class*="edge-depth-"] { stroke-width: 1.5px; }`,
+      `path[class*="section-edge-"] { stroke: ${colors.stroke}; }`,
+      `.mindmap-node .node-bkg { stroke: ${border}; stroke-width: 1px; }`,
+      '.mindmap-node line { stroke: none; }',
+      // With every node outlined alike, the centre is told apart by weight.
+      '.section-root text, .section-root tspan { font-weight: 600; }',
       // Data model: the crow's-foot ends ARE the notation, so the relationship
       // line is drawn in the text colour and a little heavier than a box edge
       // (seen in the overlay: at the scale a tall model is shown, a hairline
       // in the border colour made "one" and "many" hard to tell apart).
       `.relationshipLine, .er.relationshipLine { stroke: ${colors.text}; stroke-width: 1.4px; }`,
       `.marker.er path, .marker.er circle, marker[id*="ONLY_ONE"] path, marker[id*="ZERO_OR"] path, marker[id*="ONE_OR_MORE"] path, marker[id*="ZERO_OR"] circle { stroke: ${colors.text}; }`,
+      // The "zero" ring is an OPEN circle. Mermaid fills it white, which on a
+      // dark panel is a solid white dot.
+      `.marker.er circle { fill: ${labelBack}; }`,
     ].join(' '),
     fontFamily: DIAGRAM_FONT_FAMILY,
     // SVG <text> labels, not HTML in <foreignObject>: keeps the output
@@ -185,7 +238,8 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       actorMargin: 14,
       messageMargin: 22,
       width: 110,
-      height: 40,
+      // Room for a name on two lines (at 40 the second line sat on the box's edge).
+      height: 46,
       boxMargin: 6,
       wrap: true,
       diagramMarginX: 8,
@@ -196,7 +250,9 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
     timeline: { useMaxWidth: false },
     // A Gantt chart is as wide as it is told to be; the card is about this wide.
     gantt: { useMaxWidth: false, useWidth: 720, barHeight: 18, barGap: 5, topPadding: 44, leftPadding: 96, rightPadding: 16, fontSize: 11, sectionFontSize: 11, gridLineStartPadding: 30, axisFormat: '%b %e' },
-    class: { useMaxWidth: false, htmlLabels: false },
+    // A class with neither attributes nor methods is drawn as its name alone,
+    // not as a name over two empty compartments.
+    class: { useMaxWidth: false, htmlLabels: false, hideEmptyMembersBox: true },
     er: { useMaxWidth: false },
     themeVariables: {
       darkMode: colors.dark,
@@ -205,13 +261,13 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       fontSize: '13px',
       primaryColor: colors.nodeFill,
       primaryTextColor: colors.text,
-      primaryBorderColor: colors.stroke,
+      primaryBorderColor: border,
       secondaryColor: colors.groupFill,
       secondaryTextColor: colors.text,
-      secondaryBorderColor: colors.stroke,
+      secondaryBorderColor: border,
       tertiaryColor: colors.groupFill,
       tertiaryTextColor: colors.text,
-      tertiaryBorderColor: colors.stroke,
+      tertiaryBorderColor: border,
       lineColor: colors.stroke,
       // Data model attribute rows: the same two quiet fills as everything else
       // (this Mermaid reads rowOdd / rowEven; its defaults are near-black bands).
@@ -219,23 +275,23 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       rowEven: colors.groupFill,
       textColor: colors.text,
       mainBkg: colors.nodeFill,
-      nodeBorder: colors.stroke,
+      nodeBorder: border,
       clusterBkg: colors.groupFill,
-      clusterBorder: colors.stroke,
+      clusterBorder: border,
       titleColor: colors.text,
-      edgeLabelBackground: colors.nodeFill,
+      edgeLabelBackground: labelBack,
       actorBkg: colors.nodeFill,
-      actorBorder: colors.stroke,
+      actorBorder: border,
       actorTextColor: colors.text,
       actorLineColor: colors.stroke,
       signalColor: colors.stroke,
       signalTextColor: colors.text,
       labelBoxBkgColor: colors.groupFill,
-      labelBoxBorderColor: colors.stroke,
+      labelBoxBorderColor: border,
       labelTextColor: colors.text,
       loopTextColor: colors.muted,
       noteBkgColor: colors.groupFill,
-      noteBorderColor: colors.stroke,
+      noteBorderColor: border,
       noteTextColor: colors.text,
       activationBkgColor: colors.accent,
       activationBorderColor: colors.stroke,
@@ -263,7 +319,7 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       altSectionBkgColor: 'transparent',
       sectionBkgColor2: colors.groupFill,
       taskBkgColor: colors.nodeFill,
-      taskBorderColor: colors.stroke,
+      taskBorderColor: border,
       taskTextColor: colors.text,
       taskTextLightColor: colors.text,
       taskTextDarkColor: colors.text,
@@ -271,7 +327,7 @@ function initialise(mermaid: MermaidApi, colors: DiagramThemeColors): void {
       activeTaskBkgColor: colors.accent,
       activeTaskBorderColor: colors.stroke,
       doneTaskBkgColor: colors.groupFill,
-      doneTaskBorderColor: colors.stroke,
+      doneTaskBorderColor: border,
       critBkgColor: colors.nodeFill,
       critBorderColor: colors.accent,
       gridColor: colors.stroke,
