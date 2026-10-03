@@ -448,16 +448,24 @@ app label dates in the prompt; find the cause of the streamed tool-call markup a
 | E6 | The pass's CONFLICT step: a current document against an older one is not a conflict (wording, replayed offline) | +0.06 (±0.08), hard fails 32 → 27, critical 17 → 14; fails its first line (the interval includes 0) | **Not kept**, not built; Evin's call |
 | E7 | A file's own date and version on the evidence tag, and a notice saying the later final document holds | Labels delivered on 271 of 333 prompts; conflict drafts 8.23 → 7.67, hard fails 8 → 10 | **Not kept**, reverted |
 
-**The cause behind section 6.** The claim pass was never the wrong idea; it was reading a cut prompt. Once the
-pack is in the prompt (E1), the prompt is longer than 24,000 characters on 302 of 384 passes, and both surfaces cut
-it there. Shown the whole prompt, the pass replaces 71 answers instead of 113 on dev + counterfactual, costs
-nothing on the mean, and still removes capped failures (39 → 31 on dev + counterfactual). E3 and E4 (section 9)
-were attempts to work around this; neither is needed.
+**E5 is the other half of E1, and main currently has only the first half.** E1 puts the pack in the prompt; that
+makes the prompt longer than 24,000 characters on 302 of 384 passes, and both surfaces cut it there before the
+claim pass reads it. So landing E1 alone created the condition that cost −0.23 on dev + counterfactual and −0.37 on
+the blind holdout. With E5 the same build reaches 8.71 on the holdout against 8.17 for E1 alone. They belong
+together.
 
-**Why the labels failed.** A date on a tag does not say which document governs. The benchmark's hard cases are the
-ones where the later word is an undated informal note (a lecturer's correction against the dated syllabus), and the
-notice "the later-dated final document holds, give it plainly" made the answer state the dated value and drop the
-flag. The other option Evin was shown, a switch the user sets on a file, was not built or tested.
+**The cause behind section 6.** The cut caused the net loss. Shown the whole prompt, the pass replaces 71 answers
+instead of 113 on dev + counterfactual, costs nothing on the mean, and still removes capped failures (39 → 31).
+A residual cost remains and is not fixed: in the offline whole-prompt arm the pass's edits to answers that had
+their evidence still cost 0.93 (±0.60) on the 25 it edited (13 worse, 1 better), offset by its gains elsewhere;
+the visible part of that is its CONFLICT step (E6). E3 and E4 (section 9) were attempts to work around the cut.
+
+**The labels failed their rule.** Conflict drafts fell and their capped failures rose. Of the nine conflict cases
+that dropped by more than a point, two show one mechanism: the later word was an undated informal note (a
+lecturer's correction against the dated syllabus), and the notice "the later-dated final document holds, give it
+plainly" made the answer state the dated value and drop the flag. The other seven drops were not about dates, and
+I have no measured cause for them. The other option Evin was shown, a switch the user sets on a file, was not
+built or tested.
 
 **Where the product stands with E1 + the markup fix + E5** (`report/mode-table.mjs s3 dev cf holdout`, 513 rows):
 
@@ -476,8 +484,9 @@ flag. The other option Evin was shown, a switch the user sets on a file, was not
 | Hard fails / critical | 100 / 61 | 53 / 29 | 46 / 23 |
 
 Rows with the evidence in the prompt, E1 + E5: mean 8.95 (±0.16), 10th percentile 6.8, critical 2.5 %, against
-targets of 9.2, 8.5 and under 1 %. Closer, still not met; by the rule of section 2 the verdict stays A (the mean
-is under 9.0 and 5.5 % of those rows are hard fails). On these 513 rows no prompt held a file of another mode
+targets of 9.2, 8.5 and under 1 %. Closer, still not met. The rule of section 2, read per set as written: dev +
+counterfactual 8.97 (±0.19) with 4.3 % hard fails, holdout 8.91 (±0.28) with 7.6 %. The mean is under 9.0 on both
+(by 0.03 on dev + counterfactual), so the verdict stays A. On these 513 rows no prompt held a file of another mode
 and no prompt or answer held a string of the other profile; the isolation set itself was not run again for this
 build.
 
@@ -486,6 +495,13 @@ answer wrong with the evidence in the prompt 11; profile evidence not in the pro
 wrong file 4; an outdated or draft source preferred 3; addressed to the wrong party 2. The largest single item
 that is still a delivery problem is the résumé (6 of 46, and 6.6 against 9.5 on the rows that depend on it): E2,
 the résumé and JD handed over whole, is still unbuilt.
+
+**On main.** E5 and the markup fix were measured only on the `e000db4a` base. They are also prepared on top of
+main as branch `fix/er-followups-on-main` (`be676d88` on `6f00e104`): the markup fix applied cleanly; E5 conflicted
+in `LLMHelper.replayAnswerCall`, where main carries a later change (the active design is kept across the cut), and
+was resolved by keeping main's logic with the claim pass's cap. On that branch: `typecheck:electron` clean,
+`test:intelligence` 2,858 pass / 0 fail, the llm suite 5,768 pass / 0 fail. It was not benchmarked and is not
+landed.
 
 **Not established for this section:** gpt-6-astra has judged none of it (chain armed, the new runs added); the
 offline replays (E5's first screen, E6) are provisional-judge only and are not in the chain; the app runs shared the

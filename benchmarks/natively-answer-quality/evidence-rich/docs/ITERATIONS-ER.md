@@ -484,5 +484,6 @@ Against the kept build `e000db4a` on the same blind set: 7.40 → 8.71 (+1.30 ±
 **Verdict: E5 is kept**, as commit `441ed80a` on `fix/er-followups` (with the markup fix `d503ae4f`; the branch
 head `742a7170` has the labels reverted). Tests on the head: `test:intelligence` 2,806 pass / 0 fail, the llm suite
 5,472 pass / 0 fail, `typecheck:electron` clean. **Not on main.** On main `d503ae4f` cherry-picks cleanly;
-`441ed80a` conflicts in `LLMHelper.replayAnswerCall` (main carries a later change to the same lines) and needs a
-two-line resolution. The judge was the provisional one; the gpt-6-astra chain is armed to re-judge these runs.
+`441ed80a` conflicts in `LLMHelper.replayAnswerCall` (main carries a later change to the same lines); resolved and
+tested on branch `fix/er-followups-on-main` (`be676d88` on main `6f00e104`: typecheck clean, `test:intelligence`
+2,858 pass / 0 fail, llm suite 5,768 pass / 0 fail), not benchmarked there, not landed. The judge was the provisional one; the gpt-6-astra chain is armed to re-judge these runs.
