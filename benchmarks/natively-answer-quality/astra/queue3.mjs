@@ -52,6 +52,8 @@ const TIERS = [
   // 2026-10-02, speed: the kept build run with the embedder working, with the bundled rerank on (emb2) and off
   // (emb4), same dev rows. The pair says what the awaited rerank is worth in answer quality.
   [J('dev-c2-emb2', 'abs-dev-c2', 'aq2-dev-emb2'), J('dev-c2-emb4', 'abs-dev-c2', 'aq2-dev-emb4')],
+  // 2026-10-03: the same pair run again back to back with a healthy provider (emb4 was hit by a DeepSeek stall).
+  [J('dev-c2-rron1', 'abs-dev-c2', 'aq2-dev-rron1'), J('dev-c2-rroff1', 'abs-dev-c2', 'aq2-dev-rroff1')],
   // Reasoning: the build (fix15) reasons on TYPED turns only, so the deciding variant is the typed-only set — heard
   // rows carry the reasoning-off answer (no judge call, a difference of exactly 0). The all-turns sets come later
   // and are reported only: they are the evidence for the heard-turn question, which is Evin's to decide.

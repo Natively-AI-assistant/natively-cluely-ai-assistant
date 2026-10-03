@@ -2043,3 +2043,32 @@ it does that when it finds a `codex login` session on the machine — so profile
 partial run is deleted. The relaunch names the run correctly and starts the app with `CODEX_HOME` pointing at an
 empty directory; a run that logs any Codex line, or more than two stalled rows, is not accepted and is run again.
 
+## The rerank pair run again, back to back, provider healthy (2026-10-03 04:37Z)
+
+Evin: "try running this again". `aq2-dev-rroff1` (04:20–04:28Z, `NATIVELY_RAG_LOCAL_RERANK=0`) then `aq2-dev-rron1`
+(04:28–04:36Z), kept build `e000db4a`, embedder working, same three modes, 120 dev rows each. Both accepted by the
+run's own check: 120 rows, 0 failed, 0 rows without a finish reason or with a first word over 5 s, 0 Codex lines.
+
+| p50 / p90 | wait before the request | first word | settled answer |
+|---|---:|---:|---:|
+| every heard turn (93), rerank on | 220 / 485 ms | 1,079 / 1,487 ms | 2,440 / 3,634 ms |
+| every heard turn, rerank off | 13 / 38 ms | 810 / 1,105 ms | 2,186 / 3,066 ms |
+| heard with a profile (55), on | 345 / 530 ms | 1,146 / 1,517 ms | 2,615 / 3,450 ms |
+| heard with a profile, off | 14 / 221 ms | 831 / 1,166 ms | 2,186 / 2,957 ms |
+| heard, reference file only (28), on | 188 / 246 ms | 1,022 / 1,316 ms | 2,440 / 4,331 ms |
+| heard, reference file only, off | 14 / 23 ms | 758 / 1,086 ms | 2,385 / 3,734 ms |
+| typed (27), on | 6 / 25 ms | 640 / 1,049 ms | 1,868 / 2,936 ms |
+| typed, off | 9 / 25 ms | 800 / 1,171 ms | 2,240 / 2,691 ms |
+
+* **Heard turns: the first word comes 0.27 s sooner at the median and 0.38 s sooner at p90 without the rerank**
+  (1.08 → 0.81 s; 1.49 → 1.11 s), and the settled answer about 0.25 s sooner. Typed turns do not wait for the
+  rerank in either run; their difference between the two runs (640 against 800 ms) is the provider from one
+  ten-minute window to the next and is the size of error to keep in mind for the first-word column.
+* Retrieved passages differ on 4 of the 93 rows that carry any (5 yesterday).
+* All of the app's processes together, sampled once a second: 1,110 MB resident at the median with the rerank on
+  (peak 1,536), 936 MB with it off (peak 1,291) — the reranker is never loaded when the flag is off.
+* The judge is closed (both keys 402 at 04:37Z). Chain `b1100c` is armed for the 11:00 UTC batch: calibration, then
+  `rron1` and `rroff1`. As written before the last batch, a whole-run pair is reported only; what it adds this time
+  is a second "rerank on" run of the same code (`rron1` against yesterday's `emb2`), which measures the noise the
+  on/off difference has to be read against.
+
