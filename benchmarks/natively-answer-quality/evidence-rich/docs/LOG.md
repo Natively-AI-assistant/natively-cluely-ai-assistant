@@ -61,3 +61,30 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   (`cp -Rc`, no extra disk until files change) and the two arm64 binaries were restored inside the clone from the
   copies that packaging keeps in `bin/darwin-arm64-148/`. `scripts/verify-native-arch.js`: both OK.
 * Relaunched 13:56: app up in 24 s, 56 base files uploaded and `ready`.
+
+## 13:56–14:51 — baseline runs on `e000db4a`
+
+* dev 270 (13:56–14:20), counterfactual 63 (–14:28), isolation 46 (–14:34), holdout 180 (–14:51): 559 rows, every
+  row answered, no provider failure line, no timeout, no row left with unverified state. Generator on every row:
+  `deepseek-direct / deepseek-flash`.
+* Judging with the provisional judge started at 14:20 while the later sets were still running in the app, so only
+  the dev run's latency is quoted anywhere.
+* Baseline read (provisional judge): see `EVIDENCE-RICH-QUALITY.md`. In one line: dev 7.47 overall; 8.98 where the
+  needed evidence was in the prompt (101 rows) and 5.69 where it was not (111 rows); holdout 7.40, 8.95 and 5.60.
+
+## 14:45–15:05 — three checks added (rules in `BASELINE-PLAN.md`, committed `86e31940` before they ran)
+
+* `supp-oracle-sources`: 223 dev cases asked again with only the files their oracle names (run 14:52–15:17).
+* Drafts: the streamed text of every row whose shown text was replaced by the claim pass, judged (105 rows).
+* A leak is counted only when the other text was in the prompt.
+
+## 15:12–15:44 — the app and the supervisor were stopped from outside, three times
+
+* 15:12 and 15:14: the app quit with `[Lifecycle] before-quit reason=user-quit` during the oracle-sources run; the
+  supervisor restarted it and the run resumed (223 rows complete at 15:17).
+* 15:33: the app quit the same way during the E1 dev run at 189 of 270 rows; at about 15:35 the supervisor process
+  itself ended with exit 137 (killed). Not caused by this session: another session's packaging run was active on
+  the machine (two `7za` processes at 100 % CPU from the main checkout's `node_modules`, a Playwright Chromium, load
+  average 5–7). The run was resumed at 15:45; rows already written are kept.
+* Consequence: the E1 runs did not have the machine to themselves. Their latency is reported with that caveat and
+  cannot be held against the baseline dev run as strictly as rule 6 of E1 intended.
