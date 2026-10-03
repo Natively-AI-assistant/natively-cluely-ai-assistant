@@ -22,7 +22,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { resolveVersions, computeMissing, ensureMacOptionalDeps } = require('../lib/ensure-mac-optional-deps.cjs');
+const { resolveVersions, computeMissing, computeStale, ensureMacOptionalDeps } = require('../lib/ensure-mac-optional-deps.cjs');
 const { verifyPackedArchFamilies } = require('../ad-hoc-sign.js');
 
 // ---------------------------------------------------------------------------
@@ -70,6 +70,13 @@ test('computeMissing returns only the not-yet-installed packages', () => {
   const installed = new Set(['a']);
   assert.deepEqual(computeMissing(['a', 'b', 'c'], (n) => installed.has(n)), ['b', 'c']);
   assert.deepEqual(computeMissing(['a'], (n) => installed.has(n)), []);
+});
+
+test('computeStale treats a wrong-version package as not installed (parent upgraded, cross-arch binding left behind)', () => {
+  const versions = { a: '0.35.5', b: '0.35.5', c: '1.3.4' };
+  const onDisk = { a: '0.35.5', b: '0.34.5' }; // b predates the upgrade, c is absent
+  assert.deepEqual(computeStale(['a', 'b', 'c'], versions, (n) => onDisk[n] ?? null), ['b', 'c']);
+  assert.deepEqual(computeStale(['a'], versions, (n) => onDisk[n] ?? null), []);
 });
 
 test('ensureMacOptionalDeps is a no-op on Windows', () => {

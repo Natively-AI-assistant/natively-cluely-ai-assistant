@@ -37,6 +37,16 @@ function isInstalled(nodeModulesDir, packageName) {
   return fs.existsSync(path.join(packageDir(nodeModulesDir, packageName), 'package.json'));
 }
 
+/** Version of an installed package, or null when it is absent or its package.json is unreadable. */
+function installedVersion(nodeModulesDir, packageName) {
+  try {
+    const manifest = fs.readFileSync(path.join(packageDir(nodeModulesDir, packageName), 'package.json'), 'utf8');
+    return JSON.parse(manifest).version || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Pull the pinned versions for a family's required packages out of the lockfile.
  * Throws with a NAMED error rather than installing a floating "latest" — a native
@@ -70,6 +80,19 @@ function resolveVersions(lockfile, lockKey, required) {
 /** Which of `required` are not installed. Pure: takes the predicate. */
 function computeMissing(required, installedPredicate) {
   return required.filter((name) => !installedPredicate(name));
+}
+
+/**
+ * Which of `required` are absent OR installed at a version other than the
+ * lockfile's. Pure: takes the version reader.
+ *
+ * A package left over from before a parent upgrade is not "installed": npm never
+ * touches the cross-arch package (it is not in this host's tree), so after e.g.
+ * sharp 0.34 -> 0.35 the Intel slice would keep the 0.34 binding next to the
+ * 0.35 JavaScript, and the binding's file name carries the version.
+ */
+function computeStale(required, versions, versionOf) {
+  return required.filter((name) => versionOf(name) !== versions[name]);
 }
 
 /** `npm pack` the exact version and unpack it into node_modules. */
@@ -123,18 +146,19 @@ function ensureMacOptionalDeps(opts) {
   const lockfile = JSON.parse(fs.readFileSync(path.join(rootDir, 'package-lock.json'), 'utf8'));
   const versions = resolveVersions(lockfile, lockKey, required);
 
-  const missing = computeMissing(required, (name) => isInstalled(nodeModulesDir, name));
+  const versionOf = (name) => installedVersion(nodeModulesDir, name);
+  const missing = computeStale(required, versions, versionOf);
   if (missing.length === 0) {
     log(`packages for darwin arm64 and x64 are installed.`);
     return { skipped: false, installed: [] };
   }
 
-  log(`Installing missing packages: ${missing.join(', ')}`);
+  log(`Installing missing or out-of-date packages: ${missing.map((n) => `${n}@${versions[n]}`).join(', ')}`);
   for (const name of missing) {
     installPackage({ rootDir, nodeModulesDir, packageName: name, version: versions[name], tmpPrefix });
   }
 
-  const stillMissing = computeMissing(required, (name) => isInstalled(nodeModulesDir, name));
+  const stillMissing = computeStale(required, versions, versionOf);
   if (stillMissing.length > 0) {
     throw new Error(`[${label}] Failed to install: ${stillMissing.join(', ')}`);
   }
@@ -145,8 +169,10 @@ function ensureMacOptionalDeps(opts) {
 module.exports = {
   packageDir,
   isInstalled,
+  installedVersion,
   resolveVersions,
   computeMissing,
+  computeStale,
   installPackage,
   ensureMacOptionalDeps,
 };
