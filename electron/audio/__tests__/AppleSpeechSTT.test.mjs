@@ -97,7 +97,7 @@ test('starts the helper, waits for ready, drains buffered audio with backpressur
   // init succeeds, the first audio write backpressures, and the second audio
   // write is released only after the fake stream emits drain.
   const { child, spawnCalls, runtime } = createHarness({ writeResults: [true, false, true] });
-  const stt = new AppleSpeechSTT('/fake/natively-apple-speech', runtime);
+  const stt = new AppleSpeechSTT('/fake/corespeechd-asr', runtime);
   const ready = [];
   const statuses = [];
   const transcripts = [];
@@ -112,7 +112,7 @@ test('starts the helper, waits for ready, drains buffered audio with backpressur
   stt.start();
 
   assert.deepEqual(spawnCalls, [{
-    executable: '/fake/natively-apple-speech',
+    executable: '/fake/corespeechd-asr',
     args: [],
     options: { stdio: ['pipe', 'pipe', 'pipe'] },
   }]);
