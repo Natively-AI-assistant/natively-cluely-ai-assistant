@@ -2146,6 +2146,8 @@ with fewer than all its rows judged on both sides is INCOMPLETE and has no verdi
 * **Probe again:** returned model `claude-opus-5-5`, one turn, 6,619 input tokens (the CLI's own environment block
   and account line are about 450 of them), parsed first time. Passes.
 * **Calibration:** 25 of 25 (need 23). Passes.
+* Checked afterwards: the withdrawn Fable series went through the same transport; its 1,034 stored calls show
+  6.4k to 11k input tokens each, so it did not carry advisor turns. It stays withdrawn.
 
 ## Second judge, result: none of the four changes passes under Claude Opus 5.5 either (2026-10-03 08:16Z)
 
@@ -2186,7 +2188,8 @@ many.
 * **Sales (i6).** astra's +0.31 came with hard fails 4 → 1; Opus flags one hard fail in each arm and reads −0.01.
 
 **Verdict under the rule written before the data: neither branch is required.** Three of the four changes show no
-gain a second judge can see. Reasoning shows a small real one that both judges put under the bar, at a cost of
-about 1.3 s to the first word of a typed Technical interview or Lecture answer. Nothing is merged.
+gain a second judge can see. Reasoning shows a small gain that only Opus is sure of (its interval excludes 0 and
+hard fails fall by three; astra's interval includes 0) and that both judges put under the bar, at a cost of about
+1.3 s to the first word of a typed Technical interview or Lecture answer. Nothing is merged.
 
 The Opus series is in `results/replay/*.judged-opus.jsonl` and is not pooled with astra anywhere in the report.
