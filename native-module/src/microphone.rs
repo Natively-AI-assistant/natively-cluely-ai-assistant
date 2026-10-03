@@ -6,17 +6,26 @@
 // 3. Background thread: drains buffer, resamples, emits to JS
 
 use anyhow::Result;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+#[cfg(not(target_os = "windows"))]
+use cpal::traits::StreamTrait;
+use cpal::traits::{DeviceTrait, HostTrait};
+#[cfg(not(target_os = "windows"))]
 use cpal::{SampleFormat, Stream};
+use ringbuf::HeapCons;
+#[cfg(not(target_os = "windows"))]
 use ringbuf::{
     traits::{Producer, Split},
-    HeapCons, HeapProd, HeapRb,
+    HeapProd, HeapRb,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::{Condvar, Mutex};
 
+#[cfg(not(target_os = "windows"))]
 use crate::audio_config::RING_BUFFER_SAMPLES;
+
+#[cfg(target_os = "windows")]
+mod windows;
 
 /// List available input devices
 pub fn list_input_devices() -> Result<Vec<(String, String)>> {
@@ -59,6 +68,7 @@ fn normalize_device_name(s: &str) -> String {
         .to_lowercase()
 }
 
+#[cfg(not(target_os = "windows"))]
 fn resolve_input_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cpal::Device> {
     let requested_id = device_id
         .map(str::trim)
@@ -128,7 +138,10 @@ fn resolve_input_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cp
 /// Callback pushes raw f32 samples to ring buffer.
 /// Consumer is polled by DSP thread.
 pub struct MicrophoneStream {
+    #[cfg(not(target_os = "windows"))]
     stream: Option<Stream>,
+    #[cfg(target_os = "windows")]
+    stream: Option<windows::WindowsInputStream>,
     consumer: Option<HeapCons<f32>>,
     sample_rate: u32,
     is_running: Arc<AtomicBool>,
@@ -159,6 +172,7 @@ pub struct MicrophoneStream {
 /// then I32 (rare on input). For each candidate format we pick the highest
 /// sample rate it supports up to 48kHz (the rate STT providers natively
 /// accept).
+#[cfg(not(target_os = "windows"))]
 fn pick_supported_config(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig> {
     let default_cfg = device
         .default_input_config()
@@ -214,46 +228,47 @@ fn pick_supported_config(device: &cpal::Device) -> Result<cpal::SupportedStreamC
 
 impl MicrophoneStream {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        let host = cpal::default_host();
-        let device = resolve_input_device(&host, device_id.as_deref())?;
-
-        let config = pick_supported_config(&device)?;
-
-        let sample_rate = config.sample_rate().0;
-        let channels = config.channels() as usize;
-
-        println!(
-            "[Microphone] Device: {}, Rate: {}Hz, Channels: {}, Format: {:?}",
-            device.name().unwrap_or_default(),
-            sample_rate,
-            channels,
-            config.sample_format()
-        );
-
-        // Create lock-free SPSC ring buffer
-        let rb = HeapRb::<f32>::new(RING_BUFFER_SAMPLES);
-        let (producer, consumer) = rb.split();
-
         let is_running = Arc::new(AtomicBool::new(false));
-        let is_running_clone = is_running.clone();
-
-        // Shared Condvar for DSP thread wakeup
         let data_ready = Arc::new((Mutex::new(false), Condvar::new()));
-        let data_ready_clone = data_ready.clone();
-
         let err_signal: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-        let err_signal_clone = err_signal.clone();
 
-        // Build the stream with minimal callback
-        let stream = build_input_stream(
-            &device,
-            &config,
-            producer,
-            channels,
-            is_running_clone,
-            data_ready_clone,
-            err_signal_clone,
+        #[cfg(target_os = "windows")]
+        let (stream, consumer, sample_rate) = windows::WindowsInputStream::new(
+            device_id,
+            is_running.clone(),
+            data_ready.clone(),
+            err_signal.clone(),
         )?;
+
+        #[cfg(not(target_os = "windows"))]
+        let (stream, consumer, sample_rate) = {
+            let host = cpal::default_host();
+            let device = resolve_input_device(&host, device_id.as_deref())?;
+            let config = pick_supported_config(&device)?;
+            let sample_rate = config.sample_rate().0;
+            let channels = config.channels() as usize;
+
+            println!(
+                "[Microphone] Device: {}, Rate: {}Hz, Channels: {}, Format: {:?}",
+                device.name().unwrap_or_default(),
+                sample_rate,
+                channels,
+                config.sample_format()
+            );
+
+            let rb = HeapRb::<f32>::new(RING_BUFFER_SAMPLES);
+            let (producer, consumer) = rb.split();
+            let stream = build_input_stream(
+                &device,
+                &config,
+                producer,
+                channels,
+                is_running.clone(),
+                data_ready.clone(),
+                err_signal.clone(),
+            )?;
+            (stream, consumer, sample_rate)
+        };
 
         Ok(Self {
             stream: Some(stream),
@@ -320,6 +335,7 @@ impl MicrophoneStream {
 ///
 /// The callback ONLY pushes to the ring buffer.
 /// No mutexes, allocations, or DSP.
+#[cfg(not(target_os = "windows"))]
 fn build_input_stream(
     device: &cpal::Device,
     config: &cpal::SupportedStreamConfig,

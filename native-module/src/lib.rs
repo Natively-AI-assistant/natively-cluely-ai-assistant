@@ -20,6 +20,9 @@ pub mod resampler;
 pub mod silence_suppression;
 pub mod speaker;
 
+#[cfg(target_os = "windows")]
+mod windows_audio;
+
 #[cfg(target_os = "macos")]
 pub mod stealth_window;
 
