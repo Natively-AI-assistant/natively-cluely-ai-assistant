@@ -309,7 +309,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/ws": "^8.18.1",
-    "@vitejs/plugin-react": "^4.3.3",
+    "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.6.1",
     "concurrently": "^9.2.4",
     "cross-env": "^7.0.3",
@@ -317,7 +317,7 @@
     "dotenv": "^17.3.1",
     "electron": "43.1.0",
     "electron-builder": "26.17.0",
-    "esbuild": "0.21.5",
+    "esbuild": "0.28.2",
     "husky": "^9.1.7",
     "mermaid": "11.17.2",
     "patch-package": "^8.0.1",
@@ -327,7 +327,7 @@
     "tailwindcss": "^3.4.15",
     "typescript": "^5.6.3",
     "typescript7": "npm:typescript@^7.0.2",
-    "vite": "^5.4.11",
+    "vite": "^7.3.6",
     "wait-on": "^8.0.1"
   },
   "dependencies": {
