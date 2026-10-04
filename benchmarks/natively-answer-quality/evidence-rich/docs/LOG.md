@@ -194,3 +194,9 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
 * gpt-6-astra probed at 03:10: 402 on both keys. The chain was re-armed to probe from now on (14 h).
 * On Evin's word the markup fix and E5 were fast-forwarded onto local main (`6f00e104` → `be676d88`), not pushed.
   The session's scheduled task at 18:47 local is now a re-review with gpt-6-astra, not a landing.
+
+## 2026-10-04 03:30 UTC — E2 landed on local main
+
+* Prepared and tested on top of main in a throwaway worktree (removed), then fast-forwarded: `be676d88` →
+  `3540ed27`. Not pushed. Other sessions' uncommitted files untouched.
+* Local main now carries E1 (`9fce990b`), the markup fix (`be5b9edd`), E5 (`be676d88`) and E2 (`3540ed27`).
