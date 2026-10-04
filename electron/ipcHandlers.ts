@@ -2215,8 +2215,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               // only; the launcher's reading surface is not inside a meeting.
               conversationSummary: answerSurface === 'live' ? (() => {
                 try {
-                  const { speechWindowForPrompt } = require('./llm/conversationHistoryPolicy') as typeof import('./llm/conversationHistoryPolicy');
-                  const formatted = String(appState.getIntelligenceManager?.()?.getFormattedContext?.(180) ?? '');
+                  const { speechWindowForPrompt, SPEECH_WINDOW_SECONDS } = require('./llm/conversationHistoryPolicy') as typeof import('./llm/conversationHistoryPolicy');
+                  // Durable transcript, like the heard path (2026-10-04, E12).
+                  const im: any = appState.getIntelligenceManager?.();
+                  const formatted = String((typeof im?.getFormattedSpeech === 'function' ? im.getFormattedSpeech(SPEECH_WINDOW_SECONDS) : im?.getFormattedContext?.(180)) ?? '');
                   const w = speechWindowForPrompt(formatted);
                   return w.trim() ? w : undefined;
                 } catch { return undefined; }

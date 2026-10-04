@@ -36,6 +36,7 @@ import type { AnswerSurface, EvidenceScope } from '../contracts/types';
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
 import { describeUserInstructionDelivery } from '../../llm/userInstructionContract';
 import { readSelectionStaysOnDevice } from '../../llm/activeCustomProvider';
+import { SPEECH_WINDOW_HISTORY_CHARGE_MAX } from '../../llm/conversationHistoryPolicy';
 
 /**
  * Credential-scrub a [V3] trace payload before stringifying. Keeps every
@@ -480,7 +481,10 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
           const speech = String(convoSummary ?? '');
           const budgetChars = Math.max(0, (policy.contextBudget?.conversationTokens ?? 600) * 4);
           const rendered = renderHistory(ringTurns, {
-            budgetChars: Math.max(0, budgetChars - speech.length),
+            // The speech window is charged against the shared budget only up to
+            // what it used to cost (E12): it grew to 6,000 chars, and earlier
+            // answers and screens keep the room they had.
+            budgetChars: Math.max(0, budgetChars - Math.min(speech.length, SPEECH_WINDOW_HISTORY_CHARGE_MAX)),
             digestBudgetChars: budgetChars,
             // BUDGETED like the ring branch. Unbudgeted, 10 screen turns once
             // put 80,000 characters of screen text into an 83,072-character

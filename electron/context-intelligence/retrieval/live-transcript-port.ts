@@ -126,6 +126,46 @@ export function windowOnlyRestatesQuery(window: string, query: string): boolean 
   return lines.length > 0 && lines.every((l) => l === q);
 }
 
+/**
+ * A light stem for SPEECH matching only (2026-10-04, E12): "are we launching"
+ * must meet "the launch target moved". Applied to both sides of the BM25
+ * comparison in this port; the shared tokenizer (bm25.ts) is untouched, because
+ * documents and profiles are matched on their exact terms. Deliberately
+ * conservative: plural/3rd-person -s, -es, -ies, -ed, -ing; never on a short
+ * word, an identifier, or a word ending in -ss.
+ * EXPORTED for tests.
+ */
+export function stemSpeechToken(token: string): string {
+  const w = String(token);
+  if (w.length <= 3 || /\d/.test(w)) return w;
+  if (w.length > 5 && w.endsWith('ing')) return w.slice(0, -3);
+  if (w.length > 4 && w.endsWith('ied')) return `${w.slice(0, -3)}y`;
+  if (w.length > 4 && w.endsWith('ed')) return w.slice(0, -2);
+  if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+  if (w.length > 4 && /(ch|sh|x|z|ss)es$/.test(w)) return w.slice(0, -2);
+  if (w.endsWith('s') && !w.endsWith('ss') && !w.endsWith('us') && !w.endsWith('is')) return w.slice(0, -1);
+  return w;
+}
+const stemSpeech = (text: string): string => normalizeSpeech(text).split(' ').map(stemSpeechToken).join(' ');
+
+/**
+ * Does this spoken line restate the question being answered? Exact once
+ * normalised, or — because the retrieval query is the CLEANED question (fillers
+ * and stutters stripped) while the transcript holds what was actually said —
+ * a line that carries nearly all of the question's words and little else.
+ */
+function lineRestatesQuery(line: string, query: string): boolean {
+  const q = normalizeSpeech(query);
+  const l = normalizeSpeech(line.replace(/^[^:\n]{1,40}:\s*/, ''));
+  if (!q || !l) return false;
+  if (l === q) return true;
+  const qt = new Set(q.split(' ').filter((w) => w.length > 2));
+  const lt = l.split(' ').filter((w) => w.length > 2);
+  if (qt.size < 4) return false;
+  const shared = [...qt].filter((w) => lt.includes(w)).length;
+  return shared / qt.size >= 0.9 && lt.length <= qt.size * 1.5 + 2;
+}
+
 export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput): RetrievalPort | null {
   const chunks = chunkLiveTranscript(input.segments, input.roleOf ?? defaultRoleOf);
   if (!chunks.length) return null;
@@ -136,27 +176,42 @@ export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput
   const activeVersions = new Map<string, string>([[sourceId, 'live']]);
   const chunkVersions = new Map<string, string>([[sourceId, 'live']]);
   const sourceScopes = new Map<string, EvidenceScope>([[sourceId, scope]]);
-  const index = new Bm25Index(chunks.map((text, i) => ({ id: String(i), text })));
   const provenance = process.env.NATIVELY_TEST_TRANSCRIPT_INJECTION === '1' ? 'TEST_TRANSCRIPT' as const : 'LIVE_STT' as const;
 
   return createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number }) =>
-      index.scoreNormalized(query)
+    retrieve: async (query: string, opts: { topK: number }) => {
+      // The question being answered is in the transcript too (that is how a
+      // heard question arrives). Left in, its window scores 1.00 against itself
+      // and every window holding what was actually said falls under the
+      // relative floor (measured: 0.15–0.16 against a floor of 0.2, on every
+      // meeting of 20+ lines). Its line is taken out BEFORE scoring, so the
+      // floor is measured against real speech, and a question is never handed
+      // back as evidence for its own answer (2026-10-04, E12).
+      const asksSomething = looksLikeQuestion(query);
+      const windows = chunks
+        .map((text, chunkIndex) => ({
+          chunkIndex,
+          text: asksSomething ? text.split('\n').filter((line) => !lineRestatesQuery(line, query)).join('\n') : text,
+        }))
+        .filter((w) => w.text.trim().length > 0);
+      if (!windows.length) return [];
+      const index = new Bm25Index(windows.map((w, i) => ({ id: String(i), text: stemSpeech(w.text) })));
+      return index.scoreNormalized(stemSpeech(query))
         .filter((s) => s.score >= LIVE_TRANSCRIPT_MIN_NORMALIZED_SCORE)
-        .filter((s) => !windowOnlyRestatesQuery(chunks[Number(s.id)], query))
         .slice(0, Math.max(1, opts.topK))
         .map((s) => {
-          const chunkIndex = Number(s.id);
+          const w = windows[Number(s.id)];
           return {
             sourceId,
             fileName: 'transcript:live',
-            text: chunks[chunkIndex],
-            chunkIndex,
+            text: w.text,
+            chunkIndex: w.chunkIndex,
             score: s.score,
             vectorScore: s.score,
             provenance,
           };
-        }),
+        });
+    },
   });
 }
