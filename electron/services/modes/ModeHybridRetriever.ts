@@ -342,14 +342,10 @@ const CONF_MIN_QUERY_TOKENS = 3;     // ignore trivially short queries for the "
 // total, well inside the retrieval budget.
 const RERANK_BATCH_SIZE = 6;
 
-// Typed questions query the bundled embedder's vectors like spoken ones
-// (2026-10-04, owner's decision, E11). The July hotfix sent every typed turn
-// in a meeting to keyword-only search to spare ONNX memory, but a spoken turn
-// in the same meeting already embeds its query (hasTranscript lifts the rule),
-// and the crash it guarded against was the reranker's 30-pair batch, fixed by
-// RERANK_BATCH_SIZE. The old behaviour stays one switch away:
-// NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1.
-function keylessManualRetrievalUsesLexical(): boolean {
+// The July hotfix (keyword-only retrieval while the bundled local embedder is
+// the provider and a meeting is running) can be forced back for every turn:
+// NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1. See shouldUseLexicalForLocalManualQuery.
+function keylessManualRetrievalForcedLexical(): boolean {
     const raw = String(process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL || '').trim().toLowerCase();
     return ['1', 'true', 'on', 'enabled', 'yes'].includes(raw);
 }
@@ -1322,21 +1318,22 @@ export class ModeHybridRetriever {
      * streaming. Use the existing lexical fallback for manual turns unless the
      * env escape hatch disables this mitigation.
      */
-    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean, meetingActive?: boolean): boolean {
+    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean, meetingActive?: boolean, surface?: 'live' | 'manual'): boolean {
         if (hasTranscript) return false;
-        if (!keylessManualRetrievalUsesLexical()) return false;
         const provider = this.embeddingPipeline.getActiveProviderName?.();
         if (provider !== 'local') return false;
         // OUTSIDE A MEETING THE PRESSURE THIS GUARDS AGAINST DOES NOT EXIST
-        // (2026-09-19, owner's decision). The hotfix is about ONNX arena pressure
-        // stacked with local STT and streaming during a live meeting — but under
-        // forceDocumentGrounding `hasTranscript` is always false, so the rule had
-        // swallowed EVERY V3 turn: a key-less user's vectors were built and never
-        // queried. Measured: of 162 questions at 70k tokens the answer chunk
-        // reached the prompt for 149 lexical-only vs 160 with the same MiniLM
-        // vectors. Only an EXPLICIT "no meeting" lifts it; an unknown state keeps
-        // the conservative behaviour.
-        return meetingActive !== false;
+        // (2026-09-19, owner's decision): only an EXPLICIT "no meeting" lifts it.
+        if (meetingActive === false) return false;
+        if (keylessManualRetrievalForcedLexical()) return true;
+        // IN A MEETING (2026-10-04, owner's pick "smart search for typed too"): a
+        // TYPED question queries the vectors. A heard turn keeps the keyword
+        // search it has had since July — with it the confidence gate reads
+        // "low" and the bundled rerank is awaited, which the owner decided on
+        // 2026-10-03 to keep as it is. Lifting the rule for every turn (the
+        // first version of this change) gave heard turns vector scores, the
+        // gate stopped firing, and the rerank stopped running on them.
+        return surface !== 'manual';
     }
 
     /**
@@ -1733,7 +1730,7 @@ export class ModeHybridRetriever {
 
         let candidates: ChunkCandidate[] = [];
 
-        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript, params.meetingActive);
+        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript, params.meetingActive, rerankSurface);
         let degradedReason: RetrievalDegradedReason | undefined;
 
         const h4StageTrace = process.env.NATIVELY_E2E === '1'
