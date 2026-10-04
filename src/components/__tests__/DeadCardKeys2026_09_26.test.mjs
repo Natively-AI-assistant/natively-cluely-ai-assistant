@@ -59,7 +59,8 @@ test('no IPC nobody calls: review:record-session, trial:wipe-profile-data', () =
 
 test('no unused constants: DonationManager.SHOW_DELAY_MS, the banner\'s PLAN_PRO_URL', () => {
   assert.ok(!read('electron/DonationManager.ts').includes('SHOW_DELAY_MS'));
-  assert.ok(!read('src/components/trial/FreeTrialBanner.tsx').includes('PLAN_PRO_URL'));
+  // The banner itself was removed on 2026-10-04, PLAN_PRO_URL with it.
+  assert.ok(!existsSync(join(root, 'src/components/trial/FreeTrialBanner.tsx')));
 });
 
 test('the legacy READS stay for users not yet migrated', () => {

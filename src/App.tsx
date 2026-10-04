@@ -13,7 +13,7 @@ import { EXIT_MS, launcherLanding } from "./components/startup/splashTimeline"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
-import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
+import { useTrialExpiry }       from "./components/trial/useTrialExpiry"
 import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
@@ -425,7 +425,7 @@ const App: React.FC = () => {
   const [activeTrial, setActiveTrial] = useState<{
     expiresAt: string;
     usage: TrialUsage;
-    /** Carried from /v1/trial/status so the banner does not hardcode allowances. */
+    /** The trial's allowances, carried from /v1/trial/status. */
     limits?: TrialLimits;
   } | null>(null);
   // Dev-only: `?forceTrialEnded=1` opens the end-of-trial card for a design check.
@@ -435,14 +435,20 @@ const App: React.FC = () => {
   // The card is due (expired at launch) but still inside its 10 s delay: it
   // already owns the card slot, so no other card can open under it.
   const [trialEndedDue, setTrialEndedDue] = useState(false);
-  // 0:00 on the banner: settle the expiry from the LOCAL clock and open the
-  // card at once, offline included, instead of waiting for the next poll
-  // (toaster policy §5 row 2).
+  // 0:00: settle the expiry from the LOCAL clock and open the card at once,
+  // offline included, instead of waiting for the next poll (toaster policy §5
+  // row 2).
   const handleTrialClockExpired = useCallback(() => {
     window.electronAPI?.getLocalTrial?.().then((local: any) => {
       if (local?.showEndedCard) { setActiveTrial(null); setShowTrialExpiredModal(true); }
     }).catch(() => {});
   }, []);
+  // Launcher only, like the trial poll (toaster policy §7.5). Nothing is drawn
+  // here: the time left is on the trial card in Settings › Plans.
+  useTrialExpiry(
+    !isolateGlobalSurfaces && (isLauncherWindow || isDefault) && activeTrial ? activeTrial.expiresAt : null,
+    handleTrialClockExpired,
+  );
 
   const isManagerOpen = activeManagerPanel !== null;
   const managerContentVariants = {
@@ -781,7 +787,7 @@ const App: React.FC = () => {
         }
         return;
       }
-      // Seed the banner from the LOCAL token before the first poll answers.
+      // Seed the trial from the LOCAL token before the first poll answers.
       //
       // This is the "closed the app and reopened it inside the 30 minutes and
       // the trial was gone" report. The trial was fine — the countdown just
@@ -1291,7 +1297,7 @@ const App: React.FC = () => {
           startPreviewingOpacity/stopPreviewingOpacity so the Interface
           Opacity live-preview hides every global banner/toast/modal along
           with #launcher-container, instead of leaving whichever one happens
-          to be visible (update/quota/trial banners, onboarding toasts, ad
+          to be visible (update/quota banners, onboarding toasts, ad
           promos) painted opaque on top of the "transparent" preview. */}
       {!isolateGlobalSurfaces && showHindsightBanner && (
         <div data-opacity-preview-surface="">
@@ -1467,17 +1473,6 @@ const App: React.FC = () => {
           </OrchestratorProvider>
         )}
 
-
-        {/* Free trial countdown banner — only in launcher window while trial is active */}
-        {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && activeTrial && (
-          <FreeTrialBanner
-            expiresAt={activeTrial.expiresAt}
-            usage={activeTrial.usage}
-            limits={activeTrial.limits}
-            onUpgrade={() => openSettingsExclusive('plans')}
-            onExpired={handleTrialClockExpired}
-          />
-        )}
 
         {/* Post-trial upgrade modal — shown when trial expires */}
         {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
