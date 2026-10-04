@@ -808,3 +808,41 @@ Not in it: the planning misses in the profile modes (3 rows).
 **Holdout (aggregates only):** lines 1, 3, 5 and 6 with `m1`'s holdout as the control (hard fails 20; the same
 margins). A failure of line 7 drops (a); a failure of line 6 or 8 drops (b); any other failure drops both.
 Nothing lands without Evin.
+
+### E8 — dev + counterfactual data and verdict (2026-10-04; run `m2` = main `54606ef2` + `dfe2cf5b` + `e1cb7f9b`; provisional judge)
+
+`report/pack-in-prompt.mjs m1 m2 -- dev cf`, `report/missed-rows.mjs m1 m2 recruiting -- dev cf`,
+`report/stack-vs.mjs m1 m2 dev cf`, `report/paired-builds.mjs m1 m2 dev cf`. The run was paused at Evin's request at
+115 of 270 dev rows and resumed 20 minutes later on the same build; 333 rows answered, none unverified.
+
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. Needed reference fact in the prompt on at least 240 of 244 | 232 → 242 | yes |
+| 2. Every loaded file in the prompt on at least 298 of 306 turns | 279 → 305 (fast-path turns 2 → 12 of 12; Recruiting heard 13 → 27 of 27) | yes |
+| 3. No claim-pass cut, no cross-mode file, no profile evidence where forbidden, no other-profile string | 0 of 251; 0; 0; 0 | yes |
+| 4. The 12 rows that missed their reference evidence in `m1`: gain ≥ +1.0 | 5.58 → 8.62, +3.04 (±1.60); hard fails 2 → 0 | yes |
+| 5. All rows not below −0.15; hard fails not above 28 | −0.07 (±0.20); **33** (critical 11 → 17) | **no** |
+| 6. Rows that need no document: not below −0.3; hard fails not above 11 | −0.12 (±0.42); 11 | yes, at the limit |
+| 7. Recruiting not below −0.2; unsupported-claim / role flags not up | +0.08 (heard +0.50); 1 → 1 | yes |
+| 8. Heard first word, dev median, not more than 100 ms above `m1` | 1,484 → 1,589 ms (+105) | **no**, by 5 ms |
+
+**Verdict by the rule: not kept** (line 5, and line 8 by 5 ms). The holdout was not run.
+
+What the failed lines are made of, split by whether the change could have touched the row (the set of evidence
+items in the prompt is the same in both runs, or not):
+
+| | Rows | `m1` | `m2` | Hard fails | Newly failing / newly fine |
+|---|---:|---:|---:|---:|---:|
+| Evidence set changed (what E8 does) | 28 | 7.48 | 8.62 (+1.14 ±1.14) | 3 → 2 | 2 / 3 |
+| Evidence set identical in both runs | 305 | 8.70 | 8.51 (−0.19 ±0.18) | 23 → 31 | 15 / 7 |
+
+The whole rise in hard fails is on rows E8 did not touch, where the two runs sent the same evidence and got
+different answers. The first-word difference is the same: the fast-path turns E8 changed went 1,207 → 1,188 ms
+with the pack in the prompt; the other turns, unchanged, went 1,622 → 1,721 ms. So the two failed lines measure the
+difference between two runs, not the change. I set line 5's margin (2 hard fails) without having measured how much
+two runs of one build differ; `s3` against `m1` had already shown swings of five. That is my calibration error, and
+the verdict above stands as written. To put a number on it, the control build is run a second time (`m1r`).
+
+Of the two rows E8 touched that newly fail: one general-knowledge turn that now carries the pack attached a
+personal claim (9.5 → 5.0), and one Recruiting turn deferred with the job description in view (9.3 → 2.6). The five
+fast-path turns that need no document went 9.26 → 7.69 (−1.57 ±1.80): the cost side of (b), on five rows.
