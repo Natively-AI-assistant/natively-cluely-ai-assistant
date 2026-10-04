@@ -1358,11 +1358,8 @@ select.aip-input { cursor:pointer; }
 .aip-root[data-theme='light'] .aip-cs { --aip-cs-quiet: #555a65; }
 .aip-cs .aip-meta { color: var(--aip-cs-quiet); }
 
-.aip-cs-set { display:flex; flex-direction:column; gap: var(--aip-gap-row); padding:12px;
-              transition: box-shadow var(--aip-dur-state) var(--aip-ease-out); }
+.aip-cs-set { display:flex; flex-direction:column; gap: var(--aip-gap-row); padding:12px; }
 .aip-cs-set + .aip-cs-set { border-top:1px solid var(--aip-divider); }
-/* The block whose choice was refused. An inset edge, so nothing moves. */
-.aip-cs-set[data-failed='true'] { box-shadow: inset 2px 0 0 var(--aip-danger); }
 .aip-cs-set-name { font-size:12px; font-weight:600; letter-spacing:-0.005em; color: var(--aip-hero);
                    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* While a choice is applying the buttons are aria-disabled, not disabled, so
@@ -3043,7 +3040,7 @@ const AmbiguousStoresCard: React.FC = () => {
             view[which].others > 0 ? t('other settings: {count}').replace('{count}', String(view[which].others)) : null,
         ].filter(Boolean).join(' · ');
         return (
-            <div className="aip-cs-set" role="group" aria-label={name} data-failed={failure?.choice === which ? 'true' : 'false'}>
+            <div className="aip-cs-set" role="group" aria-label={name}>
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <p className="aip-cs-set-name">{name}</p>
@@ -3106,7 +3103,7 @@ const AmbiguousStoresCard: React.FC = () => {
                 <div className="aip-well">
                     {setBlock('keyring')}
                     {setBlock('fallback')}
-                    <div className="aip-cs-set" data-failed={failure?.choice === 'merge' ? 'true' : 'false'}>
+                    <div className="aip-cs-set">
                         <div className="flex items-center justify-between gap-3">
                             <p className="aip-meta min-w-0">{t('Or keep both. Where a key differs, the one in the app backup is used.')}</p>
                             {keepButton('merge', t('Keep both'))}
