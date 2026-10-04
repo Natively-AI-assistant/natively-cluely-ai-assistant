@@ -697,3 +697,20 @@ profile-fact delivery. Generator: direct DeepSeek as before, recorded per row.
 Holdout (aggregates only): lines 1, 3, 4 and 5 against `s3`'s holdout (hard fails 15, critical 5; the same margins).
 All hold → the measured results carry over to main. A line fails → Evin is told which, with the numbers, before
 anything else is built or landed; nothing is reverted without his word.
+
+### M1 — dev + counterfactual on main `54606ef2` (2026-10-04 04:50 UTC; provisional judge)
+
+`report/stack-vs.mjs s3 m1 dev cf`, `report/paired-builds.mjs s3 m1 dev cf`, `report/profile-rows.mjs s4 m1 dev cf`.
+333 rows, all answered, none unverified; generator direct DeepSeek on every row.
+
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. Needed reference fact in the prompt on at least 93 % | 232 of 244 (95.1 %; `s3`: the same 232) | yes |
+| 2. Profile-fact rows of the two profile modes: at least 17 of 20 | 19 of 20 (`s4`: 19) | yes |
+| 3. No claim-pass request cut; no cross-mode file; no other-profile string | 0 of 250 passes cut; 0; 0 | yes |
+| 4. All rows, paired with `s3` (shown): not below −0.25 | 8.52 → 8.59, +0.08 (±0.16) | yes |
+| 5. Hard fails ≤ 36, critical ≤ 22 | 26, 11 (`s3`: 31, 18) | yes |
+| 6. Heard first word, median, not more than 250 ms above `s3`'s dev run | 1,484 ms against 1,772 ms | yes |
+
+The effect of the claim pass on main is −0.05 (±0.10), with hard fails 33 in the drafts and 26 shown. On the two
+profile modes main matches `s4`: 8.51 → 8.53. **Dev + counterfactual: the results carry over to main.**
