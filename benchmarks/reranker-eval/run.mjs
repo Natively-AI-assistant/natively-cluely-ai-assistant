@@ -13,11 +13,14 @@ import { buildCandidatePools } from './lib/candidates.mjs';
 import { runCohereReranker } from './lib/rerankers/cohere.mjs';
 import { runOpenRouterReranker } from './lib/rerankers/openrouter.mjs';
 
-// The 7 models OpenRouter's own catalog returns for output_modalities=rerank
+// The 9 models OpenRouter's own catalog returns for output_modalities=rerank
 // (confirmed live against https://openrouter.ai/api/v1/models?output_modalities=rerank,
-// 2026-09-01 — do not hand-guess this list, re-query that endpoint if it
-// needs updating). `name` is the results/raw/<name>.json filename.
+// 2026-09-01 for the first seven and 2026-10-05 for the Voyage rerank-3 pair —
+// do not hand-guess this list, re-query that endpoint if it needs updating).
+// `name` is the results/raw/<name>.json filename.
 const OPENROUTER_RERANK_MODELS = [
+  { name: 'openrouter-voyage-rerank-3-lite', modelId: 'voyageai/rerank-3-lite' },
+  { name: 'openrouter-voyage-rerank-3', modelId: 'voyageai/rerank-3' },
   { name: 'openrouter-qwen3-reranker-8b', modelId: 'qwen/qwen3-reranker-8b' },
   { name: 'openrouter-voyage-rerank-2.5-lite', modelId: 'voyageai/rerank-2.5-lite' },
   { name: 'openrouter-voyage-rerank-2.5', modelId: 'voyageai/rerank-2.5' },

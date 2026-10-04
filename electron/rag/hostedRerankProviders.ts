@@ -90,8 +90,14 @@ export const HOSTED_RERANK_PROVIDERS: Record<HostedRerankProviderId, HostedReran
     keyPlaceholder: 'natively_sk_…',
     // One managed model, chosen and served by the API. Nothing to discover and
     // nothing to pick, so the card shows no model list.
+    //
+    // rerank-3-lite since 2026-10-05 (Voyage's successor to rerank-2.5-lite,
+    // same price and limits). The API still accepts 'rerank-2.5-lite' — the id
+    // every earlier build sends, and the one an existing install may have saved
+    // as `nativelyModel` — and serves it with this same model, so neither needs
+    // migrating.
     models: [
-      { id: 'rerank-2.5-lite', label: 'Voyage Rerank 2.5 Lite', recommended: true },
+      { id: 'rerank-3-lite', label: 'Voyage Rerank 3 Lite', recommended: true },
     ],
     staticCatalogue: true,
   },
@@ -129,8 +135,17 @@ export const HOSTED_RERANK_PROVIDERS: Record<HostedRerankProviderId, HostedReran
    * Voyage AI, on the SAME key as the Voyage embedding provider — one vendor,
    * one credential, like OpenRouter. Models and wire format from Voyage's API
    * reference (docs.voyageai.com/reference/reranker-api, checked 2026-09-22):
-   * `rerank-2.5` and `rerank-2.5-lite` are the recommended models, the cap is
-   * `top_k`, and results arrive in `data`, sorted by relevance.
+   * the cap is `top_k`, and results arrive in `data`, sorted by relevance.
+   *
+   * Models from docs.voyageai.com/docs/reranker, checked 2026-10-05: `rerank-3`
+   * and `rerank-3-lite` are the current pair (released 2026-09-30, same prices
+   * and limits as the 2.5 pair, same wire format — verified with a live call).
+   * `rerank-3` carries the recommendation because it is the one Voyage
+   * recommends for most applications, as `rerank-2.5` was before it.
+   *
+   * The 2.5 pair stays in the list. Voyage still serves both, and an install
+   * that saved one as `voyageModel` keeps sending it — dropping the id here
+   * would leave that user's picker pointing at a model the list no longer names.
    */
   voyage: {
     id: 'voyage',
@@ -139,7 +154,9 @@ export const HOSTED_RERANK_PROVIDERS: Record<HostedRerankProviderId, HostedReran
     keyUrl: 'https://dashboard.voyageai.com/',
     keyPlaceholder: 'pa-…',
     models: [
-      { id: 'rerank-2.5', label: 'Voyage Rerank 2.5', recommended: true },
+      { id: 'rerank-3', label: 'Voyage Rerank 3', recommended: true },
+      { id: 'rerank-3-lite', label: 'Voyage Rerank 3 Lite' },
+      { id: 'rerank-2.5', label: 'Voyage Rerank 2.5' },
       { id: 'rerank-2.5-lite', label: 'Voyage Rerank 2.5 Lite' },
     ],
     staticCatalogue: true,

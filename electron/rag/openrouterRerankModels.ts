@@ -18,9 +18,10 @@
 //     UI shows that, labelled as a measurement of the last call.
 //
 //  2. QUALITY. The grouping below is derived from context length, modality and
-//     this repo's own benchmark run (benchmarks/reranker-eval/results/REPORT.md,
-//     2026-08-31, n=28) — not from OpenRouter's usage rankings, which measure
-//     popularity rather than retrieval quality.
+//     this repo's own benchmark runs (benchmarks/reranker-eval, n=28:
+//     2026-08-31, and 2026-10-05 for the Voyage rerank-3 pair) — not from
+//     OpenRouter's usage rankings, which measure popularity rather than
+//     retrieval quality.
 
 const LIST_TIMEOUT_MS = 10_000;
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -64,23 +65,42 @@ function headers(apiKey?: string): Record<string, string> {
   return h;
 }
 
+const RECOMMENDED_RERANK_MODEL = 'voyageai/rerank-3-lite';
+const PREVIOUS_RECOMMENDED_RERANK_MODEL = 'voyageai/rerank-2.5-lite';
+
 /**
  * Which shelf a model sits on.
  *
  * `recommended` is reserved for the model this repo has actually MEASURED as a
- * good latency/quality trade at the live-path budget. On the 2026-08-31 run
- * voyageai/rerank-2.5-lite scored 0.864 MRR at 868ms p95 — high quality, and it
- * clears RERANK_BUDGET_MS (1200ms) with room to spare, which rerank-2.5 (0.905
- * MRR, 830ms p95) also does. Lite is the recommendation because it is the
- * cheaper of the two at a quality difference of 0.04 MRR.
+ * good latency/quality trade at the live-path budget.
+ *
+ * Since 2026-10-05 that is voyageai/rerank-3-lite, Voyage's successor to
+ * rerank-2.5-lite (released 2026-09-30, same price). Same benchmark, same 28
+ * queries, all four Voyage models run back to back, twice:
+ *
+ *   rerank-3-lite     0.917 MRR   recall@1 0.857   p95 703 / 882 ms
+ *   rerank-3          0.905 MRR   recall@1 0.821   p95 512 / 523 ms
+ *   rerank-2.5        0.905 MRR   recall@1 0.821   p95 640 / 496 ms
+ *   rerank-2.5-lite   0.864 MRR   recall@1 0.786   p95 1044 / 612 ms
+ *
+ * The rankings were identical across the two passes; the latency was not, so
+ * read p95 as "inside RERANK_BUDGET_MS (1200ms)", which all four are, and not
+ * as an ordering. rerank-2.5-lite reproduced its 2026-08-31 score (0.864)
+ * exactly, which is what makes the comparison a like-for-like one.
+ *
+ * Lite is the recommendation because it is the cheaper of the pair and, on
+ * this set, not the weaker one. The 0.012 MRR it has over rerank-3 is one query
+ * in 28: it shows the two are level here, not that lite is better.
  *
  * Anything not measured here lands in `other`. A model does not get promoted for
- * being popular.
+ * being popular, or for being new.
  */
 function groupFor(id: string, multimodal: boolean): RerankModelGroup {
   if (multimodal) return 'multimodal';
-  if (id === 'voyageai/rerank-2.5-lite') return 'recommended';
-  if (id === 'voyageai/rerank-2.5' || id === 'cohere/rerank-4-pro' || id === 'qwen/qwen3-reranker-8b') return 'quality';
+  if (id === RECOMMENDED_RERANK_MODEL) return 'recommended';
+  if (id === 'voyageai/rerank-3' || id === 'cohere/rerank-4-pro' || id === 'qwen/qwen3-reranker-8b') return 'quality';
+  // The previous generation: measured, still served, no longer the pick.
+  if (id === 'voyageai/rerank-2.5' || id === PREVIOUS_RECOMMENDED_RERANK_MODEL) return 'quality';
   if (id === 'cohere/rerank-4-fast' || id === 'cohere/rerank-v3.5') return 'fast';
   return 'other';
 }
@@ -156,6 +176,11 @@ export function defaultRerankModel(catalog: RerankCatalogModel[]): string | null
   if (catalog.length === 0) return null;
   const recommended = catalog.find((m) => m.group === 'recommended');
   if (recommended) return recommended.id;
+  // A catalogue that does not carry the current recommendation (an account or
+  // region OpenRouter does not serve it to, or a delisting) still gets a
+  // MEASURED model before it gets "whichever paid one sorts first".
+  const previous = catalog.find((m) => m.id === PREVIOUS_RECOMMENDED_RERANK_MODEL);
+  if (previous) return previous.id;
   const paidText = catalog.find((m) => !m.free && !m.multimodal);
   return (paidText ?? catalog[0]).id;
 }
