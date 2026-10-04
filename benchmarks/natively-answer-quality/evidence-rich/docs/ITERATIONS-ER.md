@@ -1383,3 +1383,19 @@ e13 23 / 30). **The awaited rerank is back as on main.** First word: heard 1,508
 over 5 s, no fallback answer. cc: 8.84, 17 hard fails; every needed fact in the prompt on 209 of 212 rows.
 **er-dev-e13c is the dev baseline of the autopilot series** (er-dev-e13 8.72 / 19 was the same build without the two
 corrections; the difference is inside run-to-run variation).
+
+## dev2 — 360 more development items (2026-10-04)
+Evin: "you can increase the questions per mode instead of 30 if needed, no cap". `datasets/dev2.json`: 40 items per
+mode (15 grounded_single, 8 multi_source, 7 conflict_stale, 4 irrelevant_source, 4 missing_evidence, 2 followup), ids
+`ER-D2-<PFX>-NNN`, on the SAME documents and manifest (sha 8aa245098a93, 104 evidence files). Written per mode by nine
+agents that were given only AUTHORING-ER.md, AUTHORING-ER-DEV2.md and the mode's authoring folder, and told not to read
+results, judgments or analysis; they read dev and holdout only to avoid repeats. Lint: 0 errors. Frozen 0886c10b084e;
+dev, holdout and the two supp sets hash exactly as before. Development decisions are read on dev + dev2 (630 rows) from
+here on; the holdout stays a confirmation set.
+Known differences from dev, reported by the authors: the two profile modes spread `pi_state` over all seven values
+(dev never used B-RESUME / B-JD) and run more items on the empty config; conflict items in call-center, general and
+looking-for-work reuse declared conflicts from new angles (the packs declare few).
+
+**E16 amended 2026-10-04, before any E16 measurement:** control = er-dev-e13c + er-dev2-e13c (`cand/e13b`); candidate =
+er-dev-e16 + er-dev2-e16 (`cand/e16` on top of it); every line is read on the two partitions pooled. Line 1 becomes:
+profile-mode turns with a profile loaded and no résumé in the prompt fall to at most 15 % of the control's count.
