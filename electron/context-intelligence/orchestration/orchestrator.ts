@@ -367,6 +367,25 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     ...(meetingContextForGeneralTurn ? ['MEETING_TRANSCRIPT' as SourceType] : []),
   ];
 
+  // WHAT FITS IS READ, WHATEVER THE PLAN NAMED (2026-10-04, E16). The pack and the
+  // profile are handed over whole when they fit, but each item still had to be
+  // of a PLANNED type. Measured on the dev set: heard "How often are you
+  // carrying the pager these days?" was classified a document question, the
+  // plan did not name RESUME, the whole résumé was dropped by the planned-type
+  // gate, and the answer presented another company's on-call checklist as the
+  // candidate's own rota (2.1 of 10 in three runs of three). Typed "why am I
+  // leaving…" planned PROFILE_FACT only and the user's own interview notes — the
+  // whole pack, 2,254 tokens — were not read. 19 of the profile-mode turns with
+  // a profile loaded had no résumé in the prompt. No claim is added: what the
+  // evidence may SUPPORT is unchanged, only what is in view.
+  const fittingTypes: SourceType[] = retrieves ? [
+    ...(wholeProfile ? policy.allowedSourceTypes.filter((t) => t === 'RESUME' || t === 'JOB_DESCRIPTION') : []),
+    ...(packFits && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
+      && policy.allowedSourceTypes.includes('REFERENCE_FILE') ? ['REFERENCE_FILE' as SourceType] : []),
+  ] : [];
+  const withFitting = (types: readonly SourceType[]): SourceType[] =>
+    (types.length ? [...new Set([...types, ...fittingTypes])] : [...types]);
+
   const retrievalPlan: RetrievalPlan = {
     path: cls.path,
     shouldRetrieve: cls.shouldRetrieve || fastTurnSources.length > 0,
@@ -375,7 +394,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     // (deep-run 2, issue 5). An unclaimed retrieval consults document pools
     // only; identity pools (résumé/JD/profile) are reachable solely through
     // claims that name them.
-    sourceTypes: fastTurnSources.length ? fastTurnSources : cls.shouldRetrieve
+    sourceTypes: withFitting(fastTurnSources.length ? fastTurnSources : cls.shouldRetrieve
       ? (cls.requiredSourceTypes.length
         ? cls.requiredSourceTypes
         : policy.allowedSourceTypes.filter((s) =>
@@ -389,7 +408,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
           // not arise: a coding turn does not retrieve at all, and this branch
           // is reached only by a turn that decided to.
           || (req.profileOnlyDocuments === true && (s === 'RESUME' || s === 'JOB_DESCRIPTION'))))
-      : [],
+      : []),
     // A bare fragment with no referent ("explain", "why?", "more") retrieves
     // NOTHING on its own text, so the composer had no material to apply it to
     // and asked "what should I explain?" (2026-09-07, always-answer). When
