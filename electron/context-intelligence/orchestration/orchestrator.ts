@@ -142,7 +142,13 @@ function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manua
   // routed FAST because the classifier could not see "what is the <noun>".
   // Stripped here, once, so the classifier, the retrieval query and the
   // model all see the same clean question. rawQuestion keeps the original.
-  if (manual) return { resolved: stripSttFillers(manual) || manual, source: 'manual', confidence: 1 };
+  // TYPED chat is not transcriber output (2026-10-04, owner's decision): the
+  // stripper turned "the right answer" into "the answer" and dropped
+  // "basically", "I mean" and a repeated word from what the user typed. Typed
+  // text goes to the model verbatim. 'manual' alone does not mean typed: the
+  // what-to-answer surface hands SPOKEN questions over as manual (Auto Answer,
+  // speculative and pinned questions), and those keep the cleaning.
+  if (manual) return { resolved: req.surface === 'manual-chat' ? manual : (stripSttFillers(manual) || manual), source: 'manual', confidence: 1 };
   const t = req.transcriptQuestion?.trim() ?? '';
   if (!t) return { resolved: t, source: 'transcript', confidence: 0 };
   // Honour the extractor's own confidence when the caller supplied it; fall
