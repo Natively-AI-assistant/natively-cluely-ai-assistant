@@ -84,7 +84,16 @@ const HEIGHT = 420;
 // underside -30 — and each of those fails here.
 const MIN_TOP_RIM = { dark: 25, light: 10 };
 const MIN_BOUNCE_RIM = 25;             // dark, bottom face
-const MIN_UNDERSIDE = 12;              // light, bottom face darker than the body
+// 10, not 12: without the capture's ringing the face reads 11.2 darker than the
+// body, at 1x and at 2x. The ringing described above came from Electron itself:
+// up to 43.7.0, capturePage() on an offscreen window returned the 1x render
+// resampled to the display's scale factor, and on a 2x display the resampled
+// edge row read 16.3 darker. 43.7.1 fixed that (electron/electron#53818), so the
+// capture is now the real render and a flat bubble reads 0 here, not -9.
+// Measured 2026-10-04 on 43.1.0 and 43.7.7: default offscreen capture 16.3 ->
+// 11.2; with offscreen.deviceScaleFactor = 2 pinned, 11.2 on both. The CSS and
+// the on-screen look did not change.
+const MIN_UNDERSIDE = 10;              // light, bottom face darker than the body
 const MAX_UNDERSIDE = 22;
 const MIN_SIDE_SHADE = 10;
 const MAX_SIDE_SHADE = { dark: 30, light: 60 };
