@@ -25,7 +25,7 @@ import { loadRun } from './objective.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
-const name = opt('name'); const cap = Number(opt('cap', 24000)); const recordedCap = Number(opt('recorded-cap', 24000)); // the cap the RECORDING app used, for the fidelity check const K = Number(opt('k', 1)); const limit = opt('limit') ? Number(opt('limit')) : null;
+const name = opt('name'); const cap = Number(opt('cap', 24000)); const recordedCap = Number(opt('recorded-cap', 24000)); /* the cap the RECORDING app used, for the fidelity check */ const K = Number(opt('k', 1)); const limit = opt('limit') ? Number(opt('limit')) : null;
 if (!name || !opt('cv') || !opt('runs')) { console.error('need --name, --cv and --runs'); process.exit(2); }
 const cv = await import(pathToFileURL(path.resolve(opt('cv'))).href);
 const variant = opt('variant') ? await import(pathToFileURL(path.resolve(opt('variant'))).href) : {};

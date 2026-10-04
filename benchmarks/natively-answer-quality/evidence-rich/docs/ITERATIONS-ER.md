@@ -996,3 +996,29 @@ a control arm (main's wording) and the v1 arm, both through the same harness; ne
 5. The control arm's two repetitions agree with each other within half of whatever line 1 or 2 measures; if they do
    not, the replay itself is too noisy to decide and nothing is concluded.
 All hold → one app run of main + E9 on dev + counterfactual and the holdout, under the rule written then.
+
+### E9 — offline data and verdict (2026-10-04 09:46 UTC; provisional judge)
+
+Arms `e9-ctl` (main's wording) and `e9-v1`, k 2 each, on the 252 turns of `m1` (dev + counterfactual) where the
+pass ran; the rebuilt request equals the recorded one on 504 of 504 replays per arm. New texts judged (153).
+
+| | Control, rep. 0 | Control, rep. 1 | v1, rep. 0 | v1, rep. 1 |
+|---|---:|---:|---:|---:|
+| Mean, 333 rows | 8.59 | 8.63 | 8.65 | 8.66 |
+| Hard fails (drafts: 33) | 27 | 26 | 24 | 25 |
+| Critical | 15 | 12 | 11 | 13 |
+| Answers the pass changed | 59 | 56 | 65 | 59 |
+
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. Hard fails at least 2 below the control | −3 and −1 (average −2) | at the line |
+| 2. All rows not more than 0.05 below | +0.05 and +0.03 | yes |
+| 3. Evidence-in-prompt rows not more than 0.1 below | +0.05 and −0.02 | yes |
+| 4. Changed answers not more than 25 % above | +10 % and +5 % | yes |
+| 5. The control's two repetitions agree within half of what lines 1 and 2 measure | hard fails differ by 1 (half of 2: yes); the mean differs by 0.04, against an effect of 0.04 (half: 0.02): **no** | **no** |
+
+**Verdict: nothing concluded; not taken to the app.** The new wording points the right way in both repetitions
+(three and one fewer hard fails, the no-document rows +0.08 and +0.19), but the effect is the size of the
+replay's own spread, which line 5 was written to catch. At this size a change can no longer be resolved by this
+benchmark with one judge: the 333 dev + counterfactual rows hold about 11 rows of this failure class, and the pass
+replayed twice on the same drafts already differs by one hard fail and 0.04 of a point.
