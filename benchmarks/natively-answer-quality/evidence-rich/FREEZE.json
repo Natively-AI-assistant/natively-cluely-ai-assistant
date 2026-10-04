@@ -1,6 +1,6 @@
 {
  "name": "evidence-rich-v1",
- "frozen_at": "2026-10-03T13:52:13.949Z",
+ "frozen_at": "2026-10-04T17:31:51.939Z",
  "manifest_sha256": "8aa245098a930f64fc181bb8e30d6c851ef2fa93d89c3404f530b9277cf0cbf3",
  "datasets": {
   "dev": {
@@ -18,15 +18,11 @@
   "supp-isolation": {
    "items": 46,
    "sha256": "1e2758f86572d64b13f1086b81192f8c2d420e042816b4a099a42433a6da35a9"
+  },
+  "dev2": {
+   "items": 360,
+   "sha256": "0886c10b084eeef1ac4171be93a63b079af14bb7d9d8841f275f4d835e8275c9"
   }
  },
- "evidence_files": 104,
- "addenda": {
-  "supp-oracle-sources": {
-   "items": 223,
-   "sha256": "cf02e7a95c865bb16901911819570c3a82eba0ee8602d9ce1cd58b0cb2dea7a2",
-   "built_at": "2026-10-03T14:45:14.149Z",
-   "derived_from": "dev (same questions and oracles; only the files loaded in the case's own mode change)"
-  }
- }
+ "evidence_files": 104
 }

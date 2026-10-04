@@ -1,0 +1,3501 @@
+{
+ "mode": "call-center",
+ "items": [
+  {
+   "id": "ER-D2-CC-001",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "We had a new router put in last week and the installer set it to the five gigahertz network only, said that's the fast one. Is that why the Eave cam out front won't join any more?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "troubleshooting",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Yes, that is the likely cause: the Eave Cam connects on 2.4 GHz only, so a router that broadcasts nothing but 5 GHz cannot be joined. The agent says so plainly and gives the practical fix (switch the 2.4 GHz band back on at the router, or ask the installer to). Only the third-generation Lantern Cam can use 5 GHz. No factory reset is needed for this.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F12",
+      "text": "The Eave Cam connects on 2.4 GHz only, so a 5 GHz-only router will not work with it.",
+      "answer_needles": [
+       "2.4"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F12",
+      "text": "The third-generation Lantern Cam is the model that can use 2.4 GHz or 5 GHz."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the Eave Cam can connect on 5 GHz, or that the band is not the problem.",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F12",
+      "answer_needles": []
+     },
+     {
+      "text": "Sends the customer to a factory reset as the fix for the band mismatch.",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F15",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it cannot tell without escalating, although the guide states which band the camera uses.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-TROUBLESHOOTING-2026"
+    ],
+    "source_priority": [
+     "CC-REF-TROUBLESHOOTING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Suggesting the 2.4 GHz band be switched back on at the router alongside the 5 GHz one."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-002",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "eave cam, night vision keeps flickering after dark. device page shows fw 3.10.4. known thing or is the camera faulty?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "troubleshooting",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Known fault, not a broken camera: Eave Cam firmware 3.10.4 made night vision flicker and it is corrected in 3.11.0, the current Eave Cam release. The camera updates itself between 2:00 am and 4:00 am local time when idle; the customer cannot force it, so the advice is to leave it powered and online overnight. No fix date is promised and nothing here needs Engineering.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F20",
+      "text": "Firmware 3.10.4 has a known night-vision flicker, corrected in 3.11.0.",
+      "answer_needles": [
+       "3.11.0",
+       "3.11"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F19",
+      "text": "Cameras update themselves between 2:00 am and 4:00 am local time when idle; an update cannot be forced."
+     },
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F18",
+      "text": "3.11.0 is the current Eave Cam firmware."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the customer or the agent can trigger the update manually (a button, an app option, a console push).",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F19",
+      "answer_needles": []
+     },
+     {
+      "text": "Treats it as a hardware fault and sends it to a replacement or to Engineering.",
+      "kind": "fabrication",
+      "fact": "CC-REF-ESCALATION-2026#F8",
+      "answer_needles": []
+     },
+     {
+      "text": "Quotes the firmware of another camera as the fix.",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F18",
+      "answer_needles": [
+       "4.8.2",
+       "2.6.1"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-TROUBLESHOOTING-2026"
+    ],
+    "source_priority": [
+     "CC-REF-TROUBLESHOOTING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Telling the customer to keep the camera charged and connected tonight so it can update."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-003",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "incident board has a sev 1 open for her region and her lantern cam went offline an hour ago. do I still run her through the offline steps? and what do I say about when it's back",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "troubleshooting",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "With an incident open for the customer's region the agent does not walk her through device steps and never has her factory-reset. The agent tells her there is a known incident and that her equipment is not at fault. A time for the fix is given only if the Incident Board shows one; the agent never estimates one. She can follow updates at status.brindlewatch.example.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F4",
+      "text": "During an open incident for the region: no device steps and no factory reset; tell the customer there is a known incident and her equipment is not at fault.",
+      "answer_needles": [
+       "incident"
+      ]
+     },
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F4",
+      "text": "Give a fix time only if the Incident Board shows one; never estimate one.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F5",
+      "text": "Customers can follow updates at status.brindlewatch.example."
+     },
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F8",
+      "text": "Any outage credit is applied automatically on the next invoice; agents do not add it by hand."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Tells the agent to run the six offline steps or a factory reset anyway.",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F4",
+      "answer_needles": []
+     },
+     {
+      "text": "Gives or suggests an estimated time for the fix that the Incident Board does not show.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F4",
+      "answer_needles": []
+     },
+     {
+      "text": "Tells the agent to promise or add an outage credit by hand.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F8",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-TROUBLESHOOTING-2026"
+    ],
+    "source_priority": [
+     "CC-REF-TROUBLESHOOTING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-004",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "It says the account's locked because I got the password wrong too many times. Can you just unlock it from your end? How long am I stuck like this?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "recovery",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "A sign-in lock after six wrong passwords lasts 15 minutes and agents cannot lift it. The agent says so, asks the customer to wait it out and then use a password reset rather than guessing again, and can offer to trigger the reset e-mail. This is not the 24-hour lock on phone and chat verification, which is a different rule.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F9",
+      "text": "The sign-in lock lasts 15 minutes.",
+      "answer_needles": [
+       "15 minutes",
+       "fifteen minutes",
+       "15-minute",
+       "fifteen-minute",
+       "quarter of an hour"
+      ]
+     },
+     {
+      "fact": "CC-REF-RECOVERY-2026#F9",
+      "text": "Agents cannot lift the lock.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F1",
+      "text": "The agent can trigger a reset e-mail once the lock has run out."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the agent will unlock the account now.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-RECOVERY-2026#F9",
+      "answer_needles": []
+     },
+     {
+      "text": "Quotes the 24-hour verification lock as the length of this lock.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F4",
+      "answer_needles": []
+     },
+     {
+      "text": "Sends the customer to Identity Review for a simple sign-in lock.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F15",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-RECOVERY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-RECOVERY-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to send the reset e-mail after the wait."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-005",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "I've triggered 3 reset emails for him since this morning and he says none have landed. how many more can I send today before the system stops me?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "recovery",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The cap is 5 reset e-mails per account in 24 hours, so after 3 there are 2 left. Good advice also says not to burn them: an e-mail can take up to 5 minutes, and the customer should look in junk and promotions folders before another is sent.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F5",
+      "text": "No more than 5 reset e-mails per account in 24 hours, so 2 more can be sent.",
+      "answer_needles": [
+       "2 more",
+       "two more",
+       "2 left",
+       "two left",
+       "2 remain",
+       "two remain",
+       "another 2",
+       "another two",
+       "2 additional",
+       "two additional",
+       "2 further",
+       "two further"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F4",
+      "text": "The e-mail can take up to 5 minutes; check junk and promotions folders before sending another."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a different cap, or says there is no limit.",
+      "kind": "fabrication",
+      "fact": "CC-REF-RECOVERY-2026#F5",
+      "answer_needles": []
+     },
+     {
+      "text": "Suggests reading out or setting a password instead.",
+      "kind": "fabrication",
+      "fact": "CC-REF-RECOVERY-2026#F1",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-RECOVERY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-RECOVERY-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Pointing out that each link expires 30 minutes after it is sent."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "5 - 3",
+     "result": 2,
+     "unit": "reset e-mails",
+     "accepted_forms": [
+      "2 more",
+      "two more",
+      "2 left",
+      "two left",
+      "2 remain",
+      "two remain",
+      "another two",
+      "another 2"
+     ],
+     "inputs": {
+      "cap_per_24_hours": "CC-REF-RECOVERY-2026#F5",
+      "already_sent": "stated in the question (3)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-006",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "The Lantern cam turned up two weeks ago and honestly I just don't need it, there's nothing wrong with it. It was eighty-nine dollars and I paid fourteen ninety-five on top for the quicker shipping. So how much am I getting back?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "refund",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two weeks is inside the 60-day return period, so the camera can come back for any reason. The refund is the item price less $8 for the return label, because the camera is not defective: $89 - $8 = $81. The $14.95 shipping charge is not refunded, for the same reason. $81 is within what a Tier 1 agent may approve.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F10",
+      "text": "The refund is the $89 item price less the $8 label deduction: $81.",
+      "answer_needles": [
+       "$81",
+       "81 dollars",
+       "eighty-one",
+       "81.00"
+      ]
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F10",
+      "text": "The original shipping charge is not refunded because the camera is not defective.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F9",
+      "text": "A camera bought directly can be returned for any reason within 60 days of delivery."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the shipping charge comes back too.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F10",
+      "answer_needles": [
+       "103.95",
+       "95.95"
+      ]
+     },
+     {
+      "text": "Says the whole item price is refunded with nothing taken off for the label.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F10",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the camera cannot be returned because nothing is wrong with it.",
+      "kind": "false_denial",
+      "fact": "CC-REF-REFUND-2026#F9",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-REFUND-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that any sales tax paid on the refunded amount comes back with it."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "89 - 8",
+     "result": 81,
+     "unit": "USD",
+     "accepted_forms": [
+      "$81",
+      "81 dollars",
+      "eighty-one",
+      "81.00"
+     ],
+     "inputs": {
+      "label_deduction": "CC-REF-REFUND-2026#F10",
+      "item_price": "stated in the question ($89)",
+      "shipping_paid": "stated in the question ($14.95, not refunded)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-007",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "she was billed twice today for the annual pro, $220 each, same card. that's over what I'm allowed to approve. does one of them have to go to a sup or can I sort it?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "refund",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Same plan, same amount, same day is a duplicate charge, which the policy treats as a correction rather than a refund: a Tier 1 agent reverses the second charge on the spot, whatever the amount. The Tier 1 refund limit does not apply and no supervisor is needed. Only the duplicate is reversed.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F19",
+      "text": "A duplicate charge is a correction, not a refund; the Tier 1 agent reverses it on the spot whatever the amount.",
+      "answer_needles": [
+       "reverse",
+       "correction",
+       "not a refund",
+       "duplicate"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F20",
+      "text": "The Tier 1 limit of $150 per request applies to refunds, not to this correction."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says it has to go to a supervisor because it is above the Tier 1 limit.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F21",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the agent can do it because the limit is $250.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F8",
+      "answer_needles": [
+       "$250"
+      ]
+     },
+     {
+      "text": "Tells the agent to reverse both charges.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-REFUND-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-008",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "My yearly plan's due to renew on the fourteenth of November. Do you lot warn me before you take the money? When exactly would I hear from you?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "billing",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Yes: a reminder e-mail goes out 21 days before the renewal date and again 3 days before. For a 14 November renewal that is 24 October and 11 November. The agent gives the two dates. Not seeing a reminder does not extend the refund window, and auto-renew can be switched off at any time.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F7",
+      "text": "The first reminder goes out 21 days before renewal: 24 October.",
+      "answer_needles": [
+       "october 24",
+       "24 october",
+       "oct 24",
+       "oct. 24",
+       "24th of october",
+       "october twenty-fourth",
+       "twenty-fourth of october",
+       "the 24th"
+      ]
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F7",
+      "text": "The second reminder goes out 3 days before renewal: 11 November.",
+      "answer_needles": [
+       "november 11",
+       "11 november",
+       "nov 11",
+       "nov. 11",
+       "11th of november",
+       "november eleventh",
+       "eleventh of november",
+       "the 11th"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F4",
+      "text": "Auto-renew can be switched off at any time."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives reminder dates or intervals other than 21 days and 3 days before.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F7",
+      "answer_needles": []
+     },
+     {
+      "text": "Says a missed reminder would extend the time to ask for a refund.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F7",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-REFUND-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the reminders go to the login e-mail address."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026-11-14) - 21 days ; date(2026-11-14) - 3 days",
+     "result": "2026-10-24 and 2026-11-11",
+     "unit": "date",
+     "accepted_forms": [
+      "October 24",
+      "24 October",
+      "Oct 24",
+      "24th of October",
+      "October 24th",
+      "October twenty-fourth",
+      "the 24th"
+     ],
+     "inputs": {
+      "reminder_intervals": "CC-REF-REFUND-2026#F7",
+      "renewal_date": "stated in the question (14 November)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-009",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "My ex's lawyer says he's going to subpoena the footage off my cameras for the custody case. Can he actually get my videos out of you that way?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "privacy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Not with a subpoena: a subpoena obtains basic account details only, never video. Recordings are handed over only in response to a search warrant or a court order, every such request is handled by the Legal Response team and nobody else, and the account holder is told before anything is disclosed unless the law forbids it. The agent explains this plainly, does not promise the company will fight anything, and does not give legal advice.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-PRIVACY-2026#F19",
+      "text": "A subpoena obtains basic account details only, never video.",
+      "answer_needles": []
+     },
+     {
+      "fact": "CC-REF-PRIVACY-2026#F19",
+      "text": "Recordings are handed over only on a search warrant or court order.",
+      "answer_needles": [
+       "warrant",
+       "court order"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-PRIVACY-2026#F21",
+      "text": "The account holder is told before disclosure unless the law forbids it."
+     },
+     {
+      "fact": "CC-REF-PRIVACY-2026#F17",
+      "text": "Every legal request is handled by the Legal Response team only."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says a subpoena is enough to get the recordings.",
+      "kind": "fabrication",
+      "fact": "CC-REF-PRIVACY-2026#F19",
+      "answer_needles": []
+     },
+     {
+      "text": "Says nobody can ever obtain the recordings whatever a court orders.",
+      "kind": "fabrication",
+      "fact": "CC-REF-PRIVACY-2026#F19",
+      "answer_needles": []
+     },
+     {
+      "text": "Promises that the company will refuse or contest the request.",
+      "kind": "unauthorized_promise",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-PRIVACY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-PRIVACY-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Suggesting the customer speak to their own lawyer about the case itself."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-010",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I don't just want the videos gone. I want the whole account wiped, everything you hold on me, name, address, the lot. How long does that take you?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "privacy",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Erasing an entire account, all personal data and not only video, is a separate request to the Privacy Office and is completed within 30 calendar days. The agent gives that figure and says who carries it out. The 4-business-day figure belongs to a recordings Deletion Request and the 24-hour figure to clips the customer deletes in the app; neither is the answer here.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-PRIVACY-2026#F15",
+      "text": "Whole-account erasure is completed within 30 calendar days.",
+      "answer_needles": [
+       "30 calendar days",
+       "30 days",
+       "thirty calendar days",
+       "thirty days",
+       "30-day"
+      ]
+     },
+     {
+      "fact": "CC-REF-PRIVACY-2026#F15",
+      "text": "It is a separate request handled by the Privacy Office.",
+      "answer_needles": [
+       "privacy office",
+       "privacy team"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F6",
+      "text": "Closing the account needs step-up verification first."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Quotes the 4-business-day Deletion Request time for erasing the whole account.",
+      "kind": "fabrication",
+      "fact": "CC-REF-PRIVACY-2026#F14",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the agent will wipe the account now, from the console.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-PRIVACY-2026#F13",
+      "answer_needles": []
+     },
+     {
+      "text": "Says everything is erased within 24 hours.",
+      "kind": "fabrication",
+      "fact": "CC-REF-PRIVACY-2026#F12",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-PRIVACY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-PRIVACY-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-011",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "it's sunday afternoon and this fault needs to go to device diagnostics. can I warm transfer her or what? and what do I tell her about when she'll hear back",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "escalation",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Tier 2 is staffed Monday to Saturday, 8:00 am to 8:00 pm Central, so on a Sunday there is no warm transfer: the agent opens a ticket, and Tier 2 makes first contact within 1 business day. The customer is given the ticket number, the team's name and that response target, which is when the team first responds and not when the fault is fixed.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-ESCALATION-2026#F6",
+      "text": "Tier 2 is not staffed on Sunday, so the agent opens a ticket instead of a warm transfer.",
+      "answer_needles": [
+       "ticket"
+      ]
+     },
+     {
+      "fact": "CC-REF-ESCALATION-2026#F6",
+      "text": "Tier 2 makes first contact within 1 business day.",
+      "answer_needles": [
+       "1 business day",
+       "one business day"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-ESCALATION-2026#F7",
+      "text": "Write up what was reported, the steps done, the firmware version and the light colour."
+     },
+     {
+      "fact": "CC-REF-ESCALATION-2026#F20",
+      "text": "Give the ticket number, the team name and the response target; promise no outcome or resolution time."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says a warm transfer to Tier 2 is possible on a Sunday.",
+      "kind": "fabrication",
+      "fact": "CC-REF-ESCALATION-2026#F6",
+      "answer_needles": []
+     },
+     {
+      "text": "Tells the agent to promise the fault will be fixed within a business day.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-ESCALATION-2026#F20",
+      "answer_needles": []
+     },
+     {
+      "text": "Quotes another team's target for Tier 2.",
+      "kind": "fabrication",
+      "fact": "CC-REF-ESCALATION-2026#F12",
+      "answer_needles": [
+       "within 1 hour",
+       "within one hour",
+       "4 business hours",
+       "four business hours"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-ESCALATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-ESCALATION-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying first contact would normally come on Monday."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-012",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "No. I'm done going round in circles. Put your manager on. And don't give me 'they're in a meeting', if nobody's there I want to know when somebody is going to ring me.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "escalation",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "A request for a supervisor is never refused. The agent agrees at once to get one, and says that if none is free right now a supervisor calls back within 4 business hours. No attempt to talk the customer out of it, and no promise about what the supervisor will decide.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-ESCALATION-2026#F14",
+      "text": "The agent does not refuse and gets a supervisor.",
+      "answer_needles": [
+       "supervisor",
+       "manager",
+       "team lead"
+      ]
+     },
+     {
+      "fact": "CC-REF-ESCALATION-2026#F14",
+      "text": "If none is free, a supervisor calls back within 4 business hours.",
+      "answer_needles": [
+       "4 business hours",
+       "four business hours"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Refuses, stalls, or insists on carrying on without a supervisor.",
+      "kind": "fabrication",
+      "fact": "CC-REF-ESCALATION-2026#F14",
+      "answer_needles": []
+     },
+     {
+      "text": "Quotes another team's response time for the supervisor callback.",
+      "kind": "fabrication",
+      "fact": "CC-REF-ESCALATION-2026#F12",
+      "answer_needles": [
+       "within 1 hour",
+       "within one hour",
+       "within an hour",
+       "1 business day",
+       "one business day"
+      ]
+     },
+     {
+      "text": "Promises what the supervisor will decide or give.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-ESCALATION-2026#F20",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-ESCALATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-ESCALATION-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to pass on what has been covered so the customer need not repeat it."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-013",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "My bill comes out on the first of the month. I'm taking one Trek cam to Portugal from the fifth of November through the sixteenth, and it'll be on the whole time, no pass or anything. What are those daily fees going to add up to?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "billing",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Portugal is in the European Union, so Zone 2: $15 per camera per day. The 5th to the 16th is 12 calendar days, which would be $180, but Roam Day fees for one camera stop at the Zone 2 cap of $90 per billing cycle, and the whole trip falls inside one cycle. So the Roam Day fees come to $90. The ordinary $5 Roam Link fee still applies and data used abroad comes out of the same 3 GB.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F13",
+      "text": "Roam Day fees are capped at $90 per camera per billing cycle in Zone 2, so the trip costs $90 in day fees.",
+      "answer_needles": [
+       "$90",
+       "90 dollars",
+       "ninety"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F12",
+      "text": "The Zone 2 Roam Day fee is $15 per camera per day."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F30",
+      "text": "Data used abroad comes out of the same monthly allowance."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F14",
+      "text": "A Zone 2 Roam Week pass is $70 and covers 7 consecutive days; here it would cost more than the cap."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives $180 as what will be billed, with no cap.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F13",
+      "answer_needles": []
+     },
+     {
+      "text": "Uses the Zone 1 rate or the Zone 1 cap.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F11",
+      "answer_needles": [
+       "$60",
+       "$120"
+      ]
+     },
+     {
+      "text": "Says the cap also covers the monthly Roam Link fee or data overage.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F13",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning that 12 days at $15 would be $180 before the cap.",
+     "Noting that the Roam Week pass would not save money on this trip."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "min(12 * 15, 90)",
+     "result": 90,
+     "unit": "USD",
+     "accepted_forms": [
+      "$90",
+      "90 dollars",
+      "ninety",
+      "90.00"
+     ],
+     "inputs": {
+      "zone2_day_rate": "CC-REF-BILLING-TRAVEL-2026#F12",
+      "zone2_cap": "CC-REF-BILLING-TRAVEL-2026#F13",
+      "calendar_days": "stated in the question (5 to 16 November inclusive = 12)",
+      "billing_cycle": "stated in the question (bills on the 1st)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-014",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "The parcel landed on Wednesday the thirtieth of September with one side of the box caved in, and the lens on the camera is cracked. I haven't taken any pictures yet and I'm away from the house for a few days. What's the last day I can get this reported to you properly?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "shipping",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Damage has to be reported within 7 calendar days of delivery, with photos of the box and of the item. Delivered 30 September means 7 October at the latest. The agent gives that date and says what is needed (photos of both), and can add that a replacement and a prepaid label for the damaged camera follow.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F22",
+      "text": "The report must be made within 7 calendar days of delivery: by 7 October.",
+      "answer_needles": [
+       "october 7",
+       "7 october",
+       "oct 7",
+       "oct. 7",
+       "7th of october",
+       "october seventh",
+       "seventh of october",
+       "the 7th",
+       "the seventh"
+      ]
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F22",
+      "text": "Photos of the box and of the item are needed.",
+      "answer_needles": [
+       "photo",
+       "picture"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F22",
+      "text": "A replacement is sent, with a prepaid label for the damaged one."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the 14-day missing-parcel deadline for a damage report.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F11",
+      "answer_needles": [
+       "14 calendar days",
+       "14 days",
+       "fourteen days"
+      ]
+     },
+     {
+      "text": "Gives the 60-day return period as the time to report damage.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F9",
+      "answer_needles": [
+       "60 days",
+       "sixty days"
+      ]
+     },
+     {
+      "text": "Says a carrier trace has to be opened first.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F10",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-SHIPPING-2026"
+    ],
+    "source_priority": [
+     "CC-REF-SHIPPING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Advising the customer to send the photos as early as they can rather than on the last day."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026-09-30) + 7 days",
+     "result": "2026-10-07",
+     "unit": "date",
+     "accepted_forms": [
+      "October 7",
+      "7 October",
+      "Oct 7",
+      "October 7th",
+      "7th of October",
+      "October seventh",
+      "the 7th"
+     ],
+     "inputs": {
+      "report_window_days": "CC-REF-SHIPPING-2026#F22",
+      "delivery_date": "stated in the question (30 September)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-015",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm down as the authorised contact on my dad's account, you've got my name and my PIN. He's forgotten his password again. Can you send the reset link over to me and I'll sort it out for him tonight?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "verification",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The caller is a properly verified Authorised Contact, so the agent can help her, but not with this: an Authorised Contact may not change the password or receive a reset link. A reset link goes only to the contact details on file for the account holder. The agent says no to sending it to her and explains the way that works: her father uses Forgot password himself, which sends the link to his own e-mail on file, or he calls in himself (she may help him on that call if he is present and agrees). The agent can mention what she can be helped with as an Authorised Contact: troubleshooting, order and billing status, a carrier trace. The agent does not trigger a reset on her request.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F12",
+      "text": "An Authorised Contact may not receive a reset link or change the password.",
+      "answer_needles": []
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F22",
+      "text": "A reset link goes only to the contact details on file for the account holder.",
+      "answer_needles": [
+       "on file",
+       "on the account",
+       "his e-mail",
+       "his email",
+       "his own",
+       "your dad",
+       "your father",
+       "account holder"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F11",
+      "text": "An Authorised Contact may get troubleshooting help, check order and billing status and ask for a carrier trace."
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F10",
+      "text": "An Authorised Contact is verified by their own name plus the 4-digit contact PIN."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Agrees to send the reset link to the Authorised Contact.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-VERIFICATION-2026#F12",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the link can go to another address the caller gives once she is verified.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F4",
+      "answer_needles": []
+     },
+     {
+      "text": "Treats her as a third party and refuses to discuss the account at all.",
+      "kind": "false_denial",
+      "fact": "CC-REF-VERIFICATION-2026#F7",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-VERIFICATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Suggesting her father use Forgot password on the sign-in screen, or call in himself with her beside him."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-016",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Oh, thank goodness. So can you switch it over to the new place for me? What do you need from me to do that?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I ordered an Eave cam on Friday and I've only just noticed it's going to my old flat."
+    },
+    {
+     "speaker": "user",
+     "text": "I can see the order here. It's showing as Received at the moment."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "shipping",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Two documents. Shipping: the delivery address can be changed until the order status shows Label created, and this order is still at Received, so it can be done. Verification: changing the delivery address on an open order needs step-up verification first, a 6-digit one-time code sent to the phone number or e-mail on file, which the customer reads back within 10 minutes. The agent says yes, explains the code, then takes the new address.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F23",
+      "text": "The address can still be changed because the order has not reached Label created.",
+      "answer_needles": []
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F6",
+      "text": "Changing the delivery address on an open order needs step-up verification: a one-time code sent to the phone or e-mail on file, read back by the customer.",
+      "answer_needles": [
+       "code"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F5",
+      "text": "The code has 6 digits and expires after 10 minutes."
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F23",
+      "text": "Once the status is Label created only the carrier's redirect service can change it."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the address cannot be changed once the order is placed.",
+      "kind": "false_denial",
+      "fact": "CC-REF-SHIPPING-2026#F23",
+      "answer_needles": []
+     },
+     {
+      "text": "Changes the address with no step-up code.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F6",
+      "answer_needles": []
+     },
+     {
+      "text": "Offers to send the code to a new phone number or e-mail the caller gives.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F22",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-SHIPPING-2026",
+     "CC-REF-VERIFICATION-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-SHIPPING-2026",
+     "CC-REF-VERIFICATION-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Asking for the new address once the code is confirmed."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-017",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So what do I actually get back? I'm guessing the plan money's gone, since that was more than a month ago.",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I bought a Lantern cam and a year of the Basic plan together in one order, about five weeks ago. The camera was forty-nine dollars."
+    },
+    {
+     "speaker": "user",
+     "text": "I can see it: the camera and the annual Keep Basic on the same order, delivered five weeks ago."
+    },
+    {
+     "speaker": "other",
+     "text": "Right. The camera works fine, I just never use it, so I'm sending it back."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "refund",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Five weeks is inside the 60-day camera return period. The camera refund is its $49 price less $8 for the label, because it is not defective: $41. The plan is not lost: a subscription bought in the same order as a camera returned in time is refunded in full as well, and annual Keep Basic is $60. Total $101. The 30-day annual-plan window does not apply to this case. $101 is within what a Tier 1 agent may approve.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F11",
+      "text": "The annual plan bought in the same order is refunded in full as well, despite being past 30 days.",
+      "answer_needles": []
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F10",
+      "text": "The camera refund is $49 less the $8 label deduction, and with the $60 plan the total is $101.",
+      "answer_needles": [
+       "$101",
+       "101 dollars",
+       "hundred and one",
+       "one hundred one",
+       "101.00"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F1",
+      "text": "Keep Basic costs $60 per year."
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F9",
+      "text": "A camera can be returned for any reason within 60 days of delivery."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the plan cannot be refunded because the 30-day window has passed.",
+      "kind": "false_denial",
+      "fact": "CC-REF-REFUND-2026#F3",
+      "answer_needles": []
+     },
+     {
+      "text": "Refunds the full order with no label deduction.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F10",
+      "answer_needles": []
+     },
+     {
+      "text": "Uses the price of another plan for the subscription part.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "answer_needles": [
+       "$130",
+       "$171"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that sales tax collected on the refunded amounts comes back with them."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "49 - 8 + 60",
+     "result": 101,
+     "unit": "USD",
+     "accepted_forms": [
+      "$101",
+      "101 dollars",
+      "hundred and one",
+      "101.00"
+     ],
+     "inputs": {
+      "camera_price": "CONVERSATION ($49)",
+      "label_deduction": "CC-REF-REFUND-2026#F10",
+      "same_order_rule": "CC-REF-REFUND-2026#F11",
+      "basic_annual": "CC-REF-BILLING-TRAVEL-2026#F1"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-018",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "refund I put through last week has bounced. her card was closed and the bank sent the money back to us. now she wants it wired to her checking account. where does this go and what can I tell her?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "refund",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Two documents. Refund policy: a refund goes only to the original payment method, never to a bank account; when the issuer returns the money to us, Billing Operations (Tier 2) arranges a cheque or account credit. Escalation matrix: a refund that cannot reach the original payment method goes to the Billing Operations desk, and the customer gets the ticket number, the team's name and its response target (first contact within 1 business day), with no promise of the outcome or of when it will be resolved.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F14",
+      "text": "Billing Operations (Tier 2) takes it and arranges a cheque or account credit.",
+      "answer_needles": [
+       "billing operations",
+       "billing ops"
+      ]
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F13",
+      "text": "The money cannot be sent to a bank account or any method other than the original one.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-ESCALATION-2026#F4",
+      "text": "A refund that cannot reach the original payment method is a Billing Operations case."
+     },
+     {
+      "fact": "CC-REF-ESCALATION-2026#F20",
+      "text": "Give the ticket number, the team name and the response target; promise no outcome or resolution time."
+     },
+     {
+      "fact": "CC-REF-ESCALATION-2026#F6",
+      "text": "Tier 2 makes first contact within 1 business day."
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F22",
+      "text": "Any refund by cheque is approved by the Billing Operations manager."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the money will be wired to her checking account.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-REFUND-2026#F13",
+      "answer_needles": []
+     },
+     {
+      "text": "Promises a cheque, or a date by which she will have the money.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-ESCALATION-2026#F20",
+      "answer_needles": []
+     },
+     {
+      "text": "Tells the agent to reissue the refund to a different card himself.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F13",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-ESCALATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-ESCALATION-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-019",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "My husband died in August. The account and the yearly plan are both in his name. I'd like it closed, and whatever's left of the year refunded. Can you do that with me now?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "escalation",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents. Verification standard: the account of a customer who has died is handled by Tier 2 Account Integrity, on documents; Tier 1 takes the caller's details and makes no change. Refund policy: the death of the account holder is one of the refund exceptions (the full unused months of the current term), and every exception needs a supervisor's approval, so the agent can say that the policy allows for it and that it is decided with a supervisor's approval, but neither processes nor promises it. A kind, unhurried reply: condolences, the agent takes her details, Account Integrity takes it over on documents, and nothing on the account is changed on this call.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F13",
+      "text": "Tier 2 Account Integrity handles the account of a customer who has died, on documents; Tier 1 takes details and makes no change.",
+      "answer_needles": [
+       "account integrity"
+      ]
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F17",
+      "text": "A refund of the unused months is possible in this case but is an exception that needs a supervisor's approval.",
+      "answer_needles": [
+       "supervisor",
+       "team lead",
+       "approval",
+       "approve"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-ESCALATION-2026#F3",
+      "text": "Account Integrity is the Tier 2 desk for accounts of holders who have died."
+     },
+     {
+      "fact": "CC-REF-ESCALATION-2026#F6",
+      "text": "Tier 2 makes first contact within 1 business day."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Closes the account or changes it on this call.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-VERIFICATION-2026#F13",
+      "answer_needles": []
+     },
+     {
+      "text": "Promises the refund, or states its amount as settled.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-REFUND-2026#F23",
+      "answer_needles": []
+     },
+     {
+      "text": "Says nothing can be refunded because the 30-day window has passed.",
+      "kind": "false_denial",
+      "fact": "CC-REF-REFUND-2026#F3",
+      "answer_needles": []
+     },
+     {
+      "text": "Treats the spouse as if she were the account holder because she lives at the address.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F3",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-REFUND-2026",
+     "CC-REF-ESCALATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-REFUND-2026",
+     "CC-REF-ESCALATION-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering condolences before the practical steps.",
+     "Saying documents will be asked for by the team that takes it over."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-020",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "And the delivery's free, yeah? I'm sure I saw free shipping on your site.",
+   "prior_transcript": [
+    {
+     "speaker": "user",
+     "text": "So in the basket I've got the Lantern Cam at forty-nine dollars and the wall mount at eighteen."
+    },
+    {
+     "speaker": "other",
+     "text": "Yep, that's the lot. Ordinary delivery's fine, I'm in no rush."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "shipping",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The basket from the conversation is $49 + $18 = $67. Standard delivery is free only on orders of $75 or more, so this order is $8 short and Standard costs $6.95. The agent says so and can point out that adding $8 or more would make delivery free. No delivery day is promised.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F1",
+      "text": "Standard delivery is free on orders of $75 or more; this basket is $67, so it is not free.",
+      "answer_needles": [
+       "$75",
+       "75 dollars",
+       "seventy-five"
+      ]
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F1",
+      "text": "Standard delivery on this order costs $6.95.",
+      "answer_needles": [
+       "6.95",
+       "six ninety-five",
+       "six dollars and ninety-five"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F1",
+      "text": "Standard delivery is estimated at 4 to 7 business days."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says delivery on this order is free.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F1",
+      "answer_needles": []
+     },
+     {
+      "text": "Quotes the Expedited or Canada charge for ordinary delivery.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F2",
+      "answer_needles": [
+       "19.50"
+      ]
+     },
+     {
+      "text": "Promises a delivery day.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-SHIPPING-2026#F6",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-SHIPPING-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-SHIPPING-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the basket comes to $67.",
+     "Saying another $8 in the basket would bring delivery down to nothing."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-021",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "account holder wants her daughter to be able to (a) watch the cameras from her own phone and (b) ring us about the bill when mum's travelling. what are the two setups and what are the limits on each?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "verification",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Two documents. (a) Watching: a Shared Access invitation sent from the account holder's app; up to 4 guests, each with their own sign-in, who can watch live view and clips on chosen cameras but cannot change settings, delete anything or see billing. (b) Calling about the bill: register the daughter as an Authorised Contact; up to 2 per account, added in the app or on a verified call after a step-up code, verified by her own name plus a 4-digit contact PIN, and able to check billing and order status, get troubleshooting help and ask for a carrier trace, but not to change payment method, password or e-mail, ask for a refund, delete recordings or close the account. A Shared Access guest is not an Authorised Contact.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F15",
+      "text": "For watching: Shared Access, view-only on chosen cameras, with no access to billing; up to 4 guests.",
+      "answer_needles": [
+       "shared access"
+      ]
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F11",
+      "text": "For calling about the bill: an Authorised Contact, who may check billing status; up to 2 per account, verified by name plus a 4-digit PIN.",
+      "answer_needles": [
+       "authorised contact",
+       "authorized contact"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F9",
+      "text": "Up to 2 Authorised Contacts, added in the app or on a verified call after a step-up code."
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F10",
+      "text": "An Authorised Contact is verified by their own name plus a 4-digit contact PIN."
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F12",
+      "text": "An Authorised Contact may not change login details or payment method, ask for a refund, delete recordings or close the account."
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F23",
+      "text": "A Shared Access invitation gives view-only access to chosen cameras."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Swaps the limits of the two setups.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F9",
+      "answer_needles": [
+       "4 authorised contacts",
+       "four authorised contacts",
+       "4 authorized contacts",
+       "four authorized contacts",
+       "2 guests",
+       "two guests"
+      ]
+     },
+     {
+      "text": "Says a Shared Access guest can call in about billing, or is the same thing as an Authorised Contact.",
+      "kind": "fabrication",
+      "fact": "CC-REF-RECOVERY-2026#F15",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the daughter can simply be helped as a household member once she passes verification.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F3",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-RECOVERY-2026",
+     "CC-REF-VERIFICATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-RECOVERY-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-022",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Is that the newest one? And if it isn't, how do I make it update, is there a button somewhere?",
+   "prior_transcript": [
+    {
+     "speaker": "user",
+     "text": "I'm looking at your Lantern Cam now. It's the third-generation model and it's reporting firmware 4.7.9."
+    },
+    {
+     "speaker": "other",
+     "text": "Okay. I've no idea what that means."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "troubleshooting",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The agent just said the camera reports 4.7.9; the guide gives 4.8.2 as the current firmware for the third-generation Lantern Cam, so it is not the newest. There is no button: cameras update themselves between 2:00 am and 4:00 am local time when idle, and a customer cannot force it. Leaving the camera powered and online overnight is enough.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F18",
+      "text": "The current firmware for the third-generation Lantern Cam is 4.8.2, so 4.7.9 is not the newest.",
+      "answer_needles": [
+       "4.8.2"
+      ]
+     },
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F19",
+      "text": "The camera updates itself between 2:00 am and 4:00 am local time when idle; it cannot be forced, so leave it powered and online overnight.",
+      "answer_needles": [
+       "overnight",
+       "2:00",
+       "2 am",
+       "2 a.m.",
+       "two and four",
+       "2 and 4",
+       "two in the morning",
+       "automatically",
+       "itself",
+       "on its own"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Describes a button, an app option or an agent action that forces the update.",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F19",
+      "answer_needles": []
+     },
+     {
+      "text": "Gives another camera's firmware as the current one for this model.",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F18",
+      "answer_needles": [
+       "4.5.9",
+       "3.11.0",
+       "2.6.1"
+      ]
+     },
+     {
+      "text": "Tells the customer to factory-reset the camera to get the update.",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F15",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-TROUBLESHOOTING-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-TROUBLESHOOTING-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-023",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "It's thirteen dollars and it's plainly your mistake. Just put it back on my card now, will you?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I cancelled the monthly Plus plan on the ninth of September. I've got your confirmation e-mail open right here, reference CX-58213."
+    },
+    {
+     "speaker": "user",
+     "text": "Yes, I can see the cancellation was confirmed on the ninth."
+    },
+    {
+     "speaker": "other",
+     "text": "Well, you went and charged me thirteen dollars again on the twenty-second."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "refund",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "From the conversation: a charge taken after a cancellation that was confirmed, and the customer has the reference. The refund policy lists exactly this as an exception, and every exception needs a supervisor's approval whatever the amount, so the small sum does not make it a Tier 1 refund. The agent acknowledges it, submits it, and tells the customer three things: it has been submitted, a supervisor decides, and the decision comes by e-mail within 2 business days. The agent does not say or imply it will be approved, and does not refuse.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F17",
+      "text": "A charge after a confirmed cancellation is a refund exception that needs a supervisor's approval whatever the amount.",
+      "answer_needles": [
+       "supervisor",
+       "team lead"
+      ]
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F23",
+      "text": "The agent submits it and the decision arrives by e-mail within 2 business days.",
+      "answer_needles": [
+       "2 business days",
+       "two business days"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "The cancellation was confirmed on 9 September (reference CX-58213) and $13 was charged on the 22nd."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the $13 is refunded now, or approves it on the call.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-REFUND-2026#F17",
+      "answer_needles": []
+     },
+     {
+      "text": "Says or implies the supervisor will approve it.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-REFUND-2026#F23",
+      "answer_needles": []
+     },
+     {
+      "text": "Says monthly charges are never refunded.",
+      "kind": "false_denial",
+      "fact": "CC-REF-REFUND-2026#F5",
+      "answer_needles": []
+     },
+     {
+      "text": "Treats it as a duplicate charge the agent can reverse on the spot.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F19",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-REFUND-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Quoting the cancellation reference back when submitting it."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-024",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm locked out, and the e-mail you've got for me is my old work one, I left that company in the spring so it's dead. I've answered all your security questions. Just send the reset to my Gmail and we're done, okay?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "recovery",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The 2025 handbook let an agent send the link to another address the caller supplied once verification was passed. That is outdated. Under the current Verification Standard and Recovery Procedure a reset link goes only to the login e-mail on file. The current route for a verified customer who cannot reach that mailbox: send a one-time code by text message to the phone number on file; once the customer reads it back, the login e-mail is changed to the address they use now and the reset is sent there. If there is no phone number on file the route is Identity Review. The agent does not send the link to the Gmail address directly and does not change the e-mail without the confirmed code.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F14",
+      "text": "Send a one-time code by text message to the phone number on file; once it is confirmed, the login e-mail can be changed and the reset sent to the new address.",
+      "answer_needles": [
+       "text",
+       "sms",
+       "phone number on file",
+       "phone on file"
+      ]
+     },
+     {
+      "fact": "CC-REF-RECOVERY-2026#F2",
+      "text": "The reset link cannot simply be sent to an address that is not the one on file.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F17",
+      "text": "A Tier 1 agent never changes a login e-mail without a confirmed step-up code or an approved IR-7."
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F15",
+      "text": "With no phone number on file the route is Identity Review (form IR-7)."
+     },
+     {
+      "fact": "CC-REF-RECOVERY-2026#F7",
+      "text": "The Recovery Procedure gives the same route: text code, change the login e-mail, then reset."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Sends the reset link straight to the Gmail address because verification was passed.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F4",
+      "answer_needles": []
+     },
+     {
+      "text": "Changes the login e-mail without the text code being confirmed.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F17",
+      "answer_needles": []
+     },
+     {
+      "text": "Says nothing can be done unless the customer gets back into the old mailbox.",
+      "kind": "false_denial",
+      "fact": "CC-REF-VERIFICATION-2026#F14",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-RECOVERY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-RECOVERY-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Where a password reset link may be sent",
+      "sources": [
+       "CC-REF-VERIFICATION-2026",
+       "CC-REF-RECOVERY-2026",
+       "CC-REF-HANDBOOK-V2"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Asking whether the phone number on the account is still the customer's."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-025",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "You took thirteen dollars off me yesterday morning for another month of Plus, and I don't want it any more. If I cancel right now, do I get that back, or only some of it?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "refund",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Current policy (July 2026): a monthly plan normally gets nothing back for a part month, with one exception, a monthly renewal charge is refunded in full if the customer cancels within 48 hours of that charge. Yesterday morning is inside 48 hours, so cancelling now returns the whole $13, and $13 is within what a Tier 1 agent may approve. The 2025 handbook's pro-rata refund of unused days is outdated and must not be applied.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F6",
+      "text": "Cancelling within 48 hours of a monthly renewal charge gets that charge back in full: the whole $13.",
+      "answer_needles": [
+       "48 hours",
+       "48-hour",
+       "forty-eight",
+       "in full",
+       "full refund",
+       "full thirteen",
+       "full $13",
+       "all thirteen",
+       "all of it",
+       "whole thirteen",
+       "whole $13",
+       "the whole"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F20",
+      "text": "A Tier 1 agent may approve refunds the policy plainly allows up to $150."
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F5",
+      "text": "Outside that 48-hour exception there is no refund for a partial month."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Offers a pro-rata refund of the unused days.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F6",
+      "answer_needles": []
+     },
+     {
+      "text": "Says a monthly charge can never be refunded.",
+      "kind": "false_denial",
+      "fact": "CC-REF-REFUND-2026#F5",
+      "answer_needles": []
+     },
+     {
+      "text": "Says a supervisor has to approve it.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F21",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-REFUND-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Refund when a monthly plan is cancelled",
+      "sources": [
+       "CC-REF-REFUND-2026",
+       "CC-REF-HANDBOOK-V2"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Offering to cancel and process the refund on the call."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-026",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Okay, so the refund's gone through on your side. I don't pay by card, it comes straight out of my bank by direct debit. How long before I actually see the money?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "refund",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The current policy gives a time per payment method: for direct bank debit it is up to 10 business days after approval. The 2025 handbook's blanket 10 to 14 business days is outdated, and the card figure (5 to 7 business days) and the wallet figure (up to 3) belong to other methods. The agent gives 'up to 10 business days' as a time frame, not a guaranteed date.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F16",
+      "text": "A refund to direct bank debit takes up to 10 business days after approval.",
+      "answer_needles": [
+       "10 business days",
+       "ten business days"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Quotes the 2025 handbook's 10 to 14 business days.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F7",
+      "answer_needles": [
+       "10 to 14",
+       "ten to fourteen",
+       "10-14",
+       "14 business days",
+       "fourteen business days"
+      ]
+     },
+     {
+      "text": "Quotes the card or wallet time for a direct debit refund.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F15",
+      "answer_needles": []
+     },
+     {
+      "text": "Promises a particular date on which the money will arrive.",
+      "kind": "unauthorized_promise",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-REFUND-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "How long a refund takes to arrive",
+      "sources": [
+       "CC-REF-REFUND-2026",
+       "CC-REF-HANDBOOK-V2"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-027",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "My yearly plan renewed on the eighteenth of September. I'm still making up my mind whether to keep it. What's the very last day I can come back to you and get the whole lot refunded?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "refund",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The current policy (July 2026) refunds an annual charge in full if the customer asks within 30 days of the charge date: 18 September plus 30 days is 18 October. The 2025 handbook's 45 days (which would give 2 November) is outdated and must not be used. The agent gives 18 October and can add what happens after it: no refund for the unused part, the plan runs to the end of the term, and auto-renew can be switched off.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F3",
+      "text": "The annual charge is refundable in full within 30 days of the charge date, so the last day is 18 October.",
+      "answer_needles": [
+       "october 18",
+       "18 october",
+       "oct 18",
+       "oct. 18",
+       "18th of october",
+       "october eighteenth",
+       "eighteenth of october"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F4",
+      "text": "After the window there is no refund for the unused part; the plan stays active to the end of the term and auto-renew can be switched off."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses the 2025 handbook's 45-day window.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F5",
+      "answer_needles": [
+       "45 days",
+       "45-day",
+       "forty-five",
+       "november 2",
+       "2 november",
+       "nov 2",
+       "2nd of november",
+       "november second"
+      ]
+     },
+     {
+      "text": "Gives the 60-day camera return period as the window for the plan.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F9",
+      "answer_needles": [
+       "60 days",
+       "sixty days",
+       "november 17"
+      ]
+     },
+     {
+      "text": "Says a part refund is available after the window closes.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F4",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-REFUND-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Annual-plan refund window",
+      "sources": [
+       "CC-REF-REFUND-2026",
+       "CC-REF-HANDBOOK-V2"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Advising the customer not to leave it to the last day."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026-09-18) + 30 days",
+     "result": "2026-10-18",
+     "unit": "date",
+     "accepted_forms": [
+      "October 18",
+      "18 October",
+      "Oct 18",
+      "October 18th",
+      "18th of October",
+      "October eighteenth",
+      "eighteenth of October"
+     ],
+     "inputs": {
+      "refund_window_days": "CC-REF-REFUND-2026#F3",
+      "charge_date": "stated in the question (18 September)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-028",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "she lost the phone that had her authenticator on it and has no backup codes left. can I just turn 2-step off for her? if not, what's the route and how long do I tell her it'll take?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "recovery",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Agents cannot switch two-step sign-in off. A customer with no authenticator device and no backup codes goes through Identity Review (form IR-7), decided by Tier 2 Account Integrity. On how long: two current documents disagree, the Recovery Procedure (April 2026) says allow up to 3 business days and the Verification Standard (June 2026) says allow up to 5, and neither says it replaces the other. Good private advice flags the discrepancy and gives the safe figure (up to 5 business days), or says to confirm with Account Integrity, and does not promise 3.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F8",
+      "text": "Agents cannot switch two-step sign-in off; with no authenticator and no backup codes the route is Identity Review.",
+      "answer_needles": [
+       "identity review",
+       "ir-7"
+      ]
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F16",
+      "text": "The safe figure to give the customer is up to 5 business days (the two documents say 3 and 5).",
+      "answer_needles": [
+       "5 business days",
+       "five business days"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F6",
+      "text": "The Recovery Procedure says up to 3 business days; the two documents differ."
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F15",
+      "text": "Identity Review needs government photo ID plus proof of purchase or a photo of a camera's serial label; Tier 2 Account Integrity decides."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Tells the agent to promise it will be done within 3 business days, with no mention that the other document says 5.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-RECOVERY-2026#F6",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the agent, or Tier 2 on request, can simply switch two-step sign-in off.",
+      "kind": "fabrication",
+      "fact": "CC-REF-RECOVERY-2026#F8",
+      "answer_needles": []
+     },
+     {
+      "text": "Gives a duration found in neither document.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "surface_conflict",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-RECOVERY-2026",
+     "CC-REF-VERIFICATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-RECOVERY-2026"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "How long Identity Review takes",
+      "sources": [
+       "CC-REF-VERIFICATION-2026",
+       "CC-REF-RECOVERY-2026"
+      ],
+      "resolution": "unresolved"
+     }
+    ],
+    "acceptable_inference": [
+     "Saying 'three to five business days'.",
+     "Preferring the later-dated Verification Standard while noting the Recovery Procedure differs."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-029",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "caller's given me her name and zip and both match. she can't remember which email she signed up with and her card's out in the car. she does have the camera right in front of her. am I ok to go into the account?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "verification",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Not yet. The current Verification Standard (June 2026) needs 3 of the 5 identifiers; two is not enough. The 2025 handbook's 2 of 4 is outdated. The fifth identifier, which the handbook's list did not have, is the serial number of a registered camera (on the label under the stand, beginning with BW), and she has the camera in front of her: ask her to read it out. With name, postal code and serial she passes. The agent does not help her with the e-mail address.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F1",
+      "text": "Three of the five identifiers are needed; name and postal code are only two.",
+      "answer_needles": [
+       "3 of",
+       "three of",
+       "3 out of",
+       "three out of",
+       "third",
+       "one more",
+       "3 identifiers",
+       "three identifiers"
+      ]
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F2",
+      "text": "The serial number of a registered camera counts as an identifier, so she can read it off the camera.",
+      "answer_needles": [
+       "serial"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F26",
+      "text": "Note which identifiers were used, never their values."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says two correct identifiers are enough to open the account.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F1",
+      "answer_needles": []
+     },
+     {
+      "text": "Tells the agent to read out, hint at or complete the e-mail address on file for her.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Tells the agent to ask for the full card number, expiry date or security code.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F3",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-VERIFICATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "How many identifiers a caller must give, and which count",
+      "sources": [
+       "CC-REF-VERIFICATION-2026",
+       "CC-REF-HANDBOOK-V2"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Saying she could also fetch the card for the last four digits instead."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-030",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm her son, I live here with her at the same address, and I've given you her e-mail, the postcode and the last four of the card. All I want to know is whether this month's payment went through. Surely you can tell me that much?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "verification",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The 2025 handbook let another adult at the billing address who passed verification be helped as if they were the account holder. That is outdated. Under the current Verification Standard only the account holder or a registered Authorised Contact may be helped; a son is a third party however much he knows and wherever he lives, so the agent gives general information only and does not confirm anything about an account, payment status included. The way forward answers his actual request: unlike a plan change, checking billing status is something a registered Authorised Contact may do, so if his mother registers him (in the app, or on a verified call) he can ask this himself next time; otherwise she calls.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F7",
+      "text": "He is a third party whatever he knows and wherever he lives, so the agent cannot tell him about the account or its payments.",
+      "answer_needles": []
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F8",
+      "text": "The agent gives general information only and invites him to have the account holder call.",
+      "answer_needles": [
+       "your mother",
+       "your mum",
+       "your mom",
+       "account holder",
+       "she can call",
+       "have her call",
+       "her to call",
+       "she calls"
+      ]
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F11",
+      "text": "If his mother registers him as an Authorised Contact he may check billing status himself, which is exactly what he is asking for.",
+      "answer_needles": [
+       "authorised contact",
+       "authorized contact"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F10",
+      "text": "An Authorised Contact is verified by their own name plus a 4-digit contact PIN."
+     },
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F9",
+      "text": "The account holder adds an Authorised Contact in the app or on a verified call after a step-up code."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Helps him as a household member because he passed verification.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F3",
+      "answer_needles": []
+     },
+     {
+      "text": "Tells him whether the payment went through, or confirms that the account exists.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F8",
+      "answer_needles": []
+     },
+     {
+      "text": "Offers to add him as an Authorised Contact on this call on his own say-so.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-VERIFICATION-2026#F9",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-VERIFICATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Whether a household member can be helped with the account",
+      "sources": [
+       "CC-REF-VERIFICATION-2026",
+       "CC-REF-HANDBOOK-V2"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Explaining in general terms how billing dates and failed-payment retries work."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-031",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "write me the wrap-up note for this call, keep it short",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Two things. The Eave cam at the back keeps dropping off overnight, and I also want my invoices going to my new e-mail from now on."
+    },
+    {
+     "speaker": "user",
+     "text": "Okay. For the camera, I had you restart the router just now and it's back online with a solid green light."
+    },
+    {
+     "speaker": "other",
+     "text": "Good. And the e-mail thing?"
+    },
+    {
+     "speaker": "user",
+     "text": "That one needs a security code sent to your phone first, and you said you'd rather do it tomorrow when you've got the phone with you."
+    },
+    {
+     "speaker": "other",
+     "text": "Yes, I'll ring back tomorrow for that."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "irrelevant_source",
+   "category": "conversation",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Everything needed is in the conversation: the customer wanted two things (back Eave Cam dropping offline overnight; invoices to a new e-mail); done: router restarted, camera back online with a solid green light; still open: the e-mail change, which needs a security code to her phone, and she will call back tomorrow. A short note in those terms is the answer. Policy text, extra troubleshooting steps or invented details (a ticket number, a firmware version, a time) do not belong in it.",
+    "required_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "What was done: the router was restarted and the camera is back online (solid green).",
+      "answer_needles": [
+       "router"
+      ]
+     },
+     {
+      "fact": "CONVERSATION",
+      "text": "What is still open: the e-mail change needs a security code and the customer will call back tomorrow.",
+      "answer_needles": [
+       "tomorrow"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Adds details that were never said (a ticket or reference number, a firmware version, a signal reading, a time).",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Records that the e-mail address was changed on this call.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with a summary of policy instead of a note about this call.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_advice",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Laying the note out as wanted / done / still open."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-032",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "A what? I don't know what that is. My grandson set this phone up for me. How would I even know if I've got one of those?",
+   "prior_transcript": [
+    {
+     "speaker": "user",
+     "text": "The camera's showing as online on my side, so let's look at the phone. Could you check whether your phone is on a VPN at the moment?"
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "irrelevant_source",
+   "category": "general-knowledge",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "A general-knowledge question, not a policy one. The agent explains in a sentence what a VPN is (an app or setting that sends the phone's internet traffic through another server, often installed for privacy or for work) and how to tell: a small VPN or key symbol at the top of the screen, or a VPN entry in the phone's settings showing connected. Then the call carries on. No document supplies this and none should be recited.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Skips the question and moves to other steps (reinstalling the app, restarting the router, a factory reset).",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it cannot explain what a VPN is.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     },
+     {
+      "text": "Claims Brindlewatch provides or installs a VPN.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "explain",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to walk the customer through the phone settings to look."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-033",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Minus ten Celsius? I don't think in Celsius. What's that in Fahrenheit?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "The camera on the barn keeps going flat, and it's been bitter up here all month."
+    },
+    {
+     "speaker": "user",
+     "text": "That will be the cold. Once it's under about minus ten Celsius the battery runs down a good deal faster."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "irrelevant_source",
+   "category": "general-knowledge",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "A unit conversion of the figure the agent just said, from general knowledge: -10 C x 9/5 + 32 = 14 degrees Fahrenheit. One short line with the number is the answer. No document gives a Fahrenheit figure, and the battery guidance does not need to be recited again.",
+    "required_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "Minus ten Celsius, the figure the agent just gave, is 14 degrees Fahrenheit.",
+      "answer_needles": [
+       "14 degrees",
+       "14°",
+       "14 f",
+       "14 fahrenheit",
+       "fourteen degrees",
+       "fourteen fahrenheit",
+       "fourteen"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Gives a wrong Fahrenheit figure.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it cannot convert it or has to check.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with a run-through of battery or charging guidance instead of the conversion.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that freezing point, 0 C, is 32 Fahrenheit."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "-10 * 9 / 5 + 32",
+     "result": 14,
+     "unit": "degrees Fahrenheit",
+     "accepted_forms": [
+      "14 degrees",
+      "14°",
+      "14 F",
+      "14 Fahrenheit",
+      "fourteen degrees",
+      "fourteen"
+     ],
+     "inputs": {
+      "celsius": "CONVERSATION (minus ten Celsius)",
+      "formula": "general knowledge (C x 9/5 + 32)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-034",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "customer keeps saying he wants it 'pro rata'. what does that actually mean in plain english? one line, I don't want to sound clueless",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "irrelevant_source",
+   "category": "general-knowledge",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "A vocabulary question answered from general knowledge: 'pro rata' means in proportion, here paying or getting back only for the share of the period actually used or left. One plain line. The loaded handbook happens to use the phrase for an outdated refund rule; that rule must not be presented as what the company does. Adding that the current policy does not refund part months is acceptable but not needed.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F5",
+      "text": "Under the current policy a monthly plan gets no refund for a partial month."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the company refunds unused days pro rata when a monthly plan is cancelled.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F6",
+      "answer_needles": []
+     },
+     {
+      "text": "Gives a wrong meaning (for example: in full, or at a discount).",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with a run-through of the refund policy instead of the meaning.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "explain",
+    "expected_response_type": "private_advice",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "A tiny example, such as half a month used meaning half the fee."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-035",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "How much is the middle plan, the Plus one, if I pay for the whole year in one go?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-none",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "no_policy",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "No document is loaded. The agent must not state a price as fact and must not deny that yearly billing exists. A good spoken reply sounds like a person: they want to give the exact figure rather than guess, they will check it (now, or follow up), and the call keeps moving. No AI-system phrasing such as 'that is not in my documents'.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "States a price for the plan, yearly or monthly.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says there is no yearly option, or no such plan.",
+      "kind": "false_denial",
+      "answer_needles": []
+     },
+     {
+      "text": "Invents a saving or discount for paying yearly.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the exact price will be confirmed before the customer decides."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-036",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm a veteran, twenty-two years in the Navy. Do you do any sort of military discount on the yearly plans?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "no_policy",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The billing guide lists plan prices and nothing else: no discount for veterans, military, seniors or students is mentioned anywhere, and nothing says there is none. The agent must neither invent a discount nor flatly deny one. A good reply says they will check rather than guess, and can share what is known, such as the yearly prices, or that paying yearly costs less than twelve monthly payments. The goodwill credit is not a discount and is not offered as one.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "Keep Plus is $13 per month or $130 per year."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F1",
+      "text": "Keep Basic is $6 per month or $60 per year."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F3",
+      "text": "Keep Pro is $22 per month or $220 per year."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says there is a military or veteran discount, or names a percentage or amount.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "States as fact that the company offers no military discount.",
+      "kind": "false_denial",
+      "answer_needles": []
+     },
+     {
+      "text": "Offers the goodwill credit, or any other allowance, as a military discount.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-ESCALATION-2026#F16",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Pointing out that yearly billing works out cheaper than paying month by month.",
+     "Offering to find out and come back to the customer."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-037",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "We'll be off-grid at the lake for a week. How long does the Trek cam run on a full charge? Will it last the week?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "no_policy",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Nothing in the material gives a battery life for the Trek Cam. The only battery figure is for the Eave Cam (a charge typically lasts 4 to 6 months), and it must not be passed off as the Trek Cam's. The agent must neither state a run time nor promise it will last the week, and must not deny that it could. A good reply says they would rather confirm the figure than guess and offers to come back with it, without AI-system phrasing such as 'that is not in my documents'.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F24",
+      "text": "The 4 to 6 months figure is for the Eave Cam, not the Trek Cam."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a battery life for the Trek Cam, including the Eave Cam's figure presented as the Trek Cam's.",
+      "kind": "fabrication",
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F24",
+      "answer_needles": []
+     },
+     {
+      "text": "Assures the customer it will last the week.",
+      "kind": "unauthorized_promise",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it will not last a week, or that the Trek Cam cannot run on battery.",
+      "kind": "false_denial",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to check the figure and come back to the customer."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-038",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "what's the most I can refund on my own before it has to go to a supervisor? need the actual dollar figure",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-cf-no-refund-policy",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "no_policy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The refund policy is not on the shelf in this case. The escalation matrix says a refund above the Tier 1 approval limit goes to a supervisor but never states the limit as an amount. Other amounts are nearby and are not this limit: $300 is the order value up to which Tier 1 may approve a replacement or refund after a failed carrier trace, $25 is the goodwill credit, $30 is the first-trip travel courtesy. The answer must not give a general refund limit; it says the figure is not in what the agent has and should be confirmed with the Team Lead, and may list those narrower limits for what they are.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-ESCALATION-2026#F15",
+      "text": "A refund above the Tier 1 approval limit goes to a supervisor; the amount is not stated."
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F14",
+      "text": "After a failed trace Tier 1 may approve a replacement or refund for orders up to $300."
+     },
+     {
+      "fact": "CC-REF-ESCALATION-2026#F16",
+      "text": "The goodwill credit is up to $25, once per account in any 3 months."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a dollar amount as the general Tier 1 refund limit.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "$150",
+       "$250",
+       "$500"
+      ]
+     },
+     {
+      "text": "Presents the $300 missing-parcel limit, the $25 goodwill credit or the $30 travel courtesy as the general refund limit.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F14",
+      "answer_needles": []
+     },
+     {
+      "text": "Says Tier 1 agents cannot approve any refund.",
+      "kind": "false_denial",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "private_advice",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Telling the agent to check the figure with the Team Lead before quoting it."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-039",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm on the Basic plan, paying month to month, and I want to move up to Pro today. I've got eighteen days to go before my next bill. What are you going to charge me for switching?",
+   "prior_transcript": null,
+   "conversation_id": "ER-D2-CC-039-C",
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "billing",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Moving up on a monthly plan takes effect at once and is charged as the price difference for the days left, with every month counted as 30 days: (22 - 6) x 18 / 30 = $9.60 today, and then $22 on each billing date from the next one. The guide's own worked example ($8.00) is for 15 days left and is not this customer's figure.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F6",
+      "text": "The charge today is the price difference for the 18 days left: $9.60.",
+      "answer_needles": [
+       "9.60",
+       "nine sixty",
+       "nine dollars and sixty"
+      ]
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F3",
+      "text": "From the next billing date the plan is $22 per month.",
+      "answer_needles": [
+       "$22 a month",
+       "$22 per month",
+       "$22/month",
+       "$22 each month",
+       "$22 monthly",
+       "$22 from",
+       "$22 on",
+       "$22.00",
+       "22 a month",
+       "22 per month",
+       "22 dollars",
+       "twenty-two"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F6",
+      "text": "The upgrade takes effect at once."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F1",
+      "text": "Keep Basic is $6 per month."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the guide's worked example as this customer's charge.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F6",
+      "answer_needles": [
+       "$8.00"
+      ]
+     },
+     {
+      "text": "Charges the full Pro price, or the full monthly difference, today.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F6",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the change waits until the next billing date.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F7",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning what Pro adds: up to 20 cameras, 60 days of clips and continuous recording."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "(22 - 6) * 18 / 30",
+     "result": 9.6,
+     "unit": "USD",
+     "accepted_forms": [
+      "$9.60",
+      "9.60",
+      "nine sixty",
+      "nine dollars and sixty cents"
+     ],
+     "inputs": {
+      "formula": "CC-REF-BILLING-TRAVEL-2026#F6",
+      "pro_monthly": "CC-REF-BILLING-TRAVEL-2026#F3",
+      "basic_monthly": "CC-REF-BILLING-TRAVEL-2026#F1",
+      "days_remaining": "stated in the question (18)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-D2-CC-040",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Hmm. That's more a month than I had in mind. What would it be if I only went up to the middle one instead?",
+   "prior_transcript": null,
+   "conversation_id": "ER-D2-CC-039-C",
+   "turn_index": 2,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "billing",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Continues the previous turn: same customer, on Basic monthly with 18 days left, now asking about Keep Plus. (13 - 6) x 18 / 30 = $4.20 today, then $13 on each billing date from the next one. The agent gives the new figures without asking again for the plan or the days left.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F6",
+      "text": "Moving from Basic to Plus with 18 days left costs $4.20 today.",
+      "answer_needles": [
+       "4.20",
+       "four twenty",
+       "four dollars and twenty"
+      ]
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "From the next billing date Keep Plus is $13 per month.",
+      "answer_needles": [
+       "$13 a month",
+       "$13 per month",
+       "$13/month",
+       "$13 each month",
+       "$13 monthly",
+       "$13 from",
+       "$13 on",
+       "$13.00",
+       "13 a month",
+       "13 per month",
+       "13 dollars",
+       "thirteen"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "Keep Plus covers up to 5 cameras and keeps 30 days of clips."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Repeats the Pro figures as the answer for Plus.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F3",
+      "answer_needles": []
+     },
+     {
+      "text": "Asks again which plan the customer is on or how many days are left, instead of answering.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     },
+     {
+      "text": "Charges the full Plus price, or the full monthly difference, today.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F6",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Comparing it with the $9.60 quoted for Pro."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "(13 - 6) * 18 / 30",
+     "result": 4.2,
+     "unit": "USD",
+     "accepted_forms": [
+      "$4.20",
+      "4.20",
+      "four twenty",
+      "four dollars and twenty cents"
+     ],
+     "inputs": {
+      "formula": "CC-REF-BILLING-TRAVEL-2026#F6",
+      "plus_monthly": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "basic_monthly": "CC-REF-BILLING-TRAVEL-2026#F1",
+      "days_remaining": "previous turn (18)"
+     }
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}
