@@ -11972,13 +11972,24 @@ html[data-tooltips='off'] .t-tt {
     transform: translateY(8px);                       /* --distance-base */
   }
 }
-/* Its level bars reuse the existing `stt-wave-dot` keyframes. The wrapper
-   holds only the bars, so the rule's nth-child delays line up. */
+/* Its level bars reuse the existing `stt-wave-dot` timing and delays. The
+   wrapper holds only the bars, so the rule's nth-child delays line up. */
 .ov-listening-wave {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   height: 14px;
+}
+/* The bars keep `stt-wave-dot`'s shape but rest at 0.55, not 0.3: a 3px bar at
+   0.3 fades into every panel (light, glass and modern most of all). Same
+   weight as the reduced-motion rule below, which comes later and has to win. */
+@keyframes ov-listening-wave-bar {
+  0%   { transform: scaleY(1);   opacity: 0.55; }
+  40%  { transform: scaleY(2.4); opacity: 1; }
+  100% { transform: scaleY(1);   opacity: 0.55; }
+}
+.ov-listening-wave .stt-wave-dot {
+  animation-name: ov-listening-wave-bar;
 }
 
 /* Screenshot attached. The tray and its thumbnails move in framer

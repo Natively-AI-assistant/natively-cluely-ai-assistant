@@ -2264,6 +2264,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
 
   const useDarkCodeTheme = !isLightTheme || isGlassTheme || isModernTheme;
+  // Glass and modern keep a dark panel under the light app theme, so only the
+  // default interface theme ever puts the chat's content on a light surface.
+  const isLightSurface = isLightTheme && !isGlassTheme && !isModernTheme;
   const codeTheme = useDarkCodeTheme ? vividDarkCodeTheme : oneLight;
   const codeLineNumberColor = useDarkCodeTheme ? VIVID_DARK_LINE_NUMBER_COLOR : 'rgba(24,24,24,0.4)';
   // Header only shows for the light theme and the modern/glass interface
@@ -11525,26 +11528,35 @@ Provide only the answer, nothing else.`;
                     />
                   ))}
 
-                  {/* Active Recording State with Live Transcription */}
+                  {/* Active Recording State with Live Transcription.
+                      The pale emeralds are for a dark panel; on the light one
+                      they wash out (emerald-300 on the tinted pane is about
+                      1.1:1), so it takes the dark end of the scale, the way
+                      the user bubble swaps blue-100 for blue-900. The label
+                      and the bars are the transcript's colour at full
+                      strength: at emerald-400, the label at 70%, they were
+                      the faintest things on the glass and modern panels.
+                      The fill stays `bg-emerald-500/10` in both: the glass and
+                      modern recipes in index.css select on that class. */}
                   {isManualRecording && (
                     <div className="ov-listening-in flex flex-col items-end gap-1">
                       {/* Live transcription preview */}
                       {(manualTranscript || voiceInput) && (
-                        <div className="max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-[18px] rounded-tr-[4px]">
-                          <span className="text-[13px] text-emerald-300">
+                        <div className={`max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border rounded-[18px] rounded-tr-[4px] ${isLightSurface ? 'border-emerald-600/30' : 'border-emerald-500/20'}`}>
+                          <span className={`text-[13px] ${isLightSurface ? 'text-emerald-900' : 'text-emerald-300'}`}>
                             {voiceInput}
                             {voiceInput && manualTranscript ? ' ' : ''}
                             {manualTranscript}
                           </span>
                         </div>
                       )}
-                      <div className="px-3 py-2 flex gap-1.5 items-center bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                      <div className={`px-3 py-2 flex gap-1.5 items-center bg-emerald-500/10 border rounded-full ${isLightSurface ? 'border-emerald-600/30' : 'border-emerald-500/20'}`}>
                         <span className="ov-listening-wave" aria-hidden>
                           {[0, 1, 2, 3].map((i) => (
-                            <span key={i} className="stt-wave-dot w-[3px] h-1.5 rounded-full bg-emerald-400" />
+                            <span key={i} className={`stt-wave-dot w-[3px] h-1.5 rounded-full ${isLightSurface ? 'bg-emerald-700' : 'bg-emerald-300'}`} />
                           ))}
                         </span>
-                        <span className="text-[10px] text-emerald-400/70 ml-1">{t('Listening...')}</span>
+                        <span className={`text-[10px] ml-1 ${isLightSurface ? 'text-emerald-800' : 'text-emerald-300'}`}>{t('Listening...')}</span>
                       </div>
                     </div>
                   )}
