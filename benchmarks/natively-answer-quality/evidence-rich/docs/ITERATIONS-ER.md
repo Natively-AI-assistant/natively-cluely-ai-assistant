@@ -1376,3 +1376,10 @@ baseline run; it decides nothing.
 **Evin, 2026-10-04:** "you can increase the questions per mode instead of 30 if needed, no cap". The dev set's
 resolution is the limit now (modes swing ±0.7 on 30 rows between runs of one build; E14 and E8 turned on one or two
 hard fails). The set will be extended; see the next section.
+
+### E11 correction — check on the clean run (2026-10-04; er-dev-e13c = `cand/e13b` 91de17d1, direct DeepSeek, nothing else on the key)
+Heard hotkey-to-request in the document-grounded modes: p50 675 ms, p90 1,226 ms (m1 700 / 1,225; m1r 761 / 1,226;
+e13 23 / 30). **The awaited rerank is back as on main.** First word: heard 1,508 ms, typed 898 ms (m1 1,484 / 899). No turn
+over 5 s, no fallback answer. cc: 8.84, 17 hard fails; every needed fact in the prompt on 209 of 212 rows.
+**er-dev-e13c is the dev baseline of the autopilot series** (er-dev-e13 8.72 / 19 was the same build without the two
+corrections; the difference is inside run-to-run variation).
