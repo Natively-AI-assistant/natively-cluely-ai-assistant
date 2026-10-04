@@ -1415,3 +1415,27 @@ pass came back PARTIAL and a second pass, classified with DOCUMENT_FACT as well,
 E16 the first pass already holds the whole résumé, answerability is FULL, there is no second pass, and the whole job
 description — planned, retrieved — is removed by the claim-authority gate because it cannot evidence a personal-skill
 claim. Whole MODE files are exempt from that gate since efc126a9; whole PROFILE documents are not.
+
+### E16 — the four turns still without the résumé, and the three that never gained it (2026-10-05, read from the traces)
+* D2-LFW-030 went down the FAST path with nothing planned; E16 widens only a plan that already retrieves. Not a target.
+* LFW-015, TI-002, TI-011: résumé and job description planned (by E16), returned whole by the profile port, admitted,
+  and absent from the evidence — the same claim-authority gate. One cause covers nine of the ten affected rows.
+
+## E16b — whole profile documents are present whenever they are planned (rule written 2026-10-05, before the code)
+**Change (on top of `cand/e16`):** the claim-authority gate in `legacy-retrieval-port.ts` keeps an item the profile port
+handed over WHOLE (`PROFILE_RESUME` / `PROFILE_JOB_DESCRIPTION` with `wholeDocument`), exactly as it keeps a whole mode
+file since efc126a9. Presence in the prompt only: `acceptedFor`, `evidenceSupportsClaim` and the claim pass are not
+touched, so a job description still cannot SUPPORT a claim about the candidate.
+**Risk the gate exists for:** a requirement from the job description answered as the candidate's own experience.
+**Control** er-dev-e13c + er-dev2-e13c (`cand/e13b`). **Candidate** er-dev-e16b + er-dev2-e16b. Pooled, cc judge.
+| # | Line | Bar |
+|---|---|---|
+| 1 | Résumé loaded but not in the prompt | ≤ 3 of 103 (control 24) |
+| 2 | Rows with every needed fact in the prompt | ≥ 494 of 499 (control 490 + the four E16 gained) |
+| 3 | Rows that gain the résumé: mean change | ≥ +0.5 |
+| 4 | Profile modes: mean; rows flagged unsupported_personal_claim / wrong_profile_used / evidence_overload | ≥ control − 0.10; ≤ control + 2 |
+| 5 | All rows: mean; hard fails | ≥ control − 0.10; ≤ control + 3 |
+| 6 | First word, profile modes, median | ≤ control + 150 ms |
+Every line must hold. Lines 3–5 need the judge; this time they are read whatever lines 1–2 say.
+Unit tests before any app run: the shapes of D2-TI-009 ("count it from my CV … their experience bar") and TI-023 keep
+the whole job description and a non-zero item count; efc126a9's claim-authority tests still pass.
