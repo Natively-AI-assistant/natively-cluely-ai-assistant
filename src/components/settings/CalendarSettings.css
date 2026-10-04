@@ -43,7 +43,7 @@
   --cp-btn-bg-hover: rgba(0, 0, 0, 0.08);
   --cp-btn-border: rgba(0, 0, 0, 0.05);
   --cp-input-border: rgba(0, 0, 0, 0.10);
-  /* Periwinkle-700, as PI's own accent TEXT on light (--pi-cta-accent-text):
+  /* Periwinkle-700, as PI's own accent text on light (--pi-accent-icon):
      -600 on the pill's tint over this canvas measures 3.66:1, -700 5.26:1. */
   --cp-accent: var(--periwinkle-700);
 }

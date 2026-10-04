@@ -1,0 +1,174 @@
+/*
+  PageContextChip — the captured browser page, at the top of the overlay.
+
+  CLEAR Liquid Glass, not a coloured pill. The body is the kit's `clear`
+  variant (src/ui-components): no fill of its own, so the panel shows through
+  and the rim is what the material adds. It replaced a flat green pill, and a
+  first glass cut that tinted the whole chip green with a white sheen ramp —
+  a glossy gradient pill, the exact thing the kit's design.md says the
+  material is not ("flat, with a thin directional rim").
+
+  The STATE is the colour of the plain globe at the leading end (green when
+  the page was read, yellow when only part of it was), from the banner's tone
+  tokens through .ov-tone-scope (OverlayBanner.css). It used to sit in a tinted
+  glass bead; the owner asked for the plain icon with no circle behind it. The
+  label stays in the overlay's text colour, so the site name reads at full
+  contrast in every theme.
+*/
+.pc-chip-host {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* (0,4,0)+: beats .lg-button.lg-sm's box and the kit's (0,3,0) press rule. */
+.lg-button.lg-clear.lg-sm.pc-chip {
+  --lg-pill-h: 30px;
+  --lg-label-size: 12px;
+  --lg-label-weight: 500;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0 5px 0 10px;
+  /* A container with controls in it, not a control: it lights under the
+     pointer like the rest of the kit, but it does not press. */
+  cursor: default;
+}
+.lg-button.lg-clear.lg-sm.pc-chip:active {
+  transform: none;
+}
+.lg-button.lg-clear.lg-sm.pc-chip:active .lg-lens {
+  --lg-lens-w: 90px;
+  --lg-lens-h: 40px;
+}
+
+.pc-chip > .lg-content {
+  gap: 7px;
+}
+.pc-chip > .lg-content > .lg-label {
+  max-width: 400px;
+}
+.pc-chip-head {
+  font-weight: 600;
+}
+/* The status after the site name, one step quieter. The primary colour at
+   72%, not the muted token: muted fails 4.5:1 on the light theme. */
+.pc-chip-rest {
+  color: color-mix(in srgb, var(--overlay-text-primary) 72%, transparent);
+}
+
+/* The globe: a plain 14px icon. 14 in a 30px chip leaves a whole 8px above
+   and below, so it lands on the pixel grid at every screen scale. */
+.pc-chip-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--ovb-ok);
+  /* Read ⇄ partly read: the colour crosses over, it does not jump. */
+  transition: color 250ms ease-in-out;                    /* --duration-fast, --ease-in-out */
+}
+.pc-chip-host[data-tone='warning'] .pc-chip-icon {
+  color: var(--ovb-warning);
+}
+.pc-chip-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pc-chip-sep {
+  width: 1px;
+  height: 14px;
+  flex: none;
+  background: var(--overlay-border);
+}
+
+.pc-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--overlay-text-muted);
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.pc-chip-btn:hover {
+  color: var(--overlay-text-primary);
+  background: var(--overlay-icon-hover-bg);
+}
+.pc-chip-btn svg {
+  width: 12px;
+  height: 12px;
+}
+/* The two controls sit closer to each other than to the label. */
+.pc-chip-btn + .pc-chip-btn {
+  margin-left: -5px;
+}
+/* The tab-list button while its picker is open: it stays lit, so the button
+   and the list under it read as one thing. */
+.pc-chip-btn[aria-expanded='true'] {
+  color: var(--overlay-text-primary);
+  background: var(--overlay-icon-hover-bg);
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────────────
+   Same rules as the banner's (OverlayBanner.css): only transform, opacity and
+   filter move, on the text and the icons, never on the glass chip itself;
+   entrances use @starting-style and play once.
+
+    - a page is captured ....... the globe pops (badge pop open) and the label
+                                 rises in (#18 texts reveal)
+    - another page is captured while the chip is up ... the label swaps in
+      place (#04 text states swap, SwapText)
+    - read ⇄ partly read ....... the globe's colour crosses over
+    - the two controls ......... the icon sinks a little while pressed */
+.pc-chip-label {
+  transition:
+    opacity   var(--ovb-reveal-dur, 500ms) var(--ovb-reveal-ease, ease-out),
+    transform var(--ovb-reveal-dur, 500ms) var(--ovb-reveal-ease, ease-out),
+    filter    var(--ovb-reveal-dur, 500ms) var(--ovb-reveal-ease, ease-out);
+  transition-delay: var(--ovb-stagger, 40ms);
+}
+@starting-style {
+  .pc-chip-label {
+    opacity: 0;
+    transform: translateY(4px);                           /* --distance-micro: the chip is 30px tall */
+    filter: blur(var(--ovb-reveal-blur, 3px));
+  }
+}
+/* The swap span carries the label's ellipsis: as an inline-block inside the
+   kit's clipped label, a label too long to fit would be dropped whole. */
+.pc-chip-label > .t-text-swap {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pc-chip-icon svg {
+  transition:
+    transform var(--ovb-pop-dur, 500ms) var(--ovb-pop-ease, ease-out),
+    opacity   150ms ease-out;                             /* --duration-quick, --ease-out */
+}
+@starting-style {
+  .pc-chip-icon svg {
+    opacity: 0;
+    transform: scale(var(--ovb-pop-from, 0.25));
+  }
+}
+
+.pc-chip-btn svg {
+  transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1);   /* --duration-quick, --ease-smooth-out */
+}
+.pc-chip-btn:active svg {
+  transform: scale(0.82);
+  transition-duration: 80ms;                              /* --duration-micro */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-chip-icon,
+  .pc-chip-icon svg,
+  .pc-chip-label,
+  .pc-chip-btn,
+  .pc-chip-btn svg {
+    transition: none !important;
+  }
+}

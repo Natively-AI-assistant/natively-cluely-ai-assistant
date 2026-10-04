@@ -9,10 +9,12 @@ import {
   Globe,
   HelpCircle,
   Image,
+  Keyboard,
   Lightbulb,
   List,
   MessageSquare,
   Mic,
+  MicOff,
   Pencil,
   PointerOff,
   RefreshCw,
@@ -402,9 +404,12 @@ import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
 import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel } from '../utils/modelUtils';
 import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
+import { acceleratorToKeys } from '../utils/keyboardUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
+import { PageContextChip } from './overlay/PageContextChip';
+import { TabPicker } from './overlay/TabPicker';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { modelSelectorGroupLabel } from './ui/modelSelectorGroups';
@@ -2827,6 +2832,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // localisable. Absent for emitters that predate it and for the in-app TCC
     // repair result, which is constructed locally below.
     titleKey?: string;
+    // True when main gave up (no more recovery attempts). Decides the banner's
+    // tone: a terminal fault is an error, a stuck-but-retrying one a warning.
+    terminal?: boolean;
   };
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
   // UX2: in-flight guard for the "Repair Permissions" button so a double-click
@@ -2876,6 +2884,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           message: payload.message,
           channel: payload.channel,
           titleKey: payload.titleKey,
+          terminal: !!payload.terminal,
         });
         setIsExpanded(true);
       }
@@ -10881,23 +10890,49 @@ Provide only the answer, nothing else.`;
     sttUserError,
     sttInterviewerError,
   );
-  // Only surface the STT pill for genuine problems (config error, failed, or a
-  // dropped-then-reconnecting channel). The neutral 'awaiting-audio' state
-  // ("Listening for audio…") is intentionally suppressed — it added a pill on
-  // every launch and made the top section look padded vs. the prior build.
-  // When an audio-capture-failure banner is showing, it already conveys the
-  // hard failure with actionable UI (repair button + system-settings deep
-  // link). Surfacing the STT "needs attention" error pill at the same time is
-  // the same status on two surfaces — let the richer banner own the error and
-  // suppress the redundant error-tone pill. Reconnecting indication still shows
-  // (the banner only fires on terminal/stuck, not transient reconnects).
+  // Warnings and errors are BANNERS, not pills (owner request: "just the banner
+  // based is enough"). So the status row keeps only the one neutral progress
+  // note, "Preparing Apple Speech…", and the STT states that used to be pills
+  // are drawn by OverlayBanner:
+  //   not configured  -> the Transcription Not Configured banner
+  //   failed          -> error banner below
+  //   reconnecting    -> warning banner below
+  // The neutral 'awaiting-audio' state ("Listening for audio…") stays
+  // suppressed, as before: it showed on every launch.
+  //
+  // When an audio-capture-failure banner is showing it already conveys the
+  // hard failure with the fix, so the STT failure banner stands down rather
+  // than saying the same thing twice.
   const audioFailureBannerActive = systemAudioWarning?.kind === 'audio-capture-failure';
+  const sttFailed = sttUserStatus === 'failed' || sttInterviewerStatus === 'failed';
+  const sttReconnecting = sttUserStatus === 'reconnecting' || sttInterviewerStatus === 'reconnecting';
   const shouldShowSttSummaryPill =
-    (sttSummary.tone === 'error' && !audioFailureBannerActive) ||
-    sttUserStatus === 'reconnecting' ||
-    sttInterviewerStatus === 'reconnecting' ||
-    sttUserStatus === 'preparing' ||
-    sttInterviewerStatus === 'preparing';
+    !sttNotConfigured && !sttFailed && !sttReconnecting &&
+    (sttUserStatus === 'preparing' || sttInterviewerStatus === 'preparing');
+  const sttStatusBanner: { tone: 'warning' | 'error'; title: string; message: string } | null =
+    sttNotConfigured
+      ? null
+      : sttFailed && !audioFailureBannerActive
+        ? {
+            tone: 'error',
+            title: t('Transcription Stopped'),
+            // Two lines: what stopped, then what to do. The provider's own
+            // error (often a bare status like "401 Unauthorized") is not
+            // shown; a code on screen explains nothing.
+            message:
+              sttUserStatus === 'failed' && sttInterviewerStatus === 'failed'
+                ? t('Nothing is being transcribed right now. Check your transcription provider and its key in Settings.')
+                : sttUserStatus === 'failed'
+                  ? t('Your microphone is no longer being transcribed. Check your transcription provider and its key in Settings.')
+                  : t('Interviewer audio is no longer being transcribed. Check your transcription provider and its key in Settings.'),
+          }
+        : sttReconnecting && !sttFailed
+          ? {
+              tone: 'warning',
+              title: t('Transcription Reconnecting'),
+              message: t('The connection to your speech-to-text provider dropped. Retrying.'),
+            }
+          : null;
   // Whether the vision chip will render (mirrors the IIFE's early-return guard).
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =
@@ -10910,7 +10945,15 @@ Provide only the answer, nothing else.`;
   // Suppressed: mode label pill is not required in the UI.
   // Suppressed: LLM privacy label pill is not required in the UI.
   // Suppressed: vision pill ("Vision: provider") is not required in the UI.
-  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext || !!captureFallback;
+  const dismissPageContext = () => {
+    setPageContext(null);
+    try {
+      if (typeof (window as any).lastCapturedDOM === 'string') {
+        (window as any).lastCapturedDOM = '';
+      }
+    } catch (_) {}
+  };
+  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext;
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
 
   // Suppress the shell's scale/translate entry animation until it has rendered
@@ -11094,8 +11137,12 @@ Provide only the answer, nothing else.`;
                   </div>
                 )}
                 {pageContext && (
-                  <div
-                    className={`${statusPillBaseClass} ${getStatusToneClass(pageContext.partial ? 'warn' : 'ok')} pr-1.5`}
+                  // The captured page: a clear Liquid Glass chip (owner's pick
+                  // over a banner and a row above the input). It replaced a
+                  // flat green status pill.
+                  <PageContextChip
+                    label={pageContextChipLabel(pageContext)}
+                    partial={!!pageContext.partial}
                     title={
                       pageContext.partial
                         ? `Only part of this page could be read automatically${
@@ -11105,53 +11152,13 @@ Provide only the answer, nothing else.`;
                           ? `${pageContext.url} · ${pageContext.chars.toLocaleString()} chars · used on your next answer`
                           : `${pageContext.chars.toLocaleString()} chars · used on your next answer`
                     }
-                  >
-                    <Globe className="h-3 w-3 opacity-70" />
-                    <span className="max-w-[220px] truncate">
-                      {pageContextChipLabel(pageContext)}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={t("Pick a different browser tab")}
-                      title={t("Capture a different tab")}
-                      className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
-                      onClick={() => { void openTabPicker(); }}
-                    >
-                      <List className="h-2.5 w-2.5" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t("Dismiss captured page context")}
-                      className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
-                      onClick={() => {
-                        setPageContext(null);
-                        try {
-                          if (typeof (window as any).lastCapturedDOM === 'string') {
-                            (window as any).lastCapturedDOM = '';
-                          }
-                        } catch (_) {}
-                      }}
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                )}
-                {captureFallback && (
-                  <div
-                    className={`${statusPillBaseClass} ${getStatusToneClass('warn')} pr-1.5`}
-                    title={captureFallback.detail}
-                  >
-                    <Image className="h-3 w-3 opacity-70" />
-                    <span className="max-w-[260px] truncate">{captureFallback.label}</span>
-                    <button
-                      type="button"
-                      aria-label={t('Dismiss page capture notice')}
-                      className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
-                      onClick={() => setCaptureFallback(null)}
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
+                    // The list button toggles: a second press closes the picker.
+                    onPickTab={() => { if (tabPicker !== null) setTabPicker(null); else void openTabPicker(); }}
+                    pickerOpen={tabPicker !== null}
+                    onDismiss={dismissPageContext}
+                    pickTabLabel={t('Pick a different browser tab')}
+                    dismissLabel={t('Dismiss captured page context')}
+                  />
                 )}
               </div>
               </ChromeFold>
@@ -11159,42 +11166,23 @@ Provide only the answer, nothing else.`;
               {/* Multi-tab picker — choose which open browser tab to capture. */}
               <ChromeFold show={tabPicker !== null} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-1 pb-1" testId="fold-tab-picker">
               {tabPicker !== null && (
-                <div className="relative no-drag mx-4 rounded-[12px] border border-white/10 bg-black/30 backdrop-blur-xl p-2 shadow-sm">
-                  <div className="flex items-center justify-between px-1 pb-1.5">
-                    <span className="text-[11px] font-medium overlay-text-primary">
-                      {tabPickerLoading ? t('Finding open tabs…') : t('Pick a tab to capture')}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={t("Close tab picker")}
-                      className="rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-white/10 transition-opacity"
-                      onClick={() => setTabPicker(null)}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                  {!tabPickerLoading && tabPicker.length === 0 && (
-                    <div className="px-1 py-1 text-[10px] overlay-text-muted">
-                      {t('No capturable tabs — is the browser open and the extension connected?')}
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-0.5 max-h-44 overflow-y-auto">
-                    {tabPicker.map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => { void pickTab(t.id); }}
-                        className="text-left px-2 py-1.5 rounded-md text-[11px] overlay-text-primary hover:bg-white/10 transition-colors"
-                        title={t.url}
-                      >
-                        <span className="block truncate">{t.title || t.url}</span>
-                        <span className="block truncate text-[9px] overlay-text-muted">
-                          {hostnameFromUrl(t.url) || t.url}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <TabPicker
+                  tabs={tabPicker}
+                  loading={tabPickerLoading}
+                  currentUrl={pageContext?.url}
+                  hostOf={hostnameFromUrl}
+                  onPick={(tabId) => { void pickTab(tabId); }}
+                  onClose={() => setTabPicker(null)}
+                  onRetry={() => { void openTabPicker(); }}
+                  labels={{
+                    title: t('Pick a tab to capture'),
+                    loading: t('Finding open tabs…'),
+                    empty: t('No capturable tabs — is the browser open and the extension connected?'),
+                    close: t('Close tab picker'),
+                    retry: t('Try again'),
+                    current: t('Captured'),
+                  }}
+                />
               )}
               </ChromeFold>
 
@@ -11304,6 +11292,17 @@ Provide only the answer, nothing else.`;
                   <OverlayBanner
                     className="mx-4"
                     /*
+                      A blocked permission and a capture that gave up are
+                      errors: nothing is being heard and nothing will change
+                      until the user acts. A stuck channel main is still
+                      retrying (a silent mic, an expired grant) is a warning.
+                    */
+                    tone={
+                      systemAudioWarning.kind === 'screen-recording-permission' || systemAudioWarning.terminal
+                        ? 'error'
+                        : 'warning'
+                    }
+                    /*
                       The title is an i18n KEY shipped from the main process
                       (main.ts `permissionTitleKey`) so it stays localisable
                       while naming the fault the body no longer repeats.
@@ -11402,48 +11401,186 @@ Provide only the answer, nothing else.`;
               {/* PR #173: STT Not Configured Warning Banner */}
               <ChromeFold show={sttNotConfigured} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-not-configured">
               {sttNotConfigured && (
-                <div className="flex items-center justify-between mx-4 px-3.5 py-2.5 bg-orange-500/10 border border-orange-500/20 rounded-[12px] shadow-sm relative no-drag group/stt-warning">
-                  <div className="flex flex-col gap-1 pr-3">
-                    <div className="flex items-center gap-2 text-[12.5px] text-orange-600 dark:text-orange-400/90 font-medium leading-tight">
-                      <div className="shrink-0 p-1 bg-orange-500/20 rounded-full">
-                        <svg
-                          className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2.5}
-                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                          />
-                        </svg>
-                      </div>
-                      <span>{t('Transcription Not Configured')}</span>
-                    </div>
-                    <p className="text-[11px] text-orange-600/70 dark:text-orange-400/60 leading-snug pl-[26px]">
-                      {t('No STT provider selected. Open Settings → Audio to pick one.')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => {
-                        window.electronAPI?.toggleSettingsWindow?.();
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 text-orange-700 dark:text-orange-500 text-[11px] font-semibold transition-all active:scale-95 border border-orange-500/20 shadow-sm"
+                /*
+                  The shared banner, as an error: with no provider nothing is
+                  transcribed at all. It was a hand-rolled orange box (orange
+                  text on an orange wash, a dismiss ✕ that only showed on
+                  hover). Title and sentence are the existing keys.
+                */
+                <OverlayBanner
+                  className="mx-4"
+                  tone="error"
+                  icon={<MicOff strokeWidth={2.2} />}
+                  title={t('Transcription Not Configured')}
+                  message={t('No STT provider selected. Open Settings → Audio to pick one.')}
+                  onDismiss={() => setSttNotConfigured(false)}
+                  dismissLabel={t('Dismiss')}
+                  actions={
+                    <OverlayBannerButton
+                      variant="primary"
+                      // Settings › Audio, which is where the sentence sends
+                      // the user. This used to open the quick-toggles popup.
+                      onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
                     >
                       {t('Open Settings')}
-                    </button>
-                    <button
-                      onClick={() => setSttNotConfigured(false)}
-                      className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-orange-600/50 hover:text-orange-700 dark:text-orange-500/50 dark:hover:text-orange-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/stt-warning:opacity-100"
-                      title={t("Dismiss")}
+                    </OverlayBannerButton>
+                  }
+                />
+              )}
+              </ChromeFold>
+
+              {/* Transcription failed or is reconnecting. These two used to
+                  be pills in the status row ("STT needs attention", "STT
+                  reconnecting"); warnings and errors are banners now (owner
+                  request), so each says what happened in a sentence and the
+                  failure carries the fix. */}
+              <ChromeFold show={!!sttStatusBanner} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-status">
+              {sttStatusBanner && (
+                <OverlayBanner
+                  className="mx-4"
+                  tone={sttStatusBanner.tone}
+                  icon={sttStatusBanner.tone === 'error' ? <MicOff strokeWidth={2.2} /> : <RefreshCw strokeWidth={2.2} className="ov-banner-spin" />}
+                  title={sttStatusBanner.title}
+                  message={sttStatusBanner.message}
+                  actions={sttStatusBanner.tone === 'error' ? (
+                    <OverlayBannerButton
+                      variant="primary"
+                      onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
                     >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
+                      {t('Open Settings')}
+                    </OverlayBannerButton>
+                  ) : undefined}
+                />
+              )}
+              </ChromeFold>
+
+              {/* A page capture (Cmd/Ctrl+Shift+Y) fell back to a screenshot,
+                  or captured nothing. It used to be an amber pill whose
+                  explanation lived in a tooltip; the banner shows the
+                  explanation. Label and detail are main's own strings
+                  (electron/services/pageCaptureFallback.ts). */}
+              <ChromeFold show={!!captureFallback} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-capture-fallback">
+              {captureFallback && (
+                <OverlayBanner
+                  className="mx-4"
+                  // "Capture failed — nothing was attached" is the one case
+                  // where neither the page nor a screenshot got through.
+                  tone={captureFallback.label.startsWith('Capture failed') ? 'error' : 'warning'}
+                  icon={<Image strokeWidth={2.2} />}
+                  title={captureFallback.label}
+                  message={captureFallback.detail}
+                  onDismiss={() => setCaptureFallback(null)}
+                  dismissLabel={t('Dismiss page capture notice')}
+                />
+              )}
+              </ChromeFold>
+
+              {/* The two stealth-typing banners sit up here with the rest
+                  (owner request); they used to sit above the prompt input. */}
+              {/* Stealth hotkey conflict banner — shown if globalShortcut.register()
+                                  failed for chat:focusInput (typically because the configured
+                                  activation hotkey is already claimed by another app or by the
+                                  OS). Click-to-activate still works (mousedown listener is
+                                  independent of the hotkey), but the user can rebind in Settings. */}
+              <ChromeFold show={!!stealthHotkeyConflict} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-hotkey-conflict">
+              {stealthHotkeyConflict && (
+                /*
+                  The shared banner, as a warning: clicking the input still
+                  activates stealth typing. It was a hand-rolled rose box
+                  that printed the raw accelerator ("CommandOrControl+
+                  Shift+Space"); the keys are now drawn as the platform's
+                  own keycaps, the way the input placeholder draws them.
+                  No title: the two halves of the sentence are the existing
+                  keys, and they do not split into a heading and a body.
+                */
+                <OverlayBanner
+                  className="mx-4"
+                  data-stealth-ignore="true"
+                  icon={<Keyboard strokeWidth={2.2} />}
+                  message={
+                    <>
+                      {t('Stealth typing hotkey')}{' '}
+                      <span className="ov-banner-keys">
+                        {acceleratorToKeys(stealthHotkeyConflict).map((key, i) => (
+                          <kbd key={i}>{key}</kbd>
+                        ))}
+                      </span>{' '}
+                      {t('is already in use. Click the input to activate, or rebind in Settings.')}
+                    </>
+                  }
+                  onDismiss={() => setStealthHotkeyConflict(null)}
+                  dismissLabel={t('Dismiss')}
+                  dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
+                  actions={
+                    <OverlayBannerButton
+                      variant="primary"
+                      onClick={() => window.electronAPI.openSettingsTab('keybinds')}
+                      data-stealth-ignore="true"
+                    >
+                      {t('Rebind')}
+                    </OverlayBannerButton>
+                  }
+                />
+              )}
+              </ChromeFold>
+
+              {/* Stealth tap permission banner — shown only when the user
+                                  pressed the activation hotkey but Accessibility wasn't
+                                  granted. macOS-only: Accessibility is a TCC concept that
+                                  doesn't exist on Windows, and the underlying CGEventTap
+                                  Rust module ships only in the Darwin binary. Gating here
+                                  is belt-and-suspenders on top of the native-side gate. */}
+              <ChromeFold show={isMac && stealthPermissionMissing} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-accessibility">
+              {isMac && stealthPermissionMissing && (
+                <OverlayBanner
+                  className="mx-4"
+                  data-stealth-ignore="true"
+                  /*
+                    Unified onto the same primitive as the system-audio
+                    banner above: same surface, radius, padding, type ramp,
+                    icon chip, primary/secondary button pair and inline ✕.
+                    Previously this was a second design for the same job
+                    (bare sentence + three flat amber buttons + a "×" glyph).
+                    The heading is new; the sentence below it is byte-for-byte
+                    the existing key, which has shipped ja/ru translations.
+                  */
+                  title={t('Accessibility Access Needed')}
+                  message={t('Stealth typing needs Accessibility access. Grant it in System Settings, then restart Natively.')}
+                  onDismiss={() => setStealthPermissionMissing(false)}
+                  dismissLabel={t('Dismiss')}
+                  dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
+                  actions={
+                    <>
+                      <OverlayBannerButton
+                        variant="primary"
+                        onClick={() => window.electronAPI.stealthTapOpenSettings()}
+                        title={t('Open macOS Accessibility privacy settings')}
+                        data-stealth-ignore="true"
+                      >
+                        {t('Open Settings')}
+                      </OverlayBannerButton>
+                      <OverlayBannerButton
+                        variant="secondary"
+                        onClick={async () => {
+                          if (appRestarting) return; // in-flight guard
+                          setAppRestarting(true);
+                          try {
+                            await window.electronAPI?.restartApp?.();
+                          } catch (err) {
+                            console.warn('[UI] restart-app failed:', err);
+                            setAppRestarting(false);
+                          }
+                        }}
+                        disabled={appRestarting}
+                        aria-busy={appRestarting}
+                        data-stealth-ignore="true"
+                        title={t('Accessibility grants often need a full app restart to take effect')}
+                      >
+                        {appRestarting ? t('Restarting…') : t('Restart Now')}
+                      </OverlayBannerButton>
+                    </>
+                  }
+                />
               )}
               </ChromeFold>
 
@@ -11969,102 +12106,6 @@ Provide only the answer, nothing else.`;
                   isLightTheme={isLightTheme}
                   t={t}
                 />
-
-                {/* Stealth hotkey conflict banner — shown if globalShortcut.register()
-                                    failed for chat:focusInput (typically because the configured
-                                    activation hotkey is already claimed by another app or by the
-                                    OS). Click-to-activate still works (mousedown listener is
-                                    independent of the hotkey), but the user can rebind in Settings. */}
-                <ChromeFold show={!!stealthHotkeyConflict} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pb-2" testId="fold-hotkey-conflict">
-                {stealthHotkeyConflict && (
-                  <div
-                    className="px-3 py-2 rounded-xl border border-rose-400/40 bg-rose-500/10 text-[11px] flex items-center gap-2"
-                    data-stealth-ignore="true"
-                  >
-                    <span className="overlay-text-primary flex-1">
-                      {t('Stealth typing hotkey')}{' '}
-                      <kbd className="px-1 py-0.5 rounded bg-white/10 font-mono text-[10px]">
-                        {stealthHotkeyConflict}
-                      </kbd>{' '}
-                      {t('is already in use. Click the input to activate, or rebind in Settings.')}
-                    </span>
-                    <button
-                      onClick={() => window.electronAPI.openSettingsTab('keybinds')}
-                      className="px-2 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap"
-                      data-stealth-ignore="true"
-                    >
-                      {t('Rebind')}
-                    </button>
-                    <button
-                      onClick={() => setStealthHotkeyConflict(null)}
-                      className="px-1.5 py-1 rounded-md hover:bg-white/10 transition-colors text-[11px] overlay-text-muted"
-                      aria-label={t("Dismiss")}
-                      data-stealth-ignore="true"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-                </ChromeFold>
-
-                {/* Stealth tap permission banner — shown only when the user
-                                    pressed the activation hotkey but Accessibility wasn't
-                                    granted. macOS-only: Accessibility is a TCC concept that
-                                    doesn't exist on Windows, and the underlying CGEventTap
-                                    Rust module ships only in the Darwin binary. Gating here
-                                    is belt-and-suspenders on top of the native-side gate. */}
-                <ChromeFold show={isMac && stealthPermissionMissing} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pb-2" testId="fold-accessibility">
-                {isMac && stealthPermissionMissing && (
-                  <OverlayBanner
-                    data-stealth-ignore="true"
-                    /*
-                      Unified onto the same primitive as the system-audio
-                      banner above: same surface, radius, padding, type ramp,
-                      icon chip, primary/secondary button pair and inline ✕.
-                      Previously this was a second design for the same job
-                      (bare sentence + three flat amber buttons + a "×" glyph).
-                      The heading is new; the sentence below it is byte-for-byte
-                      the existing key, which has shipped ja/ru translations.
-                    */
-                    title={t('Accessibility Access Needed')}
-                    message={t('Stealth typing needs Accessibility access. Grant it in System Settings, then restart Natively.')}
-                    onDismiss={() => setStealthPermissionMissing(false)}
-                    dismissLabel={t('Dismiss')}
-                    dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
-                    actions={
-                      <>
-                        <OverlayBannerButton
-                          variant="primary"
-                          onClick={() => window.electronAPI.stealthTapOpenSettings()}
-                          title={t('Open macOS Accessibility privacy settings')}
-                          data-stealth-ignore="true"
-                        >
-                          {t('Open Settings')}
-                        </OverlayBannerButton>
-                        <OverlayBannerButton
-                          variant="secondary"
-                          onClick={async () => {
-                            if (appRestarting) return; // in-flight guard
-                            setAppRestarting(true);
-                            try {
-                              await window.electronAPI?.restartApp?.();
-                            } catch (err) {
-                              console.warn('[UI] restart-app failed:', err);
-                              setAppRestarting(false);
-                            }
-                          }}
-                          disabled={appRestarting}
-                          aria-busy={appRestarting}
-                          data-stealth-ignore="true"
-                          title={t('Accessibility grants often need a full app restart to take effect')}
-                        >
-                          {appRestarting ? t('Restarting…') : t('Restart Now')}
-                        </OverlayBannerButton>
-                      </>
-                    }
-                  />
-                )}
-                </ChromeFold>
 
                 {/* data-stealth-engage marks this subtree as
                                     the ONLY clickable region that engages the

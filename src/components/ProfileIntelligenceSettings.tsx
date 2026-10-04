@@ -100,8 +100,6 @@ const PI_CSS = `
         --pi-accent-icon: var(--periwinkle-400);
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--periwinkle-400);
-        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-300) 30%, transparent);
         --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
         --pi-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
         /* Expo-out. Almost all of the distance is covered in the first third,
@@ -208,8 +206,6 @@ const PI_CSS = `
         --pi-accent-icon: var(--periwinkle-700);
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--periwinkle-700);
-        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
         --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
         --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
         /*
@@ -926,6 +922,50 @@ const PI_CSS = `
         --legacy-action-bg: #496ae6;
         --legacy-action-hover: #5a7cf7;
         --legacy-action-fg: #ffffff;
+    }
+    /*
+      The panel's primary actions (Open Identity, Analyse Role, Research Now,
+      Generate Letter, and Role Insight's out-of-date Re-analyse) are the
+      onboarding's "Start using Natively" glass: variant="lavender" + .lg-sm
+      .lg-wide, fed the same per-theme colours. The values are a COPY of
+      WELCOME_BUTTON_TOKENS (src/components/onboarding/welcomeButtonTokens.ts),
+      written out here because this stylesheet is read as plain text by the
+      CSS checks and the Role Insight harness, and because Role Insight's
+      buttons live in the premium tree with no theme prop to pick a token set
+      by. Change one, change the other.
+
+      Dark is the toggle blue at full strength with a white label; light is a
+      pale tint of the same hue with a deep label (white on it runs ~1.3:1).
+
+      The box is the tinted pill these replaced: 32px tall, 20px side padding
+      plus the 1px border it had. The glow is the onboarding's, brought in for
+      a pill two thirds the height: at 14px/30px it reached past the bottom
+      edge of the notice card the Re-analyse button sits in.
+    */
+    .lg-button.lg-sm.pi-action-lg {
+        --lg-pill-h: 32px;
+        padding: 0 21px;
+        --lg-lav-bg: #6688F5;
+        --lg-lav-hover: #7594F7;
+        --lg-lav-fg: #FFFFFF;
+        --lg-lav-rim: rgba(255,255,255,0.30);
+        --lg-lav-glow: rgba(102,136,245,0.55);
+        box-shadow:
+            inset 0 -1px 0 var(--lg-lav-under, rgba(90,43,176,0.14)),
+            0 1px 2px var(--lg-lav-drop, rgba(78,46,150,0.10)),
+            0 9px 20px -9px var(--lg-lav-glow);
+    }
+    .pi-root[data-theme='light'] .lg-button.lg-sm.pi-action-lg {
+        --lg-lav-bg: rgba(102,136,245,0.28);
+        --lg-lav-hover: rgba(102,136,245,0.40);
+        --lg-lav-fg: #2A44A6;
+        --lg-lav-rim: rgba(255,255,255,0.78);
+        --lg-rim-2: rgba(102,136,245,0.32);
+        --lg-rim-3: rgba(102,136,245,0.14);
+        --lg-lens-rim-soft: rgba(102,136,245,0.28);
+        --lg-lav-glow: rgba(102,136,245,0.42);
+        --lg-lav-under: rgba(40,70,180,0.14);
+        --lg-lav-drop: rgba(40,60,150,0.10);
     }
 
     /*
@@ -3179,13 +3219,13 @@ export function ProfileIntelligenceSettings({
                                 Hiring strategy, interview focus, salary signals and culture for <strong style={{ color: 'var(--pi-primary)' }}>{companyName}</strong>.
                             </div>
                         </div>
-                        <button
-                            className="pi-pill-btn pi-press"
-                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
                             onClick={() => doCompanyResearch(false)}
                         >
                             Research Now
-                        </button>
+                        </LiquidGlassButton>
                     </div>
                 )}
                 {(companyResearching || aotResearching) && companyName && (
@@ -3665,13 +3705,13 @@ export function ProfileIntelligenceSettings({
                                 Generate a personalised cover letter from your resume and this job description.
                             </div>
                         </div>
-                        <button
-                            className="pi-pill-btn pi-press"
-                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
                             onClick={() => doGenerate(false)}
                         >
                             Generate Letter
-                        </button>
+                        </LiquidGlassButton>
                     </div>
                 )}
 
