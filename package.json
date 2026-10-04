@@ -3,7 +3,7 @@
   "version": "2.9.1",
   "main": "dist-electron/electron/main.js",
   "engines": {
-    "node": ">=22.6.0"
+    "node": ">=22.13.0"
   },
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
@@ -300,7 +300,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
-    "@electron/rebuild": "^4.0.3",
+    "@electron/rebuild": "^4.2.0",
     "@napi-rs/cli": "^3.5.1",
     "@playwright/test": "^1.63.0",
     "@types/better-sqlite3": "^7.6.13",
@@ -347,7 +347,7 @@
     "axios": "^1.20.0",
     "better-sqlite3": "12.11.1",
     "electron-store": "^8.1.0",
-    "electron-updater": "^6.7.3",
+    "electron-updater": "^6.8.9",
     "form-data": "^4.0.6",
     "framer-motion": "^12.29.2",
     "groq-sdk": "^0.37.0",
