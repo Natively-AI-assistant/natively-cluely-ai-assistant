@@ -585,3 +585,21 @@ preferences ("I'm staying in Porto, so remote within Europe is what I'm working 
 on Rotterdam and remote and come back to you"; 9.3 → 3.4 and 9.9 → 6.2), which it had left alone in the control
 run. Whether that is this change's doing (more material in view of the pass) or the pass's run-to-run variation is
 not established: 19 answers were replaced here against 20 in the control.
+
+### E2 — a second rule, for the blind holdout (Evin, 2026-10-03 20:50 UTC: "Run the blind holdout")
+
+E2 failed line 4 of its first rule and by that rule the holdout was not to be run. Evin chose to run it anyway. This
+rule replaces nothing: the first verdict stands as recorded. It is written before any holdout row of E2 exists, on
+what the change itself controls (delivery and the generator's drafts), with the shown answers as a guard.
+
+Run `er-holdout-s4`: the holdout's 40 rows of Looking for work and Technical Interview, branch
+`fix/er-profile-whole` (`fea39964`). Control: the same 40 rows of `er-holdout-s3`. Aggregates only, judged blind.
+
+1. Rows that need a profile fact (13): every needed fact in the prompt on at least 11 (control: 5).
+2. No claim-pass request cut; no string of the other profile in any prompt or answer.
+3. Drafts, all 40 rows, paired with the control's drafts: not below −0.15; the profile-fact rows' drafts not lower.
+4. Shown answers, all 40 rows, paired: not below −0.15; hard fails not up.
+5. Heard first word, median: not more than 150 ms above the control's.
+
+All five hold → E2 is confirmed on the holdout for what it controls, and stays on its branch for Evin's decision.
+Any line fails → E2 is not kept, finally.
