@@ -1211,3 +1211,19 @@ what these two changes buy is in the probes (typed multi-file misses 6 of 9 → 
 Observation, not explained: on heard turns in the document-grounded modes the time from the hotkey to the provider
 request fell from a median of ~500 ms (p90 1,222) on m1/m1r/m2 to 24 ms; prompt size and quality are unchanged. The
 step that used to take that time was not identified from the logs.
+
+### E13 — data and verdict (2026-10-04; er-dev-e13 = `cand/e13` 0c04c519, direct DeepSeek; cc judge; `report/rule-pair.mjs er-dev-e12b er-dev-e13`)
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. Rows with every needed fact in the prompt ≥ control + 3 | 204 → 209 of 212 | yes |
+| 2. Rows that gained their evidence: gain ≥ +1.0 | n 5: 5.66 → 8.70, +3.03; hard 1 → 0 | yes |
+| 3. Need no document: mean ≥ −0.30; hard ≤ +2 | 8.36 → 8.45; 7 → 5 | yes |
+| 4. All rows: mean ≥ −0.10; hard ≤ +3 | 8.66 → 8.72; 20 → 19 | yes |
+| 5. First word: heard ≤ +100 ms; typed ≤ +150 ms | 1,157 → 1,085; 1,111 → 1,046 | yes |
+
+**Verdict: KEEP.** Candidate branch is now `cand/e13`.
+Noise reading under the cc judge (same build twice, er-dev-e12 vs er-dev-e12b): all rows 8.70 vs 8.66, hard 23 vs 20;
+single modes swing by up to ±0.7 on 30 rows. Sales alternates between ~8.6 / 1 hard fail and ~7.85 / 7 hard fails
+across runs (e12 7.87, e12b 8.58, e13 7.84) on character-identical prompts: the same pricing or which-list-is-current
+question is computed right in one run and wrong in the next (SALES-012, -020, -022, -028, -029). That is the
+generator's own variance on multi-step sums and source precedence, not state; it is the next class to work on.
