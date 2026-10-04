@@ -304,8 +304,18 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   // that number in front of me". No claim is added, exactly as below.
   const smallCorpus = typeof req.attachedCorpusTokens === 'number'
     && req.attachedCorpusTokens > 0 && req.attachedCorpusTokens <= SMALL_CORPUS_MAX_TOKENS;
+  // A PACK THAT FITS is read on such a turn too (2026-10-04). When packs up to
+  // WHOLE_PACK_MAX_TOKENS began to be handed over whole, a turn the classifier
+  // answers from general knowledge was left reading nothing from them. Measured
+  // on main: 10 of 333 benchmark turns, in General, Sales, Team Meet, Recruiting
+  // and Looking for work ("They need the NetSuite link and SSO. Can both be had
+  // on Operations?" → "I'll confirm how the NetSuite link and SSO work", with
+  // the integration matrix loaded and unread). The cost is the pack's tokens on
+  // every such turn of a mode that has one.
+  const packFits = typeof req.attachedCorpusTokens === 'number'
+    && req.attachedCorpusTokens > 0 && req.attachedCorpusTokens <= WHOLE_PACK_MAX_TOKENS;
   const sourcePrimaryTurn = cls.path === 'FAST' && !cls.shouldRetrieve
-    && (policy.attachedMaterialIsPrimary === true || smallCorpus)
+    && (policy.attachedMaterialIsPrimary === true || smallCorpus || packFits)
     && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
     && !cls.questionTypes.includes('META_REQUEST')
     && policy.retrievalPolicy.enabled

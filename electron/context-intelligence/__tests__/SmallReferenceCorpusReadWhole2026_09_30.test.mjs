@@ -66,9 +66,11 @@ describe('decide(): a FAST turn reads a small corpus in every mode, without a cl
       if (d.retrievalPlan.path === 'FAST') assert.ok(!d.claimRequirements.some((c) => c.claimType === 'DOCUMENT_FACT'), 'no document claim → no absence notice');
     });
   }
-  test('a large corpus keeps the classifier\'s fast path (non-primary modes)', () => {
+  // 2026-10-04: "large" now means larger than a pack that fits the prompt (WHOLE_PACK_MAX_TOKENS, 12,000). This test
+  // used 9,000, which is such a pack and is now read on a fast turn too (LoadedPackReachesEveryTurn2026_10_04).
+  test('a corpus too large to hand over whole keeps the classifier\'s fast path (non-primary modes)', () => {
     for (const modeId of ['general', 'sales', 'team-meet', 'call-center']) {
-      const d = decide(req(modeId, 'What is a mutex?', { attachedCorpusTokens: 9000 }));
+      const d = decide(req(modeId, 'What is a mutex?', { attachedCorpusTokens: 19000 }));
       assert.equal(d.retrievalPlan.shouldRetrieve, false, modeId);
     }
   });
