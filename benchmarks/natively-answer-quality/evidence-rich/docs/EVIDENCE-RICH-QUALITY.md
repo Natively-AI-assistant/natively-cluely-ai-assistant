@@ -436,6 +436,10 @@ infer that from dates.
 
 ## 15. Follow-up after Evin's decisions (2026-10-03, evening)
 
+**Later on 2026-10-04:** the claim-authority change for a mode's own whole files (E8 (a), Recruiting) landed on
+local main as `efc126a9`; the fast-path change (E8 (b)) did not. Run-to-run variation was measured: two runs of
+one build differ by about ±0.16 on the mean and a handful of hard fails (`ITERATIONS-ER.md`).
+
 **Main measured, 2026-10-04 05:00 UTC (`ITERATIONS-ER.md`, M1):** main `54606ef2`, with all four changes, scores 8.58
 over the 513 rows (kept build 7.44) and 8.54 on the blind holdout (kept build 7.40, +1.14 ±0.42), hard fails 39 → 20.
 Rows that need no document are lower than on the kept build (8.38 → 8.06, hard fails 4 → 7).
