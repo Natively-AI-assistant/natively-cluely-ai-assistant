@@ -5,7 +5,7 @@ import fs from "node:fs"
 import { app, desktopCapturer, screen, systemPreferences } from "electron"
 import { v4 as uuidv4 } from "uuid"
 import util from "util"
-import sharp from "sharp"
+import sharp, { type OverlayOptions } from "sharp"
 import { exec as execShell } from "child_process"
 
 // Module-level: promisified shell exec created once per process lifetime.
@@ -379,7 +379,7 @@ async function stitchImages(captures: DisplayCapture[], selection: Electron.Rect
   console.log(`[ScreenshotHelper] Output dimensions: ${outputWidth}x${outputHeight}`);
   
   // Process each capture: resize to fit the output scale
-  const composites: sharp.OverlayOptions[] = [];
+  const composites: OverlayOptions[] = [];
   
   try {
     for (const capture of captures) {

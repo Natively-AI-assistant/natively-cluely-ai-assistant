@@ -8,7 +8,26 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const SQLITE_VEC_VERSION = '0.1.7-alpha.2';
+// The version comes from package-lock.json, never from a constant here. sqlite-vec
+// pins its platform packages to its own exact version, so a platform package that
+// drifts from the JS wrapper is a mismatch. A hardcoded '0.1.7-alpha.2' stayed
+// behind when the lockfile moved to 0.1.9: the host arch got 0.1.9 from npm while
+// the cross-arch packages fetched here stayed on the old build (found 2026-10-04,
+// an Intel build made on Apple Silicon).
+const lockfile = require('../package-lock.json');
+const SQLITE_VEC_VERSION = lockfile?.packages?.['node_modules/sqlite-vec']?.version;
+if (!SQLITE_VEC_VERSION) {
+  throw new Error('[ensure-sqlite-vec] Could not read the sqlite-vec version from package-lock.json.');
+}
+
+/** Version of an installed package, or null when it is absent or unreadable. */
+function installedVersion(pkgDir) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf-8')).version || null;
+  } catch {
+    return null;
+  }
+}
 
 const packages = [
   'sqlite-vec-darwin-arm64',
@@ -24,12 +43,22 @@ const packages = [
 
 for (const pkg of packages) {
   const pkgDir = path.join(__dirname, '..', 'node_modules', pkg);
-  if (fs.existsSync(pkgDir)) {
-    console.log(`[ensure-sqlite-vec] ${pkg} already present, skipping.`);
+  const present = installedVersion(pkgDir);
+  if (present === SQLITE_VEC_VERSION) {
+    console.log(`[ensure-sqlite-vec] ${pkg}@${present} already present, skipping.`);
     continue;
   }
 
-  console.log(`[ensure-sqlite-vec] ${pkg} missing — fetching...`);
+  if (fs.existsSync(pkgDir)) {
+    // Present but the wrong build (or a directory with no package.json): replace it,
+    // or the pack ships an extension that does not match the sqlite-vec wrapper.
+    console.log(
+      `[ensure-sqlite-vec] ${pkg} is ${present || 'unreadable'}, lockfile wants ${SQLITE_VEC_VERSION} — replacing...`
+    );
+    fs.rmSync(pkgDir, { recursive: true, force: true });
+  } else {
+    console.log(`[ensure-sqlite-vec] ${pkg} missing — fetching...`);
+  }
   try {
     // Use npm pack to download the tarball, then extract it into node_modules
     const tmpDir = os.tmpdir();
@@ -59,7 +88,7 @@ for (const pkg of packages) {
 // inspects darwin members, a Windows artifact is not being produced by this run, and
 // this fetch has a history of transient registry flakiness.
 const stillMissing = packages.filter(
-  (pkg) => !fs.existsSync(path.join(__dirname, '..', 'node_modules', pkg))
+  (pkg) => installedVersion(path.join(__dirname, '..', 'node_modules', pkg)) !== SQLITE_VEC_VERSION
 );
 const fatalMissing = stillMissing.filter(
   (pkg) => pkg.startsWith('sqlite-vec-darwin-') && process.platform === 'darwin'

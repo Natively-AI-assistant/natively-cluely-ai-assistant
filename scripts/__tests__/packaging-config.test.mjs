@@ -165,3 +165,81 @@ test('committed productName stays the disguise alias (release builds use it verb
       `alias); package-app.js derives per-platform names from disguise-name.cjs at build time`
   );
 });
+
+test('the default mac build makes a DMG, and only on an electron-builder whose DMG step is fixed', () => {
+  // THE REGRESSION THIS GUARDS (v2.9.1): electron-builder 26.8.1's DMG step dropped
+  // the Electron Framework binary from large apps and reported success
+  // (electron-userland/electron-builder#9706). The fix is in the dmg-builder 1.2.3
+  // toolset, first shipped by electron-builder 26.14.0. While that step was broken
+  // the DMG was built by a plain `hdiutil create`, which has no install window
+  // (no background, no icon positions) — so both halves are pinned here: the dmg
+  // target stays on, and the builder stays at or above the fixed version.
+  const targets = pkg.build?.mac?.target ?? [];
+  for (const kind of ['zip', 'dmg']) {
+    const t = targets.find((x) => x.target === kind);
+    assert.ok(t, `build.mac.target must include "${kind}"`);
+    assert.deepEqual([...t.arch].sort(), ['arm64', 'x64'], `mac ${kind} target must build both arches`);
+  }
+
+  const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package-lock.json'), 'utf8'));
+  const locked = lock.packages?.['node_modules/dmg-builder']?.version;
+  assert.ok(locked, 'package-lock.json must pin dmg-builder');
+  const [major, minor] = locked.split('.').map(Number);
+  assert.ok(
+    major > 26 || (major === 26 && minor >= 14),
+    `dmg-builder is locked at ${locked}; the DMG step silently drops files before 26.14.0`
+  );
+});
+
+test('the mac DMG keeps the disguise alias as its file and volume name', () => {
+  // build.mac.artifactName carries the brand for the updater zip; without its own
+  // artifactName the DMG would inherit it, and without a title the mounted volume
+  // would be "<name> <version>". Both resolve from productName, which is the alias.
+  assert.equal(pkg.build?.dmg?.artifactName, '${productName}-${version}-${arch}.${ext}');
+  assert.equal(pkg.build?.dmg?.title, '${productName}');
+});
+
+test('sqlite-vec and its platform packages resolve to one version, and the fetch script follows the lockfile', () => {
+  // THE REGRESSION THIS GUARDS (found 2026-10-04): scripts/ensure-sqlite-vec.js
+  // hardcoded '0.1.7-alpha.2' and skipped any package that already existed, so
+  // after the lockfile moved to 0.1.9 an Intel build made on Apple Silicon shipped
+  // the 0.1.9 wrapper with a 0.1.7-alpha.2 extension. sqlite-vec pins its platform
+  // packages to its own exact version, so all of them must agree.
+  const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package-lock.json'), 'utf8'));
+  const wanted = lock.packages?.['node_modules/sqlite-vec']?.version;
+  assert.ok(wanted, 'package-lock.json must pin sqlite-vec');
+  for (const name of ['sqlite-vec-darwin-arm64', 'sqlite-vec-darwin-x64', 'sqlite-vec-windows-x64']) {
+    assert.equal(
+      lock.packages?.[`node_modules/${name}`]?.version,
+      wanted,
+      `${name} must be locked at the sqlite-vec version (${wanted})`
+    );
+  }
+
+  const src = fs.readFileSync(path.join(repoRoot, 'scripts', 'ensure-sqlite-vec.js'), 'utf8');
+  assert.ok(
+    !/SQLITE_VEC_VERSION\s*=\s*['"`]/.test(src),
+    'scripts/ensure-sqlite-vec.js must not hardcode a version; it reads package-lock.json'
+  );
+  assert.match(src, /package-lock\.json/, 'scripts/ensure-sqlite-vec.js must read the version from package-lock.json');
+});
+
+test('the macOS native build pins its deployment target instead of taking Rust\'s default', () => {
+  // THE REGRESSION THIS GUARDS (found 2026-10-04): Rust links x86_64-apple-darwin
+  // for macOS 10.12 by default. At that target the linker records the Swift
+  // overlay libraries as `@rpath/libswiftCoreMedia.dylib`, the app provides no
+  // such rpath, and the Intel slice of the audio module fails at dlopen — while
+  // the arm64 slice (default 11.0) works, so nothing fails on the build machine.
+  const src = fs.readFileSync(path.join(repoRoot, 'scripts', 'build-native.js'), 'utf8');
+  assert.match(
+    src,
+    /MACOSX_DEPLOYMENT_TARGET:\s*process\.env\.MACOSX_DEPLOYMENT_TARGET\s*\|\|\s*MACOS_DEPLOYMENT_TARGET/,
+    'scripts/build-native.js must pass MACOSX_DEPLOYMENT_TARGET to the napi build on macOS'
+  );
+  const pinned = /const MACOS_DEPLOYMENT_TARGET = '(\d+)\.(\d+)'/.exec(src);
+  assert.ok(pinned, 'scripts/build-native.js must define MACOS_DEPLOYMENT_TARGET');
+  assert.ok(
+    Number(pinned[1]) >= 11,
+    `MACOS_DEPLOYMENT_TARGET is ${pinned[1]}.${pinned[2]}; below 10.15 the Swift overlay libraries are linked by @rpath`
+  );
+});
