@@ -22,7 +22,7 @@ import * as app from '../../lib/app.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ER = path.join(HERE, '..');
-const OUT = path.join(ER, 'results', 'limits'); fs.mkdirSync(OUT, { recursive: true });
+const OUT = process.env.PROBE_OUT ? path.resolve(process.env.PROBE_OUT) : path.join(ER, 'results', 'limits'); fs.mkdirSync(OUT, { recursive: true });
 const PROBE_DIR = path.join(ER, 'evidence', 'limits-probe'); fs.mkdirSync(PROBE_DIR, { recursive: true });
 const [cmd, ...args] = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
