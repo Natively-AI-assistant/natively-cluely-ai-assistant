@@ -10,6 +10,7 @@ import { useToggleInit } from './settings/useToggleInit';
 import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
 import { useConfirmDialog } from './ui/ConfirmDialog';
@@ -2703,7 +2704,8 @@ export function ProfileIntelligenceSettings({
                 </div>
             )}
             {jdError && (
-                <div style={{ fontSize: 11, color: 'var(--pi-danger)', padding: '6px 10px', borderRadius: 6, background: 'var(--pi-danger-bg)' }}>
+                // The 10px keeps the scope note below from sitting 3px under this box.
+                <div style={{ fontSize: 11, color: 'var(--pi-danger)', padding: '6px 10px', borderRadius: 6, background: 'var(--pi-danger-bg)', marginBottom: 10 }}>
                     {jdError}
                 </div>
             )}
@@ -3027,10 +3029,9 @@ export function ProfileIntelligenceSettings({
         <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <h3 className="pi-section-label" style={{ margin: 0 }}>Tavily Search API</h3>
+                {/* The kit's green tag, as Settings › Intelligence says "Connected". */}
                 {hasStoredTavilyKey && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', padding: '2px 7px', borderRadius: 4, background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.20)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <Check size={9} strokeWidth={2.5} /> Connected
-                    </span>
+                    <LiquidGlassBadge variant="green" icon={<Check size={10} strokeWidth={2.5} />}>Connected</LiquidGlassBadge>
                 )}
             </div>
             <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '0 0 16px', lineHeight: 1.6 }}>
