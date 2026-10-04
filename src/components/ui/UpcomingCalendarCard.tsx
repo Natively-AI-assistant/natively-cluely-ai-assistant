@@ -640,6 +640,8 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
     // status check connects silently: nothing to celebrate.
     //   none ── fresh sign-in ──▶ waiting ── window focused + beat ──▶ hiding ── 200ms ──▶ none
     const [linkHold, setLinkHold] = useState<'none' | 'waiting' | 'hiding'>('none');
+    // A refused sign-in's message is showing under Connect calendar.
+    const [connectError, setConnectError] = useState(false);
     const [revealLinkedHeading, setRevealLinkedHeading] = useState(false);
     const handleConnected = (info: { fresh: boolean }) => {
         if (info.fresh) {
@@ -820,7 +822,10 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
                 </div>
             ) : (
                 <div key="linking" className="relative z-10 w-full flex flex-col items-center h-full pt-6 text-center">
-                    <DemoMeetingStack hiding={linkHold === 'hiding'} />
+                    {/* The sample steps aside for a refused sign-in's message, which
+                        needs the room under the button; it comes back when the
+                        message clears. */}
+                    <DemoMeetingStack hiding={linkHold === 'hiding' || connectError} />
                     {/* Connect calendar sits centred between the heading (ends at
                         70.3px) and the sample banner (starts at 142px): 17.85px
                         either side of its 36px. */}
@@ -833,12 +838,11 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
                     </div>
 
                     {/* Leaves with the heading, on the same quiet 200ms fade. */}
-                    {/* Above the sample meeting: a refused sign-in's message
-                        grows down over its top edge. */}
                     <div className={`relative z-[1] cal-link-exit${linkHold === 'hiding' ? ' is-hiding' : ''}`}>
                         <ConnectCalendarButton
                             className="-translate-x-0.5"
                             onConnect={handleConnected}
+                            onErrorChange={setConnectError}
                         />
                     </div>
                 </div>
