@@ -1052,3 +1052,39 @@ the repair ran in er-dev-m1, er-dev-m1r, er-dev-m2 and er-holdout-m1 (131 turns,
 Judge: gpt-6-astra (canonical, back since 11:02 UTC). If Astra stops answering mid-way, the rest is judged by Opus
 5.5 (provisional, never pooled) and the verdict waits for Astra.
 Descriptive only (not part of the rule): the 11 turns where `cut` lacked a needed fact the generator had.
+
+## E11 — a named fact is ranked above pieces that share only common words; the retriever picks only what fits; typed questions use the embedding search
+Written 2026-10-04, BEFORE any app measurement of this change. Owner's picks: "fix the scoring", "fit what's
+picked", "smart search for typed too".
+
+**Measured cause (CONTEXT-TRUNCATION-TESTS §4).** Typed, 6 × 2,100-token files: the right chunk was retrieved, but
+`computeDocumentAnswerabilityScore` gave it 0.07 (entity boost capped at 0.25 with common words — code, gate, depot —
+counted like the name; −0.18 "generic overview" because the word "summary" appeared in its first 220 chars) while
+five wrong chunks got 0.24; it ranked 5th and the packer fitted 4. A run with the embedding search on missed the
+same facts, so the typed lexical fallback was NOT the cause (my first explanation was wrong).
+
+**Change (branch `fix/typed-verbatim` in er-main):**
+(a) names in the question (capitalised phrases minus sentence-opening question words; tokens with digits) score
+0.15 per hit (cap 0.30), other shared words 0.05 (cap 0.15); (b) the overview penalty fires on an overview SECTION
+— section title, or a line in the first 220 chars that is itself an overview heading — not on the word inside a
+sentence; (c) the V3 mode port counts 120 est. tokens per item (the packer's tag) against the retriever's budget;
+(d) typed questions query the bundled embedder in a meeting too (env `NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1`
+restores the July hotfix).
+
+**Measurement.**
+1. Probes (`evidence-rich/limits/probe.mjs`, judge-free, AgentRouter → DeepSeek as for the main-build probes):
+   ref-count typed AND heard — sales 6×2100, 10×3000, 6×1900, 20×600, 5×3000; general 10×3000; ref-size typed general
+   12500/32000/64000 (7 positions); aggregate general 4000/11800/12500/32000.
+2. One dev run of the branch (`er-dev-e11`, 270 rows) — direct DeepSeek, because the main baselines er-dev-m1/m1r
+   used direct DeepSeek (recorded reason); another route would confound both delivery and first-word time.
+   Judge: Opus 5.5 (provisional), because m1/m1r were judged by Opus; never pooled; Astra re-review later.
+   Note: the branch also carries #2 (typed verbatim), #3 (output cap/notice) and E10 (repair cap); none changes what
+   retrieval puts in the generator's prompt except #2, which changes the typed question text.
+
+**Rule (KEEP = stays on the branch for Evin):**
+1. Probes: the typed named-fact misses (sales 6×2100: 2/3, sales 10×3000: 2/3, general 10×3000: 2/3 on main) → 0;
+   and no new miss anywhere in the probe set (heard and typed). Aggregate: not worse than main at any size.
+2. Dev run: needed-fact strings delivered to the generator prompt ≥ min(m1, m1r).
+3. Typed first word, median: ≤ max(m1, m1r) typed median + 150 ms.
+4. Opus quality: mean ≥ min(m1, m1r) − 0.05; hard fails ≤ max(m1, m1r) + 2.
+Failing 1, 2 or 4 → revert (a)–(c) and report; failing 3 alone → revert (d) only.
