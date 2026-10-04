@@ -1439,3 +1439,37 @@ touched, so a job description still cannot SUPPORT a claim about the candidate.
 Every line must hold. Lines 3–5 need the judge; this time they are read whatever lines 1–2 say.
 Unit tests before any app run: the shapes of D2-TI-009 ("count it from my CV … their experience bar") and TI-023 keep
 the whole job description and a non-zero item count; efc126a9's claim-authority tests still pass.
+
+## Autopilot baseline on 630 development rows (2026-10-05; `cand/e13b`, cc judge)
+| Partition | Rows | Mean | Hard fails |
+|---|---|---|---|
+| dev (er-dev-e13c) | 270 | 8.843 | 17 |
+| dev2 (er-dev2-e13c) | 360 | 8.722 | 31 |
+| pooled | 630 | 8.774 | 48 |
+772 points are lost in all; the 54 rows under 5 lose 333 of them. By condition: grounded_single 8.96, multi_source
+8.51, conflict_stale 8.76, missing_evidence 8.12, irrelevant_source 9.14, followup 9.11. Heard 8.70, typed 8.91.
+Every needed fact is in the prompt on 490 of 499 rows that need one; those 490 still hold 34 of the hard fails.
+**The claim pass on these runs** (120 rows edited, draft and shown both judged): 8.19 → 8.11, hard 17 → 11.
+missing_evidence 7.69 → 8.19 (hard 8 → 2); conflict_stale 8.48 → 7.37; multi_source 8.16 → 7.78; grounded_single
+8.29 → 8.04. **Twelve of the edits added "given two ways … needs confirming": 8.39 → 6.11.** In each the documents
+say which value is current (a version, an effective date, "supersedes") and the draft had given it: "30 days" became
+"45 days in one, 30 days in another"; "$47 per van" became "$47 on the current price list and $42 on the earlier one".
+The other 108 edits: 8.16 → 8.34.
+
+## E17 — the claim pass names a conflict only when the material does not settle it (rule written 2026-10-05, before any replay)
+**Change:** in `LIST_THEN_REWRITE` (claimVerifier.ts) the CONFLICT line asks for a conflict only when nothing in the
+material says which value holds now (not when one is marked current / newer / later, or the other earlier / superseded
+/ retired / draft, or one is the general rule and the other the specific case asked about); rule 3 adds that with no
+conflict the pass does not add a second value or turn a stated value into something to confirm. Wording:
+`replay-variants/e17-conflict.mjs`, fixed before the replay.
+**Measured by** `replay-claim-pass.mjs` on every row of er-dev-e13c + er-dev2-e13c whose turn ran the pass, cap 96,000
+(the app's), k 1: arm `e17-ctl` (the app's prompt) against arm `e17-conflict`. Both arms come from the replay; cc judge;
+a text equal to the draft or to what the app showed reuses that judgment.
+| # | Line | Bar |
+|---|---|---|
+| 1 | Replies in which the pass ADDS "two ways" | falls by at least 70 % against the control arm |
+| 2 | conflict_stale rows: effect of the pass (shown − draft) | ≥ control arm + 0.30; hard fails ≤ control arm |
+| 3 | All rows: effect of the pass | ≥ control arm; hard fails ≤ control arm |
+| 4 | Rows flagged source_conflict_ignored or stale_source_preferred | ≤ control arm + 1 |
+| 5 | missing_evidence rows: effect of the pass | ≥ control arm − 0.10 (the part of the pass that works is untouched) |
+Every line must hold; then the wording goes into the app and is confirmed on the next app run with the other candidates.
