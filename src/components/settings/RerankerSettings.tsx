@@ -1357,14 +1357,14 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 </div>
 
                 {catalogError && (
-                    <div className="aip-inline-warn flex items-start gap-2 pt-3" role="status">
+                    <div className="aip-inline-warn flex items-start gap-2 mt-3" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">{catalogError}</span>
                     </div>
                 )}
 
                 {status.provider === 'openrouter' && !status.eligible && (
-                    <div className="aip-inline-warn flex items-start gap-2 pt-3" role="status">
+                    <div className="aip-inline-warn flex items-start gap-2 mt-3" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">
                             {status.ineligibleMessage}{' '}
@@ -2171,7 +2171,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                                                 {/* License Acceptance Banner */}
                                                 {group.unacknowledgedLicense && (
-                                                    <div className="space-y-1.5 p-2 rounded bg-[var(--aip-btn-bg)] border border-[var(--aip-divider)] mt-1">
+                                                    <div className="space-y-1.5 p-2 rounded-[var(--aip-r-md)] bg-[var(--aip-btn-bg)] border border-[var(--aip-divider)] mt-1">
                                                         <p className="text-[10px] aip-muted">
                                                             {t('This model requires licence acceptance')} ({group.unacknowledgedLicense.spdx})
                                                             {group.unacknowledgedLicense.commercialUseRestricted ? ` — ${t('non-commercial use only')}` : ''}.
