@@ -661,3 +661,10 @@ uncommitted files in the main checkout were untouched (status identical before a
 rule above, with `ER_JUDGE=astra`. Agreement is reported; a disagreement is reported with the commit that would be
 reverted (E1 `9fce990b`, E5 `be676d88`), and nothing is reverted without Evin's word.
 E2 (`fix/er-profile-whole`, `fea39964`) is not landed; that decision is still open.
+
+### E2 landed on LOCAL main (Evin, 2026-10-04: "Land it now")
+
+`3540ed27` (a clean cherry-pick of `fea39964` onto `be676d88`; fast-forward; not pushed). On that commit:
+`typecheck:electron` clean, `test:intelligence` 2,874 pass / 0 fail, llm suite 5,768 pass / 0 fail. Not benchmarked
+on main. Landed with its caveat on record: on the holdout the rows that need no profile fact fell 0.31 (±0.60),
+hard fails 3 → 5. Undo: `git revert 3540ed27`. gpt-6-astra has not judged any E2 run; they are added to its chain.
