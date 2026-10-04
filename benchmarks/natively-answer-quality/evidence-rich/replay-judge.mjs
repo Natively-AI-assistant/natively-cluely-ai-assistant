@@ -21,7 +21,10 @@ const [cmd, ...args] = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? (args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true) : d; };
 const runs = String(opt('runs')).split(',').map((r) => path.resolve(HERE, '..', r));
 const body = (t) => splitGist(t).body.replace(/\s+/g, ' ').trim();
-const arm = (name) => { const m = {}; for (const r of readJsonl(path.join(HERE, 'results', 'replay', `${name}.jsonl`))) if (r.k === 0) m[`${r.run}|${r.id}`] = r; return m; };
+// --k N reads repetition N of an arm (default 0). An arm name may also carry it: "e9-ctl@1".
+const splitK = (name) => { const m = String(name).match(/^(.*)@(\d+)$/); return m ? { base: m[1], k: Number(m[2]) } : { base: String(name), k: Number(opt('k', 0)) }; };
+const tagOf = (name) => { const { base, k } = splitK(name); return k ? `${base}-k${k}` : base; };
+const arm = (name) => { const { base, k } = splitK(name); const m = {}; for (const r of readJsonl(path.join(HERE, 'results', 'replay', `${base}.jsonl`))) if (r.k === k) m[`${r.run}|${r.id}`] = r; return m; };
 const judged = (runName, draft = false) => Object.fromEntries(readJsonl(path.join(HERE, 'judge', 'out', 'base', `${runName}${draft ? '.draft' : ''}.${JUDGE}.jsonl`)).filter((j) => j.ok).map((j) => [j.benchmark_id, j]));
 
 /** Where a replayed text's judgment comes from: 'draft', 'app' (the text the app showed), or 'new'. */
@@ -34,21 +37,21 @@ function source(row, rec) {
 if (cmd === 'prep') {
   const name = opt('arm'); const A = arm(name);
   for (const dir of runs) {
-    const run = loadRun(dir); const runName = path.basename(dir); const out = path.join(HERE, 'results', `rp-${name}--${runName}`);
+    const run = loadRun(dir); const runName = path.basename(dir); const out = path.join(HERE, 'results', `rp-${tagOf(name)}--${runName}`);
     fs.mkdirSync(out, { recursive: true });
     for (const f of ['run.json', 'wire.jsonl', 'systems.json', 'ingest.jsonl', 'pi.jsonl']) { const dst = path.join(out, f); if (fs.existsSync(path.join(dir, f)) && !fs.existsSync(dst)) fs.symlinkSync(path.join(dir, f), dst); }
     const ids = []; const lines = [];
     for (const row of run.rows) { const rec = A[`${runName}|${row.benchmark_id}`]; if (source(row, rec) === 'new') { ids.push(row.benchmark_id); lines.push(JSON.stringify({ ...row, rendered_answer: rec.text, answer_differs_raw_vs_rendered: true })); } else lines.push(JSON.stringify(row)); }
     fs.writeFileSync(path.join(out, 'rows.jsonl'), lines.join('\n') + '\n');
     const counts = { draft: 0, app: 0, new: 0 }; for (const row of run.rows) counts[source(row, A[`${runName}|${row.benchmark_id}`])]++;
-    console.log(`${name} / ${runName}: ${JSON.stringify(counts)}`);
-    if (ids.length) console.log(`AQ_JUDGE=${JUDGE} node evidence-rich/judge/judge-er.mjs --set base --runs evidence-rich/results/rp-${name}--${runName} --ids ${ids.join(',')} --concurrency 4${opt('blind') ? ' --blind' : ''}`);
+    console.log(`${tagOf(name)} / ${runName}: ${JSON.stringify(counts)}`);
+    if (ids.length) console.log(`AQ_JUDGE=${JUDGE} node evidence-rich/judge/judge-er.mjs --set base --runs evidence-rich/results/rp-${tagOf(name)}--${runName} --ids ${ids.join(',')} --concurrency 4${opt('blind') ? ' --blind' : ''}`);
   }
 } else if (cmd === 'effect') {
   const names = [opt('a'), opt('b')]; const arms = names.map(arm); const R = [];
   for (const dir of runs) {
     const run = loadRun(dir); const runName = path.basename(dir); const S = judged(runName), D = judged(runName, true);
-    const N = names.map((n) => judged(`rp-${n}--${runName}`));
+    const N = names.map((n) => judged(`rp-${tagOf(n)}--${runName}`));
     for (const row of run.rows) {
       const s = S[row.benchmark_id]; if (!s) continue; const item = run.ds.byId[row.benchmark_id];
       const draft = (row.answer_differs_raw_vs_rendered ? D[row.benchmark_id] : s)?.official; if (!draft) continue;
