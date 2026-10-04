@@ -767,7 +767,7 @@ job description from the pack (it is present on typed turns), and 3 are planning
 | Recruiting, typed | 9 | 8 | 1 | 0 |
 | Technical Interview, heard | 22 | 20 | 2 | 0 |
 | Turns the classifier answers without retrieval, in General, Sales, Team Meet, Recruiting, Looking for work | 10 | 0 | 0 | 10 |
-| Every other mode and surface | 265 | 264 | 0 | 1 |
+| Every other mode and surface | 238 | 237 | 0 | 1 |
 
 * **(a)** In `legacy-retrieval-port.ts` the claim-authority gate keeps only items that can evidence a claim the turn
   needs. On a heard Recruiting turn the needed claims are about the candidate, so the mode's own hiring job
@@ -788,7 +788,10 @@ Not in it: the planning misses in the profile modes (3 rows).
 
 **Rule, judge-free (dev + counterfactual).**
 1. Every needed reference fact in the prompt on at least 240 of 244 rows (`m1`: 232).
-2. Turns with a pack that fits: every loaded file in the prompt on at least 325 of the 333 (`m1`: 305).
+2. Turns with a pack loaded: every loaded file in the prompt on at least 298 of the 306 (`m1`: 279).
+   *Corrected 2026-10-04 before any `m2` row was judged: this line first read "325 of the 333 (`m1`: 305)". 27 of
+   the 333 turns have no file loaded, and I had counted them as turns with the whole pack. The margin (all but 8)
+   is unchanged; `report/pack-in-prompt.mjs` is the count.*
 3. No claim-pass request cut; no file of another mode in any prompt; no profile evidence in a mode that may not use
    it; no string of the other profile.
 
