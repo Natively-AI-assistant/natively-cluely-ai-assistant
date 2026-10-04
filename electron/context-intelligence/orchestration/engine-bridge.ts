@@ -604,6 +604,8 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       heardQuestion: input.surface === 'what-to-answer' && input.questionSpeaker !== 'user',
       questionSpokenByUser: input.surface === 'what-to-answer' && input.questionSpeaker === 'user',
       readingSurface: input.readingSurface === true,
+      // The overlay's typed box in a live mode: private to the user (E15).
+      typedInOverlay: input.surface === 'manual-chat' && input.readingSurface !== true,
       conversationHasContent: convoHasContent && Boolean(convoSummary),
       // Only TRUE when a screen line actually survived into the rendered
       // history — so a withheld `screenshots` scope cannot make the composer

@@ -38,6 +38,9 @@ export interface ComposeInput {
   /** The chosen question is the USER's own spoken line (what-to-answer picked
    *  it because the user asked after the other party). Never set with heardQuestion. */
   questionSpokenByUser?: boolean;
+  /** The question was TYPED into the overlay during a live mode: private to the
+   *  user, never heard by the other person. See typedQuestionPerspective. */
+  typedInOverlay?: boolean;
   /** The answer is READ, not said: the launcher's chat (2026-09-29). Drops the
    *  spoken-delivery rules that contradict the chat layout. Every live surface
    *  (what-to-answer, the overlay's typed box) leaves it unset. */
@@ -1208,6 +1211,24 @@ export function heardQuestionPerspective(modeId: string | undefined): string {
 }
 
 /**
+ * Who a TYPED question is from, and who the reply is for (2026-10-04, E15).
+ * A heard question gets heardQuestionPerspective; a question typed into the
+ * overlay got nothing, and kept the spoken-delivery rules. Measured on the dev
+ * set (cc judge): 10 of 91 typed answers were marked for who they address —
+ * the seller privately types "they need the netsuite link and sso. can both be
+ * had on operations?" and the reply is voiced to the prospect ("your
+ * customers", "tell me"), or is a line to say aloud ("I'll confirm and come
+ * back to you"). Kept SHORT on purpose: a longer first wording ("give the fact
+ * first and then the line") was echoed back ("let me give you the facts
+ * first") and lengthened answers by a fifth.
+ */
+export function typedQuestionPerspective(modeId: string | undefined): string {
+  const r = modeId ? HEARD_SPEAKER_BY_MODE[modeId] : undefined;
+  if (!r) return '\n(Typed to you privately by the user. Answer the user directly: "you" means the user. Reply to the user, not to anyone else.)';
+  return `\n(Typed to you privately by ${r.user}; ${r.speaker} cannot see or hear it. Reply to the user, not to ${r.speaker}: "you" means the user.)`;
+}
+
+/**
  * A heard question that asks the user to COMMIT (2026-09-30). The permanent
  * user-facts rule sits deep in a long system prompt; measured on the dev set
  * after it landed, heard "does Tuesday to Thursday in LoDo work for you?",
@@ -1474,7 +1495,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   ].filter((s) => s.trim()).join('\n\n');
 
   const user = [
-    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? heardQuestionPerspective(policy.id) : input.questionSpokenByUser ? USER_SPOKEN_QUESTION_PERSPECTIVE : ''}`),
+    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? heardQuestionPerspective(policy.id) : input.questionSpokenByUser ? USER_SPOKEN_QUESTION_PERSPECTIVE : input.typedInOverlay ? typedQuestionPerspective(policy.id) : ''}`),
     // The header carries the rule, not just a label (Pattern E, 2026-08-01):
     // some surfaces pass a raw transcript window here, in which the
     // assistant's own prior output appears. Without the rule in the section
