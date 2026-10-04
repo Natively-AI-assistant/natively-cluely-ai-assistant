@@ -670,3 +670,30 @@ the merge, and my note of that moment said it had landed when it had not. It was
 re-tested there (`typecheck:electron` clean, `test:intelligence` 2,874 pass / 0 fail, llm suite 5,768 pass / 0 fail)
 and then fast-forwarded and verified on main. Not benchmarked on main. Landed with its caveat on record: on the
 holdout the rows that need no profile fact fell 0.31 (±0.60), hard fails 3 → 5. Undo: `git revert 73a2f89f`. gpt-6-astra has not judged any E2 run; they are added to its chain.
+
+---
+
+## M1 — main as it now stands, measured (2026-10-04; Evin: "continue")
+
+**Rule written before main was run (commit time of this section is the record).**
+
+**Why.** E1, the markup fix, E5 and E2 are on local main, each measured on the `e000db4a` base. Main is more than
+300 commits past that base; only the test suites vouch for the combination there. Before anything else is built on
+main, main itself is run: `54606ef2`, unchanged, in a fresh worktree.
+
+**What runs.** dev (270) and counterfactual (63) as run tag `m1`, then the holdout (180), judged blind. Control:
+`s3` (E1 + markup fix + E5 on the old base) for all rows, and `s4` (`s3` + E2) for the two profile modes'
+profile-fact delivery. Generator: direct DeepSeek as before, recorded per row.
+
+**Rule (dev + counterfactual; the landed stack must carry over to main, not improve).**
+1. Every needed reference fact in the prompt on at least 93 % of the rows that need one (`s3`: 95 %).
+2. Rows of the two profile modes that need a profile fact: every needed fact in the prompt on at least 17 of 20
+   (`s4`: 19).
+3. No claim-pass request cut; no file of another mode in any prompt; no string of the other profile in any prompt
+   or answer.
+4. All rows, paired with `s3` (shown): not below −0.25.
+5. Hard fails not above `s3`'s 31 by more than 5; critical not above its 18 by more than 4.
+6. Heard first word, median, not more than 250 ms above `s3`'s dev run.
+Holdout (aggregates only): lines 1, 3, 4 and 5 against `s3`'s holdout (hard fails 15, critical 5; the same margins).
+All hold → the measured results carry over to main. A line fails → Evin is told which, with the numbers, before
+anything else is built or landed; nothing is reverted without his word.
