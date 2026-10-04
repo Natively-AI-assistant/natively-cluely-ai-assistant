@@ -1,0 +1,3142 @@
+{
+  "mode": "seminar",
+  "items": [
+    {
+      "id": "ER-D2-SEM-001",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "That rule engine you opened with, the two thousand-odd alarms in a year. How many of those did anyone actually do something about?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The paper gives 2,317 alarms in the 2023-24 school year, of which staff closed 1,576 (68%) without taking any action. The presenter subtracts: that leaves 741 alarms, about a third (32%), as the most that can have been acted on; the paper does not say what happened to them, so \"at most 741\" or \"the other 741\" is the honest wording. One or two sentences. The 1,576 or the 68% is the share that was ignored, not the share acted on.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F31",
+            "text": "Of the 2,317 alarms, 1,576 were closed without action, which leaves at most 741 (about 32%) that could have been acted on; the paper says nothing more about those 741.",
+            "answer_needles": [
+              "741",
+              "seven hundred and forty-one",
+              "seven hundred forty-one",
+              "32%",
+              "32 percent",
+              "32 per cent",
+              "a third",
+              "one in three",
+              "one third"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F31",
+            "text": "The 1,576 closed without action are 68% of the 2,317."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 1,576 or 68% as the number or share of alarms that were acted on (the reverse of what the paper says).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Invents a count the paper does not support, or answers with the pilot's 51 of 63 alerts, which are TERN's alerts and not the rule engine's alarms.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Rounding to \"roughly a third\".",
+          "Saying plainly \"about 741 were acted on\" in live speech is tolerable; claiming a documented outcome for them is not."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2317 - 1576",
+          "result": 741,
+          "unit": "rule-engine alarms that were not closed without action (the upper bound on those acted on)",
+          "accepted_forms": [
+            "741",
+            "seven hundred and forty-one",
+            "seven hundred forty-one",
+            "32%",
+            "32 percent",
+            "32 per cent",
+            "a third",
+            "one in three",
+            "one third"
+          ],
+          "inputs": {
+            "alarms_raised": "SEM-REF-PAPER-FINAL#F31",
+            "closed_without_action": "SEM-REF-PAPER-FINAL#F31"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-002",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Suppose we take your technician at his word and strike out the alarms he decided were genuine faults after all. What does your false alarm rate come down to then?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The technician re-inspected all 16 false alarms and judged 5 to be real, unlogged faults, which leaves 11 genuine false alarms. Over the 498 unit-months of held-out monitoring that is about 2.2 per 100 unit-months, against the reported 3.2. The presenter should add that the published figures keep all 16 as false alarms, so the reported rate is the conservative one.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F19",
+            "text": "Removing the 5 re-classified alarms leaves 11 genuine false alarms, about 2.2 per 100 unit-months over the 498 unit-months.",
+            "answer_needles": [
+              "11 false",
+              "11 genuine",
+              "11 alarms",
+              "11 real",
+              "11 remaining",
+              "11 of",
+              "leaves 11",
+              "to 11",
+              "down to 11",
+              "eleven",
+              "2.2"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F30",
+            "text": "The held-out buildings contribute 498 unit-months of monitoring."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F5",
+            "text": "The reported figure is 16 false alarms, 3.2 per 100 unit-months."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F19",
+            "text": "All 16 remain counted as false alarms in the reported figures."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the reported 16 false alarms or the 3.2 rate already exclude the five re-classified alarms.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives a recomputed precision or F1 as if the paper reported one for this case, or a rate that does not follow from 11 alarms over 498 unit-months.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the rate cannot be worked out, although the paper gives both the 11 genuine false alarms and the 498 unit-months.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying precision would also rise a little, without quoting an invented value.",
+          "Rounding to \"a bit over two per hundred unit-months\"."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(16 - 5) / 498 * 100",
+          "result": 2.2088,
+          "unit": "false alarms per 100 unit-months",
+          "accepted_forms": [
+            "2.2",
+            "2.21",
+            "just over 2",
+            "just over two",
+            "a little over two",
+            "a bit over two",
+            "about two per",
+            "roughly two per"
+          ],
+          "inputs": {
+            "false_alarms": "SEM-REF-PAPER-FINAL#F5",
+            "judged_real": "SEM-REF-PAPER-FINAL#F19",
+            "unit_months": "SEM-REF-PAPER-FINAL#F30"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-003",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "which room am i in on thursday, and how long is the whole slot once you add the questions?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "logistics",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "From the title slide: room G.14, Thursday 8 October 2026; a 25-minute talk followed by 15 minutes of discussion, so 40 minutes in all. Two short lines.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-SLIDES#F1",
+            "text": "The seminar is in room G.14.",
+            "answer_needles": [
+              "G.14",
+              "G14",
+              "G 14"
+            ]
+          },
+          {
+            "fact": "SEM-REF-SLIDES#F1",
+            "text": "The slot is 25 minutes of talk plus 15 minutes of discussion, 40 minutes in total.",
+            "answer_needles": [
+              "40 min",
+              "40-min",
+              "40 mins",
+              "forty min",
+              "forty-min"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-SLIDES#F1",
+            "text": "It is the Built Environment Research Seminar on Thursday 8 October 2026."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a room, a start time or a slot length that the slides do not state (the slides give no start time).",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-SLIDES"
+        ],
+        "source_priority": [
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Splitting the 40 minutes into 25 of talk and 15 of discussion."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "25 + 15",
+          "result": 40,
+          "unit": "minutes",
+          "accepted_forms": [
+            "40 min",
+            "40-min",
+            "40 mins",
+            "forty min",
+            "forty-min"
+          ],
+          "inputs": {
+            "talk_minutes": "SEM-REF-SLIDES#F1",
+            "discussion_minutes": "SEM-REF-SLIDES#F1"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-004",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Of your five kinds of fault, which one turns up most often in the data? And roughly what share of everything is it?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The most frequent class is the stuck outdoor-air damper with 121 of the 508 episodes, about 24%, a little under a quarter. The others are fewer: leaking valve 109, fouled filter 101, fan belt 94, sensor drift 83.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F44",
+            "text": "The stuck outdoor-air damper is the most common fault class, with 121 episodes.",
+            "answer_needles": [
+              "damper"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F28",
+            "text": "121 of the 508 episodes is about 24%, just under a quarter.",
+            "answer_needles": [
+              "24%",
+              "24 percent",
+              "24 per cent",
+              "23.8",
+              "a quarter",
+              "one in four",
+              "one quarter",
+              "25%",
+              "about 25"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F44",
+            "text": "Leaking valve 109, fouled filter 101, slipping fan belt 94, sensor drift 83."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Names another class (for example the leaking valve, 109 episodes) as the most common.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives a share that does not follow from 121 of 508.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Rounding to \"about a quarter\".",
+          "Noting that the classes are fairly evenly spread."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "121 / 508 * 100",
+          "result": 23.82,
+          "unit": "percent of all fault episodes",
+          "accepted_forms": [
+            "24%",
+            "24 percent",
+            "24 per cent",
+            "23.8",
+            "a quarter",
+            "one in four",
+            "one quarter",
+            "25%",
+            "about 25"
+          ],
+          "inputs": {
+            "stuck_damper_episodes": "SEM-REF-PAPER-FINAL#F44",
+            "all_episodes": "SEM-REF-PAPER-FINAL#F28"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-005",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "of the held-out faults that came from real work orders, how many did we miss? not the ones the technician staged",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The results table has a natural-faults-only row for TERN: 145 episodes, 117 detected, recall 0.81. So 28 natural faults were missed. The injected row (42 episodes, 40 detected) is the other one and must not be mixed in; the overall 30 missed is both together.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F14",
+            "text": "On natural faults only, TERN detected 117 of 145, so it missed 28.",
+            "answer_needles": [
+              "28",
+              "twenty-eight"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F15",
+            "text": "On injected faults it detected 40 of 42, missing 2."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F12",
+            "text": "Recall is 0.81 on natural faults against 0.95 on injected ones."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the overall 30 missed episodes, or the 2 missed injected faults, as the number of natural faults missed.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the split by label source is not available, although the results table has the row.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that 28 of the 30 misses overall were natural faults."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "145 - 117",
+          "result": 28,
+          "unit": "natural fault episodes missed",
+          "accepted_forms": [
+            "28",
+            "twenty-eight"
+          ],
+          "inputs": {
+            "natural_episodes": "SEM-REF-RESULTS-TABLE#F14",
+            "natural_detected": "SEM-REF-RESULTS-TABLE#F14"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-006",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Is there any type of fault where the autoencoder actually does better than your method? Be straight with me.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "comparison_baseline",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "An honest concession from the per-class rows of the results table: on recall the LSTM autoencoder is ahead on the two slow classes, fouled filters (33 of 39, recall 0.85, against TERN's 31, 0.79) and sensor drift (19 of 28, 0.68, against 18, 0.64). On dampers, valves and fan belts TERN has the higher recall, and TERN is quicker on every class, including those two (71 against 83 minutes on filters, 142 against 165 on drift). The presenter must not claim to win everywhere.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F25",
+            "text": "On fouled filters the autoencoder finds more episodes than TERN (recall 0.85 against 0.79).",
+            "answer_needles": [
+              "filter"
+            ]
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F12",
+            "text": "On sensor drift the autoencoder finds slightly more episodes than TERN (recall 0.68 against 0.64).",
+            "answer_needles": [
+              "drift"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F4",
+            "text": "TERN on fouled filters: 31 of 39, recall 0.79, median delay 71 minutes."
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F3",
+            "text": "TERN on sensor drift: 18 of 28, recall 0.64, median delay 142 minutes."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F7",
+            "text": "Overall the autoencoder raises 49 false alarms against TERN's 16."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says TERN beats the autoencoder on every fault class.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Names stuck dampers, leaking valves or fan belts as classes where the autoencoder has the higher recall, or says the autoencoder is quicker on some class.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says there is no per-class comparison to answer from.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Pointing out that class rows carry no false-alarm count, so the overall false-alarm gap cannot be split by class."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-007",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "I've heard the Pellworth people have a newer release that no longer needs the equipment graph at all. Doesn't that take away your reason for not running theirs?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "comparison_other_group",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The reading notes record a 2026 preprint from the Pellworth group saying Corvane-Net v2 works without the equipment graph, marked as not yet read and not to be cited. The presenter can say they know of the preprint and have not read it, so they will not characterise it; and that the graph was only one of two obstacles, the other being that there is no public code (an email to Dr Ostrander in February 2026 got no reply). There is still no head-to-head. No claim about what v2 does or scores, and no promise to run it.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F15",
+            "text": "A 2026 preprint says Corvane-Net v2 runs without the equipment graph; the presenter has not read it.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F6",
+            "text": "The other obstacle stands: there is no public code, and a request to the authors went unanswered.",
+            "answer_needles": [
+              "code"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F7",
+            "text": "No head-to-head comparison with Corvane-Net exists."
+          },
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F6",
+            "text": "The email to Dr Ostrander was sent on 12 February 2026."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Describes how v2 works, what it scores, or how it would do on the school data, beyond the single claim recorded in the notes.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says Corvane-Net (either version) was run on the study's data.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Commits to running v2 or to including a comparison in a later paper.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Denies that a newer version exists.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-RELATED-NOTES"
+        ],
+        "source_priority": [
+          "SEM-REF-RELATED-NOTES",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying a comparison would be worth doing if code becomes available, without promising it."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-008",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "This business of re-calibrating on a moving window. Does it earn its keep? What happens if you just leave the calibration set alone?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "ablation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The third ablation answers this: with the calibration set frozen at the commissioning window, the F1 is 0.84 instead of 0.87, the median delay 41 minutes instead of 34, and false alarms rise from 16 to 27. So rolling recalibration is a modest gain in F1 and a clear gain in false alarms. The March export (pipeline v0.6) also had a fixed calibration set, but its 0.82 and 48 minutes come from an older pipeline that differs in other ways and are not the ablation result.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F15",
+            "text": "With the calibration set frozen, the F1 is 0.84, the median delay 41 minutes and there are 27 false alarms.",
+            "answer_needles": [
+              "0.84",
+              ".84",
+              "point eight four",
+              "27 false",
+              "twenty-seven",
+              "41 min",
+              "forty-one"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F1",
+            "text": "With rolling recalibration the F1 is 0.87."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F5",
+            "text": "With rolling recalibration there are 16 false alarms."
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F18",
+            "text": "The ablation row: 156 detected, F1 0.84, 41 minutes, 27 false alarms."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the March run's 0.82 or 48 minutes as the result of freezing the calibration set.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F2",
+            "answer_needles": [
+              "0.82",
+              ".82"
+            ]
+          },
+          {
+            "text": "Gives the figures of another ablation (0.74 and 38 without the thermal balance, or 44 false alarms without the conformal stage) as the frozen-calibration result.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-SLIDES",
+          "SEM-REF-RESULTS-EXPORT-MARCH"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Explaining that a frozen set goes stale as the seasons change."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-009",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "exact alarm rule pls: what does the martingale have to pass, and how long must it hold before we call it an alarm",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "method",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "TERN alarms when the martingale of any residual exceeds 100, which corresponds to a significance level of 0.01, and stays above that for at least 10 minutes.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F37",
+            "text": "The martingale threshold is 100 (significance level 0.01).",
+            "answer_needles": [
+              "100"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F37",
+            "text": "It must stay above the threshold for at least 10 minutes.",
+            "answer_needles": [
+              "10 min",
+              "ten min",
+              "10-min",
+              "ten-min"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F22",
+            "text": "Residuals are aggregated over 15 minutes; alarms within 60 minutes are merged."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the 15-minute aggregation window, the 60-minute merge gap or the 14-day calibration window as the persistence time.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives a threshold other than 100, or a significance level other than 0.01, as the setting used in the paper.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-APPENDIX",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that all systems share the same 10-minute persistence rule."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-010",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "When you fit the model for a unit, is that on data from right round the clock, or only from when the building's in use?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "method",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Only occupied hours: the supplement says the fit uses the 42-day commissioning window restricted to 07:00 to 17:30 on school days.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F1",
+            "text": "Fitting is restricted to occupied hours, 07:00 to 17:30 on school days.",
+            "answer_needles": [
+              "07:00",
+              "7:00",
+              "7 am",
+              "7am",
+              "7 a.m",
+              "seven in the morning",
+              "7 in the morning",
+              "seven a.m",
+              "seven am",
+              "seven o",
+              "seven to",
+              "seven until",
+              "seven till",
+              "17:30",
+              "5:30",
+              "half past five",
+              "half five",
+              "five thirty",
+              "five-thirty",
+              "occupied hours"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F36",
+            "text": "The window is the unit's first six weeks (42 days)."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the model is fitted on all hours of the day, or gives hours other than 07:00 to 17:30.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Linking it to the limitation that all the buildings are occupied in the daytime only."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-011",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How good is the physical model on its own, before any detection happens? What sort of error do you get on the temperatures?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "method",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Supplement A.1: across the 86 units the median root-mean-square error on the commissioning window was 0.6 °C for the mixed-air balance and 0.9 °C for the coil outlet balance. Units above 2.0 °C (4 of them) were refitted after dropping the first week of the window; 2.0 °C is that refit threshold, not the typical error.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F2",
+            "text": "Median fit error is 0.6 °C for the mixed-air balance.",
+            "answer_needles": [
+              "0.6 °C",
+              "0.6°",
+              "0.6 degree",
+              "0.6 C",
+              "0.6 of a degree",
+              "0.6 K",
+              "point six",
+              "six tenths",
+              "six-tenths"
+            ]
+          },
+          {
+            "fact": "SEM-REF-APPENDIX#F2",
+            "text": "Median fit error is 0.9 °C for the coil outlet balance.",
+            "answer_needles": [
+              "0.9 °C",
+              "0.9°",
+              "0.9 degree",
+              "0.9 C",
+              "0.9 of a degree",
+              "0.9 K",
+              "point nine",
+              "nine tenths",
+              "nine-tenths"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F23",
+            "text": "Units whose fit error exceeded 2.0 °C were refitted without the first week; this applied to 4 units."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 2.0 °C as the typical fit error, or quotes an error figure that the supplement does not report.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents the 0.5 °C from another group's drift monitor as this model's error.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Calling it under a degree on both balances."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-012",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "of the 7 units we threw out, how many were dead loggers and how many were units taken out of service?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "dataset",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Supplement A.3: of the 7 excluded units, 4 had failed trend loggers and 3 were decommissioned during the collection period.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F8",
+            "text": "4 of the excluded units had failed trend loggers.",
+            "answer_needles": [
+              "four",
+              "4 had",
+              "4 were",
+              "4 failed",
+              "4 dead",
+              "4 logger",
+              "4 units",
+              "4 of",
+              "4 with",
+              "4 and 3",
+              "4 vs",
+              "4 to 3",
+              "4 / 3",
+              "4/3",
+              "4 trend"
+            ]
+          },
+          {
+            "fact": "SEM-REF-APPENDIX#F8",
+            "text": "3 were decommissioned during the collection period.",
+            "answer_needles": [
+              "three",
+              "3 were",
+              "3 had",
+              "3 decommissioned",
+              "3 taken",
+              "3 units",
+              "3 of",
+              "3 got",
+              "and 3",
+              "vs 3",
+              "4 to 3",
+              "4 / 3",
+              "4/3",
+              "3 out of service"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F26",
+            "text": "All 7 had more than 20% of samples missing; 86 of 93 units remained."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a split other than 4 and 3, or reasons the supplement does not give.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-APPENDIX"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-013",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "For the heating comparison, where do the consumption figures actually come from? And what base temperature are your degree-days worked out to?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "pilot",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Supplement A.8: heating energy was read from the estate's gas meters and normalised by heating degree-days to a base temperature of 15.5 °C. The 15.5 in the results table is something else (PCA's false alarms per 100 unit-months).",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F19",
+            "text": "Heating energy was read from the estate's gas meters.",
+            "answer_needles": [
+              "gas meter",
+              "gas-meter",
+              "the meters",
+              "meter reading",
+              "metered",
+              "gas meters"
+            ]
+          },
+          {
+            "fact": "SEM-REF-APPENDIX#F19",
+            "text": "Degree-days use a base temperature of 15.5 °C.",
+            "answer_needles": [
+              "15.5",
+              "fifteen and a half",
+              "fifteen point five"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F22",
+            "text": "The result was 6.8% lower in the pilot buildings against 1.9% in the other ten."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives another base temperature or another data source (sub-meters, bills, BMS estimates).",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Reminding the questioner that the comparison is observational."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-014",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Say one unit keeps tripping, three alarms inside the same hour and nothing actually wrong with it. Does that go down as three false alarms or as one?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "metrics",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "As one: alarms on the same unit less than 60 minutes apart are merged (the 60-minute merge gap in the settings table). The 10-minute persistence and the 15-minute aggregation window are different settings.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F22",
+            "text": "Alarms on one unit less than 60 minutes apart are merged, so this counts as one false alarm.",
+            "answer_needles": [
+              "60 min",
+              "60-min",
+              "sixty min",
+              "sixty-min",
+              "merge",
+              "within an hour",
+              "under an hour",
+              "less than an hour"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F5",
+            "text": "With that rule TERN raised 16 false alarms on the held-out buildings."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says each alarm is counted separately.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives the 10-minute persistence or the 15-minute window as the merge gap.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that the same rule is applied to every system compared."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-015",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "When your system gets it wrong, which way does it tend to go? Is it more likely to miss a real fault, or to cry wolf?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_result",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "It errs towards missing: recall is 0.84 (30 of 187 episodes missed) while precision is 0.91 (16 false alarms). So a miss is the more common error; false alarms are the rarer one, by design, since the false-alarm rate is the thing the method controls.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F2",
+            "text": "Precision is 0.91 and recall 0.84, so misses are more common than false alarms.",
+            "answer_needles": [
+              "0.84",
+              ".84",
+              "84%",
+              "84 percent",
+              "84 per cent",
+              "0.91",
+              ".91",
+              "91%",
+              "91 percent",
+              "91 per cent",
+              "30 of",
+              "thirty of",
+              "16 false",
+              "sixteen false"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F4",
+            "text": "157 of 187 episodes detected, so 30 missed."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F5",
+            "text": "16 false alarms."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F11",
+            "text": "Most of the misses are in sensor drift (recall 0.64)."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the system errs towards false alarms, or swaps the precision and recall values.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Naming sensor drift as where most misses sit."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-016",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "You make a lot of staying inside the estate's false alarm budget. Would the three baselines have broken it, though?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "defence",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "An honest answer needs the limit in the paper's units (supplement A.9: 25 false alarms per 100 unit-months) and the baselines' rates from the results table: LSTM-AE 9.8, RB-28 6.8, PCA-T2 15.5. None of them breaks the limit; even PCA, the worst, is under it. TERN is simply much lower at 3.2. Raw counts (49, 34, 77) must not be compared with 25, which is a rate.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F21",
+            "text": "The limit equals 25 false alarms per 100 unit-months.",
+            "answer_needles": [
+              "25"
+            ]
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F10",
+            "text": "All three baselines are under it: PCA-T2 15.5, LSTM-AE 9.8, RB-28 6.8 per 100 unit-months.",
+            "answer_needles": [
+              "15.5",
+              "9.8",
+              "6.8"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F8",
+            "text": "LSTM-AE: 49 false alarms, 9.8 per 100 unit-months."
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F9",
+            "text": "RB-28: 34 false alarms, 6.8 per 100 unit-months."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F5",
+            "text": "TERN: 16 false alarms, 3.2 per 100 unit-months."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says one or more baselines exceeded the facilities team's limit.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Compares the raw counts 49, 34 or 77 with the limit of 25 as if they were in the same units.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the material does not allow the comparison.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the limit turned out to be generous and that TERN's advantage is the margin, not passing it."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-017",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Will there be a fuller write-up of this at some point? And is there any chance it'll include a test on somebody else's data?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "future_work",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The slides plan a journal version in spring 2027. The reading notes name a public dataset, the Tolland Open AHU Corpus (3 sites, 67 units), as a candidate for an external check in that version, with the conversion script not yet written. The presenter states the plan and the candidate, and does not promise that the check will be in the journal paper or suggest it has been started.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-SLIDES#F11",
+            "text": "A journal version is planned for spring 2027.",
+            "answer_needles": [
+              "spring 2027",
+              "spring of 2027",
+              "next spring",
+              "spring next year",
+              "spring"
+            ]
+          },
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F11",
+            "text": "A public corpus (Tolland Open AHU Corpus, 3 sites, 67 units) is a candidate for an external check; nothing has been run on it.",
+            "answer_needles": [
+              "Tolland",
+              "public corpus",
+              "public dataset",
+              "public data",
+              "publicly available",
+              "open corpus",
+              "open dataset",
+              "open data"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F23",
+            "text": "So far TERN has not been evaluated on a second estate or any external dataset."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Commits that the journal version will contain an external validation, or says the external check is under way or done.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Quotes any result for TERN on the Tolland corpus or on another outside dataset.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says no external check is being considered.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_then_scope_authority",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-SLIDES",
+          "SEM-REF-RELATED-NOTES"
+        ],
+        "source_priority": [
+          "SEM-REF-SLIDES",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RELATED-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the data would first have to be converted to the study's point naming."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-018",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "The staged faults, who physically went out and did those? When was it done, and how long was each one left in place?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "dataset",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "From the supplement: the estate's lead technician carried out the injections, on 9 units, each lasting between 2 and 6 hours. From the paper: they were done in the school holidays, the Easter 2025 break and the October 2025 half-term (96 faults in all).",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F11",
+            "text": "The injections were carried out by the estate's lead technician.",
+            "answer_needles": [
+              "technician"
+            ]
+          },
+          {
+            "fact": "SEM-REF-APPENDIX#F11",
+            "text": "Each injected fault lasted between 2 and 6 hours.",
+            "answer_needles": [
+              "2 to 6",
+              "two to six",
+              "2–6",
+              "2-6",
+              "2 and 6",
+              "two and six"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F27",
+            "text": "They were done during the Easter 2025 break and the October 2025 half-term.",
+            "answer_needles": [
+              "Easter",
+              "half-term",
+              "half term",
+              "holiday"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F11",
+            "text": "54 injections were in development buildings and 42 in held-out buildings."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F27",
+            "text": "96 faults were injected on 9 units."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the researchers injected the faults themselves, or that it was done in term time with pupils in the building.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives a duration other than 2 to 6 hours.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-019",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "that three-site study in my notes: how much did their f1 fall once it left the home site? and do we have anything like that for tern",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The notes: the CrossEstate study (Hesketh-Mbeki consortium, 2025) took another group's residual-based detector across three sites and got an F1 of 0.75 at home against 0.59 averaged over the two external sites, a fall of 0.16. That is their detector, not TERN. For TERN there is nothing comparable: the paper says all data come from one estate and it was not evaluated on a second estate or any external dataset.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F10",
+            "text": "CrossEstate: 0.75 on the home site, 0.59 on the two external sites, a fall of 0.16.",
+            "answer_needles": [
+              "0.59",
+              ".59",
+              "0.16",
+              ".16",
+              "16 points",
+              "sixteen points"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F23",
+            "text": "TERN has no cross-site result: one estate only, no second estate or external dataset.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F1",
+            "text": "Everything in the notes is other groups' work on other groups' data."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Attributes the three-site validation, or either of its figures, to TERN.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States as a finding how much TERN's F1 would fall on another site.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says TERN has been validated on an external site or dataset.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-RELATED-NOTES",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RELATED-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Expressing the fall as about a fifth in relative terms.",
+          "Suggesting the study be cited when transfer comes up."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "0.75 - 0.59",
+          "result": 0.16,
+          "unit": "F1 points lost between the home site and the external sites",
+          "accepted_forms": [
+            "0.16",
+            ".16",
+            "16 points",
+            "sixteen points",
+            "16 percentage",
+            "21%",
+            "21 percent",
+            "a fifth"
+          ],
+          "inputs": {
+            "home_site_f1": "SEM-REF-RELATED-NOTES#F10",
+            "external_sites_f1": "SEM-REF-RELATED-NOTES#F10"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-020",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So if it starts logging that day, when's the earliest your method could actually be watching it?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "I manage the estate for a college across the river. We're putting a new air handler into the science block this autumn."
+        },
+        {
+          "speaker": "other",
+          "text": "It gets switched on on Monday the second of November."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The method needs the unit's first six weeks (42 days) of ordinary, fault-free operation to fit its model. Six weeks from Monday 2 November 2026 is Monday 14 December 2026 (the last day of the window is Sunday 13 December). The presenter gives that date (mid-December) and may add that the weeks must be normal operation, and that the method has only been evaluated on schools, so this is the data requirement and not a promise about how it would perform at a college.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The unit starts on Monday 2 November.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F36",
+            "text": "The model is fitted on the unit's first six weeks (42 days) of data.",
+            "answer_needles": [
+              "six weeks",
+              "6 weeks",
+              "six-week",
+              "6-week",
+              "42 days",
+              "forty-two"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F40",
+            "text": "Those six weeks are assumed to be fault-free."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F23",
+            "text": "The method has only been evaluated on schools in one estate."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a readiness date that does not follow from six weeks after 2 November, for example 16 November (two weeks after the start, from the 14-day calibration window).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Guarantees how well the method will work on the college's unit.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Says it cannot tell, although the paper states how much data a new unit needs.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-APPENDIX",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying \"about mid-December\".",
+          "Noting that a holiday shutdown inside the window would not count as ordinary operation."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2026-11-02 (Mon) + 42 days",
+          "result": "2026-12-14",
+          "unit": "date (a Monday)",
+          "accepted_forms": [
+            "14 December",
+            "December 14",
+            "14th of December",
+            "14th December",
+            "Dec 14",
+            "14 Dec",
+            "fourteenth of December",
+            "December the fourteenth",
+            "mid-December",
+            "mid December",
+            "middle of December",
+            "13 December",
+            "December 13",
+            "13th of December",
+            "13 Dec",
+            "Dec 13"
+          ],
+          "inputs": {
+            "start_date": "CONVERSATION (Monday 2 November 2026)",
+            "commissioning_window_days": "SEM-REF-PAPER-FINAL#F36"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-021",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Which schools was the live run in? And were any of those among the ones you scored the method on? That would worry me.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "pilot",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The supplement names the four pilot buildings: Hollin Bank Primary, Skerrow Secondary, Withenshaw Primary and Calder Yew Infants. The paper says the pilot ran in four of the nine development buildings, so none of them is among the five held-out buildings on which the reported results were measured.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F17",
+            "text": "The pilot buildings were Hollin Bank Primary, Skerrow Secondary, Withenshaw Primary and Calder Yew Infants.",
+            "answer_needles": [
+              "Hollin Bank",
+              "Skerrow",
+              "Withenshaw",
+              "Calder Yew"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F20",
+            "text": "They are four of the nine development buildings, not held-out ones.",
+            "answer_needles": [
+              "development",
+              "none of them",
+              "none of those",
+              "not among",
+              "not in the held",
+              "separate from the held"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F29",
+            "text": "The five held-out buildings were used only for the final evaluation."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F20",
+            "text": "The pilot ran from 3 November 2025 to 9 January 2026."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says a pilot building was part of the held-out evaluation, or names a held-out building (Aldergate, Fenwick Hollow, Marrowby, Quarrelton, Tessel Lane) as a pilot site.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Names schools that are in neither list.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-APPENDIX",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that the held-out results therefore owe nothing to the pilot."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-022",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "pca baseline: how many components did we keep, and where did it land next to the other systems?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "baselines",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Supplement: PCA-T2 keeps 9 components (95% of variance), alarm at the 99th percentile of T². Paper: it was the weakest system, with an F1 of 0.66 and 77 false alarms (median delay 74 minutes), below RB-28 at 0.71, LSTM-AE at 0.79 and TERN at 0.87.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F6",
+            "text": "PCA-T2 keeps 9 components, 95% of the variance.",
+            "answer_needles": [
+              "9 comp",
+              "nine comp",
+              "9 principal",
+              "nine principal",
+              "kept 9",
+              "keeps 9",
+              "keep 9",
+              "kept nine",
+              "keeps nine",
+              "keep nine",
+              "retained 9",
+              "retained nine",
+              "retains 9",
+              "retains nine",
+              "9 (95",
+              "9 pcs",
+              "9 PCs",
+              "nine, ",
+              "9, which"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F8",
+            "text": "It was the weakest system: F1 0.66 with 77 false alarms.",
+            "answer_needles": [
+              "0.66",
+              ".66"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F10",
+            "text": "PCA-T2: 131 detected, precision 0.63, recall 0.70, median delay 74 minutes, 15.5 false alarms per 100 unit-months."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a component count other than 9, or gives the 99th-percentile alarm threshold as the variance kept.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives PCA-T2 another system's figures (0.71, 0.79) or ranks it above a system it scored below.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-APPENDIX",
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-023",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Slow sensor drift is plainly where you struggle. Is there anything out there in the literature you could borrow to fix that?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "future_work",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The presenter owns the weakness (the paper says roughly a third of drift episodes are missed; recall 0.64) and points to the one lead in the reading notes: the Quillfeather drift monitor, CUSUM on pairs of redundant temperature sensors, which its authors report catches a 0.5 °C drift within 3 days on a laboratory rig. It is a possible starting point only: it is another group's laboratory result, it has not been tried in this study, and it relies on duplicate sensors.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F12",
+            "text": "The Quillfeather drift monitor (CUSUM on pairs of redundant temperature sensors) is a possible starting point.",
+            "answer_needles": [
+              "Quillfeather",
+              "CUSUM"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F45",
+            "text": "Sensor drift remains hard for TERN: roughly a third of drift episodes are missed.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F11",
+            "text": "TERN's recall on sensor drift is 0.64."
+          },
+          {
+            "fact": "SEM-REF-RELATED-NOTES#F12",
+            "text": "The authors report catching drift of 0.5 °C within 3 days on a laboratory rig."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the study has tested, adopted or reproduced the Quillfeather approach.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents \"0.5 °C within 3 days\" as a result of TERN or of this study.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Promises that the drift weakness will be solved, or by when.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-RELATED-NOTES",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RELATED-NOTES",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning that a dedicated residual for slow drift is the planned next step.",
+          "Noting that the approach needs duplicate sensors, which most school units lack."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-024",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "A damper that's jammed open, that's the classic one. How quickly does yours pick that up?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "version_conflict",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The current results table (pipeline v1.2, 21 August 2026) gives a median delay of 18 minutes for stuck dampers (IQR 11 to 29), with 43 of 46 detected. The March export (v0.6) says 24 minutes; it is the older run and must not be quoted. The 24 minutes in the current table belongs to the injected-faults row, not to dampers.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F5",
+            "text": "TERN's median delay on stuck dampers is 18 minutes.",
+            "answer_needles": [
+              "18 min",
+              "18-min",
+              "eighteen",
+              "18 (",
+              "18 mins"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F5",
+            "text": "Recall 0.93: 43 of 46 episodes detected; IQR 11 to 29 minutes."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 24 minutes, the figure in the March export, as the delay on stuck dampers.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F5"
+          },
+          {
+            "text": "Gives the overall 34 minutes or another class's delay as the damper figure.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-EXPORT-MARCH"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "TERN median delay on stuck dampers",
+            "sources": [
+              "SEM-REF-RESULTS-TABLE",
+              "SEM-REF-RESULTS-EXPORT-MARCH"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying it is the quickest class to show up."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-025",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What exactly are you calibrating against? Is it a reference set you fix once when the unit goes in, or does it move with time?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "method",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "In the final method it moves: the calibration set is the unit's own most recent 14 days without alarms. The March export describes an older pipeline in which the calibration set was fixed at the commissioning window (and fixed 7- and 28-day variants that were dropped); the draft abstract's notes say that was about to change. A frozen set survives only as an ablation in the final paper. The presenter describes the rolling 14-day window.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F37",
+            "text": "The calibration set rolls: the unit's own most recent 14 days without alarms.",
+            "answer_needles": [
+              "14 days",
+              "14-day",
+              "fourteen days",
+              "fourteen-day",
+              "two weeks",
+              "two-week",
+              "14 alarm-free",
+              "fortnight"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F15",
+            "text": "Freezing the calibration set is an ablation: F1 0.84, 27 false alarms."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F38",
+            "text": "The rolling window is a practical remedy for seasonality, not a proof."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the method calibrates against a set fixed at the commissioning window.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F1"
+          },
+          {
+            "text": "Gives 7 or 28 days as the calibration window; those were variants explored in March and dropped.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F12"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-APPENDIX",
+          "SEM-REF-SLIDES",
+          "SEM-REF-RESULTS-EXPORT-MARCH",
+          "SEM-REF-ABSTRACT-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "calibration set: rolling 14 days (final) or fixed at the commissioning window (March run)",
+            "sources": [
+              "SEM-REF-PAPER-FINAL",
+              "SEM-REF-APPENDIX",
+              "SEM-REF-SLIDES",
+              "SEM-REF-RESULTS-EXPORT-MARCH",
+              "SEM-REF-ABSTRACT-DRAFT"
+            ],
+            "resolution": "final_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Mentioning that an earlier version of the pipeline used a fixed set and that this was changed."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-026",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What about very brief blips, something flagged for five minutes and then gone? Do those count as fault episodes in your evaluation?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "dataset",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No. In the final dataset the 41 candidate episodes that lasted less than 10 minutes were removed (the supplement calls them likely logging artefacts), leaving 508 of 560 candidates once the 11 overlapping ones were also taken out. The March export's note says such episodes were still included; that is the older run.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F28",
+            "text": "The 41 candidate episodes shorter than 10 minutes were removed from the evaluation.",
+            "answer_needles": [
+              "41 ",
+              "41,",
+              "41.",
+              "forty-one",
+              "removed",
+              "excluded",
+              "dropped",
+              "taken out",
+              "took those out",
+              "filtered out",
+              "thrown out",
+              "threw out",
+              "discarded"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F9",
+            "text": "They were removed as likely logging artefacts."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F28",
+            "text": "560 candidates, 508 episodes kept."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says episodes under 10 minutes are included in the reported evaluation.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F7"
+          },
+          {
+            "text": "Gives a different cut-off or count for the short episodes.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-APPENDIX",
+          "SEM-REF-RESULTS-EXPORT-MARCH"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "whether episodes shorter than 10 minutes are in the evaluation",
+            "sources": [
+              "SEM-REF-PAPER-FINAL",
+              "SEM-REF-APPENDIX",
+              "SEM-REF-RESULTS-EXPORT-MARCH"
+            ],
+            "resolution": "final_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Adding that an alarm must also persist for 10 minutes, so a five-minute blip could not have been detected anyway."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-027",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how many fault episodes sit in the development buildings? need the final number, the two csvs are confusing me",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "version_conflict",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The final figure is in the paper: nine development buildings, 55 units, 321 episodes (321 + 187 held-out = 508). The March export has a development-buildings row with 348 episodes, from pipeline v0.6 before the short episodes were dropped; only its version and run-date columns show it is older. The current results table has no development-buildings row at all. Natively gives 321 and may say where the 348 comes from.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F29",
+            "text": "The development buildings hold 321 episodes (55 units, nine buildings).",
+            "answer_needles": [
+              "321"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F28",
+            "text": "508 episodes in total, 187 of them held out."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 348, the development-buildings count in the March export, as the number.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F11",
+            "answer_needles": [
+              "348"
+            ]
+          },
+          {
+            "text": "Says the files disagree and leaves it there without giving the final figure.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-SLIDES",
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-RESULTS-EXPORT-MARCH"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "number of fault episodes in the development buildings",
+            "sources": [
+              "SEM-REF-PAPER-FINAL",
+              "SEM-REF-RESULTS-EXPORT-MARCH"
+            ],
+            "resolution": "final_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Checking it against 508 minus 187."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-028",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And a sensor that's slowly wandering off, how long does that typically go before you flag it?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "version_conflict",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Current results table: the median delay on sensor drift is 142 minutes (IQR 85 to 260), a little under two and a half hours, by far the slowest class. The March export says 176 minutes; that is the superseded v0.6 run.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F3",
+            "text": "TERN's median delay on sensor drift is 142 minutes.",
+            "answer_needles": [
+              "142",
+              "two hours and twenty",
+              "two hours twenty",
+              "2 hours 20",
+              "2 hours and 20",
+              "2 hours 22",
+              "2 hours and 22",
+              "two and a half hours",
+              "2.4 hours",
+              "just over two hours",
+              "a bit over two hours",
+              "well over two hours"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F3",
+            "text": "Recall on drift is 0.64 (18 of 28); IQR 85 to 260 minutes."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F45",
+            "text": "Roughly a third of drift episodes are missed altogether."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 176 minutes, the March export's figure.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F3",
+            "answer_needles": [
+              "176"
+            ]
+          },
+          {
+            "text": "Gives the overall 34 minutes, or a baseline's drift delay (165, 210 or 420 minutes), as TERN's delay on drift.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-EXPORT-MARCH"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "TERN median delay on sensor drift",
+            "sources": [
+              "SEM-REF-RESULTS-TABLE",
+              "SEM-REF-RESULTS-EXPORT-MARCH"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Adding that this is the median over the drift episodes that were detected at all."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-029",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Belts slipping on the fan. What proportion of those do you catch?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "version_conflict",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Current results table: 29 of 33 fan-belt episodes detected, recall 0.88 (the slides' backup list agrees). The March export has 29 of 35, recall 0.83: the same number detected over a larger, older episode set. The current figure is 0.88.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F7",
+            "text": "TERN detects 29 of 33 fan-belt episodes, a recall of 0.88.",
+            "answer_needles": [
+              "0.88",
+              ".88",
+              "88%",
+              "88 percent",
+              "88 per cent",
+              "29 of 33",
+              "29 of the 33",
+              "29 out of 33",
+              "twenty-nine of thirty-three"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F7",
+            "text": "Median delay on fan belts is 29 minutes."
+          },
+          {
+            "fact": "SEM-REF-SLIDES#F13",
+            "text": "The backup slide lists fan belt recall as 0.88."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 29 of 35 or a recall of 0.83, the March export's figures.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F10",
+            "answer_needles": [
+              "29 of 35",
+              "29 out of 35",
+              "29 of the 35"
+            ]
+          },
+          {
+            "text": "Gives the overall recall of 0.84 as the fan-belt figure.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-SLIDES",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-EXPORT-MARCH"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "TERN recall on slipping fan belts",
+            "sources": [
+              "SEM-REF-RESULTS-TABLE",
+              "SEM-REF-SLIDES",
+              "SEM-REF-RESULTS-EXPORT-MARCH"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying \"nearly nine in ten\"."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-030",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "which pipeline version are the numbers on my results slide from, and when was that run done? someone may ask",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "version_conflict",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The slide's headline figures (0.87, 34 minutes, 16 false alarms) are the ones in the current results table, every row of which is pipeline v1.2, run on 21 August 2026. The other spreadsheet is the March export: pipeline v0.6, run on 9 March 2026, with 0.82 and 48 minutes, which do not match the slide. So the answer is v1.2, 21 August 2026.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F1",
+            "text": "The figures are from pipeline version v1.2.",
+            "answer_needles": [
+              "1.2"
+            ]
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F1",
+            "text": "That run is dated 21 August 2026.",
+            "answer_needles": [
+              "21 August",
+              "August 21",
+              "2026-08-21",
+              "21 Aug",
+              "Aug 21",
+              "21st of August",
+              "21st August",
+              "August 21st"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F1",
+            "text": "The older export is pipeline v0.6, run on 9 March 2026."
+          },
+          {
+            "fact": "SEM-REF-SLIDES#F3",
+            "text": "The slide shows F1 0.87, 34 minutes, 16 false alarms."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the slide's numbers come from pipeline v0.6 or from the 9 March 2026 run.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F1"
+          },
+          {
+            "text": "Says the slides do not state a version and stops there, although the figures match the v1.2 table and not the March export.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-SLIDES"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-SLIDES",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-EXPORT-MARCH",
+          "SEM-REF-ABSTRACT-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "which pipeline run the presented figures come from",
+            "sources": [
+              "SEM-REF-RESULTS-TABLE",
+              "SEM-REF-RESULTS-EXPORT-MARCH",
+              "SEM-REF-ABSTRACT-DRAFT"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Noting that the slides themselves print no version, so this rests on the figures matching the v1.2 table."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-031",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Can you just say what an autoencoder is? Half the room are building-services people.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "General knowledge in one or two plain sentences: an autoencoder is a neural network trained to squeeze its input down and then rebuild it; it learns to rebuild normal data well, so a large rebuilding error marks something unusual. The uploaded material is not needed, and the reply must not turn into the baseline's configuration or a recital of results.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Defines it wrongly, for example as a classifier trained on labelled faults.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Declines or defers because the paper does not define the term.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "explain",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "One clause tying it to the talk: the baseline alarms when the reconstruction error is unusually large."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-032",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "wilcoxon signed-rank in one line, in case someone asks what that test is",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "General knowledge, one or two lines: a non-parametric test for paired measurements; it ranks the sizes of the paired differences and asks whether positive and negative differences balance out, so it tests for a shift without assuming the differences are normally distributed. The uploaded material is not required.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Describes it as a test for two independent (unpaired) samples, or as one that assumes normality (that is, describes a t-test or a rank-sum test instead).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the documents do not explain the test and stops there.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning that the supplement uses it for the paired comparison of detection delays."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-033",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what was her name and where's she from? want to address her properly",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Thanks, that was very clear. Ingrid Solvang-Reyes, I run the estates team at Dunholm College."
+        },
+        {
+          "speaker": "other",
+          "text": "We've had a rule engine on our air handlers for years and frankly nobody trusts it any more."
+        },
+        {
+          "speaker": "other",
+          "text": "So my question is really about how much effort it takes to get a single unit going."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "conversation_recall",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The answer is in what was just said, not in any document: Ingrid Solvang-Reyes, who runs the estates team at Dunholm College. One line. No name from the paper, the acknowledgements or the reading notes belongs here.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "Her name is Ingrid Solvang-Reyes.",
+            "answer_needles": [
+              "Solvang"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "She runs the estates team at Dunholm College.",
+            "answer_needles": [
+              "Dunholm"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Gives a name or affiliation taken from the documents (a co-author, Dr Ostrander, the Brackenfirth facilities team) or an invented one.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says it cannot know who is speaking.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding in a few words what she asked about."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-034",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "I've got two things, one about how the faults were labelled and one about the live trial. Which would you like me to start with?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "current_decision",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A present decision by the presenter, one short sentence, for example \"Let's start with the labelling.\" Either order is fine. No document is needed; answering either topic in advance with study figures is a failure.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says it cannot decide, or asks a document or the chair to decide.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Invents a reason from the material for the choice, or starts reciting the labelling procedure or the pilot results before either question has been asked.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Either choice is acceptable."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-035",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "who funded this and what's the grant number? want to say it right on the thank-you slide",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-none",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "unsupported",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No reference material is loaded for this mode, so Natively has no funder and no grant number to give. It must not make either up. It says plainly that it has nothing on the funding to hand and points the presenter to the paper's acknowledgements or the grant letter.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Names a funder or gives a grant number.",
+            "kind": "fabrication",
+            "fact": "SEM-REF-PAPER-FINAL#F42",
+            "answer_needles": [
+              "NET-2291",
+              "Northmarch"
+            ]
+          },
+          {
+            "text": "Describes the project, its authors or its results in specifics that nothing loaded supports.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting where the presenter would find it (acknowledgements section, grant award letter)."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-036",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "do we report any inter-rater agreement on the fault labels, a kappa or anything like it? who else checked them",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "unsupported",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Nothing in the pack reports agreement between annotators, and no second annotator is mentioned. What the paper does say is that each natural episode was confirmed by one person, the estate's lead technician, against the trend logs, and that the labels are imperfect. Natively says no agreement figure is reported and gives that fact; it must not supply a kappa or a second rater.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F27",
+            "text": "Each natural fault episode was confirmed by the estate's lead technician."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F47",
+            "text": "The paper lists imperfect labels as a limitation."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F19",
+            "text": "The same technician re-inspected the 16 false alarms."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Quotes a kappa or any agreement figure, or names a second annotator or review panel.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents the false-alarm audit (5 of 16 judged real) as an inter-rater agreement result.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-APPENDIX"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying that, as far as the paper states, a single technician confirmed the labels.",
+          "Suggesting the presenter name this as a limitation if asked."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-037",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Did you break the baselines down school by school as well? How did the autoencoder do in, say, the big secondary?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "unsupported",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The per-building rows in the results table and the supplement are for TERN only; no baseline is broken down by building anywhere in the pack. The presenter says so and does not produce a per-school figure for the autoencoder. Offering what does exist is useful: the autoencoder's overall F1 of 0.79 across all five held-out buildings, or TERN's own figure at Fenwick Hollow Secondary (0.87), clearly labelled as TERN's.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F7",
+            "text": "LSTM-AE overall on the held-out buildings: F1 0.79, 49 false alarms."
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F21",
+            "text": "Fenwick Hollow Secondary, TERN only: 61 episodes, F1 0.87."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives an F1, recall, delay or false-alarm count for the autoencoder (or any baseline) at a named building.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Passes off one of TERN's per-building figures as the autoencoder's.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the baselines were not run on the held-out buildings; they were, and only the per-building split is absent.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the split could be produced, without promising it."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-038",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "You've got constant-volume and variable-volume units in there. Did it do better on one kind than on the other?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "unsupported",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The paper gives the mix (52 constant-air-volume and 34 variable-air-volume units) but no document splits any result by unit type. The presenter says that breakdown is not reported and does not claim a difference or the lack of one.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F26",
+            "text": "The 86 units are 52 constant-air-volume and 34 variable-air-volume."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives an F1, recall or delay for constant-volume or variable-volume units, or says which type did better.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States that there was no difference between the two types; the material is silent on it.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-APPENDIX"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Giving the 52 and 34 split of the units.",
+          "Saying results are broken down by fault class and by building, not by unit type."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-039",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "On the faults that both yours and the autoencoder caught, which one got there first, and by how much?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D2-SEM-039-C",
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "comparison_baseline",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Supplement A.7: on the 139 episodes detected by both systems, TERN raised its alarm first in 104, and the median paired difference was 15 minutes in TERN's favour (Wilcoxon signed-rank, p < 0.001).",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F16",
+            "text": "TERN alarmed first in 104 of the 139 episodes that both systems detected.",
+            "answer_needles": [
+              "104"
+            ]
+          },
+          {
+            "fact": "SEM-REF-APPENDIX#F16",
+            "text": "The median paired difference was 15 minutes in TERN's favour.",
+            "answer_needles": [
+              "15 min",
+              "15-min",
+              "fifteen min",
+              "fifteen-min",
+              "quarter of an hour"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F7",
+            "text": "Unpaired, the medians are 34 minutes for TERN and 52 for the autoencoder."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the gap between the two overall medians (18 minutes) as the paired difference.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says TERN was first on every shared episode.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that the difference is statistically significant."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SEM-040",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So as a share of those, how often is that?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D2-SEM-039-C",
+      "turn_index": 2,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Continuing the previous answer: 104 of the 139 shared episodes is about 75%, three quarters. The base is the 139 episodes both systems detected, not the 187 held-out episodes or the 157 TERN detected.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F16",
+            "text": "104 of 139 is about 75%.",
+            "answer_needles": [
+              "75%",
+              "74.8",
+              "75 percent",
+              "75 per cent",
+              "three quarters",
+              "three-quarters",
+              "three in four",
+              "3 in 4",
+              "three out of four",
+              "3 out of 4"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-APPENDIX#F16",
+            "text": "In the other 35 shared episodes TERN was not first."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Works the share out against 187 or 157 episodes instead of the 139 both systems detected.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Loses the thread and answers about something other than the paired comparison.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-APPENDIX"
+        ],
+        "source_priority": [
+          "SEM-REF-APPENDIX",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Rounding to \"three times out of four\"."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "104 / 139 * 100",
+          "result": 74.82,
+          "unit": "percent of the episodes detected by both systems",
+          "accepted_forms": [
+            "75%",
+            "74.8",
+            "75 percent",
+            "75 per cent",
+            "three quarters",
+            "three-quarters",
+            "three in four",
+            "3 in 4",
+            "three out of four",
+            "3 out of 4"
+          ],
+          "inputs": {
+            "tern_first": "SEM-REF-APPENDIX#F16",
+            "detected_by_both": "SEM-REF-APPENDIX#F16"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}
