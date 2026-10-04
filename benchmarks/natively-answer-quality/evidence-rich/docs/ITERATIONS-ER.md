@@ -698,7 +698,7 @@ Holdout (aggregates only): lines 1, 3, 4 and 5 against `s3`'s holdout (hard fail
 All hold → the measured results carry over to main. A line fails → Evin is told which, with the numbers, before
 anything else is built or landed; nothing is reverted without his word.
 
-### M1 — dev + counterfactual on main `54606ef2` (2026-10-04 04:50 UTC; provisional judge)
+### M1 — dev + counterfactual on main `54606ef2` (2026-10-04, committed 04:38 UTC as `61ee2c39`; provisional judge)
 
 `report/stack-vs.mjs s3 m1 dev cf`, `report/paired-builds.mjs s3 m1 dev cf`, `report/profile-rows.mjs s4 m1 dev cf`.
 333 rows, all answered, none unverified; generator direct DeepSeek on every row.
@@ -707,10 +707,48 @@ anything else is built or landed; nothing is reverted without his word.
 |---|---|---|
 | 1. Needed reference fact in the prompt on at least 93 % | 232 of 244 (95.1 %; `s3`: the same 232) | yes |
 | 2. Profile-fact rows of the two profile modes: at least 17 of 20 | 19 of 20 (`s4`: 19) | yes |
-| 3. No claim-pass request cut; no cross-mode file; no other-profile string | 0 of 250 passes cut; 0; 0 | yes |
+| 3. No claim-pass request cut; no cross-mode file; no other-profile string | 0 of 252 passes cut; 0; 0 | yes |
 | 4. All rows, paired with `s3` (shown): not below −0.25 | 8.52 → 8.59, +0.08 (±0.16) | yes |
 | 5. Hard fails ≤ 36, critical ≤ 22 | 26, 11 (`s3`: 31, 18) | yes |
 | 6. Heard first word, median, not more than 250 ms above `s3`'s dev run | 1,484 ms against 1,772 ms | yes |
 
 The effect of the claim pass on main is −0.05 (±0.10), with hard fails 33 in the drafts and 26 shown. On the two
 profile modes main matches `s4`: 8.51 → 8.53. **Dev + counterfactual: the results carry over to main.**
+
+### M1 — holdout on main and verdict (2026-10-04 05:10 UTC; aggregates only; provisional judge)
+
+`er-holdout-m1` on `54606ef2` (180 rows, all answered, none unverified), judged blind with its drafts;
+`report/stack-vs.mjs s3 m1 holdout --blind`, `report/paired-builds.mjs s3 m1 holdout`.
+
+| Holdout line | Measured | Holds |
+|---|---|---|
+| 1. Needed reference fact in the prompt on at least 93 % | 132 of 135 (97.8 %) | yes |
+| 3. No claim-pass request cut; no cross-mode file; no other-profile string | 0 of 133; 0; 0 | yes |
+| 4. All rows, paired with `s3` (shown): not below −0.25 | 8.71 → 8.54, −0.17 (±0.24) | yes |
+| 5. Hard fails ≤ 20, critical ≤ 9 | 20, 8 (`s3`: 15, 5) | yes, hard fails at the limit |
+
+**Verdict: the measured results carry over to main.** Every line holds on both sets. They hold comfortably on dev
++ counterfactual (+0.08, hard fails 31 → 26) and at the margin on the holdout (−0.17, hard fails 15 → 20). Over all
+513 rows main and `s3` are level: 8.58 and 8.58, 46 hard fails each, critical 19 against 23.
+
+Against the kept build `e000db4a`, on the blind holdout: **7.40 → 8.54 (+1.14 ±0.42)**, hard fails 39 → 20, critical
+19 → 8; evidence-required rows 7.15 → 8.65 (+1.51 ±0.48). The rows that need no document went the other way:
+8.38 → 8.06 (−0.32 ±0.65), hard fails 4 → 7, critical 2 → 5.
+
+Where the holdout is lower than `s3` (drafts and shown alike, so it is the generator and not the claim pass):
+conflict / stale −0.71 (±0.65), multi-source −0.45 (±0.63), rows that need no document −0.39 (±0.44) with hard
+fails 3 → 7. Single-source rows +0.21. Main differs from `s3` by E2 and by the 300 other commits; which of the two
+moved these slices is not established, and on dev + counterfactual the same slices moved the other way (+0.21,
+−0.14, +0.26).
+
+Main, all 513 rows (`report/mode-table.mjs m1 dev cf holdout`): General 8.44, Sales 8.17, Recruiting 8.47, Team Meet
+8.82, Looking for work 8.11, Lecture 8.77, Technical Interview 8.89, Seminar 9.25, Call Center 8.26; all 8.58.
+Rows with the evidence in the prompt (382 of 400): mean 8.81 (±0.17), 10th percentile 6.1, critical 2.1 %, hard
+fails 7.1 %. Targets (9.2, 8.5, under 1 %) not met; the verdict by the rule of the report's section 2 stays A.
+
+What remains on main, dev + counterfactual (`analyze.mjs`, 26 hard fails): something invented where the evidence is
+absent 7; answer wrong with the evidence in the prompt 6; arithmetic 4; addressed to the wrong party 3; an outdated
+or draft source preferred 3; needed fact not in the prompt 2; profile evidence 1. Thirteen evidence-required rows
+still miss their evidence (mean 5.27 against 8.87 for the 244 that have it): 7 are turns the classifier answers
+without reading the loaded pack, 3 are heard Recruiting turns on which the claim-authority gate removes the hiring
+job description from the pack (it is present on typed turns), and 3 are planning misses in the profile modes.

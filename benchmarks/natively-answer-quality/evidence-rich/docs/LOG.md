@@ -202,3 +202,12 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   truncated command output; corrected. Re-applied on `ac97c043`, re-tested, fast-forwarded to `73a2f89f` and
   verified with `git merge-base --is-ancestor`. Not pushed. Other sessions' uncommitted files untouched.
 * Local main now carries E1 (`9fce990b`), the markup fix (`be5b9edd`), E5 (`be676d88`) and E2 (`73a2f89f`).
+
+## 2026-10-04 04:00–05:15 UTC — main measured (M1)
+
+* Fresh worktree `er-main` at `54606ef2` (cloned dependencies, premium from main's pinned commit, model weights).
+  dev 04:03–04:24, counterfactual –04:33, holdout 04:38–04:56. 513 rows, all answered, none unverified.
+* Every M1 line holds on dev + counterfactual and on the holdout (the holdout's hard fails at the limit).
+* The gpt-6-astra chain now takes main's holdout and E2's holdout right after the baseline / E1 pair; the session's
+  18:47 task reports on all four landed changes and on main, and reverts nothing.
+* Disk fell to 4.1 GB during the dev run (other sessions) and recovered to 16 GB; the run was not paused.

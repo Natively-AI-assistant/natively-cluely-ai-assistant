@@ -47,7 +47,10 @@ const steps = [
   ['agreement sample (45 dev rows)', [J, '--set', 'base', '--runs', R('er-dev-base'), '--ids', sample.join(','), '--concurrency', '3']],
   step('holdout, baseline (aggregates only)', 'er-holdout-base'), step('holdout, E1 (aggregates only)', 'er-holdout-e1'),
   // what decides E5 (the claim pass shown the whole prompt): E1's holdout drafts, then the holdout of E1 + E5 and its drafts
+  // main as it stands (E1 + markup fix + E5 + E2): what Evin has
+  step('holdout, main (aggregates only)', 'er-holdout-m1'),
   step('drafts: holdout, E1 (early)', 'er-holdout-e1', ['--draft']), step('holdout, E1 + E5 (aggregates only)', 'er-holdout-s3'), step('drafts: holdout, E1 + E5', 'er-holdout-s3', ['--draft']),
+  step('holdout, E2 (two profile modes)', 'er-holdout-s4'),
   step('dev, baseline: evidence conditions', 'er-dev-base', EV), step('dev, E1: evidence conditions', 'er-dev-e1', EV),
   step('counterfactual, baseline', 'er-cf-base'), step('counterfactual, E1', 'er-cf-e1'),
   // the streamed drafts of the rows the claim pass replaced (what sections 6, E3 and E4 of the report rest on)
