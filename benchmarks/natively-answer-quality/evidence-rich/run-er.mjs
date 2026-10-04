@@ -180,7 +180,7 @@ const header = fs.existsSync(F.header) ? readJson(F.header) : {
   // §81–§84: the AgentRouter → DeepSeek generator route was requested first. The build under test (e000db4a) has no
   // AgentRouter provider (no setAgentRouterApiKey in its preload), a deterministic failure, so generation is on the
   // direct DeepSeek key — the fallback the spec names — and every row says so.
-  generator: { requested_first: 'agentrouter/deepseek', used: 'deepseek-direct', generator_fallback: true, fallback_reason: 'the AgentRouter provider is not in the build under test (e000db4a); adding it would change the build' },
+  generator: { requested_first: 'agentrouter/deepseek', used: 'deepseek-direct', generator_fallback: true, fallback_reason: process.env.ER_GENERATOR_REASON || 'direct DeepSeek for comparability: the baselines this run is compared with (er-dev-m1, er-dev-m1r) used direct DeepSeek; AgentRouter is available in this build and was not used' },
   local_models: { embedder: fs.existsSync(path.join(APP_ROOT, 'resources', 'models', 'Xenova', 'multilingual-e5-small', 'onnx', 'model_quantized.onnx')), reranker: fs.existsSync(path.join(APP_ROOT, 'resources', 'models', 'Xenova', 'ms-marco-MiniLM-L-6-v2', 'onnx', 'model_quantized.onnx')) },
   reference_root: process.env.NATIVELY_E2E_REFERENCE_ROOT ?? null, app_log: APP_LOG,
   os: `${os.type()} ${os.release()} ${os.arch()}`, node: process.version, warmup_requests: Number(opt('warmup', 3)), request_timeout_ms: Number(opt('timeout', 90000)), concurrency: 1, sessions: [],

@@ -25,12 +25,20 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ER = path.join(HERE, '..');
 // ER_BENCH_DIR: judgments and cache of a rig smoke test stay out of the real series.
 const JOUT = process.env.ER_BENCH_DIR ? path.join(path.resolve(process.env.ER_BENCH_DIR), 'judge') : HERE;
-export const CHARTER = fs.readFileSync(path.join(HERE, 'CHARTER-ER.md'), 'utf8');
+// ER_JUDGE_ROLE=cc (with AQ_JUDGE=opus) — Evin, 2026-10-04: "since the claude code and astra are similar in judging
+// continue with claude code as judge, update the judge character ... be specific to claude code that you are the judge
+// and not act like claude code". The base charter is unchanged; a preamble (CHARTER-ER.claude-code.md) tells the model it
+// is running inside the Claude Code CLI and is the judge, nothing else. A different system prompt is a different judge:
+// its own charter version (so its own cache keys) and its own files (<run>.cc.jsonl). Never pooled with the
+// `.opus.jsonl` or `.astra.jsonl` series.
+export const CC_ROLE = VIA_CLI && process.env.ER_JUDGE_ROLE === 'cc';
+const BASE_CHARTER = fs.readFileSync(path.join(HERE, 'CHARTER-ER.md'), 'utf8');
+export const CHARTER = CC_ROLE ? `${fs.readFileSync(path.join(HERE, 'CHARTER-ER.claude-code.md'), 'utf8').trim()}\n\n---\n\n${BASE_CHARTER}` : BASE_CHARTER;
 export const CHARTER_VERSION = 'er1-' + crypto.createHash('sha256').update(CHARTER).digest('hex').slice(0, 12);
 export const JUDGE_META = Object.freeze(VIA_CLI
-  ? { judge_provider: 'claude-code-cli', judge_model: JUDGE_MODEL, judge_family: 'claude-opus-5.5', judge_status: 'provisional' }
+  ? { judge_provider: 'claude-code-cli', judge_model: JUDGE_MODEL, judge_family: 'claude-opus-5.5', judge_status: CC_ROLE ? 'working judge (Evin, 2026-10-04), Claude Code judge preamble' : 'provisional' }
   : { judge_provider: 'agentrouter', judge_model: JUDGE_MODEL, judge_family: 'gpt-6-astra', judge_status: 'canonical' });
-export const JUDGE_TAG = VIA_CLI ? JUDGE : 'astra';
+export const JUDGE_TAG = CC_ROLE ? 'cc' : VIA_CLI ? JUDGE : 'astra';
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const saved = (write) => { try { write(); return true; } catch (e) { stopNewCalls(`disk nearly full (a judgment could not be saved: ${e.code ?? 'write failed'})`); return false; } };
 
