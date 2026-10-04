@@ -294,7 +294,7 @@ button.tp-row:focus-visible {
   stroke-dasharray: 24;
   stroke-dashoffset: 0;
   transition: stroke-dashoffset 500ms cubic-bezier(0.22, 1, 0.36, 1);   /* --duration-very-slow: success check */
-  transition-delay: calc(var(--i, 0) * var(--tp-stagger) + 160ms);
+  transition-delay: calc(var(--i, 0) * var(--tp-stagger) + 150ms);   /* + --duration-quick: after its row */
 }
 @starting-style {
   .tp-row-tag svg path {
