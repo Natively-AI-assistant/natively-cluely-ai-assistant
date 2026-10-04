@@ -21,8 +21,9 @@ saw. A `verifier_context_loss` is an answer the pass CHANGED while missing a nee
 | **er-holdout-e1** | 133 | **27** | **77** | **106** | 185 | **42** | 56 | **15** |
 | er-holdout-m1 (main) | 133 | 133 | 0 | 0 | 192 | 0 | 23 | 0 |
 
-`verifier_evidence_parity` on current main = 1.00 (every pass saw the whole generator user message, on 536 passes
-across four runs). The loss existed exactly once, in the window between E1 (whole files, prompts above 24,000 chars)
+`verifier_evidence_parity` = 1.00 on every recorded build since E5: the pass saw the whole generator user message on
+941 of 941 passes (s3, m1, m1r, m2, holdout-m1). None of these runs is `efc126a9` itself; it adds only the
+claim-authority exemption for whole mode files, which widens the prompt the pass inherits whole. The loss existed exactly once, in the window between E1 (whole files, prompts above 24,000 chars)
 and E5 (cap raised to 96,000), and E5 removed it. Both are on local main.
 
 ## What can still differ (code, not seen at runtime in these runs)
@@ -47,16 +48,26 @@ and E5 (cap raised to 96,000), and E5 removed it. Both are on local main.
      5,200 tokens, topK 24), not the V3 pack the answer used;
    - **replaces the streamed answer** when its rails pass (`fullAnswer = repairedTrim`); the claim pass then checks it.
 
-   | Run | turns | corrected-answer repairs | of those cut at 24,000 |
-   |---|---|---|---|
-   | er-dev-m1 | 270 | 34 | 34 |
-   | er-dev-m2 | 270 | 36 | 35 |
-   | er-holdout-m1 | 180 | 24 | 24 |
+   Measured with `node evidence-rich/report/repair-parity.mjs <runs>` (requests identified by their
+   "Output ONLY the corrected answer" line):
 
-   So about 13 % of turns are rewritten by a pass that sees LESS of the generator's evidence plus a different
-   retrieval. Its effect on quality is NOT MEASURED yet (the recorded rows have the draft and the final text, not the
-   text between the repair and the claim pass). This is the remaining real parity gap on main.
+   | Run | heard turns | repair ran | cut at 24,000 | needed facts the generator had | missing from the repair | turns with a loss |
+   |---|---|---|---|---|---|---|
+   | er-dev-base (kept build) | 179 | 25 | 0 | 34 | 0 | 0 |
+   | er-dev-e1 | 179 | 36 | 36 | 56 | 8 | 5 |
+   | er-dev-s3 | 179 | 35 | 35 | 53 | 6 | 2 |
+   | er-dev-m1 | 179 | 34 | 34 | 57 | 9 | 3 |
+   | er-dev-m1r | 179 | 38 | 38 | 63 | 11 | 3 |
+   | er-dev-m2 | 179 | 35 | 35 | 55 | 7 | 4 |
+   | er-holdout-m1 | 119 | 24 | 24 | 34 | 1 | 1 |
 
-## Classification of the 35 E1-era losses (for the record)
-All 35 are the same mechanism: whole files pushed the generator's prompt over the 24,000-char replay cap; the pass got a
+   The repair runs on about 20 % of heard turns and never on typed turns. Since E1 (whole files) it is cut at
+   24,000 chars every time it runs, and it lacks at least one needed fact the generator had on 1–4 turns per run
+   (about 1–2 % of heard turns). E5 did not touch it.
+   **Whether its text became the shown answer cannot be read from these runs:** the prompt recorder keeps no response
+   body for secondary calls (repair and claim pass both record 0 chars), so a changed answer cannot be attributed to
+   the repair or to the claim pass. NOT MEASURED. This is the remaining parity gap on main.
+
+## Classification of the 35 E1-era claim-pass losses (for the record)
+All 35 (20 dev + 15 holdout edited answers) are the same mechanism: whole files pushed the generator's prompt over the 24,000-char replay cap; the pass got a
 head-cut prompt with `[...answer context truncated...]` and lost the files' tails. Fixed by E5 (`be676d88`).
