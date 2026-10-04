@@ -1473,3 +1473,21 @@ a text equal to the draft or to what the app showed reuses that judgment.
 | 4 | Rows flagged source_conflict_ignored or stale_source_preferred | ≤ control arm + 1 |
 | 5 | missing_evidence rows: effect of the pass | ≥ control arm − 0.10 (the part of the pass that works is untouched) |
 Every line must hold; then the wording goes into the app and is confirmed on the next app run with the other candidates.
+
+### E16b — result and verdict (2026-10-05; er-dev-e16b + er-dev2-e16b = `cand/e16b` b5684a62 against er-dev-e13c + er-dev2-e13c; direct DeepSeek, no fallback answer; 8 turns over 5 s to the first word against 0 in the control)
+| # | Line | Measured | Holds |
+|---|---|---|---|
+| 1 | Résumé loaded but not in the prompt ≤ 3 of 103 | 24 → 1 | yes |
+| 2 | Rows with every needed fact ≥ 494 of 499 | 490 → 497 (seven gained, none lost) | yes |
+| 3 | Rows that gain the résumé: mean change ≥ +0.5 | n 23: 8.26 → 8.70, **+0.44** | **no** |
+| 4 | Profile modes: mean ≥ −0.10; flagged rows ≤ control + 2 | n 140: 8.48 → 8.63; flagged 5 → 7 | yes |
+| 5 | All rows: mean ≥ −0.10; hard ≤ control + 3 | 8.774 → 8.820; hard 48 → 45 | yes |
+| 6 | First word, profile modes, median ≤ control + 150 ms | 882 → 950 ms | yes |
+**Verdict by the rule: not kept** (line 3, by 0.06). Not landed; main is unchanged.
+What line 3 is made of: 5 of the 23 rows rose by 4.8 to 7.5 points (TI-024, LFW-015, TI-027, D2-TI-002, D2-TI-006: the
+turns that had no profile to answer from); 12 moved by less than half a point; 6 fell, four of them by 1.8 to 5.6
+(TI-007 9.6 → 4.0 arithmetic and factual error; LFW-013 9.8 → 5.2 deferral on a conflict; LFW-009 7.7 → 4.9 unsupported
+personal claim on a missing-evidence question; LFW-010 9.4 → 7.3; TI-011 9.7 → 7.9). Those were answered well without
+the résumé and worse with it in view. One run each, so run-to-run variation is inside these numbers (same build, 30
+rows: ± 0.7); the rule does not ask for a second run and none was made.
+Autopilot paused here at Evin's word (2026-10-05). E17's rule and variant are committed; its replay was not started.
