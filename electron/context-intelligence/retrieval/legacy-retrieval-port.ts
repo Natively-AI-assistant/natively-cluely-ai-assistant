@@ -146,6 +146,24 @@ function isWholeModeFile(e: EvidenceItem): boolean {
     && (e.metadata as Record<string, unknown> | undefined)?.wholeDocument === true;
 }
 
+// ── The same for a profile document handed over WHOLE (2026-10-05) ──────────
+//
+// Measured on the evidence-rich benchmark (630 development turns) once the
+// whole profile is planned on every retrieving turn: the profile port returned
+// the résumé and the job description entire, and this gate removed one or both
+// on nine turns. Typed "do I clear their experience bar? count it from my CV"
+// lost the job description, so the bar it asks about was not in the prompt;
+// with only a job description loaded a question about the user read nothing at
+// all (7 items → 0); "why am I leaving <company>" lost both documents.
+//
+// Presence only, as above: `acceptedFor` and evidenceSupportsClaim still keep
+// a job description from supporting a claim about the user. A profile read in
+// passages (too large, or raw text missing) keeps the gate exactly as it was.
+function isWholeProfileDocument(e: EvidenceItem): boolean {
+  return (e.provenance === 'PROFILE_RESUME' || e.provenance === 'PROFILE_JOB_DESCRIPTION')
+    && (e.metadata as Record<string, unknown> | undefined)?.wholeDocument === true;
+}
+
 export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
   const now = deps.now ?? (() => 0);
 
@@ -209,7 +227,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
 
         const inScope = adapted.evidence.filter((e) => allowed.has(e.sourceType) || isAdmissibleModeAttachment(e, allowed));
         const kept: EvidenceItem[] = neededClaims.size
-          ? inScope.filter((e) => e.acceptedFor.some((c) => neededClaims.has(c)) || isWholeModeFile(e))
+          ? inScope.filter((e) => e.acceptedFor.some((c) => neededClaims.has(c)) || isWholeModeFile(e) || isWholeProfileDocument(e))
           : inScope;
 
         // Post-adapter drops, made observable (context-debug, 2026-08-01):
