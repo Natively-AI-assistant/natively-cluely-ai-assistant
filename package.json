@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.9.1",
+  "version": "2.9.2",
   "main": "dist-electron/electron/main.js",
   "engines": {
     "node": ">=22.13.0"
