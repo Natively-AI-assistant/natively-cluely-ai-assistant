@@ -38,7 +38,7 @@ import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
-import { speechWindowForPrompt } from './llm/conversationHistoryPolicy';
+import { speechWindowForPrompt, SPEECH_WINDOW_SECONDS } from './llm/conversationHistoryPolicy';
 import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver, slowWorkloadAdvice } from './llm/performance/wiring';
 import { estimateTokens } from './llm/modelCapabilities';
 import { mintTurnId } from './llm/turnIdentity';
@@ -7380,8 +7380,18 @@ export class IntelligenceEngine extends EventEmitter {
                 // section of a composed prompt — it does not substitute for a
                 // source decision, and evidence still comes only from the port.
                 // Speech only, whole lines — see speechWindowForPrompt.
-                conversationWindow: (sec: number) =>
-                    speechWindowForPrompt(String((this.session as any)?.getFormattedContext?.(sec) ?? '')),
+                // From the DURABLE transcript (2026-10-04, E12): the rolling
+                // context is evicted after 180 s and this was asked for 60–90 s
+                // of it, so a line said two minutes ago was already gone. The
+                // caller's `sec` is kept as the fallback for a session object
+                // without the durable reader.
+                conversationWindow: (sec: number) => {
+                    const s: any = this.session;
+                    const formatted = typeof s?.getFormattedSpeech === 'function'
+                        ? s.getFormattedSpeech(SPEECH_WINDOW_SECONDS)
+                        : s?.getFormattedContext?.(sec);
+                    return speechWindowForPrompt(String(formatted ?? ''));
+                },
             };
         } catch { return null; }
     }
