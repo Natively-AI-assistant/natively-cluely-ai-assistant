@@ -129,10 +129,14 @@ test('the notice slides in from the right edge and back out, like a macOS banner
   const slide = css.slice(css.indexOf('/* ADDED: the horizontal travel'));
   assert.ok(/\.lg-notice-slide \{\s*transform: translateX\(calc\(100% \+ var\(--notice-edge-gap\)\)\);/.test(slide), 'starts and ends past the right edge');
   assert.ok(!/opacity|filter/.test(slide.slice(0, slide.indexOf('@media'))), 'the wrapper never fades or filters');
-  // Open slower than close, one smooth-out curve, reduced-motion guards kept.
+  // Open slower than close; neither curve overshoots; reduced-motion guards kept.
+  // The curves are the corner slide's (genieMotion.mjs SLIDE, 2026-10-04): an
+  // ease-out cubic in, and out a swipe that is fastest at the edge.
   const v = (n) => parseFloat(css.match(new RegExp(`--toast-${n}: (\\d+)ms`))[1]);
   assert.ok(v('open') > v('close'), 'open is the slower clock');
-  assert.ok(/--toast-ease: cubic-bezier\(0\.22, 1, 0\.36, 1\);/.test(css), '--ease-smooth-out, no overshoot on a close');
+  assert.ok(/--toast-ease: cubic-bezier\(0\.33, 1, 0\.68, 1\);/.test(css), 'the way in: ease-out, y never above 1');
+  assert.ok(/--notice-travel-close-ease: cubic-bezier\(0\.4, 0\.2, 1, 0\.8\);/.test(css), 'the way out: accelerating, y never above 1');
+  assert.ok(/\.lg-notice-slide \{\s*transform: translateX\(calc\(100% \+ var\(--notice-edge-gap\)\)\);\s*transition: transform var\(--toast-close\) var\(--notice-travel-close-ease\);/.test(slide));
   assert.ok(css.includes('.t-toast { transition: none !important; }') && css.includes('.lg-notice-slide { transition: none !important; }'), 'reduced-motion guards');
   // It keeps what it showed while it slides out, and mounts in the closed pose first.
   assert.ok(/const \{ warning, progress, degraded = null, onDismiss, onReindex \} = open \? props : lastOpen\.current;/.test(notice), 'content frozen while closing');

@@ -67,3 +67,19 @@ export declare const LIFT: {
 };
 export declare function liftMs(phase: 'open' | 'close'): number;
 export declare function playLift(card: HTMLElement, phase: 'open' | 'close'): () => void;
+
+type SlideState = { transform: string; opacity: string; filter: string };
+type SlideClock = { transform: number; opacity: number; filter: number };
+export declare const SLIDE_EASE: string;
+export declare const SLIDE_OUT_EASE: string;
+export declare const SLIDE_FADE_OUT_EASE: string;
+export declare const SLIDE_EASES: Record<'open' | 'close', Record<'transform' | 'opacity' | 'filter', string>>;
+export declare const SLIDE: {
+  away: Omit<SlideState, 'transform'>;
+  shown: SlideState;
+  open: SlideClock;
+  close: SlideClock;
+};
+export declare function slideMs(phase: 'open' | 'close'): number;
+export declare function slideAway(travelPx: number): SlideState;
+export declare function playSlide(card: HTMLElement, phase: 'open' | 'close', travelPx: number): () => void;

@@ -2,9 +2,10 @@
  * GenieModal.test.mjs
  *
  * Every launcher popup (Settings, the Modes / Profile Intelligence manager,
- * Update, Review, the trial and support cards, and the notices in the
- * bottom-right corner) opens and closes with the same macOS genie as the
- * browser-extension toaster, through GenieModal.
+ * Update, Review, the trial and support cards) opens and closes with the same
+ * macOS genie as the browser-extension toaster, through GenieModal. The
+ * notices in the bottom-right corner go through GenieModal too, but slide in
+ * from the window's right edge instead (2026-10-04; the last section here).
  *
  *   1. The presence latch (geniePresence.mjs) and the compositor track
  *      (genieMotion.mjs) are pure, so they are EXECUTED here, not read.
@@ -830,4 +831,176 @@ test('genie off: the hook hands the card to the lift and keeps the clock and the
   assert.ok(/const b = animate\(scrim, 1, motion === 'lift' \? LIFT_DIM_OPEN : \{ duration: SCRIM_OPEN_S, ease: EASE_FM as any \}\);/.test(hook));
   assert.ok(/: motion === 'fade' \? REDUCED_FADE : LIFT_DIM_CLOSE\);/.test(hook), 'the dim leaves with the card');
   assert.ok(!/settle/.test(modal.replace(/settled/g, '')), 'no per-placement variant any more');
+});
+
+// ─── Corner notices slide ───────────────────────────────────────
+// Every toaster in the window's bottom-right corner comes in from the right
+// edge and leaves through it, on the search-index notice's numbers.
+
+// The curve a CSS cubic-bezier() draws, to measure the motion rather than pin its digits alone.
+const bezier = str => {
+  const [x1, y1, x2, y2] = str.match(/-?[\d.]+/g).map(Number);
+  const at = (m, a, b) => 3 * (1 - m) ** 2 * m * a + 3 * (1 - m) * m * m * b + m ** 3;
+  return t => {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (at(m, x1, x2) < t) lo = m; else hi = m; }
+    return at((lo + hi) / 2, y1, y2);
+  };
+};
+
+test('corner slide: the search-index notice’s clocks, eases and blur, so the corner moves as one', () => {
+  const { SLIDE, SLIDE_EASE, SLIDE_OUT_EASE, SLIDE_FADE_OUT_EASE, SLIDE_EASES, slideMs } = genieMod;
+  const css = read('components/ProviderChangeNotice.css');
+  const slideVars = css.slice(css.indexOf('.lg-notice-slide {'), css.indexOf('}', css.indexOf('.lg-notice-slide {')));
+  const cssVar = name => slideVars.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim();
+  assert.equal(`${slideMs('open')}ms`, cssVar('toast-open'));
+  assert.equal(`${slideMs('close')}ms`, cssVar('toast-close'));
+  assert.equal(SLIDE_EASE, cssVar('toast-ease'));
+  assert.equal(SLIDE_OUT_EASE, cssVar('notice-travel-close-ease'));
+  assert.equal(SLIDE_FADE_OUT_EASE, cssVar('notice-fade-close-ease'));
+  assert.equal(SLIDE.away.filter, `blur(${cssVar('toast-blur')})`);
+  assert.equal(`${SLIDE.open.opacity}ms`, cssVar('notice-fade-open'));
+  assert.equal(`${SLIDE.open.filter}ms`, cssVar('notice-blur-open'));
+  assert.equal(`${SLIDE.close.opacity}ms`, cssVar('notice-fade-close'));
+  assert.equal(`${SLIDE.close.filter}ms`, cssVar('notice-blur-close'));
+  assert.ok(/\.lg-notice\.t-toast \{\s*transition-duration: var\(--notice-fade-close\), var\(--toast-close\), var\(--notice-blur-close\);\s*transition-timing-function: var\(--notice-fade-close-ease\), var\(--toast-ease\), var\(--notice-fade-close-ease\);\s*\}/.test(css),
+    'opacity, transform, filter: the snippet’s property order');
+  assert.ok(/\.lg-notice\.t-toast\.is-open \{\s*transition-duration: var\(--notice-fade-open\), var\(--toast-open\), var\(--notice-blur-open\);/.test(css));
+  // The wrapper carries the travel: the way out on its own curve, the way in on the snippet's.
+  assert.ok(/\.lg-notice-slide \{\s*transform: translateX\(calc\(100% \+ var\(--notice-edge-gap\)\)\);\s*transition: transform var\(--toast-close\) var\(--notice-travel-close-ease\);/.test(css));
+  assert.ok(/\.lg-notice-slide\.is-open \{\s*transform: translateX\(0\);\s*transition: transform var\(--toast-open\) var\(--toast-ease\);/.test(css));
+  assert.deepEqual(SLIDE_EASES.open, { transform: SLIDE_EASE, opacity: SLIDE_EASE, filter: SLIDE_EASE });
+  assert.deepEqual(SLIDE_EASES.close, { transform: SLIDE_OUT_EASE, opacity: SLIDE_FADE_OUT_EASE, filter: SLIDE_FADE_OUT_EASE });
+});
+
+test('corner slide: the way in is seen travelling and lands without overshoot', () => {
+  const { SLIDE, SLIDE_EASE, slideMs } = genieMod;
+  // "A bit slower" (Evin, 2026-10-04): one token step up from a panel's 400.
+  assert.deepEqual(SLIDE.open, { transform: 500, opacity: 250, filter: 350 });
+  assert.equal(slideMs('open'), SLIDE.open.transform, 'the travel is the run');
+  assert.ok(SLIDE.open.opacity < SLIDE.open.filter && SLIDE.open.filter < SLIDE.open.transform, 'solid, then sharp, then landed');
+  assert.equal(SLIDE_EASE, 'cubic-bezier(0.33, 1, 0.68, 1)');
+  const travel = 350, ms = SLIDE.open.transform, f = bezier(SLIDE_EASE);
+  // "Refine it a bit more" (Evin, 2026-10-04). --ease-smooth-out moved 51px in
+  // its first frame here and was 95% done at 234ms: a jump, then a creep.
+  const smoothOut = bezier('cubic-bezier(0.22, 1, 0.36, 1)');
+  const firstFrame = f(16.7 / ms) * travel;
+  assert.ok(firstFrame < 36 && firstFrame < smoothOut(16.7 / ms) * travel * 0.7, `first frame ${firstFrame.toFixed(0)}px`);
+  let t95 = 0; while (f(t95 / ms) < 0.95) t95++;
+  assert.ok(t95 >= 0.6 * ms && t95 <= 0.68 * ms, `95% of the way at ${t95}ms: travelling for most of its clock, settling for the rest`);
+  // No overshoot, and never backwards.
+  let prev = 0;
+  for (let t = 0; t <= ms; t += 5) { const v = f(t / ms); assert.ok(v >= prev - 1e-9 && v <= 1 + 1e-9, `at ${t}ms`); prev = v; }
+});
+
+test('corner slide: the way out is a swipe: answered at once, fastest at the edge, solid until it crosses', () => {
+  const { SLIDE, SLIDE_OUT_EASE, SLIDE_FADE_OUT_EASE, slideMs } = genieMod;
+  assert.deepEqual(SLIDE.close, { transform: 400, opacity: 400, filter: 400 });
+  assert.ok(slideMs('close') < slideMs('open'), 'the close is the quicker');
+  assert.equal(SLIDE_OUT_EASE, 'cubic-bezier(0.4, 0.2, 1, 0.8)');
+  assert.equal(SLIDE_FADE_OUT_EASE, 'cubic-bezier(0.7, 0, 1, 1)');
+  const travel = 350, ms = SLIDE.close.transform, f = bezier(SLIDE_OUT_EASE), fade = bezier(SLIDE_FADE_OUT_EASE);
+  assert.ok(f(50 / ms) * travel >= 20, 'a click on the close is answered: it has visibly moved within 50ms');
+  // It never slows: each 20ms step covers at least as much as the one before.
+  let last = 0;
+  for (let t = 20; t <= ms; t += 20) {
+    const step = (f(t / ms) - f((t - 20) / ms)) * travel;
+    assert.ok(step >= last - 0.01, `slows at ${t}ms`);
+    last = step;
+  }
+  assert.ok(last > 20, `crossing the edge at ${last.toFixed(0)}px per 20ms`);
+  // Solid while most of it is still in the window; the fade is the last stretch.
+  assert.ok(1 - fade(0.5) >= 0.8, 'at half time it is still 80% opaque');
+  assert.ok(f(0.5) < 0.4, 'and less than 40% of the way out');
+  assert.ok(1 - fade(0.9) <= 0.3, 'nearly gone as it clears the edge, shadow and all');
+});
+
+test('corner slide: the travel is each card’s own', () => {
+  const { SLIDE, slideAway } = genieMod;
+  assert.deepEqual(SLIDE.shown, { transform: 'translateX(0px)', opacity: '1', filter: 'blur(0px)' });
+  // The travel is each card's own: its width plus its gap to the edge, whole pixels, never leftwards.
+  assert.deepEqual(slideAway(343.2), { transform: 'translateX(344px)', opacity: '0', filter: 'blur(2px)' });
+  assert.equal(slideAway(-5).transform, 'translateX(0px)');
+});
+
+test('corner slide: in from past the edge, back out through it, reversible, and nothing left on a landed card', async () => {
+  const { SLIDE, SLIDE_EASE, SLIDE_EASES, playSlide, slideAway } = genieMod;
+  const away = slideAway(344);
+  const card = fakeCard();
+  playSlide(card, 'open', 344);
+  assert.deepEqual(card.anims.map(a => a.prop), ['transform', 'opacity', 'filter']);
+  for (const a of card.anims) {
+    assert.equal(a.id, 'slide');
+    assert.equal(a.opts.easing, SLIDE_EASE);
+    assert.equal(a.opts.duration, SLIDE.open[a.prop]);
+    assert.deepEqual(a.frames, [{ [a.prop]: away[a.prop] }, { [a.prop]: SLIDE.shown[a.prop] }]);
+  }
+  card.style.transform = 'translateX(0px)'; card.style.filter = 'blur(0px)'; card.style.opacity = '1';
+  for (const a of card.anims) a.finish();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(card.getAnimations().length, 0);
+  assert.deepEqual([card.style.transform, card.style.opacity, card.style.filter], ['', '', ''], 'a transform or filter left behind would trap position: fixed children');
+
+  const rest = fakeCard();
+  playSlide(rest, 'close', 344);
+  for (const a of rest.anims) {
+    assert.equal(a.opts.duration, SLIDE.close[a.prop]);
+    assert.equal(a.opts.easing, SLIDE_EASES.close[a.prop]);
+    assert.deepEqual(a.frames, [{ [a.prop]: SLIDE.shown[a.prop] }, { [a.prop]: away[a.prop] }], 'out the way it came: to the right');
+  }
+
+  const mid = fakeCard();
+  playSlide(mid, 'open', 344);
+  for (const a of mid.anims) a.progress = 0.4;
+  playSlide(mid, 'close', 344);
+  const live = mid.getAnimations();
+  assert.equal(live.length, 3, 'only the close runs');
+  for (const a of live) assert.deepEqual(a.frames[0], { [a.prop]: `${a.prop}@0.4` }, `${a.prop} reverses from what is on screen`);
+
+  // The lift is untouched by sharing its player.
+  const lifted = fakeCard();
+  genieMod.playLift(lifted, 'open');
+  assert.ok(lifted.anims.every(a => a.id === 'lift'));
+});
+
+test('corner slide: a bottom-right card slides whatever the genie setting says; reduced motion still fades', () => {
+  assert.ok(modal.includes("motion: placement === 'bottom-right' ? 'slide' : undefined,"), 'the corner decides, not each host');
+  assert.ok(hook.includes("const cardMotionNow: CardMotion = options.motion === 'slide' && motionNow !== 'fade' ? 'slide' : motionNow;"),
+    'the OS asking for reduced motion wins; otherwise genie on or off, the corner slides');
+  assert.ok(hook.includes('motionNowRef.current = cardMotionNow;') && hook.includes('useRef<CardMotion>(cardMotionNow)'));
+  // `reduced` stays about the app as a whole: GenieModal lets go of EVERY card's
+  // pictures on it, and a corner notice mounting must not do that to Settings.
+  assert.ok(hook.includes("const reducedNow = motionNow !== 'genie';") && hook.includes('reduced: reducedNow };'));
+  assert.ok(hook.includes("if (motion === 'slide' && card) playSlide(card, 'open', slideTravel());"));
+  assert.ok(hook.includes("if (motion === 'slide' && card) playSlide(card, 'close', slideTravel());"));
+  assert.ok(hook.includes("const SLIDE_OPEN_CLOCK  = { duration: slideMs('open') / 1000, ease: 'linear' as const };"), 'onOpened fires as it lands');
+  assert.ok(hook.includes("const SLIDE_CLOSE_CLOCK = { duration: slideMs('close') / 1000, ease: 'linear' as const };"), 'the card unmounts as it clears the edge');
+  assert.ok(hook.includes("const a = motion === 'slide' ? animate(genie, 0, SLIDE_OPEN_CLOCK)"));
+  assert.ok(hook.includes("const a = motion === 'slide' ? animate(genie, 1, SLIDE_CLOSE_CLOCK)"));
+  const render = hook.slice(hook.indexOf('const renderGenie = useCallback('), hook.indexOf("useEffect(() => genie.on('change', renderGenie)"));
+  assert.ok(render.indexOf("if (motion === 'fade') {") < render.indexOf("if (motion === 'slide') return;"), 'no per-frame write: the slide draws itself');
+  // The travel is measured on the wrap, which is never transformed.
+  assert.ok(/const slideTravel = \(\) => \{\s*const wrap = wrapRef\.current;\s*return wrap \? window\.innerWidth - wrap\.getBoundingClientRect\(\)\.left : 0;\s*\};/.test(hook));
+  // Which cards: the three that sit in the corner through GenieModal.
+  for (const f of ['components/NativelyQuotaBanner.tsx', 'components/HindsightStatusBanner.tsx', 'components/UpdateModal.tsx']) {
+    assert.ok(code(f).includes('placement="bottom-right"'), f);
+  }
+});
+
+test('corner slide: the launcher’s own Refreshed toast is on the same clocks', () => {
+  const launcher = code('components/Launcher.tsx');
+  const toast = launcher.slice(launcher.indexOf('key="refresh-toast"'), launcher.indexOf('className={`fixed bottom-10 right-10'));
+  const { SLIDE } = genieMod;
+  const s = ms => String(ms / 1000);
+  const { SLIDE_EASE, SLIDE_OUT_EASE, SLIDE_FADE_OUT_EASE } = genieMod;
+  const arr = ease => `[${ease.match(/-?[\d.]+/g).join(', ')}]`;
+  const [inE, outE, fadeE] = [SLIDE_EASE, SLIDE_OUT_EASE, SLIDE_FADE_OUT_EASE].map(arr);
+  assert.ok(toast.includes(`{ x: 'calc(0% + 0px)', opacity: 1, filter: 'blur(0px)', transition: { x: { duration: ${s(SLIDE.open.transform)}, ease: ${inE} }, opacity: { duration: ${s(SLIDE.open.opacity)}, ease: ${inE} }, filter: { duration: ${s(SLIDE.open.filter)}, ease: ${inE} } } }`));
+  assert.ok(toast.includes(`{ x: 'calc(100% + 40px)', opacity: 0, filter: 'blur(2px)', transition: { x: { duration: ${s(SLIDE.close.transform)}, ease: ${outE} }, opacity: { duration: ${s(SLIDE.close.opacity)}, ease: ${fadeE} }, filter: { duration: ${s(SLIDE.close.filter)}, ease: ${fadeE} } } }`));
+  // Its own width plus its 40px inset (bottom-10 right-10), not a fixed 300px a long translation would outgrow.
+  assert.ok(toast.includes("{ x: 'calc(100% + 40px)', opacity: 0, filter: 'blur(2px)' }") && !/x: 300/.test(toast));
+  assert.ok(!/spring|scale/.test(toast), 'no spring and no scale: it used to bounce in at 0.9');
+  assert.ok(toast.includes('prefersReducedMotion ? { opacity: 0 }'), 'reduced motion fades in place');
 });

@@ -27,7 +27,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react
 import { animate, cubicBezier, useMotionValue, useReducedMotion } from 'framer-motion';
 import {
   genieFrame, genieBands, genieBandRows, genieOpacity, genieShadowOpacity, genieEdges,
-  genieTrack, SLOT_INSET, BAND_OVERLAP, playLift, liftMs, LIFT,
+  genieTrack, SLOT_INSET, BAND_OVERLAP, playLift, liftMs, LIFT, playSlide, slideMs,
   type GenieGeometry,
 } from './genieMotion.mjs';
 import type { GenieSnapshot } from './genieSnapshots';
@@ -84,10 +84,11 @@ const SCRIM_CLOSE_S = 0.3;
 
 /**
  * How a run moves: the genie; the lift, with the genie turned off in Settings
- * (genieMotion.mjs LIFT); or, when the OS asks for reduced motion, the plain
- * fade.
+ * (genieMotion.mjs LIFT); the slide, for a notice in the window's corner
+ * whatever that setting says (genieMotion.mjs SLIDE); or, when the OS asks for
+ * reduced motion, the plain fade.
  */
-type CardMotion = 'genie' | 'lift' | 'fade';
+type CardMotion = 'genie' | 'lift' | 'slide' | 'fade';
 
 // The lift draws itself (playLift, on the compositor). Framer's value is only
 // its clock here: linear, as long as the lift's slowest property, so the open
@@ -96,6 +97,9 @@ const LIFT_OPEN_CLOCK  = { duration: liftMs('open') / 1000, ease: 'linear' as co
 const LIFT_CLOSE_CLOCK = { duration: liftMs('close') / 1000, ease: 'linear' as const };
 const LIFT_DIM_OPEN    = { duration: LIFT.open.dim / 1000, ease: EASE_FM as any };
 const LIFT_DIM_CLOSE   = { duration: LIFT.close.dim / 1000, ease: EASE_FM as any };
+// The slide draws itself too (playSlide); the same kind of clock.
+const SLIDE_OPEN_CLOCK  = { duration: slideMs('open') / 1000, ease: 'linear' as const };
+const SLIDE_CLOSE_CLOCK = { duration: slideMs('close') / 1000, ease: 'linear' as const };
 
 // Backstop: Chromium stops animation frames in a hidden window, and a close
 // that never completes must still release the onboarding slot.
@@ -155,6 +159,11 @@ export interface GenieCardOptions {
    * open, a new theme or size), the live copies stand in.
    */
   snapshots?: GenieSnapshotSource;
+  /**
+   * 'slide': the card is a notice in the window's bottom-right corner, and
+   * comes in from the right edge instead of pouring or lifting.
+   */
+  motion?: 'slide';
 }
 
 export interface GenieSnapshotSource {
@@ -174,12 +183,16 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
   const osReduced = useReducedMotion() ?? false;
   const motionNow: CardMotion = osReduced ? 'fade' : genieEnabled ? 'genie' : 'lift';
   const reducedNow = motionNow !== 'genie';
-  const motionNowRef = useRef(motionNow);
-  motionNowRef.current = motionNow;
+  // This card's own motion. `reduced` above stays about the app as a whole (the
+  // host lets go of every card's pictures on it), so a corner notice sliding
+  // while the genie is on does not read as the genie being off.
+  const cardMotionNow: CardMotion = options.motion === 'slide' && motionNow !== 'fade' ? 'slide' : motionNow;
+  const motionNowRef = useRef(cardMotionNow);
+  motionNowRef.current = cardMotionNow;
   // The motion of the run on screen, fixed when it starts. Read from a ref,
   // not a dependency: flipping the switch inside an open Settings card re-ran
   // the open effect and poured the card out again under the user.
-  const runMotionRef = useRef<CardMotion>(motionNow);
+  const runMotionRef = useRef<CardMotion>(cardMotionNow);
   const bandCount = options.bands ?? GENIE_BANDS;
   const onOpenedRef = useRef(options.onOpened);
   onOpenedRef.current = options.onOpened;
@@ -213,6 +226,13 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
   // layer's fade and the shadow stand-in. Empty when the main thread draws.
   const trackRef = useRef<Animation[]>([]);
   const pinsRef = useRef(new WeakMap<HTMLElement, string>());
+
+  // How far a corner notice travels to clear the window's right edge: from
+  // the wrap's left side (the wrap is never transformed) to that edge.
+  const slideTravel = () => {
+    const wrap = wrapRef.current;
+    return wrap ? window.innerWidth - wrap.getBoundingClientRect().left : 0;
+  };
 
   const measure = () => {
     const r = wrapRef.current?.getBoundingClientRect();
@@ -437,6 +457,7 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     }
     // The lift draws itself (playLift); nothing to do per frame.
     if (motion === 'lift') return;
+    if (motion === 'slide') return;
 
     // At rest only when the run is heading there (an open, or nothing
     // running). A close starts from rest too, and its eased progress stays
@@ -523,7 +544,9 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     scrim.set(0);
     const card = cardRef.current;
     if (motion === 'lift' && card) playLift(card, 'open');
-    const a = animate(genie, 0, motion === 'genie' ? GENIE_OPEN : motion === 'fade' ? REDUCED_FADE : LIFT_OPEN_CLOCK);
+    if (motion === 'slide' && card) playSlide(card, 'open', slideTravel());
+    const a = motion === 'slide' ? animate(genie, 0, SLIDE_OPEN_CLOCK)
+      : animate(genie, 0, motion === 'genie' ? GENIE_OPEN : motion === 'fade' ? REDUCED_FADE : LIFT_OPEN_CLOCK);
     const b = animate(scrim, 1, motion === 'lift' ? LIFT_DIM_OPEN : { duration: SCRIM_OPEN_S, ease: EASE_FM as any });
     let live = true;
     a.then(() => { if (live) onOpenedRef.current?.(); });
@@ -581,10 +604,13 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
       if (!reduced && rowsRef.current) renderGenie(from);
       const card = cardRef.current;
       if (motion === 'lift' && card) playLift(card, 'close');
-      const a = animate(genie, 1, motion === 'genie' ? GENIE_CLOSE : motion === 'fade' ? REDUCED_FADE : LIFT_CLOSE_CLOCK);
+      if (motion === 'slide' && card) playSlide(card, 'close', slideTravel());
+      const a = motion === 'slide' ? animate(genie, 1, SLIDE_CLOSE_CLOCK)
+        : animate(genie, 1, motion === 'genie' ? GENIE_CLOSE : motion === 'fade' ? REDUCED_FADE : LIFT_CLOSE_CLOCK);
       // The lift's dim leaves with the card, not after it.
       const b = animate(scrim, 0, motion === 'genie'
         ? { duration: SCRIM_CLOSE_S, delay: GENIE_CLOSE.duration - SCRIM_CLOSE_S, ease: EASE_FM as any }
+        : motion === 'slide' ? SLIDE_CLOSE_CLOCK
         : motion === 'fade' ? REDUCED_FADE : LIFT_DIM_CLOSE);
       // `live`: when the backstop has already released the card (frames were
       // stopped in a hidden window) and the host has moved on, the animation

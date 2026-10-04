@@ -3,9 +3,14 @@
 // A popup card that opens and closes with the macOS genie: the same pour out
 // of, and back into, a slot at the window's bottom edge (straight below the
 // card: the bottom centre, for a centred one) that the browser-extension and
-// permissions cards use. Settings, the Modes and Profile Intelligence manager,
-// the other launcher popups and the notices in the bottom-right corner all go
-// through here, so every card in the app moves the same way.
+// permissions cards use. Settings, the Modes and Profile Intelligence manager
+// and the other launcher popups all go through here, so every card in the app
+// moves the same way.
+//
+// The notices in the bottom-right corner go through here too, for the presence
+// and the frozen content, but they do not pour: they slide in from the
+// window's right edge and back out through it (genieMotion.mjs SLIDE), the way
+// the search-index notice beside them does.
 //
 // The animation itself is useGenieCard's. This adds what those two toasters
 // never needed:
@@ -99,7 +104,8 @@ export interface GenieModalProps {
   modal?: boolean;
   /**
    * Where the card sits in the window (default: centred). The genie pours
-   * into a slot at the window's bottom edge, straight below the card.
+   * into a slot at the window's bottom edge, straight below the card. A card
+   * in the bottom-right corner slides in from the right edge instead.
    */
   placement?: 'center' | 'bottom-right';
   zIndex?: number;
@@ -192,6 +198,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   const genie = useGenieCard(presence.mounted, label, {
     snapshots,
     onOpened: () => { landedRef.current = true; onOpened?.(); },
+    motion: placement === 'bottom-right' ? 'slide' : undefined,
   });
   genieRef.current = genie;
   const { shown, closing, closeThen, scrim, wrapRef, bandsRef, shadowRef } = genie;
