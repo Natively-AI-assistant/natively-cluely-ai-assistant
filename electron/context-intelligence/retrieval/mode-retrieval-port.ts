@@ -25,6 +25,7 @@ export interface ModeRetrieverLike {
     meetingActive?: boolean;
     rerankPoolMultiplier?: number;
     queryEmbedRetryBudgetMs?: number;
+    perItemOverheadTokens?: number;
   }) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
   /** Corpus arbitration: do these files hold the question's distinctive terms together? */
   probeReferenceAnchors?: (modeInfo: unknown, files: unknown[], question: string) => boolean;
@@ -336,6 +337,13 @@ export function isSmallReferenceCorpus(files: ReadonlyArray<{ content?: string |
 /** Whole-pack threshold, in the packer's estimateTokens units (~4 chars/token). */
 export const WHOLE_PACK_MAX_TOKENS = 12000;
 
+/**
+ * What the prompt packer charges for one evidence item beyond its text: the
+ * <evidence …> tag with its attributes (~380 chars) and escaping. The same
+ * figure the orchestrator reserves per whole file (WHOLE_PACK_ITEM_OVERHEAD).
+ */
+export const PACKED_ITEM_OVERHEAD_TOKENS = 120;
+
 /** True when the attached pack is read whole on a turn that reads the files (small corpus included). */
 export function isWholePackCorpus(files: ReadonlyArray<{ content?: string | null }>): boolean {
   const t = referenceCorpusTokens(files);
@@ -389,6 +397,8 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
         // The plan's own budget (multi-file turns) wins over the policy budget the
         // caller constructed this port with, so retriever and packer agree.
         query, topK: opts.topK, tokenBudget: Math.max(input.tokenBudget, opts.tokenBudget ?? 0) * (exhaustive ? 3 : 1),
+        // Count each item's <evidence> tag the way the packer will (E11, 2026-10-04).
+        perItemOverheadTokens: PACKED_ITEM_OVERHEAD_TOKENS,
         ...(exhaustive ? { rerankPoolMultiplier: 2 } : {}),
         // RERANK ON THE V3 PATH (2026-09-07). This was `allowRerank: false`, and
         // V3 is the default answer path — so a reranker the user selected in

@@ -654,6 +654,32 @@ export interface DocumentAnswerabilityScore {
   hasDefinitionEvidence: boolean;
 }
 
+/** A line that IS an overview heading: "Abstract", "1. Introduction", "## Executive summary", "Background:". */
+const OVERVIEW_HEADING_RE = /^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\d+(?:\.\d+)*\.?\s+)?(?:executive\s+)?(abstract|introduction|overview|background|methodology|summary|chapter outlines)\s*[:.\-—]?\s*(?:\*\*|__)?\s*$/i;
+
+/** Question words that open a sentence capitalised without being a name. */
+const QUESTION_OPENERS = new Set(['what', 'how', 'why', 'when', 'where', 'which', 'who', 'whom', 'whose', 'is', 'are', 'was', 'were', 'can', 'could', 'would', 'should', 'do', 'does', 'did', 'tell', 'explain', 'describe', 'give', 'list', 'show', 'i', 'and', 'but', 'so', 'the', 'a', 'an', 'in', 'on', 'for', 'please', 'remind', 'okay', 'ok', 'hey']);
+
+/**
+ * Names in a question, in the same form extractLikelyEntities returns them
+ * (lower-cased capitalised phrases), minus question words that are capitalised
+ * only because they open the sentence; plus any token carrying a digit (Q3,
+ * SKU-114, v2.3).
+ */
+function extractNamedEntities(question: string): string[] {
+  const raw = String(question || '');
+  const out = new Set<string>();
+  for (const phrase of raw.match(/\b[A-Z][A-Za-z0-9-]*(?:[- ][A-Z0-9][A-Za-z0-9-]*){0,4}\b/g) || []) {
+    const words = phrase.split(/[- ]/);
+    while (words.length && QUESTION_OPENERS.has(words[0].toLowerCase())) words.shift();
+    if (!words.length) continue;
+    out.add(phrase.toLowerCase());
+    out.add(words.join(' ').toLowerCase());
+  }
+  for (const m of raw.matchAll(/\b[A-Za-z]*\d[A-Za-z0-9.-]*\b/g)) out.add(m[0].toLowerCase());
+  return [...out];
+}
+
 function extractLikelyEntities(question: string): string[] {
   const raw = String(question || '');
   const phraseMatches = raw.match(/\b[A-Z][A-Za-z0-9-]*(?:[- ][A-Z0-9][A-Za-z0-9-]*){0,4}\b/g) || [];
@@ -680,7 +706,21 @@ export function computeDocumentAnswerabilityScore(params: {
   const entities = extractLikelyEntities(params.question);
   const entityHits = entities.filter(e => e.length >= 3 && lower.includes(e.toLowerCase()));
   const hasExactEntity = entityHits.length > 0;
-  if (hasExactEntity) { score += Math.min(0.25, entityHits.length * 0.08); boosts.push(`entity:${entityHits.slice(0, 3).join(',')}`); }
+  // A NAME the question asks about (capitalised mid-sentence, or carrying a
+  // digit) is worth more than a common word it shares (2026-10-04, E11).
+  // Measured: "What code opens the gate at the Ashbrook depot?" — every depot's
+  // chunk matched "code, gate, depot" and scored 0.24; the Ashbrook chunk matched
+  // the name as well and scored 0.25 (the old flat 0.08 per hit, capped at
+  // 0.25), so the one chunk that could answer was not ranked above the five
+  // that could not, and the packer dropped it.
+  if (hasExactEntity) {
+    const named = new Set(extractNamedEntities(params.question));
+    const namedHits = entityHits.filter(e => named.has(e.toLowerCase()));
+    const commonHits = entityHits.length - namedHits.length;
+    score += Math.min(0.30, namedHits.length * 0.15) + Math.min(0.15, commonHits * 0.05);
+    boosts.push(`entity:${entityHits.slice(0, 3).join(',')}`);
+    if (namedHits.length) boosts.push(`named:${namedHits.slice(0, 3).join(',')}`);
+  }
 
   const sectionHits = entities.filter(e => section.includes(e.toLowerCase()));
   if (sectionHits.length > 0) { score += 0.15; boosts.push('section-title-overlap'); }
@@ -697,7 +737,16 @@ export function computeDocumentAnswerabilityScore(params: {
   if (queryShape === 'document_structure_answer' && /^\[Table of Contents\s*\|/i.test(text)) { score += 0.65; boosts.push('table-of-contents-navigation'); }
   if (queryShape === 'document_followup_answer' && (hasExactEntity || hasNumericEvidence)) { score += 0.20; boosts.push('followup-entity-or-value'); }
 
-  const genericOverview = /\b(abstract|introduction|overview|background|methodology|chapter outlines|this thesis is organized|summary)\b/i.test(text.slice(0, 220));
+  // An overview SECTION, not a chunk that merely uses the word (2026-10-04, E11):
+  // "summary" or "background" anywhere in the first 220 characters cost the
+  // chunk that held the answer 0.18 and its place in the prompt. Now: the
+  // section title, a LINE in the first 220 characters that is itself an
+  // overview heading ("Abstract", "1. Introduction", "**Overview**"), or
+  // thesis-structure prose.
+  const headLines = text.replace(/^\[[^\]]*\]\s*/, '').slice(0, 220).split('\n');
+  const genericOverview = headLines.some((line) => OVERVIEW_HEADING_RE.test(line))
+    || /\b(abstract|introduction|overview|background|methodology|summary)\b/i.test(section)
+    || /\b(chapter outlines|this thesis is organized)\b/i.test(text.slice(0, 220));
   if (genericOverview && queryShape !== 'broad_overview') { score -= 0.18; penalties.push('generic-overview-specific-query'); }
   if (queryShape === 'document_absent_fact_refusal' && !hasExactEntity && !hasNumericEvidence) { score -= 0.10; penalties.push('absent-probe-low-coverage'); }
 

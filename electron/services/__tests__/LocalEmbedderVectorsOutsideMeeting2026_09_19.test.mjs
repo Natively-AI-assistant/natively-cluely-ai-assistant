@@ -32,15 +32,26 @@ function retriever(provider) {
 const ask = (hr, meetingActive) => hr.retrieve({ query: 'how long are audit logs kept', modeId: 'm', files: FILES, tokenBudget: 1500, topK: 20, forceDocumentGrounding: true, allowRerank: false, ...(meetingActive === undefined ? {} : { meetingActive }) });
 
 describe('local provider', () => {
-  test('meeting running → lexical-only, no query embed (the hotfix stands)', async () => {
+  // 2026-10-04 (owner's decision, E11): typed questions query the vectors in a
+  // meeting too — a spoken turn in the same meeting already does. The July
+  // hotfix stays one switch away (NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1).
+  test('meeting running → the vectors are queried, like a spoken turn', async () => {
     const { hr, embeds } = retriever('local');
     const r = await ask(hr, true);
-    assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+    assert.equal(r.usedHybrid, true); assert.ok(embeds.query > 0);
   });
-  test('UNKNOWN meeting state → still lexical-only (conservative default)', async () => {
+  test('UNKNOWN meeting state → the vectors are queried', async () => {
     const { hr, embeds } = retriever('local');
     const r = await ask(hr, undefined);
-    assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+    assert.equal(r.usedHybrid, true); assert.ok(embeds.query > 0);
+  });
+  test('the old hotfix is one switch away: lexical-only in a meeting', async () => {
+    process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL = '1';
+    try {
+      const { hr, embeds } = retriever('local');
+      const r = await ask(hr, true);
+      assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+    } finally { delete process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL; }
   });
   test('explicitly NO meeting → the vectors are queried', async () => {
     const { hr, embeds } = retriever('local');
