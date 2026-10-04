@@ -4,7 +4,7 @@ const squash = (t) => String(t ?? '').replace(/--\s*\d+\s*of\s*\d+\s*--/g, ' ').
 const med = (a) => { const s = a.filter((x) => Number.isFinite(x)).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
 const mean = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
 const S = {};
-for (const tag of ['m1', 'm1r', 'e12']) {
+for (const tag of ['m1', 'm1r', process.argv[2] || 'e12']) {
   const run = loadRun(`evidence-rich/results/er-dev-${tag}`); const J = Object.fromEntries(readJsonl(`evidence-rich/judge/out/base/er-dev-${tag}.opus.jsonl`).filter((j) => j.ok).map((j) => [j.benchmark_id, j.official]));
   const s = { delivered: 0, had: 0, allDelivered: 0, required: 0, typedFirst: [], heardFirst: [], all: [], heard: [], hard: 0, hardHeard: 0, judged: 0 };
   for (const row of run.rows) {
@@ -18,7 +18,7 @@ for (const tag of ['m1', 'm1r', 'e12']) {
   S[tag] = s;
   console.log(`${tag.padEnd(4)} needed-fact strings in the prompt ${s.delivered}/${s.had}; rows with every needed fact ${s.allDelivered}/${s.required}; first word median typed ${med(s.typedFirst)} ms, heard ${med(s.heardFirst)} ms; Opus mean ${mean(s.all).toFixed(3)} (n ${s.judged}), hard ${s.hard}; heard mean ${mean(s.heard).toFixed(3)}, heard hard ${s.hardHeard}`);
 }
-const { m1, m1r, e12 } = S; const L = (n, ok, d) => console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${n}  (${d})`);
+const { m1, m1r } = S; const e12 = S[process.argv[2] || 'e12']; const L = (n, ok, d) => console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${n}  (${d})`);
 L('E11.2 delivered ≥ min(m1, m1r)', e12.delivered >= Math.min(m1.delivered, m1r.delivered), `${e12.delivered} vs min ${Math.min(m1.delivered, m1r.delivered)}`);
 L('E11.3 typed first word ≤ max + 150 ms', med(e12.typedFirst) <= Math.max(med(m1.typedFirst), med(m1r.typedFirst)) + 150, `${med(e12.typedFirst)} vs max ${Math.max(med(m1.typedFirst), med(m1r.typedFirst))}`);
 L('E11.4 mean ≥ min − 0.05; hard ≤ max + 2', mean(e12.all) >= Math.min(mean(m1.all), mean(m1r.all)) - 0.05 && e12.hard <= Math.max(m1.hard, m1r.hard) + 2, `${mean(e12.all).toFixed(3)} vs min ${Math.min(mean(m1.all), mean(m1r.all)).toFixed(3)}; hard ${e12.hard} vs max ${Math.max(m1.hard, m1r.hard)}`);

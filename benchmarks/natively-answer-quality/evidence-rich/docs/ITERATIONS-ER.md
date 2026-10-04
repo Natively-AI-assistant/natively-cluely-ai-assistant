@@ -1189,3 +1189,25 @@ Judge: cc.
 5. First word, median: heard ≤ control + 100 ms; typed ≤ control + 150 ms.
 A failure of ONLY the hard-fail part of line 3 or 4 triggers one repeat of the candidate run; the count is then the
 mean of the two runs. Any other failure → not kept.
+
+### E11 + E12 — dev run and verdict (2026-10-04)
+`er-dev-e12` went through AgentRouter by my mistake (the supervisor was started without `--fresh-userdata`; the profile
+left by the limits probes still held an AgentRouter key, while the run header said deepseek-direct). It does not meet
+the rule's conditions and is not used for the verdict. The runner now refuses to start on any route but direct DeepSeek.
+`er-dev-e12b` is the valid run (`fix/older-speech` c6b1bc59, fresh profile, 270/270 on deepseek-direct), judged with the
+earlier Opus series for comparison with m1 / m1r (`report/rule-e11-e12.mjs e12b`):
+
+| | m1 | m1r | e12b |
+|---|---|---|---|
+| needed-fact strings in the prompt (of 1,225) | 404 | 401 | 405 |
+| rows with every needed fact (of 212) | 201 | 200 | 204 |
+| Opus mean / hard fails | 8.678 / 20 | 8.576 / 24 | 8.681 / 20 |
+| heard mean / hard fails | 8.648 / 13 | 8.524 / 16 | 8.687 / 12 |
+| first word, median: typed / heard | 899 / 1,484 ms | 1,096 / 1,628 ms | 1,111 / 1,157 ms |
+
+E11.2 PASS, E11.3 PASS (1,111 ≤ 1,096 + 150), E11.4 PASS, E12.3 PASS, E12.4 PASS. With the probe lines:
+**E11 KEEP, E12 KEEP.** The benchmark mean does not move (its packs are all under 12,000 tokens and its meetings short):
+what these two changes buy is in the probes (typed multi-file misses 6 of 9 → 0; older speech 36/36 facts).
+Observation, not explained: on heard turns in the document-grounded modes the time from the hotkey to the provider
+request fell from a median of ~500 ms (p90 1,222) on m1/m1r/m2 to 24 ms; prompt size and quality are unchanged. The
+step that used to take that time was not identified from the logs.
