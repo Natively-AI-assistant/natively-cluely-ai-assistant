@@ -1399,3 +1399,19 @@ looking-for-work reuse declared conflicts from new angles (the packs declare few
 **E16 amended 2026-10-04, before any E16 measurement:** control = er-dev-e13c + er-dev2-e13c (`cand/e13b`); candidate =
 er-dev-e16 + er-dev2-e16 (`cand/e16` on top of it); every line is read on the two partitions pooled. Line 1 becomes:
 profile-mode turns with a profile loaded and no résumé in the prompt fall to at most 15 % of the control's count.
+
+### E16 — judge-free lines and verdict (2026-10-05; er-dev-e16 + er-dev2-e16 = `cand/e16` e3cb8ba7 against er-dev-e13c + er-dev2-e13c; all four runs clean: direct DeepSeek, no turn over 5 s, no fallback answer)
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. Résumé loaded but not in the prompt: ≤ 15 % of control | 24 → 4 of 103 (bar: 3) | no, by one |
+| 2. Rows with every needed fact ≥ control + 1 | 490 → 488 of 499 | **no** |
+| 6. First word, profile modes, median ≤ control + 150 ms | 882 → 869 ms (input tokens 10,909 → 11,230) | yes |
+**Verdict by the rule: not kept as built** (lines 1 and 2; the judged lines were not read — the judging of the two E16
+runs was stopped, they decide nothing).
+What line 2 is made of: 4 rows GAINED their evidence (LFW-015, TI-024, D2-TI-002, D2-TI-006: the planning misses the
+change was written for) and 6 LOST the job description (LFW-012, TI-014, TI-023, D2-TI-008, D2-TI-009, D2-TI-025).
+Cause of the loss, from the traces: on "do I clear their experience bar? count it from my CV" the control's first
+pass came back PARTIAL and a second pass, classified with DOCUMENT_FACT as well, admitted the job description; with
+E16 the first pass already holds the whole résumé, answerability is FULL, there is no second pass, and the whole job
+description — planned, retrieved — is removed by the claim-authority gate because it cannot evidence a personal-skill
+claim. Whole MODE files are exempt from that gate since efc126a9; whole PROFILE documents are not.
