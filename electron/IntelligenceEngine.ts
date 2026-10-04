@@ -5786,6 +5786,10 @@ export class IntelligenceEngine extends EventEmitter {
                                                 whatToAnswerCancellationToken.signal,
                                                 wtaRepairSystemPrompt,
                                                 ['reference_files'],
+                                                // The whole answer prompt, like the claim pass (E5). At the
+                                                // 24,000 default a turn that read files whole lost their
+                                                // tails here: measured on every repair since E1 (E10).
+                                                (require('./llm/claimVerifier') as typeof import('./llm/claimVerifier')).CLAIM_VERIFIER_MATERIAL_MAX_CHARS,
                                             )
                                         ) as AsyncGenerator<string>,
                                         firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
