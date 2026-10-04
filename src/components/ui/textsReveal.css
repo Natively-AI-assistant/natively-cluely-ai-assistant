@@ -85,3 +85,21 @@
 @media (prefers-reduced-motion: reduce) {
   .cal-link-exit { transition: none; }
 }
+
+/* A refused sign-in's message under Connect calendar. It grows down from the
+   button while the sample meeting fades out of its way (.cal-link-exit), one
+   beat after it so the two never sit half-faded on top of each other.
+   Motion tokens: 250ms --duration-fast on --ease-smooth-out (a surface
+   opening), 4px --distance-micro, 2px --blur-small, 80ms --duration-micro to
+   sequence it after the sample. It leaves at once: Connect was pressed again. */
+.cal-connect-error {
+  animation: cal-connect-error-in 250ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+}
+@keyframes cal-connect-error-in {
+  from { opacity: 0; transform: translateY(-4px); filter: blur(2px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+@keyframes cal-connect-error-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .cal-connect-error { animation: cal-connect-error-fade 150ms linear both; }
+}

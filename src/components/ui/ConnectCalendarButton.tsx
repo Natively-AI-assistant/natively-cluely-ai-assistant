@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useT } from '../../i18n';
 import { ArrowRight, Loader, Check } from 'lucide-react';
 // Static import keeps Vite from warning about a "mixed" dynamic+static import
@@ -50,9 +50,11 @@ interface ConnectCalendarButtonProps extends React.ButtonHTMLAttributes<HTMLButt
      * linking without replaying it on every launch.
      */
     onConnect?: (info: { fresh: boolean }) => void;
+    /** A sign-in error is showing under the button, or has just been cleared. */
+    onErrorChange?: (showing: boolean) => void;
 }
 
-const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className = '', variant = 'default', onConnect, ...props }) => {
+const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className = '', variant = 'default', onConnect, onErrorChange, ...props }) => {
     const t = useT();
     const [loading, setLoading] = useState(false);
     const [connected, setConnected] = useState(false);
@@ -60,6 +62,12 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
     // then does the label swap animate.
     const [justConnected, setJustConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // The caller makes room for the message (the calendar card moves its sample
+    // meeting out from under it).
+    const onErrorChangeRef = useRef(onErrorChange);
+    onErrorChangeRef.current = onErrorChange;
+    useEffect(() => { onErrorChangeRef.current?.(!!error); }, [error]);
 
     useEffect(() => {
         if (window.electronAPI) {
@@ -128,7 +136,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
         // The caller's className lands here, not on the button: a Tailwind
         // translate is a `transform`, which the material's :active scale would
         // replace, so the pill would jump on every press.
-        <div className={`flex flex-col items-center gap-1.5 w-fit ${className}`}>
+        <div className={`flex flex-col items-center gap-2.5 w-fit ${className}`}>
             <LiquidGlassButton
                 {...props}
                 variant="sky"
@@ -156,7 +164,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
             </LiquidGlassButton>
             {error && (
                 <span
-                    className="text-[11px] text-red-300 bg-red-950/95 backdrop-blur-sm border border-red-500/30 rounded-lg px-2.5 py-1 max-w-[280px] leading-tight text-center"
+                    className="cal-connect-error text-[11px] text-red-300 bg-red-950/95 backdrop-blur-sm border border-red-500/30 rounded-lg px-3 py-2 max-w-[260px] leading-snug text-center"
                     title={error}
                 >
                     {error}
