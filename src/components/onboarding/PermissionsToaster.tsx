@@ -5,8 +5,11 @@
 // Split-view permissions onboarding card.
 // Shows once on first launch, after the launcher UI is visible.
 // macOS: raises the mic consent prompt, opens System Settings for screen recording.
-// Windows: mic only — there is no per-app screen-capture gate — and the macOS
-// visual guide is not rendered at all.
+// Windows: the same card. Only the microphone has to be given there — there is
+// no per-app screen-capture gate — so the Screen Recording row is shown already
+// allowed, and the guide pictures the WINDOWS microphone page, never the macOS
+// alert (CLAUDE.md: no macOS troubleshooting on Windows).
+// Any other platform keeps the compact single-column card with no guide.
 //
 // Row presentation lives in src/lib/permissionRowPolicy.mjs so both platform
 // branches are testable without mutating process.platform (CLAUDE.md). This
@@ -18,13 +21,14 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Circle } from 'lucide-react';
+import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Circle, LayoutList, ArrowLeft, Minus, Square, ChevronRight } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import { GenieModal } from '../ui/GenieModal';
 import { describePermRow, allPermissionsResolved } from '../../lib/permissionRowPolicy.mjs';
 import type { RowPresentation } from '../../lib/permissionRowPolicy.mjs';
+import { windowsMicPage } from '../../lib/micPermissionPolicy.mjs';
 
 const STORAGE_KEY = 'natively_perms_shown_v1';
 
@@ -35,6 +39,43 @@ const T = {
   green: '#34D399',
   amber: '#F59E0B',
 };
+
+// "Open Settings" in the card's own blue: the row icons' colour, and the blue
+// macOS gives an alert's default button. The material is the onboarding glass
+// (`lavender`: top sheen, hairline rim, a glow underneath), re-tinted through
+// its --lg-lav-* tokens. Every tinted token is set, not only the fill, or the
+// kit's lavender shows through at the rim.
+//
+// A set of this card's own rather than WELCOME_BUTTON_TOKENS: those also colour
+// the welcome CTA and Settings' selected tiles, which stay as they are.
+// White on #007AFF is 4.0:1 at 14px semibold.
+const OPEN_SETTINGS_GLASS = {
+  light: {
+    '--lg-lav-bg': T.blue,
+    '--lg-lav-hover': '#1F8BFF',
+    '--lg-lav-fg': '#FFFFFF',
+    '--lg-lav-rim': 'rgba(255,255,255,0.46)',
+    '--lg-rim-2': 'rgba(255,255,255,0.20)',
+    '--lg-rim-3': 'rgba(255,255,255,0.10)',
+    '--lg-lens-rim-soft': 'rgba(255,255,255,0.22)',
+    // On a white card a full-strength glow blooms; a contact shadow carries it.
+    '--lg-lav-glow': 'rgba(0,122,255,0.34)',
+    '--lg-lav-under': 'rgba(0,45,120,0.30)',
+    '--lg-lav-drop': 'rgba(0,45,120,0.18)',
+  },
+  dark: {
+    '--lg-lav-bg': T.blue,
+    '--lg-lav-hover': '#1F8BFF',
+    '--lg-lav-fg': '#FFFFFF',
+    '--lg-lav-rim': 'rgba(255,255,255,0.32)',
+    '--lg-rim-2': 'rgba(255,255,255,0.14)',
+    '--lg-rim-3': 'rgba(255,255,255,0.08)',
+    '--lg-lens-rim-soft': 'rgba(255,255,255,0.18)',
+    '--lg-lav-glow': 'rgba(0,122,255,0.55)',
+    '--lg-lav-under': 'rgba(0,20,70,0.36)',
+    '--lg-lav-drop': 'rgba(0,0,0,0.30)',
+  },
+} as const;
 
 type PermStatus = 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown' | 'loading';
 type RowKind = 'screen' | 'microphone';
@@ -57,8 +98,6 @@ interface CardColors {
   mockShadow: string;
   mockIconShadow: string;
   mockTextPrimary: string;
-  mockSecondaryBg: string;
-  mockSecondaryBorder: string;
   mockSecondaryText: string;
   panelBg: string;
   panelBorder: string;
@@ -82,7 +121,26 @@ const SPRING = {
 
 export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const [ready,      setReady]      = useState(false);
-  const [platform,   setPlatform]   = useState<string>('darwin');
+  // The preload knows the platform before the first status read comes back, so
+  // a failed read can no longer leave a Windows card drawn as the macOS one.
+  const [platform,   setPlatform]   = useState<string>(() => window.electronAPI?.platform ?? 'darwin');
+  // Which Windows the guide is drawn for. Windows 10 and 11 name the microphone
+  // switches differently, and both report "Windows NT 10.0" in the user agent,
+  // so the release comes from the UA client hint. Read here rather than in the
+  // guide so it has long settled by the time the statuses arrive and the card
+  // opens; until it answers (or if it cannot) the guide is Windows 11's.
+  const [winMicPage, setWinMicPage] = useState(() => windowsMicPage(null));
+  useEffect(() => {
+    if (platform !== 'win32') return;
+    let live = true;
+    const hints = (navigator as Navigator & {
+      userAgentData?: { getHighEntropyValues?: (hints: string[]) => Promise<{ platformVersion?: string }> };
+    }).userAgentData;
+    hints?.getHighEntropyValues?.(['platformVersion'])
+      .then(v => { if (live) setWinMicPage(windowsMicPage(v?.platformVersion)); })
+      .catch(() => { /* stays Windows 11's */ });
+    return () => { live = false; };
+  }, [platform]);
   const [micStatus,  setMicStatus]  = useState<PermStatus>('loading');
   const [scrStatus,  setScrStatus]  = useState<PermStatus>('loading');
   const [requesting, setRequesting] = useState<RowKind | null>(null);
@@ -149,12 +207,6 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       : '0 24px 50px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.1)',
     mockIconShadow: isLight ? '0 4px 10px rgba(0,0,0,0.12)' : '0 4px 12px rgba(0,0,0,0.4)',
     mockTextPrimary: isLight ? '#1C1C1E' : '#FFFFFF',
-    mockSecondaryBg: isLight
-      ? 'linear-gradient(180deg, #FFFFFF 0%, #F3F3F5 100%)'
-      : 'linear-gradient(180deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.08) 100%)',
-    mockSecondaryBorder: isLight
-      ? '1px solid rgba(0,0,0,0.14)'
-      : '1px solid rgba(255,255,255,0.10)',
     mockSecondaryText: isLight ? '#1C1C1E' : '#FFFFFF',
 
     panelBg: isLight ? '#FFFFFF' : 'rgba(36, 36, 46, 0.8)',
@@ -246,11 +298,16 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   // ('request'). That matters: until an app has requested once, it does not
   // appear in System Settings > Privacy > Microphone at all, so sending a fresh
   // install straight to Settings would strand it with nothing to toggle.
+  //
+  // A row blocked by policy is passed over, as allPermissionsResolved passes it
+  // over: nothing here can fix it, and stopping on it left the button dead
+  // while the microphone below it was still waiting to be asked.
   const openSettingsForNext = useCallback(async () => {
+    const outstanding = (row: RowPresentation) => row.tone !== 'granted' && row.tone !== 'blocked';
     const screen = platform === 'darwin' ? describePermRow(platform, 'screen', scrStatus) : null;
     const mic = describePermRow(platform, 'microphone', micStatus);
-    if (screen && screen.tone !== 'granted') { await handleRowAction('screen', screen.remedy); return; }
-    if (mic.tone !== 'granted') await handleRowAction('microphone', mic.remedy);
+    if (screen && outstanding(screen)) { await handleRowAction('screen', screen.remedy); return; }
+    if (outstanding(mic)) await handleRowAction('microphone', mic.remedy);
   }, [platform, scrStatus, micStatus, handleRowAction]);
 
   // The host unmounts us the moment it hears onDismiss, which would cut the
@@ -263,10 +320,14 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   }, [closeThen, onDismiss]);
 
   const isMac = platform === 'darwin';
+  const isWin = platform === 'win32';
+  // The two platforms Natively ships on share the split card: rows on the left,
+  // a picture of that platform's own settings on the right.
+  const hasGuide = isMac || isWin;
   const allResolved = allPermissionsResolved(platform, { microphone: micStatus, screen: scrStatus });
   const checking = micStatus === 'loading' || (isMac && scrStatus === 'loading');
 
-  const CARD_W = isMac ? '600px' : '420px';
+  const CARD_W = hasGuide ? '600px' : '420px';
 
   // The same rows in both states. Once granted, PermItem already draws its own
   // check badge and stops being interactive, so the resolved state needs no
@@ -279,7 +340,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       transition={{ delay: 0.12 }}
       style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}
     >
-      {isMac && (
+      {/* On Windows this row is never something to do: the policy reports it
+          allowed, because there is no screen-capture permission to give. */}
+      {hasGuide && (
         <PermItem
           icon={Monitor}
           label="Screen Recording"
@@ -337,10 +400,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       shadow={colors.boxShadow}
       radius={20}
     >
-      {/* On macOS the close sits on the inset panel (below), as it does
-          on the extension card. Windows has no panel, so it falls back
-          to the card corner. */}
-      {!isMac && (
+      {/* The close sits on the inset panel (below), as it does on the
+          extension card. Without a panel it falls back to the card corner. */}
+      {!hasGuide && (
       <button onClick={handleDismiss} aria-label="Dismiss"
         style={{
           position: 'absolute', top: '16px', right: '16px', zIndex: 10,
@@ -367,12 +429,12 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
           marginTop:auto, which is what holds the column together at
           that floor instead of the flex:1 row list that used to strand
           the gap ABOVE the button. */}
-      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: isMac ? '440px' : undefined }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: hasGuide ? '440px' : undefined }}>
 
         {/* ── LEFT: Permission controls ── */}
         <div style={{
-          flex: isMac ? '1 1 58%' : 1, minWidth: 0,
-          padding: isMac ? '40px 28px 34px 40px' : '32px 32px 28px',
+          flex: hasGuide ? '1 1 58%' : 1, minWidth: 0,
+          padding: hasGuide ? '40px 28px 34px 40px' : '32px 32px 28px',
           display: 'flex', flexDirection: 'column',
         }}>
 
@@ -399,6 +461,8 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: 0 }}>
                   {isMac
                     ? 'Natively needs a few permissions to capture meetings and transcribe speech.'
+                    : isWin
+                    ? 'Screen recording is already allowed. Natively only needs your microphone.'
                     : 'Natively needs microphone access to transcribe speech.'}
                 </p>
               </motion.div>
@@ -425,11 +489,11 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
           )}
         </div>
 
-        {/* ── RIGHT: Visual guide — macOS only ──
-             The mock below is a macOS consent dialog and a macOS
-             Privacy & Security row. Showing either on Windows would be
-             troubleshooting for the wrong OS (CLAUDE.md). */}
-        {isMac && (
+        {/* ── RIGHT: Visual guide — one picture per platform ──
+             macOS gets its consent dialog and Privacy & Security row;
+             Windows gets its own microphone page. Showing either on the
+             other would be troubleshooting for the wrong OS (CLAUDE.md). */}
+        {hasGuide && (
           <motion.div
             initial={enter ? { opacity: 0, x: 20 } : false} animate={{ opacity: 1, x: 0 }}
             transition={{ ...SPRING.gentle, delay: 0.08 }}
@@ -481,7 +545,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 
               {allResolved
                 ? <GuideResolved isLight={isLight} colors={colors} t3={t3} />
-                : <GuideSteps colors={colors} t3={t3} reduced={reduced} enter={enter} />}
+                : isMac
+                ? <GuideSteps isLight={isLight} colors={colors} t3={t3} reduced={reduced} enter={enter} />
+                : <GuideStepsWindows isLight={isLight} colors={colors} t3={t3} reduced={reduced} enter={enter} page={winMicPage} />}
             </div>
           </motion.div>
         )}
@@ -501,8 +567,15 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 //    Without it the cap stops stay percentages of width and the specular is
 //    still climbing well past the corner (design.md's third sighting of that
 //    bug, after LiquidGlassBadge and the Profile Intelligence CTA).
-//  - `action` reads the host's own --legacy-action-bg, so this stays Natively's
-//    primary action colour rather than importing the reference green.
+//  - "Open Settings" is the onboarding's glass in this card's blue: `lavender`
+//    (the "Start using Natively" material) on OPEN_SETTINGS_GLASS. It was
+//    `action`, a flat saturated fill that read as a blue plate, and then the
+//    welcome tokens, whose pale light-theme tint did not read as blue at all.
+//    The tokens are picked from the resolved theme HERE rather than by a
+//    [data-theme] rule, so the macOS and Windows cards get the same button.
+//  - `lavender` blurs what is behind it. This card is opaque, so the blur has
+//    nothing to show, and blur layers in this card were the subject of the
+//    ?isolate=permissions-toaster bisect: it is switched off on this instance.
 //
 // Hover, press and the lens all live in the material; no framer wrapper.
 // The unresolved card's footer is the way OUT, not a third way to fix
@@ -535,7 +608,7 @@ function QuietButton({ isLight, label, onClick }: {
 }
 
 function PrimaryButton({
-  label, icon: Icon, onClick, disabled, variant = 'blue',
+  isLight, label, icon: Icon, onClick, disabled, variant = 'blue',
 }: {
   isLight: boolean;
   label: string;
@@ -544,9 +617,10 @@ function PrimaryButton({
   disabled?: boolean;
   variant?: 'blue' | 'green';
 }) {
+  const glass = variant === 'blue';
   return (
     <LiquidGlassButton
-      variant={variant === 'green' ? 'green' : 'action'}
+      variant={glass ? 'lavender' : 'green'}
       className="lg-sm lg-wide"
       onClick={onClick}
       disabled={disabled}
@@ -557,7 +631,21 @@ function PrimaryButton({
         // lg-wide derives its cap stops from --lg-pill-h, so they follow.
         ['--lg-pill-h' as string]: '48px',
         ['--lg-label-size' as string]: '14px',
-        opacity: disabled ? 0.55 : 1,
+        ...(glass ? {
+          ...OPEN_SETTINGS_GLASS[isLight ? 'light' : 'dark'],
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
+        } : null),
+        // No blanket opacity while the statuses are being read: the material
+        // dims its own label, rim and lens when disabled (design.md, States).
+        // The kit has no disabled body for `lavender`, so the fill is muted
+        // and the glow dropped here. A darker fill only reads as "off" on the
+        // dark card; on the light one it looks pressed, so there it is lifted
+        // toward the card instead.
+        ...(glass && disabled ? {
+          filter: isLight ? 'saturate(.32) brightness(1.24)' : 'saturate(.4) brightness(.85)',
+          ['--lg-lav-glow' as string]: 'transparent',
+        } : null),
         cursor: disabled ? 'default' : 'pointer',
       } as React.CSSProperties}
     >
@@ -609,7 +697,8 @@ function AllSetPanel({ isLight, reduced, enter, onContinue, rows }: {
 // layers. That combination is what ?isolate=permissions-toaster was added to
 // bisect against a native OOM, and none of it taught the user anything a still
 // image does not. Entrance animation only now.
-function GuideSteps({ colors, t3, reduced, enter }: {
+function GuideSteps({ isLight, colors, t3, reduced, enter }: {
+  isLight: boolean;
   colors: CardColors;
   t3: string;
   reduced: boolean;
@@ -660,28 +749,8 @@ function GuideSteps({ colors, t3, reduced, enter }: {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
-          <div style={{
-            flex: 1, height: '20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: '6px',
-            background: colors.mockSecondaryBg,
-            border: colors.mockSecondaryBorder,
-            fontSize: '10px', fontWeight: 500, color: colors.mockSecondaryText,
-            letterSpacing: '-0.005em',
-          }}>
-            Deny
-          </div>
-          <div style={{
-            flex: 1, height: '20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: '6px',
-            background: T.blue,
-            fontSize: '10px', fontWeight: 500, color: '#FFFFFF',
-            letterSpacing: '-0.005em',
-            boxShadow: '0 1px 3px rgba(0,122,255,0.35), inset 0 1px 0 rgba(255,255,255,0.22)',
-          }}>
-            Open Settings
-          </div>
+          <MockGlassButton isLight={isLight} color={colors.mockSecondaryText}>Deny</MockGlassButton>
+          <MockGlassButton isLight={isLight} primary>Settings</MockGlassButton>
         </div>
       </motion.div>
 
@@ -729,6 +798,193 @@ function GuideSteps({ colors, t3, reduced, enter }: {
         System Settings → Privacy &amp; Security
       </p>
     </div>
+  );
+}
+
+// ─── Guide: the microphone page, Windows only ─────────────────
+// What "Open Settings" lands on there, drawn from the real page the way the
+// macOS guide draws its alert: a Windows 11 Settings window in miniature (back
+// arrow, caption buttons, the breadcrumb that is the page's title, Fluent's
+// neutral greys rather than this card's blue-blacks).
+//
+// The page's own structure, which is what makes the three switches legible:
+//   - "Microphone access" is a card of its own, with the microphone glyph.
+//   - "Let apps access your microphone" heads a second card, with the list
+//     glyph, and "Let desktop apps access your microphone" sits INSIDE that
+//     card, indented under it with no glyph. It is the one that covers
+//     Natively.
+// Checked against a screenshot of the page. Earlier versions drew three
+// identical rows, which is not how it looks.
+//
+// Windows lists desktop apps under that last switch only once they have used
+// the microphone, so at onboarding there is no "Natively" row to picture.
+// Every switch is drawn on: the page as it should end up. Which one is off is
+// said by the row on the left, in the page's own words.
+//
+// The names and the path are Windows's own and differ between 10 and 11:
+// windowsMicPage (lib/micPermissionPolicy.mjs) holds both.
+// A still image with an entrance only, as on macOS.
+function GuideStepsWindows({ isLight, colors, t3, reduced, enter, page }: {
+  isLight: boolean;
+  colors: CardColors;
+  t3: string;
+  reduced: boolean;
+  enter: boolean;
+  page: ReturnType<typeof windowsMicPage>;
+}) {
+  const rise = (delay: number) => (!enter
+    ? { initial: false as const }
+    : reduced
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2, delay } }
+    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { type: 'spring' as const, stiffness: 180, damping: 18, delay } });
+
+  // Windows 11's own surfaces, text and default accent, per theme. The switch
+  // is Fluent's: accent track with a dark knob on dark, a white one on light.
+  const w = isLight ? {
+    window: '#F3F3F3', card: '#FBFBFB', cardEdge: 'rgba(0,0,0,0.07)', edge: 'rgba(0,0,0,0.12)', rule: 'rgba(0,0,0,0.06)',
+    text: 'rgba(0,0,0,0.9)', quiet: 'rgba(0,0,0,0.6)',
+    accent: '#005FB8', knob: '#FFFFFF',
+  } : {
+    window: '#202020', card: '#2B2B2B', cardEdge: 'rgba(255,255,255,0.05)', edge: 'rgba(255,255,255,0.11)', rule: 'rgba(255,255,255,0.07)',
+    text: '#FFFFFF', quiet: 'rgba(255,255,255,0.62)',
+    accent: '#60CDFF', knob: '#000000',
+  };
+  const [app, ...crumbs] = page.path;
+  const [device, apps, desktopApps] = page.switches;
+
+  // One setting: an optional glyph (or the indent where one would be), the
+  // switch's name, and the switch, on.
+  const GLYPH = 13;
+  const GAP = 7;
+  const setting = (label: string, Glyph: React.ElementType | null) => (
+    <div style={{ minHeight: '36px', boxSizing: 'border-box', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: `${GAP}px` }}>
+      {Glyph
+        ? <Glyph size={GLYPH} strokeWidth={1.6} color={w.text} style={{ flexShrink: 0, opacity: 0.82 }} />
+        : <span aria-hidden style={{ width: `${GLYPH}px`, flexShrink: 0 }} />}
+      <span style={{ flex: 1, minWidth: 0, fontSize: '10px', fontWeight: 500, color: w.text, lineHeight: 1.28 }}>
+        {label}
+      </span>
+      <span aria-hidden style={{
+        position: 'relative', flexShrink: 0, boxSizing: 'border-box',
+        width: '26px', height: '13px', borderRadius: '7px', background: w.accent,
+      }}>
+        <span style={{ position: 'absolute', top: '3px', right: '3px', width: '7px', height: '7px', borderRadius: '50%', background: w.knob }} />
+      </span>
+    </div>
+  );
+  const card: React.CSSProperties = { background: w.card, border: `1px solid ${w.cardEdge}`, borderRadius: '4px' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', position: 'relative', zIndex: 1, width: '100%' }}>
+      <motion.div
+        {...rise(0.15)}
+        style={{
+          // A little past the pane's padding: these names are long, and any
+          // narrower the last one wraps to three lines.
+          width: 'calc(100% + 12px)', minWidth: 0, margin: '0 -6px', boxSizing: 'border-box',
+          background: w.window,
+          borderRadius: '8px',
+          border: `1px solid ${w.edge}`,
+          boxShadow: colors.mockShadow,
+          overflow: 'hidden',
+          textAlign: 'left',
+          // The real page's face where it exists; elsewhere the card's own.
+          fontFamily: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif',
+        }}
+      >
+        {/* Title bar: back, the app's name, then minimise / maximise / close */}
+        <div aria-hidden style={{ height: '24px', display: 'flex', alignItems: 'center', paddingLeft: '9px', color: w.quiet }}>
+          <ArrowLeft size={9} strokeWidth={1.75} style={{ flexShrink: 0, marginRight: '7px' }} />
+          <span style={{ flex: 1, fontSize: '9px', fontWeight: 500, letterSpacing: '0.01em' }}>{app}</span>
+          {[Minus, Square, X].map((Glyph, i) => (
+            <span key={i} style={{ width: '22px', display: 'flex', justifyContent: 'center' }}>
+              <Glyph size={i === 1 ? 7 : 9} strokeWidth={1.5} />
+            </span>
+          ))}
+        </div>
+
+        <div style={{ padding: '3px 7px 8px' }}>
+          {/* The page's breadcrumb, which is its title on Windows */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '0 4px 9px', fontSize: '11px', fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            {crumbs.map((crumb, i) => (
+              <React.Fragment key={crumb}>
+                {i > 0 && <ChevronRight size={10} strokeWidth={2} color={w.quiet} style={{ flexShrink: 0 }} />}
+                <span style={{ color: i === crumbs.length - 1 ? w.text : w.quiet }}>{crumb}</span>
+              </React.Fragment>
+            ))}
+          </div>
+
+          <div style={card}>{setting(device, Mic)}</div>
+
+          <div style={{ ...card, marginTop: '3px' }}>
+            {setting(apps, LayoutList)}
+            <div aria-hidden style={{ height: '1px', background: w.rule }} />
+            {setting(desktopApps, null)}
+          </div>
+        </div>
+      </motion.div>
+
+      <p style={{ fontSize: '10px', fontWeight: 500, color: t3, lineHeight: 1.4, margin: '6px 0 0', textAlign: 'center', opacity: 0.85, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        All three switches on
+      </p>
+    </div>
+  );
+}
+
+// ─── Guide: the alert's two push buttons ──────────────────────
+// Pictures of buttons, in the same Liquid Glass as the card's own action: the
+// default ("Settings") is the footer button's blue glass at 20px, the other
+// ("Deny") the kit's clear glass, which takes the alert's own text colour.
+//
+// Spans with no lens, as LiquidGlassBadge is: nothing here can be pressed, so
+// they are kept out of the pointer's reach and neither tint on hover nor take
+// focus. `lavender`'s blur is off for the same reason as in PrimaryButton, and
+// its glow is brought in for a pill this small (at 14px/30px it would wash the
+// whole alert).
+function MockGlassButton({ isLight, primary, color, children }: {
+  isLight: boolean;
+  primary?: boolean;
+  color?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`lg-button ${primary ? 'lg-lavender' : 'lg-clear'} lg-sm lg-wide`}
+      style={{
+        // The alert's own button shape: two equal rounded rectangles, as macOS
+        // draws them and as this mock always had them. They were pills for a
+        // while (the kit's default), which is the footer's shape, not an
+        // alert's. The kit's 16px side padding is for a 30px settings row; at
+        // 77px it would cut a label to an ellipsis. The tracking is the mock's
+        // own.
+        flex: '1 1 0', minWidth: 0,
+        padding: '0 4px', pointerEvents: 'none',
+        ['--lg-label-track' as string]: '-0.005em',
+        ['--lg-radius' as string]: '6px',
+        // The rim's cap stops follow the corner, not half the height (lg-wide's
+        // pill assumption), or the specular fades out well before a 6px corner.
+        ['--lg-cap-0' as string]: '1px',
+        ['--lg-cap-1' as string]: '3px',
+        ['--lg-cap-2' as string]: '6px',
+        ['--lg-pill-h' as string]: '20px',
+        ['--lg-label-size' as string]: '10px',
+        ['--lg-label-weight' as string]: 500,
+        ...(primary ? {
+          ...OPEN_SETTINGS_GLASS[isLight ? 'light' : 'dark'],
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
+          boxShadow: [
+            'inset 0 -1px 0 var(--lg-lav-under, rgba(90,43,176,0.14))',
+            '0 1px 2px var(--lg-lav-drop, rgba(78,46,150,0.10))',
+            '0 5px 12px -6px var(--lg-lav-glow)',
+          ].join(', '),
+        } : { color }),
+      } as React.CSSProperties}
+    >
+      <span className="lg-content">
+        <span className="lg-label">{children}</span>
+      </span>
+    </span>
   );
 }
 
