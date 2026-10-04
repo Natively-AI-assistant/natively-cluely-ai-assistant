@@ -854,3 +854,38 @@ decided by it. It answers one question: when the build and the prompts are the s
 in mean, in hard fails and in first word? It will be reported as `m1` against `m1r` on all 333 rows, and it is the
 yardstick for every paired line in this file whose margin was set without it (E8 line 5 first of all). E8's
 verdict by its rule is not changed by it.
+
+### Run-to-run variation, measured (`m1` against `m1r`, the same build twice; 2026-10-04 07:30 UTC; provisional judge)
+
+`report/run-noise.mjs m1 m1r dev cf`. 333 rows, both runs complete.
+
+| Two runs of main `54606ef2` | First | Second |
+|---|---:|---:|
+| Mean, 333 rows | 8.59 | 8.52 (−0.08 ±0.16) |
+| Hard fails | 26 | 28 (11 newly failing, 9 newly fine, 17 in both) |
+| Critical | 11 | 13 |
+| Heard first word, dev median | 1,484 ms | 1,628 ms |
+| Shown answers identical in both runs | 3 of 333 | |
+| Per-row difference | sd 1.47; 71 % within half a point; 9 % more than two points apart | |
+
+So, for this benchmark and this judge: a row's score from one run is a sample, not a property of the build (one row
+in eleven moves by more than two points between runs of the same build); a set's mean repeats within about ±0.16;
+the hard-fail COUNT repeats within a few, but its membership turns over (20 of 37 failing rows fail in only one of
+the two runs); and the heard first word moved by 144 ms between two runs of one build on a shared machine. Every
+earlier line in this file that set a margin of 2 hard fails, or 100–150 ms, was tighter than the instrument.
+
+*Not a clean repeat in the two profile modes.* In `m1r` the app structured some profile documents with the model
+instead of the built-in parser (job descriptions parsed by the model on six loads, one résumé; each load took 15 to
+440 s against 1 to 4 s, because the model call timed out at 45 s and was retried before the fallback). The
+other runs never did, for a reason I have not established (probably which credentials the app found at start). The
+seven modes without a profile: 8.61 → 8.57 (−0.04 ±0.17), hard fails 22 → 22. The two profile modes: 8.53 → 8.33
+(−0.20 ±0.37), which is this study's only measurement of the model-structured path, and it is 74 rows with a mixed
+state.
+
+**E8 read against both control runs.** Hard fails: 26 and 28 in the two control runs, 33 in `m2`. Against the
+second control, rows whose evidence set did not change: 23 → 30 (14 newly failing, 7 newly fine); rows whose
+evidence changed: 7.75 → 8.56 (+0.81 ±0.76), hard fails 5 → 3; the rows that had missed their evidence: +3.14
+(±1.54). `m2`'s excess of 5 to 7 hard fails sits on rows E8 did not touch and is larger than the 2 between the two
+control runs, without being separable from run-to-run turnover on these numbers (flips 14 against 7 where two
+control runs give 10 against 9). `m2` was also the run that was paused and resumed. E8's verdict by its rule
+stands (not kept). To see whether the excess repeats, the candidate is run a second time (`m2r`).
