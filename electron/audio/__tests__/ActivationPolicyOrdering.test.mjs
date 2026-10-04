@@ -65,10 +65,23 @@ test('startup never round-trips the activation policy (the round-trip made the d
   assert.ok(whenReadyIndex >= 0 && disguiseIndex >= 0 && createWindowIndex >= 0 && promoteIndex >= 0,
     'could not locate expected startup landmarks');
 
-  assert.ok(whenReadyIndex < disguiseIndex, 'sanity: whenReady before applyInitialDisguise');
-  assert.ok(disguiseIndex < createWindowIndex, 'sanity: applyInitialDisguise before createWindow');
+  assert.ok(whenReadyIndex < createWindowIndex, 'sanity: whenReady before createWindow');
+  // The disguise is applied ONCE, after the windows exist (e931e8ee,
+  // 2026-10-02): the earlier pre-createWindow call was removed because two
+  // app.setName()/process.title writes in normal mode could churn the Dock
+  // tile. createWindow() is synchronous and nothing awaits between the two
+  // calls, so no frame is painted in between. This assertion used to demand
+  // the old order and had been failing on main since that commit.
+  assert.ok(createWindowIndex < disguiseIndex, 'BUG: applyInitialDisguise must run after appState.createWindow() (single disguise application).');
+  assert.equal(
+    (mainSource.match(/appState\.applyInitialDisguise\(\);/g) || []).length,
+    1,
+    'BUG: the startup disguise must be applied exactly once.',
+  );
+  const between = mainSource.slice(createWindowIndex, disguiseIndex);
+  assert.ok(!/\bawait\b/.test(between), 'BUG: nothing may await between createWindow() and applyInitialDisguise().');
   assert.ok(
-    createWindowIndex < promoteIndex,
+    disguiseIndex < promoteIndex,
     'BUG: setActivationPolicy(regular) must run AFTER appState.createWindow() so the dock tile and window appear together.',
   );
 

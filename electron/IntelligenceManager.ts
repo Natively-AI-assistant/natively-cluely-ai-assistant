@@ -138,7 +138,7 @@ export class IntelligenceManager extends EventEmitter {
 
     addAssistantMessage(
         text: string,
-        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean; answersSpokenQuestion?: boolean },
         surface?: ConversationSurface,
         identity?: TurnIdentity,
     ): boolean {
@@ -378,6 +378,11 @@ export class IntelligenceManager extends EventEmitter {
 
     async recoverUnprocessedMeetings(): Promise<void> {
         return this.persistence.recoverUnprocessedMeetings();
+    }
+
+    /** Called with the meeting id each time a meeting's notes are saved or regenerated. */
+    setMeetingNotesSavedListener(listener: ((meetingId: string) => void) | null): void {
+        this.persistence.setNotesSavedListener(listener);
     }
 
     /** Regenerate V3 notes for a saved meeting (optionally with a different mode/tone). */

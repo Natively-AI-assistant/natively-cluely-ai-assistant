@@ -165,6 +165,8 @@ export class ProcessingHelper {
 
       // CRITICAL: Ensure demo meeting has chunks
       ragManager.ensureDemoMeetingProcessed().catch(console.error);
+      // Once per launch: summaries for meetings indexed before their notes existed.
+      ragManager.backfillMeetingSummaries().catch(console.error);
 
       // CRITICAL: Cleanup stale queue items to prevent "Chunk not found" errors
       ragManager.cleanupStaleQueueItems();

@@ -57,6 +57,15 @@ export class RAGRetriever {
         this.embeddingPipeline = embeddingPipeline;
     }
 
+    /** When each selected chunk's meeting began, so its header can show time into the meeting. */
+    private meetingStartTimes(chunks: ScoredChunk[]): Map<string, number> {
+        try {
+            return this.vectorStore.getMeetingStartTimes([...new Set(chunks.map(c => c.meetingId))]);
+        } catch {
+            return new Map();
+        }
+    }
+
     /**
      * Retrieve relevant context for a query
      */
@@ -144,8 +153,9 @@ export class RAGRetriever {
         selected.sort((a, b) => a.startMs - b.startMs);
 
         // 6. Format context
+        const starts = this.meetingStartTimes(selected);
         const formattedContext = selected
-            .map(chunk => formatChunkForContext(chunk))
+            .map(chunk => formatChunkForContext(chunk, starts.get(chunk.meetingId)))
             .join('\n\n');
 
         return {
@@ -250,10 +260,11 @@ export class RAGRetriever {
 
         // Format with meeting grouping
         const contextParts: string[] = [];
+        const starts = this.meetingStartTimes(selected);
         for (const [meetingId, chunks] of byMeeting) {
             // Sort chunks within meeting by timestamp
             chunks.sort((a, b) => a.startMs - b.startMs);
-            const chunkTexts = chunks.map(c => formatChunkForContext(c)).join('\n');
+            const chunkTexts = chunks.map(c => formatChunkForContext(c, starts.get(meetingId))).join('\n');
             contextParts.push(`--- Meeting ${meetingId} ---\n${chunkTexts}`);
         }
 

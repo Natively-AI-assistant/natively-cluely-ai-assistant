@@ -61,7 +61,8 @@ export function stripPriorAssistantTurns(snapshot: string): string {
       skipping = true;
       continue;
     }
-    if (/^\[(ME|INTERVIEWER)\]:/.test(line)) {
+    // ME TYPED: a line the user typed to the assistant (SessionTracker.TYPED_TURN_LABEL).
+    if (/^\[(ME TYPED|ME|INTERVIEWER)\]:/.test(line)) {
       skipping = false;
       kept.push(line);
       continue;

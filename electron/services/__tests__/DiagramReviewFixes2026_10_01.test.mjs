@@ -872,7 +872,9 @@ describe('a spoken request for a drawing of the conversation is handed the conve
 
   test('the speech is read from the durable transcript, with the assistant left out', () => {
     const tracker = fs.readFileSync(path.join(root, 'electron/SessionTracker.ts'), 'utf8');
-    assert.match(tracker, /getFormattedSpeech\(lastSeconds: number = 600\): string \{\s*return this\.formatContextItems\(this\.getDurableContext\(lastSeconds\)\.filter\(\(item\) => item\.role !== 'assistant'\)\);/);
+    // 2026-10-04: lines the user TYPED to the assistant are left out too — they
+    // were never said, and "what was said" is this method's whole contract.
+    assert.match(tracker, /getFormattedSpeech\(lastSeconds: number = 600\): string \{\s*return this\.formatContextItems\(this\.getDurableContext\(lastSeconds\)\.filter\(\(item\) => item\.role !== 'assistant' && !item\.typed\)\);/);
     const manager = fs.readFileSync(path.join(root, 'electron/IntelligenceManager.ts'), 'utf8');
     assert.match(manager, /getFormattedSpeech\(lastSeconds: number = 600\): string \{\s*return this\.session\.getFormattedSpeech\(lastSeconds\);/);
   });

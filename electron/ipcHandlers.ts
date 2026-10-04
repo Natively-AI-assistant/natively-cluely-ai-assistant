@@ -171,6 +171,7 @@ function resolveManualChatBasePrompt(
   return withDiagramContract(CHAT_MODE_PROMPT, diagramTurn, { tier, surface });
 }
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
+import { spokenLineAlreadyInTranscript } from './llm/spokenLineAlreadyInTranscript';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
@@ -1749,6 +1750,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     ): Promise<null> => {
       let myController: AbortController | null = null;
       let _manualFgToken: string | null = null;
+      // The Answer button routes a SPOKEN question through this handler
+      // (`liveQuestion`). Its reply is recorded on the 'manual_chat' surface
+      // like any other, so the write is told it answers speech — meeting notes
+      // keep replies to typed chat only (SessionTracker.chatReply).
+      //
+      // The tag follows what was RECORDED, not the flag alone: it is set only
+      // when the question is already in the transcript as speech. If it had to
+      // be added here as a typed line (its STT final never landed), the reply
+      // stays a chat reply, so the pair is kept or dropped together instead of
+      // leaving a "typed" question with its answer removed.
+      let questionOnRecordAsSpeech = false;
+      const forThisTurn = <T extends object>(decision: T | undefined): (T & { answersSpokenQuestion?: boolean }) | undefined =>
+        questionOnRecordAsSpeech ? { ...(decision ?? ({} as T)), answersSpokenQuestion: true } : decision;
       // Intelligence OS observe-only trace (Phase 1). Hoisted so the catch can record
       // an error + commit. Assigned to the real trace right after planAnswer; until
       // then it's the shared zero-cost NO-OP, so this is free when the flag is off.
@@ -1894,6 +1908,28 @@ export function initializeIpcHandlers(appState: AppState): void {
           // dedicated V3 surface owns them.
           const callerOwnsPrompt = options?.skipSystemPrompt === true && Boolean(context);
           if (!callerOwnsPrompt && isContextIntelligenceV3Enabled()) {
+            // Assistant-identity short-circuit, ahead of the V3 turn (2026-10-04).
+            // The legacy handler's probe sits ~900 lines below, after this
+            // block's `return null`, so with V3 on it never ran: "what model are
+            // you ?" was planned as a DOCUMENT_FACT/MEETING_FACT question, sent
+            // with the transcript in scope, and answered with the
+            // hidden-configuration refusal. Only the UNAMBIGUOUS probes are
+            // taken here; "who are you?" / "introduce yourself" still reach V3,
+            // which can see whether a profile or the mode's files make them a
+            // question about the user. Same guards as the legacy probe: a skill
+            // turn or an attached screen is never hijacked.
+            if (!skillPromptBlock && !imagePaths?.length && typeof message === 'string') {
+              const { resolveUnambiguousAssistantProbe } = require('./llm/manualIdentityRouting') as typeof import('./llm/manualIdentityRouting');
+              const identityReply = resolveUnambiguousAssistantProbe(message);
+              if (identityReply) {
+                // The emission lives in replyWithAssistantIdentity, below this
+                // handler: several structure tests read this branch from its
+                // first line to its catch, and the reply's own stream events
+                // would otherwise be the first ones they find.
+                replyWithAssistantIdentity({ event, senderId, streamId: myStreamId, message, reply: identityReply, imagePaths });
+                return null;
+              }
+            }
             // The phone shows the question now, with Thinking under it, as the
             // overlay does: everything below (screen understanding, retrieval,
             // the prompt) can take seconds before a first word, and the phone
@@ -2838,10 +2874,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           // candidate_fast_path → fall through; the fast-path block below owns it.
           if (probe.kind === 'assistant_reply') {
             const identityHit = probe.reply;
-            intelligenceManager.addTranscript(
-              { text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' },
-              true,
-            );
+            // Same rule as the main record site below: a spoken question the
+            // mic already stored is not stored again as typed chat.
+            questionOnRecordAsSpeech = options?.liveQuestion === true
+              && spokenLineAlreadyInTranscript(intelligenceManager.getCurrentMeetingTranscript(), message, Date.now());
+            if (!questionOnRecordAsSpeech) {
+              intelligenceManager.addTranscript(
+                { text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' },
+                true,
+              );
+            }
             try {
               PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message, { awaitingAnswer: true });
             } catch (_) {
@@ -2868,7 +2910,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             } catch (_) {
               /* noop */
             }
-            intelligenceManager.addAssistantMessage(identityHit, undefined, 'manual_chat');
+            intelligenceManager.addAssistantMessage(identityHit, forThisTurn(undefined), 'manual_chat');
             intelligenceManager.logUsage('chat', message, identityHit, imagePaths);
             // Observe-only trace for the app-identity canned reply (common path). The
             // hoisted iTrace is still the NOOP here (real trace is created post-planAnswer),
@@ -2910,16 +2952,28 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
 
         // Now add USER message to IntelligenceManager (after context snapshot)
-        intelligenceManager.addTranscript(
-          {
-            text: message,
-            speaker: 'user',
-            timestamp: Date.now(),
-            final: true,
-            origin: 'manual_chat',
-          },
-          true,
-        );
+        //
+        // …unless it is already there. The Answer button sends what the user
+        // just SAID (`liveQuestion`), and the mic's STT seam has already stored
+        // that line as speech. Re-adding it here wrote the same sentence a
+        // second time, as typed chat: a live session's transcript had "Name."
+        // twice, 1.7 s apart (2026-10-04), and notes and search both read the
+        // duplicate. Checked against the transcript rather than assumed from
+        // the flag, so a question whose STT final never landed is still kept.
+        questionOnRecordAsSpeech = options?.liveQuestion === true
+          && spokenLineAlreadyInTranscript(intelligenceManager.getCurrentMeetingTranscript(), message, Date.now());
+        if (!questionOnRecordAsSpeech) {
+          intelligenceManager.addTranscript(
+            {
+              text: message,
+              speaker: 'user',
+              timestamp: Date.now(),
+              final: true,
+              origin: 'manual_chat',
+            },
+            true,
+          );
+        }
 
         // Mirror to phone (no-op if PhoneMirrorService isn't running). Already
         // published if the V3 path ran first and fell through; published once.
@@ -3559,7 +3613,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           event.sender.send('gemini-stream-done', { finalText: clarification, streamId: myStreamId });
           try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarification); } catch (_) { /* noop */ }
           try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarification); } catch (_) { /* noop */ }
-          intelligenceManager.addAssistantMessage(clarification, undefined, 'manual_chat');
+          intelligenceManager.addAssistantMessage(clarification, forThisTurn(undefined), 'manual_chat');
           intelligenceManager.logUsage('chat', message, clarification, imagePaths);
           chatTrace.markFirstUseful({ via: 'context_free_clarification' });
           chatTrace.mark('response_completed', { chars: clarification.length, deterministic: true });
@@ -3645,7 +3699,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
-            intelligenceManager.addAssistantMessage(clarify, clarifyWrite, 'manual_chat');
+            intelligenceManager.addAssistantMessage(clarify, forThisTurn(clarifyWrite), 'manual_chat');
             intelligenceManager.logUsage('chat', message, clarify, imagePaths);
             chatTrace.markFirstUseful({ via: 'context_os_clarification' });
             chatTrace.mark('response_completed', { chars: clarify.length, deterministic: true, finalGenerationMode: 'source_safe_refusal' });
@@ -3882,7 +3936,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
-            intelligenceManager.addAssistantMessage(clarify, clarifyWrite, 'manual_chat');
+            intelligenceManager.addAssistantMessage(clarify, forThisTurn(clarifyWrite), 'manual_chat');
             intelligenceManager.logUsage('chat', message, clarify, imagePaths);
             chatTrace.markFirstUseful({ via: 'source_switch_clarification' });
             chatTrace.mark('response_completed', { chars: clarify.length, deterministic: false, finalGenerationMode: 'source_safe_refusal' });
@@ -6735,7 +6789,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 && !blockedFromSessionTracker
                 && !sessionWriteDecision.blockedFromSessionTracker
                 && !contextChangedSinceAsk()) {
-              intelligenceManager.addAssistantMessage(fullResponse, sessionWriteDecision, 'manual_chat');
+              intelligenceManager.addAssistantMessage(fullResponse, forThisTurn(sessionWriteDecision), 'manual_chat');
               // Log Usage for streaming chat
               intelligenceManager.logUsage('chat', message, fullResponse, imagePaths);
               // CONTEXT OS memory safety (Phase 9, 2026-07-10): persist the
@@ -6984,7 +7038,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               event.sender.send('gemini-stream-token', safe, { streamId: myStreamId });
               event.sender.send('gemini-stream-done', { finalText: safe, streamId: myStreamId });
               try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), safe); PhoneMirrorService.getInstance().publishDone(String(myStreamId), safe); } catch (_) { /* noop */ }
-              intelligenceManager.addAssistantMessage(safe, sessionWriteDecision, 'manual_chat');
+              intelligenceManager.addAssistantMessage(safe, forThisTurn(sessionWriteDecision), 'manual_chat');
               _emitAttr({ answer_type: answerPlan.answerType, profile_tree_used: false, profile_tree_fast_path_used: false, structured_resume_used: false });
               return null;
             }
@@ -7029,6 +7083,45 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Register the manual chat handler; also expose it for the E2E manual-ask
   // harness (test-only; NATIVELY_E2E gates the caller).
   safeHandle('gemini-chat-stream', _geminiChatStreamHandler);
+
+  /**
+   * Send the fixed assistant-identity line for a typed turn and record the
+   * exchange, without calling a model. Used by the V3 branch of the chat
+   * handler above for probes that are about the assistant whatever is loaded
+   * (see resolveUnambiguousAssistantProbe). A function declaration, so it is
+   * hoisted and callable from the handler defined before it.
+   */
+  function replyWithAssistantIdentity(turn: {
+    event: any; senderId: number; streamId: number; message: string; reply: string; imagePaths?: string[];
+  }): void {
+    const { event, senderId, streamId, message, reply, imagePaths } = turn;
+    const im = appState.getIntelligenceManager();
+    im?.addTranscript?.({ text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+    try { PhoneMirrorService.getInstance().publishUserMessage(String(streamId), message, { awaitingAnswer: true }); } catch { /* mirror only */ }
+    // A newer chat stream may have taken over; same guard as the legacy probe.
+    if (_chatStreamsBySender.get(senderId)?.streamId !== streamId) {
+      console.log(`[IPC] gemini-chat-stream ${streamId} (identity probe, pre-V3) superseded for sender ${senderId}, skipping emit.`);
+      return;
+    }
+    event.sender.send('gemini-stream-token', reply, { streamId });
+    event.sender.send('gemini-stream-done', { finalText: reply, streamId });
+    try { PhoneMirrorService.getInstance().publishToken(String(streamId), reply); } catch { /* mirror only */ }
+    try { PhoneMirrorService.getInstance().publishDone(String(streamId), reply); } catch { /* mirror only */ }
+    im?.addAssistantMessage?.(reply, undefined, 'manual_chat');
+    im?.logUsage?.('chat', message, reply, imagePaths);
+    // The continuity sink a V3 answer writes, so the next turn's
+    // "Conversation so far" still shows this exchange.
+    try {
+      require('./context-intelligence/question/conversation-state-store')
+        .recordAnswerSummary(v3ConversationSessionId(appState, senderId), reply, undefined, message);
+    } catch { /* continuity only */ }
+    try {
+      const probeTrace = beginTrace(message);
+      probeTrace.setRouting({ source: 'manual_input', answerType: 'unknown_answer', deterministicFastPathUsed: true, profileFactsReady: false });
+      probeTrace.noteFallback('assistant_identity_reply');
+      commitTrace(probeTrace);
+    } catch { /* trace never affects the answer */ }
+  }
   if (process.env.NATIVELY_E2E === '1') {
     (globalThis as any).__nativelyGeminiChatStream = _geminiChatStreamHandler;
   }
@@ -15008,6 +15101,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     const ragManager = appState.getRAGManager();
     if (ragManager && ragManager.isReady()) {
       ragManager.ensureDemoMeetingProcessed().catch(console.error);
+      // Once per launch: summaries for meetings indexed before their notes existed.
+      ragManager.backfillMeetingSummaries().catch(console.error);
     }
 
     return { success: true };
@@ -16337,8 +16432,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { RAG_STREAM_INCOMPLETE_CODA } = require('./rag/RAGManager') as typeof import('./rag/RAGManager');
     const ragLiveTruncated = ragLiveAnswer.trimEnd().endsWith(RAG_STREAM_INCOMPLETE_CODA.trim());
     const im = appState.getIntelligenceManager?.();
+    // This is the voice path: `query` is what the user just SAID, and the mic
+    // has normally stored it as speech already. Adding it again as typed chat
+    // is the duplicate the chat handler's record site guards against — this
+    // route is the Answer button's FIRST choice, so it needs the same guard.
+    let questionOnRecordAsSpeech = false;
     try {
-      im?.addTranscript?.({ text: query, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+      questionOnRecordAsSpeech = spokenLineAlreadyInTranscript(im?.getCurrentMeetingTranscript?.() ?? [], query, Date.now());
+      if (!questionOnRecordAsSpeech) {
+        im?.addTranscript?.({ text: query, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+      }
     } catch { /* continuity only */ }
     try {
       im?.logUsage?.('rag_live', query, ragLiveAnswer);
@@ -16394,7 +16497,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
     } catch { /* memory only */ }
     try {
-      im?.addAssistantMessage?.(ragLiveAnswer, undefined, 'manual_chat');
+      im?.addAssistantMessage?.(ragLiveAnswer, questionOnRecordAsSpeech ? { answersSpokenQuestion: true } : undefined, 'manual_chat');
     } catch { /* continuity only */ }
   }
 

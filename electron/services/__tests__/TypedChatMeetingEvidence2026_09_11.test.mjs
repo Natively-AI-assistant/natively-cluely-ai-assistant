@@ -127,7 +127,10 @@ describe('rag:query-live records its turn', () => {
   test('the recorder writes every history sink V3 writes', () => {
     assert.match(helper, /recordAnswerSummary\(\s*v3ConversationSessionId\(appState, senderId\)/);
     assert.match(helper, /addTranscript\?\.\(\{ text: query, speaker: 'user'/);
-    assert.match(helper, /addAssistantMessage\?\.\(ragLiveAnswer, undefined, 'manual_chat'\)/);
+    // 2026-10-04: the reply is marked as answering SPEECH when the question is
+    // already in the transcript from the mic, so notes do not file it as a
+    // reply to typed chat.
+    assert.match(helper, /addAssistantMessage\?\.\(ragLiveAnswer, questionOnRecordAsSpeech \? \{ answersSpokenQuestion: true \} : undefined, 'manual_chat'\)/);
     assert.match(helper, /_manualConversationMemory\.record\(\{/);
     assert.match(helper, /logUsage\?\.\('rag_live', query, ragLiveAnswer\)/);
   });

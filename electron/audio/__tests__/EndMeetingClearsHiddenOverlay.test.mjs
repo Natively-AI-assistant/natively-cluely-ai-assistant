@@ -78,7 +78,11 @@ test('endMeeting sends session-reset to the overlay so its hidden tree is cleare
 });
 
 test('endMeeting clears the overlay AFTER hiding it (setWindowMode(launcher)), so the clear is off-screen', () => {
-  const hideIdx = endMeetingBody.search(/setWindowMode\(\s*['"]launcher['"]\s*\)/);
+  // Matches the call whether or not it carries the second argument: while
+  // undetectable the launcher is shown WITHOUT focus (setWindowMode('launcher',
+  // true)), so the call no longer ends at the mode name. What this pins is the
+  // ORDER (hide, then clear), which the extra argument does not change.
+  const hideIdx = endMeetingBody.search(/setWindowMode\(\s*['"]launcher['"]\s*[,)]/);
   const resetIdx = endMeetingBody.search(SESSION_RESET_TO_OVERLAY);
 
   assert.ok(hideIdx >= 0, 'sanity: endMeeting() must switch to launcher (hides the overlay).');

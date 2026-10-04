@@ -23,8 +23,14 @@ export interface NormalizedTranscriptSegment {
   speakerId?: string;
   text: string;
   timestamp: number;
+  /** Milliseconds from the meeting's first stamped line to this one. Absent on
+   *  a line with no timestamp. `timestamp` stays the absolute clock time. */
+  elapsedMs?: number;
   uncertainSpeaker?: boolean;
   originalIndex: number;
+  /** Set on lines that were not said in the meeting: something the user typed
+   *  to the assistant, or the assistant's reply to it. Absent on speech. */
+  chat?: 'typed' | 'assistant_reply';
 }
 
 export interface NormalizedTranscript {

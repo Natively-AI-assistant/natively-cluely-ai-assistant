@@ -65,3 +65,20 @@ export function resolveIdentityProbe(message: string, profileReady: boolean): Id
   }
   return { kind: 'none' };
 }
+
+/**
+ * The canned reply for a probe that is about the assistant WHATEVER is loaded
+ * (assistant-meta and creator probes), or null. Candidate-ambiguous probes
+ * ("who are you?", "introduce yourself") return null here on purpose: with a
+ * mode's files or a profile in play they are questions about the user, and the
+ * answer path that can see that evidence has to decide them.
+ *
+ * This is the subset safe to answer before any answer path runs (2026-10-04):
+ * "what model are you ?" typed during a meeting reached the model, was routed
+ * as a document/meeting fact question with the transcript in scope, and came
+ * back as the hidden-configuration refusal instead of this line.
+ */
+export function resolveUnambiguousAssistantProbe(message: string): string | null {
+  const decision = resolveIdentityProbe(message, /* profileReady */ true);
+  return decision.kind === 'assistant_reply' ? decision.reply : null;
+}

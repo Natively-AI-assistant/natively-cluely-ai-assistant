@@ -1248,6 +1248,8 @@ import { configureVisionCapabilityStore } from "./llm/visionCapabilityStore"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
+import { isSpokenSavedLine } from "./intelligence/savedTranscriptOrigin"
+import { buildSummaryTextForSearch } from "./rag/summaryTextForSearch"
 
 /** Unified type for all STT providers with optional extended capabilities */
 type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT | AppleSpeechSTT) & {
@@ -2647,6 +2649,19 @@ export class AppState {
             () => this.ragManager ?? null,
           );
         } catch (e) { console.warn('[AppState] V3 meeting RAG wiring skipped:', e); }
+
+        // A meeting's summary goes into search when its notes are SAVED, not
+        // when the meeting ends (the notes do not exist yet at that point). The
+        // listener reads this.ragManager lazily, like the provider above, so a
+        // later re-init is picked up.
+        try {
+          this.intelligenceManager?.setMeetingNotesSavedListener?.((meetingId: string) => {
+            const rag = this.ragManager;
+            if (!rag) return;
+            rag.indexMeetingSummary(meetingId).catch((e: any) =>
+              console.warn('[AppState] Summary indexing failed (non-fatal):', e?.message || e));
+          });
+        } catch (e) { console.warn('[AppState] notes-saved wiring skipped:', e); }
 
         console.log('[AppState] RAGManager initialized');
       }
@@ -4244,7 +4259,7 @@ export class AppState {
         console.warn(`${prefix}MicrophoneCapture produced 0 chunks in ${STUCK_WATCHDOG_MS / 1000}s — likely silent capture (device contention, hot-unplug, or muted input).`);
         this.sendAudioCaptureFailed( {
           channel: 'mic',
-          message: `No audio detected from your microphone for ${STUCK_WATCHDOG_MS / 1000}s. Check that your input device is unmuted and not in use by another app.`,
+          message: `No audio from your microphone for ${STUCK_WATCHDOG_MS / 1000}s. Check it is unmuted and not in use by another app.`,
           attempt: 0,
           maxAttempts: 3,
           terminal: false,
@@ -4341,7 +4356,7 @@ export class AppState {
               console.warn(`${prefix}Mic in HFP (native ${nativeRate}Hz) but no built-in mic to switch to.`);
               this.sendAudioCaptureFailed({
                 channel: 'mic',
-                message: `Your microphone is in low-quality Bluetooth call mode. Set your audio output to the speakers, or use a different mic, for better transcription.`,
+                message: `Your mic is in low-quality Bluetooth call mode. Switch output to the speakers, or use another mic.`,
                 attempt: 0,
                 maxAttempts: 0,
                 terminal: false,
@@ -4478,7 +4493,7 @@ export class AppState {
           this.systemAudioCapture = null;
           this.sendAudioCaptureFailed({
             channel: 'system',
-            message: 'System audio capture failed to initialize. The native audio module could not allocate the capture device. Restarting Natively may help; if the problem persists, file a bug.',
+            message: 'System audio capture could not start. Restart Natively.',
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -4501,7 +4516,7 @@ export class AppState {
           this.microphoneCapture = null;
           this.sendAudioCaptureFailed({
             channel: 'mic',
-            message: 'Microphone capture failed to initialize. The native audio module could not open the default input device. Check that the device is connected and not in exclusive use by another app, then restart Natively.',
+            message: 'The microphone could not be opened. Check it is connected and free, then restart Natively.',
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -4529,7 +4544,7 @@ export class AppState {
         if (!this.googleSTT) {
           this.sendAudioCaptureFailed( {
             channel: 'system',
-            message: `Speech-to-text provider "${sttProv}" failed to initialize for the interviewer channel. Check your API key and credentials in Settings.`,
+            message: `Speech-to-text provider "${sttProv}" could not start for system audio. Check its API key in Settings.`,
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -4549,7 +4564,7 @@ export class AppState {
         if (!this.googleSTT_User) {
           this.sendAudioCaptureFailed( {
             channel: 'mic',
-            message: `Speech-to-text provider "${sttProv}" failed to initialize for the microphone channel. Check your API key and credentials in Settings.`,
+            message: `Speech-to-text provider "${sttProv}" could not start for your microphone. Check its API key in Settings.`,
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -4700,7 +4715,7 @@ export class AppState {
       console.error('[Main] Resume: failed to restart mic capture:', err);
       this.sendAudioCaptureFailed( {
         channel: 'mic',
-        message: 'Microphone failed to restart after wake. Check that no other app holds the mic, then end and restart the meeting.',
+        message: 'Microphone did not restart after wake. Close other apps using the mic, then restart the meeting.',
         attempt: 0,
         maxAttempts: 0,
         terminal: true,
@@ -5300,7 +5315,7 @@ export class AppState {
           // Surface to UI so the user knows the meeting will be system-audio-only.
           this.sendAudioCaptureFailed( {
             channel: 'mic',
-            message: 'No working microphone could be initialized. Disconnect and reconnect your audio devices, or restart the app.',
+            message: 'No working microphone found. Reconnect your audio devices, or restart the app.',
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -6396,7 +6411,7 @@ export class AppState {
       console.error(`[Main] ${context}: mic channel failed to start:`, err);
       this.sendAudioCaptureFailed({
         channel: 'mic',
-        message: `Microphone failed to start (${(err as Error)?.message || 'unknown error'}). Check that no other app holds the mic — the meeting continues with system audio only.`,
+        message: `Microphone failed to start (${(err as Error)?.message || 'unknown error'}). The meeting continues with system audio only.`,
         attempt: 0,
         maxAttempts: 0,
         terminal: true,
@@ -6825,7 +6840,12 @@ export class AppState {
     // clear effects) while still painted — combined with a same-instance theme
     // switch, that interleaving produces the half-painted overlay symptom the
     // user can only escape via force-quit. Hide first, then broadcast.
-    this.windowHelper.setWindowMode('launcher');
+    //
+    // Stealth: show the launcher WITHOUT focus while undetectable (same
+    // centerAndShowWindow pattern) — the user often stops transcription while
+    // the proctored test continues, and an activating show would blur the
+    // test page. Normal mode is unchanged (active show + focus).
+    this.windowHelper.setWindowMode('launcher', this.isUndetectable ? true : undefined);
 
     // ─── CLEAR THE OVERLAY TREE WHILE IT IS HIDDEN ─────────────────────────
     // The overlay BrowserWindow is PERSISTENT — created once with show:false
@@ -7048,21 +7068,24 @@ export class AppState {
       const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
       if (!meeting || !meeting.transcript || meeting.transcript.length === 0) return;
 
-      // Convert transcript to RAG format
-      const segments = meeting.transcript.map(t => ({
+      // Convert transcript to RAG format — speech only. The saved rows now
+      // carry each line's origin, so typed chat and the assistant's answers no
+      // longer get chunked and embedded as meeting content in a session that
+      // also has speech (the zero-eligible skip above only covered chat-only
+      // sessions). Filtered BEFORE preprocessing, which merges consecutive
+      // lines by speaker and would fuse a typed line into a spoken one.
+      const segments = meeting.transcript.filter(isSpokenSavedLine).map(t => ({
         speaker: t.speaker,
         text: t.text,
         timestamp: t.timestamp
       }));
+      if (segments.length === 0) return;
 
-      // Generate summary from detailedSummary if available
-      let summary: string | undefined;
-      if (meeting.detailedSummary) {
-        summary = [
-          ...(meeting.detailedSummary.keyPoints || []),
-          ...(meeting.detailedSummary.actionItems || []).map(a => `Action: ${a}`)
-        ].join('. ');
-      }
+      // The summary, if the notes already exist. They usually do not: this
+      // runs as soon as the meeting ends, while the notes are still being
+      // written. The summary is indexed by the notes-saved listener instead
+      // (see setMeetingNotesSavedListener where the RAG manager is created).
+      const summary = buildSummaryTextForSearch(meeting.detailedSummary, meeting.summary) || undefined;
 
       const result = await this.ragManager.processMeeting(meeting.id, segments, summary);
       console.log(`[AppState] RAG processed meeting ${meeting.id}: ${result.chunkCount} chunks`);
@@ -9754,7 +9777,7 @@ if (process.env.THINKING_MATRIX === '1') {
             console.warn('[Init] Microphone is restricted by device policy at startup.');
             appState.sendAudioCaptureFailed({
               channel: 'mic',
-              message: 'Microphone is restricted by device policy. Contact your administrator to enable microphone access for Natively.',
+              message: 'Microphone is blocked by device policy. Ask your administrator to allow it for Natively.',
               attempt: 0,
               maxAttempts: 0,
               terminal: true,
