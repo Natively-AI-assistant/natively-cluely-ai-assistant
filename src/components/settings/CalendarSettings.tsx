@@ -1,3 +1,4 @@
+import { getCalendarConnectErrorMessage } from '../../lib/calendarConnectError.mjs';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertCircle, ArrowUpRight, CalendarRange, Check, Info, Loader2, RefreshCw, Video } from 'lucide-react';
@@ -297,9 +298,9 @@ export const CalendarSettings: React.FC = () => {
     try {
       const res = await window.electronAPI.calendarConnect();
       if (res.success) setStatus(await window.electronAPI.getCalendarStatus());
-      else if (res.error) setError(res.error);
-    } catch (err: any) {
-      setError(err?.message || t('Could not connect to Google Calendar.'));
+      else setError(getCalendarConnectErrorMessage(res.error, t));
+    } catch (err) {
+      setError(getCalendarConnectErrorMessage(err, t));
     } finally {
       setBusy(null);
     }
