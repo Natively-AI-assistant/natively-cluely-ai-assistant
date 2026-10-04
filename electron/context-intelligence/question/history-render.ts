@@ -18,6 +18,7 @@
 // carried, not how the composer frames it.
 
 import type { HistoryTurn } from './conversation-state';
+import { hasOnDeviceScreenText, ON_DEVICE_SCREEN_WITHHELD } from './on-device-screen';
 import { tokenize } from '../retrieval/bm25';
 
 export interface RenderHistoryOptions {
@@ -29,6 +30,13 @@ export interface RenderHistoryOptions {
   screenBudgetChars: number;
   /** The `screenshots` data scope is denied: screen text is neither charged nor rendered. */
   screensDenied: boolean;
+  /**
+   * This turn stays on this device, so text read off a screenshot that was
+   * KEPT on this device may be shown. Absent or false — the destination is a
+   * cloud provider, or nobody can say — such text is replaced by a note
+   * (on-device-screen.ts). Fails closed.
+   */
+  onDeviceScreens?: boolean;
   /** Turns already present elsewhere in the prompt (a live speech window). */
   exclude?: (turn: HistoryTurn) => boolean;
   /** The current question. With `recallBudgetChars`, older exchanges related to
@@ -50,6 +58,16 @@ export interface RenderedHistory {
   screenWithheld: boolean;
   /** Exchanges brought back by the RECALL tier. */
   recalledCount: number;
+}
+
+/** This turn's screen text was kept on this device and this prompt may not carry it. */
+function keptAway(t: HistoryTurn, opts: Pick<RenderHistoryOptions, 'onDeviceScreens'>): boolean {
+  return !opts.onDeviceScreens && hasOnDeviceScreenText(t.screen);
+}
+
+/** The screen text as THIS prompt may show it: the text, or the note that stands in for it. */
+function shownScreen(t: HistoryTurn, opts: Pick<RenderHistoryOptions, 'onDeviceScreens'>): string | undefined {
+  return keptAway(t, opts) ? ON_DEVICE_SCREEN_WITHHELD : t.screen;
 }
 
 /** Per-turn cap on the user's words in the condensed tier. */
@@ -171,7 +189,7 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
     // Screen text has its OWN allowance (a screenshot must not evict the
     // user's older turns), newest screens first; a turn whose screen does not
     // fit keeps its exchange.
-    const screenCost = opts.screensDenied ? 0 : (t.screen?.length ?? 0);
+    const screenCost = opts.screensDenied ? 0 : (shownScreen(t, opts)?.length ?? 0);
     if (screenCost && screenSpent + screenCost > opts.screenBudgetChars) {
       full.unshift({ ...t, screen: undefined });
       continue;
@@ -202,7 +220,7 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
     for (const idx of rankRelatedTurns(older, opts.query)) {
       const t = older[idx];
       const cost = t.q.length + Math.min(t.a.length, RECALL_ANSWER_CHARS)
-        + (opts.screensDenied ? 0 : Math.min(t.screen?.length ?? 0, RECALL_SCREEN_CHARS)) + 48;
+        + (opts.screensDenied ? 0 : Math.min(shownScreen(t, opts)?.length ?? 0, RECALL_SCREEN_CHARS)) + 48;
       if (picked.length && recallSpent + cost > opts.recallBudgetChars!) continue;
       recallSpent += cost;
       picked.push(idx);
@@ -214,7 +232,8 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
     return {
       ...t,
       a: t.a.length > RECALL_ANSWER_CHARS ? `${t.a.slice(0, RECALL_ANSWER_CHARS)}…` : t.a,
-      ...(t.screen ? { screen: t.screen.slice(0, RECALL_SCREEN_CHARS) } : {}),
+      // (The stand-in note is never cut: it is short, and half a note is noise.)
+      ...(t.screen ? { screen: keptAway(t, opts) ? t.screen : t.screen.slice(0, RECALL_SCREEN_CHARS) } : {}),
     };
   });
   const recalledQs = new Set(picked.map((idx) => older[idx].q));
@@ -223,14 +242,14 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
   let carriesScreen = false;
   let screenWithheld = false;
   const fullText = full.map((t) => {
-    if (t.screen && opts.screensDenied) screenWithheld = true;
+    if (t.screen && (opts.screensDenied || keptAway(t, opts))) screenWithheld = true;
     const showScreen = Boolean(t.screen) && !opts.screensDenied;
-    if (showScreen) carriesScreen = true;
+    if (showScreen && !keptAway(t, opts)) carriesScreen = true;
     return [
       `${questionLabel(t)}: ${t.q}`,
       // The screenshot the user attached on that turn, as text. The image is
       // long gone from the payload by now; this is all a follow-up has.
-      ...(showScreen ? [`[screen attached that turn] ${t.screen}`] : []),
+      ...(showScreen ? [`[screen attached that turn] ${shownScreen(t, opts)}`] : []),
       `Assistant: ${t.a}`,
     ].join('\n');
   }).join('\n\n');
@@ -241,12 +260,12 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
   const recalledText = recalled.length
     ? ['Earlier in this session, related to this question (older exchanges, oldest first):',
       ...recalled.map((t) => {
-        if (t.screen && opts.screensDenied) screenWithheld = true;
+        if (t.screen && (opts.screensDenied || keptAway(t, opts))) screenWithheld = true;
         const showScreen = Boolean(t.screen) && !opts.screensDenied;
-        if (showScreen) carriesScreen = true;
+        if (showScreen && !keptAway(t, opts)) carriesScreen = true;
         return [
           `${questionLabel(t)}: ${t.q}`,
-          ...(showScreen ? [`[screen attached that turn] ${t.screen}`] : []),
+          ...(showScreen ? [`[screen attached that turn] ${shownScreen(t, opts)}`] : []),
           `Assistant: ${t.a}`,
         ].join('\n');
       })].join('\n\n')

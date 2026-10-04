@@ -159,8 +159,17 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
   const handlePlan = (key: PlanKey, url: string) => {
     window.electronAPI?.convertTrial?.(key)?.catch(() => {});
     if (key === 'standard' && onStandard) onStandard().catch(() => {});
-    (window.electronAPI as any)?.openExternal?.(url);
+    (window.electronAPI as any)?.openExternal?.(url, { surface: 'trial_card' });
   };
+
+  // Funnel: this card appeared, and (in dismiss, below) was closed without a
+  // decision. The decisions themselves are reported by the main process.
+  const cardMode = activeTrialExpiresAt ? 'active' : 'expired';
+  useEffect(() => {
+    window.electronAPI?.funnelTrack?.('trial_card', { mode: cardMode, action: 'shown' })?.catch?.(() => {});
+    // Once per showing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Both hosts unmount this the moment they hear onDone, so the done step's
   // button closes the card first (the genie) and reports from onClosed.
@@ -193,7 +202,10 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
   // The trial is still running and this is the options card, not the eulogy.
   const isActiveTrial = !!activeTrialExpiresAt;
   const { clock: trialClock, isWarning: trialIsWarning } = useTrialRemaining(activeTrialExpiresAt ?? '');
-  const dismiss = () => setOpen(false);
+  const dismiss = () => {
+    window.electronAPI?.funnelTrack?.('trial_card', { mode: cardMode, action: 'dismissed' })?.catch?.(() => {});
+    setOpen(false);
+  };
 
   const sttMin = (usage.stt_seconds / 60).toFixed(1);
   // `usage.search` is the CREDIT counter (2026-09-21): /v1/search bills each

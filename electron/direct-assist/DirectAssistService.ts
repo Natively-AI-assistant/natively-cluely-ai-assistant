@@ -1,4 +1,4 @@
-import { DirectAssistError, normalizeDirectAssistError } from './errors';
+import { DirectAssistError, describeDirectAssistFailure, normalizeDirectAssistError } from './errors';
 import {
   DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG,
   DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS,
@@ -11,8 +11,11 @@ import type { FallbackConfig, HealthEntry, StreamProvider } from '../llm/streamF
 import { runStreamingFallback } from '../llm/streamFallbackEngine';
 import { DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS } from './types';
 import type {
+  DirectAssistAttemptFailure,
   DirectAssistDispatchRequest,
   DirectAssistErrorCode,
+  DirectAssistErrorPayload,
+  DirectAssistFailureInfo,
   DirectAssistRequestInput,
   DirectAssistRung,
   DirectAssistStreamEvent,
@@ -134,6 +137,14 @@ export class DirectAssistService {
     // Hoisted: the catch has to distinguish an exhausted ladder budget from an
     // ordinary provider failure.
     let budgetExpired = false;
+    // Hoisted for the same reason: what the provider is not allowed to quote
+    // back in its error. Empty until the prompt exists.
+    let echoOf: readonly string[] = [];
+    // Also for the catch: every provider the ladder gave up on, in order, and
+    // a way to describe the one it was on when it ended. Together they are the
+    // "nobody answered" list on the error.
+    const abandonedRungs: DirectAssistAttemptFailure[] = [];
+    let describeActiveRung: ((reason?: DirectAssistErrorCode) => DirectAssistAttemptFailure | null) | null = null;
 
     if (abortSignal?.aborted) {
       terminalSent = true;
@@ -143,6 +154,7 @@ export class DirectAssistService {
 
     try {
       const prepared = prepareDirectAssistPrompt(input);
+      echoOf = [prepared.systemPrompt, prepared.userPrompt];
       yield Object.freeze({
         type: 'start',
         requestId: prepared.request.requestId,
@@ -230,6 +242,16 @@ export class DirectAssistService {
       // `reasonFromThrow` is null whenever the attempt ended without the rung's
       // own generator throwing — see switchReason().
       let reasonFromThrow: DirectAssistErrorCode | null = null;
+      // The same throw's status and words, for the overlay. Set and cleared
+      // together with reasonFromThrow, so a rung ended by our own timeout —
+      // which said nothing — reports nothing.
+      let failureFromThrow: DirectAssistFailureInfo | null = null;
+      // When the active rung was first opened: the switch reports how long it
+      // was given, retries and backoff included.
+      let activeRungOpenedAt = ladderStartedAt;
+      // The engine announces a rung just BEFORE opening it, and the budget can
+      // still refuse the open. Only a rung that got past that check was tried.
+      let activeRungAttempted = false;
       let lastAttemptSignal: AbortSignal | null = null;
       const switchReason = (): DirectAssistErrorCode => {
         if (reasonFromThrow !== null) return reasonFromThrow;
@@ -316,9 +338,11 @@ export class DirectAssistService {
             // quietly rather than classifying this as a provider failure.
             throw new DirectAssistError('CONNECT_TIMEOUT', 'No provider answered in time.', true);
           }
+          activeRungAttempted = true;
           // Reset per ATTEMPT so a stale reason from the previous rung can
           // never be attributed to this one's switch event.
           reasonFromThrow = null;
+          failureFromThrow = null;
           lastAttemptSignal = signal;
           // Re-arm the outer silence guard on every rung AND every retry. It is
           // armed once before the ladder starts, and re-arming only on a delta
@@ -351,11 +375,24 @@ export class DirectAssistService {
             // guard, not by the provider, and whatever the generator throws on
             // its way out of that abort is debris. Leave those to
             // switchReason(), which reads the signal instead.
-            if (!signal.aborted) reasonFromThrow = normalizeDirectAssistError(error).code;
+            if (!signal.aborted) {
+              reasonFromThrow = normalizeDirectAssistError(error).code;
+              failureFromThrow = describeDirectAssistFailure(error, { echoOf });
+            }
             throw error;
           }
         },
       }));
+
+      const describeRung = (reason: DirectAssistErrorCode = switchReason()): DirectAssistAttemptFailure =>
+        Object.freeze({
+          provider: activeRung.provider,
+          model: activeRung.model,
+          reason,
+          ...(failureFromThrow ?? {}),
+          waitedMs: Math.max(0, this.now() - activeRungOpenedAt),
+        });
+      describeActiveRung = (reason) => (activeRungAttempted ? describeRung(reason) : null);
 
       const providerStream = runStreamingFallback(
         engineRungs,
@@ -377,6 +414,11 @@ export class DirectAssistService {
             // be unique by construction today, but rungIdOf is free and
             // doesn't lean on that invariant to detect a genuine switch.
             if (!next || rungIdOf(next) === rungIdOf(activeRung)) return;
+            // One description of the rung being left, used twice: on the
+            // switch event if the next rung answers, and on the error's list
+            // if nobody does.
+            const { provider, model, ...abandoned } = describeRung();
+            abandonedRungs.push(Object.freeze({ provider, model, ...abandoned }));
             pendingSwitches.push(Object.freeze({
               type: 'provider_switch',
               requestId: dispatchRequest.requestId,
@@ -384,11 +426,13 @@ export class DirectAssistService {
               // not consume a delta slot — `sequence` doubles as the terminal
               // `chunks` and the `partial` test.
               sequence,
-              from: { provider: activeRung.provider, model: activeRung.model },
+              from: { provider, model },
               to: { provider: next.provider, model: next.model },
-              reason: switchReason(),
+              ...abandoned,
             }));
             activeRung = next;
+            activeRungOpenedAt = this.now();
+            activeRungAttempted = false;
           },
         },
         AbortSignal.any([budgetController.signal, dispatchController.signal]),
@@ -480,14 +524,29 @@ export class DirectAssistService {
       }
       // An exhausted whole-ladder budget surfaces as itself, not as the
       // INCOMPLETE_STREAM the empty engine stream would otherwise produce.
-      const normalized = budgetExpired && sequence === 0
+      const outOfTime = budgetExpired && sequence === 0;
+      const normalized = outOfTime
         ? new DirectAssistError('CONNECT_TIMEOUT', 'No provider answered in time.', true)
         : normalizeDirectAssistError(error);
       if (normalized.code === 'CANCELLED') {
         yield Object.freeze({ type: 'cancel', requestId, sequence });
         return Object.freeze({ state: 'cancelled', chunks: sequence });
       }
-      const payload = normalized.toPayload();
+      // The provider's status and words ride beside the fixed message, never
+      // inside it. An exhausted budget is our own verdict, and our own idle
+      // watchdog likewise: no provider said anything.
+      // Nobody answered (nothing was streamed): if the ladder walked more than
+      // one provider, say what each of them did. One provider is the error
+      // itself; a cut-off answer already announced its switches.
+      const lastRung = sequence === 0
+        ? describeActiveRung?.(idleTimedOut ? 'STREAM_IDLE_TIMEOUT' : undefined) ?? null
+        : null;
+      const attempts = sequence === 0 ? [...abandonedRungs, ...(lastRung ? [lastRung] : [])] : [];
+      const payload: DirectAssistErrorPayload = Object.freeze({
+        ...normalized.toPayload(),
+        ...(outOfTime || idleTimedOut ? {} : describeDirectAssistFailure(error, { echoOf })),
+        ...(attempts.length > 1 ? { attempts: Object.freeze(attempts) } : {}),
+      });
       yield Object.freeze({
         type: 'error',
         requestId,

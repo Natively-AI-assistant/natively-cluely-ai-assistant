@@ -1,0 +1,421 @@
+/**
+ * Who reads a screenshot, and in what order (2026-10-01).
+ *
+ * Phase 5a moves the user's SELECTED model to the front of the chat screenshot
+ * chain. This records the order for every combination of configured keys and
+ * selected model BEFORE that change, so the change can be held to exactly one
+ * difference: the selection's own rung leads. Every other rung keeps its place.
+ *
+ * Regenerate the baseline ONLY on the commit that extracted buildVisionChain
+ * and changed nothing else:
+ *   VISION_ORDER_WRITE=1 node --test electron/services/__tests__/VisionChainOrder2026_10_01.test.mjs
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const dist = (p) => path.join(__dirname, '../../../dist-electron/electron', p);
+const electronPath = require.resolve('electron');
+require.cache[electronPath] = {
+  id: electronPath, filename: electronPath, loaded: true,
+  exports: { app: { isReady: () => true, getPath: () => os.tmpdir(), getVersion: () => '0.0.0-test' }, safeStorage: { isEncryptionAvailable: () => false } },
+};
+const { LLMHelper } = require(dist('LLMHelper.js'));
+const { VisionCapabilityStore, __setVisionCapabilityStore } = require(dist('llm/visionCapabilityStore.js'));
+__setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null }));
+
+const FIXTURE = path.join(__dirname, 'fixtures/visionChainOrder2026_10_01.json');
+
+const TIERS = [
+  { family: 'openai', tier1: 'gpt-5.4', tier2: 'gpt-5.4', tier3: 'gpt-5.4' },
+  { family: 'claude', tier1: 'claude-sonnet-4-6', tier2: 'claude-sonnet-4-6', tier3: 'claude-sonnet-4-6' },
+  { family: 'gemini_flash', tier1: 'gemini-3.8-flash', tier2: 'gemini-3.8-flash', tier3: 'gemini-3.8-flash' },
+  { family: 'gemini_pro', tier1: 'gemini-3.1-pro-preview', tier2: 'gemini-3.1-pro-preview', tier3: 'gemini-3.1-pro-preview' },
+];
+// Which providers are configured. Each name maps to the state that makes its rung possible.
+const KEYS = {
+  openai: { openaiClient: {} }, claude: { claudeClient: {} }, gemini: { client: {} }, groq: { groqClient: {} },
+  natively: { hasNatively: () => true }, deepseek: { deepseekClient: {} }, openrouter: { openrouterClient: {} },
+  litellm: { litellmClient: {} }, nvidia_nim: { nvidiaNimClient: {} }, ninerouter: { ninerouterClient: {} },
+  fluxion: { hasFluxionCredential: () => true }, agentrouter: { hasAgentRouterCredential: () => true },
+  codex: { isCodexAvailable: () => true },
+  // As the real method: the user's own Antigravity selection, else the first discovered model.
+  antigravity: { antigravityFallbackModel() { return this.currentModelId.startsWith('antigravity:') ? this.currentModelId.slice('antigravity:'.length) : 'gemini-3-pro-high'; } },
+};
+const VENDORS = ['openai', 'claude', 'gemini', 'groq', 'natively'];
+const EVERYTHING = [...VENDORS, 'deepseek', 'openrouter', 'litellm', 'nvidia_nim', 'ninerouter', 'fluxion', 'agentrouter', 'codex', 'antigravity'];
+const KEY_SETS = [
+  [], ['gemini'], ['openai'], ['claude'], ['deepseek'], ['openai', 'gemini'], ['claude', 'gemini'], VENDORS, EVERYTHING,
+];
+// A selection is a model id, or `[label, state]` for the ones that are not just an id.
+const SELECTIONS = [
+  'gpt-5.4', 'gpt-5.5', 'o3', 'gpt-3.5-turbo', 'claude-sonnet-4-6', 'claude-opus-5', 'gemini-3.1-flash-lite', 'gemini-3.8-flash',
+  'gemini-3.1-pro-preview', 'gemini-2.5-flash', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile', 'natively', 'deepseek-v4-flash',
+  'deepseek-v4-pro', 'openrouter/openai/gpt-4o', 'fluxion/claude-opus-5', 'agentrouter/gpt-6-astra', 'litellm/internal-model',
+  'nvidia_nim/meta/llama-3.2-90b-vision-instruct', 'ninerouter/openai/gpt-5', 'codex-cli', 'antigravity:claude-opus-5',
+  ['ollama llava', { useOllama: true, ollamaModel: 'llava', ollamaVisionModel: 'llava', currentModelId: 'gemini-3.8-flash' }],
+  ['custom with an image placeholder', { customProvider: { id: 'c1', name: 'Mine', curlCommand: 'curl https://example.com -d \'{"image":"{{IMAGE_BASE64}}"}\'' }, currentModelId: 'gemini-3.8-flash' }],
+];
+
+function helper(keys, selection) {
+  const [, state] = Array.isArray(selection) ? selection : [selection, { currentModelId: selection }];
+  const h = Object.create(LLMHelper.prototype);
+  Object.assign(h, {
+    useOllama: false, customProvider: null, activeCurlProvider: null, currentModelId: '', ollamaModel: '', ollamaVisionModel: null,
+    ollamaVisionCache: new Map(), ninerouterVisionModels: new Set(['openai/gpt-5']), configuredCustomProviders: [],
+    isLocalOnlyMode: false, isProviderDisabled: () => false, deepseekPermanentlyDead: false,
+    client: null, openaiClient: null, claudeClient: null, groqClient: null, deepseekClient: null,
+    openrouterClient: null, litellmClient: null, nvidiaNimClient: null, ninerouterClient: null,
+    litellmBaseURL: 'http://localhost:4000/v1', ninerouterBaseURL: 'http://localhost:20128/v1',
+    visionHealth: new Map(), modelVersionManager: { getAllVisionTiers: () => TIERS },
+    codexCliConfig: { enabled: false, model: 'gpt-5.5' }, isCodexAvailable: () => false, antigravityFallbackModel: () => null,
+    hasNatively: () => false, hasFluxionCredential: () => false, hasAgentRouterCredential: () => false,
+    maybeProbeSelectedVision: () => {}, refreshOpenRouterVisionData: async () => {},
+  });
+  for (const k of keys) Object.assign(h, KEYS[k]);
+  Object.assign(h, state);
+  return h;
+}
+
+const REQ = { userContent: 'u', message: 'm', imagePaths: ['/tmp/x.png'], systemPrompt: 's' };
+
+/** `case → [rung id, …]`, or `["THROWS: <first words>"]` when nothing can read the screenshot. */
+async function orders() {
+  const out = {};
+  for (const keys of KEY_SETS) for (const selection of SELECTIONS) {
+    const label = Array.isArray(selection) ? selection[0] : selection;
+    const h = helper(keys, selection);
+    let ids;
+    try { ids = (await h.buildVisionChain(REQ)).map((p) => p.id); }
+    catch (e) { ids = [`THROWS: ${String(e.message).split('.').slice(0, 2).join('.')}`]; }
+    out[`[${keys.join(',')}] ${label}`] = ids;
+  }
+  return out;
+}
+
+/** Rung ids that belong to a selection: the ones allowed to move to (or appear at) the front. */
+function ownRungs(label) {
+  if (/^(?:gpt-|o\d)/.test(label)) return ['openai_selected', 'openai'];
+  if (label.startsWith('claude-')) return ['claude_selected', 'claude'];
+  if (label.startsWith('gemini-')) return ['gemini_selected', 'gemini_flash_lite', 'gemini_flash', 'gemini_pro'];
+  if (label === 'natively') return ['natively'];
+  if (label.startsWith('antigravity:')) return ['antigravity'];
+  if (label.startsWith('qwen/') || label.startsWith('llama-')) return ['groq'];
+  return [];
+}
+
+test('the chain order changes only by the selection moving to the front', async () => {
+  const now = await orders();
+  if (process.env.VISION_ORDER_WRITE === '1') {
+    fs.mkdirSync(path.dirname(FIXTURE), { recursive: true });
+    fs.writeFileSync(FIXTURE, JSON.stringify({ written: '2026-10-01', note: 'order at the buildVisionChain extraction commit, before phase 5a', orders: now }, null, 1) + '\n');
+    return;
+  }
+  const before = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')).orders;
+  assert.deepEqual(Object.keys(now).sort(), Object.keys(before).sort(), 'the case list changed');
+  for (const [name, was] of Object.entries(before)) {
+    const is = now[name];
+    if (JSON.stringify(is) === JSON.stringify(was)) continue;
+    const label = name.slice(name.indexOf('] ') + 2);
+    const own = ownRungs(label);
+    assert.ok(own.includes(is[0]), `${name}: the first rung is ${is[0]}, which is not the selection's own (was ${was.join(' > ')}; now ${is.join(' > ')})`);
+    const rest = is.slice(1).filter((id) => id !== is[0]);
+    const wasRest = was.filter((id) => id !== is[0]);
+    assert.deepEqual(rest, wasRest, `${name}: rungs other than the selection's changed order (was ${was.join(' > ')}; now ${is.join(' > ')})`);
+  }
+});
+
+test('wherever a selection that reads images has a rung of its own, that rung is first', async () => {
+  // The fixture test above only inspects cases that CHANGED, so it passes with
+  // phase 5a reverted. This one states the rule for every case.
+  const TEXT_ONLY = new Set(['gpt-3.5-turbo', 'llama-3.3-70b-versatile']);
+  const now = await orders();
+  let checked = 0;
+  for (const [name, is] of Object.entries(now)) {
+    const label = name.slice(name.indexOf('] ') + 2);
+    const own = ownRungs(label);
+    if (own.length === 0 || TEXT_ONLY.has(label) || !is.some((id) => own.includes(id))) continue;
+    checked += 1;
+    assert.ok(own.includes(is[0]), `${name}: ${is.join(' > ')}`);
+  }
+  assert.ok(checked >= 40, `only ${checked} cases have a selection with its own rung`);
+});
+
+const chainIds = async (keys, selection, state = {}) => {
+  const h = Object.assign(helper(keys, selection), state);
+  return (await h.buildVisionChain(REQ)).map((p) => p.id);
+};
+const coolingUntil = (id, until) => new Map([[id, { openUntil: until, consecutiveFails: 3, ttftEma: null }]]);
+
+test('a selected model whose breaker is open does not lead its screenshot turn; it leads again after', async () => {
+  const cooling = await chainIds(EVERYTHING, 'fluxion/claude-opus-5', { visionHealth: coolingUntil('fluxion', Date.now() + 60_000) });
+  assert.equal(cooling[0], 'openai', `a failing selection must not cost its first-token budget on every screenshot (got ${cooling.join(' > ')})`);
+  assert.equal(cooling.at(-1), 'fluxion', 'still tried, last');
+  const recovered = await chainIds(EVERYTHING, 'fluxion/claude-opus-5', { visionHealth: coolingUntil('fluxion', Date.now() - 1) });
+  assert.equal(recovered[0], 'fluxion');
+});
+
+// ── Phase 5a: a selected direct model reads its own screenshot (defect 10) ────
+
+const chainOf = async (keys, selection, state = {}) => {
+  const h = Object.assign(helper(keys, selection), state);
+  const chain = await h.buildVisionChain(REQ);
+  return { h, chain, ids: chain.map((p) => p.id), names: chain.map((p) => p.name) };
+};
+const drain = async (gen) => { for await (const _ of gen) { /* drain */ } };
+
+test('a selected Gemini model leads even when an OpenAI key exists', async () => {
+  assert.equal((await chainOf(['openai', 'gemini'], 'gemini-3.8-flash')).ids[0], 'gemini_flash');
+  assert.equal((await chainOf(VENDORS, 'gemini-3.1-pro-preview')).ids[0], 'gemini_pro');
+  assert.equal((await chainOf(VENDORS, 'gemini-3.1-flash-lite')).ids[0], 'gemini_flash_lite');
+});
+test('a `models/`-prefixed Gemini id is the same model: no second rung for it', async () => {
+  const r = await chainOf(VENDORS, 'models/gemini-3.8-flash');
+  assert.equal(r.ids[0], 'gemini_flash');
+  assert.ok(!r.ids.includes('gemini_selected'));
+});
+test('a selected Gemini model that is none of the three fixed ones gets its own rung, for that model', async () => {
+  const r = await chainOf(VENDORS, 'gemini-2.5-flash');
+  assert.equal(r.ids[0], 'gemini_selected');
+  assert.match(r.names[0], /gemini-2\.5-flash/);
+  assert.deepEqual(r.ids.slice(1), ['openai', 'claude', 'gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'groq', 'natively'], 'everything else keeps its place');
+});
+test('a selected OpenAI or Claude model reads with ITSELF; the fixed vision model stays as the fallback', async () => {
+  const o = await chainOf(VENDORS, 'gpt-5.5');
+  assert.deepEqual(o.ids.slice(0, 2), ['openai_selected', 'openai']);
+  assert.match(o.names[0], /gpt-5\.5/);
+  const c = await chainOf(VENDORS, 'claude-opus-5');
+  assert.equal(c.ids[0], 'claude_selected');
+  assert.match(c.names[0], /claude-opus-5/);
+  assert.ok(c.ids.includes('claude'), 'the fixed Claude vision model is still there to fall back to');
+  // (`o3-pro`, not bare `o3`: isOpenAiModel does not claim a bare o-series id, so the app cannot route one at all.)
+  assert.equal((await chainOf(VENDORS, 'o3-pro')).ids[0], 'openai_selected');
+});
+test('a selection equal to the fixed vision model is not tried twice', async () => {
+  const o = await chainOf(VENDORS, 'gpt-5.4');
+  assert.equal(o.ids[0], 'openai');
+  assert.ok(!o.ids.includes('openai_selected'));
+  const c = await chainOf(VENDORS, 'claude-sonnet-4-6');
+  assert.equal(c.ids[0], 'claude');
+  assert.ok(!c.ids.includes('claude_selected'));
+});
+test('a text-only selected model gets no rung of its own: the vendor vision model answers', async () => {
+  const r = await chainOf(['openai'], 'gpt-3.5-turbo');
+  assert.deepEqual(r.ids, ['openai']);
+  assert.doesNotMatch(r.names.join(' '), /gpt-3\.5/);
+});
+test('a model nothing is known about gets no rung of its own until its test passes; a failed test keeps it out', async () => {
+  const before = await chainOf(VENDORS, 'gpt-next-unknown');
+  assert.ok(!before.ids.includes('openai_selected'));
+  try {
+    const yes = new VisionCapabilityStore({ filePath: null }); yes.recordTest('openai', '', 'gpt-next-unknown', true);
+    __setVisionCapabilityStore(yes);
+    assert.equal((await chainOf(VENDORS, 'gpt-next-unknown')).ids[0], 'openai_selected');
+    const no = new VisionCapabilityStore({ filePath: null }); no.recordTest('openai', '', 'gpt-5.5', false);
+    __setVisionCapabilityStore(no);
+    const refused = await chainOf(VENDORS, 'gpt-5.5');
+    assert.ok(!refused.ids.includes('openai_selected'), 'a model TESTED as text-only is not sent the screenshot, whatever its name says');
+    assert.equal(refused.ids[0], 'openai');
+  } finally { __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })); }
+});
+test('Natively selected leads; a selected Groq vision model leads; a Groq text model does not', async () => {
+  assert.equal((await chainOf(VENDORS, 'natively')).ids[0], 'natively');
+  const g = await chainOf(VENDORS, 'qwen/qwen3.8-27b');
+  assert.equal(g.ids[0], 'groq');
+  assert.match(g.names[0], /qwen3\.8-27b/);
+  const t = await chainOf(VENDORS, 'llama-3.3-70b-versatile');
+  assert.equal(t.ids[0], 'openai');
+  assert.doesNotMatch(t.names.join(' '), /llama-3\.3/, 'the Groq rung still uses the Groq vision model');
+});
+test('a selected Antigravity model leads', async () => {
+  const r = await chainOf(EVERYTHING, 'antigravity:claude-opus-5');
+  assert.equal(r.ids[0], 'antigravity');
+  assert.match(r.names[0], /claude-opus-5/);
+});
+test('no key, or the provider switched off: no rung for the selection, and the chain still works', async () => {
+  const noKey = await chainOf(['gemini'], 'gpt-5.5');
+  assert.deepEqual(noKey.ids, ['gemini_flash_lite', 'gemini_flash', 'gemini_pro']);
+  const off = await chainOf(VENDORS, 'gpt-5.5', { isProviderDisabled: (p) => p === 'openai' });
+  assert.ok(!off.ids.some((id) => id.startsWith('openai')), off.ids.join(' > '));
+  assert.equal(off.ids[0], 'claude');
+});
+test('Ollama or a custom provider selected: a leftover cloud model id does not lead', async () => {
+  const o = await chainOf(VENDORS, SELECTIONS.find((s) => Array.isArray(s) && s[0] === 'ollama llava'));
+  assert.deepEqual(o.ids.slice(0, 2), ['ollama', 'openai']);
+  const c = await chainOf(VENDORS, SELECTIONS.find((s) => Array.isArray(s) && s[0].startsWith('custom')));
+  assert.deepEqual(c.ids.slice(0, 2), ['custom', 'openai']);
+});
+test('local-only mode: a selected cloud model gets no rung', async () => {
+  await assert.rejects(() => chainOf(VENDORS, 'gpt-5.5', { isLocalOnlyMode: true }), /Local-only mode is on/);
+});
+test('each selected rung opens the SELECTED model, with the screenshot', async () => {
+  const calls = [];
+  const stubs = {
+    streamWithOpenaiMultimodal: async function* (_u, imgs, _sys, model) { calls.push(['openai', model, imgs.length]); yield 'ok'; },
+    streamWithClaudeMultimodal: async function* (_u, imgs, _sys, model) { calls.push(['claude', model, imgs.length]); yield 'ok'; },
+    streamWithGeminiModel: async function* (_u, model, imgs) { calls.push(['gemini', model, imgs.length]); yield 'ok'; },
+    streamWithGroqMultimodal: async function* (_u, imgs, _sys, _sig, model) { calls.push(['groq', model, imgs.length]); yield 'ok'; },
+  };
+  for (const model of ['gpt-5.5', 'claude-opus-5', 'gemini-2.5-flash', 'qwen/qwen3.6-27b']) {
+    const { chain } = await chainOf(VENDORS, model, stubs);
+    await drain(chain[0].open(new AbortController().signal, 1));
+  }
+  // Groq: qwen3.6 is RETIRED (free and developer tiers), so the rung sends its
+  // successor, as Groq's text path does (review fix, 2026-10-01).
+  assert.deepEqual(calls, [['openai', 'gpt-5.5', 1], ['claude', 'claude-opus-5', 1], ['gemini', 'gemini-2.5-flash', 1], ['groq', 'qwen/qwen3.8-27b', 1]]);
+});
+test('a selected rung refused as image-unsupported re-tests the selected model', async () => {
+  const forced = [];
+  // Only the SELECTED model refuses; the vendor's fixed vision model answers.
+  const openai = async function* (_u, _imgs, _sys, model) {
+    if (model === 'gpt-5.5') { const e = new Error('This model does not support image input'); e.status = 400; throw e; }
+    yield `seen by ${model}`;
+  };
+  const h = Object.assign(helper(['openai', 'gemini'], 'gpt-5.5'), {
+    streamWithOpenaiMultimodal: openai,
+    maybeProbeSelectedVision: (o) => { if (o?.force) forced.push(o); },
+  });
+  const out = [];
+  for await (const t of h.streamVisionWithFallback(REQ)) out.push(t);
+  assert.deepEqual(out, ['seen by gpt-5.4'], 'the screenshot is still answered, by the next rung');
+  assert.equal(forced.length, 1, 'the refusal contradicts "reads images": test the selected model again');
+});
+
+// ── Review fixes (2026-10-01) ────────────────────────────────────────────────
+
+const DAY = 24 * 3600_000;
+test('a breaker opened by ONE selected model does not hold back the next model picked', async () => {
+  // The rung id is the same for every model it can carry, so a retired or
+  // text-only model's demotion (up to a day) outlived picking another model.
+  for (const [keys, first, rung, second] of [
+    [VENDORS, 'claude-opus-5', 'claude_selected', 'claude-fable-5-1'],
+    [VENDORS, 'gpt-5.5', 'openai_selected', 'gpt-6-astra'],
+    [VENDORS, 'gemini-2.5-flash', 'gemini_selected', 'gemini-3.5-flash'],
+    [EVERYTHING, 'openrouter/openai/gpt-4o', 'openrouter', 'openrouter/x-ai/grok-4.7'],
+    [EVERYTHING, 'fluxion/claude-opus-5', 'fluxion', 'fluxion/gpt-5.5'],
+  ]) {
+    const h = helper(keys, first);
+    assert.equal((await h.buildVisionChain(REQ))[0].id, rung, `${first} leads`);
+    h.visionHealth.set(rung, { openUntil: Date.now() + DAY, consecutiveFails: 1, ttftEma: null }); // e.g. retired upstream
+    assert.notEqual((await h.buildVisionChain(REQ))[0].id, rung, `${first}: the same failing selection stays demoted`);
+    h.currentModelId = second;
+    const after = await h.buildVisionChain(REQ);
+    assert.equal(after[0].id, rung, `${second} must lead: ${first}'s breaker says nothing about it (got ${after.map((p) => p.id).join(' > ')})`);
+    assert.match(after[0].name, new RegExp(second.split('/').pop().replace(/[.]/g, '\\.')));
+  }
+});
+test('going back to the model that failed does not clear another rung, and a fixed rung keeps its own breaker', async () => {
+  // `openai` (the fixed vision model) failed as a FALLBACK while Claude was
+  // selected. Selecting that same fixed model later does not make a dead key lead.
+  const h = helper(VENDORS, 'claude-opus-5');
+  await h.buildVisionChain(REQ);
+  h.visionHealth.set('openai', { openUntil: Date.now() + DAY, consecutiveFails: 1, ttftEma: null });
+  h.currentModelId = 'gpt-5.4';
+  assert.notEqual((await h.buildVisionChain(REQ))[0].id, 'openai');
+});
+test('a new key retries the selection at once: every setter clears its own rungs', () => {
+  const state = () => ({
+    visionHealth: new Map(), textHealth: new Map(), geminiPromptCache: { clear() {} },
+    litellmModelBudgets: new Map(), ninerouterModelBudgets: new Map(), ninerouterModelInputCaps: new Map(), ninerouterVisionModels: new Set(),
+  });
+  for (const [setter, args, ids] of [
+    ['setApiKey', [''], ['gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'gemini_selected']],
+    ['setOpenaiApiKey', [''], ['openai', 'openai_selected']],
+    ['setClaudeApiKey', [''], ['claude', 'claude_selected']],
+    ['setGroqApiKey', [''], ['groq']],
+    ['setDeepseekApiKey', [''], ['deepseek']],
+    ['setLitellmConfig', ['', ''], ['litellm']],
+    ['setNinerouterConfig', ['', ''], ['ninerouter']],
+    ['setNativelyKey', [null], ['natively']],
+  ]) {
+    const h = Object.assign(Object.create(LLMHelper.prototype), state());
+    for (const id of [...ids, 'someone_else']) h.visionHealth.set(id, { openUntil: Date.now() + DAY, consecutiveFails: 3, ttftEma: null });
+    h[setter](...args);
+    assert.deepEqual([...h.visionHealth.keys()], ['someone_else'], `${setter} must clear ${ids.join(', ')} and nothing else`);
+  }
+});
+test('a selected local model leads even while its breaker is open', async () => {
+  const ollama = SELECTIONS.find((s) => Array.isArray(s) && s[0] === 'ollama llava');
+  const ids = await chainIds(VENDORS, ollama, { visionHealth: coolingUntil('ollama', Date.now() + 60_000) });
+  assert.deepEqual(ids.slice(0, 2), ['ollama', 'openai'], 'the cloud follows only if the local model fails');
+});
+test('a custom provider: a local one always leads; a hosted one stops leading while cooling, until it is edited', async () => {
+  const custom = (curlCommand) => ['custom', { customProvider: { id: 'c1', name: 'Mine', curlCommand }, currentModelId: 'gemini-3.8-flash' }];
+  const cooling = () => coolingUntil('custom', Date.now() + 60_000);
+  const local = await chainIds(VENDORS, custom('curl http://localhost:1234/v1/chat -d \'{"image":"{{IMAGE_BASE64}}"}\''), { visionHealth: cooling() });
+  assert.equal(local[0], 'custom', 'a local custom endpoint leads even while cooling');
+  const h = Object.assign(helper(VENDORS, custom('curl https://example.com/v1 -d \'{"image":"{{IMAGE_BASE64}}"}\'')), { visionHealth: new Map() });
+  assert.equal((await h.buildVisionChain(REQ))[0].id, 'custom');
+  h.visionHealth = cooling();
+  const hosted = (await h.buildVisionChain(REQ)).map((p) => p.id);
+  assert.equal(hosted[0], 'openai', `a failing hosted endpoint must not cost its budget on every screenshot (got ${hosted.join(' > ')})`);
+  assert.ok(hosted.includes('custom'), 'still tried');
+  // The user fixes the endpoint: same provider id, new command. It leads at once.
+  h.customProvider = { ...h.customProvider, curlCommand: 'curl https://fixed.example.com/v1 -d \'{"image":"{{IMAGE_BASE64}}"}\'' };
+  assert.equal((await h.buildVisionChain(REQ))[0].id, 'custom');
+});
+
+// ── Phase 5c-2: a leading selected rung is retried less ──────────────────────
+
+const attemptsOf = async (keys, selection, state = {}) => Object.fromEntries((await chainOf(keys, selection, state)).chain.map((p) => [p.id, p.maxAttempts]));
+
+test('the rung carrying the selected model itself is tried once: the vendor\'s fixed model follows on the same key', async () => {
+  const o = await attemptsOf(VENDORS, 'gpt-5.5');
+  assert.equal(o.openai_selected, 1);
+  assert.equal(o.openai, undefined, 'fallback rungs keep the engine default');
+  assert.equal((await attemptsOf(VENDORS, 'claude-opus-5')).claude_selected, 1);
+  assert.equal((await attemptsOf(VENDORS, 'gemini-2.5-flash')).gemini_selected, 1);
+});
+test('any other leading selection is tried twice, not three times', async () => {
+  assert.equal((await attemptsOf(VENDORS, 'natively')).natively, 2);
+  assert.equal((await attemptsOf(EVERYTHING, 'openrouter/openai/gpt-4o')).openrouter, 2);
+  assert.equal((await attemptsOf(['openai', 'gemini'], 'gemini-3.8-flash')).gemini_flash, 2);
+  assert.equal((await attemptsOf(VENDORS, 'gpt-5.4')).openai, 2, 'the fixed rung when it IS the selection');
+  assert.equal((await attemptsOf(EVERYTHING, 'deepseek-v4-flash')).deepseek, 2);
+  const ollama = SELECTIONS.find((s) => Array.isArray(s) && s[0] === 'ollama llava');
+  assert.equal((await attemptsOf(VENDORS, ollama)).ollama, 2, 'a local selection too: the cloud follows if it fails');
+});
+test('a rung that is the only chance keeps the full attempts', async () => {
+  assert.equal((await attemptsOf(['deepseek'], 'deepseek-v4-flash')).deepseek, undefined, 'alone in the chain');
+  const coolingOthers = new Map(['openai', 'claude', 'gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'groq'].map((id) => [id, { openUntil: Date.now() + 60_000, consecutiveFails: 3, ttftEma: null }]));
+  assert.equal((await attemptsOf(VENDORS, 'natively', { visionHealth: coolingOthers })).natively, undefined, 'every rung behind it has its breaker open');
+});
+test('no selection rung, or one that does not lead: nothing is capped', async () => {
+  assert.deepEqual(Object.values(await attemptsOf(['openai', 'gemini'], 'gpt-3.5-turbo')).filter((v) => v !== undefined), []);
+  const cooling = await attemptsOf(EVERYTHING, 'fluxion/claude-opus-5', { visionHealth: coolingUntil('fluxion', Date.now() + 60_000) });
+  assert.equal(cooling.fluxion, undefined, 'a selection whose breaker is open is tried last, like any other rung');
+});
+test('through the engine: an unreachable selected provider is tried twice, then the next rung answers', async () => {
+  let natively = 0;
+  const h = Object.assign(helper(['openai', 'natively'], 'natively'), {
+    streamWithNatively: async function* () { natively++; throw new Error('Natively API connect timeout (4s)'); },
+    streamWithOpenaiMultimodal: async function* () { yield 'seen'; },
+  });
+  const out = [];
+  for await (const piece of h.streamVisionWithFallback(REQ)) out.push(piece);
+  assert.deepEqual(out, ['seen']);
+  assert.equal(natively, 2, 'three attempts cost ~16 s with Natively unreachable (measured 2026-10-01)');
+});
+test('the engine\'s log names the budget actually in force for a capped rung', async () => {
+  // It printed the engine default ("attempt 1/3") for a rung capped at 2, so a
+  // debug log showed a fallback after "one of three" tries that were never allowed.
+  const lines = [];
+  const real = { log: console.log, warn: console.warn };
+  console.log = (...a) => lines.push(a.join(' ')); console.warn = (...a) => lines.push(a.join(' '));
+  try {
+    const h = Object.assign(helper(['openai', 'natively'], 'natively'), {
+      streamWithNatively: async function* () { throw new Error('Natively API connect timeout (4s)'); },
+      streamWithOpenaiMultimodal: async function* () { yield 'seen'; },
+    });
+    for await (const _ of h.streamVisionWithFallback(REQ)) { /* drain */ }
+  } finally { console.log = real.log; console.warn = real.warn; }
+  const natively = lines.filter((l) => /\[Vision\] Natively API attempt/.test(l));
+  assert.deepEqual(natively.map((l) => l.match(/attempt (\d\/\d)/)[1]), ['1/2', '2/2']);
+  assert.match(lines.find((l) => /committed to OpenAI/.test(l)), /attempt 1\/3/, 'an uncapped fallback rung still reads 1/3');
+});

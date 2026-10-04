@@ -105,8 +105,9 @@ const FlowStage: React.FC<{ icon: React.ReactNode; title: string; detail: string
     <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
       {icon}
     </div>
-    <div className="mt-2 text-xs font-semibold text-text-primary leading-tight">{title}</div>
-    <div className="mt-0.5 text-[11px] text-text-secondary leading-snug">{detail}</div>
+    {/* One line each: a stage is a label, not a sentence (the column is ~115px). */}
+    <div className="mt-2 text-xs font-semibold text-text-primary leading-tight whitespace-nowrap">{title}</div>
+    <div className="mt-0.5 text-[11px] text-text-secondary leading-snug whitespace-nowrap">{detail}</div>
   </div>
 );
 
@@ -126,12 +127,12 @@ export const AnswerFlowFigure: React.FC = () => (
     <FlowStage
       icon={<span className="flex items-center gap-0.5"><Mic size={14} /><Volume2 size={14} /></span>}
       title="Meeting audio"
-      detail="You and the other side"
+      detail="Both sides"
     />
     <FlowArrow />
     <FlowStage icon={<AudioLines size={20} />} title="Speech provider" detail="Turns it into text" />
     <FlowArrow />
-    <FlowStage icon={<FlaskConical size={20} />} title="AI model" detail="Reads text and screen" />
+    <FlowStage icon={<FlaskConical size={20} />} title="AI model" detail="Text and screen" />
     <FlowArrow />
     <FlowStage icon={<NativelyGlyph size={18} />} title="Answer" detail="In the overlay" />
   </div>

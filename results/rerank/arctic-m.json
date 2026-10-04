@@ -1,0 +1,34 @@
+{
+  "model_id": "arctic-m",
+  "reranker": "Xenova/ms-marco-MiniLM-L-6-v2 (q8, bundled)",
+  "n_queries": 60,
+  "pool": 30,
+  "sampled": true,
+  "embedding_only": {
+    "r1": 0.0667,
+    "r5": 0.2167,
+    "r10": 0.2833,
+    "mrr": 0.1273,
+    "ndcg": 0.1418
+  },
+  "reranked": {
+    "r1": 0.1333,
+    "r5": 0.2333,
+    "r10": 0.3,
+    "mrr": 0.1772,
+    "ndcg": 0.1897
+  },
+  "gain": {
+    "r1": 0.0666,
+    "r5": 0.0166,
+    "r10": 0.0167,
+    "mrr": 0.0499
+  },
+  "rescued_queries": 2,
+  "lost_queries": 1,
+  "unrecoverable_queries": 35,
+  "unrecoverable_rate": 0.5833,
+  "rerank_failures": 0,
+  "rerank_latency_p50_ms": 3957,
+  "rerank_latency_p95_ms": 4663
+}

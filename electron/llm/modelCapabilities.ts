@@ -363,6 +363,37 @@ export function claudeAcceptsSamplingParams(modelId: string): boolean {
   return /^claude-(?:opus|sonnet|haiku)-4(?:-[0-6])?(?:-\d{8})?$/.test(id);
 }
 
+/**
+ * The `thinking` setting to send a NATIVE Claude model so it answers without
+ * thinking up front (low time-to-first-token), as a spread: `{ thinking }` or
+ * `{}`. Per Anthropic's per-model table (platform.claude.com/docs/en/
+ * build-with-claude/thinking, read 2026-10-01):
+ *
+ *   - `disabled` is accepted by Claude 3, Opus/Sonnet/Haiku 4.0–4.8, Sonnet 5,
+ *     and Opus 5 at `high` effort or below (Natively sets no effort; the
+ *     default is `high`).
+ *   - Sonnet 5.5 REJECTS `disabled` (400). Its lowest setting is
+ *     `between_tools` (up-front thinking off), accepted at its default effort.
+ *   - Opus 5.5, Fable 5 / 5.1 and Mythos reject `disabled` AND `between_tools`:
+ *     adaptive thinking is always on, and no field is the request they accept.
+ *
+ * An allow-list, for the same reason as claudeAcceptsSamplingParams: OMITTING
+ * the field is valid for every model, while sending a value a model rejects
+ * fails every answer — which is what `disabled` did to a selected Opus 5.5,
+ * Sonnet 5.5 or Fable before this. Unknown and future ids omit.
+ */
+export function claudeThinkingParam(modelId: string): { thinking?: { type: 'disabled' | 'between_tools' } } {
+  const id = (modelId || '').toLowerCase();
+  const disabled = /^claude-(?:2|3|instant)/.test(id)
+    // Opus / Sonnet / Haiku 4.0–4.8, bare or with a date suffix.
+    || /^claude-(?:opus|sonnet|haiku)-4(?:-[0-8])?(?:-\d{8})?$/.test(id)
+    // Opus 5 and Sonnet 5 exactly — not 5.5 (`claude-opus-5-5`).
+    || /^claude-(?:opus|sonnet)-5(?:-\d{8})?$/.test(id);
+  if (disabled) return { thinking: { type: 'disabled' } };
+  if (/^claude-sonnet-5-5(?:-\d{8})?$/.test(id)) return { thinking: { type: 'between_tools' } };
+  return {};
+}
+
 export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 // Lowest-latency *valid* reasoning_effort for an OpenAI reasoning model, or null

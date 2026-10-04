@@ -45,6 +45,7 @@ function portOver(chunks) {
     tokenBudget: 3600,
     userId: 'u',
     rerankSurface: 'manual',
+    wholeSmallCorpus: false, // placeholder files stand for large ones (retriever seam under test)
   });
 }
 

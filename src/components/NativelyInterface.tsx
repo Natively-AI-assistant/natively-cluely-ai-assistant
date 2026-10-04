@@ -305,6 +305,7 @@ import {
   maxWindowWidthFor,
   maxWindowHeightFor,
   collapsedWidthFor,
+  collapsedWidthForRow,
   OVERLAY_PANEL_INSET,
   OVERLAY_HOVER_GATE_PAD,
   defaultCollapsedPanelWidth,
@@ -323,6 +324,14 @@ import {
 } from '../lib/overlayCustomSize.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
+import {
+  DIRECT_ASSIST_OPEN_PROVIDERS,
+  directAssistFailureText,
+  directAssistNoticeView,
+  type DirectAssistAnswerFailure,
+  type DirectAssistFallbackHop,
+  type DirectAssistFallbackNotice,
+} from '../lib/directAssistFailure.mjs';
 import {
   applyFirstStreamingToken,
   commitStreamingFlush,
@@ -360,6 +369,24 @@ import DOMPurify from 'dompurify';
 import { normalizeFinalizedMarkdownMath, renderStreamingMarkdown } from '../lib/streamingMarkdown';
 import ReactMarkdown from 'react-markdown';
 import { useT } from '../i18n';
+// System-design diagram artifacts: a ```mermaid block in an answer is drawn as
+// a diagram card. Mermaid itself is loaded on demand inside mermaidRenderer —
+// none of these imports pull it into this chunk.
+import { DiagramArtifact } from './diagram/DiagramArtifact';
+import { parseFencedBlocks, createFencedBlockTracker, replaceMermaidSource, isVisualBlock, mentionsVisualTag, type FenceBlock } from '../lib/diagram/fencedBlocks.mjs';
+import {
+  shouldUseStreamingDiagramUi,
+  hasOpeningMermaidFence,
+  mayHoldMermaidFence,
+  isMermaidOpeningTail,
+  fastForwardDiagramReveal,
+  completedDiagramCount,
+  previousVersionFor,
+  describeDiagramFromLead,
+} from '../lib/diagram/diagramStreamUi.mjs';
+import { latestDiagramInAnswer } from '../lib/diagram/activeDesign.mjs';
+import { diagramTimings } from '../lib/diagram/diagramTimings.mjs';
+import { useDiagramsEnabled, diagramsEnabledNow, cancelAllDiagramRepairs, warmDiagramRenderer, warmDiagramRendererOnIdle } from '../lib/diagram/diagramRuntime';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -384,6 +411,8 @@ import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
+import { modelSelectorGroupLabel } from './ui/modelSelectorGroups';
+import { DirectAssistNotice } from './ui/DirectAssistNotice';
 import RollingTranscript from './ui/RollingTranscript';
 import SwapText from './ui/SwapText';
 import ScreenshotTray from './overlay/ScreenshotTray';
@@ -501,10 +530,17 @@ interface Message {
   // and "gone" are different things to a reader judging an answer.
   shortenedFields?: string[];
   // Set when the ladder answered with a DIFFERENT provider than the one the
-  // user selected (a fallback rung fired). Verbatim provider ids, never a
-  // mapping table — the point is telling the user which provider actually
-  // received their request and got billed, not a pretty label.
-  fallbackNotice?: string;
+  // user selected (a fallback rung fired): each provider that failed, why,
+  // and — once someone has answered — who. Kept as data and worded at render
+  // time by directAssistNoticeView. Providers are named the way the model
+  // dropdown names them (modelSelectorGroupLabel), so the notice and the
+  // picker agree on who received the request and got billed.
+  fallbackNotice?: DirectAssistFallbackNotice;
+  // Set when the answer failed: outright, or partway (`partial`). Data, not a
+  // sentence — `text` holds one plain sentence for Copy and later context,
+  // and the row draws DirectAssistNotice from this instead. The provider's
+  // own words live only here, never in `text`.
+  failure?: DirectAssistAnswerFailure;
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -560,6 +596,9 @@ interface ActiveDirectAssistRequest {
   /** True once at least one provider_switch has fired for this request, so
    *  'done' knows whether to surface a fallback notice at all. */
   hasSwitched?: boolean;
+  /** The provider the ladder last moved to. An answer that breaks off
+   *  partway was being written by this one, not by the original selection. */
+  switchedTo?: string;
 }
 
 type DirectAssistRendererEvent =
@@ -573,9 +612,35 @@ type DirectAssistRendererEvent =
       from: { provider: string; model: string };
       to: { provider: string; model: string };
       reason: string;
+      status?: number;
+      detail?: string;
+      waitedMs: number;
+      unreachable?: boolean;
     }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
-  | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
+  | {
+      type: 'error';
+      requestId: string;
+      sequence: number;
+      error: {
+        code: string;
+        message: string;
+        retryable: boolean;
+        status?: number;
+        detail?: string;
+        unreachable?: boolean;
+        /** Every provider tried, when more than one was and none answered. */
+        attempts?: Array<{
+          provider: string;
+          model: string;
+          reason: string;
+          status?: number;
+          detail?: string;
+          unreachable?: boolean;
+          waitedMs: number;
+        }>;
+      };
+    }
   | { type: 'cancel'; requestId: string; sequence: number };
 
 const createDirectAssistRequestId = (): string => {
@@ -589,9 +654,6 @@ const directAssistSkillId = (request: string): string | undefined => {
   const match = request.match(/^\s*[/$]([a-z0-9][a-z0-9_-]*)(?=\s|$)/i);
   return match?.[1];
 };
-
-const directAssistErrorText = (code: string, message: string): string =>
-  `❌ ${code}: ${message}`;
 
 interface NativelyInterfaceProps {
   /** The pill's Stop ended the meeting (main already did the stopping). */
@@ -1083,11 +1145,27 @@ const MessageRow = React.memo(
     const t = useT();
     // Which attached screenshot (if any) is currently enlarged in this card.
     const [expandedPreview, setExpandedPreview] = React.useState<number | null>(null);
-    const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
+    // Worded here, at render time, so it follows the interface language.
+    const directAssistNotice = msg.role === 'system' && (msg.failure || msg.fallbackNotice)
+      ? directAssistNoticeView(
+          { failure: msg.failure, fallbackNotice: msg.fallbackNotice, ended: !msg.isStreaming },
+          t,
+        )
+      : null;
+    // A tilde-fenced diagram has no backtick fence but is the same wide card.
+    const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```') || hasOpeningMermaidFence(msg.text));
+    // A diagram answer's row spans the full width so the DRAWING can: a
+    // diagram is scaled down to fit its card, and the usual 85% column made
+    // real ones hard to read. Its prose and code keep the 85% measure (the
+    // .diagram-answer-parts rule in index.css), so the text does not reflow at
+    // the moment the block's fence arrives mid-stream.
+    const isDiagramMsg = msg.role === 'system' && hasOpeningMermaidFence(msg.text) && diagramsEnabledNow();
     // bubbleMaxClass: user bubbles are tighter; system + code use the same width.
     const bubbleMaxClass =
       msg.role === 'user'
         ? 'max-w-[72%] px-[13.6px] py-[10.2px]'
+        : isDiagramMsg
+        ? 'w-full max-w-full p-0'
         : msg.role === 'system'
         ? 'max-w-[85%] p-0'
         : 'max-w-[85%] px-4 py-3';
@@ -1232,7 +1310,9 @@ const MessageRow = React.memo(
                 <span>{t('Corrected answer')}{msg.correctionNote ? ` — ${msg.correctionNote}` : ''}</span>
               </div>
             )}
-            {renderMessageText(msg)}
+            {/* An answer that failed outright has no text worth a bubble: the
+                notice below stands in for it. A cut-off answer keeps its text. */}
+            {msg.role === 'system' && msg.failure && !msg.failure.partial ? null : renderMessageText(msg)}
             {/* Direct Assist dropped one or more context fields to fit the
                 model's context window (see requestBuilder's per-source drop
                 order) — surfaced so a thin-looking answer isn't a silent
@@ -1254,14 +1334,16 @@ const MessageRow = React.memo(
                 </span>
               </div>
             ) : null}
-            {/* The ladder answered with a different provider than the one the
-                user selected — the label above must never lie about who
-                actually received the request and got billed. */}
-            {msg.role === 'system' && msg.fallbackNotice && (
-              <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
-                <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
-                <span className="truncate max-w-[260px]">{msg.fallbackNotice}</span>
-              </div>
+            {/* A provider failed: another one answered, is being tried, or
+                nobody did. The notice must never lie about who actually
+                received the request and got billed. */}
+            {directAssistNotice && (
+              <DirectAssistNotice
+                view={directAssistNotice}
+                isLightTheme={isLightTheme}
+                actionLabel={t(DIRECT_ASSIST_OPEN_PROVIDERS)}
+                onAction={() => window.electronAPI?.openSettingsTab?.('ai-providers')}
+              />
             )}
             {/* Verified badge: the code in this message passed executed tests. */}
             {msg.role === 'system' && msg.codeVerified && (
@@ -1915,6 +1997,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // immediately contradict eager expansion and schedule a collapse.
   const eagerCodeExpansionHoldRef = useRef(false);
   const animationControlsRef = useRef<ReturnType<typeof animate> | null>(null);
+  // The width the latest startTransition was sent to — so a collapsed width
+  // that changes mid-flight can tell a panel heading to the OLD collapsed width
+  // from one heading somewhere else.
+  const transitionTargetRef = useRef<number | null>(null);
   // Honors the OS "Reduce Motion" accessibility setting (WCAG 2.3.3). When the
   // user prefers reduced motion we SNAP the shell width instead of springing it
   // — same final state, zero animated travel. A ref (not state) so the
@@ -2488,8 +2574,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const heightPinStreamIdRef = useRef<string | null>(null);
 
   // The panel fills the window when expanded; the collapsed width scales with
-  // it. collapsedWidthFor(732) === 600 exactly, so with no custom size these
-  // are bit-identical to the constants they replace. Recomputed per render like
+  // it. With no custom size that is 720 expanded and 604 collapsed (widened
+  // from 590 so Interview Mode's Brainstorm row fits; see
+  // OVERLAY_DEFAULT_COLLAPSED_WIDTH). Recomputed per render like
   // the old literals were — every dependency array that listed the literals
   // already lists these, so no memoisation is needed or wanted.
   // What we ASK the OS for — the user's pin, else the default. Never the
@@ -2516,7 +2603,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // new is that the slack now also exists on the VERTICAL axis, and at the
   // panel's fully expanded width.
   const SHELL_WIDTH_EXPANDED = WINDOW_WIDTH - OVERLAY_PANEL_INSET * 2;
-  const SHELL_WIDTH_COLLAPSED = collapsedWidthFor(SHELL_WIDTH_EXPANDED);
+  // The quick-action row's single-line width in EACH mode, measured from two
+  // hidden copies of the row (0 until the first measure). The collapsed panel
+  // grows past its default only as far as the row needs, so Interview Mode's
+  // Brainstorm chip never pushes Answer onto a second line in any language.
+  // See the measuring effect after handleManualResizeToggle.
+  const [quickRowNeeds, setQuickRowNeeds] = useState({ recap: 0, brainstorm: 0 });
+  // The mode whose chip label is ON SCREEN. It trails actionButtonMode: a
+  // longer label waits for the panel to make room, and a shorter one is swapped
+  // in before the panel narrows. Until they agree the panel holds the wider of
+  // the two, so the row never wraps mid-change.
+  const [shownActionMode, setShownActionMode] = useState(actionButtonMode);
+  const quickRowNeed = Math.max(quickRowNeeds[actionButtonMode], quickRowNeeds[shownActionMode]);
+  const SHELL_WIDTH_COLLAPSED = collapsedWidthForRow(
+    collapsedWidthFor(SHELL_WIDTH_EXPANDED),
+    SHELL_WIDTH_EXPANDED,
+    quickRowNeed,
+  );
+  // The same rule at the DEFAULT window, for the reset paths (session reset,
+  // double-click reset). They live in long-lived callbacks, so they read it
+  // through a ref rather than closing over this render's value.
+  const defaultCollapsedForRowRef = useRef(defaultCollapsedPanelWidth());
+  defaultCollapsedForRowRef.current = collapsedWidthForRow(
+    defaultCollapsedPanelWidth(),
+    panelWidthForWindow(OVERLAY_DEFAULT_WINDOW_WIDTH),
+    quickRowNeed,
+  );
   // The OS overlay window's width. Equals SHELL_WIDTH_EXPANDED always (the
   // panel fills the window edge-to-edge when expanded), and at its default
   // equals WindowHelper.OVERLAY_DEFAULT_WIDTH (the window's birth width — the
@@ -3636,7 +3748,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       verticalScrollCap({ availHeight, chromeHeight }),
     );
     return chromeHeight + Math.min(naturalViewport, cap);
-  }, [shellWidth, SHELL_WIDTH_EXPANDED]);
+  }, [shellWidth, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
 
   // Measure the viewport's NATURAL height and feed it to the commit rule.
   //
@@ -3731,6 +3843,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // toggle, checkCodeVisibility, the aux-window action and queueToken.
       if (isResizingRef.current) return;
       codeExpandedRef.current = targetWidth === SHELL_WIDTH_EXPANDED;
+      transitionTargetRef.current = targetWidth;
 
       const fromWidth = Math.round(shellWidth.get());
 
@@ -3986,6 +4099,110 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     manualWidthOverrideRef.current = target;
     startTransition(target);
   }, [shellWidth, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
+
+  // ── Collapsed width follows the quick-action row ──────────────────────────
+  // Interview Mode swaps Recap for Brainstorm, and in several languages that
+  // chip is long enough to push Answer onto a second line at the default
+  // collapsed width. So the row is measured from layout and the collapsed
+  // width grows to fit it (collapsedWidthForRow: never below the default,
+  // never above the expanded width). English with Inter fits the default and
+  // never moves.
+  const quickRowRef = useRef<HTMLDivElement>(null);
+  const recapRowMeasureRef = useRef<HTMLDivElement>(null);
+  const brainstormRowMeasureRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const row = quickRowRef.current;
+    const card = shellRef.current;
+    const recapRow = recapRowMeasureRef.current;
+    const brainstormRow = brainstormRowMeasureRef.current;
+    if (!row || !card || !recapRow || !brainstormRow || typeof ResizeObserver === 'undefined') return;
+    const px = (v: string) => parseFloat(v) || 0;
+    const measure = () => {
+      // The hidden rows are the real chips laid out on one line at their
+      // natural width, so their width IS the single-line need; add the card
+      // chrome around the row (its borders: card width minus row width).
+      const chrome = px(getComputedStyle(card).width) - px(getComputedStyle(row).width);
+      const next = {
+        recap: px(getComputedStyle(recapRow).width) + chrome,
+        brainstorm: px(getComputedStyle(brainstormRow).width) + chrome,
+      };
+      setQuickRowNeeds((prev) =>
+        Math.abs(prev.recap - next.recap) < 0.25 && Math.abs(prev.brainstorm - next.brainstorm) < 0.25
+          ? prev
+          : next,
+      );
+    };
+    measure();
+    // Fires on language changes and when Inter finishes loading over the
+    // fallback font. Neither the mode nor Answer/Stop moves these rows.
+    const ro = new ResizeObserver(measure);
+    ro.observe(recapRow);
+    ro.observe(brainstormRow);
+    return () => ro.disconnect();
+  }, []);
+
+  // When the collapsed width changes, move a panel that is resting at (or
+  // heading to) the old collapsed width onto the new one. Expanded, dragged
+  // and custom widths are left alone. Only an Interview Mode change animates —
+  // the width follows the mode in the same render, so that is known exactly;
+  // the first measure and a late-loading font snap, inside the reflow they
+  // come with. A spring already in flight is redirected, never stopped: its
+  // completion is what settles the window height.
+  const quickRowModeKey = `${actionButtonMode}|${shownActionMode}`;
+  const appliedModeKeyRef = useRef(quickRowModeKey);
+  const appliedCollapsedRef = useRef(SHELL_WIDTH_COLLAPSED);
+  useLayoutEffect(() => {
+    const modeDriven = appliedModeKeyRef.current !== quickRowModeKey;
+    appliedModeKeyRef.current = quickRowModeKey;
+    const previous = appliedCollapsedRef.current;
+    appliedCollapsedRef.current = SHELL_WIDTH_COLLAPSED;
+    if (previous === SHELL_WIDTH_COLLAPSED) return;
+    if (isResizingRef.current || codeExpandedRef.current) return;
+    const inFlight = animationControlsRef.current !== null;
+    const atPrevious = inFlight
+      ? transitionTargetRef.current === previous
+      : Math.abs(shellWidth.get() - previous) <= 1;
+    if (!atPrevious) return;
+    if (manualWidthOverrideRef.current !== null) {
+      manualWidthOverrideRef.current = SHELL_WIDTH_COLLAPSED;
+    }
+    if (inFlight || (modeDriven && hasRenderedExpandedRef.current)) {
+      startTransition(SHELL_WIDTH_COLLAPSED);
+      return;
+    }
+    transitionTargetRef.current = SHELL_WIDTH_COLLAPSED;
+    shellWidth.set(SHELL_WIDTH_COLLAPSED);
+  }, [SHELL_WIDTH_COLLAPSED, quickRowModeKey, shellWidth, startTransition]);
+
+  // The chip label the swap is heading to. A longer label waits until the
+  // panel is wide enough for the row; if nothing is widening the panel (it is
+  // expanded, dragged, or the window is too narrow) it swaps at once.
+  const [labelActionMode, setLabelActionMode] = useState(actionButtonMode);
+  useEffect(() => {
+    if (labelActionMode === actionButtonMode) return;
+    const target = actionButtonMode;
+    const fits = () => shellWidth.get() + 0.5 >= quickRowNeeds[target];
+    const swap = () => setLabelActionMode(target);
+    if (fits()) {
+      swap();
+      return;
+    }
+    const unsubscribe = shellWidth.on('change', () => {
+      if (fits()) swap();
+    });
+    const raf = requestAnimationFrame(() => {
+      if (animationControlsRef.current === null) swap();
+    });
+    const timer = setTimeout(swap, 1200);
+    return () => {
+      unsubscribe();
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [actionButtonMode, labelActionMode, quickRowNeeds, shellWidth]);
+  const handleModeLabelShown = useCallback((key: string) => {
+    setShownActionMode(key === 'brainstorm' ? 'brainstorm' : 'recap');
+  }, []);
 
   // ── Free-form resize handles ──────────────────────────────────────────────
   // EAST-side directions only ('e', 's', 'se'). A west-side handle would need
@@ -4447,7 +4664,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     setCustomWindowWidth(null);
     setAppliedWindowWidth(null);
     manualWidthOverrideRef.current = null;
-    shellWidth.set(defaultCollapsedPanelWidth());
+    shellWidth.set(defaultCollapsedForRowRef.current);
     // A WIDTH pin re-reports through the sizing effect (it lists
     // `customWindowWidth` in its deps). A height-only pin has no such path:
     // clearing a null width is not a state change, the content did not move
@@ -5181,8 +5398,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // the fresh meeting) with no native resize and no sideways motion. The
       // toggle aux window follows via the shellWidth 'change' anchor stream.
       // The DEFAULT collapsed width, not this render's SHELL_WIDTH_COLLAPSED,
-      // which would still reflect a width pinned in the previous meeting.
-      shellWidth.set(defaultCollapsedPanelWidth());
+      // which would still reflect a width pinned in the previous meeting —
+      // widened for the quick-action row, so a new meeting in a long language
+      // does not open wrapped.
+      shellWidth.set(defaultCollapsedForRowRef.current);
       setInputValue('');
       setAttachedContext([]);
       setManualTranscript('');
@@ -5432,6 +5651,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ticker inherits that hardening for free, with zero edits to those sites.
   const streamingRafRef    = useRef<number | null>(null);
   const streamingRenderModeRef = useRef<'imperative' | 'react-code'>('imperative');
+  // Diagram artifacts in the live stream. The tracker scans the ARRIVED text
+  // incrementally (once per frame, never per token) so the reveal can be
+  // fast-forwarded through a Mermaid block — see fastForwardDiagramReveal.
+  // Reset per stream, in lockstep with the pacer (ensureRevealTicker).
+  const diagramRevealTrackerRef = useRef(createFencedBlockTracker());
+  const diagramBlocksCompleteRef = useRef(0);
+  // When the current request was accepted (submit / action press), carried
+  // onto the answer row's timing entry once that row has an id.
+  const diagramRequestAtRef = useRef<number | null>(null);
+  // The last valid diagram shown before the row that is streaming now: kept on
+  // screen, dimmed, while an UPDATE of the same design is still being written.
+  const previousDiagramRef = useRef<{ beforeMsgId: string; source: string } | null>(null);
+  // Answers the user stopped: no automatic repair (a paid call) after a Stop.
+  const diagramRepairBlockedRef = useRef<Set<string>>(new Set());
   // RETIRED: used to be scheduleStreamingCodeRender's own rAF handle (a
   // second, UNPACED render loop that wrote streamingTextRef.current — the
   // full raw arrived text, not the reveal-paced prefix — straight into
@@ -5812,7 +6045,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // burst of tokens landing in one tick showed up all at once regardless of
   // how well-paced the prose path was. Called from revealTick, so it's
   // already coalesced to at most once per frame.
-  const commitRevealedCodeText = useCallback((msgId: string, revealedText: string) => {
+  // Diagram repairs accepted in this window: broken source → the source that
+  // draws. The stream keeps committing text from refs that still hold what the
+  // model wrote (the paced prefix, then the sealed text), so a repair written
+  // only into React state was overwritten by the very next reveal tick and the
+  // card fell back to "syntax error" with its one repair already spent.
+  // Applied wherever streamed text is committed; the refs stay untouched so the
+  // pacer's offsets keep meaning what they meant.
+  const diagramRepairsRef = useRef<Map<string, string>>(new Map());
+  const withDiagramRepairs = useCallback((text: string): string => {
+    const repairs = diagramRepairsRef.current;
+    if (repairs.size === 0 || typeof text !== 'string' || !mentionsVisualTag(text)) return text;
+    let out = text;
+    for (const [original, repaired] of repairs) out = replaceMermaidSource(out, original, repaired);
+    return out;
+  }, []);
+
+  const commitRevealedCodeText = useCallback((msgId: string, rawRevealedText: string) => {
+    const revealedText = withDiagramRepairs(rawRevealedText);
     setMessages((prev) => {
       const idx = prev.findLastIndex((m) => m.id === msgId);
       if (idx === -1) return prev;
@@ -5822,7 +6072,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       updated[idx] = { ...row, text: revealedText, isStreaming: true };
       return updated;
     });
-  }, []);
+  }, [withDiagramRepairs]);
 
   // revealTick: self-rescheduling rAF loop that paces the reveal via the
   // deterministic tickPacer state machine (src/lib/textRevealPacing.mjs —
@@ -5840,6 +6090,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // fade-hold path below and the immediate path seal identically — two
   // copies of this teardown would be a latent source of drift.
   const sealPendingStream = useCallback((pending: { msgId: string; intent: string; text: string }) => {
+    diagramTimings.mark(pending.msgId, 'answer_complete', performance.now());
     pendingFinalizeRef.current = null;
     if (pendingFinalizeTimeoutRef.current !== null) {
       clearTimeout(pendingFinalizeTimeoutRef.current);
@@ -5858,7 +6109,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (direct?.completed && direct.placeholderId === pending.msgId) {
       activeDirectAssistRef.current = null;
     }
-    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
   }, []);
 
   const revealTick = useCallback((ts: number) => {
@@ -5880,6 +6131,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const pacer = revealPacerRef.current;
     const prevLen = pacer.revealedLen;
     tickPacer(pacer, fullText, ts, deltaMs, { reducedMotion: prefersReducedMotionRef.current });
+    // ARTIFACT FAST-FORWARD (the one explicit exception to paced reveal).
+    // A Mermaid block is not prose: once the reveal reaches it, the reveal
+    // jumps to the end of what has ARRIVED of that block, so a finished
+    // diagram is never held back behind a slow reveal of its own source.
+    // Order is kept — text before the block was already revealed, and text
+    // after it resumes at the normal pace. The decision itself is the pure,
+    // tested fastForwardDiagramReveal; this only applies it. Ordinary code
+    // blocks are untouched and keep their per-line reveal.
+    if (streamingRenderModeRef.current === 'react-code' && mentionsVisualTag(fullText) && diagramsEnabledNow()) {
+      const parse = diagramRevealTrackerRef.current.update(fullText);
+      const completeNow = completedDiagramCount(parse.blocks);
+      if (completeNow > diagramBlocksCompleteRef.current) {
+        diagramBlocksCompleteRef.current = completeNow;
+        // Receipt of a complete block — distinct from when it becomes visible.
+        diagramTimings.mark(msgId, 'block_complete', ts);
+      }
+      const forwarded = fastForwardDiagramReveal(parse.blocks, pacer.revealedLen, fullText.length);
+      if (forwarded > pacer.revealedLen) {
+        pacer.revealedLen = forwarded;
+        pacer.charBudget = 0;
+      }
+    }
+    if (pacer.revealedLen > 0) diagramTimings.mark(msgId, 'first_text_visible', ts);
     if (pacer.revealedLen !== prevLen) {
       // Record WHEN these characters became visible, before painting — the
       // paint reads this history back to derive each new word's fade offset.
@@ -5991,6 +6265,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // words either a stale (already-expired) timestamp or, worse, a future
       // one — holding real text invisible.
       resetRevealHistory(revealHistoryRef.current);
+      // Diagram scan state is per stream too: block offsets restart at 0.
+      diagramRevealTrackerRef.current.reset();
+      diagramBlocksCompleteRef.current = 0;
+      // Timing marks for this answer row (content-free; see diagramTimings).
+      {
+        const nowMs = performance.now();
+        const acceptedAt = diagramRequestAtRef.current;
+        // A request mark older than two minutes belongs to some earlier press.
+        if (acceptedAt !== null && nowMs - acceptedAt < 120_000) diagramTimings.mark(msgId, 'request_accepted', acceptedAt);
+        diagramRequestAtRef.current = null;
+        diagramTimings.mark(msgId, 'first_token', nowMs);
+      }
       // Same lockstep reason as the history: these are per-stream one-shots.
       // A carried-over gist timestamp would leave the next answer's chip
       // permanently past its animation (or, if the clock ran backwards,
@@ -6040,7 +6326,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const msgId = reuseMsgId ?? genMessageId();
     streamingMsgIdRef.current = msgId;
     streamingIntentRef.current = intent;
-    streamingRenderModeRef.current = 'imperative';
+    // A whole-payload answer that carries a diagram types out through the
+    // React path, so its diagram mounts as a card when the reveal reaches it
+    // instead of showing as raw Mermaid until the row seals.
+    streamingRenderModeRef.current = diagramsEnabledNow() && hasOpeningMermaidFence(text) ? 'react-code' : 'imperative';
     streamingTextRef.current = text; // the whole answer "arrives" as one token
     pendingFinalizeRef.current = { msgId, intent, text };
     if (pendingFinalizeTimeoutRef.current !== null) {
@@ -6069,7 +6358,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (direct?.completed && direct.placeholderId === pending.msgId) {
         activeDirectAssistRef.current = null;
       }
-      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
     }, safetyNetMs);
     if (!reuseMsgId) {
       setMessages((prev) => prepareIntelligenceStreamPlaceholderMessages(prev, intent, msgId));
@@ -6123,7 +6412,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (direct?.completed && direct.placeholderId === pending.msgId) {
         activeDirectAssistRef.current = null;
       }
-      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
     }, safetyNetMs);
     ensureRevealTicker(msgId);
   }, [ensureRevealTicker, computeSafetyNetMs]);
@@ -6187,7 +6476,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           const idx = prev.findLastIndex((m) => m.id === prevId);
           if (idx !== -1) {
             const updated = [...prev];
-            updated[idx] = { ...updated[idx], text: prevText, isStreaming: false };
+            // (A diagram repaired during the stream stays repaired: see withDiagramRepairs.)
+            updated[idx] = { ...updated[idx], text: withDiagramRepairs(prevText), isStreaming: false };
             return updated;
           }
           return prev;
@@ -6202,7 +6492,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       manualWidthOverrideRef.current = null;
     }
 
-    const shouldUseReactCodeUi = shouldUseStreamingCodeUi(intent, token, streamingTextRef.current);
+    // A Mermaid fence switches ANY intent's stream to the React path: the
+    // diagram card is a React component, and a diagram can arrive on any route
+    // (a refinement, a recap, brainstorm) — not only the two intents the code
+    // card's switch is limited to. Content decides, not the action's name.
+    const shouldUseReactCodeUi = shouldUseStreamingCodeUi(intent, token, streamingTextRef.current)
+      || (streamingRenderModeRef.current !== 'react-code'
+        && diagramsEnabledNow()
+        && shouldUseStreamingDiagramUi(token, streamingTextRef.current));
     if (shouldEagerExpandForCodeToken(intent, token, streamingTextRef.current)) {
       eagerCodeExpansionHoldRef.current = true;
       // Respect a manual width pin: don't auto-grow if the user chose a width.
@@ -6211,14 +6508,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
     }
     if (shouldUseReactCodeUi) {
+      // A diagram fence just opened: start loading Mermaid now, so it is ready
+      // by the time the block's closing fence arrives. (A no-op once loaded.)
+      if (streamingRenderModeRef.current !== 'react-code' && diagramsEnabledNow() && hasOpeningMermaidFence(streamingTextRef.current + token)) {
+        warmDiagramRenderer();
+      }
+      const flippedMidStream = streamingRenderModeRef.current !== 'react-code' && streamingMsgIdRef.current !== null;
       streamingRenderModeRef.current = 'react-code';
       if (streamingRafRef.current !== null) {
         cancelAnimationFrame(streamingRafRef.current);
         streamingRafRef.current = null;
       }
-      if (streamingNodeRef.current) {
+      // The imperative node held everything revealed so far, and React state
+      // held nothing (it is not written during imperative streaming). Wiping
+      // the node therefore left the row on its empty state — the "Thinking…"
+      // label, over text that had been on screen — until the next reveal
+      // advance, which can be a sentence hold away. What was revealed is
+      // handed to React in the same breath.
+      const revealedAtFlip = flippedMidStream && streamingMsgIdRef.current !== null
+        ? streamingTextRef.current.slice(0, revealPacerRef.current.revealedLen)
+        : '';
+      // …and the node is wiped only when nothing is handed over. With text to
+      // hand over, the wipe is synchronous and React's commit is not: under
+      // load a frame was painted in between, with the row empty (seen once in
+      // ten runs of the overlay check). React removes this node whole when the
+      // row re-renders under its other key, so it keeps what it shows until then.
+      if (streamingNodeRef.current && !revealedAtFlip) {
         streamingNodeRef.current.innerHTML = '';
       }
+      if (revealedAtFlip && streamingMsgIdRef.current !== null) commitRevealedCodeText(streamingMsgIdRef.current, revealedAtFlip);
     }
 
     streamingTextRef.current += token;
@@ -6385,7 +6703,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Keep eagerCodeExpansionHoldRef until the finalized React row mounts; the
     // visibility scanner clears it as soon as it sees a real [data-code-msg].
     // NOT wrapped in startTransition — ordering must hold.
-    setMessages((prev) => commitStreamingFlush(prev, msgId, text));
+    setMessages((prev) => commitStreamingFlush(prev, msgId, withDiagramRepairs(text)));
   }, []);
 
   const tryBeginOverlayAction = useCallback((actionKey: string): boolean => {
@@ -6448,6 +6766,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const settleDirectAssistIncomplete = useCallback((
     active: ActiveDirectAssistRequest,
     terminalLabel: string,
+    // Set when a provider (or the app) FAILED, as opposed to a cancel. The
+    // row draws the notice from it; `terminalLabel` is then the one plain
+    // sentence kept as the text of an answer that never started.
+    failure?: DirectAssistAnswerFailure,
   ) => {
     if (streamingMsgIdRef.current === active.placeholderId) {
       if (streamingRafRef.current !== null) {
@@ -6476,20 +6798,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (!active.answerText && terminalLabel === 'Request cancelled.') {
         return prev.filter((_, messageIndex) => messageIndex !== idx);
       }
-      const text = active.answerText
-        ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
-        : terminalLabel;
+      // A failure leaves the text clean — the answer so far, or the plain
+      // sentence — because the notice says the rest ("Answer cut off", why).
+      // A cancel has no notice, so it still marks the text itself.
+      const text = failure
+        ? active.answerText || terminalLabel
+        : active.answerText
+          ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
+          : terminalLabel;
       const updated = [...prev];
       updated[idx] = {
         ...updated[idx],
         text,
         isStreaming: false,
         isCode: text.includes('```') || text.includes('#include'),
+        ...(failure ? { failure: { ...failure, partial: Boolean(active.answerText) } } : {}),
       };
       return updated;
     });
     setIsProcessing(false);
   }, []);
+
+  // Every way a direct-ask answer can fail goes through here with DATA; the
+  // wording is directAssistFailureText's and directAssistNoticeView's.
+  const settleDirectAssistFailure = useCallback((
+    active: ActiveDirectAssistRequest,
+    failure: DirectAssistAnswerFailure,
+  ) => {
+    settleDirectAssistIncomplete(active, directAssistFailureText(failure, t), failure);
+  }, [settleDirectAssistIncomplete, t]);
 
   useEffect(() => {
     if (!window.electronAPI?.onDirectAssistEvent) return;
@@ -6542,16 +6879,26 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // produced a single token — and on an A -> B -> C walk, main queues
         // switches and drains them back to back just before the first
         // delta, so the renderer can see switch(A->B) then switch(B->C) with
-        // B never having answered anything. Word this as an ATTEMPT, never
-        // an outcome, so it stays accurate at every intermediate step and
+        // B never having answered anything. So this only RECORDS the hop —
+        // who failed, why, and who is tried next — and names no outcome:
+        // the notice is worded as an attempt at every intermediate step and
         // even if the ladder later fails entirely. 'done' (below) is the
-        // only place that upgrades this to "answered by".
+        // only place that says who answered.
         active.hasSwitched = true;
+        active.switchedTo = event.to.provider;
         const placeholderId = active.placeholderId;
-        const noticeText = `${event.from.provider} didn't respond — trying ${event.to.provider}…`;
+        const hop: DirectAssistFallbackHop = {
+          provider: modelSelectorGroupLabel(event.from.provider),
+          next: modelSelectorGroupLabel(event.to.provider),
+          code: event.reason,
+          status: event.status,
+          detail: event.detail,
+          waitedMs: event.waitedMs,
+          unreachable: event.unreachable,
+        };
         setMessages((prev) => prev.map((message) =>
           message.id === placeholderId
-            ? { ...message, fallbackNotice: noticeText }
+            ? { ...message, fallbackNotice: { hops: [...(message.fallbackNotice?.hops ?? []), hop] } }
             : message,
         ));
         return;
@@ -6577,25 +6924,28 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const answer = event.fullText ?? active.answerText;
         if (!answer) {
           activeDirectAssistRef.current = null;
-          settleDirectAssistIncomplete(
-            active,
-            directAssistErrorText('INCOMPLETE_STREAM', 'The model returned no answer.'),
-          );
+          // Not the provider's doing: main turns a stream that returned
+          // nothing into an error, so a `done` with no text means the text
+          // was lost on the way here.
+          settleDirectAssistFailure(active, {
+            code: 'INTERNAL_ERROR',
+            message: '',
+          });
           return;
         }
 
         // Content actually arrived: if any provider_switch fired for this
         // request, this is where — and only where — the attempt-worded
-        // notice upgrades to an outcome. Name the ORIGINAL selection and the
-        // provider that actually answered (event.provider, from done, not
-        // whichever rung a queued switch last opened). If the ladder never
-        // switched, leave fallbackNotice untouched (absent).
-        if (active.hasSwitched && active.originalProvider) {
-          const finalNoticeText = `${active.originalProvider} didn't respond — answered by ${event.provider}.`;
+        // notice upgrades to an outcome. The hops already name the ORIGINAL
+        // selection first; this adds the provider that actually answered
+        // (event.provider, from done, not whichever rung a queued switch
+        // last opened). If the ladder never switched, there is no notice to
+        // add it to and fallbackNotice stays absent.
+        if (active.hasSwitched) {
           const finalPlaceholderId = active.placeholderId;
           setMessages((prev) => prev.map((message) =>
-            message.id === finalPlaceholderId
-              ? { ...message, fallbackNotice: finalNoticeText }
+            message.id === finalPlaceholderId && message.fallbackNotice
+              ? { ...message, fallbackNotice: { ...message.fallbackNotice, answeredBy: modelSelectorGroupLabel(event.provider) } }
               : message,
           ));
         }
@@ -6638,10 +6988,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
       if (event.type === 'error') {
         activeDirectAssistRef.current = null;
-        settleDirectAssistIncomplete(
-          active,
-          directAssistErrorText(event.error.code, event.error.message),
-        );
+        // With nothing answered yet the error is the SELECTED provider's (main
+        // reports the first rung's failure), the one 'start' recorded. An
+        // answer that had already begun was cut off by whoever was writing
+        // it — the provider the ladder last moved to, if it moved.
+        const failedProvider = (active.answerText.length > 0 && active.switchedTo) || active.originalProvider;
+        settleDirectAssistFailure(active, {
+          provider: failedProvider ? modelSelectorGroupLabel(failedProvider) : undefined,
+          code: event.error.code,
+          message: event.error.message,
+          status: event.error.status,
+          unreachable: event.error.unreachable,
+          detail: event.error.detail,
+          // Nobody answered and more than one provider was tried: each one,
+          // with its own reason.
+          attempts: event.error.attempts?.map((attempt) => ({
+            provider: modelSelectorGroupLabel(attempt.provider),
+            code: attempt.reason,
+            status: attempt.status,
+            unreachable: attempt.unreachable,
+            detail: attempt.detail,
+            waitedMs: attempt.waitedMs,
+          })),
+        });
         return;
       }
 
@@ -6649,7 +7018,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       settleDirectAssistIncomplete(active, 'Request cancelled.');
     });
     return () => unsubscribe?.();
-  }, [finalizeWhenRevealCaughtUp, queueToken, settleDirectAssistIncomplete]);
+  }, [finalizeWhenRevealCaughtUp, queueToken, settleDirectAssistFailure, settleDirectAssistIncomplete]);
 
   const beginDirectAssist = useCallback(async ({
     source,
@@ -6735,24 +7104,30 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (activeDirectAssistRef.current?.requestId !== requestId) return;
       if (!response.accepted || response.requestId !== requestId) {
         activeDirectAssistRef.current = null;
-        const code = response.error?.code || 'DIRECT_ASSIST_REJECTED';
-        const message = response.error?.message || 'Direct Assist could not start this request.';
-        settleDirectAssistIncomplete(active, directAssistErrorText(code, message));
+        // Refused before any provider was asked, so there is no provider to
+        // name: main's own sentence is the explanation.
+        settleDirectAssistFailure(active, {
+          code: response.error?.code || 'DIRECT_ASSIST_REJECTED',
+          message: response.error?.message || '',
+        });
       }
     } catch (error) {
       if (activeDirectAssistRef.current?.requestId !== requestId) return;
       activeDirectAssistRef.current = null;
-      settleDirectAssistIncomplete(
-        active,
-        directAssistErrorText(
-          'DIRECT_ASSIST_UNAVAILABLE',
-          error instanceof Error ? error.message : String(error),
-        ),
-      );
+      // The call itself threw: the request never reached main's handler.
+      settleDirectAssistFailure(active, {
+        code: 'INTERNAL_ERROR',
+        message: '',
+      });
     }
-  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistIncomplete]);
+  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistFailure, settleDirectAssistIncomplete]);
 
   const cancelActiveChatStream = useCallback(() => {
+    // Stop also stops diagram repairs: any in flight is cancelled, and the
+    // answer being stopped never starts an automatic one afterwards.
+    cancelAllDiagramRepairs();
+    if (streamingMsgIdRef.current) diagramRepairBlockedRef.current.add(streamingMsgIdRef.current);
+    if (diagramRepairBlockedRef.current.size > 64) diagramRepairBlockedRef.current.clear();
     const direct = activeDirectAssistRef.current;
     if (direct) {
       activeDirectAssistRef.current = null;
@@ -6794,6 +7169,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const resetChatState = useCallback(() => {
     cancelActiveChatStream();
+    diagramRepairBlockedRef.current.clear();
+    previousDiagramRef.current = null;
     setMessages([]);
     answerPanelPinnedRef.current = false;
     setAnswerPanelPinned(false);
@@ -6875,8 +7252,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             finalizeImperativeStreamMessages(prev, {
               msgId: streamingMsgId,
               intent,
-              bufferedText,
-              finalText: text,
+              // The authoritative final text is the model's text as it was
+              // written: a block that was repaired while it streamed is broken
+              // again in it. Committed as is, the card fell back to "syntax
+              // error" with its one automatic repair already spent.
+              bufferedText: withDiagramRepairs(bufferedText),
+              finalText: withDiagramRepairs(text),
             }),
           );
           return;
@@ -7525,6 +7906,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const runWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
     setIsExpanded(true);
@@ -7854,6 +8238,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleFollowUp = async (intent: string = 'rephrase') => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     const actionKey = `follow_up:${intent}`;
     if (!tryBeginOverlayAction(actionKey)) return;
     setIsExpanded(true);
@@ -7883,6 +8270,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleRecap = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!tryBeginOverlayAction('recap')) return;
     setIsExpanded(true);
     setIsProcessing(true);
@@ -8029,6 +8419,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleBrainstorm = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!tryBeginOverlayAction('brainstorm')) return;
     legacyIntelligenceTombstonedRef.current = false;
     liveAnswerGenIdRef.current = null;
@@ -8218,7 +8611,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               : -1;
           const target = idx !== -1 ? prev[idx] : prev[prev.length - 1];
           if (target && target.role === 'system') {
-            const text = finalText || target.text || pendingTextSnapshot;
+            const text = withDiagramRepairs(finalText || target.text || pendingTextSnapshot);
             if (!text) return prev;
             const isCode =
               text.includes('```') || text.includes('def ') || text.includes('function ');
@@ -8749,7 +9142,10 @@ Provide only the answer, nothing else.`;
             question,
             currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
             prompt,
-            { skipSystemPrompt: true },
+            // `liveQuestion`: a turn of this session (unlike a question about a
+            // past meeting), so main decides the diagram contract for it with
+            // the design that is on the table.
+            { skipSystemPrompt: true, liveQuestion: true },
           );
         } catch (err) {
           // R-17: a throw from invoke() never reaches the main process, so no
@@ -8811,6 +9207,9 @@ Provide only the answer, nothing else.`;
   }, [inputValue]);
 
   const handleManualSubmit = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!inputValue.trim() && attachedContext.length === 0) return;
 
     const rawUserText = inputValue;
@@ -9001,6 +9400,79 @@ Provide only the answer, nothing else.`;
     resetChatState();
   };
 
+  // ── Diagram artifacts: per-window state the row renderer reads ──────────
+  const diagramsEnabled = useDiagramsEnabled();
+  // The newest answer row. Only it may start an automatic repair.
+  const latestAnswerIdRef = useRef<string | null>(null);
+  // Recomputed when the ROWS change (a row added, or a row's streaming flag
+  // flipping), not when a streaming row's text grows: the signature below has
+  // no text in it, so the reveal's per-frame commits cost nothing here.
+  const diagramRowsSignature = useMemo(
+    () => messages.map((m) => (m.role === 'system' ? `${m.id}:${m.isStreaming ? 1 : 0}` : '')).join('|'),
+    [messages],
+  );
+  const messagesForDiagramsRef = useRef(messages);
+  messagesForDiagramsRef.current = messages;
+  useEffect(() => {
+    let latestId: string | null = null;
+    let lastValidSource: string | null = null;
+    let previous: { beforeMsgId: string; source: string } | null = null;
+    for (const m of messagesForDiagramsRef.current) {
+      if (m.role !== 'system') continue;
+      latestId = m.id;
+      if (m.isStreaming) {
+        if (lastValidSource) previous = { beforeMsgId: m.id, source: lastValidSource };
+      } else if (mentionsVisualTag(m.text)) {
+        const found = latestDiagramInAnswer(m.text);
+        if (found) lastValidSource = found.source;
+      }
+    }
+    latestAnswerIdRef.current = latestId;
+    previousDiagramRef.current = previous;
+  }, [diagramRowsSignature]);
+
+  // A repaired block drew. Put the working source into the answer that held
+  // the broken one — exact-source match only, so it cannot land in another
+  // answer — so copy, export, a reopened meeting and the next follow-up all
+  // see the diagram that is actually on screen. Stable identity ([]): the
+  // card's memo comparator and the row renderer both depend on it.
+  const handleDiagramRepaired = useCallback((originalSource: string, repairedSource: string) => {
+    // Remembered for the text still to be committed by the running stream.
+    const repairs = diagramRepairsRef.current;
+    repairs.delete(originalSource);
+    repairs.set(originalSource, repairedSource);
+    while (repairs.size > 24) {
+      const oldest = repairs.keys().next().value;
+      if (oldest === undefined) break;
+      repairs.delete(oldest);
+    }
+    setMessages((prev) => {
+      let changed = false;
+      const next = prev.map((m) => {
+        if (m.role !== 'system' || !mentionsVisualTag(m.text)) return m;
+        const text = replaceMermaidSource(m.text, originalSource, repairedSource);
+        if (text === m.text) return m;
+        changed = true;
+        return { ...m, text };
+      });
+      return changed ? next : prev;
+    });
+    // Direct Assist's history is this surface's conversation state: the next
+    // follow-up must start from the diagram that works, not the broken one.
+    directAssistHistoryRef.current = directAssistHistoryRef.current.map((turn) =>
+      turn.role === 'assistant' && mentionsVisualTag(turn.content)
+        ? { ...turn, content: replaceMermaidSource(turn.content, originalSource, repairedSource) }
+        : turn,
+    );
+  }, []);
+
+  // The newest answer's diagram changed height on its own (the drawing arrived
+  // after the last text commit): keep following the bottom, exactly as a text
+  // commit would. followStreamBottom honours a scroll-up by the user.
+  const handleDiagramLayout = useCallback(() => {
+    requestAnimationFrame(() => followStreamBottom());
+  }, [followStreamBottom]);
+
   // PERF: useCallback so MessageRow's memo comparator can rely on a stable
   // function identity. Deps are the things the closure actually reads that
   // can change: theme + memoized markdown components + memoized appearance.
@@ -9035,10 +9507,25 @@ Provide only the answer, nothing else.`;
       // hand off to, and is safe to leave permanently true afterwards: once
       // the paced text contains a fence it never loses it (reveal only
       // grows forward).
+      // A drawing is on its way: the ARRIVED text holds a visual fence the paced
+      // text has not reached yet. Its lead is prose, and it was on screen as
+      // formatted Markdown a frame ago (the imperative path). It goes straight
+      // to the Markdown renderer the finished answer uses — the raw-text
+      // branch below showed it as literal "**"/"#"/"-" until the reveal caught
+      // up with the fence, then formatted it again.
+      const preFenceDiagramStream =
+        msg.id === streamingMsgIdRef.current &&
+        streamingRenderModeRef.current === 'react-code' &&
+        diagramsEnabled &&
+        msg.role === 'system' &&
+        Boolean(msg.text) &&
+        !msg.isCode &&
+        hasOpeningMermaidFence(streamingTextRef.current);
       const isActiveReactCodeStream =
         msg.id === streamingMsgIdRef.current &&
         streamingRenderModeRef.current === 'react-code' &&
-        (msg.isCode || msg.text.includes('```'));
+        // …or a tilde-fenced diagram, which has no backtick fence at all.
+        (msg.isCode || msg.text.includes('```') || hasOpeningMermaidFence(msg.text) || preFenceDiagramStream);
       if (msg.isStreaming && msg.role === 'system' && !msg.isNegotiationCoaching && !isActiveReactCodeStream) {
         // React-code pre-fence gap: streamingRenderModeRef already flipped to
         // 'react-code' (the raw arrived text has a fence) but the paced
@@ -9205,7 +9692,7 @@ Provide only the answer, nothing else.`;
       // Code-containing messages get special styling
       // We split by code blocks to keep the "Code Solution" UI intact for the code parts
       // But use ReactMarkdown for the text parts around it
-      if (msg.isCode || (msg.role === 'system' && msg.text.includes('```'))) {
+      if (msg.isCode || (msg.role === 'system' && (msg.text.includes('```') || hasOpeningMermaidFence(msg.text) || preFenceDiagramStream))) {
         // Teleprompter gist on CODE answers (live report 2026-08-23:
         // "[[GIST]] Use a hash map for O(n) lookup" painted literally): this
         // branch returned before the gist split below ever ran, so every
@@ -9213,6 +9700,185 @@ Provide only the answer, nothing else.`;
         // render the same bottom chip the prose surfaces use.
         const { body: codeGistBody, gist: codeGistLine } = splitGistLine(msg.text);
         const parts = codeGistBody.split(/(```[\s\S]*?(?:```|$))/g);
+
+        // One fenced CODE part → the code card. Shared by the code-only path
+        // (the regex split above, unchanged) and the diagram path below.
+        const renderFencePart = (part: string, key: React.Key): React.ReactNode => {
+          // Language class allows +/#/- so c++, objective-c, f# match.
+          const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
+          const lang = match && match[1] ? match[1] : '';
+          // Raw, UNTRIMMED — see below for why the streaming path
+          // must not trim this.
+          const rawCode = match && match[2]
+            ? match[2]
+            : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '');
+          // Still-open fence on a still-streaming row → the
+          // per-completed-line preview (kills the flicker, adds
+          // the per-line reveal fade). Anything else (already
+          // closed, or streaming already ended) → the static,
+          // full-context-highlighted block, same as always.
+          if (isUnclosedCodeFencePart(part) && msg.isStreaming) {
+            // Deliberately NOT .trim()'d: splitStreamingCodeLines
+            // decides "this line is complete" by finding a
+            // trailing \n. Trimming it here would strip the most
+            // recently arrived line's newline the instant it
+            // lands (before the NEXT character confirms there's
+            // more text after it), so that line would render as
+            // the unhighlighted in-progress line for one extra
+            // tick, then flip to highlighted-and-faded-in a tick
+            // late — a small but real one-tick color pop on every
+            // single line. The static HighlightedCode path below
+            // still trims (rawCode.trim()) since a finalized block
+            // should never show a stray trailing blank line.
+            return (
+              <StreamingHighlightedCode
+                key={key}
+                code={rawCode}
+                lang={lang}
+                isLightTheme={isLightTheme}
+                codeTheme={codeTheme}
+                codeBlockClass={codeBlockClass}
+                codeHeaderClass={codeHeaderClass}
+                codeHeaderTextClass={codeHeaderTextClass}
+                codeLineNumberColor={codeLineNumberColor}
+                appearance={appearance}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+                showCodeHeader={showCodeHeader}
+              />
+            );
+          }
+          return (
+            <HighlightedCode
+              key={key}
+              code={rawCode.trim()}
+              lang={lang}
+              isLightTheme={isLightTheme}
+              codeTheme={codeTheme}
+              codeBlockClass={codeBlockClass}
+              codeHeaderClass={codeHeaderClass}
+              codeHeaderTextClass={codeHeaderTextClass}
+              codeLineNumberColor={codeLineNumberColor}
+              appearance={appearance}
+              isModernTheme={isModernTheme}
+              isGlassTheme={isGlassTheme}
+              showCodeHeader={showCodeHeader}
+            />
+          );
+        };
+        // Regular text - Render with Markdown
+        const renderProsePart = (part: string, key: React.Key): React.ReactNode => (
+          <div key={key} className="markdown-content">
+            <ReactMarkdown
+              remarkPlugins={REMARK_PLUGINS}
+              rehypePlugins={REHYPE_PLUGINS}
+              components={mdComponents.codeText}
+            >
+              {normalizeFinalizedMarkdownMath(part)}
+            </ReactMarkdown>
+          </div>
+        );
+
+        // ── Diagram artifacts ────────────────────────────────────────────
+        // A ```mermaid block is drawn as a diagram card. Dispatch is on the
+        // block's own tag — never on the action that produced the answer and
+        // never by guessing at untagged code. The shared fence scanner decides
+        // what is a complete block, so a closing fence that is still arriving
+        // is not mistaken for one. With the feature switched off this path is
+        // skipped and a Mermaid block is the ordinary code card it always was.
+        const diagramParse = diagramsEnabled && mayHoldMermaidFence(codeGistBody, Boolean(msg.isStreaming))
+          ? parseFencedBlocks(codeGistBody, { final: !msg.isStreaming })
+          : null;
+        const hasDiagram = Boolean(diagramParse && (
+          diagramParse.blocks.some(isVisualBlock)
+          || (msg.isStreaming && isMermaidOpeningTail(diagramParse.tail))
+        ));
+        const renderedParts: React.ReactNode[] = [];
+        if (hasDiagram && diagramParse) {
+          // Keys follow each block's own ordinal, so nothing remounts as the
+          // answer grows or when the authoritative final text replaces it.
+          let lead = '';
+          diagramParse.blocks.forEach((block, i) => {
+            if (block.kind === 'prose') {
+              if (block.text.trim()) {
+                renderedParts.push(renderProsePart(block.text, `p${i}`));
+                lead = block.text;
+              }
+              return;
+            }
+            const fence = block as FenceBlock;
+            if (isVisualBlock(fence)) {
+              const before = previousDiagramRef.current;
+              renderedParts.push(
+                <DiagramArtifact
+                  key={`d${fence.diagramIndex}`}
+                  // What the block is written in decides what draws it: Mermaid,
+                  // the chart adapter, or a notation adapter.
+                  kind={fence.kind as 'mermaid' | 'chart' | 'notation'}
+                  artifactId={`${msg.id}:d${fence.diagramIndex}`}
+                  turnId={msg.id}
+                  source={fence.source}
+                  info={fence.info}
+                  complete={fence.closed}
+                  streaming={Boolean(msg.isStreaming)}
+                  description={describeDiagramFromLead(lead)}
+                  // An update still being written keeps the last valid version
+                  // of the SAME design on screen (decided from shared
+                  // component names — a fresh design shows no "previous").
+                  previousSource={!fence.closed && msg.isStreaming && before?.beforeMsgId === msg.id
+                    ? previousVersionFor(fence.source, before.source)
+                    : undefined}
+                  // One bounded automatic repair, for the newest answer only,
+                  // and never after the user pressed Stop on it.
+                  allowAutoRepair={latestAnswerIdRef.current === msg.id && !diagramRepairBlockedRef.current.has(msg.id)}
+                  onRepaired={handleDiagramRepaired}
+                  // Only the newest answer follows the bottom; an older row
+                  // redrawing (a theme change) must not move the scroll.
+                  onLayout={latestAnswerIdRef.current === msg.id ? handleDiagramLayout : undefined}
+                  themeKey={`${isLightTheme ? 'l' : 'd'}:${interfaceTheme ?? 'default'}`}
+                />,
+              );
+              return;
+            }
+            // Ordinary code in a mixed answer keeps the code card. A plain
+            // backtick fence is passed through byte for byte (exactly what the
+            // regex split would have produced); a tilde or indented fence is
+            // normalised to that form.
+            const raw = codeGistBody.slice(fence.start, fence.end);
+            const plain = fence.fenceChar === '`' && fence.fenceLength === 3 && raw.startsWith('```');
+            const part = plain
+              ? (fence.closed ? raw.replace(/\s+$/, '') : raw)
+              : `\`\`\`${fence.lang}\n${fence.source}${fence.closed ? '\n```' : ''}`;
+            renderedParts.push(renderFencePart(part, `c${fence.fenceIndex}`));
+          });
+          // A fence line still being typed: a code fence shows at once, as it
+          // always has; one that is turning into ```mermaid stays hidden so
+          // the card never appears first as an empty code block.
+          if (msg.isStreaming && diagramParse.tail.kind === 'opening-fence' && !isMermaidOpeningTail(diagramParse.tail)) {
+            renderedParts.push(renderFencePart(diagramParse.tail.text.trimStart(), 'tail'));
+          }
+        } else {
+          // Keys match the diagram path above (p<block>, c<fence>), so a code
+          // card or a paragraph already on screen is not torn down and rebuilt
+          // when a visual fence shows up later in the same answer.
+          let blockOrdinal = 0;
+          let fenceOrdinal = 0;
+          parts.forEach((part, i) => {
+            if (!part) {
+              // An empty piece of the split (an answer that opens with a
+              // fence): rendered as it always was, and not counted.
+              renderedParts.push(renderProsePart(part, `e${i}`));
+              return;
+            }
+            if (part.startsWith('```')) {
+              renderedParts.push(renderFencePart(part, `c${fenceOrdinal}`));
+              fenceOrdinal += 1;
+            } else {
+              renderedParts.push(renderProsePart(part, `p${blockOrdinal}`));
+            }
+            blockOrdinal += 1;
+          });
+        }
         return (
           // code-card-mount-in: a one-time cross-fade (@starting-style, see
           // index.css) for the FIRST render of this branch — i.e. exactly
@@ -9227,86 +9893,8 @@ Provide only the answer, nothing else.`;
             {/* Answer cards carry no copy button; the only copy action is
                 the code block's own (CodeBlockChrome, on the headerless dark
                 code theme). */}
-            <div className="space-y-2 text-[14.5px] leading-relaxed">
-              {parts.map((part, i) => {
-                if (part.startsWith('```')) {
-                  // Language class allows +/#/- so c++, objective-c, f# match.
-                  const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
-                  if (match || part.startsWith('```')) {
-                    const lang = match && match[1] ? match[1] : '';
-                    // Raw, UNTRIMMED — see below for why the streaming path
-                    // must not trim this.
-                    const rawCode = match && match[2]
-                      ? match[2]
-                      : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '');
-                    // Still-open fence on a still-streaming row → the
-                    // per-completed-line preview (kills the flicker, adds
-                    // the per-line reveal fade). Anything else (already
-                    // closed, or streaming already ended) → the static,
-                    // full-context-highlighted block, same as always.
-                    if (isUnclosedCodeFencePart(part) && msg.isStreaming) {
-                      // Deliberately NOT .trim()'d: splitStreamingCodeLines
-                      // decides "this line is complete" by finding a
-                      // trailing \n. Trimming it here would strip the most
-                      // recently arrived line's newline the instant it
-                      // lands (before the NEXT character confirms there's
-                      // more text after it), so that line would render as
-                      // the unhighlighted in-progress line for one extra
-                      // tick, then flip to highlighted-and-faded-in a tick
-                      // late — a small but real one-tick color pop on every
-                      // single line. The static HighlightedCode path below
-                      // still trims (rawCode.trim()) since a finalized block
-                      // should never show a stray trailing blank line.
-                      return (
-                        <StreamingHighlightedCode
-                          key={i}
-                          code={rawCode}
-                          lang={lang}
-                          isLightTheme={isLightTheme}
-                          codeTheme={codeTheme}
-                          codeBlockClass={codeBlockClass}
-                          codeHeaderClass={codeHeaderClass}
-                          codeHeaderTextClass={codeHeaderTextClass}
-                          codeLineNumberColor={codeLineNumberColor}
-                          appearance={appearance}
-                          isModernTheme={isModernTheme}
-                          isGlassTheme={isGlassTheme}
-                          showCodeHeader={showCodeHeader}
-                        />
-                      );
-                    }
-                    return (
-                      <HighlightedCode
-                        key={i}
-                        code={rawCode.trim()}
-                        lang={lang}
-                        isLightTheme={isLightTheme}
-                        codeTheme={codeTheme}
-                        codeBlockClass={codeBlockClass}
-                        codeHeaderClass={codeHeaderClass}
-                        codeHeaderTextClass={codeHeaderTextClass}
-                        codeLineNumberColor={codeLineNumberColor}
-                        appearance={appearance}
-                        isModernTheme={isModernTheme}
-                        isGlassTheme={isGlassTheme}
-                        showCodeHeader={showCodeHeader}
-                      />
-                    );
-                  }
-                }
-                // Regular text - Render with Markdown
-                return (
-                  <div key={i} className="markdown-content">
-                    <ReactMarkdown
-                      remarkPlugins={REMARK_PLUGINS}
-                      rehypePlugins={REHYPE_PLUGINS}
-                      components={mdComponents.codeText}
-                    >
-                      {normalizeFinalizedMarkdownMath(part)}
-                    </ReactMarkdown>
-                  </div>
-                );
-              })}
+            <div className={`space-y-2 text-[14.5px] leading-relaxed${hasDiagram ? ' diagram-answer-parts' : ''}`}>
+              {renderedParts}
               {codeGistLine ? <div className="overlay-gist-chip">{codeGistLine}</div> : null}
             </div>
           </div>
@@ -9473,7 +10061,10 @@ Provide only the answer, nothing else.`;
     // across renders and changes only on a language switch, so listing it
     // keeps the thinking label translatable without costing MessageRow its
     // React.memo bailout (which compares this callback by identity).
-    [isLightTheme, mdComponents, appearance, t],
+    // diagramsEnabled: flipping the switch must re-dispatch every row (a
+    // Mermaid block is a diagram card when on, a code card when off).
+    // handleDiagramRepaired is stable ([]).
+    [isLightTheme, mdComponents, appearance, t, diagramsEnabled, handleDiagramRepaired, handleDiagramLayout, interfaceTheme],
   );
 
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
@@ -10446,6 +11037,7 @@ Provide only the answer, nothing else.`;
     : [];
   const clampedPickerIndex = Math.min(skillPickerIndex, Math.max(0, filteredSkills.length - 1));
 
+
   return (
     <>
     {/* The resize toggle and the TopPill render in their OWN aux
@@ -11278,71 +11870,130 @@ Provide only the answer, nothing else.`;
                     </motion.button>
                   )}
                 </AnimatePresence>
-                <div
-                  className={`ov-chip-row ov-quickrow-pad flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3 is-bare'}`}
-                >
-                <button
-                  onClick={handleWhatToSay}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
-                </button>
-                <button
-                  onClick={handleClarify}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
-                </button>
-                <button
-                  onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  {actionButtonMode === 'brainstorm' ? (
-                    <>
-                      <Lightbulb className="w-3 h-3 opacity-70" /> {t('Brainstorm')}
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleFollowUpQuestions}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
-                </button>
-                <button
-                  onClick={handleAnswerNow}
-                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
-                    isManualRecording
-                      ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
-                      : 'overlay-chip-surface overlay-text-interactive'
-                  }`}
-                  style={isManualRecording ? undefined : appearance.chipStyle}
-                >
-                  {/* Block-level flex inside the inline-block swap span: an
-                      inline-flex child would sit on a text baseline and lift
-                      the label ~2px above its neighbours. */}
-                  <SwapText swapKey={isManualRecording ? 'stop' : 'answer'}>
-                    {isManualRecording ? (
+                {(() => {
+                  const chipClass = `flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`;
+                  const answerChipClass = (recording: boolean) =>
+                    `flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
+                      recording
+                        ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
+                        : 'overlay-chip-surface overlay-text-interactive'
+                    }`;
+                  // A label drawn by CSS (::before + attr), for layout copies
+                  // only: it takes exactly the width real text would, but it is
+                  // not DOM text, so the copies never show up in textContent,
+                  // text queries or text search.
+                  const ghost = (text: string) => <span className="ov-ghost-label" data-label={text} />;
+                  const modeChipContent = (mode: 'recap' | 'brainstorm') =>
+                    mode === 'brainstorm' ? (
                       <span className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                        {t('Stop')}
+                        <Lightbulb className="w-3 h-3 opacity-70" /> {t('Brainstorm')}
                       </span>
                     ) : (
                       <span className="flex items-center gap-1.5">
-                        <Mic className="w-3 h-3 opacity-70" /> {t('Answer')}
+                        <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
                       </span>
-                    )}
-                  </SwapText>
-                </button>
-                </div>
+                    );
+                  const answerContent = (
+                    <span className="flex items-center gap-1.5">
+                      <Mic className="w-3 h-3 opacity-70" /> {t('Answer')}
+                    </span>
+                  );
+                  const stopContent = (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                      {t('Stop')}
+                    </span>
+                  );
+                  // The Answer chip is as wide as its wider label: invisible
+                  // copies of both share one grid cell with the live label, so
+                  // Answer ⇄ Stop never slides the rest of the row sideways.
+                  const answerSizers = (
+                    <>
+                      <span className="ov-chip-sizer flex items-center gap-1.5" aria-hidden>
+                        <span className="w-3 h-3 shrink-0" />
+                        {ghost(t('Answer'))}
+                      </span>
+                      <span className="ov-chip-sizer flex items-center gap-1.5" aria-hidden>
+                        <span className="w-1.5 h-1.5 shrink-0" />
+                        {ghost(t('Stop'))}
+                      </span>
+                    </>
+                  );
+                  // The row laid out on one line for one mode, invisible and
+                  // inert: its width is what the collapsed panel needs (see the
+                  // measuring effect). Same classes and icons as the real
+                  // chips; spans, not buttons, and CSS-drawn labels.
+                  const measureRow = (mode: 'recap' | 'brainstorm', ref: React.RefObject<HTMLDivElement | null>) => (
+                    <div ref={ref} className="ov-row-measure flex flex-nowrap items-center gap-1.5 px-4" aria-hidden inert>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        <Pencil className="w-3 h-3 opacity-70" />
+                        {ghost(t('What to answer?'))}
+                      </span>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        <MessageSquare className="w-3 h-3 opacity-70" />
+                        {ghost(t('Clarify'))}
+                      </span>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        {mode === 'brainstorm' ? (
+                          <Lightbulb className="w-3 h-3 opacity-70" />
+                        ) : (
+                          <RefreshCw className="w-3 h-3 opacity-70" />
+                        )}
+                        {ghost(mode === 'brainstorm' ? t('Brainstorm') : t('Recap'))}
+                      </span>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        <HelpCircle className="w-3 h-3 opacity-70" />
+                        {ghost(t('Follow Up Question'))}
+                      </span>
+                      <span className={answerChipClass(false)} style={appearance.chipStyle}>
+                        <span className="ov-chip-stack">{answerSizers}</span>
+                      </span>
+                    </div>
+                  );
+                  return (
+                    <>
+                      <div
+                        ref={quickRowRef}
+                        className={`ov-chip-row ov-quickrow-pad flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3 is-bare'}`}
+                      >
+                        <button onClick={handleWhatToSay} className={chipClass} style={appearance.chipStyle}>
+                          <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
+                        </button>
+                        <button onClick={handleClarify} className={chipClass} style={appearance.chipStyle}>
+                          <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
+                        </button>
+                        <button
+                          onClick={shownActionMode === 'brainstorm' ? handleBrainstorm : handleRecap}
+                          className={chipClass}
+                          style={appearance.chipStyle}
+                        >
+                          <SwapText swapKey={labelActionMode} onShown={handleModeLabelShown}>
+                            {modeChipContent(labelActionMode)}
+                          </SwapText>
+                        </button>
+                        <button onClick={handleFollowUpQuestions} className={chipClass} style={appearance.chipStyle}>
+                          <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
+                        </button>
+                        <button
+                          onClick={handleAnswerNow}
+                          className={answerChipClass(isManualRecording)}
+                          style={isManualRecording ? undefined : appearance.chipStyle}
+                        >
+                          <span className="ov-chip-stack">
+                            {answerSizers}
+                            <span className="flex justify-center">
+                              <SwapText swapKey={isManualRecording ? 'stop' : 'answer'}>
+                                {isManualRecording ? stopContent : answerContent}
+                              </SwapText>
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                      {measureRow('recap', recapRowMeasureRef)}
+                      {measureRow('brainstorm', brainstormRowMeasureRef)}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Input Area */}
@@ -11711,16 +12362,8 @@ Provide only the answer, nothing else.`;
 
                           window.electronAPI.toggleSettingsWindow({ x, y });
                         }}
-                        className={`
-                                            w-7 h-7 flex items-center justify-center rounded-[9px] border
-                                            interaction-base interaction-press
-                                            ${
-                                              isSettingsOpen
-                                                ? 'overlay-control-surface overlay-text-primary'
-                                                : 'overlay-control-surface overlay-text-interactive'
-                                            }
-                                        `}
-                        style={appearance.controlStyle}
+                        data-state={isSettingsOpen ? 'open' : undefined}
+                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon"
                       >
                         <SlidersHorizontal className="w-3.5 h-3.5" />
                       </button>
@@ -11734,16 +12377,8 @@ Provide only the answer, nothing else.`;
                           setIsMousePassthrough(newState);
                           window.electronAPI?.setOverlayMousePassthrough?.(newState);
                         }}
-                        className={`
-                                                    w-7 h-7 flex items-center justify-center rounded-[9px] border
-                                                    interaction-base interaction-press
-                                                    ${
-                                                      isMousePassthrough
-                                                        ? 'overlay-control-surface text-accent-primary opacity-100'
-                                                        : 'overlay-control-surface overlay-text-interactive'
-                                                    }
-                                                `}
-                        style={appearance.controlStyle}
+                        data-state={isMousePassthrough ? 'on' : undefined}
+                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon"
                       >
                         <PointerOff className="w-3.5 h-3.5" />
                       </button>

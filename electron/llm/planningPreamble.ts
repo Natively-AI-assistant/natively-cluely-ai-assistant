@@ -78,6 +78,15 @@ const PLANNING_SENTENCE_RES: RegExp[] = [
   //   know the timeline, so I send weekly updates." is a real answer about
   //   stakeholders and stays.
   new RegExp(`^${LEAD}(?:they|he|she)(?: want| wants| would like|'d like| wanted) to (?:know|hear|understand) (?:how|what|why|whether|if|when|where|which|about)\\b[^.!?\\n,;]{0,60}?\\b(?:I|I'd|I'm|I've|I'll|my|me|you|you'd|you're|you've|your)\\b`, 'i'),
+  //   The no-story BRIDGE (2026-09-30): "I don't have a specific failure story
+  //   I can point to here, so let me answer it honestly in terms of how I
+  //   handle it." A candidate never says this about their own career; the
+  //   answer that follows it is the one to keep. Only a PURE bridge — the
+  //   sentence must pivot to "so let me / I'll / here's / what I can…": "I
+  //   don't have a specific example with Kubernetes, but I've run Nomad for
+  //   three years" carries content and stays. Measured: the own-life rule in
+  //   the prompt cut these from 12 to 4 of 120 dev replays; this catches the rest.
+  new RegExp(`^${LEAD}(?:(?:honestly|to be honest|I'll be honest|I'll be straight(?: with you)?),? )?I (?:don't|do not|dont) have (?:a|any|one)(?: [\\w'-]+){0,4} (?:story|stories|example|examples|incident|instance|anecdote|situation|case)\\b[^.!?\\n]{0,90}?[,;:—–-]?\\s*(?:so|but|and) (?:let me|I'll|I will|I can|here's|here is|what I can)\\b`, 'i'),
   // Meta-references to the material as material: "the résumé shows me as…",
   // "the prior assistant turn already established…".
   /\bthe (?:r[eé]sum[eé]|resume|cv) shows (?:me|him|her|them|the candidate)\b/i,
@@ -207,6 +216,8 @@ const PREAMBLE_HEADS = [
   'she want', 'she\'d like', 'she would like',
   'i\'ll ', 'i will ', 'i should ', 'i need to ', 'i want to ', 'i\'m going to ', 'i am going to ',
   'let me answer',
+  'i don\'t have a', 'i don\'t have any', 'i don\'t have one', 'i do not have a', 'i dont have a',
+  'honestly, i don', 'honestly i don', 'to be honest, i don', 'i\'ll be honest', 'i\'ll be straight',
   'here\'s ', 'here is ', 'heres ',
   'answer', 'response', 'suggested ', 'sample ', 'spoken ', 'possible ', 'my answer', 'my response', 'the answer', 'the response',
   'the résumé', 'the resume', 'the cv ', 'the prior ', 'the previous suggestion', 'the grounded ',

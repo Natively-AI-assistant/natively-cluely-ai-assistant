@@ -110,6 +110,15 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
     else recorder.end();
   }, [activeId, forced, recorder]);
 
+  // Funnel: the permissions step of getting started. It is not a card in the
+  // ledger, so it is reported here: shown when it comes up, completed when the
+  // user closes it. A forced (dev) showing reports nothing, like the ledger.
+  useEffect(() => {
+    if (activeId === 'permissions' && !forced) {
+      window.electronAPI?.funnelTrack?.('onboarding_stage', { stage: 'permissions', action: 'shown' })?.catch?.(() => {});
+    }
+  }, [activeId, forced]);
+
   const onDismiss = (id: ToasterId) => () => orch.markDismissed(id);
   /** Close a card, recording why: its own reason, else a plain "later". */
   const closeWith = (id: ToasterId) => (reason?: CloseReason) => {
@@ -157,6 +166,7 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
             // becomes true and the RAF drain loop re-raises this toaster on the
             // very next frame — making the X button appear to do nothing.
             orch.setUserState({ permsShown: true });
+            if (!forced) window.electronAPI?.funnelTrack?.('onboarding_stage', { stage: 'permissions', action: 'completed' })?.catch?.(() => {});
             onDismiss('permissions')();
           }}
         />
@@ -189,7 +199,7 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
           onStartTrial={async () => {
             // Our own errors (network, server) are retried once; the server's
             // answers are final (spec §6 row 8).
-            const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.() ?? Promise.resolve(undefined));
+            const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.('trial_promo') ?? Promise.resolve(undefined));
             if (kind === 'started') { orch.setUserState({ hasTrialToken: true, trialClaimed: true }); recorder.outcome('acted'); }
             // Already used on this device: the promo retires and the card
             // offers a key or the user's own keys instead.

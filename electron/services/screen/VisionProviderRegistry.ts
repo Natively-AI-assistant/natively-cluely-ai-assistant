@@ -12,7 +12,6 @@
 // intentionally lazy-import LLMHelper so tests can replace this registry
 // without booting the whole LLM stack.
 
-import fs from 'node:fs/promises';
 import type {
   VisionProviderConfig,
   VisionInvocationParams,
@@ -25,15 +24,24 @@ import {
   customProviderIsLocal,
   isOllamaVisionModelByName,
 } from '../../llm/visionCapability';
-import { readActiveCustomProvider, readActiveModelId } from '../../llm/activeCustomProvider';
-import { gatewaySeatReadsImages } from '../../llm/visionResolver';
-import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from '../../llm/visionCapabilityStore';
+import {
+  readActiveCustomProvider, readActiveCurlProvider, readActiveModelId, readActiveSelection, readFixedVisionModels,
+  readOllamaRecordTarget, readUsingOllama,
+} from '../../llm/activeCustomProvider';
+import { gatewaySeatReadsImages, readsImages, resolveVision } from '../../llm/visionResolver';
+import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionOverride, storedVisionTest } from '../../llm/visionCapabilityStore';
 import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
 
 export interface VisionProviderBuildInputs {
   mode: VisionMode;
   localOnly: boolean;
   scopeAllowsScreenshots: boolean;
+  /**
+   * What the description is for (2026-10-01). `prepass` (the default) runs
+   * BEFORE the answer and feeds it. `record` runs AFTER the answer and only
+   * stores the screen's text so a later turn can quote it.
+   */
+  purpose?: 'prepass' | 'record';
 }
 
 /**
@@ -43,11 +51,27 @@ export interface VisionProviderBuildInputs {
  *                                → LiteLLM → NVIDIA NIM → Ollama → Codex → Custom
  *   private_vision: Ollama → Codex → local Custom only
  */
-export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionProviderConfig[] {
-  const credentials = CredentialsManager.getInstance();
+export function buildVisionProviders(
+  inputs: VisionProviderBuildInputs,
+  // Injectable so the rung list can be EXECUTED in a test (2026-10-01): each
+  // file is its own bundle, so this module carries a private copy of
+  // CredentialsManager that a test cannot reach from outside.
+  credentials: CredentialsManager = CredentialsManager.getInstance(),
+): VisionProviderConfig[] {
   const providers: VisionProviderConfig[] = [];
 
-  const cloudAllowed = inputs.mode !== 'private_vision';
+  // With a LOCAL model selected the pre-pass stays off cloud providers (Evin,
+  // 2026-10-01). Before this, an Ollama or local-endpoint user's screenshot
+  // went to whichever cloud key was configured first, unless "Keep screenshots
+  // on this device" was on. Only local rungs remain: a local custom or cURL
+  // endpoint that reads images runs the pre-pass; Ollama gets none and reads
+  // the screenshot in the answer itself.
+  //
+  // The RECORD is exempt (Evin, 2026-10-01): it goes to a cloud provider when
+  // one is available, so an Ollama user can still ask about an earlier screen,
+  // unless "Keep screenshots on this device" is on.
+  const cloudAllowed = inputs.mode !== 'private_vision'
+    && (inputs.purpose === 'record' || !selectionIsLocal());
 
   if (cloudAllowed) {
     providers.push(natively(credentials, inputs));
@@ -80,14 +104,16 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
     // image — see ninerouter() for why that matters, and why an empty
     // catalogue still seats it.
     providers.push(ninerouter(credentials, inputs));
+    providers.push(deepseek(credentials, inputs));
   }
 
   // Local providers — always allowed, including in private_vision.
   providers.push(ollama(credentials, inputs));
   providers.push(codex(credentials, inputs));
   providers.push(custom(credentials, inputs));
+  providers.push(curl(credentials, inputs));
 
-  return providers.filter(p => p !== null) as VisionProviderConfig[];
+  return (providers.filter(p => p !== null) as VisionProviderConfig[]).map(withUserOverride);
 }
 
 // ─── Provider builders ────────────────────────────────────────────────────
@@ -112,7 +138,8 @@ function openai(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): 
   return {
     id: 'openai',
     displayName: 'OpenAI',
-    modelId: 'gpt-4o',
+    // The model runVisionRequest('openai') actually sends to (it was a stale `gpt-4o`).
+    modelId: readFixedVisionModels().openai ?? 'gpt-4o',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -157,7 +184,7 @@ function claude(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): 
   return {
     id: 'claude',
     displayName: 'Claude',
-    modelId: 'claude-sonnet-4-6',
+    modelId: readFixedVisionModels().claude ?? 'claude-sonnet-4-6',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -201,20 +228,32 @@ function groqScout(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
   };
 }
 
-function ollama(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
-  const baseUrl = (creds.getAllCredentials() as any)?.ollamaBaseUrl as string | undefined;
-  const ollamaModel = (creds.getAllCredentials() as any)?.ollamaModel as string | undefined;
-  const isVisionModel = ollamaModel ? isOllamaVisionModel(ollamaModel) : false;
+function ollama(_creds: CredentialsManager, inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  // The after-the-answer RECORD only (2026-10-01, Evin's rule: "send it to
+  // cloud if available, else send it to the Ollama model"). The PRE-PASS never
+  // uses Ollama: it runs before the answer inside 6 s, and Ollama reads the
+  // screenshot in the answer itself.
+  //
+  // Fed by the live helper, not the credential store: this rung used to read
+  // `ollamaBaseUrl` / `ollamaModel` from credentials, which nothing ever wrote,
+  // so it had never run. The helper names the model only when Ollama is the
+  // SELECTED provider and `/api/show` (else the name list) says an installed
+  // model reads images; ScreenUnderstandingService resolves it before building.
+  //
+  // "Local" is earned from the daemon's host, as for the custom and cURL
+  // rungs: OLLAMA_URL / switchToOllama can point at another machine, and that
+  // must not satisfy "Keep screenshots on this device".
+  const target = inputs.purpose === 'record' ? readOllamaRecordTarget() : null;
   return {
     id: 'ollama',
-    displayName: 'Ollama (local)',
-    modelId: ollamaModel,
-    isLocal: true,
-    isConfigured: !!baseUrl && !!ollamaModel,
-    supportsVision: isVisionModel,
+    displayName: target ? `Ollama (${target.model})` : 'Ollama (local)',
+    modelId: target?.model,
+    isLocal: !!target && customProviderIsLocal({ curlCommand: target.url }),
+    isConfigured: !!target,
+    supportsVision: !!target,
     scopeAllowsScreenshots: true,
     hint: 'ollama',
-    invoke: async (p) => callOllamaVision(baseUrl!, ollamaModel!, p),
+    invoke: async (p) => callLLMHelperVision('ollama', p),
   };
 }
 
@@ -243,9 +282,16 @@ function codex(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): V
     id: 'codex_cli',
     displayName: 'Codex CLI',
     modelId: (creds.getAllCredentials() as any)?.codexCliModel,
-    isLocal: true,
+    // false since 2026-10-01: Codex sends to chatgpt.com. `true` was a routing
+    // hint that would have made this rung eligible under "Keep screenshots on
+    // this device" the day `supportsVision` was flipped (see SAFETY above).
+    isLocal: false,
+    // `codexCliPath` lives in SettingsManager, never in the credential store,
+    // so this has always been false. No Codex pre-pass is built: it is a slow
+    // reasoning route, the pre-pass has 6 s, and a rung that cannot answer in
+    // time delays every screenshot answer by that much.
     isConfigured: !!cliPath,
-    supportsVision: false, // unverified; see SAFETY above before flipping — also set isLocal:false
+    supportsVision: false,
     scopeAllowsScreenshots: true,
     hint: 'codex',
     invoke: async () => { throw new Error('Codex CLI vision unverified — capability disabled'); },
@@ -486,12 +532,122 @@ function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
 // The saved facts both screenshot paths read: provider catalogues and one-time
 // test results (visionCapabilityStore). `baseURL` is the normalised address of a
 // self-hosted provider, '' for hosted services — the key LLMHelper writes under.
+/**
+ * Direct DeepSeek, for the model the user selected (2026-10-01). Seated only
+ * when the resolver says that model reads images — the name list for Flash
+ * (measured), or a passed one-time test. Never on unknown: deepseek-v4-pro
+ * answers HTTP 200 without seeing the image. Last among the cloud rungs, so it
+ * matters only when nothing faster is configured; before this a DeepSeek-only
+ * user got no pre-pass at all.
+ */
+function deepseek(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getDeepseekApiKey?.();
+  const selection = readActiveSelection();
+  const isSelected = selection?.provider === 'deepseek';
+  const modelId = isSelected ? selection!.model : '';
+  const reads = isSelected
+    && readsImages(resolveVision({ provider: 'deepseek', model: modelId }, registryVisionFacts()), false);
+  return {
+    id: 'deepseek',
+    displayName: modelId ? `DeepSeek (${modelId})` : 'DeepSeek',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && reads,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('deepseek', p),
+  };
+}
+
+/**
+ * UNREACHABLE FROM THE UI TODAY (found in phase 5c-2): only the
+ * `switch-to-curl-provider` IPC selects a cURL-lane provider, the preload does
+ * not expose it, and saved cURL providers are loaded as custom providers (the
+ * rung above). This rung works if that lane is ever revived.
+ *
+ * The cURL provider the user selected (2026-10-01), on the same two shared
+ * predicates as the custom rung above: it must be able to carry an image, and
+ * it is local only when its host is loopback or private — never by default, so
+ * a hosted endpoint cannot satisfy "Keep screenshots on this device".
+ */
+function curl(_creds: CredentialsManager, inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const selection = readActiveSelection();
+  const active = selection?.provider === 'curl' ? readActiveCurlProvider() : null;
+  return {
+    id: 'curl',
+    displayName: active?.name || 'cURL provider',
+    modelId: (active as any)?.model,
+    isLocal: customProviderIsLocal(active),
+    isConfigured: !!active,
+    supportsVision: customProviderSupportsVision(active),
+    scopeAllowsScreenshots: inputs.scopeAllowsScreenshots,
+    hint: 'custom',
+    invoke: async (p) => callLLMHelperVision('curl', p),
+  };
+}
+
+/**
+ * Did the user select a model that runs on this machine? Ollama, or a custom /
+ * cURL endpoint on a loopback or private host (customProviderIsLocal — never
+ * "local" by default). No selection known → false: today's behaviour.
+ */
+function selectionIsLocal(): boolean {
+  const selection = readActiveSelection();
+  // No nameable selection: still local when Ollama is the selected provider
+  // (it has no model name at startup, or with nothing installed).
+  if (!selection) return readUsingOllama();
+  if (selection.provider === 'ollama') return true;
+  if (selection.provider === 'custom') return customProviderIsLocal(readActiveCustomProvider());
+  if (selection.provider === 'curl') return customProviderIsLocal(readActiveCurlProvider());
+  return false;
+}
+
+/**
+ * The rung that carries the SELECTED model, with a key that changes whenever
+ * that selection does, or null when no rung does. Vendor rungs (OpenAI,
+ * Claude, Gemini, Groq, Natively) run a fixed model, so the selection does not
+ * own their breaker. Used by ScreenUnderstandingService to forget a breaker
+ * that was opened for a different selection.
+ */
+export function selectionRung(): { id: string; key: string } | null {
+  const selection = readActiveSelection();
+  if (!selection) return null;
+  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'ninerouter', 'deepseek'];
+  const id = GATEWAYS.includes(selection.provider) ? selection.provider
+    : selection.provider === 'custom' || selection.provider === 'curl' ? selection.provider
+    : null;
+  if (!id) return null;
+  // A custom or cURL provider keeps its id when its command is edited.
+  const command = id === 'custom' ? readActiveCustomProvider()?.curlCommand
+    : id === 'curl' ? readActiveCurlProvider()?.curlCommand : '';
+  return { id, key: `${selection.provider}|${selection.model}|${command ?? ''}` };
+}
+
 function registryVisionFacts(baseURL = '', extra: { ninerouterVisionModels?: readonly string[] } = {}) {
   return {
     ...extra,
     providerReportsVision: (p: string, m: string) => storedVisionAnswer(p, m, baseURL),
     testedVision: (p: string, m: string) => storedVisionTest(p, m, baseURL)?.reads,
+    overriddenVision: (p: string, m: string) => storedVisionOverride(p, m, baseURL),
   };
+}
+
+// The rungs whose model is fixed, not asked of the resolver: rung id → the
+// provider its model is saved under. "Reads images: Off" (Settings, phase 4)
+// is about the MODEL, whichever rung would send to it — the same rule, and
+// the same list, as LLMHelper.buildVisionChain's fixedRungModel.
+const FIXED_RUNG_PROVIDER: Readonly<Record<string, string>> = {
+  natively: 'natively', openai: 'openai', claude: 'claude', groq_scout: 'groq',
+  gemini_flash_lite: 'gemini', gemini_flash: 'gemini', gemini_pro: 'gemini',
+};
+
+/** A fixed-model rung the user switched Off reads no screenshot. (A custom or
+ *  cURL provider has its own "Screenshot / Vision Support" control.) */
+function withUserOverride(p: VisionProviderConfig): VisionProviderConfig {
+  const provider = FIXED_RUNG_PROVIDER[p.id];
+  if (!p.supportsVision || !provider || !p.modelId) return p;
+  return storedVisionOverride(provider, p.modelId) === false ? { ...p, supportsVision: false } : p;
 }
 
 // Single definition, re-exported. The local copy this replaces had drifted:
@@ -525,62 +681,6 @@ async function callLLMHelperVision(providerId: string, params: VisionInvocationP
     params.optimized.path,
     { signal: params.signal, timeoutMs: params.timeoutMs },
   );
-}
-
-/**
- * Call a local Ollama vision model. Uses the OpenAI-compatible /v1/chat/completions
- * endpoint at `${baseUrl}/v1/` with an image_url data URL — supported by every
- * vision-capable Ollama model we care about (llava family, qwen2.5-vl, etc.).
- */
-async function callOllamaVision(baseUrl: string, model: string, params: VisionInvocationParams): Promise<string> {
-  const { optimized, systemPrompt, userPrompt, signal } = params;
-  const data = await fs.readFile(optimized.path);
-  const dataUrl = `data:${optimized.mimeType};base64,${data.toString('base64')}`;
-  const trimmedBase = baseUrl.replace(/\/+$/, '');
-  const url = `${trimmedBase}/v1/chat/completions`;
-
-  const body = {
-    model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: userPrompt },
-          { type: 'image_url', image_url: { url: dataUrl } },
-        ],
-      },
-    ],
-    stream: false,
-  };
-
-  const serializedBody = JSON.stringify(body);
-  require('../../llm/providerPayloadCapture').captureProviderPayload({
-    provider: 'ollama_vision',
-    classification: 'exact_serialized_provider_payload',
-    payload: body,
-    serializedPayload: serializedBody,
-  });
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: serializedBody,
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    // Surface a classifiable error so VisionProviderFallbackChain can bucket it.
-    throw new Error(`Ollama ${res.status}: ${text.substring(0, 200)}`);
-  }
-
-  const json: any = await res.json();
-  const content = json?.choices?.[0]?.message?.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content.map((part: any) => (typeof part === 'string' ? part : part?.text || '')).join('');
-  }
-  throw new Error('Ollama returned empty content');
 }
 
 /**

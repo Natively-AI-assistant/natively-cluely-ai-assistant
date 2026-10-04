@@ -113,7 +113,10 @@ export const COMMON_CODING_PROBLEM_PATTERNS = [
   /\b(check|find|determine|detect)\b.*\b(odd|even)\b/i,
   /\bprime number\b|\bpalindrome\b|\bfactorial\b|\bfibonacci\b/i,
   /\breverse string\b|\bsort array\b|\bfind (?:max|min)\b/i,
-  /\bcheck if\b/i,
+  // "check if" names a coding problem only with a data object in reach: bare,
+  // it routed "can you check if my dog's okay?" (a Call Center caller) to the
+  // coding contract (2026-09-30).
+  /\bcheck if\b(?=.{0,60}\b(?:numbers?|integers?|strings?|arrays?|lists?|linked list|trees?|graphs?|matrix|grid|words?|sentences?|palindromes?|primes?|anagrams?|sorted|balanced|valid|bst|binary|power of|divisible|substrings?|subsequences?|leap year|odd|even|duplicates?|cycles?|elements?|digits?|characters?|parenthes[ie]s|brackets|sum|target)\b)/i,
   // Named classic problems that lack an explicit coding verb. These are
   // unambiguously DSA/coding asks ("valid parentheses", "fizzbuzz") so the
   // planner must route them to the coding contract even when phrased bare.

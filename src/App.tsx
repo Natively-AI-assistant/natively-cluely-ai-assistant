@@ -4,11 +4,12 @@ import { ToastProvider, ToastViewport } from "./components/ui/toast"
 import NativelyInterface from "./components/NativelyInterface"
 import HindsightStatusBanner from "./components/HindsightStatusBanner"
 import SettingsPopup from "./components/SettingsPopup" // Keeping for legacy/specific window support if needed
-import Launcher from "./components/Launcher"
+import Launcher, { type LauncherRequest } from "./components/Launcher"
 import ModelSelectorWindow from "./components/ModelSelectorWindow"
 import { OverlayPillWindow, OverlayToggleWindow } from "./components/OverlayAuxWindows"
 import SettingsOverlay from "./components/SettingsOverlay"
 import StartupSequence from "./components/StartupSequence"
+import { EXIT_MS, launcherLanding } from "./components/startup/splashTimeline"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
@@ -48,6 +49,7 @@ import { GenieModal } from "./components/ui/GenieModal"
 import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
+import { useDiagramRenderHost } from "./lib/diagram/diagramRuntime"
 import { WelcomeFlow } from "./components/onboarding/WelcomeFlow"
 import { shouldShowWelcome, hasOnboardingHistory, WELCOME_SEEN_KEY, LEGACY_PERMS_SHOWN_KEY, ONBOARDING_STATE_KEY } from "./lib/onboarding/welcomeGate.mjs"
 
@@ -94,6 +96,10 @@ function getLauncherIsolation(): LauncherIsolation {
 
 const App: React.FC = () => {
   const isLight = useResolvedTheme() === 'light';
+  // The launcher and the overlay both mount App, and both can be asked by the
+  // main process to draw a diagram for the Phone Mirror (it has no DOM).
+  // Mermaid itself loads only when such a request actually arrives.
+  useDiagramRenderHost();
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
@@ -163,7 +169,7 @@ const App: React.FC = () => {
   // useEffect(deps:[onComplete]). An inline closure would be a new identity on
   // every App re-render — and the boot path re-renders many times (7-10 async
   // IPCs each setState on resolve, plus orchestrator notifies). That would tear
-  // down and re-arm BOTH the 2.2s primary AND the 5s hard-cap timer on every
+  // down and re-arm BOTH the primary AND the 5s hard-cap timer on every
   // render, so under a slow/re-render-heavy boot the hard-cap could keep
   // resetting and never fire — the "stuck at the startup animation" symptom.
   // Memoizing to [] makes the splash timers arm exactly once.
@@ -173,7 +179,7 @@ const App: React.FC = () => {
   // fresh install only (src/lib/onboarding/welcomeGate.mjs). null = not decided
   // yet: the splash holds until it is, because showing the launcher first let
   // it mount and start the orchestrator's clock, so the permissions card opened
-  // on top of the welcome when the flag read landed after the 2.2s splash (a
+  // on top of the welcome when the flag read landed after the splash (a
   // busy first boot). WELCOME_DECIDE_TIMEOUT_MS below bounds the wait.
   const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
   const readWelcomeLocal = useCallback(() => {
@@ -266,6 +272,29 @@ const App: React.FC = () => {
   const managerOpenerRef = useRef<HTMLElement | null>(null);
   const reduceManagerMotion = useReducedMotion() ?? false;
 
+  // The launcher's entrance after the splash: it is laid out under the black
+  // at once, held slightly off its size, and lands as the black lifts (the
+  // exit in splashTimeline.ts). Run as a Web Animation on `transform` so it
+  // stays on the compositor while the launcher is still mounting, and nothing
+  // is left on the element afterwards. After the welcome, or with reduced
+  // motion, the launcher keeps its plain fade-up instead.
+  const cameFromWelcome = useRef(false);
+  if (showWelcome) cameFromWelcome.current = true;
+  const launcherLands = !cameFromWelcome.current && !reduceManagerMotion;
+  const launcherLanded = useRef(false);
+  const landLauncher = useCallback((el: HTMLDivElement | null) => {
+    if (!el || launcherLanded.current) return;
+    launcherLanded.current = true;
+    if (typeof el.animate !== 'function') {
+      reportRevealComplete();
+      return;
+    }
+    const { keyframes, delay, duration } = launcherLanding();
+    // The landing ends after the splash has been removed, so its end is what
+    // tells main the reveal is over (see reportRevealComplete).
+    el.animate(keyframes, { delay, duration, fill: 'backwards' }).finished.then(reportRevealComplete, reportRevealComplete);
+  }, [reportRevealComplete]);
+
   const rememberManagerOpener = useCallback(() => {
     const activeElement = document.activeElement;
     managerOpenerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
@@ -289,6 +318,18 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
     setActiveManagerPanel('profile');
   }, [activeManagerPanel, rememberManagerOpener]);
+
+  // Settings › About's Search and Demo meeting: close Settings and ask the
+  // Launcher to open its search bar / that meeting.
+  const [launcherRequest, setLauncherRequest] = useState<LauncherRequest | null>(null);
+  const openLauncherSearch = useCallback(() => {
+    setIsSettingsOpen(false);
+    setLauncherRequest({ kind: 'search', seq: Date.now() });
+  }, []);
+  const openLauncherMeeting = useCallback((id: string) => {
+    setIsSettingsOpen(false);
+    setLauncherRequest({ kind: 'meeting', id, seq: Date.now() });
+  }, []);
 
   const openModesExclusive = useCallback(() => {
     if (!activeManagerPanel) rememberManagerOpener();
@@ -1261,10 +1302,21 @@ const App: React.FC = () => {
         {showStartup || showWelcome === null ? (
           <motion.div
             key="startup"
-            className="h-full w-full"
-            initial={{ opacity: 0, scale: 1.01 }}
-            animate={{ opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.23, 1, 0.32, 1] } }}
-            exit={{ opacity: 0, scale: 1.04, pointerEvents: "none", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } }}
+            // Laid OVER the page, not in its flow. As an `h-full` block it pushed
+            // whatever replaced it a full window-height down until it unmounted,
+            // so the splash faded to black and the launcher then cut in, already
+            // at the end of an entrance nobody saw. Out of the flow, the launcher
+            // (or the welcome) is laid out underneath from the moment the splash
+            // is dismissed. z-[100] keeps the splash in front of it until the
+            // black has lifted.
+            className="absolute inset-0 z-[100]"
+            // The splash draws its own entrance and exit: the window is already
+            // black, and on the way out the logo leaves on the black, which then
+            // lifts off the launcher. So this layer animates nothing visible.
+            // It only keeps the splash mounted until that exit has ended
+            // (EXIT_MS in splashTimeline.ts), and stops it taking clicks at once.
+            initial={false}
+            exit={{ opacity: 0, pointerEvents: "none", transition: { opacity: { delay: EXIT_MS / 1000, duration: 0.05 } } }}
           >
             <StartupSequence onComplete={dismissStartup} />
           </motion.div>
@@ -1282,8 +1334,10 @@ const App: React.FC = () => {
           <motion.div
             key="main"
             className="h-full w-full"
-            initial={{ opacity: 0, scale: 0.99, y: 8 }} // "Linear" style entry: slightly down and scaled down
-            animate={{ opacity: 1, scale: 1, y: 0 }}    // Slide up and snap to place
+            // After the splash the launcher lands (landLauncher); otherwise:
+            ref={launcherLands ? landLauncher : undefined}
+            initial={launcherLands ? false : { opacity: 0, scale: 0.99, y: 8 }} // "Linear" style entry: slightly down and scaled down
+            animate={launcherLands ? undefined : { opacity: 1, scale: 1, y: 0 }} // Slide up and snap to place
             transition={{
               duration: 0.6,
               ease: [0.19, 1, 0.22, 1], // Expo-out: snappy start, smooth landing
@@ -1294,6 +1348,7 @@ const App: React.FC = () => {
               <ToastProvider>
                 <div id="launcher-container" className="h-full w-full relative">
                   <Launcher
+                    request={launcherRequest}
                     onStartMeeting={handleStartMeeting}
                     onOpenSettings={(tab = 'general') => openSettingsExclusive(tab)}
                     onOpenProfile={() => openProfileExclusive()}
@@ -1316,6 +1371,8 @@ const App: React.FC = () => {
                   closeInstantly={isManagerOpen}
                   onOpenModes={openModesExclusive}
                   onOpenProfile={openProfileExclusive}
+                  onOpenSearch={openLauncherSearch}
+                  onOpenMeeting={openLauncherMeeting}
                 />
                 {/* Modes and Profile Intelligence share one card, which pours out
                     of and back into the bottom of the window like every other

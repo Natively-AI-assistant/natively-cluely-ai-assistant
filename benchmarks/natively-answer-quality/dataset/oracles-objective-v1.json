@@ -1,0 +1,513 @@
+{
+  "name": "oracles-objective-v1",
+  "note": "Hand-authored 2026-09-30 from each scenario's own source (question, prior transcript, attached file) — never from any answer. Values computed by hand; checks run on the whole displayed text (answer body + GIST chip). Frozen datasets are not modified; this is a sidecar keyed by benchmark id. Ballpark totals accept rounding within the stated tolerance.",
+  "oracles": {
+    "FGENH-008": {
+      "kind": "arithmetic",
+      "expected_summary": "Other paid 84+40=124; user paid ~62+12=74; total 198, fair share 99 each; the user owes the other person 25 (grocery figure approximate).",
+      "expected_action": "calculate settlement: the user owes the other person about $25",
+      "required_facts": [
+        "Settlement is $25 from the user to the other person (half of the $50 difference)."
+      ],
+      "forbidden_claims": [
+        "The settlement is $50 (the difference is not the amount owed)."
+      ],
+      "flag": "arithmetic_error",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 25,
+          "label": "states the $25 settlement"
+        },
+        {
+          "type": "pattern_absent",
+          "pattern": "(?:owed?|owes|pay(?:s)?|send|give|settle)\\b[^.\\n]{0,40}?\\$?\\s?50\\b(?!\\s*(?:gap|difference|apart))",
+          "label": "treats the $50 difference as the amount owed"
+        }
+      ]
+    },
+    "FSALES-001": {
+      "kind": "pricing",
+      "expected_summary": "320 x $89 = $28,480 sensors; 320 sensors / 60 per gateway -> 6 HL-G2 (3 per warehouse) = $2,040; 11 x $520 = $5,720 truck gateways; hardware $36,240; volume Standard 320 x $5 x 12 = $19,200 (Premium $28,800); year one $55,440 Standard / $65,040 Premium.",
+      "expected_action": "spoken ballpark with correct components; 6 gateways total, not 12",
+      "required_facts": [
+        "6 HL-G2 gateways cover 320 sensors (3 per warehouse)",
+        "hardware about $36,240",
+        "volume tier $5/sensor/month Standard"
+      ],
+      "forbidden_claims": [
+        "12 gateways / $4,080 for gateways / $38,280 hardware"
+      ],
+      "flag": "pricing_error",
+      "checks": [
+        {
+          "type": "any_of",
+          "label": "states a correct hardware or year-one total",
+          "checks": [
+            {
+              "type": "number_present",
+              "value": 36240,
+              "tolerance": 500
+            },
+            {
+              "type": "number_present",
+              "value": 55440,
+              "tolerance": 500
+            },
+            {
+              "type": "number_present",
+              "value": 65040,
+              "tolerance": 500
+            },
+            {
+              "type": "number_present",
+              "value": 2040,
+              "tolerance": 0.5
+            }
+          ]
+        },
+        {
+          "type": "number_absent",
+          "value": 4080,
+          "label": "no 12-gateway cost"
+        },
+        {
+          "type": "number_absent",
+          "value": 38280,
+          "label": "no hardware total built on 12 gateways"
+        },
+        {
+          "type": "pattern_absent",
+          "pattern": "\\b12 (?:HL-G2|gateways?)\\b|6 (?:gateways? )?per warehouse",
+          "label": "no doubled gateway count"
+        }
+      ]
+    },
+    "FCC-005": {
+      "kind": "policy_reasoning",
+      "expected_summary": "TravelPass is $8 per day of use, capped at 10 charges ($80). An 8-day trip can produce at most 8 charges ($64); 3 days of use would be $24. $80 = 10 charges does not reconcile with the trip, so the agent should check which dates were billed.",
+      "expected_action": "identify billing discrepancy: $80 is ten daily charges, more than the eight trip days",
+      "required_facts": [
+        "$80 means ten daily charges, which an eight-day trip cannot produce (max $64)"
+      ],
+      "forbidden_claims": [
+        "The $80 is explained by the cap / is correct for this trip"
+      ],
+      "flag": "major_reasoning_error",
+      "checks": [
+        {
+          "type": "any_of",
+          "label": "notices $80 = ten charges cannot come from an eight-day trip",
+          "checks": [
+            {
+              "type": "number_present",
+              "value": 64
+            },
+            {
+              "type": "number_present",
+              "value": 24
+            },
+            {
+              "type": "pattern_present",
+              "pattern": "(?:doesn'?t|does not|don'?t|wouldn'?t|would not|can'?t|cannot)\\s+(?:quite\\s+)?(?:line up|add up|match|reconcile|fit|square)|more (?:days|charges) than|\\b10 (?:days?|charges|daily charges)\\b[^.]{0,80}\\b(?:only|just)\\b[^.]{0,20}\\b8\\b|\\bonly\\b[^.]{0,20}\\b8 days\\b[^.]{0,80}\\b10\\b"
+            }
+          ]
+        }
+      ]
+    },
+    "FCC-004": {
+      "kind": "policy_arithmetic",
+      "expected_summary": "Maritime = Zone 2, not covered by TravelPass. Agent may credit up to $150 (RMA); the remaining $262 goes to Billing Review (BRV), decided within 10 business days; no outcome promised.",
+      "flag": "unsupported_policy_claim",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 150,
+          "label": "states the $150 agent credit limit"
+        },
+        {
+          "type": "pattern_absent",
+          "pattern": "credit (?:the )?(?:full|whole|entire|all(?: of)?(?: the)?) (?:\\$?412|amount|charge)|\\$?412 (?:credit|back)",
+          "label": "no full-amount credit"
+        },
+        {
+          "type": "number_absent",
+          "value": 212,
+          "label": "no mis-subtracted remainder"
+        }
+      ]
+    },
+    "FSALES-007": {
+      "kind": "lookup",
+      "expected_summary": "$290 is the current distributor price; $340 applies from 1 July.",
+      "flag": "pricing_error",
+      "checks": [
+        {
+          "type": "pattern_present",
+          "pattern": "july",
+          "label": "names the 1 July change"
+        },
+        {
+          "type": "number_present",
+          "value": 290,
+          "label": "keeps the $290 figure"
+        }
+      ]
+    },
+    "FGEN-055": {
+      "kind": "lookup",
+      "expected_summary": "Total budget $1,800 (room 450, catering 950, lanes 200, supplies 200); additions need Priya's approval.",
+      "flag": "missed_available_evidence",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 1800,
+          "label": "states $1,800"
+        },
+        {
+          "type": "pattern_present",
+          "pattern": "priya",
+          "label": "names Priya"
+        }
+      ]
+    },
+    "FGEN-064": {
+      "kind": "arithmetic_conflict",
+      "expected_summary": "Quote states $14,200 but the line items add to $15,650; start Monday Oct 12 vs 'begins October 19 pending tile'; deposit stated $5,000 although 30% of $14,200 is $4,260. The answer should surface these conflicts rather than pick one.",
+      "flag": "reference_conflict_ignored",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 14200,
+          "label": "states the quoted total"
+        },
+        {
+          "type": "number_present",
+          "value": 15650,
+          "label": "surfaces the $15,650 line-item total"
+        },
+        {
+          "type": "number_present",
+          "value": 5000,
+          "label": "states the $5,000 deposit"
+        },
+        {
+          "type": "pattern_present",
+          "pattern": "\\b19(?:th)?\\b",
+          "label": "surfaces the October 19 start note"
+        }
+      ]
+    },
+    "FGEN-086": {
+      "kind": "arithmetic_conflict",
+      "expected_summary": "30% of the $14,200 quote is $4,260, not $5,000 (and line items add to $15,650); the user should not pay $5,000 before this is reconciled.",
+      "flag": "arithmetic_error",
+      "checks": [
+        {
+          "type": "any_of",
+          "label": "notices $5,000 is not 30% of the quote",
+          "checks": [
+            {
+              "type": "number_present",
+              "value": 4260
+            },
+            {
+              "type": "number_present",
+              "value": 4695
+            },
+            {
+              "type": "pattern_present",
+              "pattern": "(?:isn'?t|is not|not|doesn'?t|does not|don'?t)\\s+(?:actually\\s+|quite\\s+|exactly\\s+)?(?:30|thirty)\\s*(?:%|percent)|(?:30|thirty)\\s*(?:%|percent)[^.]{0,60}(?:isn'?t|is not|not|doesn'?t|does not)\\b"
+            }
+          ]
+        }
+      ]
+    },
+    "FGENH-002": {
+      "kind": "lookup",
+      "expected_summary": "$38,500, Carver Lift Services, paid from the reserve fund (board vote 4-1).",
+      "flag": "missed_available_evidence",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 38500,
+          "label": "states $38,500"
+        },
+        {
+          "type": "pattern_present",
+          "pattern": "reserve",
+          "label": "names the reserve fund"
+        }
+      ]
+    },
+    "LECTURE-031": {
+      "kind": "arithmetic",
+      "expected_summary": "Payback = CAC / monthly gross margin = 120 / 15 = 8 months (not 120/40 = 3 months).",
+      "flag": "arithmetic_error",
+      "checks": [
+        {
+          "type": "pattern_present",
+          "pattern": "\\b8 months\\b|\\b8-month\\b|\\beight months\\b",
+          "label": "8 months"
+        },
+        {
+          "type": "pattern_absent",
+          "pattern": "payback[^.]{0,40}\\b3 months\\b|\\b3 months\\b[^.]{0,30}payback",
+          "label": "no revenue-based 3-month payback"
+        }
+      ]
+    },
+    "LECTURE-051": {
+      "kind": "arithmetic_conflict",
+      "expected_summary": "1.96 x 2 = 3.92 s margin; interval 70.08 to 77.92 s around 74. The handout's worked example uses z = 1.65 (3.3 s) and a mean of 72, which contradicts its own 1.96 rule.",
+      "flag": "arithmetic_error",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 3.92,
+          "label": "computes 3.92"
+        },
+        {
+          "type": "any_of",
+          "label": "flags the handout's 1.65 / 3.3 mismatch",
+          "flag": "reference_conflict_ignored",
+          "checks": [
+            {
+              "type": "number_present",
+              "value": 1.65
+            },
+            {
+              "type": "number_present",
+              "value": 3.3
+            }
+          ]
+        }
+      ]
+    },
+    "LECTURE-081": {
+      "kind": "arithmetic",
+      "expected_summary": "Multiplier = 1 / (1 - 0.8) = 5.",
+      "flag": "arithmetic_error",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 5,
+          "label": "multiplier 5"
+        }
+      ]
+    },
+    "SEMINAR-032": {
+      "kind": "lookup",
+      "expected_summary": "Removing adaptation gave up 3.9 points = 57% of the 6.8-point gain; Holm-adjusted p = 0.048 (just under 0.05); the ablation removed difficulty matching and expanding intervals together, so it cannot separate them.",
+      "flag": "missed_available_evidence",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 57,
+          "label": "57% of the gain"
+        },
+        {
+          "type": "number_present",
+          "value": 0.048,
+          "label": "adjusted p = 0.048"
+        },
+        {
+          "type": "pattern_present",
+          "pattern": "separat|together|both (?:components|parts|pieces)|can'?t (?:tell|isolate|distinguish)|cannot (?:tell|isolate|distinguish)",
+          "label": "states the ablation cannot separate the two components"
+        }
+      ]
+    },
+    "SEMINAR-061": {
+      "kind": "lookup",
+      "expected_summary": "34% lower write amplification on write-heavy W-A (14.2 -> 9.4) relative to the fixed-threshold StaticLevel baseline.",
+      "flag": "missed_available_evidence",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 34,
+          "label": "34%"
+        },
+        {
+          "type": "pattern_present",
+          "pattern": "staticlevel|fixed[- ]threshold|14\\.2",
+          "label": "names the baseline"
+        }
+      ]
+    },
+    "FSEM-009": {
+      "kind": "source_conflict",
+      "expected_summary": "The abstract says +48 min/day at 8 weeks; the results say +34 min (vs +6 in usual care) at the 12-week follow-up by sleep diary. The presenter should surface the discrepancy, not pick one silently.",
+      "flag": "reference_conflict_ignored",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 34,
+          "label": "states the 34-minute results figure"
+        },
+        {
+          "type": "number_present",
+          "value": 48,
+          "label": "surfaces the abstract's 48 minutes"
+        }
+      ]
+    },
+    "HSEM-001": {
+      "kind": "source_conflict",
+      "expected_summary": "The abstract says 241 students took part; the methods say 530 enrolled and 214 joined groups (the rest were the comparison). The counts conflict and should be flagged.",
+      "flag": "reference_conflict_ignored",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 214,
+          "label": "states 214"
+        },
+        {
+          "type": "number_present",
+          "value": 241,
+          "label": "surfaces 241"
+        }
+      ]
+    },
+    "FTECH-008": {
+      "kind": "lookup_errata",
+      "expected_summary": "Errata: five control-plane nodes (tolerates losing 2 while keeping quorum of 3), and 2 hours from provisioning (not 90 minutes from login).",
+      "flag": "major_reasoning_error",
+      "checks": [
+        {
+          "type": "pattern_present",
+          "pattern": "\\b2 hours\\b|\\btwo hours\\b|\\b120 minutes\\b",
+          "label": "2 hours"
+        },
+        {
+          "type": "pattern_present",
+          "pattern": "\\b5\\b[^.]{0,40}(?:node|member)|(?:node|member)s?[^.]{0,20}\\b5\\b|five",
+          "label": "five members"
+        },
+        {
+          "type": "pattern_absent",
+          "pattern": "(?:you have|you had|i had|we had|gave (?:me|you)|budget(?:ed)? (?:of|was)?)\\s*90 minutes",
+          "label": "does not keep the superseded 90 minutes"
+        }
+      ]
+    },
+    "DGEN-019": {
+      "kind": "arithmetic",
+      "expected_summary": "Drop the island: 45,000 - 5,600 + 600 flooring adjustment = exactly $40,000, so not under 40k (contingency $4,500 is separate and not part of the price).",
+      "flag": "arithmetic_error",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 40000,
+          "label": "states $40,000"
+        },
+        {
+          "type": "number_absent",
+          "value": 39400,
+          "label": "does not forget the $600 flooring adjustment"
+        }
+      ]
+    },
+    "DSALES-031": {
+      "kind": "lookup",
+      "expected_summary": "Enterprise is custom pricing with a 100-seat minimum (one-pager effective July 2026); 40 techs do not meet it. No per-seat Enterprise price exists to quote.",
+      "flag": "missed_available_evidence",
+      "checks": [
+        {
+          "type": "number_present",
+          "value": 100,
+          "label": "names the 100-seat minimum"
+        },
+        {
+          "type": "pattern_absent",
+          "pattern": "enterprise[^.]{0,60}\\$\\s?\\d+(?:\\.\\d+)?\\s*(?:per|a|/)\\s*(?:tech|seat|technician)|\\$\\s?\\d+(?:\\.\\d+)?\\s*(?:per|a|/)\\s*(?:tech|seat|technician)[^.]{0,40}enterprise",
+          "label": "does not invent an Enterprise per-seat price",
+          "flag": "unsupported_company_claim"
+        }
+      ]
+    },
+    "DSALES-023": {
+      "kind": "source_conflict",
+      "expected_summary": "The prospect is reading the 2025 partner sheet (valid through Dec 31 2025). That sheet contradicts itself: Growth \"includes the Salesforce connector\" yet lists the connector as a $300/month add-on. The seller should not confirm $44 with Salesforce; flag the conflict/expiry and confirm current pricing.",
+      "flag": "reference_conflict_ignored",
+      "checks": [
+        {
+          "type": "any_of",
+          "label": "surfaces the $300 add-on conflict or the expired sheet",
+          "checks": [
+            {
+              "type": "number_present",
+              "value": 300
+            },
+            {
+              "type": "pattern_present",
+              "pattern": "2025|expired|out of date|outdated|older (?:partner )?sheet|old (?:partner )?sheet|valid through|superseded|no longer current|current (?:price|pricing|sheet|list)|ran (?:through|until|to the end of)|end of last year|still (?:the )?current|confirm (?:it\\u0027s |that it\\u0027s |what\\u0027s )?(?:still )?current"
+            }
+          ]
+        },
+        {
+          "type": "pattern_absent",
+          "pattern": "(?:you\\x27?re|that\\x27?s|yes,?)\\s+(?:all\\s+)?(?:good|right|correct)\\s+at\\s+44\\b",
+          "label": "does not simply confirm $44 with Salesforce",
+          "flag": "unsafe_commitment"
+        }
+      ]
+    },
+    "DSALES-026": {
+      "kind": "source_conflict",
+      "expected_summary": "The sheet (valid through Dec 31 2025) lists 15% for 3-year prepaid and lets PARTNERS offer up to 12% off; it never says the two stack. The seller should not agree to stack them, and should note the sheet is out of date / confirm current terms.",
+      "flag": "unsafe_commitment",
+      "checks": [
+        {
+          "type": "pattern_absent",
+          "pattern": "(?:we|i) can (?:do|offer|give|stack|combine)(?: you)?(?: both| them| the two)?(?: together)?[^.]{0,20}(?:27|25\\.2|stack)",
+          "label": "does not agree to stack 15% and 12%"
+        },
+        {
+          "type": "pattern_present",
+          "pattern": "2025|expired|out of date|outdated|older (?:partner )?sheet|old (?:partner )?sheet|valid through|superseded|no longer current|current (?:price|pricing|sheet|list)|ran (?:through|until|to the end of)|end of last year|still (?:the )?current|confirm (?:it\\u0027s |that it\\u0027s |what\\u0027s )?(?:still )?current",
+          "label": "notes the sheet is out of date / confirms current terms",
+          "flag": "reference_conflict_ignored"
+        }
+      ]
+    },
+    "HSALES-022": {
+      "kind": "pricing",
+      "expected_summary": "Growth: 40 techs x $54 x 12 = $25,920; office seats free up to 5, sixth seat $15/month = $180/yr; total $26,100 per year (+ $2,500 one-time implementation = $28,600 in year one).",
+      "flag": "pricing_error",
+      "checks": [
+        {
+          "type": "any_of",
+          "label": "states a correct annual figure",
+          "checks": [
+            {
+              "type": "number_present",
+              "value": 25920,
+              "tolerance": 300
+            },
+            {
+              "type": "number_present",
+              "value": 26100,
+              "tolerance": 300
+            },
+            {
+              "type": "number_present",
+              "value": 28600,
+              "tolerance": 300
+            }
+          ]
+        },
+        {
+          "type": "number_absent",
+          "value": 27000,
+          "label": "does not bill all six office seats"
+        },
+        {
+          "type": "number_absent",
+          "value": 1080,
+          "label": "does not bill all six office seats (1,080)"
+        }
+      ]
+    }
+  }
+}

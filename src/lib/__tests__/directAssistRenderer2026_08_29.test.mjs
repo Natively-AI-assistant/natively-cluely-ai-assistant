@@ -238,7 +238,7 @@ test('provider_switch is handled before the terminal-sequence guard and words th
   // field for field) or the listener switch below is dead code.
   assert.match(
     interfaceSource,
-    /type: 'provider_switch';[\s\S]{0,220}from: \{ provider: string; model: string \};[\s\S]{0,80}to: \{ provider: string; model: string \};[\s\S]{0,80}reason: string;/,
+    /type: 'provider_switch';[\s\S]{0,220}from: \{ provider: string; model: string \};[\s\S]{0,80}to: \{ provider: string; model: string \};[\s\S]{0,80}reason: string;[\s\S]{0,40}status\?: number;[\s\S]{0,40}detail\?: string;[\s\S]{0,40}waitedMs: number;/,
   );
 
   const listener = section(
@@ -258,20 +258,28 @@ test('provider_switch is handled before the terminal-sequence guard and words th
   // a stale terminal event against the -1 initial value and settle the
   // whole request as "Request cancelled."
   assert.doesNotMatch(switchBlock, /active\.lastSequence\s*=/);
-  // No provider-label mapping table: render the ids verbatim.
-  assert.match(switchBlock, /event\.from\.provider/);
-  assert.match(switchBlock, /event\.to\.provider/);
-  assert.doesNotMatch(switchBlock, /providerLabel\(/);
+  // Named the way the overlay's own model dropdown names them (2026-10-01):
+  // the raw ids ("nvidia_nim") read as internals. No second naming table.
+  assert.match(switchBlock, /provider: modelSelectorGroupLabel\(event\.from\.provider\)/);
+  assert.match(switchBlock, /next: modelSelectorGroupLabel\(event\.to\.provider\)/);
+  // The switch records WHY the provider was left — code, status, its own
+  // words, how long it was given — and never drops an earlier hop: on an
+  // A -> B -> C walk both A's and B's reasons stay on the card.
+  assert.match(switchBlock, /code: event\.reason/);
+  assert.match(switchBlock, /status: event\.status/);
+  assert.match(switchBlock, /detail: event\.detail/);
+  assert.match(switchBlock, /waitedMs: event\.waitedMs/);
+  assert.match(switchBlock, /unreachable: event\.unreachable/);
+  assert.match(switchBlock, /hops: \[\.\.\.\(message\.fallbackNotice\?\.hops \?\? \[\]\), hop\]/);
   // Lands on the answer card (active.placeholderId), not the question card.
   assert.match(switchBlock, /message\.id === placeholderId/);
-  assert.match(switchBlock, /fallbackNotice: noticeText/);
 
   // CASE 1 (finding, worse-than-reported half): provider_switch fires when a
   // rung is OPENED, not when it answers — so at this point the target
-  // provider has produced zero tokens. The notice text built here must read
-  // as an attempt in flight, never assert that anyone answered. This is the
-  // regression guard for "answered by" being asserted a rung too early.
-  assert.match(switchBlock, /const noticeText = `\$\{event\.from\.provider\}[^`]*\$\{event\.to\.provider\}[^`]*`;/);
+  // provider has produced zero tokens. The notice built here is data with no
+  // answerer in it, which directAssistFallbackLines words as an attempt
+  // ("— trying X…"). This is the regression guard for "answered by" being
+  // asserted a rung too early.
   assert.doesNotMatch(
     stripLineComments(switchBlock),
     /answered/i,
@@ -287,11 +295,85 @@ test('provider_switch is handled before the terminal-sequence guard and words th
   // credited with an answer it didn't give.
   assert.match(switchBlock, /active\.hasSwitched = true;/);
 
-  assert.match(interfaceSource, /fallbackNotice\?: string;/);
+  assert.match(interfaceSource, /fallbackNotice\?: DirectAssistFallbackNotice;/);
+  // Worded at render time, through the translator, by the tested module, and
+  // drawn by one component. `ended` is read off the card itself: a card that
+  // is no longer streaming and has no answerer was settled by an error or a
+  // cancel, neither of which touches the notice.
+  const row = section('const MessageRow = React.memo(', 'const NativelyInterface: React.FC<NativelyInterfaceProps> = ({');
   assert.match(
-    interfaceSource,
-    /msg\.role === 'system' && msg\.fallbackNotice[\s\S]{0,320}\{msg\.fallbackNotice\}/,
+    row,
+    /directAssistNoticeView\(\s*\{ failure: msg\.failure, fallbackNotice: msg\.fallbackNotice, ended: !msg\.isStreaming \},\s*t,?\s*\)/,
   );
+  assert.match(row, /<DirectAssistNotice\s+view=\{directAssistNotice\}/);
+  // The old line: 10px at 60% opacity behind a help glyph, cut off at 260px.
+  assert.doesNotMatch(row, /msg\.fallbackNotice && \(/);
+});
+
+test('a failed answer is worded and drawn as a notice, never printed as a code or behind an emoji', () => {
+  // "❌ AUTH_FAILED: The selected provider rejected its credentials." is what
+  // every failure path used to print into the answer bubble.
+  assert.doesNotMatch(interfaceSource, /directAssistErrorText/);
+  const listener = section(
+    'window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {',
+    'const beginDirectAssist = useCallback(async ({',
+  );
+  const begin = section('const beginDirectAssist = useCallback(async ({', 'const cancelActiveChatStream = useCallback(');
+  assert.doesNotMatch(listener + begin, /❌/u, 'no emoji stands in for an icon on the direct-ask failure paths');
+
+  // Every failure path hands DATA to one function; none builds a sentence.
+  const errorBlock = listener.slice(listener.indexOf("if (event.type === 'error') {"));
+  assert.match(errorBlock, /settleDirectAssistFailure\(active, \{/);
+  assert.match(errorBlock, /code: event\.error\.code/);
+  assert.match(errorBlock, /status: event\.error\.status/);
+  assert.match(errorBlock, /unreachable: event\.error\.unreachable/);
+  assert.match(errorBlock, /detail: event\.error\.detail/);
+  // Every provider that was tried, named the way the dropdown names it.
+  assert.match(errorBlock, /attempts: event\.error\.attempts\?\.map\(/);
+  assert.match(errorBlock, /provider: modelSelectorGroupLabel\(attempt\.provider\)/);
+  assert.match(errorBlock, /code: attempt\.reason/);
+
+  // A done with no text cannot come from a provider (main turns an empty
+  // stream into an error), so it is our fault, not "X returned nothing".
+  const doneBlock = listener.slice(listener.indexOf("if (event.type === 'done') {"), listener.indexOf("if (event.type === 'error') {"));
+  assert.match(
+    doneBlock.slice(0, doneBlock.indexOf('// Content actually arrived')),
+    /settleDirectAssistFailure\(active, \{[\s\S]{0,160}code: 'INTERNAL_ERROR'/,
+  );
+  // Both ways a request can fail to start go the same way.
+  assert.equal((begin.match(/settleDirectAssistFailure\(active, \{/g) || []).length, 2);
+
+  // The failure is data on the message, and the notice stands in for the
+  // text when there is no answer to show.
+  assert.match(interfaceSource, /failure\?: DirectAssistAnswerFailure;/);
+  const row = section('const MessageRow = React.memo(', 'const NativelyInterface: React.FC<NativelyInterfaceProps> = ({');
+  assert.match(row, /msg\.failure && !msg\.failure\.partial \? null : renderMessageText\(msg\)/);
+  // The one action: open the pane that fixes a key, a plan or a model.
+  assert.match(row, /openSettingsTab\?\.\('ai-providers'\)/);
+  assert.match(row, /actionLabel=\{t\(DIRECT_ASSIST_OPEN_PROVIDERS\)\}/);
+});
+
+test("the provider's own words stay beside the answer: never in its text, never in the context sent back to a model", () => {
+  // They can echo part of the request, so they are shown and nothing else.
+  // The overlay's conversation context is built from message TEXT only.
+  const contextBuilder = section(
+    'const buildConversationContextFromMessages = (items: Message[]): string =>',
+    '// PERF: HighlightedCode',
+  );
+  assert.match(contextBuilder, /m\.text/);
+  assert.doesNotMatch(contextBuilder, /\.failure\b|fallbackNotice|\.detail\b/);
+
+  const settleFn = section(
+    'const settleDirectAssistIncomplete = useCallback((',
+    'window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {',
+  );
+  // The failure rides on the message as its own field. The text is the
+  // answer so far, or the one plain sentence worded for it — and
+  // directAssistFailureText is tested to leave the provider's words out.
+  assert.match(settleFn, /failure: \{ \.\.\.failure, partial: Boolean\(active\.answerText\) \}/);
+  assert.match(settleFn, /active\.answerText \|\| terminalLabel/);
+  assert.doesNotMatch(settleFn, /\.detail\b/, 'the words must not be written into the answer text');
+  assert.match(settleFn, /directAssistFailureText\(failure, t\)/);
 });
 
 test('start captures the ORIGINAL provider selection before any switch can overwrite it', () => {
@@ -323,30 +405,31 @@ test("done upgrades the notice to an outcome ONLY when a switch occurred, naming
   );
 
   const noAnswerReturn = doneBlock.indexOf('return;');
-  const upgradeGuard = doneBlock.indexOf('if (active.hasSwitched && active.originalProvider)');
+  const upgradeGuard = doneBlock.indexOf('if (active.hasSwitched)');
   assert.ok(noAnswerReturn >= 0 && upgradeGuard > noAnswerReturn,
     'the empty-answer early return must precede the upgrade so a failed/empty done cannot upgrade the notice');
 
-  // CASE 1 & CASE 2's resolving half: the upgrade is gated on hasSwitched —
-  // a request that never switched must never grow a fallbackNotice out of
-  // thin air at done.
+  // CASE 1 & CASE 2's resolving half: the upgrade is gated on hasSwitched and
+  // only ADDS the answerer to a notice a switch already created — a request
+  // that never switched must never grow a fallbackNotice out of thin air at
+  // done.
   const upgradeBlock = doneBlock.slice(upgradeGuard, doneBlock.indexOf('// The ONLY Direct history write'));
-  assert.match(upgradeBlock, /finalNoticeText = `\$\{active\.originalProvider\}[^`]*answered by \$\{event\.provider\}[^`]*`;/);
-  // Must name the ORIGINAL selection (active.originalProvider, unaffected by
-  // intermediate switches) and the ACTUAL answerer (done's own event.provider,
-  // not a switch's event.to.provider snapshot).
+  assert.match(upgradeBlock, /message\.id === finalPlaceholderId && message\.fallbackNotice/);
+  // The ACTUAL answerer: done's own event.provider, not a switch's
+  // event.to.provider snapshot. The original selection is the first hop,
+  // which the upgrade keeps untouched.
+  assert.match(upgradeBlock, /\.\.\.message\.fallbackNotice, answeredBy: modelSelectorGroupLabel\(event\.provider\)/);
   assert.doesNotMatch(upgradeBlock, /event\.to\.provider/);
-  assert.match(upgradeBlock, /message\.id === finalPlaceholderId/);
 
-  // "answered by" may appear literally nowhere else in the listener — it is
+  // The answerer may be set literally nowhere else in the listener — it is
   // the one and only place a Direct Assist notice is permitted to claim an
   // outcome.
   const listener = section(
     'window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {',
     'const beginDirectAssist = useCallback(async ({',
   );
-  const answeredByLiterals = (listener.match(/`\$\{[^`]*answered by[^`]*`/g) || []).length;
-  assert.equal(answeredByLiterals, 1, 'exactly one template literal in the listener may assert "answered by"');
+  const answererWrites = (stripLineComments(listener).match(/answeredBy/g) || []).length;
+  assert.equal(answererWrites, 1, 'exactly one place in the listener may name who answered');
 });
 
 test('CASE 3 — a ladder that switches then fails entirely never leaves an "answered by" notice', () => {

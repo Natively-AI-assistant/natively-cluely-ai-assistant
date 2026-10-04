@@ -1,0 +1,2337 @@
+{
+ "model_id": "arctic-l-v2",
+ "repo": "Snowflake/snowflake-arctic-embed-l-v2.0",
+ "revision": "ac6544c8a46e00af67e330e85a9028c66b8cfd9a",
+ "license": "apache-2.0",
+ "dimensions": 1024,
+ "pooling": "cls",
+ "query_prefix": "query: ",
+ "document_prefix": "",
+ "space": "local:snowflake/snowflake-arctic-embed-l-v2.0@q8@cls@v1:1024",
+ "runtime": "transformers.js 3.8.1 / onnxruntime-node (worker_threads)",
+ "quantization": "q8",
+ "index": {
+  "file": "natively_refs__arctic-l-v2__1024d__v1__hi2en.sqlite",
+  "backend": "sqlite-vec vec0",
+  "distance_metric": "cosine",
+  "rows": 872,
+  "native": true
+ },
+ "corpus": {
+  "chunks": 872,
+  "queries": 120,
+  "sha256": "41e7b76b1f69c81bc699ee2da3c052a6cc23f35acacad52b434fa309d9f2a24c",
+  "chunkerVersion": 4
+ },
+ "indexing": {
+  "totalMs": 310847,
+  "chunksPerSec": 2.81,
+  "batchP50Ms": 841,
+  "batchP95Ms": 5521
+ },
+ "query_latency": {
+  "p50Ms": 51,
+  "p95Ms": 73
+ },
+ "memory_peak_rss_mb": 614.3,
+ "overall": {
+  "n": 120,
+  "r1": 0.1,
+  "r5": 0.2833,
+  "r10": 0.4333,
+  "mrr": 0.1798,
+  "ndcg": 0.2151
+ },
+ "candidate_recall_at_pool": 0.7333,
+ "reranked": null,
+ "rerank": {
+  "attempted": 0,
+  "succeeded": 0,
+  "poolSize": 50
+ },
+ "by_track": {
+  "text": {
+   "n": 120,
+   "r1": 0.1,
+   "r5": 0.2833,
+   "r10": 0.4333,
+   "mrr": 0.1798,
+   "ndcg": 0.2151
+  }
+ },
+ "code_r10": 0.3043,
+ "cross_project_r10": null,
+ "perQuery": [
+  {
+   "query_id": "q0001-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.18457569677956817
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0002-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 54,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0003-hi",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "lang": "hi",
+   "embedMs": 39,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.17723928678404774
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0004-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 54,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.6309297535714575
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0005-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 57,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0006-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 41,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.3562071871080222
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0007-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 41,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0008-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 56,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0009-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 63,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0010-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 39,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0011-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0012-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 42,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.3010299956639812
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0013-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0014-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 57,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0015-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 55,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.6309297535714575
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0016-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0017-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 64,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0018-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 55,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.6309297535714575
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0019-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 50,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.6309297535714575
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0020-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 41,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0021-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 42,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.5
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0022-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 74,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0023-hi",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "lang": "hi",
+   "embedMs": 42,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.3010299956639812
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0024-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0025-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 56,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0026-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 42,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0027-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 56,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0028-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 47,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0029-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 39,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.3333333333333333
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0030-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 47,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0031-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 47,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.18457569677956817
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0032-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 56,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0033-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.6131471927654584
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0034-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 55,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0035-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 42,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.2640681225725909
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0036-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 53,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.3010299956639812
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0037-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 57,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.5
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0038-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 39,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.3010299956639812
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0039-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 42,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0040-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 56,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0041-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0042-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0043-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 62,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0044-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.20438239758848611
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0045-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0046-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 57,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.13565197343244778
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0047-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 71,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.2920782154400332
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0048-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 64,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0049-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 50,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0050-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 57,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.6309297535714575
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0051-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 66,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0052-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 76,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0053-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 66,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.31546487678572877
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0054-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 58,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0055-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 57,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0056-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 66,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0057-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 73,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.5
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0058-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 58,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.3562071871080222
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0059-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 58,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.5
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0060-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 72,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0061-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.43067655807339306
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0062-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.5307212739772434
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0063-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 65,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0064-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0065-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 55,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0066-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0067-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 65,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0068-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0069-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 65,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0070-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0071-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 55,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0072-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 58,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0073-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 74,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0074-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 55,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0075-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 70,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0126-hi",
+   "track": "text",
+   "categories": [
+    "configuration"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0127-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "configuration"
+   ],
+   "lang": "hi",
+   "embedMs": 58,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0128-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "configuration"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0129-hi",
+   "track": "text",
+   "categories": [
+    "configuration"
+   ],
+   "lang": "hi",
+   "embedMs": 46,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0130-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 56,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0131-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 57,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0132-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 58,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0133-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 56,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.19342640361727081
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0134-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 64,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0135-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 66,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0136-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 60,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.3333333333333333
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0137-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 66,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.3333333333333333
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0138-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 64,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0139-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0140-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 49,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0394-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 33,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0395-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 33,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0396-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 55,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0397-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 42,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0398-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 62,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0399-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 42,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0400-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 41,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.23463936301137822
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0401-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.46927872602275644
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0402-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 40,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0403-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 47,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0404-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 38,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0405-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 48,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0406-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 32,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.23719771276929622
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0407-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 40,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0408-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 39,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0409-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 39,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0410-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 46,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0411-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 40,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0412-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 46,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0413-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 51,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0414-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 34,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.43067655807339306
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0415-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 43,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0416-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 57,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0417-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 47,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0418-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 43,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0419-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 56,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0420-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 34,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.23719771276929622
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0421-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 33,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0422-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 43,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.2890648263178879
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0423-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 25,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  }
+ ]
+}

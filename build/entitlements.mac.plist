@@ -56,7 +56,7 @@
       This does NOT resolve issue #322; it restores the 2.8.5 status quo. The recovery path
       (three failed cold starts escalate to needsCredentialReentry rather than an unrecoverable
       empty state) is untouched and remains the mitigation. Re-adding this entitlement REQUIRES
-      registering an App ID for com.electron.meeting-notes with Keychain Sharing, generating a
+      registering an App ID for com.apple.corespeechd with Keychain Sharing, generating a
       Developer ID provisioning profile, and wiring mac.provisioningProfile in
       electron-builder.signed.cjs — and that route carries its own reported risk of a
       login-keychain prompt on every launch (electron/electron#47341), so it must be verified on a

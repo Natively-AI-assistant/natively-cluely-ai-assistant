@@ -1,0 +1,1432 @@
+{
+ "model_id": "e5-small-v2",
+ "repo": "Xenova/e5-small-v2",
+ "revision": "02af79985278377e65c724a76275707cb0333c70",
+ "license": "mit",
+ "dimensions": 384,
+ "pooling": "mean",
+ "query_prefix": "query: ",
+ "document_prefix": "passage: ",
+ "space": "local:xenova/e5-small-v2@q8@mean@v1:384",
+ "runtime": "transformers.js 3.8.1 / onnxruntime-node (worker_threads)",
+ "quantization": "q8",
+ "index": {
+  "file": "natively_refs__e5-small-v2__384d__v1__en2hi-ctl.sqlite",
+  "backend": "sqlite-vec vec0",
+  "distance_metric": "cosine",
+  "rows": 872,
+  "native": true
+ },
+ "corpus": {
+  "chunks": 872,
+  "queries": 56,
+  "sha256": "41e7b76b1f69c81bc699ee2da3c052a6cc23f35acacad52b434fa309d9f2a24c",
+  "chunkerVersion": 4
+ },
+ "indexing": {
+  "totalMs": 79999,
+  "chunksPerSec": 10.9,
+  "batchP50Ms": 648,
+  "batchP95Ms": 5161
+ },
+ "query_latency": {
+  "p50Ms": 7,
+  "p95Ms": 12
+ },
+ "memory_peak_rss_mb": 138,
+ "overall": {
+  "n": 56,
+  "r1": 0.2143,
+  "r5": 0.4643,
+  "r10": 0.6429,
+  "mrr": 0.3202,
+  "ndcg": 0.1214
+ },
+ "candidate_recall_at_pool": 0.8036,
+ "reranked": {
+  "n": 56,
+  "r1": 0.2857,
+  "r5": 0.5179,
+  "r10": 0.625,
+  "mrr": 0.3718,
+  "ndcg": 0.1309
+ },
+ "rerank": {
+  "attempted": 56,
+  "succeeded": 56,
+  "poolSize": 50
+ },
+ "by_track": {
+  "text": {
+   "n": 37,
+   "r1": 0.1622,
+   "r5": 0.4054,
+   "r10": 0.6216,
+   "mrr": 0.2611,
+   "ndcg": 0.1092
+  },
+  "code": {
+   "n": 2,
+   "r1": 0,
+   "r5": 0,
+   "r10": 0,
+   "mrr": 0,
+   "ndcg": 0
+  },
+  "negative": {
+   "n": 17,
+   "r1": 0.3529,
+   "r5": 0.6471,
+   "r10": 0.7647,
+   "mrr": 0.4864,
+   "ndcg": 0.1622
+  }
+ },
+ "code_r10": 0.2222,
+ "cross_project_r10": null,
+ "perQuery": [
+  {
+   "query_id": "q0001",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0002",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.09109240322345806
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0003",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.13032376591037062
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0022",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 7,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.3543334123470583
+   }
+  },
+  {
+   "query_id": "q0023",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.13743816645714543
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0031",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.09109240322345806
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.13032376591037062
+   }
+  },
+  {
+   "query_id": "q0038",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 8,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.10633668103022985
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.3576223542196109
+   }
+  },
+  {
+   "query_id": "q0039",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 9,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.2521686779156779
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.11706259313796354
+   }
+  },
+  {
+   "query_id": "q0040",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 10,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.3936948167222715
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0053",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 9,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.07979453856244817
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.15958907712489634
+   }
+  },
+  {
+   "query_id": "q0054",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "embedMs": 7,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.4034698846650846
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0055",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.17342765698823945
+   }
+  },
+  {
+   "query_id": "q0058",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 9,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.10086747116627115
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.19092086617893467
+   }
+  },
+  {
+   "query_id": "q0063",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 10,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0069",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 11,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0073",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 10,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.10633668103022985
+   }
+  },
+  {
+   "query_id": "q0119",
+   "track": "code",
+   "categories": [
+    "code"
+   ],
+   "embedMs": 9,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0120",
+   "track": "code",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0138",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "embedMs": 8,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0139",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "embedMs": 8,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0346",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0347",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.08274602130532002
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0349",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.11706259313796354
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0356",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0365",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0369",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.07945707943276742
+   }
+  },
+  {
+   "query_id": "q0373",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.08671382849411972
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.08274602130532002
+   }
+  },
+  {
+   "query_id": "q0378",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0379",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0380",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.4034698846650846
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.41966500663677697
+   }
+  },
+  {
+   "query_id": "q0383",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0384",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0392",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.13743816645714543
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.08671382849411972
+   }
+  },
+  {
+   "query_id": "q0403",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0404",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 8,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0405",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0409",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 3,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0410",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 7,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.11706259313796354
+   }
+  },
+  {
+   "query_id": "q0426",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.3108658234453849
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.2558209594125084
+   }
+  },
+  {
+   "query_id": "q0427",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 11,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0469",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 12,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.0843142342558857
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.10893649261775588
+   }
+  },
+  {
+   "query_id": "q0470",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "embedMs": 7,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.15130120674940672
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.11706259313796354
+   }
+  },
+  {
+   "query_id": "q0472",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0473",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.09162544430476362
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0477",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0485",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.11838279295536291
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0492",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0499",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.07979453856244817
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.16989454721481587
+   }
+  },
+  {
+   "query_id": "q0500",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 8,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.09785159463516042
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.09785159463516042
+   }
+  },
+  {
+   "query_id": "q0510",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.13032376591037062
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.09109240322345806
+   }
+  },
+  {
+   "query_id": "q0511",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.09109240322345806
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.19092086617893467
+   }
+  },
+  {
+   "query_id": "q0626",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.17342765698823945
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.11838279295536291
+   }
+  },
+  {
+   "query_id": "q0627",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.19092086617893467
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0628",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 4,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.19092086617893467
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.09546043308946733
+   }
+  },
+  {
+   "query_id": "q0629",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 5,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0647",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "multilingual",
+    "semantic"
+   ],
+   "embedMs": 6,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  }
+ ]
+}

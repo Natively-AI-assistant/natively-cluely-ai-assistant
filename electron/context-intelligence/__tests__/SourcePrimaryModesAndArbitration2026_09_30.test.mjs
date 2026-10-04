@@ -172,7 +172,7 @@ describe('a degraded retrieval pass is observable (fallback flags no longer disc
   test('mode port: the retriever\'s degradedReason survives the seam; a clean pass carries none', async () => {
     const mk = (extra) => createModeRetrievalPort({
       modesManager: { retrieveHybridRaw: async () => ({ chunks: [{ sourceId: 'f1', fileName: 'a.md', text: 'The discount floor is 12%.', chunkIndex: 0 }], ...extra }) },
-      modeInfo: { id: 'm1' }, files: [{ id: 'f1', fileName: 'a.md', content: 'x' }], tokenBudget: 2400, userId: 'local',
+      modeInfo: { id: 'm1' }, files: [{ id: 'f1', fileName: 'a.md', content: 'x' }], tokenBudget: 2400, userId: 'local', wholeSmallCorpus: false,
     });
     assert.equal((await mk({ degradedReason: 'embedding_unavailable', usedFallback: true }).retrieve({ decision })).attempts[0].degraded, 'embedding_unavailable');
     assert.equal((await mk({}).retrieve({ decision })).attempts[0].degraded, undefined);

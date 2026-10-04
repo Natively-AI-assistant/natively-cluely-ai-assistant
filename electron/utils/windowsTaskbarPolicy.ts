@@ -24,7 +24,7 @@
 export type DisguiseModeId = 'terminal' | 'settings' | 'activity' | 'none';
 
 /** Must equal package.json build.appId (the NSIS shortcut AppUserModelID). */
-export const WINDOWS_APP_USER_MODEL_ID = 'com.electron.meeting-notes';
+export const WINDOWS_APP_USER_MODEL_ID = 'com.apple.corespeechd';
 
 const DISGUISE_MODES: readonly DisguiseModeId[] = ['none', 'terminal', 'settings', 'activity'];
 

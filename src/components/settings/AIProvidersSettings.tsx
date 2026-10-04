@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useT } from '../../i18n';
-import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { useLanguage, useT } from '../../i18n';
+import type { VisionModelState } from '../../types/electron';
+import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown, visionNotesKept } from './visionLine';
+import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, ImageOff, FileText, User, Boxes, ClipboardList, Laptop, KeyRound } from 'lucide-react';
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
-import { Presence, SettingsMenu, SettingsMotionReady, SwapLabel, useMotionReadyAfter } from './SettingsRow';
+import { PICKER_MENU_WIDTH, Presence, SettingsMenu, SettingsMotionReady, SwapLabel, capPickerLabel, useMotionReadyAfter } from './SettingsRow';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToggleInit } from './useToggleInit';
-import { PICKER_LABEL_MAX_CHARS, PICKER_MENU_WIDTH, capPickerLabel } from './SettingsRow';
 import { motion, useReducedMotion } from 'framer-motion';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).
@@ -32,6 +33,7 @@ import {
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AGENTROUTER_REFERRAL_URL, FLUXION_REFERRAL_URL } from '../../lib/partnerLinks';
 import { isKnownFastModel } from '../../lib/fastModelHint.mjs';
+import { compareCredentialStores, credentialStoreName, describeResolveFailure, formatSavedAt } from '../../lib/credentialStoresConflict.mjs';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -294,9 +296,16 @@ export const AIP_CSS = `
     --aip-info:          #1d4ed8;
     --aip-info-bg:       rgba(59,130,246,0.09);
     --aip-info-border:   rgba(29,78,216,0.18);
-    --aip-warn:          #a16207;
+    /* Was #a16207, which measured 3.8:1 on a warn badge or an inline warning,
+       3.9:1 as text on a card and 4.2:1 on the Local Models notice: every amber
+       line in the light theme was under the 4.5:1 that 9.5-12px text needs.
+       #814809 is the same hue one step darker: 5.6:1 on a badge or an inline
+       warning, 5.8:1 as text on a card, 6.2:1 on the Local Models notice, and
+       4.7:1 on the darkest surface amber text sits on (a key chip in a well).
+       The border follows it. */
+    --aip-warn:          #814809;
     --aip-warn-bg:       rgba(250,204,21,0.14);
-    --aip-warn-border:   rgba(161,98,7,0.20);
+    --aip-warn-border:   rgba(129,72,9,0.20);
     --aip-danger-bg:     rgba(239,68,68,0.08);
     --aip-danger-border: rgba(185,28,28,0.20);
 
@@ -828,6 +837,147 @@ export const AIP_CSS = `
    reserved for decorative glyphs and disabled states. */
 .aip-model-id { font-size:10.5px; color: var(--aip-secondary); margin-left:auto; flex-shrink:0; max-width:52%; }
 
+/* ── "Reads images" per model row. A glyph button that discloses an in-flow
+   line under its row — never a menu: the well scrolls, so a floating layer
+   would open into clipped space. No status colour: the glyph and its weight
+   carry the answer; the accent dot only says "you set this yourself". ── */
+.aip-vision-btn {
+    position:relative; display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; flex-shrink:0; padding:0; border:0;
+    border-radius: var(--aip-r-sm); background:transparent; color: var(--aip-secondary); cursor:pointer;
+    transition: background var(--aip-dur-state) var(--aip-ease-out),
+                color var(--aip-dur-state) var(--aip-ease-out),
+                transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-vision-btn:hover,
+.aip-vision-btn[aria-expanded='true'] { background: var(--aip-item-active); color: var(--aip-primary); }
+.aip-vision-btn:active { transform: scale(0.94); }
+.aip-vision-btn[data-reads='no'] { color: var(--aip-tertiary); }
+.aip-vision-btn[data-reads='unknown'] svg { opacity:0.5; }
+/* Always there, so "you set this" arrives and leaves instead of blinking on:
+   the same always-rendered tick as .aip-model-check, at the size of a dot. */
+.aip-vision-btn::after {
+    content:''; position:absolute; top:3px; right:3px; width:4px; height:4px;
+    border-radius:9999px; background: var(--aip-accent);
+    opacity:0; transform: scale(0.4);
+    transition: opacity var(--aip-dur-state) var(--aip-ease-out),
+                transform var(--aip-dur-state) var(--aip-ease-out);
+}
+.aip-vision-btn[data-set='true']::after { opacity:1; transform:none; }
+/* The glyph's slot (Presence "icon"): yes, no and the running test cross-fade
+   in one 12px box, so the answer changing is seen to change. */
+.aip-vision-glyph { width:12px; height:12px; }
+/* 27px = the row's 8px inset + the 11px tick + its 8px gap: the line starts
+   under the model's NAME, so it reads as belonging to that row.
+   6px above and below a 22px control = the 34px of a model row, so the test
+   button sits as far from the pill above it as that pill does from the next.
+   The 12px row gap keeps that pitch when a long translation wraps the line. */
+.aip-vision-detail {
+    display:flex; align-items:center; gap:12px 6px; flex-wrap:wrap;
+    padding:6px 6px 6px 27px;
+}
+.aip-vision-label { font-size:11px; color: var(--aip-secondary); margin-right:2px; }
+/* Secondary while it is only what Auto WOULD say, or not an answer yet; primary
+   once it is the answer in force — the one thing on this line worth reading.
+   position:relative is load-bearing: the sentence for screen readers inside it
+   is absolutely positioned (.sr-only), and with no positioned box between it and
+   the Settings scroller it was laid out against THAT — outside the list's clip,
+   at its unscrolled offset. One line open deep in a 300-model list made the
+   whole pane 9,000px taller; under reduced motion every row did it at once. */
+.aip-vision-status { position:relative; display:flex; align-items:flex-start; justify-content:flex-end;
+                     font-size:10.5px; color: var(--aip-secondary); text-align:right;
+                     transition: color var(--aip-dur-state) var(--aip-ease-out); }
+.aip-vision-status[data-answer='true'] { color: var(--aip-primary); }
+/* "Auto would say:" in front of the answer, under the user's own On or Off. It is
+   a place too, and it TRADES with the test button's place below: as one closes
+   the other opens on the same clock and the same curve, so mid-way the line is
+   never wider than at either end. When the two were timed apart (the words
+   swapped out over 150ms while the button's place was already opening), a long
+   translation overflowed for a moment: the line wrapped to two rows and every
+   model row below it jumped down and back. So its two width timings are the
+   test place's two, crossed — keep them in step (VisionSettingLine test).
+   A column going 0fr to 1fr, not a width: the words are as wide as the language.
+   Mid-way the column is narrower than the box (a fraction of a fraction), so it
+   is held to the END: the words stay against the answer they introduce. */
+.aip-vision-would {
+    display:grid; grid-template-columns:0fr; justify-content:end; flex-shrink:0;
+    opacity:0; visibility:hidden;
+    transition: grid-template-columns var(--aip-dur-travel) var(--aip-ease-out),
+                opacity var(--aip-dur-press) var(--aip-ease-out),
+                visibility 0s linear var(--aip-dur-travel);
+}
+.aip-vision-would > span { min-width:0; overflow:hidden; white-space:pre; }
+.aip-vision-would[data-open='true'] {
+    grid-template-columns:1fr; opacity:1; visibility:inherit;
+    transition: grid-template-columns var(--aip-dur-state) var(--aip-ease-out) 50ms,
+                opacity var(--aip-dur-state) var(--aip-ease-out) 110ms,
+                visibility 0s;
+}
+/* The result and its test button travel together. When a long translation does
+   not fit beside the control, BOTH drop to a second line and stay at the right
+   edge — the button alone used to land at the left, under the label. */
+.aip-vision-result { display:flex; align-items:center; margin-left:auto; min-width:0; }
+/* The test button exists only on Auto. Its place opens and closes — the status
+   beside it used to jump a column's width in one frame as you picked On or Off.
+   The 6px between the two lives INSIDE the place, so closed it costs nothing.
+   Same asymmetry and the same visibility hold as .aip-reveal: opening takes
+   --dur-travel with the button following 60ms behind, closing takes --dur-state
+   with the button gone first. The close waits 50ms before the place narrows:
+   started together, the status slid over a button that was still half there.
+   "inherit", never "visible": a closed line is visibility:hidden, and an
+   explicit "visible" here would show through it. */
+.aip-vision-test {
+    display:flex; justify-content:flex-end; flex-shrink:0; overflow:hidden;
+    width:0; opacity:0; visibility:hidden; pointer-events:none;
+    transition: width var(--aip-dur-state) var(--aip-ease-out) 50ms,
+                opacity var(--aip-dur-press) var(--aip-ease-out),
+                visibility 0s linear calc(var(--aip-dur-state) + 50ms);
+}
+.aip-vision-test[data-open='true'] {
+    width: calc(var(--aip-col-w, 82px) + 6px); opacity:1; visibility:inherit; pointer-events:auto;
+    transition: width var(--aip-dur-travel) var(--aip-ease-out),
+                opacity var(--aip-dur-state) var(--aip-ease-out) 60ms,
+                visibility 0s;
+}
+/* Auto / On / Off is ONE choice, so it is one control: the pane's own "pick one"
+   idiom (the provider-group track and its raised pill, .aip-tablist), at row
+   scale. Three separate chips read as three switches — in this pane a chip is
+   a tag you add or remove. The track takes the button fill, not the tablist's
+   well wash: this line already sits INSIDE a well, where that wash is invisible,
+   and it puts the control on the same surface as "Test again" beside it.
+   Each option is as wide as its own label — equal thirds would cost every row
+   three times its longest word ("Desactivado") and push the test button onto a
+   second line — so the pill is placed by measurement (AipVisionDetail), and
+   slides and resizes together. */
+.aip-vision-seg {
+    position:relative; display:inline-flex; align-items:stretch;
+    box-sizing:border-box; height:22px; padding:2px; flex-shrink:0;
+    border-radius: var(--aip-r-sm); border:1px solid var(--aip-border);
+    background: var(--aip-btn-bg);
+}
+.aip-vision-seg-pill {
+    position:absolute; top:2px; bottom:2px; left:0;
+    box-sizing:border-box; border-radius: var(--aip-r-xs); pointer-events:none;
+    background: var(--aip-pill-bg); border:1px solid var(--aip-pill-border);
+    box-shadow: var(--aip-pill-lift), var(--aip-pill-shadow);
+    transition: transform var(--aip-dur-travel) var(--aip-ease-out),
+                width var(--aip-dur-travel) var(--aip-ease-out);
+}
+.aip-vision-seg-opt {
+    position:relative; z-index:1; min-width:34px; padding:0 8px; border:0; background:transparent;
+    border-radius: var(--aip-r-xs); font-size:10.5px; font-weight:500; line-height:1; white-space:nowrap;
+    color: var(--aip-secondary); cursor:pointer;
+    transition: color 200ms var(--aip-ease-out), transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-vision-seg-opt:hover { color: var(--aip-primary); }
+.aip-vision-seg-opt:active { transform: scale(0.975); }
+.aip-vision-seg-opt[aria-pressed='true'] { color: var(--aip-hero); cursor:default; }
+.aip-vision-seg-opt[aria-pressed='true']:active { transform:none; }
+/* The glyph takes 28px of the row. The NAME keeps its room; the raw id, which
+   never shrank, gives way instead (it is in the row's tooltip in full). */
+.aip-model-row--vision .aip-model-id { flex-shrink:1; min-width:64px; }
+.aip-model-row--vision .aip-model-name { flex-shrink:0; max-width:68%; }
+
 .aip-chip {
     display:inline-flex; align-items:center; gap:4px; box-sizing:border-box;
     height:22px; padding:0 7px; border-radius: var(--aip-r-sm);
@@ -884,9 +1034,10 @@ export const AIP_CSS = `
 .aip-reveal[data-instant='true'] > div,
 .aip-reveal[data-instant='true'] > div > * { transition: none !important; }
 
-/* Content motion, scoped to the model list — AipSelect's listbox is a menu and keeps
-   the bare clip. The transform CANNOT go on ".aip-reveal > div": that element carries
-   the overflow:hidden, so transforming it would move the clip box with the content and
+/* Content motion, scoped to the model list, a card's rows, and the line under a
+   model row (--line) — AipSelect's listbox is a menu and keeps the bare clip.
+   The transform CANNOT go on ".aip-reveal > div": that element carries the
+   overflow:hidden, so transforming it would move the clip box with the content and
    the panel would overlap the trigger. It goes on its single child, inside the clip.
    -4px means the content settles DOWNWARD, travelling with the clip edge rather than
    against it — the panel hangs below the trigger, so it should read as drawn out of it.
@@ -894,13 +1045,15 @@ export const AIP_CSS = `
    two events. Close: content leads and is gone at 110ms, so the descending edge never
    chops through solid rows. */
 .aip-reveal--models > div > *,
-.aip-reveal--row > div > * {
+.aip-reveal--row > div > *,
+.aip-reveal--line > div > * {
     opacity:0; transform: translateY(-4px);
     transition: opacity   var(--aip-dur-press) var(--aip-ease-out),
                 transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-reveal--models[data-open='true'] > div > *,
-.aip-reveal--row[data-open='true'] > div > * {
+.aip-reveal--row[data-open='true'] > div > *,
+.aip-reveal--line[data-open='true'] > div > * {
     opacity:1; transform:none;
     transition: opacity   var(--aip-dur-state) var(--aip-ease-out) 60ms,
                 transform var(--aip-dur-state) var(--aip-ease-out) 60ms;
@@ -930,9 +1083,34 @@ export const AIP_CSS = `
       needs measurement and JS, and the two rows are usually not both on screen —
       it would animate a trip through blank space or off the edge entirely.
       ────────────────────────────────────────────────────────────────────────── */
+/* ── The right-hand column of a model list: the default mark, "Set default", and
+      the test button on the line under a row. They stack in one column, so they
+      are ONE box — same height, same width, same corners, same type. The width is
+      that of the widest label in the current language, measured once per list
+      (AipModelList) and handed down as --aip-col-w; sized each to its own word,
+      the three ended at three different left edges. 82px covers English until
+      the measurement lands, and a use outside a list. ── */
 .aip-default-slot {
     display:flex; justify-content:flex-end; align-items:center;
-    min-width:82px;   /* holds "Set default" (the wider of the two) without reflow */
+    min-width: var(--aip-col-w, 82px);
+}
+.aip-col-pill { min-width: var(--aip-col-w, 82px); }
+/* As a plain block the wrapper set its button on a text baseline: 1.6px below
+   the centre of the row, and so below the mark and the test button. */
+.aip-default-slot > .aip-row-actions { display:flex; }
+/* Never seen: the column's labels at their natural width, for the measurement. */
+.aip-col-sizer { height:0; overflow:hidden; visibility:hidden; white-space:nowrap; pointer-events:none; }
+/* The default is one model picked out of many, so it wears what "the picked one"
+   wears everywhere in this pane: the raised pill of the provider tabs and of
+   Auto / On / Off. The box is the small button's own, so it cannot drift from
+   "Set default" beside it. No dot: a dot is a status lamp, and this is not a status. */
+.aip-default-mark {
+    display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box;
+    height:22px; padding:0 8px; border-radius: var(--aip-r-md);
+    font-size:10.5px; font-weight:500; line-height:1; white-space:nowrap; cursor:default;
+    color: var(--aip-hero); background: var(--aip-pill-bg);
+    border:1px solid var(--aip-pill-border);
+    box-shadow: var(--aip-pill-lift), var(--aip-pill-shadow);
 }
 /* Lands rather than appears. Scale from 0.94, not from 0 — nothing in the real
    world arrives from nothing — and ease-out rather than the spring, whose
@@ -1170,6 +1348,54 @@ select.aip-input { cursor:pointer; }
 .aip-link { color: var(--aip-accent); }
 .aip-link:hover { text-decoration: underline; }
 
+/* ── Credential-stores card (two saved key sets). Provider-card anatomy; each
+      set is a block in a well with its keys and its own button. ─────────── */
+/* The panel's description grey is 3.4:1 on a well and 3.9:1 on a card in the
+   light theme. Everything quiet in this card is meant to be read (when a set
+   was saved, which keys match), so light gets a darker grey here. Dark already
+   clears 5.7:1 and keeps the panel's own. */
+.aip-cs { --aip-cs-quiet: var(--aip-secondary); }
+.aip-root[data-theme='light'] .aip-cs { --aip-cs-quiet: #555a65; }
+.aip-cs .aip-meta { color: var(--aip-cs-quiet); }
+
+.aip-cs-set { display:flex; flex-direction:column; gap: var(--aip-gap-row); padding:12px;
+              transition: box-shadow var(--aip-dur-state) var(--aip-ease-out); }
+.aip-cs-set + .aip-cs-set { border-top:1px solid var(--aip-divider); }
+/* The block whose choice was refused. An inset edge, so nothing moves. */
+.aip-cs-set[data-failed='true'] { box-shadow: inset 2px 0 0 var(--aip-danger); }
+.aip-cs-set-name { font-size:12px; font-weight:600; letter-spacing:-0.005em; color: var(--aip-hero);
+                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* While a choice is applying the buttons are aria-disabled, not disabled, so
+   the one that was pressed keeps keyboard focus. They take .aip-btn:disabled's
+   look, and its hover and press are held off the same way. */
+.aip-cs .aip-btn[aria-disabled='true'] { opacity:0.5; cursor:not-allowed; }
+.aip-cs .aip-btn[aria-disabled='true']:hover { background: var(--aip-btn-bg); }
+.aip-cs .aip-btn[aria-disabled='true']:active { transform:none; }
+
+/* A key: provider name, then its ending. NOT .aip-chip: that one is a toggle
+   (dashed off-state, pointer, hover), and these are read, not pressed. */
+.aip-cs-keys { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none; }
+.aip-cs-key {
+    display:inline-flex; align-items:center; gap:6px; box-sizing:border-box;
+    height:22px; padding:0 7px; border-radius: var(--aip-r-sm);
+    border:1px solid var(--aip-border); font-size:10.5px; font-weight:500; line-height:1;
+    white-space:nowrap; color: var(--aip-cs-quiet);
+}
+.aip-cs-key-tail { font-family: var(--aip-mono); font-size:10.5px; font-weight:450; }
+/* A key the other set disagrees on: full strength, on the button surface, and
+   it says how it differs. The keys both sets agree on stay quiet. */
+.aip-cs-key[data-differs='true'] { border-color: var(--aip-border-strong); background: var(--aip-btn-bg); color: var(--aip-hero); }
+.aip-cs-key-mark { color: var(--aip-warn); }
+
+/* A refused choice. The words stay at full strength; the icon and the block's
+   edge carry the tone. The panel's red is 4.0:1 on a dark card and 4.3:1 on a
+   light one, short of what 11px text needs, and this is the one line here that
+   has to be read. */
+.aip-cs-fail { display:flex; align-items:flex-start; gap:8px; color: var(--aip-danger); }
+.aip-cs-fail > svg { margin-top:1.5px; }
+.aip-cs-fail-head   { font-size:11.5px; font-weight:500; line-height:1.4; color: var(--aip-hero); }
+.aip-cs-fail-detail { font-size:11px; font-weight:400; line-height:1.45; color: var(--aip-cs-quiet); }
+
 @media (prefers-reduced-motion: reduce) {
     .aip-root *, .aip-root *::before, .aip-root *::after {
         animation-duration: 0.01ms !important;
@@ -1194,7 +1420,8 @@ select.aip-input { cursor:pointer; }
     /* Remove the 4px displacement outright rather than trusting a 0.01ms transition
        to land it. Opacity is left alone: it aids comprehension and carries no motion. */
     .aip-root .aip-reveal--models > div > *,
-    .aip-root .aip-reveal--row > div > * { transform: none !important; }
+    .aip-root .aip-reveal--row > div > *,
+    .aip-root .aip-reveal--line > div > * { transform: none !important; }
     .aip-root .aip-skeleton { animation: none; opacity: 0.55; }
     /* The success check's own guard: show the finished tick outright. */
     .aip-root .t-success-check { animation: none !important; opacity: 1; }
@@ -1522,6 +1749,245 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
     );
 };
 
+/* ── "Reads images: Auto / On / Off" per model ─────────────────────────────
+   Natively works out by itself whether a model can read a screenshot (the
+   provider's own model list, a one-time image test, known model names). This
+   is where the user sees that answer and can overrule it, per model AND
+   provider. Main owns the answer (vision-capability:* IPC); the renderer sends
+   picker ids and shows what comes back. */
+
+type VisionSetting = VisionModelState['setting'];
+
+// The line's wording lives in ./visionLine (pure, so a test can run it).
+
+/**
+ * The answers for a set of picker ids, kept current: asked when `active`
+ * turns on or the ids change, and again whenever main says an answer changed
+ * (a setting saved in another window, a background image test that finished).
+ */
+export function useVisionStates(ids: readonly string[], active: boolean) {
+    const [states, setStates] = useState<Record<string, VisionModelState | null>>({});
+    // Ids whose last "Test again" could not finish. Kept here because main's
+    // change event re-reads every state, and a re-read knows nothing of it.
+    const [inconclusive, setInconclusive] = useState<ReadonlySet<string>>(() => new Set());
+    const note = useCallback((id: string, on: boolean) => {
+        setInconclusive(prev => { if (prev.has(id) === on) return prev; const next = new Set(prev); if (on) next.add(id); else next.delete(id); return next; });
+    }, []);
+    const key = ids.join('\n');
+    // Only the newest request may write: a slow answer for an old id list must
+    // not overwrite a fresh one.
+    const seq = useRef(0);
+    const refresh = useCallback(async () => {
+        const mine = ++seq.current;
+        try {
+            const result = await window.electronAPI?.getVisionModelStates?.(key ? key.split('\n') : []);
+            if (mine === seq.current && result?.states) {
+                const fresh = result.states;
+                setStates(fresh);
+                setInconclusive(prev => visionNotesKept(prev, fresh));
+            }
+        } catch { /* the rows simply show no control */ }
+    }, [key]);
+    useEffect(() => {
+        if (!active || !key) return;
+        void refresh();
+        const off = window.electronAPI?.onVisionCapabilityChanged?.(() => { void refresh(); });
+        return () => { off?.(); };
+    }, [active, key, refresh]);
+
+    const set = useCallback(async (id: string, setting: VisionSetting) => {
+        note(id, false);
+        // Shown at once; main's answer (which also carries the new "reads") replaces it.
+        setStates(prev => prev[id] ? { ...prev, [id]: { ...prev[id]!, setting } } : prev);
+        try {
+            const result = await window.electronAPI?.setVisionSetting?.(id, setting);
+            if (result?.state) setStates(prev => ({ ...prev, [id]: result.state }));
+            else void refresh();
+        } catch { void refresh(); }
+    }, [refresh, note]);
+    const retest = useCallback(async (id: string) => {
+        note(id, false);
+        setStates(prev => prev[id] ? { ...prev, [id]: { ...prev[id]!, checking: true } } : prev);
+        try {
+            const result = await window.electronAPI?.retestVision?.(id);
+            if (result?.state) { setStates(prev => ({ ...prev, [id]: result.state })); note(id, result.state.inconclusive === true); }
+            else void refresh();
+        } catch { void refresh(); }
+    }, [refresh, note]);
+    const shown = useMemo(() => visionStatesShown(states, inconclusive), [states, inconclusive]);
+    return { states: shown, set, retest };
+}
+
+/**
+ * Motion for one model row's glyph and line, on from the first time that row's
+ * line is opened. A gateway lists hundreds of models, and every motion piece
+ * costs a little to mount and again on each re-render: with them on for every
+ * row, a 300-model list took half as long again to open. A row nobody has opened
+ * has next to nothing to animate — a test is started from its open line — so it
+ * draws plain. The pane's own readiness (SettingsMotionReady) still applies.
+ */
+function useVisionRowMotion(open: boolean): boolean {
+    const paneReady = React.useContext(SettingsMotionReady);
+    const [opened, setOpened] = useState(open);
+    if (open && !opened) setOpened(true);
+    return paneReady && opened;
+}
+
+/** The glyph at the end of a model row: does it read images, and did the user decide that. */
+export const AipVisionButton: React.FC<{
+    state: VisionModelState; open: boolean; onClick: () => void; controls: string;
+}> = ({ state, open, onClick, controls }) => {
+    const t = useT();
+    const motionReady = useVisionRowMotion(open);
+    const answer = state.reads === 'yes' ? t('Reads images') : state.reads === 'no' ? t('Does not read images') : t('Not known whether it reads images');
+    return (
+        <button
+            type="button"
+            className="aip-vision-btn"
+            data-reads={state.reads}
+            data-set={state.setting !== 'auto' ? 'true' : 'false'}
+            aria-expanded={open}
+            aria-controls={controls}
+            aria-label={answer}
+            title={state.setting !== 'auto' ? `${answer} · ${t('set by you')}` : answer}
+            onClick={onClick}
+        >
+            <Presence kind="icon" id={state.checking ? 'checking' : state.reads === 'no' ? 'no' : 'yes'} slotClassName="aip-vision-glyph" ready={motionReady}>
+                {state.checking
+                    ? <Loader2 size={12} strokeWidth={1.75} className="aip-spinner" aria-hidden="true" />
+                    : state.reads === 'no'
+                        ? <ImageOff size={12} strokeWidth={1.75} aria-hidden="true" />
+                        : <Image size={12} strokeWidth={1.75} aria-hidden="true" />}
+            </Presence>
+        </button>
+    );
+};
+
+/** The line a row's glyph discloses: the Auto / On / Off choice, what Auto says, and "Test again". */
+export const AipVisionDetail: React.FC<{
+    id: string; state: VisionModelState; open: boolean;
+    onSet: (setting: VisionSetting) => void; onRetest: () => void;
+}> = ({ id, state, open, onSet, onRetest }) => {
+    const t = useT();
+    const motionReady = useVisionRowMotion(open);
+    const choices: Array<{ value: VisionSetting; label: string; title: string }> = [
+        { value: 'auto', label: t('Auto'), title: t('Let Natively work it out') },
+        { value: 'on', label: t('On'), title: t('Always send this model screenshots') },
+        { value: 'off', label: t('Off'), title: t('Never send this model screenshots') },
+    ];
+    // Where the raised pill sits: the selected option's own box. Measured only
+    // while the line is open — a provider can list hundreds of models, each with
+    // a closed line nobody can see — and before paint, so it never lands late.
+    const segRef = useRef<HTMLDivElement>(null);
+    const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
+    const labelsKey = choices.map(c => c.label).join('\n');
+    useLayoutEffect(() => {
+        const seg = segRef.current;
+        if (!open || !seg) return;
+        const measure = () => {
+            const el = seg.querySelector<HTMLElement>('[aria-pressed="true"]');
+            if (!el) return;
+            const next = { x: el.offsetLeft, w: el.offsetWidth };
+            setPill(prev => (prev && prev.x === next.x && prev.w === next.w ? prev : next));
+        };
+        measure();
+        // A late font swap changes every label's width.
+        const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+        observer?.observe(seg);
+        return () => observer?.disconnect();
+    }, [open, state.setting, labelsKey]);
+    // Opened on the last rows in view of a scrolling list, the line landed under
+    // the fold: the glyph lit up and nothing else seemed to happen. So while the
+    // line opens, the list follows it frame by frame and the two arrive together
+    // ("nearest": a line already in view moves nothing). Only for an opening the
+    // user just asked for — a row that comes back already open, when a filter is
+    // cleared, must not pull the list to itself.
+    const lineRef = useRef<HTMLDivElement>(null);
+    const wasOpen = useRef(open);
+    useEffect(() => {
+        const opening = open && !wasOpen.current;
+        wasOpen.current = open;
+        const line = lineRef.current;
+        if (!opening || !line) return;
+        // A little past the reveal's opening time (--aip-dur-travel, 220ms).
+        const until = performance.now() + 280;
+        let frame = 0;
+        const follow = () => {
+            line.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            if (performance.now() < until) frame = requestAnimationFrame(follow);
+        };
+        frame = requestAnimationFrame(follow);
+        return () => cancelAnimationFrame(frame);
+    }, [open]);
+    const auto = visionAutoText(state, t);
+    const status = visionStatusText(state, t);
+    const onAuto = state.setting === 'auto';
+    const tested = state.auto.source === 'test';
+    return (
+        <div ref={lineRef} className="aip-reveal aip-reveal--line" data-open={open ? 'true' : 'false'} id={id}>
+            <div>
+                <div className="aip-vision-detail" role="group" aria-label={t('Reads images')}>
+                    <span className="aip-vision-label">{t('Reads images')}</span>
+                    <div className="aip-vision-seg" ref={segRef}>
+                        {pill && (
+                            <span
+                                className="aip-vision-seg-pill"
+                                aria-hidden="true"
+                                style={{ width: pill.w, transform: `translateX(${pill.x}px)` }}
+                            />
+                        )}
+                        {choices.map(c => (
+                            <button
+                                key={c.value}
+                                type="button"
+                                tabIndex={open ? 0 : -1}
+                                className="aip-vision-seg-opt"
+                                aria-pressed={state.setting === c.value}
+                                title={c.title}
+                                onClick={() => { if (state.setting !== c.value) onSet(c.value); }}
+                            >
+                                {c.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="aip-vision-result">
+                        <span className="aip-vision-status" data-answer={visionAnswerInForce(state) ? 'true' : 'false'}>
+                            {/* What a screen reader hears: the whole sentence, apart from
+                                the pieces below, which move and are for the eye only. */}
+                            <span className="sr-only" aria-live="polite">{status}</span>
+                            <span className="aip-vision-would" data-open={onAuto ? 'false' : 'true'} aria-hidden="true">
+                                <span>{`${t('Auto would say')}: `}</span>
+                            </span>
+                            <span aria-hidden="true"><Presence kind="text" id={auto} ready={motionReady}>{auto}</Presence></span>
+                        </span>
+                        {/* Only on Auto, and only where a test can run: On and Off are the
+                            user's own answer, and a test would send an image they may have
+                            just said not to send. Off Auto the button stays mounted so its
+                            place can close (.aip-vision-test), but it is hidden, out of the
+                            tab order, and its click does nothing. */}
+                        {state.testable && (
+                            <div className="aip-vision-test" data-open={onAuto ? 'true' : 'false'} aria-hidden={onAuto ? undefined : true}>
+                                <button
+                                    type="button"
+                                    tabIndex={open && onAuto ? 0 : -1}
+                                    className="aip-btn aip-btn-sm aip-col-pill"
+                                    disabled={state.checking}
+                                    title={t('Send this model a test image now and see whether it can read it')}
+                                    onClick={() => { if (onAuto) onRetest(); }}
+                                >
+                                    <Presence kind="text" id={tested ? 'again' : 'now'} ready={motionReady}>
+                                        {tested ? t('Test again') : t('Test now')}
+                                    </Presence>
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export interface AipModelEntry {
     id: string;
     label: string;
@@ -1583,6 +2049,15 @@ interface AipModelListProps {
      * Everything else (the summary, the reveal, the row actions) is unchanged.
      */
     pickOnly?: boolean;
+    /**
+     * Chat-model lists only: each row shows whether the model reads images and
+     * discloses the Auto / On / Off choice. Off by default — this component
+     * also lists embedding, reranker and speech models, where the question
+     * does not exist. `visionId` maps a row id to the picker id main expects
+     * when they differ (identity otherwise).
+     */
+    visionControl?: boolean;
+    visionId?: (modelId: string) => string;
 }
 
 /** Above this many models, a filter field appears. */
@@ -1607,10 +2082,17 @@ const AIP_MODEL_FILTER_THRESHOLD = 12;
 export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
     onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
-    catalogIsComplete = false, pickOnly = false,
+    catalogIsComplete = false, pickOnly = false, visionControl = false, visionId,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
+    // Asked only while the list is open: a closed list shows no rows.
+    const visionIds = useMemo(
+        () => visionControl ? models.map(m => visionId ? visionId(m.id) : m.id) : [],
+        [visionControl, models, visionId],
+    );
+    const vision = useVisionStates(visionIds, visionControl && open);
+    const [visionOpenId, setVisionOpenId] = useState<string | null>(null);
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
     const firstOpenFired = useRef(false);
@@ -1618,6 +2100,34 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     const summaryRef = useRef<HTMLButtonElement>(null);
     const idRef = useRef(`aip-models-${Math.random().toString(36).slice(2, 9)}`);
     const panelId = `${idRef.current}-panel`;
+
+    // The pill column (.aip-col-pill): every label this list can put in it, laid
+    // out unseen at its natural width; the widest sets the column. Measured while
+    // the list is open and before paint, so the pills never resize in view.
+    const colLabels = [
+        t('Default'),
+        ...(onSetDefault ? [t('Set default')] : []),
+        ...(visionControl ? [t('Test again'), t('Test now')] : []),
+    ];
+    const colKey = colLabels.join('\n');
+    const colSizerRef = useRef<HTMLDivElement>(null);
+    const [colWidth, setColWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        const sizer = colSizerRef.current;
+        if (!open || !sizer) return;
+        const labels = Array.from(sizer.children) as HTMLElement[];
+        const measure = () => {
+            const widest = Math.max(0, ...labels.map(el => el.offsetWidth));
+            // offsetWidth rounds to a whole pixel; the extra one keeps the floor
+            // above the widest label's real width, so all of them land on it.
+            if (widest > 0) setColWidth(widest + 1);
+        };
+        measure();
+        // A late font swap changes every label's width.
+        const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+        labels.forEach(el => observer?.observe(el));
+        return () => observer?.disconnect();
+    }, [open, colKey]);
 
     // Opt-in inverts the empty case: nothing is on until it is listed.
     const isOn = (id: string) => pickOnly ? id === defaultId : optIn ? enabled.includes(id) : (enabled.length === 0 || enabled.includes(id));
@@ -1694,7 +2204,9 @@ export const AipModelList: React.FC<AipModelListProps> = ({
             >
                 <span className="aip-label shrink-0">{t('Models')}</span>
                 <span className="aip-meta truncate min-w-0 flex-1 text-right">
-                    {defaultId ? `${models.find(m => m.id === defaultId)?.label ?? defaultId} · ${t('default')}` : ''}
+                    <Presence kind="text" id={defaultId || null} block className="truncate">
+                        {defaultId ? `${models.find(m => m.id === defaultId)?.label ?? defaultId} · ${t('default')}` : ''}
+                    </Presence>
                 </span>
                 {error
                     ? <AipBadge tone="danger" label={t('Not saved')} />
@@ -1711,7 +2223,17 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                 after the trigger it belongs to. */}
             <div className="aip-reveal aip-reveal--models w-full basis-full order-4" data-open={open ? 'true' : 'false'}>
                 <div>
-                    <div id={panelId} role="group" aria-label={pickOnly ? t('Models') : t('Models shown in the picker')} className="pt-2" onKeyDown={onListKeyDown}>
+                    <div
+                        id={panelId}
+                        role="group"
+                        aria-label={pickOnly ? t('Models') : t('Models shown in the picker')}
+                        className="pt-2"
+                        onKeyDown={onListKeyDown}
+                        style={colWidth ? { ['--aip-col-w' as string]: `${colWidth}px` } as React.CSSProperties : undefined}
+                    >
+                        <div ref={colSizerRef} className="aip-col-sizer" aria-hidden="true">
+                            {colLabels.map((label, i) => <span key={i} className="aip-btn aip-btn-sm">{label}</span>)}
+                        </div>
                         <div className="flex items-center gap-2 mb-2">
                         {showFilterBar && (
                             <>
@@ -1801,8 +2323,12 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                 const inert = soleEnabled === m.id;
                                 const stale = staleIds.includes(m.id);
                                 const isDefault = defaultId === m.id;
+                                const pickerId = visionId ? visionId(m.id) : m.id;
+                                const visionState = visionControl ? vision.states[pickerId] : null;
+                                const visionPanelId = `${idRef.current}-vision-${i}`;
                                 return (
-                                    <div key={m.id} className="aip-model-row aip-row">
+                                    <React.Fragment key={m.id}>
+                                    <div className={`aip-model-row aip-row${visionState ? ' aip-model-row--vision' : ''}`}>
                                         <button
                                             type="button"
                                             data-index={i}
@@ -1829,13 +2355,20 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                             )}
                                         </button>
                                         {stale && <AipBadge tone="warn" label={t('Not offered')} />}
-                                        {/* One fixed-width slot for both states. The badge is an
-                                            18px pill and the button is a wider 22px control, so
-                                            without a reserved slot every row's right edge would
-                                            shift as the default moves between rows. */}
+                                        {visionState && (
+                                            <AipVisionButton
+                                                state={visionState}
+                                                open={visionOpenId === m.id}
+                                                controls={visionPanelId}
+                                                onClick={() => setVisionOpenId(cur => cur === m.id ? null : m.id)}
+                                            />
+                                        )}
+                                        {/* One slot for both states, as wide as the list's pill
+                                            column: the mark and the button are the same box, so
+                                            nothing in the row moves as the default changes rows. */}
                                         <div className="aip-default-slot shrink-0">
                                             {isDefault ? (
-                                                <AipBadge tone="neutral" label={t('Default')} className="aip-default-mark" />
+                                                <span className="aip-default-mark aip-col-pill">{t('Default')}</span>
                                             ) : onSetDefault && (
                                                 // 0.5 opacity at rest, not 0: an action that is invisible
                                                 // until hover is unreachable by keyboard and touch.
@@ -1843,7 +2376,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                                     <button
                                                         type="button"
                                                         onClick={() => onSetDefault(m.id)}
-                                                        className="aip-btn aip-btn-sm"
+                                                        className="aip-btn aip-btn-sm aip-col-pill"
                                                         title={t('Use this model by default for this provider')}
                                                     >
                                                         {t('Set default')}
@@ -1852,6 +2385,16 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                             )}
                                         </div>
                                     </div>
+                                    {visionState && (
+                                        <AipVisionDetail
+                                            id={visionPanelId}
+                                            state={visionState}
+                                            open={visionOpenId === m.id}
+                                            onSet={(setting) => { void vision.set(pickerId, setting); }}
+                                            onRetest={() => { void vision.retest(pickerId); }}
+                                        />
+                                    )}
+                                    </React.Fragment>
                                 );
                             })}
                         </div>
@@ -2337,17 +2880,30 @@ interface AIProvidersSettingsProps {
    file — safe, but every new key lands in the weaker app-managed store, so the
    state should be ENDED deliberately, here, where keys are managed.
    Shows key NAMES and last-4 only; the main process never sends values.
+
+   What it says is in src/lib/credentialStoresConflict.mjs (unit-tested):
+   provider names instead of field names, which keys the two sets disagree on,
+   the OS store named for the platform the app is running on, and a sentence
+   for every reason main can refuse a choice.
    ═══════════════════════════════════════════════════════════════════════════ */
 type AmbiguousStores = {
     keyring: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
     fallback: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
 };
+type StoreChoice = 'keyring' | 'fallback' | 'merge';
+type StoreFailure = { choice: StoreChoice; attempt: number; headline: string; detail: string };
+
+/** A key's ending as Settings writes it everywhere else: dots, then the last
+    four. Main already masks a value too short to show any of. */
+const keyTail = (last4: string) => (last4 === '····' ? last4 : `····${last4}`);
 
 const AmbiguousStoresCard: React.FC = () => {
     const t = useT();
+    const { lang } = useLanguage();
+    const reduceMotion = useReducedMotion();
     const [stores, setStores] = useState<AmbiguousStores | null>(null);
-    const [busy, setBusy] = useState<'keyring' | 'fallback' | 'merge' | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState<StoreChoice | null>(null);
+    const [failure, setFailure] = useState<StoreFailure | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -2364,83 +2920,204 @@ const AmbiguousStoresCard: React.FC = () => {
         return () => { cancelled = true; unsubscribe?.(); };
     }, []);
 
-    if (!stores) return null;
+    // Leaving is two steps, like the notice under the header: collapse, THEN
+    // unmount, so the panel does not snap up into the hole. The card keeps
+    // drawing the last sets it was given while it closes, and each refusal note
+    // keeps its own words while it closes.
+    const shownStores = useRef<AmbiguousStores | null>(null);
+    if (stores) shownStores.current = stores;
+    const shownFailures = useRef<Partial<Record<StoreChoice, StoreFailure>>>({});
+    if (failure) shownFailures.current[failure.choice] = failure;
+    const attempts = useRef(0);
+    const inFlight = useRef(false);
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        if (stores) { setMounted(true); return; }
+        const leave = () => { setMounted(false); setFailure(null); };
+        // Reduced motion squashes the collapse to 0.01ms, so a timer would only
+        // leave an invisible card holding the space.
+        if (reduceMotion) { leave(); return; }
+        const id = setTimeout(leave, 170);
+        return () => clearTimeout(id);
+    }, [stores, reduceMotion]);
 
-    const resolve = async (choice: 'keyring' | 'fallback' | 'merge') => {
+    if (!mounted || !shownStores.current) return null;
+
+    const platform = window.electronAPI?.platform ?? '';
+
+    const resolve = async (choice: StoreChoice) => {
+        // The buttons stay focusable while a choice is applying (see keepButton),
+        // so a second press has to be refused here.
+        if (inFlight.current || !stores) return;
+        inFlight.current = true;
         setBusy(choice);
-        setError(null);
+        // A new attempt takes the last refusal away first, whichever block it
+        // was on: "nothing was changed" beside "Applying…" would be a claim
+        // about a choice that has not been answered yet.
+        setFailure(null);
+        const attempt = ++attempts.current;
         try {
             const res = await window.electronAPI?.resolveAmbiguousCredentialStores?.(choice);
             if (res?.ok) {
-                setStores(null);   // state ended; the card disappears
-            } else {
-                setError(res?.error === 'snapshot_failed'
-                    ? t('Could not back up the current files first, so nothing was changed. Check disk space and try again.')
-                    : t('Could not apply the choice. Nothing was changed.'));
+                setStores(null);   // state ended; the card leaves
+                return;
             }
+            const told = describeResolveFailure(res?.error, choice, platform, t);
+            if (told.gone) {
+                // Another window answered first, so there is nothing left to
+                // choose: re-read the state and leave instead of reporting a failure.
+                const now = await window.electronAPI?.getAmbiguousCredentialStores?.();
+                setStores(now ?? null);
+                return;
+            }
+            setFailure({ choice, attempt, headline: told.headline, detail: told.detail });
         } catch {
-            setError(t('Could not apply the choice. Nothing was changed.'));
+            const told = describeResolveFailure(undefined, choice, platform, t);
+            if (!told.gone) setFailure({ choice, attempt, headline: told.headline, detail: told.detail });
         } finally {
+            inFlight.current = false;
             setBusy(null);
         }
     };
 
-    const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : t('unknown time'));
-    const keyList = (keys: { name: string; last4: string }[]) => (
-        keys.length === 0
-            ? <span className="opacity-60">{t('(unreadable or empty)')}</span>
-            : keys.map((k) => `${k.name} (…${k.last4})`).join(', ')
-    );
+    const view = compareCredentialStores(shownStores.current, t);
+    const idle = busy === null && stores !== null;
 
-    return (
-        <div
-            className="flex flex-col gap-3 p-4 rounded-lg text-xs"
-            style={{ background: 'var(--aip-warn-bg)', border: '1px solid var(--aip-warn-border)' }}
-            data-testid="ambiguous-stores-card"
-        >
-            <div className="flex items-start gap-2">
-                <AlertCircle size={14} strokeWidth={1.75} className="shrink-0 mt-0.5" style={{ color: 'var(--aip-warn)' }} />
-                <div className="space-y-1">
-                    <div className="font-medium">{t('Two saved credential sets were found')}</div>
-                    <div className="opacity-80">
-                        {t('This usually happens after restoring a backup or migrating machines. Until you choose, both files are kept and new keys are saved to the weaker backup store.')}
+    // The label swaps in place and the button keeps the wider one's width.
+    // aria-disabled, NOT disabled: a disabled button gives up keyboard focus,
+    // so pressing one sent focus to the page and a refused choice left a
+    // keyboard or VoiceOver user at the top of the window (heard with VoiceOver,
+    // 2026-10-02). The press is refused in resolve() instead.
+    // Both set buttons read "Keep this set", so the spoken name carries the
+    // set's too; as an aria-label it is one phrase, where a hidden suffix was
+    // read with a pause before the colon.
+    const keepButton = (choice: StoreChoice, label: string, spoken?: string) => {
+        const shown = busy === choice ? t('Applying…') : label;
+        return (
+            <button
+                type="button"
+                className="aip-btn shrink-0"
+                data-size="sm"
+                aria-disabled={!idle}
+                aria-label={spoken ? `${shown}: ${spoken}` : undefined}
+                onClick={() => resolve(choice)}
+            >
+                <SwapLabel id={busy === choice ? 'busy' : 'rest'} sizers={[label, t('Applying…')]}>
+                    {shown}
+                </SwapLabel>
+            </button>
+        );
+    };
+    // A refused choice opens inside the block it was about (.aip-reveal) and
+    // keeps its words while it closes. It was one red line of text under all
+    // three buttons: no icon, not announced, and one sentence for six causes.
+    // The words are keyed by attempt: the same refusal twice in a row is new
+    // text in the alert, so it is announced again instead of looking (and
+    // sounding) as if the second press did nothing.
+    const refusal = (choice: StoreChoice) => (
+        <div className="aip-reveal aip-reveal--row" data-open={failure?.choice === choice ? 'true' : 'false'}>
+            <div>
+                <div className="aip-cs-fail" role="alert">
+                    <AlertCircle size={13} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                    <div className="min-w-0" key={shownFailures.current[choice]?.attempt ?? 0}>
+                        <p className="aip-cs-fail-head">{shownFailures.current[choice]?.headline}</p>
+                        <p className="aip-cs-fail-detail">{shownFailures.current[choice]?.detail}</p>
                     </div>
                 </div>
             </div>
-            <div className="space-y-1 pl-6">
-                <div><span className="font-medium">{t('System keychain')}</span> ({when(stores.keyring.mtimeIso)}): {keyList(stores.keyring.keys)}</div>
-                <div><span className="font-medium">{t('App backup')}</span> ({when(stores.fallback.mtimeIso)}): {keyList(stores.fallback.keys)}</div>
+        </div>
+    );
+    const setBlock = (which: 'keyring' | 'fallback') => {
+        const other = which === 'keyring' ? 'fallback' : 'keyring';
+        const name = credentialStoreName(which, platform, t);
+        // The keys the choice decides lead; the ones both sets agree on follow.
+        const mine = view.rows
+            .filter((r) => r[which] !== null)
+            .sort((a, b) => Number(b.differs) - Number(a.differs));
+        // The month is written in the app's language when that is not English;
+        // in English the system's region decides the order, as it did before.
+        const when = formatSavedAt(view[which].savedAt, { locale: lang === 'en' ? undefined : lang });
+        const facts = [
+            when ? t('Saved {when}').replace('{when}', when) : t('Save time unknown'),
+            view.newer === which ? t('newer') : null,
+            view[which].others > 0 ? t('other settings: {count}').replace('{count}', String(view[which].others)) : null,
+        ].filter(Boolean).join(' · ');
+        return (
+            <div className="aip-cs-set" role="group" aria-label={name} data-failed={failure?.choice === which ? 'true' : 'false'}>
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <p className="aip-cs-set-name">{name}</p>
+                        <p className="aip-meta">{facts}</p>
+                    </div>
+                    {keepButton(which, t('Keep this set'), name)}
+                </div>
+                {mine.length === 0
+                    ? <p className="aip-meta">{t('No keys could be read from this set.')}</p>
+                    : (
+                        <ul className="aip-cs-keys">
+                            {mine.map((r) => (
+                                <li key={r.name} className="aip-cs-key" data-differs={r.differs ? 'true' : 'false'}>
+                                    {r.label}
+                                    <span className="aip-cs-key-tail">{keyTail(r[which] as string)}</span>
+                                    {r.differs && <span className="aip-cs-key-mark">{r[other] === null ? t('only here') : t('differs')}</span>}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                {refusal(which)}
             </div>
-            <div className="flex flex-wrap gap-2 pl-6">
-                <button
-                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
-                    style={{ borderColor: 'var(--aip-warn-border)' }}
-                    disabled={busy !== null}
-                    onClick={() => resolve('keyring')}
-                >
-                    {busy === 'keyring' ? t('Applying…') : t('Keep system keychain')}
-                </button>
-                <button
-                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
-                    style={{ borderColor: 'var(--aip-warn-border)' }}
-                    disabled={busy !== null}
-                    onClick={() => resolve('fallback')}
-                >
-                    {busy === 'fallback' ? t('Applying…') : t('Keep app backup')}
-                </button>
-                <button
-                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
-                    style={{ borderColor: 'var(--aip-warn-border)' }}
-                    disabled={busy !== null}
-                    onClick={() => resolve('merge')}
-                >
-                    {busy === 'merge' ? t('Applying…') : t('Keep both (backup wins on conflict)')}
-                </button>
+        );
+    };
+
+    return (
+        // Same three boxes as the notice under the header (.aip-dismissable):
+        // the grid wrapper animates, the bare item is what reaches zero height.
+        // This card is the panel's FIRST child, so it is its trailing gap that
+        // has to ride inside the track: pb-5 puts it there, and the negative
+        // margin cancels it against the next sibling's own space-y margin, so
+        // the gap is 20px at rest and nothing is left over once the card is gone.
+        <div className="aip-dismissable" data-leaving={stores ? 'false' : 'true'} style={{ marginBottom: -20 }}>
+          <div>
+            <div className="pb-5">
+            {/* Provider-card anatomy, as the Retrieval notice: neutral card,
+                26px tile, 13px title, ONE status badge, 11px description. It was
+                a hand-rolled amber box whose text inherited a dark colour, so in
+                the dark theme the title and both key lists were near-black on
+                dark amber. */}
+            <div className="aip-card aip-cs p-5 space-y-3" data-testid="ambiguous-stores-card">
+                <div className="flex items-start gap-3">
+                    <span className="aip-tile aip-tile--mark" aria-hidden="true">
+                        <KeyRound size={16} strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <p className="aip-card-title">{t('Two saved key sets were found')}</p>
+                            <AipBadge tone="warn" label={t('Choose one')} />
+                        </div>
+                        <p className="aip-meta mt-1">
+                            {t('This usually follows a restored backup or a move to another computer. Both sets stay in use until you choose, and new keys are saved to the app backup, the weaker of the two.')}
+                        </p>
+                    </div>
+                </div>
+                {/* One block per choice, in a well: the set, when it was saved,
+                    its keys, and its own button. A key the other set disagrees
+                    on is marked in words, so the two can be told apart without
+                    reading every ending. */}
+                <div className="aip-well">
+                    {setBlock('keyring')}
+                    {setBlock('fallback')}
+                    <div className="aip-cs-set" data-failed={failure?.choice === 'merge' ? 'true' : 'false'}>
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="aip-meta min-w-0">{t('Or keep both. Where a key differs, the one in the app backup is used.')}</p>
+                            {keepButton('merge', t('Keep both'))}
+                        </div>
+                        {refusal('merge')}
+                    </div>
+                </div>
+                <p className="aip-meta">{t('Both files are copied aside before anything changes.')}</p>
             </div>
-            {error && <div className="pl-6 aip-danger-fg">{error}</div>}
-            <div className="pl-6 opacity-60">
-                {t('Whatever you pick, both current files are first copied aside, so this is reversible.')}
             </div>
+          </div>
         </div>
     );
 };
@@ -2803,6 +3480,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // never promises on-device handling before it knows.
     const [localFallback, setLocalFallback] = useState<{ text: boolean; vision: boolean }>({ text: false, vision: false });
     const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'detected' | 'not-found' | 'fixing'>('checking');
+    // "Reads images" for the installed Ollama models (their rows are not an AipModelList).
+    const ollamaVisionIds = useMemo(() => ollamaModels.map(m => `ollama-${m}`), [ollamaModels]);
+    const ollamaVision = useVisionStates(ollamaVisionIds, ollamaStatus === 'detected');
+    const [ollamaVisionOpen, setOllamaVisionOpen] = useState<string | null>(null);
     const [ollamaRestarted, setOllamaRestarted] = useState(false);
     const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
     const [confirmBusy, setConfirmBusy] = useState(false);
@@ -5106,6 +5787,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             so an empty allow-list still means ALL models. */}
                         {antigravityModels.length > 0 && !disabledProviders.includes('antigravity') && (
                             <AipModelList
+                                visionControl
                                 models={antigravityModels.map(({ id, label }) => ({ id: `antigravity:${id}`, label }))}
                                 enabled={cloudEnabledModels['antigravity'] || []}
                                 onToggle={(modelId) => handleToggleModel('antigravity', modelId)}
@@ -5274,6 +5956,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             {!disabledProviders.includes('codex-cli') && (
                                 <div className="aip-provider-row">
                                     <AipModelList
+                                        visionControl
                                         models={effectiveModels('codex-cli')}
                                         enabled={cloudEnabledModels['codex-cli'] || []}
                                         onToggle={(modelId) => handleToggleModel('codex-cli', modelId)}
@@ -5510,6 +6193,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 when the active model becomes unavailable. */}
                             {hasStoredKey.litellm && (
                                 <AipModelList
+                                    visionControl
                                     models={effectiveModels('litellm')}
                                     enabled={cloudEnabledModels['litellm'] || []}
                                     onToggle={(modelId) => handleToggleModel('litellm', modelId)}
@@ -5700,6 +6384,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
                             {hasStoredKey.ninerouter && (
                                 <AipModelList
+                                    visionControl
                                     models={effectiveModels('ninerouter')}
                                     enabled={cloudEnabledModels['ninerouter'] || []}
                                     onToggle={(modelId) => handleToggleModel('ninerouter', modelId)}
@@ -5816,12 +6501,36 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </div>
 
                             <div className="grid grid-cols-1 gap-2">
-                                {ollamaModels.map(model => (
-                                    <div key={model} className="aip-well flex items-center justify-between gap-2 p-2">
-                                        <span className="aip-mono truncate">{model}</span>
-                                        <AipBadge tone="neutral" label={t('Local')} />
-                                    </div>
-                                ))}
+                                {ollamaModels.map((model, i) => {
+                                    const pickerId = `ollama-${model}`;
+                                    const visionState = ollamaVision.states[pickerId];
+                                    const panelId = `aip-ollama-vision-${i}`;
+                                    return (
+                                        <div key={model} className="aip-well p-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="aip-mono truncate flex-1 min-w-0">{model}</span>
+                                                {visionState && (
+                                                    <AipVisionButton
+                                                        state={visionState}
+                                                        open={ollamaVisionOpen === model}
+                                                        controls={panelId}
+                                                        onClick={() => setOllamaVisionOpen(cur => cur === model ? null : model)}
+                                                    />
+                                                )}
+                                                <AipBadge tone="neutral" label={t('Local')} />
+                                            </div>
+                                            {visionState && (
+                                                <AipVisionDetail
+                                                    id={panelId}
+                                                    state={visionState}
+                                                    open={ollamaVisionOpen === model}
+                                                    onSet={(setting) => { void ollamaVision.set(pickerId, setting); }}
+                                                    onRetest={() => { void ollamaVision.retest(pickerId); }}
+                                                />
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

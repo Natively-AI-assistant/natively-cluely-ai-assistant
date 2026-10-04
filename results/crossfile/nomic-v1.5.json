@@ -1,0 +1,23 @@
+{
+  "model_id": "nomic-v1.5",
+  "dimensions": 768,
+  "index": "natively_refs__nomic-v1.5__768d__v1.sqlite",
+  "n": 74,
+  "perK": {
+    "10": {
+      "anyFile": 0.5135,
+      "allFiles": 0.1216,
+      "fileRecall": 0.3029
+    },
+    "20": {
+      "anyFile": 0.6486,
+      "allFiles": 0.1622,
+      "fileRecall": 0.411
+    },
+    "50": {
+      "anyFile": 0.7838,
+      "allFiles": 0.3649,
+      "fileRecall": 0.5766
+    }
+  }
+}

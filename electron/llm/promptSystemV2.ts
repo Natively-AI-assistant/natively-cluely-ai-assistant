@@ -38,6 +38,12 @@ import {
 import { codingFormatDirective, type ExplicitCodingContract } from './codingFollowup';
 import { USER_INSTRUCTIONS_MAX_CHARS, analyzeUserInstructions, removeGroundingOverrides, renderResolvedInstructionLines } from './userInstructionContract';
 import type { CodingTaskKind } from './codingPromptSignals';
+// Type-only on purpose. LLMHelper imports this module statically, and two test
+// suites compile LLMHelper's import graph file by file with tsc — a tree in
+// which a `.mjs` module that has a `.d.mts` sibling is resolved as types and
+// never emitted. The contract text is therefore required at the point of use
+// (diagramContractBlock); esbuild bundles that require like any other.
+import type { DiagramPromptSignals } from '../../src/lib/diagram/diagramContract.mjs';
 import type { ModeTemplateType } from './modeProfiles';
 
 // ==========================================
@@ -115,6 +121,13 @@ export interface BuildSystemPromptV2Input {
      *  Unset keeps the pre-surface text byte-for-byte for callers that never
      *  declared one. `chatSurface: true` is the old spelling of 'chat'. */
     surface?: PromptSurfaceV2;
+    /** SEMANTIC diagram activation (2026-10-01): the turn asks for a system
+     *  design or a diagram (diagramPromptSignals.ts). Attaches the diagram
+     *  contract in ANY mode and on any answer-shaped action — the mode owns
+     *  voice and sources, never whether a design question gets its diagram.
+     *  Bounded enums and example ids only: the design's Mermaid source is
+     *  per-turn text and rides the turn content, not this prompt. */
+    diagram?: DiagramPromptSignals | null;
 }
 
 export type PromptSurfaceV2 = 'live' | 'chat';
@@ -368,11 +381,11 @@ You advise the interviewer in third person. Never answer as the candidate. You a
 
 When the CANDIDATE asks the interviewer something (the role, team, pay, benefits, process, company, next steps), write the interviewer's own first-person reply, ready to say: only what the role material or conversation states, and for anything it does not state, what the interviewer will confirm and when, never a typical answer. Never turn the candidate's question into a probe. Output only the words or the note itself: never open by describing what the candidate asked or what you are about to do.
 
-After a candidate answer, lead with the exact probe the interviewer should ask next, word for word, ready to say. Put at most one short observation before it, and only when it changes what to ask. Two to four sentences total — never an analysis paragraph, a list of risks, or a report. When asked for a hiring signal, use one of Strong Yes, Lean Yes, Lean No, or Strong No, followed by the best evidence and the largest gap. A résumé omission is "not evidenced," not proof that the candidate lacks the skill. Name contradictions and probe them neutrally.
+After a candidate answer, give the exact probe the interviewer should ask next, word for word, ready to say. Only when the interviewer asks you privately may one short observation come before it, and only when it changes what to ask. Two to four sentences total — never an analysis paragraph, a list of risks, or a report. When asked for a hiring signal, use one of Strong Yes, Lean Yes, Lean No, or Strong No, followed by the best evidence and the largest gap. A résumé omission is "not evidenced," not proof that the candidate lacks the skill. Name contradictions and probe them neutrally.
 </active_mode>`,
 
     'team-meet': `<active_mode name="team_meet">
-Choose between response and capture. If the user is directly addressed, write a natural first person reply with current status, next step, and any real blocker. Never invent status.
+Choose between response and capture. If the user is directly addressed, write a natural first person reply with current status, next step, and any real blocker. Never invent status. When the answer depends on something you were not given (what was agreed, who owns it, a date), speak like a colleague who simply does not remember it: ask the one question that settles it or propose the quick check, in the same breath ("Can we check Monday's notes before we treat that as a freeze?"). Never describe what you have, lack or can see ("in front of me", "I don't have a record", "I can't confirm"), and when asked for your view, give a clearly conditional one rather than none.
 
 If a decision, action, or risk is stated, capture only what is explicit. Use separate plain lines in these shapes, with no bullet characters:
 Action: [owner or owner unclear] will [task] [deadline if stated]
@@ -397,7 +410,7 @@ You are the presenter's voice during questions about uploaded slides, a paper, t
 </active_mode>`,
 
     'call-center': `<active_mode name="call_center">
-You are the support agent's voice on a live customer call. Output what the agent should say next, in first person: acknowledge the customer's actual issue, then the next diagnostic question or the concrete fix. One diagnostic question at a time, most likely cause first. Ground product facts in the provided context; when a fact is missing, say what you will check and confirm rather than guessing. Never promise a refund, credit, timeline, or product change the context does not authorize, and never pitch upgrades — this is support, not sales. Identity checks, refunds, credits, resets and escalation follow only the procedure the context states; without one, say you will check the right process rather than describing a typical one. If the issue cannot be resolved on this call, say so plainly and offer to escalate, naming tiers, teams or callback times only when the context states them.
+You are the support agent's voice on a live customer call. Output what the agent should say next, in first person: acknowledge the customer's actual issue, then the next diagnostic question or the concrete fix. One diagnostic question at a time, most likely cause first. Ground product facts in the provided context; when a fact is missing, say what you will check and confirm rather than guessing. Never promise a refund, credit, timeline, or product change the context does not authorize, and never pitch upgrades — this is support, not sales. Identity checks, refunds, credits, resets and escalation follow only the procedure the context states; without one, say you will check the right process rather than describing a typical one. When the customer asks for something the procedure gates behind verification or approval (a refund, a credit, an account change), answer the ask in the same reply: say what the context's rule for it is in general terms (the window, the limit, the condition, who must approve), then ask for exactly what the procedure needs to act on it. Asking to verify again without saying the rule leaves the customer without an answer; stating the rule is not a promise that it applies to them. If the issue cannot be resolved on this call, say so plainly and offer to escalate, naming tiers, teams or callback times only when the context states them.
 </active_mode>`,
 
     custom: `<active_mode name="custom">
@@ -526,7 +539,17 @@ const INFORMATIONAL_ACTIONS: ReadonlySet<PromptSystemV2Action> = new Set([
 
 /** Targeted overlays for the (mode, action) collisions the benchmark measured. */
 function voiceOverlay(mode: PromptSystemV2Mode, action: PromptSystemV2Action): string {
-    if (mode === 'recruiting' && (action === 'what_to_say' || action === 'answer' || action === 'assist')) {
+    // The hotkey (what_to_say) is read ALOUD to the candidate (2026-09-30).
+    // Measured on the dev set: after a candidate answer, 18 of 66 replayed
+    // hotkey probes carried coaching for the recruiter around the words
+    // ("Good, concrete answer. Push on his ownership…", "Try: \"…\" Then stay
+    // quiet", "So ask: \"…\""), which the recruiter must strip before speaking.
+    // Spoken words only here: 2 of 66. A typed/private ask keeps the advisor
+    // overlay below, where an observation is what was asked for.
+    if (mode === 'recruiting' && action === 'what_to_say') {
+        return 'In this mode, "what to say" means the INTERVIEWER\'s next spoken words and nothing else: the interviewer reads your output aloud to the candidate. When the candidate just asked the interviewer a question, give the interviewer\'s own first-person reply (grounded only in the role material or conversation; for anything not stated, what they will confirm). Otherwise give the next probe itself, addressed to the candidate the way the interviewer would say it ("Take the rollout you mentioned. Which part of it did you own yourself?"). When the candidate\'s claim conflicts with the material, put the discrepancy into the question ("Your résumé says six weeks for that migration. Help me square that with the three months you just mentioned."). No verdict or remark about the candidate\'s answer, no instruction to the interviewer ("Ask them", "Try:", "Push on", "Then stay quiet"), no quotation marks. One to three spoken sentences. Never write a first-person answer on the candidate\'s behalf.';
+    }
+    if (mode === 'recruiting' && (action === 'answer' || action === 'assist')) {
         return 'In this mode, "what to say" means words for the INTERVIEWER. When the candidate just asked the interviewer a question, give the interviewer\'s own first-person reply to it (grounded only in the role material or conversation; what they will confirm when it is not stated). Otherwise lead with the exact probe the interviewer should ask next, ready to say word for word, with at most one short observation before it (when the conversation supports one). Keep it to two to four spoken sentences — a whisper between turns, never an assessment write-up. Never write a first-person answer on the candidate\'s behalf.';
     }
     if (action === 'clarify') {
@@ -838,6 +861,30 @@ function chatLayoutBlock(input: BuildSystemPromptV2Input, tier: PromptTierV2): s
     return tier === 'local' ? CHAT_LAYOUT_TINY : CHAT_LAYOUT;
 }
 
+// Actions whose output is not an answer to the turn's question. A diagram
+// contract on these would put a Mermaid block into a title or a JSON summary.
+const NO_DIAGRAM_ACTIONS: ReadonlySet<PromptSystemV2Action> = new Set([
+    'title', 'summary_json', 'followup_email', 'follow_up_questions', 'clarify',
+]);
+
+// System-design diagram contract (2026-10-01). One shared text
+// (src/lib/diagram/diagramContract.mjs) for every surface, selected by the
+// routed signals. Semantic activation only, exactly like the coding contract:
+// no mode attaches it on its own, and no mode can remove it.
+function diagramContractBlock(input: BuildSystemPromptV2Input, tier: PromptTierV2): string {
+    if (!input.diagram || NO_DIAGRAM_ACTIONS.has(input.action)) return '';
+    try {
+        const { renderDiagramContract } = require('../../src/lib/diagram/diagramContract.mjs') as typeof import('../../src/lib/diagram/diagramContract.mjs');
+        return renderDiagramContract(input.diagram, {
+            tier,
+            surface: resolvePromptSurfaceV2(input) === 'chat' ? 'chat' : 'live',
+        });
+    } catch {
+        // buildSystemPromptV2 never throws. Unreachable in the bundled app.
+        return '';
+    }
+}
+
 // ==========================================
 // System prompt composition
 // ==========================================
@@ -868,6 +915,8 @@ export interface V2PromptDescriptor {
     chatSurface?: boolean;
     /** Declared surface carried through for the same reason. */
     surface?: PromptSurfaceV2;
+    /** Diagram signals carried through for the same reason. */
+    diagram?: DiagramPromptSignals;
 }
 
 const V2_REGISTRY_MAX = 512;
@@ -934,6 +983,14 @@ export function buildSystemPromptV2(input: BuildSystemPromptV2Input): string {
     const chatLayout = chatLayoutBlock({ ...input, mode, action }, tier);
     if (chatLayout) parts.push(chatLayout);
 
+    // Diagram contract AFTER the coding contract and the chat layout: it states
+    // its own precedence over default shapes and length limits, and recency
+    // keeps the layout's "under 120 words" from being read as a cap on the
+    // Mermaid block. A mixed design-plus-code turn carries both contracts; the
+    // diagram one says where the code goes.
+    const diagram = diagramContractBlock({ ...input, mode, action }, tier);
+    if (diagram) parts.push(diagram);
+
     // Rendered for ANY mode (originally custom-only): production built-in modes
     // also carry user-authored pinned instructions (ModesManager customContext,
     // the "Real-time prompt"), and with the v2 turn envelope replacing the
@@ -970,6 +1027,7 @@ export function buildSystemPromptV2(input: BuildSystemPromptV2Input): string {
         suppliedTemplate: input.suppliedTemplate || undefined,
         chatSurface: input.chatSurface || undefined,
         surface: input.surface,
+        diagram: diagram ? (input.diagram ?? undefined) : undefined,
     });
     return prompt;
 }
@@ -1292,6 +1350,8 @@ export interface ResolveActionPromptInput {
     chatSurface?: boolean;
     /** Where the answer is used — see BuildSystemPromptV2Input.surface. */
     surface?: PromptSurfaceV2;
+    /** Diagram signals — see BuildSystemPromptV2Input.diagram. */
+    diagram?: DiagramPromptSignals | null;
 }
 
 /**
@@ -1324,6 +1384,7 @@ export function resolveV2SystemPrompt(input: ResolveActionPromptInput): string |
             suppliedTemplate: input.suppliedTemplate,
             chatSurface: input.chatSurface,
             surface: input.surface,
+            diagram: input.diagram,
         });
     } catch {
         return null;

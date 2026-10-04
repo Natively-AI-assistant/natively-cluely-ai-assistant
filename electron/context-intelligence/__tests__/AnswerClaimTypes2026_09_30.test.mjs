@@ -129,7 +129,8 @@ describe('heard commitment questions get the notice next to the question', () =>
 
 describe('background and familiarity questions count as experience', () => {
   for (const q of ['How long have you been doing this?', "What's your background, were you ever an engineer yourself?", 'Are you familiar with the HVAC space?', 'Tell me about your background.']) {
-    test(q, () => assert.match(composer.personalCommitmentNotice(q, 'sales', true), /asks whether the user has done something|asks for the user's own preference/));
+    // Any of the no-invention notices (2026-09-30: the personal-life notice now takes the user's own background and tenure).
+    test(q, () => assert.match(composer.personalCommitmentNotice(q, 'sales', true), /asks whether the user has done something|asks for the user's own preference|asks about the user's own life/));
   }
   test('an ordinary product question does not', () => {
     assert.equal(composer.personalCommitmentNotice('How long does onboarding usually take?', 'sales', true), '');

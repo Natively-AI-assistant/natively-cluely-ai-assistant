@@ -779,6 +779,34 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       }
       .content .codeblock pre::-webkit-scrollbar { display: none; }
       .content .codeblock.streaming .codeblock-head { color: #95aff6; }
+      /* A diagram: the desktop's drawing as an image, on a light card in both
+         themes (it is drawn with a light palette), with its source underneath. */
+      .content .diagram { margin: 10px 0 12px; }
+      .content .diagram-view {
+        border-radius: var(--r-md);
+        background: #ffffff;
+        box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+        padding: 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        text-align: center;
+      }
+      .content .diagram-img { display: inline-block; max-width: 100%; height: auto; vertical-align: top; }
+      .content .diagram.is-wide .diagram-img { max-width: none; }
+      .content .diagram-note { color: #4b5563; font-size: var(--type-caption); padding: 10px 4px; }
+      .content .diagram-source { margin-top: 6px; }
+      .content .diagram-source > summary {
+        color: var(--label-2);
+        font-size: var(--type-caption);
+        padding: 4px 2px;
+        cursor: pointer;
+        list-style: none;
+      }
+      .content .diagram-source > summary::-webkit-details-marker { display: none; }
+      .content .diagram-source[open] > summary { margin-bottom: 2px; }
+      /* What sits under a chart: its values, assumptions and sources. */
+      .content .diagram-notes { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; opacity: 0.85; }
+      .content .diagram-notes li { margin: 2px 0; }
       .content pre .hl-c { color: #6b7d99; font-style: italic; }
       .content pre .hl-s { color: #a3e9b6; }
       .content pre .hl-k { color: #c8a8ff; }
@@ -1289,7 +1317,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
 
       <header class="bar" id="bar">
         <div class="brand">
-          <img alt="" src="data:image/png;base64,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" />
+          <img alt="" src="data:image/png;base64,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" />
           <span class="brand-name">Natively</span>
         </div>
         <div class="conn" id="conn" role="status" aria-live="polite">
@@ -2005,6 +2033,43 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         }
         // Desktop-rendered code blocks arrive plain; highlight them here with
         // the page's own highlighter, once.
+        // Diagrams the desktop finished drawing after their answer arrived
+        // (the 'diagram' event), by key. Applied to any figure still waiting,
+        // now and whenever an answer body is re-rendered. The picture is only
+        // ever set as an image source, and only from an SVG data URL.
+        var diagramImages = {};
+        function applyDiagrams(scope) {
+          Array.prototype.forEach.call(scope.querySelectorAll('figure.diagram[data-diagram]'), function (fig) {
+            var key = fig.getAttribute('data-diagram') || '';
+            if (!Object.prototype.hasOwnProperty.call(diagramImages, key)) return;
+            var view = fig.querySelector('.diagram-view');
+            if (!view || fig.classList.contains('is-ready')) return;
+            var src = diagramImages[key];
+            view.textContent = '';
+            fig.classList.remove('is-pending');
+            if (src) {
+              var img = document.createElement('img');
+              img.className = 'diagram-img';
+              img.alt = fig.getAttribute('data-label') || 'Diagram';
+              img.src = src;
+              view.appendChild(img);
+              fig.classList.remove('is-failed');
+              fig.classList.add('is-ready');
+            } else {
+              view.appendChild(el('div', 'diagram-note', 'This diagram could not be drawn here. Its source is below.'));
+              fig.classList.add('is-failed');
+              var details = fig.querySelector('details');
+              if (details) details.open = true;
+            }
+          });
+        }
+        function onDiagram(ev) {
+          var key = String(ev.key || '');
+          if (!key) return;
+          var src = typeof ev.src === 'string' && ev.src.indexOf('data:image/svg+xml;charset=utf-8,') === 0 ? ev.src : '';
+          diagramImages[key] = src;
+          applyDiagrams(document);
+        }
         function enhanceCode(scope) {
           Array.prototype.forEach.call(scope.querySelectorAll('.codeblock'), function (block) {
             var code = block.querySelector('pre code');
@@ -2086,6 +2151,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           }
           body.innerHTML = html;
           enhanceCode(body);
+          applyDiagrams(body);
           if (streaming) {
             // Put the caret at the end of the last line of text. Appended to
             // the body it sat on a line of its own below the paragraph. A code
@@ -2691,6 +2757,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             case 'user': onUser(ev); break;
             case 'token': onToken(String(ev.streamId), String(ev.token || '')); break;
             case 'render': onRender(ev); break;
+            case 'diagram': onDiagram(ev); break;
             case 'done': onDone(ev); break;
             case 'error': onStreamError(ev); break;
             case 'assistant': onAssistant(ev); break;

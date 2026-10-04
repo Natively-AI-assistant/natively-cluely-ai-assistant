@@ -1,0 +1,23 @@
+{
+  "model_id": "arctic-m",
+  "dimensions": 768,
+  "index": "natively_refs__arctic-m__768d__v1.sqlite",
+  "n": 74,
+  "perK": {
+    "10": {
+      "anyFile": 0.5135,
+      "allFiles": 0.1622,
+      "fileRecall": 0.33
+    },
+    "20": {
+      "anyFile": 0.6892,
+      "allFiles": 0.2432,
+      "fileRecall": 0.4651
+    },
+    "50": {
+      "anyFile": 0.8243,
+      "allFiles": 0.4054,
+      "fileRecall": 0.6137
+    }
+  }
+}

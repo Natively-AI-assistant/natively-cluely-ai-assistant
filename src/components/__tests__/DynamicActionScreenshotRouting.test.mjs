@@ -92,6 +92,8 @@ function createHarness({
   let messages = [];
   let messageId = 0;
   let captureCalls = 0;
+  let diagramWarmCalls = 0;
+  const diagramRequestAtRef = { current: null };
   const activeActions = new Set(initialBusy ? ['what_to_say'] : []);
   const generateCalls = [];
   const directCalls = [];
@@ -122,6 +124,9 @@ function createHarness({
     pendingCaptureRef,
     dynamicActionAcceptInFlightRef,
     directAssistEnabled,
+    diagramRequestAtRef,
+    performance: { now: () => 123 },
+    warmDiagramRendererOnIdle: () => { diagramWarmCalls += 1; },
     actionNeedsScreenCapture,
     appendScreenshotAttachment,
     mergePendingScreenshotAttachment,
@@ -204,12 +209,32 @@ function createHarness({
     directCalls,
     screenStatuses,
     consoleErrors,
+    diagramRequestAtRef,
+    get diagramWarmCalls() { return diagramWarmCalls; },
     get captureCalls() { return captureCalls; },
     get messages() { return messages; },
     get attachments() { return attachedState; },
     removeAttachments() { handlers.setAttachedContext([]); },
   };
 }
+
+test('accepted manual and screenshot actions retain diagram timing and warmup', async () => {
+  const harness = createHarness({
+    takeScreenshot: async () => ({ path: '/tmp/diagram.png', preview: 'diagram' }),
+  });
+  await harness.handlers.handleWhatToSay();
+  assert.equal(harness.diagramRequestAtRef.current, 123);
+  assert.equal(harness.diagramWarmCalls, 1);
+
+  await harness.handlers.handleDynamicActionAccept({ requiresScreen: true });
+  assert.equal(harness.diagramWarmCalls, 2);
+  assert.deepEqual(harness.generateCalls[1][1], ['/tmp/diagram.png']);
+
+  harness.activeActions.add('what_to_say');
+  assert.equal(await harness.handlers.handleDynamicActionAccept({ requiresScreen: true }), false);
+  assert.equal(harness.diagramWarmCalls, 2);
+  assert.equal(harness.captureCalls, 1);
+});
 
 function createBarHarness(onAcceptAction) {
   const path = resolve(here, '../dynamic-actions/DynamicActionBar.tsx');

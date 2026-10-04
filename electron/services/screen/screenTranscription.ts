@@ -1,4 +1,5 @@
 import { composeScreenDescription } from './screenDescription';
+import { hasOnDeviceScreenText } from '../../context-intelligence/question/on-device-screen';
 import {
   getScreenshotDescription,
   hashImageSet,
@@ -39,13 +40,19 @@ export async function transcribeScreenForMemory(
   try {
     const sha = hashImageSet(imagePaths);
     if (!sha) return '';
-    const cached = getScreenshotDescription(sha);
-    if (cached?.description) return cached.description;
-
     const { getScreenUnderstandingService } = require('./ScreenUnderstandingService');
     const { SettingsManager } = require('../SettingsManager');
     const { CredentialsManager } = require('../CredentialsManager');
     const settings = SettingsManager.getInstance();
+    const cached = getScreenshotDescription(sha);
+    // A description made while this screenshot was being KEPT ON THIS DEVICE
+    // is reused only while that setting is still on. With it off, the user is
+    // sending this very screenshot to a provider again, so it is read again
+    // under today's setting (and the row replaced) rather than recorded as
+    // text no cloud model may ever be shown.
+    const stale = hasOnDeviceScreenText(cached?.description) && settings.getScreenUnderstandingMode() !== 'private_vision';
+    if (cached?.description && !stale) return cached.description;
+
     const credentials = CredentialsManager.getInstance();
     const providerScopes = settings.get('providerDataScopes') || {};
 

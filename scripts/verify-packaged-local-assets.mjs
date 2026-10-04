@@ -26,9 +26,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import disguiseNames from './disguise-name.cjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
+
+// Apple Speech helper binary name — derived from the disguise alias so it stays
+// in lockstep with scripts/build-apple-speech.js HELPER_NAME (never the brand).
+const APPLE_SPEECH_HELPER = `${disguiseNames.darwin}-asr`;
 
 // Required packaged model files (the source of truth for the local fallback stack).
 const REQUIRED_MODEL_FILES = [
@@ -267,17 +272,17 @@ function verifyPackaged(appArg, platformArg) {
   // is ever unwired, the app still builds and ships, and the failure surfaces
   // only at runtime as a spawn ENOENT the moment a user picks Apple Speech.
   if (platform === 'darwin') {
-    const helper = path.join(resources, 'apple-speech', 'natively-apple-speech');
+    const helper = path.join(resources, 'apple-speech', APPLE_SPEECH_HELPER);
     if (!exists(helper)) {
       errors.push(
-        'Missing Apple Speech helper: Resources/apple-speech/natively-apple-speech ' +
+        `Missing Apple Speech helper: Resources/apple-speech/${APPLE_SPEECH_HELPER} ` +
         '(scripts/after-pack.cjs should have compiled it during afterPack).',
       );
     } else {
       try {
         fs.accessSync(helper, fs.constants.X_OK);
       } catch {
-        errors.push('Apple Speech helper is not executable: Resources/apple-speech/natively-apple-speech');
+        errors.push(`Apple Speech helper is not executable: Resources/apple-speech/${APPLE_SPEECH_HELPER}`);
       }
     }
   }

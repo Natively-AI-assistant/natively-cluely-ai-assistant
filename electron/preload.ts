@@ -44,6 +44,22 @@ interface DirectAssistError {
   code: string;
   message: string;
   retryable: boolean;
+  /** HTTP status of the failure, when the provider gave one. */
+  status?: number;
+  /** The provider's own explanation: one line, keys removed, capped in main. */
+  detail?: string;
+  /** The provider was never reached (offline, connection refused). */
+  unreachable?: boolean;
+  /** Every provider tried, when more than one was and none answered. */
+  attempts?: Array<{
+    provider: string;
+    model: string;
+    reason: string;
+    status?: number;
+    detail?: string;
+    unreachable?: boolean;
+    waitedMs: number;
+  }>;
 }
 
 type DirectAssistEvent =
@@ -57,6 +73,11 @@ type DirectAssistEvent =
       from: { provider: string; model: string };
       to: { provider: string; model: string };
       reason: string;
+      status?: number;
+      detail?: string;
+      /** How long `from` was given, retries included. */
+      waitedMs: number;
+      unreachable?: boolean;
     }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
@@ -253,7 +274,7 @@ interface ElectronAPI {
     hasSonioxKey: boolean;
   }>;
   // Free Trial
-  startTrial: () => Promise<{
+  startTrial: (surface?: string) => Promise<{
     ok: boolean;
     hasToken?: boolean;
     started_at?: string;
@@ -300,6 +321,8 @@ interface ElectronAPI {
   // Card ledger (toaster policy): shows, strikes and retirements per card.
   cardsGet: () => Promise<{ ok: boolean; ledger?: any; error?: string }>;
   cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => Promise<{ ok: boolean; ledger?: any; error?: string }>;
+  /** Report a funnel event only the renderer can see (a card on screen, a locked feature opened). */
+  funnelTrack: (eventType: string, props?: Record<string, string | number | boolean>) => Promise<{ ok: boolean; result?: string; error?: string }>;
   cardsImportLegacy: (legacy: Record<string, unknown>) => Promise<{ ok: boolean; ledger?: any; error?: string }>;
   onCardsChanged: (cb: (ledger: any) => void) => () => void;
   /** Emitted by `trial:start` so a trial claimed mid-session unlocks without a relaunch. */
@@ -533,6 +556,20 @@ interface ElectronAPI {
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>;
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>;
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
+  // ── System-design diagram artifacts (electron/services/diagram/diagramIpc.ts) ──
+  /** The feature switch: off = a ```mermaid block is an ordinary code block. */
+  getDiagramsEnabled: () => Promise<boolean>;
+  onDiagramsEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
+  /** One bounded model call to fix a Mermaid block that did not parse. */
+  repairDiagram: (payload: { requestId: string; source: string; diagnostic?: string; stage?: string; manual?: boolean }) => Promise<{ ok: true; source: string } | { ok: false; reason: string }>;
+  cancelDiagramRepair: (requestId: string) => Promise<boolean>;
+  /** The repaired block drew: record it where the broken one was recorded. */
+  acceptDiagramRepair: (payload: { originalSource: string; repairedSource: string }) => Promise<boolean>;
+  /** Save a diagram the renderer produced (svg text, base64 png, or Mermaid source). */
+  exportDiagram: (payload: { format: 'svg' | 'png' | 'mmd' | 'json' | 'csv'; data: string; name?: string }) => Promise<{ saved: boolean; canceled?: boolean; fileName?: string; silent?: boolean; error?: string }>;
+  /** The main process asks this window to draw a diagram for the phone. */
+  onDiagramRenderRequest: (callback: (request: { requestId: string; key: string; source: string }) => void) => () => void;
+  sendDiagramRenderResult: (result: { requestId: string; key: string; ok: boolean; svg?: string }) => void;
   // ── Embedding settings (configured independently of the generation model) ──
   getEmbeddingStatus: () => Promise<{
     active: { configured: boolean; provider?: string | null; model?: string | null; dimensions?: number | null; space?: string | null; location?: 'on-device' | 'cloud' | 'unknown'; lightweight?: boolean };
@@ -786,7 +823,7 @@ interface ElectronAPI {
     message: string,
     imagePaths?: string[],
     context?: string,
-    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; liveQuestion?: boolean },
   ) => Promise<void>;
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void;
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void;
@@ -1058,6 +1095,8 @@ interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  getUsageStatistics: () => Promise<boolean>;
+  setUsageStatistics: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   exportDebugLogs: () => Promise<{ success: boolean; path?: string; files?: string[]; error?: string }>;
   getStealthShortcutGuard: () => Promise<boolean>;
   setStealthShortcutGuard: (enabled: boolean) => Promise<{ success: boolean }>;
@@ -1545,7 +1584,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('settings:open-tab', subscription);
     };
   },
-  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  openExternal: (url: string, opts?: { surface?: string }) => ipcRenderer.invoke('open-external', url, opts),
   // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the
   // genie warps. capture reads this window's own compositor output.
   genieSnapshotCapture: (rect: { x: number; y: number; width: number; height: number }) =>
@@ -1729,7 +1768,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openMicSettings: () => ipcRenderer.invoke('permissions:open-mic-settings'),
 
   // Free Trial
-  startTrial: () => ipcRenderer.invoke('trial:start'),
+  startTrial: (surface?: string) => ipcRenderer.invoke('trial:start', surface),
   getTrialStatus: () => ipcRenderer.invoke('trial:status'),
   getLocalTrial: () => ipcRenderer.invoke('trial:get-local'),
   convertTrial: (choice: string) => ipcRenderer.invoke('trial:convert', choice),
@@ -1741,6 +1780,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   cardsGet: () => ipcRenderer.invoke('cards:get'),
   cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => ipcRenderer.invoke('cards:record', id, outcome, meta),
+  funnelTrack: (eventType: string, props?: Record<string, string | number | boolean>) => ipcRenderer.invoke('funnel:track', eventType, props),
   cardsImportLegacy: (legacy: Record<string, unknown>) => ipcRenderer.invoke('cards:import-legacy', legacy),
   onCardsChanged: (cb: (ledger: any) => void) => {
     const sub = (_: any, ledger: any) => cb(ledger);
@@ -2090,6 +2130,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchInMeeting: (query: string) => ipcRenderer.invoke('search:in-meeting', { query }),
   generateLectureNotes: (opts?: { title?: string; course?: string }) => ipcRenderer.invoke('lecture:generate-notes', opts),
   generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
+  getDiagramsEnabled: () => ipcRenderer.invoke('diagram:get-enabled'),
+  onDiagramsEnabledChanged: (callback: (enabled: boolean) => void) => {
+    const subscription = (_e: any, enabled: boolean) => callback(enabled === true);
+    ipcRenderer.on('diagram:enabled-changed', subscription);
+    return () => { ipcRenderer.removeListener('diagram:enabled-changed', subscription); };
+  },
+  repairDiagram: (payload: { requestId: string; source: string; diagnostic?: string; stage?: string; manual?: boolean }) => ipcRenderer.invoke('diagram:repair', payload),
+  cancelDiagramRepair: (requestId: string) => ipcRenderer.invoke('diagram:repair-cancel', requestId),
+  acceptDiagramRepair: (payload: { originalSource: string; repairedSource: string }) => ipcRenderer.invoke('diagram:repair-accepted', payload),
+  exportDiagram: (payload: { format: 'svg' | 'png' | 'mmd' | 'json' | 'csv'; data: string; name?: string }) => ipcRenderer.invoke('diagram:export', payload),
+  onDiagramRenderRequest: (callback: (request: { requestId: string; key: string; source: string }) => void) => {
+    const subscription = (_e: any, request: any) => callback(request);
+    ipcRenderer.on('diagram:render-request', subscription);
+    return () => { ipcRenderer.removeListener('diagram:render-request', subscription); };
+  },
+  sendDiagramRenderResult: (result: { requestId: string; key: string; ok: boolean; svg?: string }) => ipcRenderer.send('diagram:render-result', result),
   getEmbeddingStatus: () => ipcRenderer.invoke('embedding:get-status'),
   getEmbeddingCatalog: () => ipcRenderer.invoke('embedding:get-catalog'),
   testEmbeddingModel: (choice?: { provider?: string; model?: string }) => ipcRenderer.invoke('embedding:test', choice),
@@ -2397,7 +2453,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     message: string,
     imagePaths?: string[],
     context?: string,
-    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; liveQuestion?: boolean },
   ) => ipcRenderer.invoke('gemini-chat-stream', message, imagePaths, context, options),
 
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => {
@@ -2440,6 +2496,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFastModel: () => ipcRenderer.invoke('get-fast-model'),
   setFastModel: (modelId: string | null) => ipcRenderer.invoke('set-fast-model', modelId),
   filterFastModelCandidates: (ids: string[]) => ipcRenderer.invoke('filter-fast-model-candidates', ids),
+  getVisionModelStates: (ids: string[]) => ipcRenderer.invoke('vision-capability:describe', ids),
+  setVisionSetting: (id: string, setting: 'auto' | 'on' | 'off') => ipcRenderer.invoke('vision-capability:set', id, setting),
+  retestVision: (id: string) => ipcRenderer.invoke('vision-capability:retest', id),
+  onVisionCapabilityChanged: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('vision-capability-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('vision-capability-changed', subscription);
+    };
+  },
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) =>
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),
@@ -2982,6 +3048,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+  getUsageStatistics: () => ipcRenderer.invoke('get-usage-statistics'),
+  setUsageStatistics: (enabled: boolean) => ipcRenderer.invoke('set-usage-statistics', enabled),
   exportDebugLogs: () => ipcRenderer.invoke('export-debug-logs'),
   getStealthShortcutGuard: () => ipcRenderer.invoke('get-stealth-shortcut-guard'),
   setStealthShortcutGuard: (enabled: boolean) => ipcRenderer.invoke('set-stealth-shortcut-guard', enabled),

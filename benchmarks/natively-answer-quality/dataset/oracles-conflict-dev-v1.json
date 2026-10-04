@@ -1,0 +1,16 @@
+{
+  "name": "oracles-conflict-dev-v1",
+  "note": "Authored 2026-09-30 from the DEV items' own context notes (the dataset authors' listed contradictions), never from answers. Flags reference_conflict_ignored (no score cap): the answer must surface both conflicting values when the question turns on them.",
+  "oracles": {
+    "DSEM-027": { "kind": "source_conflict", "expected_summary": "Summary says 94.1% over five seeds; the table says 93.2% over three seeds. Surface both; stand behind the table figure or explain the difference.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 93.2, "label": "states the table's 93.2%" }, { "type": "number_present", "value": 94.1, "label": "surfaces the summary's 94.1%" } ] },
+    "DSEM-037": { "kind": "source_conflict", "expected_summary": "96 KB in the summary vs 112 KB peak RAM with the logger on. Surface both.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 112, "label": "states 112 KB" }, { "type": "number_present", "value": 96, "label": "surfaces 96 KB" } ] },
+    "DTECH-022": { "kind": "source_conflict", "expected_summary": "The FAQ says both that touching windows stay separate and that they always merge at grace 0; name the contradiction and state the assumption to confirm.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "pattern_present", "pattern": "contradict|conflict|inconsisten|two (?:different|places)|says both|both ways|disagree|doesn'?t match|mismatch|one (?:place|section|part)[^.]{0,60}(?:another|other|elsewhere)|elsewhere|but (?:the|another|a later) (?:faq|section|part|line)", "label": "names the contradiction" } ] },
+    "DTECH-023": { "kind": "source_conflict", "expected_summary": "The brief states a max input of 200,000 windows and elsewhere 2 million windows per host; surface both before sizing the solution.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "number_present", "value": 200000, "label": "states 200,000" }, { "type": "number_present", "value": 2000000, "label": "surfaces 2 million" } ] },
+    "DTEAM-034": { "kind": "source_conflict", "expected_summary": "Colin's notes say GA is now 4 November, but customers were told 28 October; the notes are a draft. Not more breathing room until the date is reconciled.", "flag": "reference_conflict_ignored",
+      "checks": [ { "type": "pattern_present", "pattern": "october 28|28 october|oct(?:ober)?\\.? 28|28th", "label": "surfaces the 28 October customer date" } ] }
+  }
+}

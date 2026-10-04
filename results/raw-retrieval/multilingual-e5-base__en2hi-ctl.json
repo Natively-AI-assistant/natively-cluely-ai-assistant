@@ -1,0 +1,1432 @@
+{
+ "model_id": "multilingual-e5-base",
+ "repo": "Xenova/multilingual-e5-base",
+ "revision": "1ec9243030a27d1a115d5c340572074c125b58b2",
+ "license": "mit",
+ "dimensions": 768,
+ "pooling": "mean",
+ "query_prefix": "query: ",
+ "document_prefix": "passage: ",
+ "space": "local:xenova/multilingual-e5-base@q8@mean@v1:768",
+ "runtime": "transformers.js 3.8.1 / onnxruntime-node (worker_threads)",
+ "quantization": "q8",
+ "index": {
+  "file": "natively_refs__multilingual-e5-base__768d__v1__en2hi-ctl.sqlite",
+  "backend": "sqlite-vec vec0",
+  "distance_metric": "cosine",
+  "rows": 872,
+  "native": true
+ },
+ "corpus": {
+  "chunks": 872,
+  "queries": 56,
+  "sha256": "41e7b76b1f69c81bc699ee2da3c052a6cc23f35acacad52b434fa309d9f2a24c",
+  "chunkerVersion": 4
+ },
+ "indexing": {
+  "totalMs": 202235,
+  "chunksPerSec": 4.31,
+  "batchP50Ms": 2097,
+  "batchP95Ms": 10738
+ },
+ "query_latency": {
+  "p50Ms": 21,
+  "p95Ms": 35
+ },
+ "memory_peak_rss_mb": 111.3,
+ "overall": {
+  "n": 56,
+  "r1": 0.1607,
+  "r5": 0.5,
+  "r10": 0.625,
+  "mrr": 0.3027,
+  "ndcg": 0.117
+ },
+ "candidate_recall_at_pool": 0.8393,
+ "reranked": {
+  "n": 56,
+  "r1": 0.3036,
+  "r5": 0.5179,
+  "r10": 0.7321,
+  "mrr": 0.395,
+  "ndcg": 0.1426
+ },
+ "rerank": {
+  "attempted": 56,
+  "succeeded": 56,
+  "poolSize": 50
+ },
+ "by_track": {
+  "text": {
+   "n": 37,
+   "r1": 0.1892,
+   "r5": 0.5135,
+   "r10": 0.6216,
+   "mrr": 0.3132,
+   "ndcg": 0.1171
+  },
+  "code": {
+   "n": 2,
+   "r1": 0,
+   "r5": 0,
+   "r10": 0,
+   "mrr": 0,
+   "ndcg": 0
+  },
+  "negative": {
+   "n": 17,
+   "r1": 0.1176,
+   "r5": 0.5294,
+   "r10": 0.7059,
+   "mrr": 0.3157,
+   "ndcg": 0.1305
+  }
+ },
+ "code_r10": 0.2222,
+ "cross_project_r10": null,
+ "perQuery": [
+  {
+   "query_id": "q0001",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 19,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.0874717141014082
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0002",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 28,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.13032376591037062
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0003",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "embedMs": 15,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0022",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 20,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.38121301394452073
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.3615901614084106
+   }
+  },
+  {
+   "query_id": "q0023",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "embedMs": 14,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.17342765698823945
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0031",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 19,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.10778915452451093
+   }
+  },
+  {
+   "query_id": "q0038",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "embedMs": 15,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.10633668103022985
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.22018418776246546
+   }
+  },
+  {
+   "query_id": "q0039",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 16,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.11706259313796354
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.11706259313796354
+   }
+  },
+  {
+   "query_id": "q0040",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "embedMs": 15,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0053",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 19,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.15958907712489634
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.10893649261775588
+   }
+  },
+  {
+   "query_id": "q0054",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "embedMs": 22,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.19092086617893467
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0055",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 25,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.13743816645714543
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.17342765698823945
+   }
+  },
+  {
+   "query_id": "q0058",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 24,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.19092086617893467
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.19092086617893467
+   }
+  },
+  {
+   "query_id": "q0063",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 37,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.12647135138382856
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.07311683844390994
+   }
+  },
+  {
+   "query_id": "q0069",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 32,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0073",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 36,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.09162544430476362
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.10633668103022985
+   }
+  },
+  {
+   "query_id": "q0119",
+   "track": "code",
+   "categories": [
+    "code"
+   ],
+   "embedMs": 33,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0120",
+   "track": "code",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 14,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0138",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "embedMs": 27,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0139",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "embedMs": 25,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0346",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 16,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.0874717141014082
+   }
+  },
+  {
+   "query_id": "q0347",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 16,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.26014148548235916
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.07945707943276742
+   }
+  },
+  {
+   "query_id": "q0349",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 17,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.13032376591037062
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0356",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 14,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0365",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 11,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0369",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 16,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.17342765698823945
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.09162544430476362
+   }
+  },
+  {
+   "query_id": "q0373",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 13,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.08671382849411972
+   }
+  },
+  {
+   "query_id": "q0378",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 13,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.25288473642100684
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0379",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 17,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.17342765698823945
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0380",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 10,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.198881557747969
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.41966500663677697
+   }
+  },
+  {
+   "query_id": "q0383",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 15,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0384",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 15,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.08671382849411972
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0392",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "semantic"
+   ],
+   "embedMs": 19,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.10633668103022985
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.08671382849411972
+   }
+  },
+  {
+   "query_id": "q0403",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 19,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0404",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 22,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0405",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 26,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0409",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 22,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0410",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 18,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.10778915452451093
+   }
+  },
+  {
+   "query_id": "q0426",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 8,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.4483039899025303
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.3333333333333333,
+    "ndcg": 0.2558209594125084
+   }
+  },
+  {
+   "query_id": "q0427",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "embedMs": 20,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0469",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 29,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.2529427027676571
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.10893649261775588
+   }
+  },
+  {
+   "query_id": "q0470",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "embedMs": 25,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1111111111111111,
+    "ndcg": 0.09109240322345806
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.11706259313796354
+   }
+  },
+  {
+   "query_id": "q0472",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 24,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0473",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 19,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.11838279295536291
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   }
+  },
+  {
+   "query_id": "q0477",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 18,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.13032376591037062
+   }
+  },
+  {
+   "query_id": "q0485",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 18,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0492",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 16,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.2529427027676571
+   }
+  },
+  {
+   "query_id": "q0499",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 17,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.16321684709627762
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.16989454721481587
+   }
+  },
+  {
+   "query_id": "q0500",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "embedMs": 19,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.2529427027676571
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.10893649261775588
+   }
+  },
+  {
+   "query_id": "q0510",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 14,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.13032376591037062
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.10086747116627115
+   }
+  },
+  {
+   "query_id": "q0511",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "embedMs": 18,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.13032376591037062
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.30260241349881345
+   }
+  },
+  {
+   "query_id": "q0626",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 22,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 0.27487633291429087
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.25,
+    "ndcg": 0.11838279295536291
+   }
+  },
+  {
+   "query_id": "q0627",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 29,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.19092086617893467
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0628",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 28,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.09546043308946733
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.10086747116627115
+   }
+  },
+  {
+   "query_id": "q0629",
+   "track": "negative",
+   "categories": [
+    "difficult_negative",
+    "documentation"
+   ],
+   "embedMs": 31,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   }
+  },
+  {
+   "query_id": "q0647",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "multilingual",
+    "semantic"
+   ],
+   "embedMs": 29,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.08671382849411972
+   }
+  }
+ ]
+}

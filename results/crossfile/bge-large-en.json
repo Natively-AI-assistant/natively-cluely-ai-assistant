@@ -1,0 +1,23 @@
+{
+  "model_id": "bge-large-en",
+  "dimensions": 1024,
+  "index": "natively_refs__bge-large-en__1024d__v1.sqlite",
+  "n": 74,
+  "perK": {
+    "10": {
+      "anyFile": 0.6351,
+      "allFiles": 0.2027,
+      "fileRecall": 0.402
+    },
+    "20": {
+      "anyFile": 0.7703,
+      "allFiles": 0.3378,
+      "fileRecall": 0.5304
+    },
+    "50": {
+      "anyFile": 0.9324,
+      "allFiles": 0.5676,
+      "fileRecall": 0.741
+    }
+  }
+}

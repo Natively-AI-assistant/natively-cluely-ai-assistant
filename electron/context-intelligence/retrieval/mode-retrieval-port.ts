@@ -149,18 +149,66 @@ export function sourceTypeForFile(
   return 'REFERENCE_FILE';
 }
 
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11,
+};
+const monthOf = (w: string): number | undefined => MONTH_INDEX[w.toLowerCase().slice(0, w.toLowerCase().startsWith('sept') ? 4 : 3)];
+
+/**
+ * A date as documents write it: "December 31, 2025", "31 December 2025",
+ * "2025-12-31", or a bare "November 2022" (→ that month's LAST day when
+ * `end`, its first otherwise). Slash dates are ambiguous across locales and
+ * are not read.
+ */
+export function parseDocumentDate(text: string, end = false): Date | undefined {
+  const t = String(text ?? '');
+  let m = t.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = t.match(/\b([A-Za-z]{3,9})\.? (\d{1,2})(?:st|nd|rd|th)?,? (\d{4})\b/);
+  if (m && monthOf(m[1]) !== undefined) return new Date(+m[3], monthOf(m[1])!, +m[2]);
+  m = t.match(/\b(\d{1,2})(?:st|nd|rd|th)? (?:of )?([A-Za-z]{3,9})\.?,? (\d{4})\b/);
+  if (m && monthOf(m[2]) !== undefined) return new Date(+m[3], monthOf(m[2])!, +m[1]);
+  m = t.match(/\b([A-Za-z]{3,9})\.? (\d{4})\b/);
+  if (m && monthOf(m[1]) !== undefined) return end ? new Date(+m[2], monthOf(m[1])! + 1, 0) : new Date(+m[2], monthOf(m[1])!, 1);
+  return undefined;
+}
+
 /**
  * Document status declared by the file itself ("Status: RETIRED. …"), read from
  * the head of the content. This is the provenance the precedence answer needs
  * (deep-test D8): the value resolver picked current-over-retired by ranking
  * luck, and when asked WHY, the model invented a rationale because no status
  * ever reached the prompt.
+ *
+ * FRESHNESS (2026-09-30). Documents also say it without a "Status:" line, and
+ * the model read them as current: a price sheet "Valid through December 31,
+ * 2025" quoted as today's price in September 2026, a "DRAFT, not reviewed"
+ * meeting note stated as settled, a policy that says "check the Knowledge Base
+ * for the current version before relying on this document" relied on, a
+ * résumé "last updated November 2022" taken over the profile (external judge,
+ * dev set: all capped). Read here as `expired` (a validity date that has
+ * passed), `draft` (only with an unreviewed/unapproved marker) and `outdated`
+ * (the document says to check for a current version); a validity date still
+ * in the future marks nothing.
  */
-export function detectDocumentStatus(content: string | undefined): string | undefined {
+export function detectDocumentStatus(content: string | undefined, now: Date = new Date()): string | undefined {
   const head = String(content ?? '').slice(0, 600);
-  const m = head.match(/\bstatus\s*[:\-]\s*(retired|deprecated|archived|superseded|legacy|obsolete|current|active|draft)\b/i);
+  const m = head.match(/\bstatus\s*[:\-]\s*(retired|deprecated|archived|superseded|legacy|obsolete|current|active|draft|expired)\b/i);
   if (m) return m[1].toLowerCase();
-  if (/\b(retired|deprecated|superseded|obsolete)\b/i.test(head.split('\n').slice(0, 3).join('\n'))) return 'retired';
+  const firstLines = head.split('\n').slice(0, 3).join('\n');
+  if (/\b(retired|deprecated|superseded|obsolete)\b/i.test(firstLines)) return 'retired';
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const validity = head.match(/\b(?:valid|good|effective)\s+(?:through|thru|until|till)\s+([^\n.;]{3,40})|\bexpires?\s+(?:on\s+)?([^\n.;]{3,40})/i);
+  if (validity) {
+    const until = parseDocumentDate(validity[1] ?? validity[2] ?? '', true);
+    if (until && until < today) return 'expired';
+  }
+  // A draft of the user's own thesis or spec is still their material; only a
+  // draft whose CONTENT is unconfirmed ("not reviewed by attendees") is marked.
+  if (/\bdraft\b/i.test(firstLines) && /\b(?:not (?:yet )?(?:been )?(?:reviewed|approved|confirmed|signed off)|unreviewed|unapproved|unconfirmed|pending (?:review|approval))\b/i.test(head)) return 'draft';
+  if (/\bcheck\b[^\n.]{0,60}\bcurrent version\b|\bmay (?:be|have) (?:out ?of ?date|outdated|changed)\b/i.test(head)) return 'outdated';
+  // An old "last updated" date is NOT marked: past events stay true, and a
+  // design doc from 2024 is not wrong for being from 2024.
   return undefined;
 }
 
@@ -216,6 +264,8 @@ export interface ModePortInput {
    * bundled embedder stays lexical-only (see ModeHybridRetriever).
    */
   meetingActive?: () => boolean;
+  /** Read a corpus that fits whole instead of retrieving chunks (default on; see SMALL_CORPUS_MAX_TOKENS, WHOLE_PACK_MAX_TOKENS). */
+  wholeSmallCorpus?: boolean;
 }
 
 /**
@@ -228,6 +278,70 @@ export interface ModePortInput {
  * meeting ids. A chunk whose sourceId is outside the declared file set fails
  * closed as UNKNOWN_SOURCE_TYPE rather than riding in on a stale index row.
  */
+// ── A SMALL REFERENCE CORPUS IS READ WHOLE (2026-09-30) ─────────────────────
+//
+// Measured on the 9-mode benchmark (every attached file is 245–652 words):
+// 20 of 188 reference-file turns on the final set, 6 of 64 on the holdout and
+// 10 of 86 on dev never put the answering text in the prompt, and the answers
+// said "I don't have that number in front of me" over a decision log that
+// held it. Two mechanisms, both artefacts of choosing chunks from a document
+// the prompt could simply hold:
+//   • "What's the crash-free bar?" — one content word matched the file, the
+//     small-pool probe wanted two, the turn stayed FAST and read nothing;
+//   • "What would Enterprise run us for forty techs?" — the hybrid pass
+//     returned the one-pager's Add-ons and header chunks and not the Plans
+//     chunk ("Enterprise: custom pricing, 100 seat minimum").
+// Below this size the whole corpus costs less prompt than the retriever's own
+// multi-file budget, so every file is handed over entire, in order, and the
+// embed/rerank round trip is skipped. Larger corpora keep retrieval unchanged.
+/** Whole-corpus threshold, in the packer's estimateTokens units (~4 chars/token). */
+export const SMALL_CORPUS_MAX_TOKENS = 1400;
+
+/** Size of the mode's attached text; null when any file has no extracted text (OCR pending, empty). */
+export function referenceCorpusTokens(files: ReadonlyArray<{ content?: string | null }>): number | null {
+  if (!files.length) return 0;
+  let chars = 0;
+  for (const f of files) {
+    const c = typeof f.content === 'string' ? f.content.trim() : '';
+    if (!c) return null;
+    chars += c.length;
+  }
+  return Math.ceil(chars / 4);
+}
+
+/** True when the attached corpus is small enough to be read whole (see SMALL_CORPUS_MAX_TOKENS). */
+export function isSmallReferenceCorpus(files: ReadonlyArray<{ content?: string | null }>): boolean {
+  const t = referenceCorpusTokens(files);
+  return t !== null && t > 0 && t <= SMALL_CORPUS_MAX_TOKENS;
+}
+
+// ── A PACK THAT FITS THE PROMPT IS READ WHOLE WHEN A TURN READS THE FILES (2026-10-03) ──
+//
+// Measured on the evidence-rich benchmark (nine modes, each with a realistic
+// pack of 6–9 files, 2,300–9,800 tokens, uploaded as PDF / DOCX / text): every
+// file parsed and indexed, and the fact the answer needed was in the prompt on
+// 99 of 199 reference-file turns. A turn carries at most 8 passages and
+// 1,500–2,400 evidence tokens, a quarter to a half of such a pack, and the
+// retriever offered more candidates than were packed on 92 of the 111 turns
+// that missed. The answers on those turns were "I'll confirm and come back to
+// you", or the value of the outdated file that happened to be chosen; with
+// the fact in the prompt the same build scored 8.98 against 5.69 without.
+//
+// So between the small-corpus size and this one the port hands every file
+// over entire, exactly as it does for a small corpus, and the embed / rerank
+// round trip is skipped. What does NOT change: a turn the classifier answers
+// from general knowledge reads nothing from a pack this size (only a SMALL
+// corpus is read on a FAST turn, see the orchestrator), and a larger corpus
+// keeps retrieval as it was.
+/** Whole-pack threshold, in the packer's estimateTokens units (~4 chars/token). */
+export const WHOLE_PACK_MAX_TOKENS = 12000;
+
+/** True when the attached pack is read whole on a turn that reads the files (small corpus included). */
+export function isWholePackCorpus(files: ReadonlyArray<{ content?: string | null }>): boolean {
+  const t = referenceCorpusTokens(files);
+  return t !== null && t > 0 && t <= WHOLE_PACK_MAX_TOKENS;
+}
+
 export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const sourceTypes = new Map<string, SourceType>();
   const activeVersions = new Map<string, string>();
@@ -235,6 +349,7 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const sourceScopes = new Map<string, EvidenceScope>();
   const documentStatuses = new Map<string, string>();
   const allowed = input.allowedSourceTypes ?? (['REFERENCE_FILE'] as const);
+  const wholeCorpus = input.wholeSmallCorpus !== false && isWholePackCorpus(input.files);
   for (const f of input.files) {
     sourceTypes.set(f.id, sourceTypeForFile(f.fileName, f.content, allowed));
     activeVersions.set(f.id, 'legacy');
@@ -247,7 +362,24 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
     retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; exhaustive?: boolean; tokenBudget?: number }) => {
-      if (!input.modeInfo || !input.files.length || !input.modesManager.retrieveHybridRaw) return [];
+      if (!input.modeInfo || !input.files.length) return [];
+      if (wholeCorpus) {
+        // Every file, entire, in attachment order. score 1: nothing here was
+        // ranked, so no downstream low-confidence rewrite should fire.
+        return input.files.map((f) => {
+          const status = documentStatuses.get(f.id);
+          return {
+            sourceId: f.id,
+            fileName: f.fileName,
+            text: String(f.content ?? '').trim(),
+            chunkIndex: 0,
+            score: 1,
+            provenance: 'MODE_REFERENCE_FILE',
+            ...(status ? { metadata: { documentStatus: status, wholeDocument: true } } : { metadata: { wholeDocument: true } }),
+          };
+        });
+      }
+      if (!input.modesManager.retrieveHybridRaw) return [];
       // An exhaustive request (RetrievalPlan.exhaustive) needs the RETRIEVER
       // to hand back more than the plan's widened topK can hold at the normal
       // token budget, and the reranker to score a wider pool — otherwise the

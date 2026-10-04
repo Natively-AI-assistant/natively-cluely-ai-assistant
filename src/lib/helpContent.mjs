@@ -14,7 +14,7 @@
 //                    `permissions:open-mic-settings` (Windows microphone page) and
 //                    `open-external` (allows x-apple.systempreferences on darwin only)
 //   system audio     Audio → Audio Configuration; macOS: Core Audio tap with
-//                    ScreenCaptureKit fallback, "SCK Backend" switch; Windows:
+//                    ScreenCaptureKit fallback, the "System Audio Capture" picker; Windows:
 //                    WASAPI loopback of the Output Device, no switch
 //   stealth          main.ts Undetectable (off by default) + WindowHelper content
 //                    protection; Process Disguise names in SettingsOverlay
@@ -162,7 +162,7 @@ export function getPlatformFacts(platform) {
         onDeviceSpeech: ['Apple Speech', 'Local Models'],
         systemAudio: {
           summary: 'Meeting audio comes from a Core Audio tap, or ScreenCaptureKit on older macOS.',
-          fix: 'If the other side is never transcribed, turn on Use ScreenCaptureKit backend under SCK Backend.',
+          fix: 'If the other side is never transcribed, set System Audio Capture to ScreenCaptureKit.',
         },
         undetectable: {
           hides: 'its Dock icon',

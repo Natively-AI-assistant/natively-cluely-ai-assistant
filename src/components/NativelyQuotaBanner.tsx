@@ -89,6 +89,7 @@ export const NativelyQuotaBanner: React.FC = () => {
 
                 setNearLimitBuckets(near);
                 setVisible(true);
+                window.electronAPI?.funnelTrack?.('upgrade_prompt', { surface: 'quota_banner', action: 'shown' })?.catch?.(() => {});
             } catch (e: any) {
                 console.log('[NativelyQuotaBanner] error:', e?.message);
             }
@@ -147,7 +148,7 @@ export const NativelyQuotaBanner: React.FC = () => {
             <div className="flex items-center justify-between pt-0.5">
                 <span className="text-[11px] text-text-secondary">Resets on your next billing date</span>
                 <button
-                    onClick={() => (window.electronAPI as any)?.openExternal?.(UPGRADE_URL)}
+                    onClick={() => (window.electronAPI as any)?.openExternal?.(UPGRADE_URL, { surface: 'quota_banner' })}
                     className={`flex items-center gap-1 text-[11px] font-semibold ${amber} ${isLight ? 'hover:text-amber-700' : 'hover:text-amber-300'} transition-colors cursor-pointer`}
                 >
                     Upgrade <ArrowUpRight size={11} strokeWidth={2.5} />

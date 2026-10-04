@@ -91,7 +91,7 @@ dist/
 
 # Compiled Apple Speech helper. Built explicitly for local development and
 # injected per target architecture during electron-builder afterPack.
-/resources/apple-speech/natively-apple-speech
+/resources/apple-speech/corespeechd-asr
 
 # husky auto-generated machinery — only the user-facing hook files
 # (e.g. .husky/pre-commit) are committed.
@@ -655,6 +655,15 @@ docs/plans/*
 !docs/plans/2026-10-01-vision-capability-phase2-plan.md
 !docs/plans/2026-10-01-vision-capability-phase3a-plan.md
 !docs/plans/2026-10-01-vision-capability-phase3b-plan.md
+!docs/plans/2026-10-01-vision-capability-phase5a-plan.md
+!docs/plans/2026-10-01-vision-capability-phase5b-plan.md
+!docs/plans/2026-10-01-vision-capability-phase5c1-plan.md
+!docs/plans/2026-10-01-vision-capability-phase5c2-plan.md
+# System-design diagrams (2026-10-01): the flow map, the example-library format and
+# the usage note. Code comments across src/lib/diagram and electron/services/diagram
+# cite it, and it is a stated deliverable of the feature.
+!docs/diagrams/
+!docs/diagrams/README.md
 
 # Live RAG probe scratch userdata — the probes mkdir these and the app fills
 # them with a multi-MB natively.db. Generated output, not a fixture.

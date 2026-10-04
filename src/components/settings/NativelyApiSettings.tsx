@@ -1035,7 +1035,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     setTrialLoading(true);
     setTrialError(null);
     try {
-      const res = await window.electronAPI?.startTrial?.();
+      const res = await window.electronAPI?.startTrial?.('api_settings');
       // A trial that started but could not be written to disk is the failure
       // behind "I pressed Start and got nothing": the server has spent this
       // machine's one-per-hwid row either way, so say what happened rather
@@ -1256,7 +1256,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   };
 
   const openExternal = (url: string) => {
-    (window.electronAPI as any)?.openExternal?.(url);
+    (window.electronAPI as any)?.openExternal?.(url, { surface: 'api_settings' });
   };
 
   const isDirty = apiKey.length > 0 && !apiKey.includes('•') && !isSaved;

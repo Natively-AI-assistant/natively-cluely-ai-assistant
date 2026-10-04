@@ -48,6 +48,14 @@ function withAdapters(h, reply) {
     yield r;
   };
   for (const name of ['streamWithFluxion', 'streamWithAgentRouter', 'streamWithOpenRouter', 'streamWithLiteLLM', 'streamWithNvidiaNim', 'streamWithNinerouter']) h[name] = adapter(name);
+  // Every OTHER adapter a test could reach is recorded too (test audit,
+  // 2026-10-01): a probe wrongly sent to DeepSeek, Groq, Natively, Gemini or
+  // Claude used to hit an unstubbed adapter, throw inside the probe's own
+  // catch, and leave `seen` empty — so "no test" tests could not fail.
+  const record = (name) => async function* () { seen.push({ name, imagePaths: [], existed: true }); yield 'x'; };
+  for (const name of ['streamWithDeepseek', 'streamWithGroqMultimodal', 'streamWithGroq', 'streamWithNatively', 'streamWithGeminiModel', 'streamWithClaudeMultimodal', 'streamWithClaude', 'streamWithOpenai']) {
+    if (!Object.prototype.hasOwnProperty.call(h, name)) h[name] = record(name);
+  }
   h.streamWithOpenaiMultimodal = async function* (_prompt, imagePaths) { seen.push({ name: 'streamWithOpenaiMultimodal', imagePaths: [...imagePaths], existed: imagePaths.every((p) => fs.existsSync(p)) }); const r = typeof reply === 'function' ? reply('openai') : reply; if (r instanceof Error) throw r; yield r; };
   return seen;
 }
@@ -127,10 +135,16 @@ describe('setModel starts a test only when it should', () => {
 describe('a test leaves no trace in what real answers record', () => {
   test('no vision health entry, no discovery', async () => {
     const h = helper(); h.enableVisionProbing();
-    withAdapters(h, new Error('404 No endpoints found that support image input'));
+    // Discovery is RECORDED, not thrown: a throw inside the probe is swallowed
+    // by its own catch, so the old throwing stub could never fail this test.
+    const discovery = [];
+    h.modelVersionManager = { getAllVisionTiers: () => [], onModelError: async (name) => { discovery.push(name); } };
+    const seen = withAdapters(h, new Error('404 No endpoints found that support image input'));
     h.setModel('fluxion/glm-5.3');
     await settle();
+    assert.equal(seen.length, 1, 'control: the test really ran');
     assert.equal(h.visionHealth.size, 0);
+    assert.deepEqual(discovery, [], 'a refused TEST image must not retire the model in the version manager');
   });
 });
 
@@ -252,5 +266,92 @@ describe('startup', () => {
     const enable = src.indexOf('this.llmHelper.enableVisionProbing()');
     const restore = src.indexOf('this.llmHelper.setModel(defaultModel, allProviders)');
     assert.ok(enable > 0 && restore > 0 && enable < restore);
+  });
+});
+
+// ── Phase 5c-2: the on-the-spot test ─────────────────────────────────────────
+//
+// A screenshot arrives, the selected model has never been tested, and nothing
+// else can read it. Before: "No vision-capable provider configured". Now the
+// model is tested first, and the screenshot is sent only if it passes.
+describe('nothing else can read the screenshot: the selected model is tested on the spot', () => {
+  const REQ = { userContent: 'u', message: 'm', imagePaths: ['/tmp/x.png'], systemPrompt: 's' };
+  const UNKNOWN = 'deepseek-v9-next';
+  /** Only a DeepSeek key, an untested DeepSeek id selected. `probe` answers for the on-the-spot test. */
+  function setup(probe, state = {}) {
+    const opened = []; const inline = [];
+    const h = helper({
+      currentModelId: UNKNOWN, client: null, openaiClient: null, claudeClient: null, groqClient: null, deepseekClient: {},
+      deepseekPermanentlyDead: false, hasNatively: () => false, hasFluxionCredential: () => false, hasAgentRouterCredential: () => false,
+      codexCliConfig: { enabled: false }, isCodexAvailable: () => false, antigravityFallbackModel: () => null,
+      visionInlineTestBudgetMs: 80, ...state,
+    });
+    h.enableVisionProbing();
+    h.streamWithDeepseek = async function* (_u, _s, model, _sig, images) { opened.push({ model, images: (images || []).length }); yield 'read it'; };
+    h.streamWithGeminiModel = async function* () { opened.push({ model: 'gemini' }); yield 'gemini read it'; };
+    // The background test (maybeProbeSelectedVision) asks the same probe. Only
+    // requests made WHILE the on-the-spot test runs are passed to `probe`.
+    let inlineRunning = false;
+    h.getVisionProbe = () => ({ ensure: (selection, opts) => (inlineRunning ? probe(selection, opts) : Promise.resolve('unknown')) });
+    const real = LLMHelper.prototype.testSelectedVisionNow;
+    h.testSelectedVisionNow = async function (...a) {
+      inlineRunning = true;
+      try { const passed = await real.apply(this, a); inline.push(passed); return passed; } finally { inlineRunning = false; }
+    };
+    const run = async () => { const out = []; for await (const piece of h.streamVisionWithFallback(REQ)) out.push(piece); return out; };
+    return { h, opened, inline, run };
+  }
+  const passes = async (selection) => { store.recordTest(selection.provider, '', selection.model, true); return 'yes'; };
+
+  test('it passes: the screenshot goes to the selected model', async () => {
+    const { run, opened, inline } = setup(passes);
+    assert.deepEqual(await run(), ['read it']);
+    assert.deepEqual(opened, [{ model: UNKNOWN, images: 1 }]);
+    assert.deepEqual(inline, [true]);
+  });
+  test('it fails: the usual message, and the screenshot is not sent', async () => {
+    const { run, opened } = setup(async (selection) => { store.recordTest(selection.provider, '', selection.model, false); return 'no'; });
+    await assert.rejects(run, /No vision-capable provider configured/);
+    assert.deepEqual(opened, []);
+  });
+  test('the test takes longer than its budget: the usual message, nothing sent, and nothing is saved as "no"', async () => {
+    const { run, opened } = setup(() => new Promise(() => {}));
+    const started = Date.now();
+    await assert.rejects(run, /No vision-capable provider configured/);
+    assert.ok(Date.now() - started < 2000, 'the answer path does not wait for a slow test');
+    assert.deepEqual(opened, []);
+    assert.equal(store.tested('deepseek', '', UNKNOWN), undefined);
+  });
+  test('the test says yes but still nothing can be seated: one rebuild, then the usual message (no loop)', async () => {
+    const { run, inline } = setup(async () => 'yes');                      // "yes" that was never saved
+    await assert.rejects(run, /No vision-capable provider configured/);
+    assert.deepEqual(inline, [true], 'tested once; the rebuilt chain does not test again');
+  });
+  test('another provider can read the screenshot: no on-the-spot test, that provider answers', async () => {
+    const { run, opened, inline } = setup(passes, { client: {} });
+    assert.deepEqual(await run(), ['gemini read it']);
+    assert.deepEqual(inline, [], 'the on-the-spot test is only for an otherwise empty chain');
+    assert.deepEqual(opened, [{ model: 'gemini' }]);
+  });
+  test('never when screenshots must stay on this device, in local-only mode, or with probing off', async () => {
+    let asked = 0;
+    const counting = async (s) => { asked++; return passes(s); };
+    const keepOnDevice = setup(counting, { assertOutboundImagesAllowed: () => { throw new Error('private vision'); } });
+    await assert.rejects(keepOnDevice.run, /No vision-capable provider configured/);
+    const scopeDenied = setup(counting, { getDeniedOutboundScopes: () => ['screenshots'] });
+    await assert.rejects(scopeDenied.run, /No vision-capable provider configured/);
+    const localOnly = setup(counting, { isLocalOnlyMode: true });
+    await assert.rejects(localOnly.run, /No vision-capable provider configured/);
+    const off = setup(counting); off.h.visionProbingEnabled = false;
+    await assert.rejects(off.run, /No vision-capable provider configured/);
+    assert.equal(asked, 0, 'no test image may be sent in any of these states');
+    for (const s of [keepOnDevice, scopeDenied, localOnly, off]) assert.deepEqual(s.inline, [false]);
+  });
+  test('a model whose test already said no is not tested again', async () => {
+    let asked = 0;
+    store.recordTest('deepseek', '', UNKNOWN, false);
+    const { run } = setup(async () => { asked++; return 'no'; });
+    await assert.rejects(run, /No vision-capable provider configured/);
+    assert.equal(asked, 0);
   });
 });

@@ -86,8 +86,10 @@ const modelAvailableSource = () => {
 };
 
 const directAssistSource = () => {
-  const start = llm.indexOf('public getDirectAssistSelection(): DirectAssistSelection {');
-  assert.ok(start >= 0, 'getDirectAssistSelection() should exist');
+  // The chain lives in classifyCloudModel since 2026-10-01 (shared with the
+  // Settings "Reads images" lookup); getDirectAssistSelection calls it.
+  const start = llm.indexOf('private classifyCloudModel(selected: string)');
+  assert.ok(start >= 0, 'classifyCloudModel() should exist');
   const end = llm.indexOf('\n  }', start);
   assert.ok(end > start, 'getDirectAssistSelection() should terminate');
   return llm.slice(start, end);
@@ -460,7 +462,7 @@ describe('review fixes 2026-09-18 — found by adversarial review, all CONFIRMED
     // so a screenshot on a selected Fluxion model went to whichever other vendor
     // key existed first. Wrong-vendor billing, inverted: the vendor the user did
     // NOT choose silently wins the turn.
-    const block = llm.slice(llm.indexOf('const front: VisionStreamProvider[] = []'), llm.indexOf('const backLocal = local.filter'));
+    const block = llm.slice(llm.indexOf('const front: VisionStreamProvider[] = []'), llm.indexOf('const ordered = orderVisionCandidates('));
     assert.match(block, /isFluxionModel\(this\.currentModelId\)/,
       'a selected Fluxion model must be front-loaded like the other three gateways');
     for (const sibling of ['isLiteLLMModel', 'isNvidiaNimModel', 'isOpenRouterModel']) {

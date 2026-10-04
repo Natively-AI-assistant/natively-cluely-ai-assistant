@@ -168,13 +168,13 @@ export interface FallbackHooks {
 // about images. Defined in this file because the engine takes no imports; the
 // one-time vision test (visionProbeOutcome.ts) reads the same list from here.
 const IMAGE_REFUSAL_PATTERNS: readonly RegExp[] = [
-  /support(?:s)? image input/,                                   // OpenRouter: "No endpoints found that support image input"
+  /no endpoints found that support image input/,                 // OpenRouter (as sent); never the bare phrase "supports image input"
   /does(?: not|n't) support (?:image|vision)/,                   // "does not support image input", "doesn't support vision"
   /image_url is only supported/,                                 // OpenAI
   /images?(?: input| inputs)? (?:is|are)(?: not|n't) supported/, // "images are not supported", "image input is not supported"
   /images? not supported/,
   /\bno vision\b/,
-  /vision is not/,
+  /vision is not (?:supported|available|enabled)/,                // not "model x-vision is not found"
 ];
 
 export function isImageRefusalMessage(message: string): boolean {
@@ -615,7 +615,7 @@ export async function* runStreamingFallback(
         committed = true;
         recordTtft(health, provider.id, now() - attemptStart);
         markHealthy(health, provider.id);
-        log(`[${cfg.logPrefix}] committed to ${provider.name} (attempt ${attempt}/${cfg.maxAttempts}, ttft=${now() - attemptStart}ms)`);
+        log(`[${cfg.logPrefix}] committed to ${provider.name} (attempt ${attempt}/${rungMaxAttempts}, ttft=${now() - attemptStart}ms)`);
         yield first.value;
 
         // Drain — post-commit failures cannot switch providers (would duplicate
@@ -656,7 +656,7 @@ export async function* runStreamingFallback(
         // Pre-commit failure → safe to retry / fall back silently.
         const timedOut = ctrl.signal.aborted;
         const cls = classifyStreamError(err, timedOut);
-        const detail = `${provider.name} attempt ${attempt}/${cfg.maxAttempts}: ${cls}`;
+        const detail = `${provider.name} attempt ${attempt}/${rungMaxAttempts}: ${cls}`;
         warn(`[${cfg.logPrefix}] ${detail} (${err?.message || err})`);
         failures.push(detail);
         // Keep the FIRST provider error itself, not just its classification.

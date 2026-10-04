@@ -3,7 +3,7 @@
 // Each row states a fact about this install. These tests pin the two things
 // that would make a row lie: a platform borrowing the other's rule (Windows has
 // no Screen Recording gate; Apple Speech exists only on macOS), and a step
-// ticked because a provider is CHOSEN when the key it needs is missing.
+// marked done because a provider is CHOSEN when the key it needs is missing.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';

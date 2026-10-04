@@ -83,7 +83,25 @@ test('release runner carries the macOS 26 SDK required by SpeechTranscriber', ()
 
 test('generated local helper is gitignored', () => {
   const ignore = fs.readFileSync(path.join(repoRoot, '.gitignore'), 'utf8');
-  assert.match(ignore, /^\/resources\/apple-speech\/natively-apple-speech$/m);
+  assert.match(ignore, new RegExp('^/resources/apple-speech/' + buildScript.HELPER_NAME + '$', 'm'));
+});
+
+test('Apple Speech helper name is brand-free and matches the runtime lookup', () => {
+  // The helper is spawned as a child process, so its basename AND path appear in
+  // process enumeration — it must never carry the brand (that was the v2.9.1
+  // "natively-apple-speech" stealth leak). And the built name must equal what
+  // electron/audio/AppleSpeechSTT.ts looks up, or Apple Speech STT silently breaks
+  // at runtime (helper spawn ENOENT).
+  assert.doesNotMatch(
+    buildScript.HELPER_NAME,
+    /natively/i,
+    `HELPER_NAME "${buildScript.HELPER_NAME}" must not contain the brand`,
+  );
+  const runtime = fs.readFileSync(path.join(repoRoot, 'electron', 'audio', 'AppleSpeechSTT.ts'), 'utf8');
+  assert.ok(
+    runtime.includes(`'${buildScript.HELPER_NAME}'`),
+    `AppleSpeechSTT.ts must look up the helper by its built name "${buildScript.HELPER_NAME}" (keep build + runtime in sync)`,
+  );
 });
 
 test('Swift bridge drains resampler state before flush and end-of-input', () => {
@@ -138,7 +156,7 @@ test('old macOS SDK fails with an actionable Xcode requirement', () => {
 
 test('thin helper is cross-compiled for the requested package architecture', () => {
   const root = fixtureRoot();
-  const output = path.join(root, 'out', 'natively-apple-speech');
+  const output = path.join(root, 'out', buildScript.HELPER_NAME);
   const { calls, run } = fakeToolchain();
   const result = buildScript.buildAppleSpeech({
     platform: 'darwin',
@@ -161,7 +179,7 @@ test('thin helper is cross-compiled for the requested package architecture', () 
 
 test('universal local build merges arm64 and x64 slices', () => {
   const root = fixtureRoot();
-  const output = path.join(root, 'out', 'natively-apple-speech');
+  const output = path.join(root, 'out', buildScript.HELPER_NAME);
   const { calls, run } = fakeToolchain();
   buildScript.buildAppleSpeech({ platform: 'darwin', arch: 'universal', root, output, run });
 
@@ -191,7 +209,7 @@ test('afterPack destination is private to one target app', () => {
       'Contents',
       'Resources',
       'apple-speech',
-      'natively-apple-speech',
+      buildScript.HELPER_NAME,
     ),
   });
 });

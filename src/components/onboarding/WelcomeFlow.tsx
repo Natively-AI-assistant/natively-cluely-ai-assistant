@@ -10,7 +10,7 @@
 // call) should not move; only what changes should. transitions.dev #08 for the
 // left column, #04 / #22 inside MeetingDemo.
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useT } from '../../i18n';
 import { useWelcomeTheme, WelcomeFrame, MeetingDemo, Keycaps, useCascade, ScaledColumn } from './welcomeShared';
@@ -30,6 +30,26 @@ export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
   const [step, setStep] = useState<'welcome' | 'tour'>('welcome');
   const tour = useShortcutTour(step === 'tour');
 
+  // Funnel: where a new user is in getting started. The stage's name and what
+  // happened to it, nothing else; nothing is sent while Usage statistics is off.
+  const stageEvent = (name: 'welcome' | 'tour', action: 'shown' | 'completed') => {
+    window.electronAPI?.funnelTrack?.('onboarding_stage', { stage: name, action })?.catch?.(() => {});
+  };
+  useEffect(() => {
+    stageEvent('welcome', 'shown');
+    // Once per showing of the flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const startTour = () => {
+    stageEvent('welcome', 'completed');
+    stageEvent('tour', 'shown');
+    setStep('tour');
+  };
+  const finishTour = () => {
+    stageEvent('tour', 'completed');
+    onDone();
+  };
+
   return (
     <WelcomeFrame t={t}>
       <ScaledColumn>
@@ -48,8 +68,8 @@ export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
             className="h-full w-full flex"
           >
             {step === 'welcome'
-              ? <WelcomeLeft onGetStarted={() => setStep('tour')} />
-              : <TourLeft tour={tour} onDone={onDone} />}
+              ? <WelcomeLeft onGetStarted={startTour} />
+              : <TourLeft tour={tour} onDone={finishTour} />}
           </motion.div>
         </AnimatePresence>
       </ScaledColumn>

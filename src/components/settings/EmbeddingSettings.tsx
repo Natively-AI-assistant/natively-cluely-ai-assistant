@@ -3,8 +3,7 @@ import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, Ha
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipTestLabel, type AipTone } from './AIProvidersSettings';
-import { Presence, SwapLabel, useMotionReadyAfter } from './SettingsRow';
-import { PICKER_MENU_WIDTH, RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, capPickerLabel } from './SettingsRow';
+import { PICKER_MENU_WIDTH, Presence, RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, SwapLabel, capPickerLabel, useMotionReadyAfter } from './SettingsRow';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 // Embeddings — configured INDEPENDENTLY of the generation model.

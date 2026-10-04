@@ -1,0 +1,23 @@
+{
+  "model_id": "e5-large-v2",
+  "dimensions": 1024,
+  "index": "natively_refs__e5-large-v2__1024d__v1.sqlite",
+  "n": 74,
+  "perK": {
+    "10": {
+      "anyFile": 0.5946,
+      "allFiles": 0.1486,
+      "fileRecall": 0.3547
+    },
+    "20": {
+      "anyFile": 0.7297,
+      "allFiles": 0.2568,
+      "fileRecall": 0.4764
+    },
+    "50": {
+      "anyFile": 0.8784,
+      "allFiles": 0.4324,
+      "fileRecall": 0.6689
+    }
+  }
+}

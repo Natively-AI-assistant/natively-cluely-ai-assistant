@@ -167,7 +167,10 @@ describe('test results (phase 3)', () => {
     const s = new S.VisionCapabilityStore({ filePath: null, now: () => 1 });
     s.recordTest('litellm', S.normalizeVisionBaseURL('http://localhost:4000/v1/'), 'my-model', true);
     S.__setVisionCapabilityStore(s);
-    assert.deepEqual(S.storedVisionTest('litellm', 'litellm/my-model', S.normalizeVisionBaseURL('http://localhost:4000')), { reads: true, at: 1 });
+    // (The 4th argument is "now": the result was saved at t=1 and is read at t=2.
+    // Read at the real clock it is decades old, and a stale result is no answer.)
+    assert.deepEqual(S.storedVisionTest('litellm', 'litellm/my-model', S.normalizeVisionBaseURL('http://localhost:4000'), 2), { reads: true, at: 1 });
+    assert.equal(S.storedVisionTest('litellm', 'litellm/my-model', S.normalizeVisionBaseURL('http://localhost:4000')), undefined, 'older than 30 days: not an answer');
     assert.equal(S.normalizeVisionBaseURL(' http://h:1/v1// '), 'http://h:1');
     assert.equal(S.normalizeVisionBaseURL(undefined), '');
     S.__setVisionCapabilityStore(null);

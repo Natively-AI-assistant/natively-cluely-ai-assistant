@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useId, useMemo } from 'react';
 import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, SquarePen } from 'lucide-react';
+import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, ChevronLeft, SquarePen, FileText } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
@@ -23,6 +23,7 @@ import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
 import { followUpRecipients, recipientSummary, gmailComposeUrl } from '../lib/followUpRecipients.mjs';
 import { reflowFlattenedList, leadingItem, techniqueLabel, techniqueFromApproach, extractComplexity, isNotApplicable, splitTrailingAnswer, plainTitle, breakGluedLines, fixBoldSpacing, latexParensToDollars, stripLeadingReasoning, stripStrayGistLines, plainEmailText, plainMeetingTitle } from '../lib/codingAnswer.mjs';
 import { normalizeFinalizedMarkdownMath } from '../lib/streamingMarkdown';
+import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 // Transcript turns, and which source-quality notes the page does not show. Kept pure so they are tested on their own.
@@ -197,6 +198,8 @@ function extractCodeBlock(body: string): { lang: string; code: string } | null {
     if (matches.length !== 1) return null;
     const m = matches[0];
     if (trimmed.replace(m[0], '').trim().length > 0) return null; // prose outside fence
+    // A diagram is not a code hero: let the markdown renderer hand it to the diagram card.
+    if (['mermaid', 'natively-chart', 'natively-diagram'].includes((m[1] || '').toLowerCase())) return null;
     return { lang: m[1] || '', code: m[2].replace(/\n$/, '') };
 }
 
@@ -359,10 +362,18 @@ const answerMarkdown = (text: string) => normalizeFinalizedMarkdownMath(latexPar
 // the trailing [[GIST]] split off (it becomes a chip elsewhere), and no [[GIST]] lines
 // left in the middle of a multi-part answer.
 const usageAnswerText = (raw?: string | null): string => raw ? stripStrayGistLines(splitGistLine(stripLeadingReasoning(raw)).body) : '';
-const AnswerMarkdown: React.FC<{ children: string }> = ({ children }) => (
-    <ReactMarkdown remarkPlugins={ANSWER_REMARK} rehypePlugins={ANSWER_REHYPE} components={mdComponents}>
-        {answerMarkdown(children)}
+// A saved answer's Mermaid blocks are drawn again from their stored source
+// (nothing but the answer text is persisted), by the same card the live overlay
+// uses. Each block is cut out before the clean-up above runs, so the diagram
+// source is never rewritten by math or bold-spacing normalisation. A replay
+// never starts a repair on its own.
+const renderAnswerChunk = (chunk: string, key: string) => (
+    <ReactMarkdown key={key} remarkPlugins={ANSWER_REMARK} rehypePlugins={ANSWER_REHYPE} components={mdComponents}>
+        {answerMarkdown(chunk)}
     </ReactMarkdown>
+);
+const AnswerMarkdown: React.FC<{ children: string }> = ({ children }) => (
+    <DiagramAwareMarkdown text={children} renderMarkdown={renderAnswerChunk} />
 );
 
 // Bespoke code hero: custom header (language label · technique chip · copy button),
@@ -666,10 +677,13 @@ const USAGE_TIME_ROW = 'flex items-center h-6 mt-2 opacity-0 translate-y-1 [@med
 // this session — history is read-mostly, so re-viewing must be instant, never a
 // re-cascade.
 const UsageInteraction: React.FC<{
-    interaction: { timestamp: number; question?: string; answer?: string };
+    interaction: { timestamp: number; question?: string; answer?: string; images?: string[] };
     id: string;
     staggerDelay: number;
-}> = ({ interaction, id, staggerDelay }) => {
+    /** Open preview `index` of `interaction.images` full size. */
+    onOpenImage?: (index: number) => void;
+}> = ({ interaction, id, staggerDelay, onOpenImage }) => {
+    const t = useT();
     const reduce = useReducedMotion();
     const firstView = !seenInteractionIds.has(id);
     useEffect(() => { seenInteractionIds.add(id); }, [id]);
@@ -688,11 +702,33 @@ const UsageInteraction: React.FC<{
         return { initial: { opacity: 0, ...offset }, animate: { opacity: 1, x: 0, y: 0 }, transition: { duration: 0.32, ease: CROSSFADE_EASE, delay } };
     };
 
+    const images = interaction.images ?? [];
+
     return (
         <div className="space-y-4">
             {/* User question — contained bubble, enters from the right, selectable */}
-            {interaction.question && (
+            {(interaction.question || images.length > 0) && (
                 <div className="group/q flex flex-col items-end">
+                    {/* The screenshots this answer used, above the question the way a
+                        message shows its attachments. Previews are made when the answer
+                        is logged (electron usagePreviews.ts); the screenshots themselves
+                        are deleted after the meeting. Click opens one full size. */}
+                    {images.length > 0 && (
+                        <motion.div {...enter({ x: 8 }, staggerDelay)} className="mb-1.5 flex flex-wrap justify-end gap-1.5 max-w-[80%]">
+                            {images.map((src, k) => (
+                                <button
+                                    key={k}
+                                    type="button"
+                                    onClick={() => onOpenImage?.(k)}
+                                    aria-label={images.length > 1 ? `${t('Screenshot')} ${k + 1} / ${images.length}` : t('Screenshot')}
+                                    className="block overflow-hidden rounded-[14px] border border-border-subtle bg-bg-input cursor-zoom-in transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:scale-[0.98]"
+                                >
+                                    <img src={src} alt="" decoding="async" draggable={false} className="block h-[108px] w-auto max-w-[220px] object-cover" />
+                                </button>
+                            ))}
+                        </motion.div>
+                    )}
+                    {interaction.question && (<>
                     {/* .lg-bubble (ui-components): the original Liquid Glass material on the
                         Settings toggle's periwinkle blue (--toggle-on, lifted toward white in light
                         mode), with nothing painted around it and no hover effect. Fill and
@@ -707,6 +743,7 @@ const UsageInteraction: React.FC<{
                     <div className={`${USAGE_TIME_ROW} justify-end pr-1 [@media(hover:hover)]:group-hover/q:opacity-100 [@media(hover:hover)]:group-hover/q:translate-y-0 group-focus-within/q:opacity-100 group-focus-within/q:translate-y-0`}>
                         <span className="text-[11px] text-text-tertiary cursor-default">{formatTime(interaction.timestamp)}</span>
                     </div>
+                    </>)}
                 </div>
             )}
 
@@ -733,6 +770,85 @@ const UsageInteraction: React.FC<{
                 </motion.div>
             )}
         </div>
+    );
+};
+
+/**
+ * A Usage screenshot preview, full size: the window dims and the image scales up
+ * from 96%; a click outside it, the close button or Esc puts it away. With more
+ * than one, ← → (keys or buttons) step through them. role="dialog" also makes the
+ * page's own Esc-to-go-back stand down while this is open.
+ */
+const UsageImageViewer: React.FC<{
+    images: string[];
+    index: number;
+    onIndex: (index: number) => void;
+    onClose: () => void;
+}> = ({ images, index, onIndex, onClose }) => {
+    const t = useT();
+    const reduce = useReducedMotion();
+    const closeRef = useRef<HTMLButtonElement>(null);
+    const count = images.length;
+    const step = (d: number) => onIndex((index + d + count) % count);
+    useEffect(() => {
+        closeRef.current?.focus({ preventScroll: true });
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
+            else if (count > 1 && e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+            else if (count > 1 && e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [index, count]);
+    const navBtn = 'absolute top-1/2 -translate-y-1/2 w-9 h-9 rounded-full inline-flex items-center justify-center bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors';
+    return (
+        <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('Screenshot')}
+            className="fixed inset-0 z-[320] flex items-center justify-center px-16 py-14 bg-black/75"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: CROSSFADE_EASE }}
+            onClick={onClose}
+        >
+            <AnimatePresence initial={false} mode="popLayout">
+                <motion.img
+                    key={index}
+                    src={images[index]}
+                    alt=""
+                    draggable={false}
+                    onClick={(e) => e.stopPropagation()}
+                    className="max-w-full max-h-full object-contain rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+                    initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.22, ease: CROSSFADE_EASE }}
+                />
+            </AnimatePresence>
+            <button
+                ref={closeRef}
+                type="button"
+                aria-label={t('Close')}
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full inline-flex items-center justify-center bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors"
+            >
+                <X className="w-4 h-4" strokeWidth={2} />
+            </button>
+            {count > 1 && (
+                <>
+                    <button type="button" aria-label={t('Previous')} onClick={(e) => { e.stopPropagation(); step(-1); }} className={`${navBtn} left-4`}>
+                        <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+                    </button>
+                    <button type="button" aria-label={t('Next')} onClick={(e) => { e.stopPropagation(); step(1); }} className={`${navBtn} right-4`}>
+                        <ChevronRight className="w-4 h-4" strokeWidth={2} />
+                    </button>
+                    <span className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[12px] font-medium text-white/70 tabular-nums select-none">{index + 1} / {count}</span>
+                </>
+            )}
+        </motion.div>
     );
 };
 
@@ -1088,6 +1204,8 @@ interface Meeting {
         question?: string;
         answer?: string;
         items?: string[];
+        /** JPEG data-URL previews of the screenshots the answer used (electron usagePreviews.ts). */
+        images?: string[];
     }>;
     summaryStatus?: MeetingSummaryStatus;
 }
@@ -1663,6 +1781,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
+    // Usage tab: the screenshot preview being viewed full size (UsageImageViewer).
+    const [imageViewer, setImageViewer] = useState<{ images: string[]; index: number } | null>(null);
     // The connected calendar account's first name: what the transcript calls the
     // user when the meeting has no saved `me` label (resolveSpeakerName). Null = "Me".
     // Same cleanup as the main process's calendarSpeakerLabels (never an address).
@@ -1681,9 +1801,11 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     }, []);
     // Tell the host, and take it back on the way out: the page unmounts with
     // the chat still open when the user goes back to the list.
+    // The screenshot viewer rides the same lift: its dim covers the whole window,
+    // header included, exactly like the chat's.
     useEffect(() => {
-        onChatOpenChange?.(isChatOpen);
-    }, [isChatOpen, onChatOpenChange]);
+        onChatOpenChange?.(isChatOpen || imageViewer != null);
+    }, [isChatOpen, imageViewer, onChatOpenChange]);
     useEffect(() => () => onChatOpenChange?.(false), [onChatOpenChange]);
     const [submittedQuery, setSubmittedQuery] = useState('');
 
@@ -3421,6 +3543,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 id={id}
                                                 interaction={interaction}
                                                 staggerDelay={staggerDelay}
+                                                onOpenImage={(index) => setImageViewer({ images: interaction.images ?? [], index })}
                                             />
                                         );
                                     });
@@ -3431,6 +3554,19 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     </div>
                 </div>
             </main>
+
+            {/* Usage tab: a screenshot preview, full size. */}
+            <AnimatePresence>
+                {imageViewer && imageViewer.images.length > 0 && (
+                    <UsageImageViewer
+                        key="usage-image-viewer"
+                        images={imageViewer.images}
+                        index={Math.min(imageViewer.index, imageViewer.images.length - 1)}
+                        onIndex={(index) => setImageViewer(v => (v ? { ...v, index } : v))}
+                        onClose={() => setImageViewer(null)}
+                    />
+                )}
+            </AnimatePresence>
 
             {/* Floating Footer (Ask Bar). While the chat is open this bar is the chat's
                 input — follow-ups go through it (MeetingChatOverlay has none of its own and

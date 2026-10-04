@@ -50,7 +50,7 @@ test('macOS: a browser is a call only with a meeting in it', () => {
 
 test('macOS: Natively itself, and unknown recorders, are never a call', () => {
     assert.equal(detectMeeting(input('darwin', [{ pid: 500, path: MAC_SELF.execPath }]).i), null, 'our own pid');
-    assert.equal(detectMeeting(input('darwin', [{ pid: 501, bundleId: 'com.electron.meeting-notes.helper', path: '/Applications/Natively.app/Contents/Frameworks/Natively Helper.app/Contents/MacOS/Natively Helper' }]).i), null, 'our own helper');
+    assert.equal(detectMeeting(input('darwin', [{ pid: 501, bundleId: 'com.apple.corespeechd.helper', path: '/Applications/Natively.app/Contents/Frameworks/Natively Helper.app/Contents/MacOS/Natively Helper' }]).i), null, 'our own helper');
     assert.equal(detectMeeting(input('darwin', [{ pid: 28295, path: '/opt/homebrew/Cellar/ffmpeg/8.1.2_1/bin/ffmpeg' }]).i), null, 'a terminal recording (measured shape: no bundle id)');
     assert.equal(detectMeeting(input('darwin', []).i), null);
 });

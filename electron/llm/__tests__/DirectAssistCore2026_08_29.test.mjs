@@ -681,7 +681,7 @@ test('empty upstream stream is INCOMPLETE_STREAM and never done', async () => {
   assert.equal(result.state, 'failed');
 });
 
-test('provider error normalization never exposes prompt, context, or response bodies', async () => {
+test('provider error normalization never exposes prompt or context, in the message or in the provider words', async () => {
   const { DirectAssistService, normalizeDirectAssistError } = await loadDirectAssist();
   const secret = 'RAW_PRIVATE_PROMPT_981276';
   const normalized = normalizeDirectAssistError({
@@ -694,13 +694,20 @@ test('provider error normalization never exposes prompt, context, or response bo
   const service = new DirectAssistService({
     streamDirectAssist() {
       return (async function* () {
-        throw new Error(`provider echoed ${secret}`);
+        throw new Error(`provider echoed ${secret} ${'and kept going '.repeat(60)}`);
       })();
     },
   });
   const { events } = await collect(service.stream(baseInput({ manualContext: secret })));
+  const error = events.at(-1).error;
   assert.equal(events.at(-1).type, 'error');
-  assert.doesNotMatch(events.at(-1).error.message, new RegExp(secret));
+  assert.doesNotMatch(error.message, new RegExp(secret));
+  // What the provider said is shown to the person who asked (2026-10-01), as
+  // one capped line — with anything it quoted from the request cut out. The
+  // context travelled in the prompt, so it must not come back on the event.
+  assert.match(error.detail, /^provider echoed … and kept going/);
+  assert.ok(error.detail.length <= 241, `detail is capped, got ${error.detail.length}`);
+  assert.doesNotMatch(JSON.stringify(events.at(-1)), new RegExp(secret));
 });
 
 test('already-aborted request emits one cancel terminal and performs no dispatch', async () => {
@@ -841,7 +848,9 @@ test('Direct private-vision guard blocks cloud images before Natively transport'
 
 test('Direct selection classifies LiteLLM and NVIDIA gateways before generic vendors', () => {
   const source = fs.readFileSync(path.resolve(root, 'electron/LLMHelper.ts'), 'utf8');
-  const start = source.indexOf('public getDirectAssistSelection()');
+  // The chain moved into classifyCloudModel (2026-10-01), which the live
+  // selection and the Settings "Reads images" lookup now share.
+  const start = source.indexOf('private classifyCloudModel(');
   const end = source.indexOf('\n  /**', start + 20);
   const selection = source.slice(start, end);
   const liteLlm = selection.indexOf('this.isLiteLLMModel(selected)');
@@ -853,8 +862,8 @@ test('Direct selection classifies LiteLLM and NVIDIA gateways before generic ven
   assert.ok(liteLlm >= 0 && liteLlm < genericOpenAi, 'litellm/openai/... must stay on LiteLLM');
   assert.ok(nvidiaNim >= 0 && nvidiaNim < genericOpenAi, 'nvidia_nim/openai/... must stay on NIM');
   assert.ok(nvidiaNim < genericGroq, 'nvidia_nim/openai/gpt-oss... must not be claimed by Groq');
-  assert.match(selection, /isLiteLLMModel\(selected\)\) provider = 'litellm'/);
-  assert.match(selection, /isNvidiaNimModel\(selected\)\) provider = 'nvidia_nim'/);
+  assert.match(selection, /isLiteLLMModel\(selected\)\) return \{ provider: 'litellm'/);
+  assert.match(selection, /isNvidiaNimModel\(selected\)\) return \{ provider: 'nvidia_nim'/);
 });
 
 test('Direct vision preflight preserves images for LiteLLM and NVIDIA gateways', () => {
@@ -869,7 +878,7 @@ test('Direct vision preflight preserves images for LiteLLM and NVIDIA gateways',
     // Since 2026-10-01 the gateways ask the resolver with unknown → forward:
     // an untested model still keeps its image; only one tested or catalogued
     // as text-only is refused (executed in VisionProbeWiring2026_10_01).
-    /case 'litellm':\s*case 'nvidia_nim':[\s\S]*?return readsImages\(this\.visionVerdict\(selection, custom, curl\), true\);/,
+    /case 'litellm':\s*case 'nvidia_nim':[\s\S]*?return gatewaySeatReadsImages\(selection\.provider as Parameters<typeof gatewaySeatReadsImages>\[0\], selection\.model, this\.visionFacts\(selection, custom, curl\)\);/,
   );
   assert.doesNotMatch(
     capabilityBoundary,

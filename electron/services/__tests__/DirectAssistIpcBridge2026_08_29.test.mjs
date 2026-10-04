@@ -93,8 +93,21 @@ test('stream relay enforces correlation, monotonic deltas, and one terminal even
   assert.match(streamBlock, /streamEvent\.sequence <= lastSequence/);
   assert.match(streamBlock, /if \(terminalSent\) return/);
   assert.match(streamBlock, /terminalSent = true/);
-  assert.match(streamBlock, /INCOMPLETE_STREAM/);
   assert.match(streamBlock, /controller\.signal\.aborted/);
+});
+
+test('a relay fault is reported as OUR fault, never as the provider returning nothing', () => {
+  // Both fallbacks fire when the relay itself breaks (a correlation or
+  // ordering violation, or the service ending without a terminal event). They
+  // used to send INCOMPLETE_STREAM, which the overlay words as "<provider>
+  // returned an empty answer" — blaming a provider for an app bug.
+  const relayFallbacks = streamBlock.match(/error: directAssistError\(\s*'([A-Z_]+)',\s*'([^']+)'/g) || [];
+  assert.equal(relayFallbacks.length, 2, 'the two relay fallbacks are where they were');
+  for (const fallback of relayFallbacks) {
+    assert.match(fallback, /'INTERNAL_ERROR'/);
+    assert.doesNotMatch(fallback, /Direct Assist/, 'no internal product jargon in a sentence the user can see');
+  }
+  assert.doesNotMatch(streamBlock, /INCOMPLETE_STREAM/);
 });
 
 test('provider_switch is forwarded in order without being swallowed into the terminal fall-through', () => {
@@ -329,7 +342,10 @@ test('Direct Assist transcribes its own screenshot AFTER the answer, never befor
   const helper = read('electron/services/screen/screenTranscription.ts');
   // Skipped entirely when these exact bytes are already described. The cache is
   // the point: a re-captured screen costs nothing.
-  assert.match(helper, /if \(cached\?\.description\) return cached\.description;/);
+  // (…unless the cached text was made while the screenshot was being kept on
+  // this device and that setting is now off: then it is read again. Behaviour:
+  // OnDeviceScreenText2026_10_01.test.mjs.)
+  assert.match(helper, /if \(cached\?\.description && !stale\) return cached\.description;/);
   // Reaches the extraction prompt. Every pre-existing call site passed an action
   // that took the "answer concisely" branch instead.
   assert.match(helper, /userAction: 'transcribe'/);

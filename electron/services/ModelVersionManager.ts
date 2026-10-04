@@ -1092,6 +1092,16 @@ export class ModelVersionManager {
     }
   }
 
+  /**
+   * Resume after stopScheduler (stealth toggle-off). Re-arms the 14-day tick;
+   * it does NOT run an immediate discovery — a discovery skipped during
+   * stealth waits for the next launch, which is the correct frugality for a
+   * fortnightly catalogue refresh.
+   */
+  public resumeScheduler(): void {
+    if (!this.discoveryTimer) this.startBackgroundScheduler();
+  }
+
   // ─── State Persistence ─────────────────────────────────────────────
 
   private loadState(): PersistedState {

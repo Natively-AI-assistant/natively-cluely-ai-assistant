@@ -21,13 +21,15 @@ export class DynamicActionEngine {
         modeTemplateType: string;
         modeId: string;
         sessionId: string;
+        /** False when "Diagrams and charts" is off: no card offers a drawing. */
+        visualsEnabled?: boolean;
     }): DynamicAction[] {
         const { transcript, speaker, modeTemplateType, modeId, sessionId } = params;
         const now = Date.now();
         const candidateActions: DynamicAction[] = [];
 
         // Detect triggers using regex patterns
-        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType });
+        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType, visualsEnabled: params.visualsEnabled });
 
         for (const { trigger, match, index } of matchedTriggers) {
             const requiresScreen = Boolean(trigger.requiresScreen);

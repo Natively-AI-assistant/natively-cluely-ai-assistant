@@ -221,7 +221,7 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                                         <ModelSelectorLabel>Gemini 3 Flash</ModelSelectorLabel>
                                         <ChevronDown size={12} className="shrink-0" />
                                     </div>
-                                    <div className="w-7 h-7 flex items-center justify-center rounded-[9px] border overlay-control-surface overlay-text-muted" style={appearance.controlStyle}>
+                                    <div className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon">
                                         <SlidersHorizontal className="w-3.5 h-3.5" />
                                     </div>
                                 </div>
@@ -603,6 +603,9 @@ interface SettingsOverlayProps {
     /** Setup & Help's "Pick a mode" / "Add your résumé": hand over to that manager. */
     onOpenModes?: () => void;
     onOpenProfile?: () => void;
+    /** About's Search / Demo meeting: close Settings, open that in the Launcher. */
+    onOpenSearch?: () => void;
+    onOpenMeeting?: (id: string) => void;
 }
 
 /**
@@ -637,6 +640,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     closeInstantly = false,
     onOpenModes,
     onOpenProfile,
+    onOpenSearch,
+    onOpenMeeting,
 }) => {
     const resolvedTheme = useResolvedTheme();
     const isLight = resolvedTheme === 'light';
@@ -802,6 +807,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
 
     const [verboseLogging, setVerboseLogging] = useState(false);
+    // On unless the user turned it off; the main process is the source of truth.
+    const [usageStatistics, setUsageStatistics] = useState(true);
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const [exportingLogs, setExportingLogs] = useState(false);
@@ -832,6 +839,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
+            window.electronAPI?.getUsageStatistics?.().then((v) => setUsageStatistics(v !== false)).catch(() => { });
             window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
             window.electronAPI?.getAutoAnswerEnabled?.().then(setAutoAnswerEnabled).catch(() => { });
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
@@ -2857,10 +2865,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                             : 'bg-bg-component hover:bg-bg-elevated text-text-primary border-border-subtle'
                                                         }`}
                                                     >
-                                                        {/* justify-start puts the glyph where Theme's and Language's
-                                                            icons start; centred, it sat 12px further in. */}
                                                         {/* Each status is one glyph + one word: the glyph cross-fades
-                                                            in its 14px slot, the word swaps (Sync's Copy → Copied). */}
+                                                            in its 14px slot, the word swaps (Sync's Copy → Copied).
+                                                            justify-start puts the glyph where Theme's and Language's
+                                                            icons start; centred, it sat 12px further in. */}
                                                         <Presence kind="icon" id={updateStatus}>
                                                             {updateStatus === 'checking' ? <RefreshCw size={14} className="animate-spin" />
                                                                 : updateStatus === 'available' ? <ArrowDown size={14} />
@@ -2987,6 +2995,37 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 window.dispatchEvent(new Event('storage'));
                                                             }}
                                                             className={showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+
+                                                    {/* Usage statistics */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Activity size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Usage statistics')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Sends which features are used and how often. Never what you say, see or type.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={usageStatistics}
+                                                            label={t('Usage statistics')}
+                                                            onChange={() => {
+                                                                const newState = !usageStatistics;
+                                                                setUsageStatistics(newState);
+                                                                // A write the settings store refused did not change
+                                                                // anything: the switch goes back so it never shows
+                                                                // "off" while reports are still being sent.
+                                                                const revert = () => setUsageStatistics(!newState);
+                                                                const pending = window.electronAPI?.setUsageStatistics?.(newState);
+                                                                if (!pending) { revert(); return; }
+                                                                pending.then((r) => { if (!r?.success) revert(); }).catch(revert);
+                                                            }}
+                                                            className={usageStatistics ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
                                                     </div>
 
@@ -3140,6 +3179,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 </p>
                                                             </div>
                                                         </div>
+                                                        {/* min-w-[105px] + px-2.5 like every other control in this column; it
+                                                            also holds "Exporting…", so the swap can't resize the box. */}
                                                         <button
                                                             type="button"
                                                             disabled={exportingLogs}
@@ -3159,9 +3200,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }}
                                                             className="shrink-0 min-w-[105px] text-xs font-medium px-2.5 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-50"
                                                         >
-                                                            {/* min-w-[105px] + px-2.5 like every other control in this
-                                                                column; it also holds "Exporting…", so the swap can't
-                                                                resize the box. */}
                                                             <LabelSwap id={exportingLogs ? 'exporting' : 'idle'}>
                                                                 {exportingLogs ? t('Exporting\u2026') : t('Export')}
                                                             </LabelSwap>
@@ -4478,7 +4516,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {activeTab === 'about' && (
-                                <AboutSection />
+                                <AboutSection onNavigate={setActiveTab} onOpenModes={onOpenModes} onOpenProfile={onOpenProfile} onOpenSearch={onOpenSearch} onOpenMeeting={onOpenMeeting} />
                             )}
                             </ErrorBoundary>
                             </motion.div>

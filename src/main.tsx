@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client"
 import "./index.css"
 import { THEME_CACHE_KEY, applyResolvedTheme } from "./lib/themeTransition.mjs"
 import { createSwitchableTooltipGuard, installNativeTooltipGuard, shouldSuppressNativeTooltips } from "./lib/nativeTooltipGuard.mjs"
+import { wireStealthTooltips } from "./lib/stealthTooltips.mjs"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
 // Surface uncaught errors and unhandled promise rejections through console.error
@@ -71,6 +72,13 @@ if (shouldSuppressNativeTooltips(tooltipWindow)) {
     .then((state) => { if (!undetectableEventSeen) launcherTooltipGuard.setActive(state); })
     .catch(() => {});
 }
+
+// Custom (.t-tt) tooltips are in-DOM, so content protection already hides them
+// from captures — but while undetectable nothing hover-revealed should render
+// at all, in ANY window (overlay included: both overlay and meeting are usable
+// mid-session, so no hint is worth even residual risk). Unlike the native
+// guard above this is stealth-driven for every window, not per-route.
+wireStealthTooltips(document.documentElement, window.electronAPI);
 
 // Step 1: Apply cached theme synchronously — before React renders.
 // This ensures useResolvedTheme()'s initial useState read sees the correct value.
