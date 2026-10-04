@@ -846,3 +846,11 @@ the verdict above stands as written. To put a number on it, the control build is
 Of the two rows E8 touched that newly fail: one general-knowledge turn that now carries the pack attached a
 personal claim (9.5 → 5.0), and one Recruiting turn deferred with the job description in view (9.3 → 2.6). The five
 fast-path turns that need no document went 9.26 → 7.69 (−1.57 ±1.80): the cost side of (b), on five rows.
+
+### Run-to-run variation, measured (`m1r`): written before the run
+
+The control build `54606ef2` is run a second time on dev + counterfactual as `m1r`, judged the same way. Nothing is
+decided by it. It answers one question: when the build and the prompts are the same, how far apart are two runs
+in mean, in hard fails and in first word? It will be reported as `m1` against `m1r` on all 333 rows, and it is the
+yardstick for every paired line in this file whose margin was set without it (E8 line 5 first of all). E8's
+verdict by its rule is not changed by it.
