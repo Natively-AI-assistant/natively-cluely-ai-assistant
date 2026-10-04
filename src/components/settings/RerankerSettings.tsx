@@ -1274,7 +1274,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 )}
 
                 {!m.supported && m.unsupportedReason && (
-                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 mt-1" role="status">
+                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 !mt-2.5" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">{m.unsupportedReason}</span>
                     </div>
@@ -2161,7 +2161,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                                                 {/* Verification Failure Warning */}
                                                 {group.anyFailed && (
-                                                    <div className="aip-inline-warn flex items-start gap-2 mt-1" role="status">
+                                                    <div className="aip-inline-warn flex items-start gap-2 !mt-2.5" role="status">
                                                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                                                         <span className="min-w-0">
                                                             {group.files.find(f => f.reason)?.reason ?? t('The downloaded file did not match its expected checksum.')}
@@ -2171,7 +2171,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                                                 {/* License Acceptance Banner */}
                                                 {group.unacknowledgedLicense && (
-                                                    <div className="space-y-1.5 p-2 rounded-[var(--aip-r-md)] bg-[var(--aip-btn-bg)] border border-[var(--aip-divider)] mt-1">
+                                                    <div className="space-y-1.5 p-2 rounded-[var(--aip-r-md)] bg-[var(--aip-btn-bg)] border border-[var(--aip-divider)] !mt-2.5">
                                                         <p className="text-[10px] aip-muted">
                                                             {t('This model requires licence acceptance')} ({group.unacknowledgedLicense.spdx})
                                                             {group.unacknowledgedLicense.commercialUseRestricted ? ` — ${t('non-commercial use only')}` : ''}.

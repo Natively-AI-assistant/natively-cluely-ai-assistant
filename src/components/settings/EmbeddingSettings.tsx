@@ -1330,7 +1330,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 )}
 
                 {needsLicence && (
-                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 mt-1" role="note">
+                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 !mt-2.5" role="note">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">
                             {t('Licence requires acceptance before downloading.')}
