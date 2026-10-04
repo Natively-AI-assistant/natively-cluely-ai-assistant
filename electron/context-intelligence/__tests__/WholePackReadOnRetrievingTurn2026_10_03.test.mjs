@@ -10,7 +10,7 @@
 // Between SMALL_CORPUS_MAX_TOKENS and WHOLE_PACK_MAX_TOKENS the port now hands
 // every file over entire on a turn that retrieves; the plan's item cap grows
 // by the file count and its token budget by the pack size, on top of what the
-// turn had. A FAST turn still reads nothing from a pack this size.
+// turn had. (Until 2026-10-04 a FAST turn read nothing from a pack this size; it now reads it.)
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -75,10 +75,14 @@ describe('decide(): the plan makes room for the whole pack on a turn that retrie
     const d = decide(req('team-meet', "What's the crash-free bar?", { attachedSourceCount: 1, attachedCorpusTokens: 180 }));
     assert.equal(d.retrievalPlan.maximumAcceptedEvidence, MODE_POLICIES['team-meet'].retrievalPolicy.maximumAcceptedEvidence);
   });
-  test('a general-knowledge turn still reads nothing from a pack this size', () => {
+  // 2026-10-04: reversed. Ten of 333 benchmark turns on main read nothing from a loaded pack because the classifier
+  // answered them from general knowledge; such a turn now reads a pack that fits (LoadedPackReachesEveryTurn2026_10_04).
+  test('a general-knowledge turn reads a pack this size too, with the same room', () => {
     for (const modeId of ['general', 'sales', 'team-meet', 'call-center']) {
       const d = decide(req(modeId, 'What is a mutex?'));
-      assert.equal(d.retrievalPlan.shouldRetrieve, false, modeId);
+      assert.equal(d.retrievalPlan.shouldRetrieve, true, modeId);
+      assert.ok(d.retrievalPlan.sourceTypes.includes('REFERENCE_FILE'), modeId);
+      assert.ok(d.retrievalPlan.evidenceTokens >= PACK_TOKENS, modeId);
     }
   });
   test('profile-only documents are not a pack', () => {
