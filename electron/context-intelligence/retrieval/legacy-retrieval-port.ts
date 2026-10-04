@@ -124,6 +124,28 @@ function isAdmissibleModeAttachment(e: EvidenceItem, allowed: ReadonlySet<Source
   return DOCUMENT_POOL_TYPES.some((t) => allowed.has(t));
 }
 
+// ── A file of the mode handed over WHOLE stays in the prompt (2026-10-04) ───
+//
+// Measured on main with the evidence-rich benchmark: on a heard Recruiting turn
+// the needed claims are about the candidate, and the claim-authority filter
+// below keeps only items that can evidence one of them. The mode's own hiring
+// job description (typed JOB_DESCRIPTION) cannot, so it was dropped from a pack
+// that was otherwise handed over whole: on 13 of 27 heard Recruiting turns,
+// including the ones where the candidate asks what the role pays, how much
+// travel it has, or whether they would carry the pager. The same file is in the
+// prompt on typed turns.
+//
+// Claim authority exists so a JD's "Postgres required" cannot ANSWER "does the
+// candidate have Postgres experience?". That is decided by what an item may
+// support (`acceptedFor`, evidenceSupportsClaim), which this does not touch.
+// What changes is only presence in the prompt, and only for a file the user
+// attached to this mode that the mode port hands over entire: the pack is one
+// thing, and a turn that reads it reads all of it.
+function isWholeModeFile(e: EvidenceItem): boolean {
+  return e.provenance === 'MODE_REFERENCE_FILE'
+    && (e.metadata as Record<string, unknown> | undefined)?.wholeDocument === true;
+}
+
 export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
   const now = deps.now ?? (() => 0);
 
@@ -187,7 +209,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
 
         const inScope = adapted.evidence.filter((e) => allowed.has(e.sourceType) || isAdmissibleModeAttachment(e, allowed));
         const kept: EvidenceItem[] = neededClaims.size
-          ? inScope.filter((e) => e.acceptedFor.some((c) => neededClaims.has(c)))
+          ? inScope.filter((e) => e.acceptedFor.some((c) => neededClaims.has(c)) || isWholeModeFile(e))
           : inScope;
 
         // Post-adapter drops, made observable (context-debug, 2026-08-01):
