@@ -470,3 +470,17 @@ describe('the FINALIZED path must survive remark-math, not just this module', ()
     });
   }
 });
+
+describe('text after an empty nested blockquote is kept', () => {
+  // marked 18.0.9 through 18.0.13 dropped the line after an empty nested
+  // blockquote (markedjs/marked#4098); 18.0.8 and 18.0.14 keep it. An answer
+  // that quotes a quote would lose its next paragraph in the overlay.
+  for (const input of ['>>\ntext', '> a\n>>\nb']) {
+    test(JSON.stringify(input), () => {
+      const html = renderStreamingMarkdown(input);
+      const last = input.split('\n').pop();
+      assert.match(html, new RegExp(`<p>${last}</p>`), `the trailing paragraph was dropped: ${html}`);
+    });
+  }
+});
+
