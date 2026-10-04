@@ -98,6 +98,20 @@ function fixMacOSDylibPaths(nodeFilePath) {
   }
 }
 
+// Minimum macOS the native module is linked for. It must match what the app can
+// run on (Electron 43's LSMinimumSystemVersion is 12.0), not Rust's defaults,
+// which are 10.12 for x86_64 and 11.0 for arm64.
+//
+// With 10.12 the linker treats the Swift overlay libraries as things an app
+// bundles itself (true before macOS 10.14.4) and records them as
+// `@rpath/libswiftCoreMedia.dylib`. Nothing in the app provides that rpath, so
+// the Intel slice failed at dlopen with "Library not loaded:
+// @rpath/libswiftCoreMedia.dylib" and native audio was unavailable on every
+// Intel Mac (found 2026-10-04 by loading the packaged x64 module under Rosetta;
+// the arm64 slice, linked for 11.0, was unaffected). At 12.0 the same library
+// resolves to its OS path, /usr/lib/swift/libswiftCoreMedia.dylib.
+const MACOS_DEPLOYMENT_TARGET = '12.0';
+
 if (os.platform() === 'darwin') {
   const macTargets = buildAllMacTargets
     ? ['x86_64-apple-darwin', 'aarch64-apple-darwin']
@@ -127,7 +141,10 @@ if (os.platform() === 'darwin') {
     }
 
     console.log(`\n--- Building for ${target} ---`);
-    const extraEnv = clangLibPath ? { LIBRARY_PATH: clangLibPath } : {};
+    const extraEnv = {
+      MACOSX_DEPLOYMENT_TARGET: process.env.MACOSX_DEPLOYMENT_TARGET || MACOS_DEPLOYMENT_TARGET,
+      ...(clangLibPath ? { LIBRARY_PATH: clangLibPath } : {}),
+    };
     runCommand(`npx napi build --platform --target ${target} --release`, extraEnv);
   }
 

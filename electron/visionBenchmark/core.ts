@@ -85,7 +85,7 @@ export async function processBenchmarkImage(imagePath: string, resolution: Bench
   try { source = await fs.readFile(imagePath); } catch { throw Object.assign(new Error('Screenshot could not be read.'), { code: 'invalid_image' }); }
   const readDurationMs = performance.now() - readStart;
   let original;
-  try { original = await sharp(source, { failOnError: true }).metadata(); } catch {
+  try { original = await sharp(source, { failOn: 'warning' }).metadata(); } catch {
     throw Object.assign(new Error('The selected file is not a valid image.'), { code: 'invalid_image' });
   }
   if (!original.width || !original.height) throw Object.assign(new Error('Image dimensions are unavailable.'), { code: 'invalid_image' });

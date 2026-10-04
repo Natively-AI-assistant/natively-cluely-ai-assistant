@@ -460,7 +460,7 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 
 #### 🖥 Platform
 
-- Electron 43 and TypeScript 7; requires Node 22.6+ to build from source.
+- Electron 43 and TypeScript 7; requires Node 22.13+ to build from source.
 - Signed macOS builds for **both** Apple Silicon and Intel, plus a macOS 12 (Monterey) compatibility guard for local speech.
 
 > 📄 **[Read the full v2.8.7 release notes →](docs/releases/v2.8.7.md)**
@@ -559,7 +559,7 @@ You explicitly control:
 
 ### Prerequisites
 
-- Node.js (v22.6+ required)
+- Node.js (v22.13+ required)
 - Git
 - Rust (required for native audio capture)
 - Xcode 26+ with the macOS 26 SDK (required only to build the Apple Speech helper or package Natively for macOS)

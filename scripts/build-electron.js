@@ -125,6 +125,16 @@ const buildOptions = {
     'pdfjs-dist',
     'pdf-parse',
     'mammoth',
+    // sharp 0.35 requires its prebuilt binding through STATIC paths
+    // (`require('./lib/sharp-darwin-arm64-<version>.node')` inside each
+    // @img/sharp-<platform> package) so that bundlers can follow them. esbuild
+    // does follow them and stops with "No loader is configured for .node
+    // files". Up to 0.34 the binding was reached through a template-string
+    // require esbuild could not resolve, so sharp's JavaScript was inlined and
+    // the binding was still found in node_modules at runtime. Externalizing
+    // keeps the same runtime lookup: sharp and @img/** are shipped in
+    // node_modules and listed in build.asarUnpack.
+    'sharp',
   ],
   sourcemap: true,
   jsx: 'automatic',
