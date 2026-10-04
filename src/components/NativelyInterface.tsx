@@ -2216,11 +2216,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const borders = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
       mirror.style.width = `${input.clientWidth + borders}px`;
       mirror.style.height = `${input.offsetHeight}px`;
-      input.scrollLeft = 0;
-      input.scrollTop = input.scrollHeight;
       mirror.scrollLeft = input.scrollLeft;
       mirror.scrollTop = input.scrollTop;
     };
+    // Typing follows the final line; resizing preserves the reading position.
+    input.scrollLeft = 0;
+    input.scrollTop = input.scrollHeight;
     syncCaretViewport();
     const observer = new ResizeObserver(syncCaretViewport);
     observer.observe(input);
