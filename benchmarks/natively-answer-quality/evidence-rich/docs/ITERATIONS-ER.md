@@ -889,3 +889,45 @@ evidence changed: 7.75 → 8.56 (+0.81 ±0.76), hard fails 5 → 3; the rows tha
 control runs, without being separable from run-to-run turnover on these numbers (flips 14 against 7 where two
 control runs give 10 against 9). `m2` was also the run that was paused and resumed. E8's verdict by its rule
 stands (not kept). To see whether the excess repeats, the candidate is run a second time (`m2r`).
+
+### E8 — the candidate run a second time (`m2r`; 2026-10-04 08:03 UTC; provisional judge)
+
+`report/run-noise.mjs m2 m2r dev cf`, `… m1 m2r …`, `… m1r m2r …`, `report/missed-rows.mjs m1 m2r recruiting -- dev cf`.
+
+| dev + counterfactual, 333 rows | Control, run 1 | Control, run 2 | Candidate, run 1 | Candidate, run 2 |
+|---|---:|---:|---:|---:|
+| Mean | 8.59 | 8.52 | 8.52 | 8.62 |
+| Hard fails | 26 | 28 | 33 | 27 |
+| Critical | 11 | 13 | 17 | 12 |
+| Heard first word, dev median | 1,484 ms | 1,628 ms | 1,589 ms | 1,732 ms |
+| Whole pack in the prompt (306 turns with one) | 279 | 279 | 305 | 305 |
+
+The excess of hard fails in the candidate's first run did not repeat (33, then 27, against 26 and 28). What does
+repeat, in every pairing of a control run with a candidate run:
+
+| | Run 1 against control 1 | Run 1 against control 2 | Run 2 against control 1 | Run 2 against control 2 |
+|---|---:|---:|---:|---:|
+| Rows whose evidence set changed | +1.14 (±1.14) | +0.81 (±0.76) | +1.29 (±1.00) | +0.94 (±0.67) |
+| Hard fails on those rows | 3 → 2 | 5 → 3 | 3 → 0 | 5 → 1 |
+| The 12 rows that had missed their reference evidence | +3.04 (±1.60) | +3.14 (±1.54) | +3.18 (±1.27) | |
+| Fast-path turns that need no document (5 rows) | −1.57 (±1.80) | −1.35 (±1.93) | −0.82 (±0.57) | |
+| Recruiting, 37 rows | +0.08 (±0.70) | | +0.59 (±0.54) | |
+
+So: the delivery gain is real and repeats; the hard-fail line that failed was run-to-run variation; and (b) has a
+repeatable cost on the general-knowledge turns that now carry a pack (five rows, about a point).
+**E8's verdict by its first rule stands as recorded: not kept (lines 5 and 8, on run 1).**
+
+### E8 — a second rule, for the blind holdout, with margins taken from the measured variation
+
+Written before any holdout row of E8 exists. It follows what Evin chose for E2 (run the blind holdout under a rule
+written first); it replaces nothing above. Run `er-holdout-m2` on `fix/er-pack-always` (`e1cb7f9b`), 180 rows,
+judged blind. Control: `er-holdout-m1`. Margins: two runs of one build differed by 0.08 (±0.16) on the mean and by
+2 to 7 hard fails on 333 rows.
+
+1. Turns with a pack loaded: every loaded file in the prompt on at least 97 % (`m1` holdout: 153 of 163).
+2. No claim-pass request cut; no file of another mode; no profile evidence where forbidden; no other-profile string.
+3. Rows whose evidence set changed against `m1`: mean gain at least +0.5.
+4. All rows, paired: not below −0.25.
+5. Hard fails not above `m1`'s 20 by more than 6.
+All five hold → E8 is confirmed on the holdout and stays on its branch for Evin's decision, with the cost of (b)
+stated. Any line fails → not kept, finally.
