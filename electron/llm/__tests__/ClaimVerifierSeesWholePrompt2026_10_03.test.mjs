@@ -97,12 +97,14 @@ describe('the claim pass sees the pack the answer saw', () => {
     assert.ok(r[0].startsWith('y'.repeat(20000)));
   });
 
-  test('wiring: the heard pass asks for its cap, and only the claim pass does', () => {
+  test('wiring: the claim pass and the document-grounded repair ask for the cap, nothing else does', () => {
+    // E10 (2026-10-04): the heard "corrected answer" repair inherits the whole prompt too — it was cut at
+    // 24,000 on every run since E1 (evidence-rich/docs/ITERATIONS-ER.md § E10). Every other repair keeps 24,000.
     const src = fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8');
-    const uses = src.match(/CLAIM_VERIFIER_MATERIAL_MAX_CHARS/g) ?? [];
-    assert.equal(uses.length, 1, 'one call site: verifyAnswerClaims');
-    const at = src.indexOf('CLAIM_VERIFIER_MATERIAL_MAX_CHARS');
-    assert.ok(src.lastIndexOf('private async verifyAnswerClaims', at) > src.lastIndexOf('private repairCallArgs', at), 'the cap is passed inside verifyAnswerClaims');
+    const uses = [...src.matchAll(/CLAIM_VERIFIER_MATERIAL_MAX_CHARS/g)].map((m) => m.index);
+    assert.equal(uses.length, 2, 'two call sites: verifyAnswerClaims and the doc-grounded repair');
+    assert.ok(uses.some((at) => src.lastIndexOf('private async verifyAnswerClaims', at) > src.lastIndexOf('private repairCallArgs', at)), 'the cap is passed inside verifyAnswerClaims');
     assert.ok(/claimVerifierDraftMessage\(body\), signal, system, \[\], cv\.CLAIM_VERIFIER_MATERIAL_MAX_CHARS\)/.test(src));
+    assert.ok(/wtaRepairSystemPrompt,\s*\['reference_files'\],[\s\S]{0,900}?CLAIM_VERIFIER_MATERIAL_MAX_CHARS/.test(src), 'the doc-grounded repair passes the cap');
   });
 });
