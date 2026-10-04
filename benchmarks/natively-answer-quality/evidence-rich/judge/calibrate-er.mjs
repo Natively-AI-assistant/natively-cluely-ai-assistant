@@ -31,7 +31,7 @@ function checkPair(obj) {
   return { ok: p.length === 0, problems: p };
 }
 
-const lim = limiter(VIA_CLI ? 4 : 3);
+const _c = process.argv.indexOf('--concurrency'); const lim = limiter(_c >= 0 ? Math.max(1, Number(process.argv[_c + 1]) || 1) : (VIA_CLI ? 4 : 3));
 const results = [];
 await Promise.all(cal.pairs.map((p) => lim(async () => {
   const item = { id: p.id, prior_transcript: null, conversation_id: null, turn_index: 1, pi_state: 'none', condition: p.class, ...p.item };
