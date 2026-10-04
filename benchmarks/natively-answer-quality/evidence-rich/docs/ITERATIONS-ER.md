@@ -953,3 +953,12 @@ For the record, beside the verdict: the three holdout rows that had missed their
 9.28; the whole holdout scored 8.82 against main's 8.54 and the kept build's 7.40 (+1.42 ±0.39, hard fails 39 → 13,
 critical 19 → 5), most of the difference to main on rows E8 did not touch (+0.27 ±0.26), which is the size of
 run-to-run variation measured above.
+
+### E8 (a) landed on LOCAL main (Evin, 2026-10-04: "Land the Recruiting fix only")
+
+`efc126a9` on `88d4e7a0`: the claim-authority change alone (cherry-pick of `e1cb7f9b`), its test file trimmed to
+that change. On that commit: `typecheck:electron` clean, `test:intelligence` 2,881 pass / 0 fail, llm suite 5,768
+pass / 0 fail; verified on main with `git merge-base --is-ancestor`. Not pushed; not benchmarked alone (it was
+measured together with (b): Recruiting +0.08 and +0.59 over two runs, the hiring job description in the prompt on
+27 of 27 heard Recruiting turns instead of 13). Undo: `git revert efc126a9`. (b), the fast-path change, stays on
+`fix/er-pack-always` (`dfe2cf5b`), not landed.

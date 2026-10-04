@@ -211,3 +211,14 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
 * The gpt-6-astra chain now takes main's holdout and E2's holdout right after the baseline / E1 pair; the session's
   18:47 task reports on all four landed changes and on main, and reverts nothing.
 * Disk fell to 4.1 GB during the dev run (other sessions) and recovered to 16 GB; the run was not paused.
+
+## 2026-10-04 06:00–09:20 UTC — E8, run-to-run variation, E8 (a) landed
+
+* E8 built on branch `fix/er-pack-always` from main `54606ef2`; runs `m2` (paused and resumed at Evin's request),
+  `m1r` (the control again), `m2r` (the candidate again), `er-holdout-m2`. Failed its first rule on run-to-run
+  variation and its second on line 3 by 0.10.
+* `m1r` structured some profile documents with the model (model call timing out at 45 s, then retried): the only
+  such run; reason not established.
+* 60 holdout judgments failed with "organization has disabled Claude subscription access for Claude Code"; retried
+  minutes later without error.
+* On Evin's word only (a) landed: `efc126a9` on local main, not pushed.
