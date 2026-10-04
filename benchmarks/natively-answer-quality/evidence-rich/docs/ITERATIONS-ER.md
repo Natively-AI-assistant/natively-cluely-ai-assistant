@@ -1053,6 +1053,19 @@ Judge: gpt-6-astra (canonical, back since 11:02 UTC). If Astra stops answering m
 5.5 (provisional, never pooled) and the verdict waits for Astra.
 Descriptive only (not part of the rule): the 11 turns where `cut` lacked a needed fact the generator had.
 
+**E10 result (2026-10-04).** Replay: 524 calls, all finished inside the deadline. Astra answered 72 judgments before its
+budget pool closed (HTTP 402, 12:08 UTC) — no turn has all four arm × k judgments, so there is no Astra verdict.
+Per the rule, judged by Opus 5.5 (provisional, 524/524, never pooled):
+
+| arm | mean | hard fails | needed-fact strings in the output | first useful median | inside 7 s |
+|---|---|---|---|---|---|
+| cut (24,000, as today) | 7.896 | 26.0 | 314 | 1,193 ms | 100 % |
+| whole (≤ 96,000) | 8.773 | 12.0 | 378 | 1,267 ms | 100 % |
+
+Lines 1–4 all PASS (whole − cut +0.877 ±0.340). **Provisional verdict: KEEP** (commit `bc878adc` on
+`fix/typed-verbatim`). The verdict waits for Astra, as written. Caveat stated in the rule: the system prompt lacked each
+mode's own instruction layer in both arms, so the absolute scores are not the app's.
+
 ## E11 — a named fact is ranked above pieces that share only common words; the retriever picks only what fits; typed questions use the embedding search
 Written 2026-10-04, BEFORE any app measurement of this change. Owner's picks: "fix the scoring", "fit what's
 picked", "smart search for typed too".
