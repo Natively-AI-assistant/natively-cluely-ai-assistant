@@ -232,10 +232,49 @@ async function outputCap() {
   console.log(`answer chars ${ans.length}; last line ${JSON.stringify(ans.trim().split('\n').at(-1)?.slice(0, 60))}; incomplete flag ${t.a.incomplete ?? '-'}`);
 }
 
+/** Résumé + JD together, either side of the 6,000 combined whole-profile switch; JD facts at top/middle/bottom. */
+async function piCombined() {
+  const c = await connect(); const modeId = await modeIdOf(c, opt('mode', 'looking-for-work')); await clearMode(c, modeId);
+  for (const [rt, jt] of String(opt('pairs', '2500:2500,3500:3500,1000:8000')).split(',').map((x) => x.split(':').map(Number))) {
+    await c.invoke('__e2e__:clear-profile'); await app.resetSession(c);
+    const rd = docWithFacts(rt, `PR${rt}`, rt + 11); const jd = docWithFacts(jt, `PJ${jt}`, jt + 13);
+    const cv = `Jordan Ashcombe\nPlatform engineer\n\nExperience\n${rd.text}\n\nSkills\nGo, PostgreSQL.`;
+    const jdText = `Senior Platform Engineer — Job Description\n\nAbout the role\n${jd.text.replace(/depot's gate release code/g, "site's badge-office reference")}\n\nRequirements\nGo, Kafka.`;
+    const pr = path.join(PROBE_DIR, `pi-resume-${rt}.txt`), pj = path.join(PROBE_DIR, `pi-jd-${jt}.txt`); fs.writeFileSync(pr, cv); fs.writeFileSync(pj, jdText);
+    const i1 = await c.invoke('__e2e__:ingest-profile-doc', { filePath: pr, docType: 'resume' }); const i2 = await c.invoke('__e2e__:ingest-profile-doc', { filePath: pj, docType: 'jd' });
+    for (const i of [0, 3, 6]) {
+      const fr = rd.facts[i]; const t1 = await turn(c, 'typed', fr.question.replace('What code opens', 'In my last role, what code opened'));
+      const fj = jd.facts[i]; const jsent = fj.sentence.replace("depot's gate release code", "site's badge-office reference"); const t2 = await turn(c, 'typed', `For this job, what is the badge-office reference for the ${SUBJECTS[i]} site?`);
+      for (const [t, kind, sent] of [[t1, 'resume', fr.sentence], [t2, 'jd', jsent]]) write('pi-combined', { experiment: 'pi-combined', resume_tokens_est: rt, jd_tokens_est: jt, sum: rt + jt, ingest_ok: !!(i1?.success && i2?.success), kind, position: POSITIONS[i], E_in_request: has(t.user, sent), whole_items: (t.user.match(/Document \(whole\)/g) ?? []).length, ...summarise(t) });
+      process.stdout.write(`${rt}+${jt}@${POSITIONS[i]}: cv ${has(t1.user, fr.sentence) ? 'Y' : 'n'} jd ${has(t2.user, jsent) ? 'Y' : 'n'}  `);
+    }
+    console.log(`| résumé ${rt} + JD ${jt}`);
+  }
+}
+/** Everything at once (looking-for-work, heard): which source is in the request when all are large? */
+async function pressure() {
+  const c = await connect(); const modeId = await modeIdOf(c, 'looking-for-work'); await clearMode(c, modeId);
+  await c.invoke('__e2e__:clear-profile'); await app.resetSession(c);
+  const rd = docWithFacts(5500, 'XR', 91); const cv = `Jordan Ashcombe\nPlatform engineer\n\nExperience\n${rd.text}\n\nSkills\nGo.`; const pr = path.join(PROBE_DIR, 'pressure-resume.txt'); fs.writeFileSync(pr, cv);
+  await c.invoke('__e2e__:ingest-profile-doc', { filePath: pr, docType: 'resume' });
+  const ref = docWithFacts(11800, 'XF', 92); const up = await upload(c, modeId, 'pressure-ref.txt', ref.text.replace(/depot's gate release code/g, "warehouse's dock number"));
+  const lines = []; for (let i = 0; i < 80; i++) lines.push({ speaker: i % 2 ? 'other' : 'user', text: i === 2 ? 'Early on: our hiring manager is Priya Lindqvist, reference HM-PRESSURE.' : i === 76 ? 'Just now: the panel interview moved to Thursday, reference PANEL-PRESSURE.' : filler(160, 9000 + i).replace(/\n/g, ' ') });
+  await app.injectLines(c, lines);
+  const asks = [['resume end', rd.facts[6].question.replace('What code opens', 'In my last role, what code opened'), rd.facts[6].sentence], ['resume start', rd.facts[0].question.replace('What code opens', 'In my last role, what code opened'), rd.facts[0].sentence],
+    ['reference end', `What is the dock number at the ${SUBJECTS[6]} warehouse?`, ref.facts[6].sentence.replace("depot's gate release code", "warehouse's dock number")],
+    ['transcript recent', 'When did they say the panel interview is?', 'reference PANEL-PRESSURE'], ['transcript old', 'Who did they say the hiring manager is?', 'reference HM-PRESSURE']];
+  for (const [kind, q, sent] of asks) {
+    const t = await turn(c, 'hotkey', q);
+    const r = { experiment: 'pressure', kind, E_in_request: has(t.user, sent), resume_whole: /Document \(whole\)/.test(t.user), reference_whole_file: has(t.user, ref.facts[0].sentence.replace("depot's gate release code", "warehouse's dock number")) && has(t.user, ref.facts[6].sentence.replace("depot's gate release code", "warehouse's dock number")), ref_status: up.status, ...summarise(t) };
+    write('pressure', r); console.log(kind.padEnd(18), 'in request', r.E_in_request, '| résumé whole', r.resume_whole, '| reference whole', r.reference_whole_file, '| user chars', t.user.length, '| provider tokens', r.provider_prompt_tokens);
+  }
+}
+
 const root = opt('root', '/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/er-main');
 if (cmd === 'start-app') await startApp(root);
 else if (cmd === 'ref-size') await refSize(); else if (cmd === 'ref-count') await refCount(); else if (cmd === 'typed') await typed();
 else if (cmd === 'aggregate') await aggregate(); else if (cmd === 'output-cap') await outputCap();
+else if (cmd === 'pi-combined') await piCombined(); else if (cmd === 'pressure') await pressure();
 else if (cmd === 'transcript') await transcript(); else if (cmd === 'history') await history(); else if (cmd === 'resume') await resume();
 else { console.error('start-app | ref-size | ref-count | typed | transcript | history | resume'); process.exit(2); }
 process.exit(0);

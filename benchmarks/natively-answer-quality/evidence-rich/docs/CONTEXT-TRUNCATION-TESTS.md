@@ -63,15 +63,18 @@ Typed, General (`ref-size-general-typed.jsonl`); heard (hotkey), General and Sal
 
 ## 3. Typed message size (`typed-input*.jsonl`, `typed-diff.mjs`, `typed-filler.mjs`)
 
-| Sent chars | head | 3 middle markers | tail line | in the answer | request user chars | provider prompt tokens | chars/4 estimate |
+Two runs: run 1 (all sizes; request chars, provider tokens) and run 2 (1k/10k/100k/400k with three middle markers).
+
+| Sent chars | head | 3 middle markers (run 2) | tail line | in the answer | request user chars (run 1) | provider prompt tokens (run 1) | chars/4 estimate (run 1) |
 |---|---|---|---|---|---|---|---|
-| 1,000 | yes | 3/3 | yes | yes | 4,225 | 5,830 | 6,804 |
-| 10,000 | yes | 3/3 | yes | yes | 13,024 | 7,498 | 9,003 |
+| 1,000 | yes | 3/3 | yes | yes | 4,177 | 5,830 | 6,804 |
+| 5,000 | yes | — | yes | yes | 8,090 | 6,587 | 7,782 |
+| 10,000 | yes | 3/3 | yes | yes | 12,973 | 7,498 | 9,003 |
 | 25,000 | yes | — | yes | yes | 27,689 | 10,307 | 12,682 |
 | 50,000 | yes | — | yes | yes | 52,246 | 14,897 | 18,821 |
-| 100,000 | yes | 3/3 | yes | yes | 101,398 | 23,928 | 31,096 |
+| 100,000 | yes | 3/3 | yes | yes | 101,346 | 23,928 | 31,096 |
 | 200,000 | yes | — | yes | yes | 199,139 | 42,711 | 55,544 |
-| 400,000 | yes | 3/3 | yes | yes | 395,744 | 80,427 | 104,682 |
+| 400,000 | yes | 3/3 | yes | yes | 395,690 | 80,427 | 104,682 |
 
 - **No size limit on the typed path**: 400,000 chars reached DeepSeek with head, middle and the last line, and the
   answer used the last line. Nothing in the renderer, IPC, handler or composer cuts it.
@@ -100,15 +103,22 @@ Typed, General (`ref-size-general-typed.jsonl`); heard (hotkey), General and Sal
 | 5 × 3,000 | 15,000 | retrieval | yes | yes | yes | 3–4 |
 | **10 × 3,000** (Sales, run twice; General once) | 30,000 | retrieval | **no** | yes | **no** | 4 |
 | 20 × 3,000 | 60,000 | retrieval | yes | yes | yes | 4 |
+| 6 × 1,900 (Sales) | 11,400 | whole pack | yes | yes | yes | 6 |
+| **6 × 2,100** (Sales, typed) | 12,600 | retrieval | **no** | **no** | yes | 4 |
+| 6 × 2,100 (Sales, **heard**) | 12,600 | retrieval | yes | yes | yes | 4 |
 
 - The code trace predicted that with more than 8 small files the files past the 8-item cap are lost. **Not seen**:
   12 small files all reached the request.
-- **A reproducible retrieval miss** at 10 × 3,000: the first and last files' uniquely named facts were not retrieved,
-  in three runs across two modes; the same four other files came back every time, and the answer offered those
-  depots instead ("The depot codes I can give you are for Elmbrook, Falbrook, Ivobrook, and Belbrook"). Typed queries
-  ran on the lexical fallback (`Local ONNX provider active for manual query; using lexical fallback`, 49 times in the
-  log). Cause NOT YET IDENTIFIED — 5 and 20 files of the same size did not miss. Repro:
-  `node evidence-rich/limits/probe.mjs ref-count --mode sales --counts 10 --file-tokens 3000`.
+- **A reproducible retrieval miss on the TYPED path** once several files together pass 12,000: at 10 × 3,000 the first
+  and last files' uniquely named facts were not retrieved (three runs, two modes), at 6 × 2,100 the first and middle
+  (and at 6 × 1,900, under the switch, all were read whole). The same handful of other files came back whatever was
+  asked, and the answer offered those instead ("I don't have a code for an Ashbrook depot. The gate release codes I
+  have are for Belbrook, Elm…"). **The same six files on the heard path: all found.** The difference: typed queries
+  skip embeddings while the bundled local embedder is the provider (`Local ONNX provider active for manual query;
+  using lexical fallback`, `ModeHybridRetriever.ts`), and the lexical-only ranking misses a fact whose only
+  distinguishing word is the name. Single-file corpora never missed (§1). Which step of the lexical ranking drops
+  the named chunk: NOT YET IDENTIFIED. Repro: `node evidence-rich/limits/probe.mjs ref-count --mode sales --counts 6
+  --file-tokens 2100` (typed) vs the same with `--surface hotkey`.
 
 ## 5. Realtime transcript (heard path; lines injected through the real `handleTranscript`)
 
@@ -133,6 +143,16 @@ asked: "remind me what the project codename is, when we are launching, and who o
   "launch" (no stemming): the launch window scored 0.00–0.04.
 - The 180-second horizon was NOT exercised (the injection stamps every line with the current time): NOT VERIFIED.
 
+## 5b. Everything at once (looking-for-work, heard; `pressure.jsonl`)
+Résumé 5,500 est. tokens + one reference file 11,800 + an 80-line meeting, then five heard questions. Every target
+reached the request: résumé first and last fact, the reference file's last fact, the most recent spoken fact, AND a
+fact said at line 2 of 80 ("Who did they say the hiring manager is?" — the live-transcript port found it). Requests
+were 79–81k chars ≈ 21,000 provider tokens; the résumé and the reference file both went whole. So: no source pushed
+another out (each has its own budget), and **older speech IS recalled when the question is short and shares a
+distinctive word with what was said**; it fails when the question is long or multi-part (§5), because the question's
+own window sets the 1.00 the others are measured against. Relevance vs recency (two conflicting facts, old and new):
+NOT RUN.
+
 ## 6. Token estimates vs provider counts (`token-ratio.mjs`, direct DeepSeek)
 
 | Text | chars | chars/4 | DeepSeek tokens | provider ÷ estimate |
@@ -153,29 +173,54 @@ language: the 12,000 whole-pack is ~10,000 real tokens of English and ~31,000 of
 ## 7. Conversation history (typed, General; `history.jsonl`)
 
 Three facts said in turns 1, the middle and the last turn, then "Remind me: the venue, the budget cap and the
-caterer?" All three were in the request at 5, 10, 20, 40 and **80** turns (request 6,255 → 24,676 chars). The ring
-keeps 400 turns; older turns are condensed (question ≤ 600 chars) — short facts survive condensing.
+caterer?" All three were in the request at 5, 10, 20, 40 and **80** turns (request 6,255 → 24,676 chars). They came
+back through several routes at once, not separated: the history render (full, then condensed: question ≤ 600
+chars), the recall tier (`historyRecalled` up to 3), and the live-transcript port — typed lines are echoed into the
+transcript as "ME (typed to the assistant)", and 2–10 such windows were admitted. This says typed-chat history holds
+up to 80 turns; it says nothing about spoken history (§5).
 
 ## 8. Profile (résumé) size — see PI-LIMITS.md
 Whole at 1,500 / 3,000 / 5,500; passages at 6,500 / 12,000; 7/7 facts reached the request at every size.
+
+## 8b. Résumé + JD together (`pi-combined.jsonl`, typed, looking-for-work)
+| Résumé + JD (est. tokens) | sum | how | résumé facts (0/50/99.5 %) | JD facts (top/middle/bottom) |
+|---|---|---|---|---|
+| 2,500 + 2,500 | 5,000 | whole (both documents) | 3/3 | 3/3 |
+| 3,500 + 3,500 | 7,000 | passages (no whole item) | 3/3 | 3/3 |
+| 1,000 + 8,000 | 9,000 | passages — the 1,000-token résumé too | 3/3 | 3/3 |
+The switch is on the sum: a long JD takes a short résumé out of whole mode. Named facts were found either way.
+
+## 8c. More modes (heard, one file, 7 positions)
+Technical Interview: 1,450 → 7/7; 12,500 → 6/7 (the 50 % fact missed). Seminar: 1,450 → 7/7; 12,500 → 7/7.
 
 ## 9. Output length (`output-cap.jsonl`)
 Asked to copy back a 900-entry list. The shown answer stopped at **16,001 chars**, mid-entry ("689. R068"): the
 `MAX_STREAM_OUTPUT_CHARS` cap, not the provider (`max_tokens` 65,536 was not reached; the stream was closed by the
 app). The text itself carries no marker; whether the overlay showed an "incomplete" state was not captured.
 
-## 10. Provider limits (direct DeepSeek, `provider-size.mjs`)
+## 10. Provider limits (direct DeepSeek `provider-size.mjs`; AgentRouter `agentrouter-size.mjs`)
+AgentRouter → DeepSeek (the app's route): 400,000 chars → HTTP 200, 79,292 input tokens, 3.3 s; 1,200,000 chars →
+HTTP 200, 237,849 input tokens, 15.8 s. Same counts as direct; no lower router limit up to there. The time is worth
+noting for any larger budget: ~240k tokens of input costs ~16 s before the first word.
 `GET /models`: `deepseek-flash` = DeepSeek-V4.1-Flash, `context_window` 1,048,576, `max_output_tokens` 393,216.
 Progressive requests 40k / 400k / 1.2M chars: all HTTP 200, 7,939 / 79,292 / 237,849 prompt tokens. The app's own
 table says 128,000 for every cloud model and never uses it to cut (`fitContextForCurrentModel` returns at ≥ 100k).
-The largest real prompt in the benchmark is ~16k provider tokens: the provider window is ~65× larger than anything
-the app sends.
+The largest prompt in the benchmark is ~16k provider tokens (the window is ~65× that); the app itself sent 80,427
+tokens for a 400,000-char typed message (§3) without trouble.
 
 ## 11. Claim pass parity — see CLAIM-VERIFIER-CONTEXT-PARITY.md
-Current main: the pass saw the generator's whole user message on 536 of 536 passes; 0 context-loss edits. The
-heard path's separate "corrected answer" repair (≈ 13 % of turns) still inherits a 24,000-char cut.
+Builds since E5: the pass saw the generator's whole user message on 941 of 941 passes; 0 context-loss edits. The
+heard path's separate "corrected answer" repair (≈ 20 % of heard turns, never typed) still inherits a 24,000-char cut
+and lacks a needed fact on 1–4 turns per run; whether its text is shown is not recorded.
 
 ## Not tested (and why)
+- Relevance vs recency (§20 of the request): NOT RUN.
+- Quality vs context size and whole-file vs retrieval with a judge (§27–28): NOT RUN — they are the next phase and
+  need Astra or the provisional Opus judge.
+- JD-only position test beyond the three positions in §8b; long résumé sections by name (skills, final project): the
+  positions 0–99.5 % cover them as text, not as named résumé sections.
+- Per-request instrumentation in the app (§5–6 of the request): NOT ADDED; the dev-only prompt recorder + V3 trace +
+  probes gave what is reported. Proposal in PROMPT-BUDGET.md.
 - FAST-classified heard turns with a 1,400–12,000 corpus (none of these questions were FAST).
 - 180-second transcript eviction (injection time stamps).
 - Ollama / local models (not installed on this machine; Evin: no large downloads). The code removes the TOP of the

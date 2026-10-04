@@ -30,25 +30,42 @@ quote-heavy JSON and numeric CSV about 1.5×.
 | Whole-file read (pack) | 12,000 (`WHOLE_PACK_MAX_TOKENS`) for ALL the mode's files together | tokens (est.) | runtime: ≤ 11,800 → the whole file is in the request; ≥ 12,500 → 3–5 retrieved chunks (~7k chars) | **no cut — a switch**: above it the model sees chunks, not the file | measure a higher threshold (Phase 2) |
 | Retrieved evidence per turn | 1,200–2,400 per mode (2,400 with 2+ files), 6–8 items (×3 when exhaustive) | tokens (est.) / items | runtime: 3–5 items above 12k | yes (items left out, trace only) | see PROMPT-BUDGET.md |
 | Retriever vs packer budget | same number, different measure (packer counts ~95 tokens of tag per item) | tokens (est.) | code: last 1–2 retrieved chunks can be dropped by the packer | yes | count the tag in the retriever, or reserve it |
-| Files per mode | none | files | runtime: 12 small files all whole; 20 × 600 → retrieval; 10 × 3,000 → first and last files' facts missed, reproducibly (cause open) | — | find the 10 × 3,000 cause |
-| Profile (résumé + JD) whole | 6,000 for the two together (`PROFILE_WHOLE_MAX_TOKENS`) | tokens (est.) | over it, both fall back to passages | no cut — a switch | see PI-LIMITS.md |
+| Files per mode | none | files | runtime: 12 small files all whole; above 12,000 in total, TYPED questions miss named facts in other files (6 × 2,100, 10 × 3,000; lexical-only retrieval while the local embedder is active); heard questions found them | no cut — a miss | fix typed-path retrieval (bottleneck 2) |
+| Profile (résumé + JD) whole | 6,000 for the two together (`PROFILE_WHOLE_MAX_TOKENS`) | tokens (est.) | runtime: 2,500 + 2,500 whole; 3,500 + 3,500 and 1,000 + 8,000 passages (a long JD takes the short résumé out too); named facts found either way | no cut — a switch | see PI-LIMITS.md |
 | Profile document ingest | 200,000 (`MAX_PROFILE_DOCUMENT_CHARS`) | chars | refused with an error | no (error shown) | keep |
 | Typed message | none (renderer, IPC, handler, composer) | chars | runtime: 400,000 chars → head, middle markers and tail in the request; BUT line breaks removed and the speech cleaner deletes repeated and "filler" words (right, basically, I mean…) | not truncated; **altered** | do not run the speech cleaner on typed text |
 | Heard question | latest interviewer turn in last 180 s; interim tail ≤ 1,200 | s / chars | code | interim only | keep |
 | Spoken transcript in the prompt | 2,400 (`SPEECH_WINDOW_MAX_CHARS`), newest lines, last 180 s | chars | runtime: a 20-line (~3,200-char) meeting already loses line 1 | **yes** | see bottleneck 1 |
-| Older speech (live-transcript retrieval) | windows of 600 chars, BM25, score ≥ 0.2 × best | chars / score | runtime + offline: the window holding the question scores 1.00, every fact window 0.15–0.16 → none admitted | **yes** | see bottleneck 1 |
+| Older speech (live-transcript retrieval) | windows of 600 chars, BM25, score ≥ 0.2 × best | chars / score | runtime + offline: a long or multi-part question's own window scores 1.00 and every fact window 0.15–0.16 → none admitted; a short targeted question did recall line 2 of 80 | **yes** | see bottleneck 1 |
 | Conversation history | 9,600 full + 9,600 condensed (q ≤ 600, gist ≤ 220); ring 400 turns, answer 1,200, question 1,200 | chars / turns | runtime: facts from turns 1, 20 and 39 of a 40-turn chat all in the request | condensed, then dropped | keep |
 | Realtime / pinned instructions | 8,000 | chars | slice + "…[truncated]" | yes (no notice to the user) | show a count in the editor |
 | Screen text | 1,200-char chunks; 8,000 per turn in history | chars | packer drops what does not fit | yes | keep |
 | System prompt | no cap; measured 23,037–26,065 chars | chars | never cut | no | keep (it is ~5.8k provider tokens) |
 | Final prompt (cloud) | none — `fitContextForCurrentModel` returns early at ≥ 100k context; every cloud model is a flat 128k in `TIER_BUDGETS` | — | never cut before the call | no | keep; record real counts |
 | Final prompt (Ollama / small local) | (ctx − 2,000 − system) × 4 chars | tokens (est.) | lines removed from the TOP of the user message: the question goes first | **yes** | trim evidence, never the question |
-| Provider input (DeepSeek) | 1,048,576 (`GET /models`) | provider tokens | runtime: 237,849 tokens accepted (HTTP 200) | — | none needed |
+| Provider input (DeepSeek, direct and via AgentRouter) | 1,048,576 (`GET /models`) | provider tokens | runtime: 237,849 tokens accepted on both routes (HTTP 200; 15.8 s via AgentRouter) | — | none needed |
 | Output tokens requested | 65,536 (`getDeepseekMaxOutput` = min(393,216, 65,536)) | provider tokens | never the binding limit | — | — |
 | Output shown | 16,000 visible chars (`MAX_STREAM_OUTPUT_CHARS`) | chars | runtime: a 900-line copy stopped at 16,001 chars mid-entry (689 of 900) | yes in the text (typed path sets `incomplete`; overlay state not captured) | say in the answer that it was cut |
 | Claim pass material | 96,000 (`CLAIM_VERIFIER_MATERIAL_MAX_CHARS`) | chars | head-cut beyond it | yes, rare (largest real prompt 48,716) | keep |
-| Other repairs (replay) | 24,000 (`REPLAYED_ANSWER_PROMPT_MAX_CHARS`) | chars | runtime: the heard "corrected answer" repair ran on ~13 % of main's turns, cut at 24,000 on 93 of 94, and can replace the answer | **yes** | measure, then give it the claim pass's cap |
+| Other repairs (replay) | 24,000 (`REPLAYED_ANSWER_PROMPT_MAX_CHARS`) | chars | runtime: the heard "corrected answer" repair runs on ~20 % of heard turns (never typed), cut at 24,000 every time since E1, lacks a needed fact on 1–4 turns per run; whether its text is shown is not recorded | **yes** | measure, then give it the claim pass's cap |
 | Claim pass time | 3,500 ms (6,000 with images) | ms | original answer kept | no | keep |
+
+## Top three bottlenecks (measured)
+1. **Spoken context is short and older speech rarely comes back.** The prompt holds the last 2,400 chars of speech
+   (about 90 seconds); a 20-line exchange already loses its first line, in General, Team Meet and Call Center.
+   Retrieval of older speech normalises every window against the window that contains the question itself, so for a
+   long or multi-part question every fact window falls under the 0.2 floor (0.15–0.16) and nothing is admitted.
+   Heard answers are Natively's core, so this ranks first.
+2. **Above 12,000 est. tokens of reference files the model sees 3–5 pieces, and typed retrieval misses.** A
+   whole-document question drops from 7/7 to 2–3/7 facts 700 tokens past the switch. On the typed path, with
+   several files, lexical-only retrieval misses uniquely named facts (2 of 3 asked files at 6 × 2,100 and
+   10 × 3,000); the heard path found them. The switch is in chars/4, so it comes 2–2.6× sooner in Chinese/Japanese.
+3. **Typed text is changed before the model reads it.** Line breaks are removed and the speech cleaner deletes
+   words it treats as filler ("the right answer" → "the answer"; "basically", "I mean", repeated words). It happens
+   on every typed turn that contains those words, and the user's exact words appear nowhere in the request.
+   Ranked above the heard "corrected answer" repair's 24,000-char cut (≈ 20 % of heard turns run it, 1–2 % lose a
+   needed fact, and whether its text is shown cannot be read from the recordings), and above the 16,000-char output
+   cap (rare: needs a > 16k-char answer, but silent in the overlay).
 
 ## 2. Where the limits live (code, er-main @ efc126a9)
 
@@ -123,3 +140,27 @@ technical-interview 20/6/1600, lecture 24/8/2000, seminar 24/8/2400. Custom mode
 - Read windows that only classify (first 6,000 / 600 / 10,000 chars) — they cut nothing.
 
 Not traced: Direct Assist (its own surface, full file text, `CONTEXT_TOO_LARGE` check), meeting summary.
+
+## 4. What the user is told (request §29) — code read, er-main
+
+| Situation | Told? | What they see |
+|---|---|---|
+| File too large (> 50 MB) | yes, vaguely | "Could not parse the selected file. It may be corrupt, password-protected, unsupported, or too large." (`ipcHandlers.ts:18190`) — the same text for every failure except `.doc` |
+| Extraction failed / empty | yes, vaguely | same generic text |
+| Scanned PDF, image-only pages | **no** | no OCR; pages give no text; console `INGESTION AUDIT` only; the file shows as ready |
+| Only part of a file embedded | partly | the badge says "Keyword" (`premium/src/ModesSettings.tsx:200`) when the whole file is lexical-only; a partial embedding failure still shows `ready` |
+| Too many files | n/a | no limit exists |
+| Mode's files over 12,000 est. tokens (the model now sees 3–5 pieces, not the file) | **no** | nothing; the file shows ready |
+| Typed input truncated | n/a — never truncated | but line breaks and "filler" words are removed silently (tests §3) |
+| Spoken context dropped (older than ~2,400 chars) | **no** | nothing |
+| Answer cut at 16,000 chars | **no in the overlay** | `gemini-stream-done` carries `incomplete: true` (`ipcHandlers.ts:2651`), but the overlay's handler and the preload type ignore it (`NativelyInterface.tsx:8430`, `preload.ts:2469`); the phone mirror does say it stopped. Code read; the overlay state was not captured at runtime |
+| Profile document > 200,000 chars | yes | error at upload |
+| Profile over 6,000 est. tokens (passages, not whole) | no | nothing |
+
+### Recommendation (§30, not implemented)
+Per file, after indexing, one plain line from three states that are true and checkable:
+"Read in full" (the mode's files fit the whole-file read), "Searchable — Natively reads the most relevant parts
+for each question" (over the whole-file size), and a specific failure ("No text found — this looks like a scanned
+PDF", "Over 50 MB"). Do not say "indexed successfully" for a file the model will only ever see in pieces, and do not
+add a "too large" state for sizes the app handles by retrieval. In the overlay, show the existing `incomplete` flag
+("Answer cut off at the length limit").
