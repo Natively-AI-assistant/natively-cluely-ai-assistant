@@ -931,3 +931,25 @@ judged blind. Control: `er-holdout-m1`. Margins: two runs of one build differed 
 5. Hard fails not above `m1`'s 20 by more than 6.
 All five hold → E8 is confirmed on the holdout and stays on its branch for Evin's decision, with the cost of (b)
 stated. Any line fails → not kept, finally.
+
+### E8 — holdout data and verdict under the second rule (2026-10-04 08:40 UTC; aggregates only; provisional judge)
+
+`er-holdout-m2` on `e1cb7f9b` (180 rows, all answered, none unverified), judged blind. 60 of the 180 judgments
+first failed with "Your organization has disabled Claude subscription access for Claude Code"; two retried a few
+minutes later went through, and the other 58 were then judged normally. No row was left unjudged.
+
+| Holdout line | Measured | Holds |
+|---|---|---|
+| 1. Every loaded file in the prompt on at least 97 % of turns with a pack | 153 → 163 of 163 | yes |
+| 2. No claim-pass cut; no cross-mode file; no profile evidence where forbidden; no other-profile string | 0 of 132; 0; 0; 0 | yes |
+| 3. Rows whose evidence set changed against `m1`: mean gain at least +0.5 | 11 rows, 8.24 → 8.64, **+0.40** (±1.34); hard fails 0 → 1 | **no** |
+| 4. All rows, paired: not below −0.25 | 8.54 → 8.82, +0.28 (±0.25) | yes |
+| 5. Hard fails not above 26 | 13 (`m1`: 20); critical 8 → 5 | yes |
+
+**Verdict under the second rule: not kept** (line 3, by 0.10 on 11 rows). As written, that is final for E8. The
+branch `fix/er-pack-always` (`dfe2cf5b`, `e1cb7f9b`) stays as it is, not landed.
+
+For the record, beside the verdict: the three holdout rows that had missed their reference evidence went 6.72 →
+9.28; the whole holdout scored 8.82 against main's 8.54 and the kept build's 7.40 (+1.42 ±0.39, hard fails 39 → 13,
+critical 19 → 5), most of the difference to main on rows E8 did not touch (+0.27 ±0.26), which is the size of
+run-to-run variation measured above.
