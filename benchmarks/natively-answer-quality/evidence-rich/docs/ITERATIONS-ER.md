@@ -752,3 +752,56 @@ or draft source preferred 3; needed fact not in the prompt 2; profile evidence 1
 still miss their evidence (mean 5.27 against 8.87 for the 244 that have it): 7 are turns the classifier answers
 without reading the loaded pack, 3 are heard Recruiting turns on which the claim-authority gate removes the hiring
 job description from the pack (it is present on typed turns), and 3 are planning misses in the profile modes.
+
+---
+
+## E8 — the loaded pack reaches every turn of its mode (Evin, 2026-10-04: "Both delivery gaps")
+
+**Rule written before any E8 code existed (commit time of this section is the record).**
+
+**What main does today** (`m1`, dev + counterfactual, judge-free; the prompt's evidence tags against the files loaded):
+
+| | Turns | Whole pack in the prompt | Some files missing | No file read |
+|---|---:|---:|---:|---:|
+| Recruiting, heard | 27 | 13 | 13 | 1 |
+| Recruiting, typed | 9 | 8 | 1 | 0 |
+| Technical Interview, heard | 22 | 20 | 2 | 0 |
+| Turns the classifier answers without retrieval, in General, Sales, Team Meet, Recruiting, Looking for work | 10 | 0 | 0 | 10 |
+| Every other mode and surface | 265 | 264 | 0 | 1 |
+
+* **(a)** In `legacy-retrieval-port.ts` the claim-authority gate keeps only items that can evidence a claim the turn
+  needs. On a heard Recruiting turn the needed claims are about the candidate, so the mode's own hiring job
+  description (typed `JOB_DESCRIPTION`) is removed from the pack, also when the candidate asks what the role pays or
+  how much travel it has. The planned-type gate already admits a mode's own attachments; this one does not.
+* **(b)** A turn the classifier answers from general knowledge reads a small corpus (≤ 1,400 tokens) and, since E1,
+  nothing of a larger pack. "Can both be had on Operations?" gets "I'll confirm" with the matrix unread.
+
+**Change (branch `fix/er-pack-always`, from the measured main `54606ef2`; two commits).**
+* (a) A file of the mode handed over whole (`MODE_REFERENCE_FILE`, `wholeDocument`) is not removed by the
+  claim-authority gate. What it may SUPPORT is unchanged (`acceptedFor`, `evidenceSupportsClaim`): a job description
+  still cannot be counted as support for a claim about the candidate or the user.
+* (b) On such a turn a pack that fits (≤ 12,000 tokens) is read, as a small corpus already is. This reverses E1's
+  choice for those turns and costs its input tokens on every one of them.
+Not in it: the planning misses in the profile modes (3 rows).
+
+**Control:** `m1`. **Candidate:** run tag `m2`, dev + counterfactual (all modes), then the holdout.
+
+**Rule, judge-free (dev + counterfactual).**
+1. Every needed reference fact in the prompt on at least 240 of 244 rows (`m1`: 232).
+2. Turns with a pack that fits: every loaded file in the prompt on at least 325 of the 333 (`m1`: 305).
+3. No claim-pass request cut; no file of another mode in any prompt; no profile evidence in a mode that may not use
+   it; no string of the other profile.
+
+**Rule, judged (provisional judge), paired with `m1`.**
+4. The 12 rows that missed their reference evidence in `m1`: mean gain at least +1.0.
+5. All rows: not below −0.15; hard fails not above `m1`'s 26 by more than 2.
+6. Rows that need no document (74): not below −0.3; hard fails not above `m1`'s by more than 2. These include the
+   general-knowledge turns that now carry a pack.
+7. Recruiting (37 rows): not below −0.2, and the rows flagged for a claim about the candidate that nothing supports
+   (`unsupported_personal_claim`, `role_confusion`) not above `m1`'s.
+8. Heard first word, median over the dev run: not more than 100 ms above `m1`'s. The turns of (b) are reported on
+   their own.
+
+**Holdout (aggregates only):** lines 1, 3, 5 and 6 with `m1`'s holdout as the control (hard fails 20; the same
+margins). A failure of line 7 drops (a); a failure of line 6 or 8 drops (b); any other failure drops both.
+Nothing lands without Evin.
