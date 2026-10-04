@@ -3,7 +3,7 @@
 # (shown answers, then the drafts of edited rows). One heavy job at a time.
 cd /Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix/benchmarks/natively-answer-quality
 RUN=$1; shift
-L=evidence-rich/results/supervise-$RUN.log
+L=evidence-rich/results/supervise-$RUN.log; [ -f $L ] || L=evidence-rich/results/supervise-er-${RUN#er-}.log
 until grep -q "all runs complete\|giving up" $L; do sleep 30; done
 P=$(ps -axo pid,command | grep "[s]cripts/dev-agent.mjs" | awk '{print $1}'); [ -n "$P" ] && kill -TERM $P
 sleep 15
