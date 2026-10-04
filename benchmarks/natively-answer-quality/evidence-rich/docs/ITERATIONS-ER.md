@@ -1300,3 +1300,32 @@ CC-006, CC-015, CC-016.
 (3) hard fails (mean of k): note ≤ base.
 **Measurement 2 — in the app:** a dev run of the candidate with the note; against the series baseline (er-dev-e13b):
 all rows ≥ baseline − 0.10, hard fails ≤ baseline + 3, typed rows ≥ baseline + 0.05. Both, or it is not kept.
+
+**E15, amended 2026-10-04 before any judgment.** The judge-free read of the replay (fixed strings: 90.8 % base, 91.5 %
+note) showed the first wording lengthens answers (median 435 → 524 chars) and is echoed ("let me give you the facts
+first"): its last sentence ("give the fact first and then the line") is the cause. The candidate is therefore the
+shorter note, v2 — "(Typed to you privately by the seller you are helping; the prospect cannot see or hear it. Reply to
+the user, not to the prospect: "you" means the user.)" — and the rule above is applied to v2. v1 is judged as a
+reference only.
+
+### E11 correction, second pass (2026-10-04) — the gate was not the cause; the hotfix covered heard turns too
+`er-dev-e13b` (`cand/e13b` 7734955d, the gateScore fix): the check FAILS — heard hotkey-to-request in the
+document-grounded modes is still p50 22 ms / p90 27 ms (m1 700 / 1,225; m1r 761 / 1,226). So the gate score was not
+what switched the rerank off.
+The cause: E11 (d). `shouldUseLexicalForLocalManualQuery` returned true for EVERY V3 turn in a meeting while the bundled
+embedder is the provider (under forceDocumentGrounding `hasTranscript` is always false — its own comment says so), heard
+turns included. Keyword-only scores are low, the confidence gate read "low", and the bundled rerank was awaited: that is
+the wait main has. (d) lifted the rule for every turn; heard turns gained vector scores and the gate stopped firing.
+Fix (`cand/e13b` 91de17d1): in a meeting only a TYPED retrieval (`rerankSurface: 'manual'`) queries the vectors; heard
+turns keep the keyword search. The gateScore fix stays (it keeps the gate's inputs as on main for the ranking change).
+The same check applies to the next run (`er-dev-e13c`): heard hotkey-to-request back within 150 ms of m1 / m1r.
+
+`er-dev-e13b` itself is SPOILED as a quality run and is not used: 29 turns took more than 5 s to the first word
+(none in m1, e12b, e13 or the holdout), 9 answers are the app's fallback lines ("The model did not produce an answer
+in time", "I don't have enough context from the conversation"), total p95 15.7 s against ~4.5 s; prompts are
+character-identical to e13. All slow turns fall between 15:50 and 16:15 UTC, when I was also running the E15 replay
+(540 calls) on the same DeepSeek key. From here on no replay runs on that key while an app run is in progress.
+Its cc score (8.28, 25 hard fails) is the provider's stall, not the build.
+Also found by running the services suite (which I had not run after E12): `WtaActiveCodingProblem` failed because the
+larger live window now carries a five-minute-old problem statement as speech; the test now excludes
+"# Conversation so far" the way it already excludes transcript evidence, and still forbids it as the question.
