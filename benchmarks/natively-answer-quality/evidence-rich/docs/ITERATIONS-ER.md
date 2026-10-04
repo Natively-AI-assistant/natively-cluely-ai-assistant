@@ -1227,3 +1227,31 @@ single modes swing by up to ±0.7 on 30 rows. Sales alternates between ~8.6 / 1 
 across runs (e12 7.87, e12b 8.58, e13 7.84) on character-identical prompts: the same pricing or which-list-is-current
 question is computed right in one run and wrong in the next (SALES-012, -020, -022, -028, -029). That is the
 generator's own variance on multi-step sums and source precedence, not state; it is the next class to work on.
+
+## E14 — a post-answer edit may remove or soften, never add a figure the draft did not have
+Written 2026-10-04, BEFORE the holdout run it is decided on.
+
+**Measured (dev, cc judge; er-dev-e12b + er-dev-e13, 95 edited rows judged as draft and as shown;
+`report/edit-rails.mjs`).** Edits are net −0.10 on the rows they touch (7.88 as drafts, 7.78 as shown) while cutting
+hard fails (18 → 10). They help when the fact is absent (missing_evidence +0.4 / +0.8) and hurt when it is present.
+The largest repeatable harm: on conflict/stale turns the draft answered from the CURRENT source and the claim pass
+added the superseded figure back as a live alternative ("30 days in one document and 45 in another": 8.4 → 4.0;
+REC-018 9.8 → 6.5; TI-026 9.8 → 7.0; LFW-007 8.0 → 4.1). Today's rail (`new_number`) lets any number through that is
+in the draft OR anywhere in the material — the superseded figure is in the material.
+Rail A — reject an edit that contains a figure the draft did not have — on those 95 rows: rejects 11, saves more than
+half a point on 8, loses on 1 (SALES-020, a real unresolved conflict the edit surfaced); edited-row mean 7.780 → 7.972,
+hard fails 10 → 9. The softer A′ (allow a one-for-one correction) saves 6 and loses 1. Rails on removed figures, new
+deferrals or shrinkage were mixed (B 5/3, C 4/2, D 8/8).
+
+**Change:** in `acceptVerifiedAnswer`, a number in the edit must already be in the draft (`new_number` no longer
+admits numbers that are only in the material).
+
+**Decided on the blind holdout, offline:** one holdout run of the candidate WITHOUT the rail (`er-holdout-e13`,
+`cand/e13`, direct DeepSeek), shown answers and drafts judged by cc; the rail is applied to the recorded draft/edit
+pairs with the app's own number extractor.
+
+**Rule (KEEP → the rail goes on the candidate branch):** on the holdout's edited rows judged both ways,
+1. mean with the rail ≥ mean without + 0.05;
+2. hard fails with the rail ≤ without;
+3. rejections that save more than half a point > rejections that lose more than half a point.
+All three, or it is not kept. The holdout rows are read in aggregate only.
