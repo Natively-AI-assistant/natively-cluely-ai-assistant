@@ -141,6 +141,11 @@ if (!dsKey) { console.error('DEEPSEEK_API_KEY not found in the env file (set NAT
 const c = await connectApp();
 if (!(await app.recorderEnabled(c))) { console.error('prompt recorder is off. Launch with NATIVELY_E2E=1 NATIVELY_PROMPT_DEBUG=1.'); process.exit(2); }
 const profile = await app.setupProfile(c, { deepseekKey: dsKey });
+// The header says direct DeepSeek; refuse to run on anything else (2026-10-04: a profile left over from the limits
+// probes still held an AgentRouter key, the app routed there, and a whole dev run was recorded as "deepseek-direct").
+if (/agentrouter/i.test(JSON.stringify(profile?.config ?? {})) && process.env.ER_ALLOW_AGENTROUTER !== '1') {
+  console.error('the app is routing through AgentRouter, not direct DeepSeek — start it from an empty profile (supervise-er.mjs --fresh-userdata)'); process.exit(4);
+}
 const modeIds = {};
 for (const k of MODE_KEYS) modeIds[k] = await app.builtinModeId(c, k);
 console.log('llm config:', JSON.stringify(profile.config));
