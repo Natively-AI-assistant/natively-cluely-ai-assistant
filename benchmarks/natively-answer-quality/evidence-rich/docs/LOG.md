@@ -203,7 +203,7 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   verified with `git merge-base --is-ancestor`. Not pushed. Other sessions' uncommitted files untouched.
 * Local main now carries E1 (`9fce990b`), the markup fix (`be5b9edd`), E5 (`be676d88`) and E2 (`73a2f89f`).
 
-## 2026-10-04 04:00–05:15 UTC — main measured (M1)
+## 2026-10-04 04:00–05:00 UTC — main measured (M1)
 
 * Fresh worktree `er-main` at `54606ef2` (cloned dependencies, premium from main's pinned commit, model weights).
   dev 04:03–04:24, counterfactual –04:33, holdout 04:38–04:56. 513 rows, all answered, none unverified.

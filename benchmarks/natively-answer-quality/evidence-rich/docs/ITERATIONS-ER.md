@@ -715,7 +715,7 @@ anything else is built or landed; nothing is reverted without his word.
 The effect of the claim pass on main is −0.05 (±0.10), with hard fails 33 in the drafts and 26 shown. On the two
 profile modes main matches `s4`: 8.51 → 8.53. **Dev + counterfactual: the results carry over to main.**
 
-### M1 — holdout on main and verdict (2026-10-04 05:10 UTC; aggregates only; provisional judge)
+### M1 — holdout on main and verdict (2026-10-04, committed 05:00 UTC as `bd01379a`; aggregates only; provisional judge)
 
 `er-holdout-m1` on `54606ef2` (180 rows, all answered, none unverified), judged blind with its drafts;
 `report/stack-vs.mjs s3 m1 holdout --blind`, `report/paired-builds.mjs s3 m1 holdout`.
