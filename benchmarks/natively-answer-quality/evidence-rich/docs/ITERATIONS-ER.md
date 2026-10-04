@@ -664,7 +664,9 @@ E2 (`fix/er-profile-whole`, `fea39964`) is not landed; that decision is still op
 
 ### E2 landed on LOCAL main (Evin, 2026-10-04: "Land it now")
 
-`3540ed27` (a clean cherry-pick of `fea39964` onto `be676d88`; fast-forward; not pushed). On that commit:
-`typecheck:electron` clean, `test:intelligence` 2,874 pass / 0 fail, llm suite 5,768 pass / 0 fail. Not benchmarked
-on main. Landed with its caveat on record: on the holdout the rows that need no profile fact fell 0.31 (±0.60),
-hard fails 3 → 5. Undo: `git revert 3540ed27`. gpt-6-astra has not judged any E2 run; they are added to its chain.
+`73a2f89f` (a clean cherry-pick of `fea39964`; fast-forward; not pushed). The first attempt, as `3540ed27` on
+`be676d88`, did not land: another session committed to main (`ac97c043`, renderer CSS only) between the check and
+the merge, and my note of that moment said it had landed when it had not. It was re-applied on `ac97c043`,
+re-tested there (`typecheck:electron` clean, `test:intelligence` 2,874 pass / 0 fail, llm suite 5,768 pass / 0 fail)
+and then fast-forwarded and verified on main. Not benchmarked on main. Landed with its caveat on record: on the
+holdout the rows that need no profile fact fell 0.31 (±0.60), hard fails 3 → 5. Undo: `git revert 73a2f89f`. gpt-6-astra has not judged any E2 run; they are added to its chain.

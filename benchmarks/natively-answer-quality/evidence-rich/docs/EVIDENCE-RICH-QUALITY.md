@@ -436,7 +436,7 @@ infer that from dates.
 
 ## 15. Follow-up after Evin's decisions (2026-10-03, evening)
 
-**Status on 2026-10-04 03:30 UTC:** E1, the markup fix, E5 and E2 are on LOCAL main (`3540ed27`, not pushed),
+**Status on 2026-10-04 03:30 UTC:** E1, the markup fix, E5 and E2 are on LOCAL main (`73a2f89f`, not pushed),
 landed on the provisional judge's results at Evin's word; gpt-6-astra re-reviews them when it returns.
 
 Evin chose: land E1 now; redesign the claim pass, then measure; raise the 24,000-character cut and measure; have the

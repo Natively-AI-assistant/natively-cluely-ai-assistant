@@ -197,6 +197,8 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
 
 ## 2026-10-04 03:30 UTC — E2 landed on local main
 
-* Prepared and tested on top of main in a throwaway worktree (removed), then fast-forwarded: `be676d88` →
-  `3540ed27`. Not pushed. Other sessions' uncommitted files untouched.
-* Local main now carries E1 (`9fce990b`), the markup fix (`be5b9edd`), E5 (`be676d88`) and E2 (`3540ed27`).
+* First attempt (`3540ed27` on `be676d88`) was refused: main had moved to `ac97c043` (another session, renderer CSS)
+  in the seconds between the check and the merge. I had already written "landed" into the docs and memory from a
+  truncated command output; corrected. Re-applied on `ac97c043`, re-tested, fast-forwarded to `73a2f89f` and
+  verified with `git merge-base --is-ancestor`. Not pushed. Other sessions' uncommitted files untouched.
+* Local main now carries E1 (`9fce990b`), the markup fix (`be5b9edd`), E5 (`be676d88`) and E2 (`73a2f89f`).
