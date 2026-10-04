@@ -1255,3 +1255,23 @@ pairs with the app's own number extractor.
 2. hard fails with the rail ≤ without;
 3. rejections that save more than half a point > rejections that lose more than half a point.
 All three, or it is not kept. The holdout rows are read in aggregate only.
+
+### E14 — holdout verdict (2026-10-04; er-holdout-e13, cc; `report/edit-rails.mjs er-holdout-e13`, aggregates only)
+25 edited rows judged as draft and as shown. Without the rail 7.607, 4 hard fails; with it (7 edits rejected) 7.846,
+5 hard fails; rejections that save more than half a point 4, that lose 1.
+Line 1 PASS (+0.239), line 2 **FAIL** (5 > 4), line 3 PASS. **Verdict by the rule: not kept.** The rail helps on
+average and blocks one edit that was removing a hard fail. The source edits were reverted; the rail is not re-tuned
+against the holdout. Holdout baseline of the series: er-holdout-e13 (cand/e13), cc: 8.759, 14 hard fails, 180 rows.
+
+### Correction to E11 (2026-10-04): the rerank gate must not move
+Found while explaining a faster heard path: on m1 / m1r / m2 the time from the hotkey to the provider request on
+heard turns in the document-grounded modes had a median of ~500 ms (p90 1,222); on er-dev-e12 / e12b / e13 it is
+24–30 ms. docs/ITERATIONS-ASTRA.md (2026-10-03) had already traced that wait to the bundled rerank, awaited when the
+retriever's confidence gate reads "low", and records Evin's decision: "keep as today". E11's higher answerability for
+a named match also raised the gate's top score, so the gate stopped firing — E11 had switched the rerank off on most
+heard turns, against that decision. My error: E11's rule had no line for it and I did not check the gate.
+Fix (`cand/e13b` 7734955d in er-fix1): `computeDocumentAnswerabilityScore` also returns `gateScore`, the pre-E11
+formula; the confidence gate reads it (best two over the whole list); the ranking keeps the new score.
+Check, written before the run: on `er-dev-e13b` the heard hotkey-to-request median in sales, recruiting, team-meet,
+lecture, seminar and call-center must be back within 150 ms of m1 / m1r (502 / 536 ms), and the E11 probe line must
+still hold (typed 6 × 2,100 and 10 × 3,000: no miss). `er-dev-e13b` (cc) then replaces e13 as the series baseline.
