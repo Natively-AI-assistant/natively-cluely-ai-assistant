@@ -173,3 +173,11 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   (profile-fact rows +0.63 ±1.13); delivery, isolation, latency and the other judged lines hold. Holdout not run.
 * The gpt-6-astra chain was re-armed at 19:45 with the holdout of `s3` and its drafts moved up to right after the
   baseline / E1 holdout pair.
+
+## 20:50–21:40 — E2 on the blind holdout (Evin's choice), second rule
+
+* Rule committed `b60f4f31` before the run. `er-holdout-s4` (40 rows of the two profile modes), judged blind with
+  drafts. All five lines hold; outside them, rows that need no profile fact −0.31 (±0.60), hard fails 3 → 5.
+  E2 stays on `fix/er-profile-whole`, not landed.
+* A one-shot check was scheduled in this session for 09:43 local on 4 October to apply the "after Astra confirms"
+  rule; it exists only while this session is open.
