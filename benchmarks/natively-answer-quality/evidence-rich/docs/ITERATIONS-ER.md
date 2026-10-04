@@ -1153,3 +1153,39 @@ main: 3/3 only at 10 lines, 2/3 at 20, 1/3 from 40 up), and the answers state al
 **Line (3) cannot be read from the probe:** `probe.mjs` did not record the first-word time, on main or here (my
 omission). Amendment, written before the dev run and before looking at any first-word figure: line 3 is read from the
 dev run's heard rows — first word, median ≤ max(m1, m1r) heard median + 150 ms.
+
+## Autopilot series (Evin, 2026-10-04): judge = Claude Code (Opus 5.5, `ER_JUDGE_ROLE=cc`), continue toward 10
+"since the claude code and astra are similar in judging continue with claude code as judge, update the judge character
+… be specific to claude code that you are the judge and not act like claude code. after it reaches above 9.5 still
+continue till you reach 10 or i stop manually so you are on autopilot".
+- Judge: `AQ_JUDGE=opus ER_JUDGE_ROLE=cc` — the unchanged charter behind a preamble (CHARTER-ER.claude-code.md) that
+  says the model is the judge, not Claude Code. Charter version `er1-f81f1c4730f0`, files `<run>.cc.jsonl`, calibration
+  38/38. On the same 270 answers (er-dev-e12) it tracks the earlier Opus series: r 0.990, mean abs difference 0.10,
+  hard-fail verdict equal on 269 of 270; means 8.696 (cc) vs 8.687. A separate series all the same: never pooled.
+- Every iteration keeps the method: cause measured first, rule written before measuring, keep/revert by the rule, the
+  holdout touched only to confirm. One heavy job at a time on this machine. Kept changes accumulate on a candidate
+  branch; nothing lands on main without Evin.
+- Honest ceiling: two runs of one build differ by about ±0.1 in the mean and by ~4 hard fails; a mean of 10.0 on 270
+  rows is not a reachable measurement. The series continues until Evin stops it.
+
+## E13 — a turn answered without retrieval still reads a pack that fits (E8 b, re-measured on the candidate)
+Written 2026-10-04, BEFORE any measurement of this build.
+
+**Measured cause (er-dev-e12, cc judge).** Of the 8 rows whose needed evidence was not in the prompt, 5 took the FAST
+path: the classifier called the question general knowledge and nothing of the loaded pack was read — "can both be had
+on operations?" (Sales, 9,023-token pack) → "I'll confirm how the NetSuite link and SSO are handled" (3.1); "can we
+bring ~4 yrs of trip records" → deferral (3.8). These rows carry `missed_available_evidence`, the most frequent flag
+(22). The change is E8 (b) (`dfe2cf5b`), cherry-picked onto the candidate as `cand/e13` (0c04c519). In E8 its target
+rows gained +3.04; it was not kept on an all-rows hard-fail count later shown to be inside run-to-run turnover.
+
+**Control:** er-dev-e12b (`fix/older-speech`, direct DeepSeek). **Candidate:** er-dev-e13 (`cand/e13`), same route.
+Judge: cc.
+
+**Rule (KEEP on the candidate branch):**
+1. Rows with every needed fact in the prompt: ≥ control + 3.
+2. Rows whose needed evidence was missing from the control's prompt and is in the candidate's: mean gain ≥ +1.0.
+3. Rows that need no document (missing_evidence + irrelevant_source): mean ≥ control − 0.30; hard fails ≤ control + 2.
+4. All rows: mean ≥ control − 0.10; hard fails ≤ control + 3.
+5. First word, median: heard ≤ control + 100 ms; typed ≤ control + 150 ms.
+A failure of ONLY the hard-fail part of line 3 or 4 triggers one repeat of the candidate run; the count is then the
+mean of the two runs. Any other failure → not kept.
