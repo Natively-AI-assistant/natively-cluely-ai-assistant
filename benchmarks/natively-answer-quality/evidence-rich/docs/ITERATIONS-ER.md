@@ -1088,3 +1088,38 @@ restores the July hotfix).
 3. Typed first word, median: ≤ max(m1, m1r) typed median + 150 ms.
 4. Opus quality: mean ≥ min(m1, m1r) − 0.05; hard fails ≤ max(m1, m1r) + 2.
 Failing 1, 2 or 4 → revert (a)–(c) and report; failing 3 alone → revert (d) only.
+
+## E12 — older speech comes back for long questions; the live speech window keeps four to five minutes
+Written 2026-10-04, BEFORE any app measurement of this change. Owner's pick: "fix the search + keep more speech".
+
+**Measured cause (CONTEXT-TRUNCATION-TESTS §5).** The prompt held the last 2,400 chars of speech, read from 60–90 s
+of a rolling context evicted at 180 s: a 20-line exchange had lost its first line. Older speech is retrieved by BM25
+over 600-char windows with a floor of 0.2 × the best window; the best window was the one holding the asked question
+(1.00), the fact windows scored 0.15–0.16, and "launching" never met "launch".
+
+**Change (branch `fix/older-speech` in er-fix1, on top of `fix/typed-verbatim`, commit c6b1bc59):** the asked
+question's own line is removed before scoring and never returned as evidence; speech is matched on light stems (this
+port only); `SPEECH_WINDOW_MAX_CHARS` 2,400 → 6,000 from the durable transcript (600 s) on both answer paths; the
+conversation budget is charged at most the old 2,400 for it.
+
+**Measurement.**
+1. Transcript probe (`probe.mjs transcript`, heard, judge-free): General, Team Meet and Call Center at 10, 20, 40,
+   80, 160 lines (three facts each: line 1, the middle, three lines from the end).
+2. The `pressure` probe (résumé + large file + 80-line meeting): unchanged or better.
+3. Dev run: see the amendment below.
+
+**Rule (KEEP = stays on the branch for Evin):**
+1. Fact checks present in the request across the transcript probe: ≥ 90 % (main: 3/3 only at 10 lines; 2/3 at 20;
+   1/3 from 40 up). The question's own line never appears as an evidence item.
+2. Pressure probe: every target that reached the request on main still does.
+3. Heard first word, median over the probe's heard turns: ≤ the main-build probe's + 150 ms.
+4. Dev run (below): Opus mean on heard rows ≥ min(m1, m1r) − 0.05; hard fails on heard rows ≤ max(m1, m1r) + 2.
+Failing 1 → revert the search half; failing 3 or 4 → revert the window half (6,000 → 2,400) and re-measure.
+
+### Amendment to E11 and E12, 2026-10-04, written before any dev run
+One dev run, not two. The machine was out of memory twice today with the app, the judge and builds running together
+(the app was killed mid-probe; free memory 52 MB of 16 GB). So E11's lines 2–4 and E12's line 4 are measured on a
+single dev run of `fix/older-speech` (E11 + E12 together), named `er-dev-e12`, direct DeepSeek, judged by Opus. If any
+of those lines fails, the run is repeated on `fix/typed-verbatim` alone to attribute the failure before anything is
+reverted. E11's probe line (1) was measured on `fix/typed-verbatim` alone and stands on its own.
+From here on, one heavy job at a time: an app run, OR a judge batch, OR a build + test suite.
