@@ -181,3 +181,10 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   E2 stays on `fix/er-profile-whole`, not landed.
 * A one-shot check was scheduled in this session for 09:43 local on 4 October to apply the "after Astra confirms"
   rule; it exists only while this session is open.
+
+## 2026-10-04 02:00–03:10 UTC — gpt-6-astra's first batch
+
+* Calibration 38 / 38, agreement sample 45, baseline holdout 180, E1 holdout 106 of 180, then 402. The `s3`
+  holdout was not reached: no landing decision. Re-armed for the next batch (not before 10:00 UTC); the session's
+  scheduled check moved to 18:47 local.
+* E1 under gpt-6-astra on the 106 finished pairs: +1.13 (±0.51), hard fails 23 → 6. Judges agree at r 0.84–0.96.
