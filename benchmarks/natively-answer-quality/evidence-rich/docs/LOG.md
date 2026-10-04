@@ -188,3 +188,9 @@ In order. Times are UTC. Each entry says what was observed, not what was expecte
   holdout was not reached: no landing decision. Re-armed for the next batch (not before 10:00 UTC); the session's
   scheduled check moved to 18:47 local.
 * E1 under gpt-6-astra on the 106 finished pairs: +1.13 (±0.51), hard fails 23 → 6. Judges agree at r 0.84–0.96.
+
+## 2026-10-04 03:10–03:20 UTC — Evin: continue on the provisional judge; the two fixes landed
+
+* gpt-6-astra probed at 03:10: 402 on both keys. The chain was re-armed to probe from now on (14 h).
+* On Evin's word the markup fix and E5 were fast-forwarded onto local main (`6f00e104` → `be676d88`), not pushed.
+  The session's scheduled task at 18:47 local is now a re-review with gpt-6-astra, not a landing.
