@@ -1329,3 +1329,35 @@ Its cc score (8.28, 25 hard fails) is the provider's stall, not the build.
 Also found by running the services suite (which I had not run after E12): `WtaActiveCodingProblem` failed because the
 larger live window now carries a five-minute-old problem statement as speech; the test now excludes
 "# Conversation so far" the way it already excludes transcript evidence, and still forbids it as the question.
+
+## E16 — a turn that retrieves reads the whole profile and the whole pack whenever they fit, whatever the plan named
+Written 2026-10-04, BEFORE any E16 code or measurement.
+
+**Measured (er-dev-e13, cc; three runs of the candidate for stability).** 33 rows score under 7 in at least two of
+three runs (about 150 of the ~344 points lost per run). Among them the planning misses E8 left out:
+- ER-D-TI-024 (2.1 / 2.5 / 2.1): heard "How often are you carrying the pager these days…". Classified DOCUMENT_FACT; the
+  plan names reference files, project files, coding samples, the job description and the meeting — not the RÉSUMÉ.
+  The profile port's whole résumé is dropped by the planned-type gate and the answer presents another company's
+  on-call checklist as the candidate's own rota.
+- ER-D-LFW-015 (5.8 / 6.0 / 5.7): typed "why am I leaving lumenquay". Planned PROFILE_FACT only; the user's own
+  interview-notes file (2,254 tokens, the whole pack) is not read; zero evidence items.
+- 19 of the profile-mode turns with a profile loaded have no résumé in the prompt (mean 8.24 against 8.72 overall),
+  among them LFW-009 (4.6), LFW-013 (5.5), LFW-023 (6.9), LFW-010.
+E1/E13 made the pack reach every turn; E2 hands the résumé and job description over whole "on a turn that reads the
+profile". The gap is a turn that retrieves SOMETHING ELSE: what fits is still filtered out for not being planned.
+
+**Change (to be built on the candidate):** in `decide()`, when the turn retrieves and (i) the profile fits
+(`wholeProfile`) and the mode's policy allows RESUME / JOB_DESCRIPTION, those types are added to the plan's source
+types; (ii) a pack fits and the policy allows REFERENCE_FILE, REFERENCE_FILE is added. No claim is added (what the
+evidence may SUPPORT is unchanged), and the item cap and token budget already grow with whole documents.
+
+**Control:** er-dev-e13c (`cand/e13b`). **Candidate:** er-dev-e16, direct DeepSeek, cc judge, nothing else on the key.
+**Rule (KEEP on the candidate branch):**
+1. Profile-mode turns with a profile loaded and no résumé in the prompt: control (≈ 19) → at most 3.
+2. Rows with every needed fact in the prompt: ≥ control + 1.
+3. The profile-mode rows that gain the résumé: mean gain ≥ +0.5.
+4. Profile modes (looking-for-work + technical-interview, 60 rows): mean ≥ control − 0.10; rows flagged
+   `unsupported_personal_claim`, `wrong_profile_used` or `evidence_overload`: ≤ control + 2.
+5. All rows: mean ≥ control − 0.10; hard fails ≤ control + 3 (a failure of only the hard-fail count triggers one repeat
+   of the candidate; the count is then the mean of the two).
+6. First word, median, profile modes: ≤ control + 150 ms.
