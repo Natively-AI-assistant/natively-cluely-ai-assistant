@@ -4429,7 +4429,7 @@ export class IntelligenceEngine extends EventEmitter {
             // provider failure or the runaway cap was still written to the
             // session transcript and usage, and fed to the NEXT turn as
             // prior_assistant_responses evidence.
-            const wtaTruncation = { truncated: false };
+            const wtaTruncation: { truncated: boolean; reason?: string } = { truncated: false };
             const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal, wtaTruncation);
             let streamAborted = false;
             let emittedStreamingToken = false;
@@ -5142,7 +5142,9 @@ export class IntelligenceEngine extends EventEmitter {
                     if (tail.stripped) { console.log('[IntelligenceEngine] canned tail stripped from the final answer'); fullAnswer = tail.text; }
                 } catch { /* never block the emit */ }
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
-                this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId, _c3SourceLabel);
+                // The stop reason rides along so the overlay can say the answer was
+                // cut off (length limit / repetition, 2026-10-04).
+                this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId, _c3SourceLabel, wtaTruncation.truncated ? wtaTruncation.reason : undefined);
                 this.setMode('idle');
                 return fullAnswer;
             }

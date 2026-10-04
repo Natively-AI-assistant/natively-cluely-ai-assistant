@@ -143,6 +143,18 @@ const ROWS: Record<string, Row> = {
     '回答が途中で切れました',
     'Respuesta interrumpida',
   ],
+  'It reached the length limit': [
+    'Достигнут предел длины',
+    '已达到长度上限',
+    '長さの上限に達しました',
+    'Llegó al límite de longitud',
+  ],
+  'It started repeating itself': [
+    'Ответ начал повторяться',
+    '回答开始重复',
+    '回答が同じ内容を繰り返し始めました',
+    'Empezó a repetirse',
+  ],
   'Natively lost track of this answer. Ask again.': [
     'Natively потерял этот ответ. Спросите ещё раз.',
     'Natively 丢失了这次回答。请再问一次。',

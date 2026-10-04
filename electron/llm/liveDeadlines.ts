@@ -453,8 +453,14 @@ export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;
  * LLMHelper that does not bound output (DeepSeek, LiteLLM, Claude, Gemini and
  * Groq all do). Adding it needs a natively-api change too, because /v1/chat
  * destructures a fixed field list and would silently ignore the field today.
+ *
+ * RAISED 16000 → 48000 (2026-10-04, owner's decision). Measured in the real app:
+ * a legitimate 900-line list was cut at entry 689, mid-line, with no notice. A
+ * loop is now stopped by its SHAPE (repetitionGuard.ts: one block repeated five
+ * times in a row) long before this; the cap remains the outer bound for a
+ * runaway that never repeats exactly.
  */
-export const MAX_STREAM_OUTPUT_CHARS = 16000;
+export const MAX_STREAM_OUTPUT_CHARS = 48000;
 
 /**
  * Abort ceiling for a coding REGENERATION (the meta-reply retry and the

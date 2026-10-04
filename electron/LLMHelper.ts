@@ -622,7 +622,7 @@ export interface StreamOutcome {
   /** True when the turn stopped early and the text is INCOMPLETE. */
   truncated: boolean;
   /** Which guard ended it — telemetry and log wording only. */
-  reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
+  reason?: 'provider_failed_after_first_token' | 'output_cap_reached' | 'output_repetition';
   /** The hidden calculation block the model wrote before its answer, if any
    *  (see llm/calcScratch.ts). Never shown; populated when the stream ends. */
   calcScratch?: string;
@@ -9528,6 +9528,9 @@ let isMultimodal = !!(imagePaths?.length);
     const outputCeiling = testOutputCharCeiling()
       ?? (profile === 'long_form' ? MAX_SUMMARY_OUTPUT_CHARS : MAX_STREAM_OUTPUT_CHARS);
     let emittedChars = 0;
+    // A stuck answer ends on its repetition, long before the length cap (2026-10-04).
+    const { RepetitionGuard } = await import('./llm/repetitionGuard');
+    const repetition = new RepetitionGuard();
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
       // Strip the internal truncation marker before anything downstream sees
@@ -9558,6 +9561,12 @@ let isMultimodal = !!(imagePaths?.length);
         console.warn(
           `[LLMHelper] Stream exceeded the ${profile === 'long_form' ? 'long-form' : 'live'} output cap (${emittedChars} > ${outputCeiling}) — ending the turn. The model is not converging.`,
         );
+        return;
+      }
+      if (repetition.feed(visible)) {
+        outcome.truncated = true;
+        outcome.reason = 'output_repetition';
+        console.warn(`[LLMHelper] Stream is repeating itself (${emittedChars} chars) — ending the turn.`);
         return;
       }
     }
@@ -9642,9 +9651,16 @@ let isMultimodal = !!(imagePaths?.length);
       import('./llm/streamFaultInjection'),
     ]);
     const ceiling = testOutputCharCeiling() ?? MAX_STREAM_OUTPUT_CHARS;
+    const { RepetitionGuard } = await import('./llm/repetitionGuard');
+    const repetition = new RepetitionGuard();
     for await (const chunk of inner) {
       yield chunk;
       state.chars += typeof chunk === 'string' ? chunk.length : 0;
+      if (typeof chunk === 'string' && repetition.feed(chunk)) {
+        console.warn(`[LLMHelper] ${label} is repeating itself (${state.chars} chars) — ending the turn.`);
+        state.truncated = true;
+        return;
+      }
       if (state.chars > ceiling) {
         console.warn(
           `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${ceiling}) — ending the turn. The model is not converging.`,
