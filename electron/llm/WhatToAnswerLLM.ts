@@ -206,7 +206,7 @@ export class WhatToAnswerLLM {
         // engine gates its session write on this; see decideSessionWritePolicy.
         // Owned by the caller rather than stored on the instance because
         // WhatToAnswerLLM is a long-lived singleton and turns can overlap.
-        truncationSink?: { truncated: boolean },
+        truncationSink?: { truncated: boolean; reason?: string },
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStreamStart = 0;
@@ -1243,6 +1243,7 @@ The user triggered this action with a coding problem on screen and NO new questi
             // AFTER the loop and BEFORE any early return below.
             if (truncationSink && _wtaStream.outcome.truncated) {
                 truncationSink.truncated = true;
+                truncationSink.reason = _wtaStream.outcome.reason;
                 console.warn(`[WhatToAnswerLLM] answer is INCOMPLETE (${_wtaStream.outcome.reason}) — the engine will not store it as session history`);
             }
 

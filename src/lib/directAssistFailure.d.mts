@@ -71,3 +71,5 @@ export function directAssistFailureText(
   failure: DirectAssistAnswerFailure,
   t?: (text: string) => string,
 ): string;
+
+export function ownStopFailure(reason: string | undefined | null): { partial: true; code: 'OUTPUT_LIMIT' | 'OUTPUT_REPETITION'; provider: '' } | null;

@@ -45,6 +45,26 @@ const CUT_OFF = 'Answer cut off';
 const APP_FAULT = 'Natively lost track of this answer. Ask again.';
 const NOT_COMPLETED = "The request couldn't be completed.";
 const NO_PROVIDER = 'No AI provider is set up yet';
+// An answer Natively itself stopped (2026-10-04): the output reached the
+// length limit, or the model began repeating one passage over and over.
+// Not a provider failure — nothing in AI Providers fixes it.
+const LENGTH_LIMIT = 'It reached the length limit';
+const REPEATING = 'It started repeating itself';
+const OWN_STOP_BY_CODE = { OUTPUT_LIMIT: LENGTH_LIMIT, OUTPUT_REPETITION: REPEATING };
+
+/**
+ * The notice data for an answer Natively stopped itself, from the stream's
+ * stop reason (main's StreamOutcome.reason). Null for any other reason: a
+ * provider breaking off is not reported through this path.
+ *
+ * @param {string | undefined | null} reason
+ * @returns {{ partial: true, code: 'OUTPUT_LIMIT' | 'OUTPUT_REPETITION', provider: '' } | null}
+ */
+export function ownStopFailure(reason) {
+  if (reason === 'output_cap_reached') return { partial: true, code: 'OUTPUT_LIMIT', provider: '' };
+  if (reason === 'output_repetition') return { partial: true, code: 'OUTPUT_REPETITION', provider: '' };
+  return null;
+}
 
 /** The label of the one action a notice can offer. Worded here so the
  *  translation tables are checked against a single list. */
@@ -57,6 +77,8 @@ export const DIRECT_ASSIST_PHRASES = Object.freeze([
   TRYING,
   NOBODY_ANSWERED,
   CUT_OFF,
+  LENGTH_LIMIT,
+  REPEATING,
   APP_FAULT,
   NOT_COMPLETED,
   NO_PROVIDER,
@@ -155,6 +177,10 @@ const isProviderFailure = (failure) => Boolean(failure.provider) && PROVIDER_COD
  */
 export function directAssistNoticeView({ failure, fallbackNotice, ended = false }, t = identity) {
   const hops = fallbackNotice?.hops ?? [];
+
+  if (failure?.partial && OWN_STOP_BY_CODE[failure.code]) {
+    return { tone: 'cutoff', headline: t(CUT_OFF), rows: [{ text: t(OWN_STOP_BY_CODE[failure.code]) }], fixable: false };
+  }
 
   if (failure?.partial) {
     // Whoever was writing stopped; then what failed before it took over.

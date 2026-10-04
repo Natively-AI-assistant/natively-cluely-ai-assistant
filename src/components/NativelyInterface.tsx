@@ -323,6 +323,7 @@ import {
   DIRECT_ASSIST_OPEN_PROVIDERS,
   directAssistFailureText,
   directAssistNoticeView,
+  ownStopFailure,
   type DirectAssistAnswerFailure,
   type DirectAssistFallbackHop,
   type DirectAssistFallbackNotice,
@@ -7530,6 +7531,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           : data.answer;
         setIsProcessing(false);
         pinAnswerPanel();
+        // An answer Natively stopped itself says so under the text (2026-10-04),
+        // like a typed one. Attached to the live row before the finalize, which
+        // keeps the row's other fields.
+        const ownStop = ownStopFailure((data as { stopReason?: string }).stopReason);
+        const liveRowId = streamingIntentRef.current === 'what_to_answer' ? streamingMsgIdRef.current : null;
+        if (ownStop && liveRowId != null) {
+          setMessages((prev) => prev.map((m) => (m.id === liveRowId ? { ...m, failure: ownStop } : m)));
+        }
         finalizeStreamingByIntent('what_to_answer', answerText);
       }),
     );
@@ -8458,6 +8467,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const pendingTextSnapshot = streamingTextRef.current;
         const pendingMsgIdSnapshot = streamingMsgIdRef.current;
         const authoritativeText = finalText || pendingTextSnapshot;
+        // An answer Natively stopped itself — at the length limit, or because it
+        // began repeating — says so under the text (2026-10-04). Attached
+        // before either finalize path; both keep the row's other fields.
+        const ownStop = data?.incomplete ? ownStopFailure(data.incompleteReason) : null;
+        if (ownStop && pendingMsgIdSnapshot != null) {
+          setMessages((prev) => prev.map((m) => (m.id === pendingMsgIdSnapshot ? { ...m, failure: ownStop } : m)));
+        }
 
         setIsProcessing(false);
 
