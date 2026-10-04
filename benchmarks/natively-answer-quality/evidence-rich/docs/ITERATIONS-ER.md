@@ -626,3 +626,23 @@ Outside the rule's lines, and against it: on the holdout the 27 rows that need n
 counterfactual the same slices had moved +0.04 and +0.37. The holdout's direction is the one E1 showed for packs:
 with the whole document in view, an answer to a question the document does not cover more often attaches something
 nearby. On 4 and 27 rows this is not established either way.
+
+### gpt-6-astra, first batch (2026-10-04 02:00–03:04 UTC): incomplete, nothing decided
+
+The chain ran while E2's holdout was being judged. Calibration 38 of 38 on the new charter; the 45-row agreement
+sample; the baseline holdout (180); then 106 of 180 rows of E1's holdout before the batch closed (402). It did not
+reach E1's drafts or the `s3` holdout, so by the rule above nothing is decided and nothing was landed. The chain
+is re-armed for the next batch (not before 10:00 UTC) and continues from its cache.
+
+What the canonical judge has said so far (`ER_JUDGE=astra node evidence-rich/report/paired-builds.mjs base e1 holdout`,
+the 106 pairs it finished; a partial set in the order the rows were processed, not a sample):
+
+| Baseline → E1, holdout | gpt-6-astra, 106 pairs | Opus, 180 pairs |
+|---|---:|---:|
+| All rows | 7.64 → 8.77 (+1.13 ±0.51) | 7.40 → 8.17 (+0.77 ±0.41) |
+| Evidence required | +1.20 (±0.60) | +1.01 (±0.49) |
+| Hard fails | 23 → 6 | 39 → 15 |
+
+Agreement between the two judges on the same answers: correlation 0.84 (45 dev rows), 0.91 (baseline holdout,
+180), 0.96 (E1 holdout, 106); gpt-6-astra scores 0.2 to 0.5 higher on average; 73–81 % of rows within one point;
+hard fails 42 against 39 on the baseline holdout, 34 of them the same rows.
