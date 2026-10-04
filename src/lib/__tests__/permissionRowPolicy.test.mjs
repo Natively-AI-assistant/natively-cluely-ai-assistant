@@ -45,6 +45,35 @@ describe('describePermRow — microphone, darwin', () => {
 });
 
 describe('describePermRow — microphone, win32', () => {
+  test('the line says what is off, in the words of the Windows page, and fits one line', () => {
+    const line = (status) => describePermRow('win32', 'microphone', status).sublabel;
+    // DeniedBySystem: the device-wide switch, which Windows calls "Microphone access".
+    assert.equal(line('restricted'), 'Microphone access is turned off');
+    // DeniedByUser: one of the two app switches; the status does not say which.
+    assert.equal(line('denied'), 'Turned off for apps');
+    // No answer about a particular switch.
+    assert.equal(line('not-determined'), 'Turn on in privacy settings');
+    for (const status of ['denied', 'not-determined', 'restricted']) {
+      // "Required to capture meeting content" (35) is the longest line the
+      // split card's left column is known to hold on one line.
+      assert.ok(line(status).length <= 35, status);
+      // What is off changes the words, never what the row does.
+      const row = describePermRow('win32', 'microphone', status);
+      assert.equal(row.remedy, 'settings');
+      assert.equal(row.actionable, true);
+    }
+  });
+
+  test('the Windows wording stays on Windows', () => {
+    // macOS keeps its own lines for the same statuses.
+    assert.equal(describePermRow('darwin', 'microphone', 'denied').sublabel, 'Re-enable in Settings');
+    assert.equal(describePermRow('darwin', 'microphone', 'not-determined').sublabel, 'Required for speech transcription');
+    // Anything else has no such page to name.
+    for (const status of ['denied', 'restricted', 'not-determined']) {
+      assert.equal(describePermRow('linux', 'microphone', status).sublabel, 'Turn on in privacy settings');
+    }
+  });
+
   test('never names macOS System Settings', () => {
     for (const status of ['denied', 'not-determined', 'restricted']) {
       const row = describePermRow('win32', 'microphone', status);
@@ -99,6 +128,17 @@ describe('describePermRow — screen recording', () => {
     const row = describePermRow('win32', 'screen', 'granted');
     assert.equal(row.remedy, 'unsupported');
     assert.equal(row.actionable, false);
+  });
+
+  test('win32 draws the row as already allowed, whatever status arrives', () => {
+    // The Windows card shows this row beside the microphone so it matches the
+    // macOS card. It must read as done, and must not borrow macOS wording.
+    for (const status of ['granted', 'denied', 'not-determined', 'restricted', 'unknown', 'loading']) {
+      const row = describePermRow('win32', 'screen', status);
+      assert.equal(row.tone, 'granted');
+      assert.equal(row.sublabel, 'Already allowed');
+      assert.doesNotMatch(row.sublabel, /System Settings|Privacy & Security|macOS/i);
+    }
   });
 });
 
