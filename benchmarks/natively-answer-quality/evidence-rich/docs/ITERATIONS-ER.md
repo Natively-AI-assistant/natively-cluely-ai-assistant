@@ -646,3 +646,18 @@ the 106 pairs it finished; a partial set in the order the rows were processed, n
 Agreement between the two judges on the same answers: correlation 0.84 (45 dev rows), 0.91 (baseline holdout,
 180), 0.96 (E1 holdout, 106); gpt-6-astra scores 0.2 to 0.5 higher on average; 73–81 % of rows within one point;
 hard fails 42 against 39 on the baseline holdout, 34 of them the same rows.
+
+### Evin, 2026-10-04 03:15 UTC: "continue on cc opus 5.5 for now, after astra comeback rereview things"
+
+gpt-6-astra was still closed (402 on both keys at 03:10 UTC). Evin lifted the "after Astra confirms" condition: the
+provisional judge's results decide for now, and gpt-6-astra re-reviews them when it returns.
+
+**Landed on LOCAL main: `be676d88`** (the markup fix `be5b9edd` and E5, fast-forward from `6f00e104`; not pushed).
+Tests on that commit: `typecheck:electron` clean, `test:intelligence` 2,858 pass / 0 fail, llm suite 5,768 pass /
+0 fail. Main + these commits was not benchmarked (E5 was measured on the `e000db4a` base). Other sessions'
+uncommitted files in the main checkout were untouched (status identical before and after).
+
+**Re-review when gpt-6-astra returns** (the chain probes every 10 minutes): the same two holdout readings as in the
+rule above, with `ER_JUDGE=astra`. Agreement is reported; a disagreement is reported with the commit that would be
+reverted (E1 `9fce990b`, E5 `be676d88`), and nothing is reverted without Evin's word.
+E2 (`fix/er-profile-whole`, `fea39964`) is not landed; that decision is still open.

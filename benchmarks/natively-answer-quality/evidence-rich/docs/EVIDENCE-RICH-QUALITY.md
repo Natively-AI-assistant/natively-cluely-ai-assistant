@@ -436,6 +436,9 @@ infer that from dates.
 
 ## 15. Follow-up after Evin's decisions (2026-10-03, evening)
 
+**Status on 2026-10-04 03:20 UTC:** E1, the markup fix and E5 are on LOCAL main (`be676d88`, not pushed), landed
+on the provisional judge's results at Evin's word; gpt-6-astra re-reviews them when it returns. E2 is on its branch.
+
 Evin chose: land E1 now; redesign the claim pass, then measure; raise the 24,000-character cut and measure; have the
 app label dates in the prompt; find the cause of the streamed tool-call markup and fix it. Detail and rules:
 `ITERATIONS-ER.md` (E5, E6, E7). Everything below except E1 is on branch `fix/er-followups` and is NOT on main.
