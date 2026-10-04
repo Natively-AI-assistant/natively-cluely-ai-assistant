@@ -11,6 +11,7 @@ import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
+import { Presence } from './settings/SettingsRow';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
 import { useConfirmDialog } from './ui/ConfirmDialog';
@@ -2076,6 +2077,9 @@ export function ProfileIntelligenceSettings({
     // Tavily
     const [tavilyApiKey, setTavilyApiKey] = useState('');
     const [hasStoredTavilyKey, setHasStoredTavilyKey] = useState(false);
+    // The stored-key check has answered: from here a change is the user's (a
+    // save, a remove) and the badge animates; the answer itself does not.
+    const [tavilyChecked, setTavilyChecked] = useState(false);
     const [tavilySaving, setTavilySaving] = useState(false);
     const [tavilyError, setTavilyError] = useState('');
 
@@ -2175,7 +2179,7 @@ export function ProfileIntelligenceSettings({
         }).catch(() => {});
         window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
             if (creds?.hasTavilyKey) setHasStoredTavilyKey(true);
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => setTavilyChecked(true));
     }, []);
 
     // Finalize an ADOPTED ingest. Only runs for uploads this mount inherited —
@@ -2705,7 +2709,8 @@ export function ProfileIntelligenceSettings({
             )}
             {jdError && (
                 // The 10px keeps the scope note below from sitting 3px under this box.
-                <div style={{ fontSize: 11, color: 'var(--pi-danger)', padding: '6px 10px', borderRadius: 6, background: 'var(--pi-danger-bg)', marginBottom: 10 }}>
+                // It arrives the way this panel's list items do (.pi-list-item).
+                <div className="pi-list-item" style={{ fontSize: 11, color: 'var(--pi-danger)', padding: '6px 10px', borderRadius: 6, background: 'var(--pi-danger-bg)', marginBottom: 10 }}>
                     {jdError}
                 </div>
             )}
@@ -3029,10 +3034,11 @@ export function ProfileIntelligenceSettings({
         <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <h3 className="pi-section-label" style={{ margin: 0 }}>Tavily Search API</h3>
-                {/* The kit's green tag, as Settings › Intelligence says "Connected". */}
-                {hasStoredTavilyKey && (
+                {/* The kit's green tag, as Settings › Intelligence says "Connected", and
+                    the same badge motion: it pops in on a save and leaves on a remove. */}
+                <Presence kind="badge" id={hasStoredTavilyKey ? 'connected' : null} ready={tavilyChecked}>
                     <LiquidGlassBadge variant="green" icon={<Check size={10} strokeWidth={2.5} />}>Connected</LiquidGlassBadge>
-                )}
+                </Presence>
             </div>
             <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '0 0 16px', lineHeight: 1.6 }}>
                 Powers live web search for company research. If not provided, LLM general knowledge is used (may be outdated).
