@@ -340,10 +340,16 @@ const CONF_MIN_QUERY_TOKENS = 3;     // ignore trivially short queries for the "
 // total, well inside the retrieval budget.
 const RERANK_BATCH_SIZE = 6;
 
+// Typed questions query the bundled embedder's vectors like spoken ones
+// (2026-10-04, owner's decision, E11). The July hotfix sent every typed turn
+// in a meeting to keyword-only search to spare ONNX memory, but a spoken turn
+// in the same meeting already embeds its query (hasTranscript lifts the rule),
+// and the crash it guarded against was the reranker's 30-pair batch, fixed by
+// RERANK_BATCH_SIZE. The old behaviour stays one switch away:
+// NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1.
 function keylessManualRetrievalUsesLexical(): boolean {
     const raw = String(process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL || '').trim().toLowerCase();
-    if (['0', 'false', 'off', 'disabled', 'no'].includes(raw)) return false;
-    return true;
+    return ['1', 'true', 'on', 'enabled', 'yes'].includes(raw);
 }
 
 // Escape XML special characters in text content
@@ -1609,6 +1615,8 @@ export class ModeHybridRetriever {
         queryEmbedRetryBudgetMs?: number;
         /** Is a meeting / STT session running? Only an explicit `false` lets the bundled embedder's vectors be queried. */
         meetingActive?: boolean;
+        /** Packer cost per item beyond its text, counted against tokenBudget (E11). */
+        perItemOverheadTokens?: number;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1622,6 +1630,7 @@ export class ModeHybridRetriever {
             rerankDeadlineMs,
             rerankPoolMultiplier,
             queryEmbedRetryBudgetMs,
+            perItemOverheadTokens = 0,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -2091,7 +2100,7 @@ export class ModeHybridRetriever {
         // guarantee each file contributes its best chunk so a large dataset can't
         // starve a small one out of the retrieved set.
         const guaranteePerFile = forceDocumentGrounding && files.length > 1;
-        const selected = this.enforceTokenBudget(deduped, tokenBudget, reranked, topK, guaranteePerFile, forceDocumentGrounding);
+        const selected = this.enforceTokenBudget(deduped, tokenBudget, reranked, topK, guaranteePerFile, forceDocumentGrounding, perItemOverheadTokens);
         markH4HybridStage('selection_complete', { chunkCount: selected.length });
 
         // Format output with citations
@@ -2826,7 +2835,7 @@ export class ModeHybridRetriever {
      * Enforce token budget by selecting highest-scoring chunks that fit. When
      * `byRerank` is true, "highest" is the cross-encoder order.
      */
-    private enforceTokenBudget(candidates: ChunkCandidate[], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K, guaranteePerFile = false, forceDocumentGrounding = false): ChunkCandidate[] {
+    private enforceTokenBudget(candidates: ChunkCandidate[], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K, guaranteePerFile = false, forceDocumentGrounding = false, perItemOverheadTokens = 0): ChunkCandidate[] {
         const sorted = [...candidates].sort((a, b) => this.rankScore(b, byRerank) - this.rankScore(a, byRerank));
 
         const selected: ChunkCandidate[] = [];
@@ -2834,7 +2843,11 @@ export class ModeHybridRetriever {
         let totalTokens = 0;
         const tryAdd = (candidate: ChunkCandidate): boolean => {
             if (picked.has(candidate)) return false;
-            const tokens = estimateTokens(candidate.text);
+            // What the packer will charge for this item: its text AND its tag
+            // (perItemOverheadTokens, E11). Counting the text alone selected
+            // 1–2 more chunks than the packer could fit; it then dropped the
+            // lowest-ranked ones whole.
+            const tokens = estimateTokens(candidate.text) + perItemOverheadTokens;
             if (totalTokens + tokens > budget && selected.length > 0) return false;
             selected.push(candidate);
             picked.add(candidate);
