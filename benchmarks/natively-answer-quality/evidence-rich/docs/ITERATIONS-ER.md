@@ -962,3 +962,37 @@ pass / 0 fail; verified on main with `git merge-base --is-ancestor`. Not pushed;
 measured together with (b): Recruiting +0.08 and +0.59 over two runs, the hiring job description in the prompt on
 27 of 27 heard Recruiting turns instead of 13). Undo: `git revert efc126a9`. (b), the fast-path change, stays on
 `fix/er-pack-always` (`dfe2cf5b`), not landed.
+
+---
+
+## E9 — the claim pass names the two shapes of invention seen when the asked fact is absent
+
+**Rule written before any E9 arm was run (commit time of this section is the record).** Evin: "continue".
+
+**What main does.** Across the two control runs of main (`m1`, `m1r`, dev + counterfactual), 11 rows that need no
+document hard-failed in at least one run. On 7 of them the claim pass ran and left the invention in: "Your
+friend's right" about a topic absent from the slides; the networks final's date given for the economics final; "the
+handles and knobs are part of the cabinetry" with no quote saying so; a connector's cost as "a separate line" with no
+price list saying so; an invented story about a manager. The pass's list step has three kinds ([past], [self],
+[promise]); these two shapes (a yes / no about whether something absent was covered, and another item's value
+given as the asked one) are not named in it. The other 4 rows are on turns the pass does not run (Lecture; one
+Technical Interview turn the personal pattern misses); they are not addressed here.
+
+**Change (wording of the pass's own prompt only, `replay-variants/e9-v1.mjs`).** The [past] kind also names: a yes
+or a no about whether something was covered, included, mentioned, allowed or offered when the material never names
+it; and a value, date, rule or result the material gives for a different item, presented as the one asked about.
+Nothing else changes.
+
+**How it is measured.** Offline, on the drafts `m1` recorded (dev + counterfactual, main `54606ef2`), with main's
+own pass (`results/.cv/cv-main-54606ef2.mjs`, system prompt hash-checked on 203 of 203 dev rows), cap 96,000, k 2:
+a control arm (main's wording) and the v1 arm, both through the same harness; new texts judged.
+
+**Rule (offline; paired on the same drafts, so the generator's run-to-run variation is out of it).**
+1. Hard fails: v1 at least 2 below the control arm.
+2. All rows: v1 not below the control arm by more than 0.05.
+3. Rows with the evidence in the prompt: not below the control arm by more than 0.1 (the pass must not start
+   deleting what the files state).
+4. Answers the pass changes: not more than 25 % above the control arm (deferral is the known cost).
+5. The control arm's two repetitions agree with each other within half of whatever line 1 or 2 measures; if they do
+   not, the replay itself is too noisy to decide and nothing is concluded.
+All hold → one app run of main + E9 on dev + counterfactual and the holdout, under the rule written then.
