@@ -1353,10 +1353,19 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                 {showNotification && (
                     <motion.div
                         key="refresh-toast"
-                        initial={{ x: 300, opacity: 0, scale: 0.9 }}
-                        animate={{ x: 0, opacity: 1, scale: 1 }}
-                        exit={{ x: 300, opacity: 0, scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 350, damping: 30, mass: 1 }}
+                        // The corner notices' slide (genieMotion.mjs SLIDE, where the
+                        // numbers are explained): in from past the right edge, seen
+                        // travelling; out as a swipe that is fastest at the edge.
+                        // The travel is the toast's own width plus its 40px inset, so
+                        // a long translation still starts and ends past the edge.
+                        // Reduced motion: the plain fade, in place.
+                        initial={prefersReducedMotion ? { opacity: 0 } : { x: 'calc(100% + 40px)', opacity: 0, filter: 'blur(2px)' }}
+                        animate={prefersReducedMotion
+                            ? { opacity: 1, transition: { duration: 0.15, ease: 'linear' } }
+                            : { x: 'calc(0% + 0px)', opacity: 1, filter: 'blur(0px)', transition: { x: { duration: 0.5, ease: [0.33, 1, 0.68, 1] }, opacity: { duration: 0.25, ease: [0.33, 1, 0.68, 1] }, filter: { duration: 0.35, ease: [0.33, 1, 0.68, 1] } } }}
+                        exit={prefersReducedMotion
+                            ? { opacity: 0, transition: { duration: 0.15, ease: 'linear' } }
+                            : { x: 'calc(100% + 40px)', opacity: 0, filter: 'blur(2px)', transition: { x: { duration: 0.4, ease: [0.4, 0.2, 1, 0.8] }, opacity: { duration: 0.4, ease: [0.7, 0, 1, 1] }, filter: { duration: 0.4, ease: [0.7, 0, 1, 1] } } }}
                         className={`fixed bottom-10 right-10 z-[2000] flex items-center gap-4 pl-4 pr-6 py-3.5 rounded-[18px] backdrop-blur-xl saturate-[180%] ring-1 ring-black/10 ${isLight ? 'bg-bg-elevated/90 border border-border-muted shadow-[0_8px_32px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-[#2A2A2E]/40 border border-white/10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.3),inset_0_-1px_0_rgba(255,255,255,0.05)]'}`}
                     >
                         {/* Liquid Icon Orb */}

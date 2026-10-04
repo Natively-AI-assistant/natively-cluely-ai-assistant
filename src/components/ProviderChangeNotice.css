@@ -286,24 +286,31 @@
    ancestor does not, so the wrapper carries only the transform, and the fade
    and blur ride on the pane itself.
 
-   Values, from the motion tokens (transitions-polish):
-     open    400ms  --duration-slow    a full off-edge travel is a panel open
-     close   350ms  --duration-medium  toast / panel close; faster than open
-     ease           --ease-smooth-out  surface motion, both ways; no overshoot
-                                       (bounce is for badges, never a close)
-     blur    2px    --blur-small       softens the slide
-     travel         the card's own width + the 24px gap, so it starts and
-                    ends fully past the window's right edge. Longer than the
-                    ~40px guideline on purpose: that is for in-place motion,
-                    and an edge-anchored banner has to come from the edge. */
+   Values: the other corner cards share them (genieMotion.mjs SLIDE, where
+   the reasons and the measurements are; a test holds the two together).
+     in    travel 500ms, ease-out cubic: seen travelling, lands with no
+           overshoot. Fade 250ms, blur 2px over 350ms: solid and sharp before
+           it lands.
+     out   travel 400ms on a curve that starts with speed and is fastest at
+           the edge: a swipe. Fade and blur held, then gone as it crosses.
+     travel  the card's own width + the 24px gap, so it starts and ends fully
+           past the window's right edge.
+   The snippet's one --toast-ease is the way in; the way out has its own
+   curves, ADDED below the snippet. */
 .lg-notice-slide {
-    --toast-open: 400ms;
-    --toast-close: 350ms;
+    --toast-open: 500ms;
+    --toast-close: 400ms;
     --toast-distance: 0px;
     --toast-blur: 2px;
     --toast-scale: 1;
-    --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --toast-ease: cubic-bezier(0.33, 1, 0.68, 1);
     --notice-edge-gap: 24px;
+    --notice-travel-close-ease: cubic-bezier(0.4, 0.2, 1, 0.8);
+    --notice-fade-open: 250ms;
+    --notice-blur-open: 350ms;
+    --notice-fade-close: 400ms;
+    --notice-blur-close: 400ms;
+    --notice-fade-close-ease: cubic-bezier(0.7, 0, 1, 1);
 }
 
 .t-toast {
@@ -330,10 +337,24 @@
   .t-toast { transition: none !important; }
 }
 
+/* ADDED: the pane's own fade and blur clocks. In, shorter than the travel: it
+   is solid and sharp before it lands. Out, held and then gone (the late
+   curve), so the pane stays solid and sharp while it is swiped away and fades
+   only as it crosses the edge. Listed in the snippet's property order:
+   opacity, transform, filter. */
+.lg-notice.t-toast {
+  transition-duration: var(--notice-fade-close), var(--toast-close), var(--notice-blur-close);
+  transition-timing-function: var(--notice-fade-close-ease), var(--toast-ease), var(--notice-fade-close-ease);
+}
+.lg-notice.t-toast.is-open {
+  transition-duration: var(--notice-fade-open), var(--toast-open), var(--notice-blur-open);
+  transition-timing-function: var(--toast-ease);
+}
+
 /* ADDED: the horizontal travel, on the same open/close clock. */
 .lg-notice-slide {
     transform: translateX(calc(100% + var(--notice-edge-gap)));
-    transition: transform var(--toast-close) var(--toast-ease);
+    transition: transform var(--toast-close) var(--notice-travel-close-ease);
     will-change: transform;
 }
 .lg-notice-slide.is-open {
