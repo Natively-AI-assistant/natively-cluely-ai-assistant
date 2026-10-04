@@ -8,7 +8,13 @@ export interface RawTranscriptSegment {
   segmentId?: string;
   /** Provenance tag (SessionTracker.TranscriptOrigin). 'assistant' turns are AI output. */
   origin?: string;
+  /** An assistant turn that answers typed chat (SessionTracker.chatReply). */
+  chatReply?: boolean;
 }
+
+/** Speaker names for the two kinds of line that were not said in the meeting. */
+export const TYPED_SPEAKER = 'Me (typed)';
+export const ASSISTANT_REPLY_SPEAKER = 'Assistant';
 
 const FILLER_WORDS = new Set(['uh', 'um', 'ah', 'hmm', 'er', 'erm']);
 const UNKNOWN_SPEAKER_RE = /^(unknown|speaker|participant|audio|system|ai|assistant|model)$/i;
@@ -89,23 +95,39 @@ export class TranscriptNormalizer {
       // (MeetingContextAssembler.assembleSummary → chunker → LLM), so excluding
       // them here keeps assistant answers out of every downstream evidence
       // surface (atoms, owners, quotes) in one place.
-      if (isAssistantTurn(raw)) {
+      //
+      // One exception (2026-10-04, owner decision): the assistant's REPLY to
+      // something the user typed is kept, labelled as the assistant. Typed
+      // questions were always in the notes input, so with their answers
+      // removed the notes reported them as "left unanswered". Live
+      // suggestions (What to Answer, Auto Answer) stay excluded — nobody said
+      // them and nobody asked for them in writing. The extraction prompt and
+      // the validator keep these lines out of decisions, owners and quotes.
+      const isChatReply = isAssistantTurn(raw) && raw?.chatReply === true;
+      if (isAssistantTurn(raw) && !isChatReply) {
         assistantExcluded++;
         continue;
       }
+      const isTyped = !isChatReply && raw?.origin === 'manual_chat';
       const text = cleanTranscriptLine(raw?.text || '');
-      if (!text || isInterimNoise(text)) {
+      // A typed line is deliberate, so a one-word message ("hi", "ok") is
+      // dropped only when empty — the interim-noise rule is for STT fragments.
+      if (!text || (!isTyped && !isChatReply && isInterimNoise(text))) {
         dropped++;
         continue;
       }
 
-      const base = canonicalSpeaker(raw?.speaker);
+      const base = isChatReply
+        ? { speaker: ASSISTANT_REPLY_SPEAKER, speakerId: 'assistant', uncertainSpeaker: false }
+        : isTyped
+          ? { speaker: TYPED_SPEAKER, speakerId: 'me', uncertainSpeaker: false }
+          : canonicalSpeaker(raw?.speaker);
       const uncertainSpeaker = base.uncertainSpeaker;
       // Provider diarization id (e.g. "speaker_2") wins over the channel-derived id, and its
       // display name follows from it ("Speaker 2") rather than the channel default.
       const resolvedSpeakerId = raw?.speakerId || base.speakerId;
       const speakerId = resolvedSpeakerId;
-      const speaker = raw?.speakerId ? displayNameForId(resolvedSpeakerId, base.speaker) : base.speaker;
+      const speaker = raw?.speakerId && !isTyped && !isChatReply ? displayNameForId(resolvedSpeakerId, base.speaker) : base.speaker;
       const timestamp = typeof raw?.timestamp === 'number' && Number.isFinite(raw.timestamp) ? raw.timestamp : 0;
       const key = `${speaker.toLowerCase()}::${text.toLowerCase()}`;
       if (key === previousKey) {
@@ -126,12 +148,28 @@ export class TranscriptNormalizer {
         timestamp,
         uncertainSpeaker,
         originalIndex: i,
+        ...(isChatReply ? { chat: 'assistant_reply' as const } : isTyped ? { chat: 'typed' as const } : {}),
       });
     }
 
+    // Time into the meeting, measured from its first stamped line. Timestamps
+    // are clock time (Date.now()), so printing them raw put "[1791118297s]" in
+    // front of every line the notes model read.
+    let meetingStartMs = 0;
+    for (const segment of normalized) {
+      if (segment.timestamp > 0 && (meetingStartMs === 0 || segment.timestamp < meetingStartMs)) meetingStartMs = segment.timestamp;
+    }
+    if (meetingStartMs > 0) {
+      for (const segment of normalized) {
+        if (segment.timestamp > 0) segment.elapsedMs = segment.timestamp - meetingStartMs;
+      }
+    }
+
     const text = normalized.map(segment => formatNormalizedSegment(segment)).join('\n');
-    const uniqueSpeakers = new Set(normalized.map(s => s.speakerId)).size;
-    const uncertainRatio = normalized.length ? uncertainSpeakers / normalized.length : 1;
+    // Speaker quality is about the meeting's voices; chat lines are not voices.
+    const spoken = normalized.filter(s => !s.chat);
+    const uniqueSpeakers = new Set(spoken.map(s => s.speakerId)).size;
+    const uncertainRatio = spoken.length ? uncertainSpeakers / spoken.length : (normalized.length ? 0 : 1);
 
     let speakerQuality: NormalizedTranscript['speakerQuality'] = 'good';
     if (normalized.length === 0 || uncertainRatio > 0.5) speakerQuality = 'poor';
@@ -154,7 +192,12 @@ export class TranscriptNormalizer {
   }
 }
 
+/**
+ * One transcript line as the notes model reads it: "[125s] Speaker 2: text",
+ * where 125 is seconds INTO THE MEETING. The model's cited times come back in
+ * the same scale and are turned into clock time by anchorAtomTimes.
+ */
 export function formatNormalizedSegment(segment: NormalizedTranscriptSegment): string {
-  const timestamp = segment.timestamp > 0 ? `[${Math.floor(segment.timestamp / 1000)}s] ` : '';
+  const timestamp = typeof segment.elapsedMs === 'number' ? `[${Math.floor(segment.elapsedMs / 1000)}s] ` : '';
   return `${timestamp}${segment.speaker}: ${segment.text}`;
 }

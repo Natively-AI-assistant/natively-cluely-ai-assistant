@@ -148,15 +148,12 @@ test('every production mode has seeded note sections for meeting summaries', () 
 });
 
 test('all mode prompts start with a shared prefix so duplicate-token stripping works', () => {
-  const promptByMode = {
-    general: promptsMod.MODE_GENERAL_PROMPT,
-    sales: promptsMod.MODE_SALES_PROMPT,
-    recruiting: promptsMod.MODE_RECRUITING_PROMPT,
-    'team-meet': promptsMod.MODE_TEAM_MEET_PROMPT,
-    'looking-for-work': promptsMod.MODE_LOOKING_FOR_WORK_PROMPT,
-    'technical-interview': promptsMod.MODE_TECHNICAL_INTERVIEW_PROMPT,
-    lecture: promptsMod.MODE_LECTURE_PROMPT,
-  };
+  // Read from the registry itself, not a hand-kept list: seminar and
+  // call-center were added to the registry but never to the list that used to
+  // live here, so both shipped without the trailing .trim() and sent the
+  // shared prelude twice (found 2026-10-04 from the startup warning).
+  const promptByMode = modesMod.TEMPLATE_SYSTEM_PROMPTS;
+  assert.deepEqual(Object.keys(promptByMode).sort(), [...EXPECTED_MODE_TYPES].sort());
 
   for (const [modeType, prompt] of Object.entries(promptByMode)) {
     assert.ok(

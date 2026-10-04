@@ -658,12 +658,18 @@ export class EmbeddingPipeline {
             VALUES (?, ?, 'pending')
         `);
 
+        let summaryQueued = false;
         const queueAll = this.db.transaction(() => {
             for (const chunk of chunks) {
                 insert.run(meetingId, chunk.id);
             }
-            // Also queue summary (chunk_id = NULL means summary)
-            insert.run(meetingId, null);
+            // Also queue the summary (chunk_id = NULL means summary) — when
+            // there is one. This used to be unconditional, but indexing starts
+            // the moment a meeting ends, before its notes exist: the row found
+            // no summary, logged "skipping" and was marked completed, so it was
+            // never tried again. The summary is queued by queueSummary() once
+            // the notes are saved.
+            summaryQueued = this.enqueueSummaryRowIfNeeded(meetingId);
         });
 
         queueAll();
@@ -672,12 +678,57 @@ export class EmbeddingPipeline {
         // for this meeting (inside embedChunk), not here — to avoid marking a
         // meeting as embedded if the queue crashes before any work is done.
 
-        console.log(`[EmbeddingPipeline] Queued ${chunks.length} chunks + 1 summary for meeting ${meetingId}`);
+        console.log(`[EmbeddingPipeline] Queued ${chunks.length} chunks${summaryQueued ? ' + 1 summary' : ''} for meeting ${meetingId}`);
 
         // Start processing in background
         this.processQueue().catch(err => {
             console.error('[EmbeddingPipeline] Queue processing error:', err);
         });
+    }
+
+    /**
+     * Insert the summary queue row for a meeting, if it has a saved summary
+     * that still needs embedding and no such row is already waiting. Returns
+     * whether a row was inserted. Synchronous; safe inside a transaction.
+     *
+     * The explicit existence check is needed because UNIQUE(meeting_id,
+     * chunk_id) does not dedupe summary rows (chunk_id IS NULL, and NULL !=
+     * NULL in SQLite), so INSERT OR IGNORE would stack one per call.
+     */
+    private enqueueSummaryRowIfNeeded(meetingId: string): boolean {
+        const needsEmbedding = this.db.prepare(
+            'SELECT 1 FROM chunk_summaries WHERE meeting_id = ? AND embedding IS NULL'
+        ).get(meetingId);
+        if (!needsEmbedding) return false;
+        const waiting = this.db.prepare(
+            `SELECT 1 FROM embedding_queue WHERE meeting_id = ? AND chunk_id IS NULL AND status IN ('pending', 'processing')`
+        ).get(meetingId);
+        if (waiting) return false;
+        this.db.prepare(
+            `INSERT INTO embedding_queue (meeting_id, chunk_id, status) VALUES (?, NULL, 'pending')`
+        ).run(meetingId);
+        return true;
+    }
+
+    /**
+     * Queue a meeting's saved summary for embedding. Called after the notes
+     * are saved (and after a regenerate, and by the launch backfill) — the
+     * point at which a summary actually exists. The row is inserted even when
+     * no provider is ready yet; processQueue() picks it up once one is.
+     */
+    async queueSummary(meetingId: string): Promise<boolean> {
+        if (this.stopped) {
+            console.log('[EmbeddingPipeline] Stopped — refusing new work during shutdown.');
+            return false;
+        }
+        const queued = this.enqueueSummaryRowIfNeeded(meetingId);
+        if (queued) {
+            console.log(`[EmbeddingPipeline] Queued summary for meeting ${meetingId}`);
+            this.processQueue().catch(err => {
+                console.error('[EmbeddingPipeline] Queue processing error (summary):', err);
+            });
+        }
+        return queued;
     }
 
     /**
@@ -712,7 +763,9 @@ export class EmbeddingPipeline {
             // the summary, and is safe inside the same transaction as the re-insert.
             this.db.prepare('DELETE FROM embedding_queue WHERE meeting_id = ?').run(meetingId);
             for (const c of chunkIds) insert.run(meetingId, c.id);
-            insert.run(meetingId, null); // summary
+            // The summary too, when the meeting has one (its embedding was just
+            // cleared above, so "needs embedding" is true for every saved summary).
+            this.enqueueSummaryRowIfNeeded(meetingId);
         });
         tx();
 
@@ -1592,6 +1645,24 @@ export class EmbeddingPipeline {
         }
 
         const embedding = await this.embedWithTimeout(p, row.summary_text, `summary:${meetingId}`);
+
+        // The summary can be replaced while this call is in flight (the notes
+        // are saved, or regenerated, mid-embed). saveSummary cleared the stored
+        // embedding for the new text, and queueSummary saw THIS row as already
+        // 'processing' and added nothing — so storing now would pair the new
+        // text with the old text's vector, for good. Drop the stale vector and
+        // queue the summary again instead.
+        const current = this.db.prepare(
+            'SELECT summary_text FROM chunk_summaries WHERE meeting_id = ?'
+        ).get(meetingId) as { summary_text: string } | undefined;
+        if (!current) return;
+        if (current.summary_text !== row.summary_text) {
+            this.db.prepare(
+                `INSERT INTO embedding_queue (meeting_id, chunk_id, status) VALUES (?, NULL, 'pending')`
+            ).run(meetingId);
+            console.log(`[EmbeddingPipeline] Summary for meeting ${meetingId} changed while it was being embedded — queued again`);
+            return;
+        }
         this.vectorStore.storeSummaryEmbedding(meetingId, embedding);
 
         // P2-8: record provider metadata on the meeting row so that provider-switch

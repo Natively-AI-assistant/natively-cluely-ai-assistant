@@ -7,6 +7,8 @@ import fs from 'fs';
 import * as sqliteVec from 'sqlite-vec';
 import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
 import { decodeUsageMetadata, encodeUsageMetadata } from './usageMetadata';
+import { encodeSavedOrigin, decodeSavedOrigin } from '../intelligence/savedTranscriptOrigin';
+import { parseVecTableName, readPendingVecRebuilds, writePendingVecRebuilds, type PendingVecRebuild } from './vecRebuildPending';
 import type { ActionItem, DecisionItem, FollowUpDraft, MeetingSummaryGenerationMeta, MeetingSummaryModeMeta, MeetingSummarySectionV3, NoteBlock, PersonMention, QuestionItem, RiskItem, SourceQualityMeta, SpeakerLabelMap, SummaryStatus, TimelineItem } from '../services/meeting/types';
 
 // Interfaces for our data objects
@@ -52,6 +54,12 @@ export interface Meeting {
         timestamp: number;
         /** Which of the other side's voices said it (speaker_2…), when known; see speaker_id. */
         speakerId?: string;
+        /** Where the line came from (SessionTracker.TranscriptOrigin): 'stt' is
+         *  speech, 'manual_chat' is typed to the assistant, 'assistant' is the
+         *  assistant's own output. Absent on meetings saved before 2026-10-04. */
+        origin?: string;
+        /** An assistant line that answers typed chat (not a live suggestion). */
+        chatReply?: boolean;
     }>;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
@@ -189,6 +197,7 @@ export class DatabaseManager {
      * `closeWithoutCheckpoint()` there instead (see below).
      */
     public close(): void {
+        this.cancelScheduledVecRebuilds();
         if (!this.db) return;
         try {
             this.db.pragma('wal_checkpoint(TRUNCATE)');
@@ -224,6 +233,7 @@ export class DatabaseManager {
      * calling the raw handle close is checkpoint-free.
      */
     public closeWithoutCheckpoint(): void {
+        this.cancelScheduledVecRebuilds();
         if (!this.db) return;
         try {
             this.db.close();
@@ -466,6 +476,8 @@ export class DatabaseManager {
             }
 
             this.runMigrations();
+            this.repairVecTables();
+            this.scheduleVecRebuilds();
         } catch (error) {
             console.error('[DatabaseManager] Failed to initialize database:', error);
             throw error;
@@ -1540,6 +1552,14 @@ export class DatabaseManager {
         // the channel, so everything that reads it is unchanged. Additive and
         // nullable, applied the same unconditional way.
         try { this.db.exec("ALTER TABLE transcripts ADD COLUMN speaker_id TEXT"); } catch (e) { /* Column already exists */ }
+        // Where each line came from (2026-10-04): speech, typed chat, or the
+        // assistant. The session knew this while the meeting ran, but the saved
+        // rows did not, so everything that re-reads a saved meeting (search
+        // indexing, regenerate notes, reindex) treated typed questions and the
+        // assistant's answers as things said in the meeting. NULL on older rows;
+        // readers fall back to the speaker (see savedTranscriptOrigin.ts).
+        // Additive and nullable, applied the same unconditional way.
+        try { this.db.exec("ALTER TABLE transcripts ADD COLUMN origin TEXT"); } catch (e) { /* Column already exists */ }
         if (version < 28) {
             this.db.pragma('user_version = 28');
         }
@@ -1752,68 +1772,26 @@ export class DatabaseManager {
         if (version < 30) {
             console.log('[DatabaseManager] Applying migration v29 → v30: rebuild vec0 tables with cosine distance');
             try {
-                let rebuilt = 0;
-                // R-08: enumerate the dimensions that actually EXIST, not just
-                // KNOWN_DIMS ([768, 1536, 3072]). LocalEmbeddingProvider — the
-                // offline fallback — is 384-d, so vec_chunks_384 is a real, shipped
-                // table on any install that has ever embedded locally. Iterating
-                // KNOWN_DIMS left it on L2 forever: the drop skipped it, and the
-                // later re-create is `CREATE VIRTUAL TABLE IF NOT EXISTS`, a silent
-                // no-op on a surviving table whose persisted DDL carries no
-                // distance_metric. The result was MIXED metrics under one shared
-                // `similarity = 1 - distance` and one shared threshold — on unit
-                // vectors L2 = sqrt(2-2cos), so a 0.25 floor silently demanded
-                // cos >= 0.719 on precisely the provider used when the cloud is down.
-                // getExistingVecDims() returns KNOWN_DIMS union the discovered ones
-                // and its own docstring warns about this exact case; it must be
-                // captured BEFORE the drop loop, or discovery finds nothing.
-                const dimsToRebuild = this.getExistingVecDims();
-                // R-13: the drop and the backfill must be ONE unit. v28 was not
-                // transactional, so a crash after the drop loop but during the
-                // rebuild left the vec0 tables EXISTING BUT EMPTY — and both
-                // detectVecSupport (VectorStore.ts:66) and hasVecExtension
-                // (:2388) probe with `SELECT count(*) ... LIMIT 1`, which SUCCEEDS
-                // on an empty table. useNativeVec stayed true, searchSimilarNative
-                // returned [] on zero rows, and there is no JS fallback on an empty
-                // result (only on a throw) — a silent, total RAG blackout with no
-                // error anywhere. Verified for this build that vec0 DROP TABLE does
-                // roll back (3 rows dropped inside a tx, 3 rows present after abort),
-                // so the wrap is sound rather than assumed.
-                // R-13 follow-up: capture a non-null local. TypeScript does not carry
-                // the enclosing method's `this.db` narrowing INTO the arrow function, so
-                // every use inside the transaction was TS2531 "Object is possibly null"
-                // (CI typecheck caught this; esbuild does not typecheck, so the local
-                // build was green). runMigrations() already returns early when this.db
-                // is null, so the local is genuinely non-null here.
-                const db = this.db;
-                db.transaction(() => {
-                for (const dim of dimsToRebuild) {
-                    db.exec(`DROP TABLE IF EXISTS vec_chunks_${dim};`);
-                    db.exec(`DROP TABLE IF EXISTS vec_summaries_${dim};`);
-                }
-                this.ensuredDims.clear();
-                for (const dim of dimsToRebuild) {
-                    this.ensureVecTableForDim(dim); // now emits distance_metric=cosine
-                    const bytes = dim * 4;
-                    const chunkIns = db.prepare(
-                        `INSERT OR REPLACE INTO vec_chunks_${dim}(chunk_id, embedding) VALUES (?, ?)`
-                    );
-                    for (const row of db.prepare(
-                        `SELECT id, embedding FROM chunks WHERE embedding IS NOT NULL AND length(embedding) = ?`
-                    ).iterate(bytes) as Iterable<any>) {
-                        try { chunkIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }
-                    }
-                    const sumIns = db.prepare(
-                        `INSERT OR REPLACE INTO vec_summaries_${dim}(summary_id, embedding) VALUES (?, ?)`
-                    );
-                    for (const row of db.prepare(
-                        `SELECT id, embedding FROM chunk_summaries WHERE embedding IS NOT NULL AND length(embedding) = ?`
-                    ).iterate(bytes) as Iterable<any>) {
-                        try { sumIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }
-                    }
-                }
-                })();
-                console.log(`[DatabaseManager] v30: rebuilt vec0 indexes with cosine distance (${rebuilt} vectors re-inserted)`);
+                // The rebuild is no longer done HERE in one unbounded pass
+                // (2026-10-05): it copied every stored vector before the first
+                // window, so its cost grew with the index — 141 MB of vectors
+                // for a 12,000-chunk profile. repairVecTables() does the same
+                // drop + recreate + backfill, driven by each table's own DDL:
+                //   - R-08 holds: it lists the vec0 tables that actually exist
+                //     (any dimension, 384 included), not KNOWN_DIMS.
+                //   - R-13 holds for what it rebuilds at once (small tables,
+                //     one transaction). A large table is instead recorded in
+                //     app_state and rebuilt after launch in slices; until that
+                //     finishes VectorStore searches it through the JS cosine
+                //     path, so the empty-but-present table R-13 describes can
+                //     never be the one a query reads.
+                //   - R-22 holds twice over: it throws (no stamp, chain stops)
+                //     if a wrong-metric table could be neither rebuilt nor
+                //     recorded as pending, and because it reads the DDL it
+                //     runs again on every launch until nothing is left —
+                //     independent of user_version, like the page-count repair
+                //     above.
+                this.repairVecTables({ fromMigration: true });
                 this.db.pragma('user_version = 30');
             } catch (e) {
                 console.error('[DatabaseManager] v30 vec0 cosine rebuild failed (leaving version at 29 to retry next launch):', e);
@@ -2826,6 +2804,421 @@ export class DatabaseManager {
     private ensuredDims = new Set<number>();
 
     /**
+     * Vectors per storage block in a vec0 table. sqlite-vec allocates a table's
+     * storage one whole block at a time, and its default block holds 1,024
+     * vectors: at 3,072 dimensions that is 1024 x 3072 x 4 = 12,582,912 bytes
+     * the moment the FIRST vector is inserted. A profile with three embedded
+     * vectors was a 25.9 MB database, and the write went through a 12 MB WAL
+     * (measured 2026-10-04). 64 makes a block 0.8 MB at 3,072 dimensions and
+     * 98 KB at 384, at the cost of more blocks to scan in a large index.
+     */
+    private static readonly VEC_CHUNK_SIZE = 64;
+
+    /**
+     * Fill the vec0 tables for one dimension from the BLOB columns. Returns the
+     * number of vectors inserted. Must run inside the caller's transaction.
+     *
+     * Read in PAGES with .all(), never .iterate(): better-sqlite3 refuses to
+     * run any other statement on a connection while one of its iterators is
+     * open ("This database connection is busy executing a query"). The v30
+     * rebuild inserted from inside an iterate() loop with a per-row
+     * `catch {}`, so every insert threw, every throw was swallowed, and the
+     * migration logged "0 vectors re-inserted" over an index it had just
+     * emptied — the silent blackout its own comment warns about. Reproduced
+     * 2026-10-04 on a copy of a live database.
+     *
+     * A row that will not insert is skipped, but a pass where rows existed and
+     * NONE went in is a broken loop, not bad data, and throws so the caller's
+     * transaction rolls the DROP back.
+     */
+    private reinsertVectorsFromBlobs(db: Database.Database, dim: number, only?: 'chunks' | 'summaries'): number {
+        const bytes = dim * 4;
+        let inserted = 0;
+        let failed = 0;
+        const copy = (sourceTable: 'chunks' | 'chunk_summaries', vecTable: string, idColumn: string) => {
+            const page = db.prepare(
+                `SELECT id, embedding FROM ${sourceTable} WHERE id > ? AND embedding IS NOT NULL AND length(embedding) = ? ORDER BY id LIMIT 500`
+            );
+            const insert = db.prepare(`INSERT OR REPLACE INTO ${vecTable}(${idColumn}, embedding) VALUES (?, ?)`);
+            let lastId = 0;
+            for (;;) {
+                const rows = page.all(lastId, bytes) as { id: number; embedding: Buffer }[];
+                if (rows.length === 0) break;
+                for (const row of rows) {
+                    try { insert.run(BigInt(row.id), row.embedding); inserted++; } catch { failed++; }
+                    lastId = row.id;
+                }
+            }
+        };
+        if (only !== 'summaries') copy('chunks', `vec_chunks_${dim}`, 'chunk_id');
+        if (only !== 'chunks') copy('chunk_summaries', `vec_summaries_${dim}`, 'summary_id');
+        if (failed > 0 && inserted === 0) {
+            throw new Error(`vec0 rebuild for dim=${dim} inserted none of ${failed} stored vectors`);
+        }
+        if (failed > 0) console.warn(`[DatabaseManager] vec0 rebuild for dim=${dim}: ${failed} stored vector(s) could not be re-inserted`);
+        return inserted;
+    }
+
+    /**
+     * The most stored-vector bytes one launch will copy SYNCHRONOUSLY while
+     * rebuilding vec0 tables. That work runs before the first window, so its
+     * cost must not grow with the index. A table that has to be rebuilt and
+     * does not fit is rebuilt after launch instead (see runPendingVecRebuilds).
+     * Timings measured 2026-10-05 are in
+     * MeetingResaveOriginAndVecBlocks2026_10_04.test.mjs. Mutable so a test
+     * can lower it.
+     */
+    public static vecRebuildBudgetBytes = 16 * 1024 * 1024;
+    /**
+     * The file is only rewritten (VACUUM) to hand the freed blocks back when
+     * what remains is small enough to copy quickly; above this the freed pages
+     * are simply reused as the database grows.
+     */
+    public static vecReclaimMaxLiveBytes = 48 * 1024 * 1024;
+    /** How long after open the deferred rebuilds start, to stay off the launch path. Mutable for tests. */
+    public static vecBackgroundRebuildDelayMs = 8000;
+    /** Stored-vector bytes copied per background slice (about 5 ms, measured), one event-loop turn apart. */
+    private static readonly VEC_BACKGROUND_SLICE_BYTES = 1024 * 1024;
+    private static readonly VEC_BLOCK_SHRINK_SETTLED_KEY = 'vec_block_shrink_settled_v1';
+
+    /**
+     * True when the vec0 table holds exactly the vectors stored in its BLOB
+     * column: none missing, none left over. Two shipped defects broke that.
+     * The v30 rebuild (2026-08-18) re-inserted nothing, so an install that
+     * upgraded through it has only the vectors embedded since; and until
+     * 2026-10-04 re-saving a meeting deleted its chunk rows by cascade while
+     * their vectors stayed behind. A native query over the first finds no old
+     * meeting; over the second it spends its top-k on rows that no longer exist.
+     *
+     * Reads vec0's own `_rowids` shadow table (rowid is the chunk id for an
+     * INTEGER PRIMARY KEY table) — under 2 ms per check at 12,000 vectors. Any
+     * failure to read it counts as "does not match".
+     */
+    private vecTableMatchesBlobs(db: Database.Database, name: string, kind: 'chunks' | 'summaries', dim: number): boolean {
+        const source = kind === 'chunks' ? 'chunks' : 'chunk_summaries';
+        try {
+            const missing = db.prepare(
+                `SELECT 1 FROM ${source} s WHERE s.embedding IS NOT NULL AND length(s.embedding) = ?
+                   AND NOT EXISTS (SELECT 1 FROM ${name}_rowids r WHERE r.rowid = s.id) LIMIT 1`
+            ).get(dim * 4);
+            if (missing) return false;
+            const leftOver = db.prepare(
+                `SELECT 1 FROM ${name}_rowids r
+                 WHERE NOT EXISTS (SELECT 1 FROM ${source} s WHERE s.id = r.rowid AND s.embedding IS NOT NULL AND length(s.embedding) = ?) LIMIT 1`
+            ).get(dim * 4);
+            return !leftOver;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Bring every vec0 table to the current shape: cosine distance, the
+     * current block size (VEC_CHUNK_SIZE), and exactly the vectors held in the
+     * BLOB columns. Driven by each table's own stored DDL and contents rather
+     * than a schema version, so it covers a table of ANY dimension and keeps
+     * retrying across launches. This is also the body of the v30 migration.
+     *
+     * Each table is one of:
+     *   - must rebuild — wrong distance metric, an old key type, or contents
+     *     that do not match the BLOBs (see vecTableMatchesBlobs). A query over
+     *     such a table is wrong, so it is always rebuilt: now if it fits this
+     *     launch's budget, otherwise after launch.
+     *   - space only — correct and complete, but created with the default
+     *     1,024-vector block. Rebuilt now if it fits the budget (next launch
+     *     if the budget is already spent). One larger than the whole budget is
+     *     left as it is: it has filled more than one block, so its waste is at
+     *     most the one part-empty block, and nothing about it is wrong.
+     *
+     * What is rebuilt NOW is one transaction (a vec0 DROP does roll back): at
+     * most vecRebuildBudgetBytes of vectors, must-rebuild tables first, then
+     * smallest first. A must-rebuild table that does not fit is recorded in
+     * app_state (vecRebuildPending.ts); VectorStore searches a recorded table
+     * through the JS cosine path until runPendingVecRebuilds() has refilled it.
+     *
+     * Throws only with `fromMigration`, and only when a must-rebuild table
+     * could be neither rebuilt nor recorded — the one outcome that must stop
+     * the migration chain.
+     */
+    private repairVecTables(opts?: { fromMigration?: boolean }): void {
+        // No extension, no vec0 module: a DROP of a virtual table would throw
+        // on every launch. Search is on the JS path there and reads the BLOBs.
+        if (!this.db || !this.resolvedExtPath) return;
+        const db = this.db;
+        // Once every table has been rebuilt, recorded or judged fine there is
+        // nothing left to look for: new tables are created in the current
+        // shape. The migration always looks.
+        if (!opts?.fromMigration) {
+            try {
+                const settled = db.prepare('SELECT value FROM app_state WHERE key = ?')
+                    .get(DatabaseManager.VEC_BLOCK_SHRINK_SETTLED_KEY) as { value?: string } | undefined;
+                if (settled?.value === '1') return;
+            } catch { /* no app_state yet: fall through to the check itself */ }
+        }
+
+        const currentBlock = new RegExp(`chunk_size\\s*=\\s*${DatabaseManager.VEC_CHUNK_SIZE}\\b`);
+        type Candidate = { name: string; dim: number; kind: 'chunks' | 'summaries'; bytes: number; mustRebuild: boolean };
+        const candidates: Candidate[] = [];
+        const alreadyPending = readPendingVecRebuilds(db);
+        try {
+            const rows = db.prepare(
+                `SELECT name, sql FROM sqlite_master WHERE type = 'table' AND sql LIKE '%USING vec0%'`
+            ).all() as { name: string; sql: string | null }[];
+            for (const row of rows) {
+                const parsed = parseVecTableName(row.name);
+                if (!parsed || alreadyPending[row.name]) continue;
+                const ddl = row.sql || '';
+                const mustRebuild = !/distance_metric\s*=\s*cosine/i.test(ddl)
+                    || !/INTEGER\s+PRIMARY\s+KEY/i.test(ddl)
+                    || !this.vecTableMatchesBlobs(db, row.name, parsed.kind, parsed.dim);
+                if (!mustRebuild && currentBlock.test(ddl)) continue;
+                // What a rebuild would copy: the stored vectors of this width.
+                // length() of a BLOB is read from the row header, not the BLOB.
+                const source = parsed.kind === 'chunks' ? 'chunks' : 'chunk_summaries';
+                const n = (db.prepare(
+                    `SELECT COUNT(*) AS n FROM ${source} WHERE embedding IS NOT NULL AND length(embedding) = ?`
+                ).get(parsed.dim * 4) as { n: number }).n;
+                candidates.push({ name: row.name, dim: parsed.dim, kind: parsed.kind, bytes: n * parsed.dim * 4, mustRebuild });
+            }
+        } catch (e) {
+            console.warn('[DatabaseManager] vec0 table check skipped:', e);
+            if (opts?.fromMigration) throw e;
+            return;
+        }
+
+        const markSettled = () => {
+            try {
+                db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)')
+                    .run(DatabaseManager.VEC_BLOCK_SHRINK_SETTLED_KEY, '1');
+            } catch { /* checked again next launch */ }
+        };
+        // Record must-rebuild tables for the background pass. Throws if the row
+        // cannot be written: then nothing keeps a query off the wrong table.
+        const recordPending = (tables: Candidate[]) => {
+            if (tables.length === 0) return;
+            const pending = readPendingVecRebuilds(db);
+            for (const table of tables) pending[table.name] = { recreated: false, cursor: 0 };
+            writePendingVecRebuilds(db, pending);
+            console.log(`[DatabaseManager] ${tables.map(t => `${t.name} (${(t.bytes / 1024 / 1024).toFixed(0)} MB)`).join(', ')} will be rebuilt after launch; searched from the stored vectors until then`);
+        };
+
+        const budget = DatabaseManager.vecRebuildBudgetBytes;
+        candidates.sort((a, b) => Number(b.mustRebuild) - Number(a.mustRebuild) || a.bytes - b.bytes);
+        const now: Candidate[] = [];
+        const afterLaunch: Candidate[] = [];
+        let waitingForNextLaunch = 0;
+        let spent = 0;
+        for (const table of candidates) {
+            if (spent + table.bytes <= budget) {
+                now.push(table);
+                spent += table.bytes;
+            } else if (table.mustRebuild) {
+                afterLaunch.push(table);
+            } else if (table.bytes <= budget) {
+                waitingForNextLaunch++;
+            } else {
+                console.log(`[DatabaseManager] ${table.name} keeps the default vec0 block size (${(table.bytes / 1024 / 1024).toFixed(0)} MB of vectors, complete and densely packed)`);
+            }
+        }
+
+        try {
+            recordPending(afterLaunch);
+        } catch (e) {
+            console.error('[DatabaseManager] Could not record vec0 tables for the background rebuild:', e);
+            if (opts?.fromMigration) throw e;
+            return;
+        }
+        if (now.length === 0) {
+            if (waitingForNextLaunch === 0) markSettled();
+            return;
+        }
+
+        const tableExists = db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`);
+        let rebuilt = 0;
+        try {
+            db.transaction(() => {
+                for (const table of now) {
+                    db.exec(`DROP TABLE IF EXISTS ${table.name};`);
+                    this.ensuredDims.delete(table.dim);
+                    this.ensureVecTableForDim(table.dim);
+                    // ensureVecTableForDim logs and swallows a failed CREATE. Here
+                    // that would commit the DROP with nothing in its place.
+                    if (!tableExists.get(table.name)) {
+                        throw new Error(`vec0 table ${table.name} was not recreated`);
+                    }
+                    rebuilt += this.reinsertVectorsFromBlobs(db, table.dim, table.kind);
+                }
+            })();
+            console.log(`[DatabaseManager] Rebuilt ${now.map(t => t.name).join(', ')} with cosine distance and ${DatabaseManager.VEC_CHUNK_SIZE}-vector blocks (${rebuilt} vectors re-inserted)`);
+        } catch (e) {
+            // Rolled back: the old tables are still there. Forget what this
+            // attempt "ensured" so the runtime path re-checks them.
+            this.ensuredDims.clear();
+            console.error('[DatabaseManager] vec0 rebuild failed (old tables kept):', e);
+            // A table that is WRONG must not go on being searched natively
+            // while it waits for the next launch: hand it to the background pass.
+            try {
+                recordPending(now.filter(t => t.mustRebuild));
+            } catch (markErr) {
+                console.error('[DatabaseManager] ...and the tables could not be recorded for a later rebuild:', markErr);
+                if (opts?.fromMigration) throw e;
+            }
+            return;
+        }
+        if (waitingForNextLaunch === 0) markSettled();
+
+        // The dropped blocks are free pages now; the file only shrinks on VACUUM.
+        // Worth a full rewrite only when it gives back a real share of the file
+        // AND what is left is small enough to copy quickly — on a large database
+        // the pages are simply reused. One-time by construction: the next launch
+        // finds nothing stale.
+        try {
+            const freePages = Number(db.pragma('freelist_count', { simple: true })) || 0;
+            const pageSize = Number(db.pragma('page_size', { simple: true })) || 4096;
+            const pageCount = Number(db.pragma('page_count', { simple: true })) || 0;
+            const freeBytes = freePages * pageSize;
+            const liveBytes = Math.max(0, pageCount - freePages) * pageSize;
+            if (freeBytes >= 4 * 1024 * 1024 && pageCount > 0 && freePages / pageCount >= 0.25
+                && liveBytes <= DatabaseManager.vecReclaimMaxLiveBytes) {
+                db.exec('VACUUM');
+                db.pragma('wal_checkpoint(TRUNCATE)');
+                console.log(`[DatabaseManager] Reclaimed ${(freeBytes / 1024 / 1024).toFixed(1)} MB after the vec0 rebuild`);
+            }
+        } catch (e) {
+            console.warn('[DatabaseManager] Space reclaim after vec0 rebuild skipped:', e);
+        }
+    }
+
+    private vecRebuildTimer: ReturnType<typeof setTimeout> | null = null;
+    private vecRebuildRunning = false;
+
+    /** Start the recorded rebuilds a little after open, if there are any. */
+    private scheduleVecRebuilds(): void {
+        if (!this.db || !this.resolvedExtPath || this.vecRebuildTimer || this.vecRebuildRunning) return;
+        if (Object.keys(readPendingVecRebuilds(this.db)).length === 0) return;
+        this.vecRebuildTimer = setTimeout(() => {
+            this.vecRebuildTimer = null;
+            this.runPendingVecRebuilds().catch(e => {
+                console.error('[DatabaseManager] Background vec0 rebuild failed (continues next launch):', e);
+            });
+        }, DatabaseManager.vecBackgroundRebuildDelayMs);
+        this.vecRebuildTimer.unref?.();
+    }
+
+    private cancelScheduledVecRebuilds(): void {
+        if (this.vecRebuildTimer) {
+            clearTimeout(this.vecRebuildTimer);
+            this.vecRebuildTimer = null;
+        }
+    }
+
+    /**
+     * Rebuild every vec0 table recorded in app_state, one after the other,
+     * without holding the main process: the old table is dropped and the new
+     * one created in one short transaction (29 ms for a 141 MB table,
+     * measured), then filled from the BLOB column a slice at a time with an
+     * event-loop turn between slices. The record keeps a cursor, written in
+     * the same transaction as each slice, so a quit or a crash resumes where
+     * it stopped; it is removed only when the table is complete. Until then
+     * VectorStore does not search the table natively.
+     *
+     * Vectors embedded while this runs are written to the table by the normal
+     * path as well; the copy is INSERT OR REPLACE, so that is harmless.
+     * Returns the number of vectors copied. Stops quietly when the database
+     * is closed.
+     */
+    public async runPendingVecRebuilds(): Promise<number> {
+        if (this.vecRebuildRunning || !this.db || !this.resolvedExtPath) return 0;
+        this.vecRebuildRunning = true;
+        const db = this.db;
+        const alive = () => this.db === db && db.open;
+        let copied = 0;
+        try {
+            for (const name of Object.keys(readPendingVecRebuilds(db))) {
+                if (!alive()) break;
+                const parsed = parseVecTableName(name);
+                if (!parsed) continue;
+                copied += await this.rebuildVecTableInSlices(db, name, parsed.kind, parsed.dim, alive);
+            }
+        } finally {
+            this.vecRebuildRunning = false;
+        }
+        return copied;
+    }
+
+    private async rebuildVecTableInSlices(
+        db: Database.Database,
+        name: string,
+        kind: 'chunks' | 'summaries',
+        dim: number,
+        alive: () => boolean,
+    ): Promise<number> {
+        const recorded = readPendingVecRebuilds(db)[name];
+        if (!recorded) return 0;
+        const state: PendingVecRebuild = { recreated: recorded.recreated, cursor: recorded.cursor };
+        const save = (next: PendingVecRebuild | null) => {
+            const all = readPendingVecRebuilds(db);
+            if (next) all[name] = next; else delete all[name];
+            writePendingVecRebuilds(db, all);
+        };
+        const nextTurn = () => new Promise<void>(resolve => setImmediate(resolve));
+
+        if (!state.recreated) {
+            while (db.inTransaction) { await nextTurn(); if (!alive()) return 0; }
+            db.transaction(() => {
+                db.exec(`DROP TABLE IF EXISTS ${name};`);
+                this.ensuredDims.delete(dim);
+                this.ensureVecTableForDim(dim);
+                if (!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name)) {
+                    throw new Error(`vec0 table ${name} was not recreated`);
+                }
+                state.recreated = true;
+                state.cursor = 0;
+                save(state);
+            })();
+        }
+
+        const source = kind === 'chunks' ? 'chunks' : 'chunk_summaries';
+        const idColumn = kind === 'chunks' ? 'chunk_id' : 'summary_id';
+        const bytes = dim * 4;
+        const perSlice = Math.max(16, Math.min(1000, Math.floor(DatabaseManager.VEC_BACKGROUND_SLICE_BYTES / bytes)));
+        const page = db.prepare(
+            `SELECT id, embedding FROM ${source} WHERE id > ? AND embedding IS NOT NULL AND length(embedding) = ? ORDER BY id LIMIT ?`
+        );
+        const insert = db.prepare(`INSERT OR REPLACE INTO ${name}(${idColumn}, embedding) VALUES (?, ?)`);
+        let inserted = 0;
+        let failed = 0;
+        for (;;) {
+            if (!alive()) return inserted;
+            if (db.inTransaction) { await nextTurn(); continue; }
+            let read = 0;
+            db.transaction(() => {
+                // .all(), never .iterate(): see reinsertVectorsFromBlobs.
+                const rows = page.all(state.cursor, bytes, perSlice) as { id: number; embedding: Buffer }[];
+                read = rows.length;
+                for (const row of rows) {
+                    try { insert.run(BigInt(row.id), row.embedding); inserted++; } catch { failed++; }
+                    state.cursor = row.id;
+                }
+                if (read > 0) save(state);
+            })();
+            if (read < perSlice) break;
+            await nextTurn();
+        }
+        if (failed > 0 && inserted === 0) {
+            // Rows existed and none went in: a broken copy, not bad data. Start
+            // over next launch; the table stays recorded, so search stays on
+            // the stored vectors and is still right.
+            save({ recreated: false, cursor: 0 });
+            console.error(`[DatabaseManager] ${name}: none of ${failed} stored vectors could be re-inserted; retried next launch`);
+            return 0;
+        }
+        save(null);
+        console.log(`[DatabaseManager] Rebuilt ${name} in the background (${inserted} vectors${failed > 0 ? `, ${failed} skipped` : ''})`);
+        return inserted;
+    }
+
+    /**
      * Lazily create a per-dimension vec0 table pair if not already present.
      * Called by v8 migration and at runtime when a new embedding dimension is first seen.
      * Uses an in-memory cache to avoid redundant CREATE TABLE IF NOT EXISTS on every insert.
@@ -2842,13 +3235,15 @@ export class DatabaseManager {
             this.db.exec(`
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks_${dim} USING vec0(
                     chunk_id INTEGER PRIMARY KEY,
-                    embedding float[${dim}] distance_metric=cosine
+                    embedding float[${dim}] distance_metric=cosine,
+                    chunk_size=${DatabaseManager.VEC_CHUNK_SIZE}
                 );
             `);
             this.db.exec(`
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries_${dim} USING vec0(
                     summary_id INTEGER PRIMARY KEY,
-                    embedding float[${dim}] distance_metric=cosine
+                    embedding float[${dim}] distance_metric=cosine,
+                    chunk_size=${DatabaseManager.VEC_CHUNK_SIZE}
                 );
             `);
             this.ensuredDims.add(dim);
@@ -2986,11 +3381,36 @@ export class DatabaseManager {
             return;
         }
 
+        // An UPSERT, not INSERT OR REPLACE (2026-10-04). REPLACE resolves the
+        // conflict by DELETING the existing row, and with foreign_keys ON (since
+        // 2026-07-10) that delete cascades: every re-save of a meeting wiped its
+        // `chunks` and `chunk_summaries`. The normal flow re-saves every meeting
+        // — placeholder at stop, final row once the notes are written — and
+        // search indexing runs in between, so a meeting's chunks were embedded
+        // and then deleted a few seconds later. Found on a live profile: the
+        // queue said "completed", `chunks` held nothing for the meeting, and its
+        // vector sat orphaned in vec_chunks_* (a virtual table, no cascade).
+        // transcripts and ai_interactions are rewritten explicitly below, so
+        // they never needed the cascade. DO UPDATE also keeps the columns this
+        // statement does not list (embedding_provider and the embedding space
+        // stamped at index time), which REPLACE reset to NULL.
         const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status, user_titled, calendar_event_json)
+            INSERT INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status, user_titled, calendar_event_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                start_time = excluded.start_time,
+                duration_ms = excluded.duration_ms,
+                summary_json = excluded.summary_json,
+                created_at = excluded.created_at,
+                calendar_event_id = excluded.calendar_event_id,
+                source = excluded.source,
+                is_processed = excluded.is_processed,
+                summary_status = excluded.summary_status,
+                user_titled = excluded.user_titled,
+                calendar_event_json = excluded.calendar_event_json
         `);
-        // RC-7 (2026-08-21): INSERT OR REPLACE rewrites the whole row, so a
+        // RC-7 (2026-08-21): the save rewrites every listed column, so a
         // user rename made while the row still said "Processing…" (the
         // placeholder → final-save window can span a slow summary generation)
         // was clobbered by the final save's generated title AND lost its
@@ -3002,8 +3422,8 @@ export class DatabaseManager {
         const readCalendarLink = this.db.prepare(`SELECT calendar_event_id, calendar_event_json, source FROM meetings WHERE id = ?`);
 
         const insertTranscript = this.db.prepare(`
-            INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms, speaker_id)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms, speaker_id, origin)
+            VALUES (?, ?, ?, ?, ?, ?)
         `);
 
         const insertInteraction = this.db.prepare(`
@@ -3064,7 +3484,8 @@ export class DatabaseManager {
                         segment.speaker,
                         segment.text,
                         segment.timestamp,
-                        typeof segment.speakerId === 'string' && /^speaker_\d{1,3}$/.test(segment.speakerId) ? segment.speakerId : null
+                        typeof segment.speakerId === 'string' && /^speaker_\d{1,3}$/.test(segment.speakerId) ? segment.speakerId : null,
+                        encodeSavedOrigin(segment)
                     );
                 }
             }
@@ -3467,6 +3888,7 @@ export class DatabaseManager {
             text: row.content,
             timestamp: row.timestamp_ms,
             ...(row.speaker_id ? { speakerId: row.speaker_id as string } : {}),
+            ...decodeSavedOrigin(row.origin),
         }));
 
         const usage = usageRows.map(row => {

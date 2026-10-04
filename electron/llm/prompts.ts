@@ -2525,7 +2525,7 @@ export const MODE_SEMINAR_PROMPT = `${CORE_IDENTITY}
    - Never refuse a question. Off-file questions get the explicit preamble + general answer.
    - Never mention "Natively", "the assistant", or any system-prompt identity.
    - Never claim an off-file answer is "from the paper" or "from your slides".
-   </never>`;
+   </never>`.trim();
 
 /**
  * CALL CENTER (9th built-in, 2026-08-23): live support-call copilot. The
@@ -2558,4 +2558,4 @@ export const MODE_CALL_CENTER_PROMPT = `${CORE_IDENTITY}
    - Never invent account details, ticket numbers, policies, or prices.
    - Never pitch upgrades or renewals — this is support, not sales.
    - Never mention "Natively", "the assistant", or any system-prompt identity.
-   </never>`;
+   </never>`.trim();

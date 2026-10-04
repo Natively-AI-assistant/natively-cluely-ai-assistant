@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react" // forcing refresh
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ToastProvider, ToastViewport } from "./components/ui/toast"
-import NativelyInterface from "./components/NativelyInterface"
 import HindsightStatusBanner from "./components/HindsightStatusBanner"
 import SettingsPopup from "./components/SettingsPopup" // Keeping for legacy/specific window support if needed
 import Launcher, { type LauncherRequest } from "./components/Launcher"
@@ -60,6 +59,25 @@ const CARD_INPUTS_FOCUS_REFRESH_MS = 5 * 60_000;
 
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
+
+// The meeting overlay's component is by far the largest in the app and only
+// the overlay window renders it, but a static import put it in the one bundle
+// that all seven windows load (launcher, overlay, pill, toggle, settings
+// popup, model selector, cropper). Loaded on demand, the other six never
+// parse it. The overlay window starts the request while this module is still
+// evaluating, so its content is not held back to the first render.
+//
+// Only this component is split. The pill and toggle stay static on purpose:
+// the main process replays the overlay's state to them when they finish
+// loading (WindowHelper's did-finish-load handler), and a component that
+// mounts a moment later would miss that replay. The settings popup and model
+// selector are left static as well; they are sized on first open and that has
+// not been checked against a later mount.
+const loadNativelyInterface = () => import('./components/NativelyInterface')
+const NativelyInterface = React.lazy(loadNativelyInterface)
+if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('window') === 'overlay') {
+  void loadNativelyInterface().catch(() => { /* surfaced by the lazy boundary on render */ })
+}
 
 type LauncherIsolation = 'onboarding' | 'global-surfaces' | 'permissions-toaster' | 'no-modals' | null
 type ManagerPanel = 'modes' | 'profile' | null
@@ -1273,11 +1291,15 @@ const App: React.FC = () => {
                 } as React.CSSProperties}
               >
                 <HindsightStatusBanner />
-                <NativelyInterface
-                  onMeetingEnded={handleMeetingEnded}
-                  overlayOpacity={overlayOpacity}
-                  interfaceTheme={meetingInterfaceTheme}
-                />
+                {/* fallback={null}: the overlay window is transparent, so
+                    anything painted while the chunk loads would flash. */}
+                <React.Suspense fallback={null}>
+                  <NativelyInterface
+                    onMeetingEnded={handleMeetingEnded}
+                    overlayOpacity={overlayOpacity}
+                    interfaceTheme={meetingInterfaceTheme}
+                  />
+                </React.Suspense>
               </div>
               <ToastViewport />
             </ToastProvider>

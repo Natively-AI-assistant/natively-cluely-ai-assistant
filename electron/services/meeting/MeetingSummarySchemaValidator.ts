@@ -75,6 +75,53 @@ export class MeetingSummarySchemaValidator {
   }
 }
 
+// Exact names only. The normalizer labels the assistant's reply "Assistant"
+// and a typed line "Me (typed)"; a prefix match would also catch real people
+// and teams ("Ai Tanaka", "AI team", "Natively team") and delete their
+// decisions and action items from any chunk that happened to hold a chat line.
+const ASSISTANT_SPEAKER_NAME_RE = /^(assistant|the assistant|ai assistant|natively)$/i;
+const CHAT_ONLY_PERSON_RE = /^(assistant|the assistant|ai assistant|natively|me \(typed\))$/i;
+
+function citesOnlyTheAssistant(item: { evidence?: Array<{ speakerName?: string }> } | null | undefined): boolean {
+  const evidence = Array.isArray(item?.evidence) ? item!.evidence! : [];
+  return evidence.length > 0 && evidence.every(e => ASSISTANT_SPEAKER_NAME_RE.test(String(e?.speakerName || '').trim()));
+}
+
+/**
+ * Keep the assistant's chat replies out of everything that claims something
+ * HAPPENED in the meeting (2026-10-04). Replies to typed chat are in the notes
+ * input so a typed question is not reported as unanswered, and the prompt says
+ * to record them only as asked-and-answered — this is the same rule enforced
+ * in code, because Defect B (2026-08-01) was exactly a model treating an
+ * assistant answer as a decision someone made.
+ *
+ * Dropped: a decision, action item, deadline or risk whose every piece of
+ * evidence is an Assistant line; the assistant as an owner, a person, or the
+ * speaker of a pulled quote. Left alone: open questions and section findings,
+ * which is where "asked the assistant X, it answered Y" belongs.
+ */
+export function dropAssistantSourcedAtoms(atoms: ChunkMeetingAtoms): ChunkMeetingAtoms {
+  const meetingOnly = <T extends { evidence?: Array<{ speakerName?: string }>; owner?: string }>(items: T[] | undefined): T[] =>
+    (items || [])
+      .filter(item => !citesOnlyTheAssistant(item))
+      .map(item => {
+        if (typeof item.owner === 'string' && ASSISTANT_SPEAKER_NAME_RE.test(item.owner.trim())) {
+          const { owner: _dropped, ...rest } = item;
+          return rest as T;
+        }
+        return item;
+      });
+  return {
+    ...atoms,
+    decisions: meetingOnly(atoms.decisions as any) as any,
+    actionItems: meetingOnly(atoms.actionItems as any) as any,
+    deadlines: meetingOnly(atoms.deadlines as any) as any,
+    risks: meetingOnly(atoms.risks as any) as any,
+    people: (atoms.people || []).filter(p => !CHAT_ONLY_PERSON_RE.test(String(p?.name || '').trim())),
+    importantQuotes: (atoms.importantQuotes || []).filter(q => !ASSISTANT_SPEAKER_NAME_RE.test(String(q?.speakerName || '').trim())),
+  };
+}
+
 function num(value: unknown): number | undefined {
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;

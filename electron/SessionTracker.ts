@@ -40,6 +40,11 @@ function isCannedFallbackPhrase(text: string): boolean {
  */
 export type TranscriptOrigin = 'stt' | 'manual_chat' | 'assistant' | 'system_instruction' | 'test';
 
+// Label, inside [..], of a line the user typed to the assistant in the rolling
+// context. Defined in its own module so the other formatter can share it.
+import { TYPED_TURN_LABEL } from './llm/typedTurnLabel';
+export { TYPED_TURN_LABEL };
+
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
@@ -53,6 +58,11 @@ export interface TranscriptSegment {
     confidence?: number;
     /** Where this segment came from. Absent = legacy/unknown writer (see TranscriptOrigin). */
     origin?: TranscriptOrigin;
+    /** An assistant line that answers something the user TYPED (overlay chat or
+     *  phone), as opposed to a live suggestion nobody asked for in writing.
+     *  Meeting notes keep these beside the typed question they answer; every
+     *  other reader still sees origin 'assistant' and treats it as before. */
+    chatReply?: boolean;
     /** STT provider id that produced this segment (WTA audit F9, additive). */
     sttProvider?: string;
     /** Punctuation provenance (WTA audit F9): 'unavailable' means the provider
@@ -92,6 +102,8 @@ export interface SuggestionTrigger {
 // Context item matching Swift ContextManager structure
 export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
+    /** A user line that was TYPED to the assistant, not said in the meeting. */
+    typed?: boolean;
     text: string;
     timestamp: number;
     /** STT provider id (WTA audit F9, additive; absent on legacy/assistant items). */
@@ -368,6 +380,7 @@ export class SessionTracker {
             role,
             text,
             timestamp: segment.timestamp,
+            ...(role === 'user' && segment.origin === 'manual_chat' ? { typed: true } : {}),
             // F9 provenance rides along when the seam supplied it (additive;
             // legacy writers leave both undefined = neutral treatment).
             ...(segment.sttProvider ? { sttProvider: segment.sttProvider } : {}),
@@ -404,7 +417,11 @@ export class SessionTracker {
      */
     addAssistantMessage(
         text: string,
-        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        // `answersSpokenQuestion`: the Answer button sends what the user SAID
+        // through the typed-chat handler, so its reply arrives on the
+        // 'manual_chat' surface too. It is a live suggestion, not a reply to
+        // typed chat, and must not be tagged (or noted) as one.
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean; answersSpokenQuestion?: boolean },
         // Phase 9 surface isolation (2026-07-14): OPTIONAL — absent means the
         // caller hasn't been updated yet, and this write behaves exactly as
         // before (shared lastAssistantMessage / assistantResponseHistory
@@ -501,7 +518,8 @@ export class SessionTracker {
             confidence: 1.0,
             // Defect B (2026-08-01): assistant answers are NOT meeting evidence.
             // Meeting-memory extraction filters on origin === 'stt'.
-            origin: 'assistant'
+            origin: 'assistant',
+            ...((surface === 'manual_chat' || surface === 'phone_mirror') && writeDecision?.answersSpokenQuestion !== true ? { chatReply: true } : {}),
         });
 
         // Compact transcript with summarization instead of losing early context
@@ -626,7 +644,8 @@ export class SessionTracker {
             if (seg.timestamp < cutoff) continue;
             const text = (seg.text || '').trim();
             if (!text) continue;
-            out.push({ role: this.mapSpeakerToRole(seg.speaker), text, timestamp: seg.timestamp });
+            const role = this.mapSpeakerToRole(seg.speaker);
+            out.push({ role, text, timestamp: seg.timestamp, ...(role === 'user' && seg.origin === 'manual_chat' ? { typed: true } : {}) });
         }
         return out;
     }
@@ -709,7 +728,7 @@ export class SessionTracker {
      * assistant's own suggestions are not something anyone described.
      */
     getFormattedSpeech(lastSeconds: number = 600): string {
-        return this.formatContextItems(this.getDurableContext(lastSeconds).filter((item) => item.role !== 'assistant'));
+        return this.formatContextItems(this.getDurableContext(lastSeconds).filter((item) => item.role !== 'assistant' && !item.typed));
     }
 
     /**
@@ -721,8 +740,14 @@ export class SessionTracker {
 
     private formatContextItems(items: ContextItem[]): string {
         return items.map(item => {
+            // A typed line is the user's, but it was never said aloud. Labelled
+            // [ME] it reached the prompt as the meeting's own speech — a typed
+            // "hi" was handed to the model as something said in the meeting,
+            // beside the same "hi" as a User line (2026-10-04). The label is
+            // upper-case words only so the label strippers and the two turn
+            // parsers (TYPED_TURN_LABEL's importers) treat it like the others.
             const label = item.role === 'interviewer' ? 'INTERVIEWER' :
-                item.role === 'user' ? 'ME' :
+                item.role === 'user' ? (item.typed ? TYPED_TURN_LABEL : 'ME') :
                     'ASSISTANT (PREVIOUS SUGGESTION)';
             return `[${label}]: ${item.text}`;
         }).join('\n');

@@ -12,6 +12,8 @@ import { followUpRedraftPlan } from './services/meeting/FollowUpDraftGenerator';
 import { cleanMeetingTitle, isAnswerFragmentTitle, isAnswerShapedGeneration } from './services/meeting/MeetingSummaryV3';
 import { NOTE_CALL_TIMEOUT_MS } from './services/meeting/generateStructured';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
+import { TranscriptNormalizer } from './services/meeting/TranscriptNormalizer';
+import { SHORT_SESSION_PROMPT, countHumanContent, isShortSession, parseShortSessionNotes } from './services/meeting/shortSessionNotes';
 import { MeetingMemoryService, buildPersistedMeetingMemory } from './intelligence/MeetingMemoryService';
 import type { MeetingMemoryProvenanceTelemetry } from './intelligence/MeetingMemoryService';
 import { LongTermMemoryService } from './intelligence/memory/LongTermMemoryService';
@@ -259,6 +261,24 @@ export class MeetingPersistence {
     constructor(session: SessionTracker, llmHelper: LLMHelper) {
         this.session = session;
         this.llmHelper = llmHelper;
+    }
+
+    // Told each time a meeting's notes are saved or regenerated, so search can
+    // index the summary at the one moment it exists. An instance field, not a
+    // module-level registry: the build bundles each entry file separately, so
+    // module state is not shared between them.
+    private notesSavedListener: ((meetingId: string) => void) | null = null;
+
+    public setNotesSavedListener(listener: ((meetingId: string) => void) | null): void {
+        this.notesSavedListener = listener;
+    }
+
+    private notifyNotesSaved(meetingId: string): void {
+        try {
+            this.notesSavedListener?.(meetingId);
+        } catch (e: any) {
+            console.warn('[MeetingPersistence] notes-saved listener threw (non-fatal):', e?.message);
+        }
     }
 
     /**
@@ -682,7 +702,41 @@ export class MeetingPersistence {
             // Generate Structured Summary. V3 is the long-context path: it never uses a
             // naïve transcript prefix as the primary summary input. If it fails or is
             // disabled, the existing V2 single-pass path below remains the compatibility fallback.
-            if (data.transcript.length > 2 && isIntelligenceFlagEnabled('meetingSummaryV3') && postCallSummaryAllowed) {
+            // SHORT SESSION (2026-10-04, owner decision): every gate below counts
+            // transcript LINES, so three lines of greeting ran the full pipeline —
+            // an extraction call, two polish calls and a title call — and saved
+            // 6.5 KB of notes about "hi". Below the minimum (see
+            // shortSessionNotes.ts) the notes are written by ONE small call, and
+            // the title is derived from them without a model call.
+            let shortSession = false;
+            let shortSessionNotesWritten = false;
+            if (data.transcript.length > 2 && postCallSummaryAllowed) {
+                try {
+                    const sized = new TranscriptNormalizer().normalize(llmTranscript as any);
+                    shortSession = isShortSession(sized);
+                    if (shortSession) {
+                        const { lines, words } = countHumanContent(sized);
+                        console.log(`[MeetingPersistence] Short session (${lines} lines, ${words} words) — one small notes call, no polish, no title call.`);
+                        DatabaseManager.getInstance().updateSummaryStatus(meetingId, 'queued');
+                        const raw = sized.text
+                            ? await this.llmHelper.generateMeetingSummary(SHORT_SESSION_PROMPT, sized.text, SHORT_SESSION_PROMPT, { timeoutMs: NOTE_CALL_TIMEOUT_MS })
+                            : '';
+                        const notes = parseShortSessionNotes(raw);
+                        if (notes) {
+                            summaryData = { overview: notes.overview, keyPoints: notes.keyPoints, actionItems: notes.actionItems };
+                            generationSucceeded = true;
+                            shortSessionNotesWritten = true;
+                        }
+                    }
+                } catch (shortErr: any) {
+                    // A failed small call leaves the meeting saved with its
+                    // transcript and no notes; it must not fall through to the
+                    // four-call pipeline this branch exists to avoid.
+                    console.warn('[MeetingPersistence] Short-session notes call failed (non-fatal):', shortErr?.message);
+                }
+            }
+
+            if (!shortSession && data.transcript.length > 2 && isIntelligenceFlagEnabled('meetingSummaryV3') && postCallSummaryAllowed) {
                 const db = DatabaseManager.getInstance();
                 db.updateSummaryStatus(meetingId, 'queued');
                 const assembler = new MeetingContextAssembler(this.llmHelper);
@@ -762,7 +816,7 @@ export class MeetingPersistence {
                 console.warn('[MeetingSummaryV3] post_call_summary scope denied — skipping V3 cloud summary path.');
             }
 
-            if (summaryData.schemaVersion !== 3 && data.transcript.length > 2 && postCallSummaryAllowed) {
+            if (!shortSession && summaryData.schemaVersion !== 3 && data.transcript.length > 2 && postCallSummaryAllowed) {
                 const baseRules = `RULES:
 - Do NOT invent information not present in the context
 - You MAY infer implied action items or next steps if they are logical consequences of the discussion
@@ -855,7 +909,11 @@ Return ONLY valid JSON (no markdown code blocks):
                         console.error('[MeetingPersistence] Failed to parse summary JSON', { responseLength: jsonStr.length, error: e });
                     }
                 }
-            } else {
+            } else if (data.transcript.length <= 2) {
+                // This used to print for EVERY meeting whose V3 notes had already
+                // succeeded (the branch above is also skipped then), which read
+                // as "the notes were refused" in a log where they had just been
+                // written. Say it only when it is true.
                 console.log("Transcript too short for summary generation.");
             }
 
@@ -865,7 +923,12 @@ Return ONLY valid JSON (no markdown code blocks):
             // V2 fallback; generateTitleFromSummary handles both shapes. A rejected or
             // failed title leaves `title` at its existing default — never blocks saving.
             if ((!metadata || !metadata.title) && postCallSummaryAllowed) {
-                const generatedTitle = await generateTitleFromSummary(this.llmHelper, summaryData);
+                const generatedTitle = shortSessionNotesWritten
+                    // Short session: name it from the notes just written. No model call.
+                    ? deriveDeterministicTitle({ topics: [], takeaways: summaryData.keyPoints || [], overview: summaryData.overview || '' })
+                    : shortSession
+                        ? null
+                        : await generateTitleFromSummary(this.llmHelper, summaryData);
                 if (generatedTitle) {
                     title = generatedTitle;
                     if (summaryData && summaryData.schemaVersion === 3) summaryData.title = generatedTitle;
@@ -986,6 +1049,7 @@ Return ONLY valid JSON (no markdown code blocks):
             // is inside the same try, so that assumption has to be recorded, not
             // inferred — see the guard at the top of the catch.
             meetingSaved = true;
+            if (generationSucceeded) this.notifyNotesSaved(meetingId);
 
             // HINDSIGHT POST-MEETING RETAIN (Phase 13 wiring, behind
             // hindsight_post_meeting_retain_enabled). After the meeting is persisted
@@ -1356,6 +1420,7 @@ Return ONLY valid JSON (no markdown code blocks):
             const prevMemory = (details.detailedSummary as any)?.meetingMemory;
             if (prevMemory) detailedSummary.meetingMemory = prevMemory;
             const ok = db.replaceDetailedSummary(meetingId, detailedSummary, { title: v3.title, summaryStatus: 'completed' });
+            if (ok) this.notifyNotesSaved(meetingId);
             try {
                 const wins = require('electron').BrowserWindow.getAllWindows();
                 wins.forEach((w: any) => w.webContents.send('meetings-updated'));
