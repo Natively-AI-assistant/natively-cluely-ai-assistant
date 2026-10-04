@@ -603,3 +603,26 @@ Run `er-holdout-s4`: the holdout's 40 rows of Looking for work and Technical Int
 
 All five hold → E2 is confirmed on the holdout for what it controls, and stays on its branch for Evin's decision.
 Any line fails → E2 is not kept, finally.
+
+### E2 — holdout data and verdict under the second rule (2026-10-03 21:35 UTC; aggregates only; provisional judge)
+
+Run `er-holdout-s4` (40 rows, all answered), judged blind with its drafts; `report/profile-rows.mjs s3 s4 holdout
+--blind`, `report/profile-drafts.mjs s3 s4 holdout`.
+
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. Every needed profile fact in the prompt on at least 11 of 13 rows | 5 → 11 | yes |
+| 2. No claim-pass request cut; no string of the other profile | 0 of 23; 0 | yes |
+| 3. Drafts, all rows not below −0.15; profile-fact rows' drafts not lower | +0.21 (±0.60); +0.98 (±1.25), hard fails 2 → 0 | yes |
+| 4. Shown, all rows not below −0.15; hard fails not up | +0.09 (±0.58); 5 → 5 | yes |
+| 5. Heard first word, median, not more than 150 ms above the control | 1,354 → 1,184 ms | yes |
+
+**Verdict under the second rule: confirmed on the holdout for what it controls.** The first rule's verdict (not
+kept: line 4, dev + counterfactual) stands as recorded; both are reported. E2 stays on `fix/er-profile-whole`
+(`fea39964`), not landed, for Evin's decision.
+
+Outside the rule's lines, and against it: on the holdout the 27 rows that need no profile fact went 8.65 → 8.34
+(−0.31 ±0.60) with hard fails 3 → 5, and the 4 missing-evidence rows 7.34 → 5.79 (hard fails 1 → 3). On dev +
+counterfactual the same slices had moved +0.04 and +0.37. The holdout's direction is the one E1 showed for packs:
+with the whole document in view, an answer to a question the document does not cover more often attaches something
+nearby. On 4 and 27 rows this is not established either way.

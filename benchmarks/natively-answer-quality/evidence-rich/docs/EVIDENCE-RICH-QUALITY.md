@@ -512,6 +512,12 @@ by its rule E2 is **not kept** and the holdout was not run. Isolation held (no p
 after a switch or after deletion). Part of the drafts' gain was taken back by the claim pass, which in this run
 rewrote two correct answers about the candidate's own stated preferences. Evin's call.
 
+Evin then asked for the blind holdout, under a second rule written first on what the change controls (40 rows of
+the two modes): needed profile facts in the prompt 5 → 11 of 13; drafts +0.21 overall and +0.98 on the profile-fact
+rows (hard fails 2 → 0); shown answers +0.09, hard fails 5 → 5; heard first word 1,354 → 1,184 ms; no leak. All
+five lines hold. Against it, outside the rule: the rows that need no profile fact fell 0.31 (±0.60) with hard
+fails 3 → 5, most of it on 4 missing-evidence rows. Both verdicts are in `ITERATIONS-ER.md`. Not landed.
+
 **Not established for this section:** gpt-6-astra has judged none of it (chain armed, the new runs added); the
 offline replays (E5's first screen, E6) are provisional-judge only and are not in the chain; the app runs shared the
 machine with another session's builds (one run was killed and resumed), so their latency is indicative only; main
