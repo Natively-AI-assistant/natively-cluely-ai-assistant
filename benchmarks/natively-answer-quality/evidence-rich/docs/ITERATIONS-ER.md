@@ -1361,3 +1361,18 @@ evidence may SUPPORT is unchanged), and the item cap and token budget already gr
 5. All rows: mean ≥ control − 0.10; hard fails ≤ control + 3 (a failure of only the hard-fail count triggers one repeat
    of the candidate; the count is then the mean of the two).
 6. First word, median, profile modes: ≤ control + 150 ms.
+
+### E15 — replay verdict (2026-10-04; 91 typed dev prompts, k = 2, cc; `replay-generator-judge.mjs effect --a e15-base --b e15-note2`)
+| Rule line | Measured | Holds |
+|---|---|---|
+| 1. The ten listed rows: gain ≥ +0.5 | 8.314 → 8.725, +0.411 (±0.357) | no |
+| 2. All 91 rows: note − base ≥ +0.05 | 8.875 → 8.720, −0.155 (±0.274) | no |
+| 3. Hard fails (mean of k): note ≤ base | 6.0 → 9.0 | no |
+**Verdict: not kept; not taken to the app.** The short note moves the answers it was written for (+0.41) and costs the
+other 81 typed rows −0.22 with three more hard fails. The source on `cand/e15` (dea38e99) is left unbuilt and unmerged.
+The reference arm (first wording) was not judged to the end: the batch was stopped to free the machine for the
+baseline run; it decides nothing.
+
+**Evin, 2026-10-04:** "you can increase the questions per mode instead of 30 if needed, no cap". The dev set's
+resolution is the limit now (modes swing ±0.7 on 30 rows between runs of one build; E14 and E8 turned on one or two
+hard fails). The set will be extended; see the next section.
