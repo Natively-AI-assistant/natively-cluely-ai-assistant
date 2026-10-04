@@ -1136,3 +1136,20 @@ single dev run of `fix/older-speech` (E11 + E12 together), named `er-dev-e12`, d
 of those lines fails, the run is repeated on `fix/typed-verbatim` alone to attribute the failure before anything is
 reverted. E11's probe line (1) was measured on `fix/typed-verbatim` alone and stands on its own.
 From here on, one heavy job at a time: an app run, OR a judge batch, OR a build + test suite.
+
+**E11 probe line (1), measured 2026-10-04 on `fix/typed-verbatim` (results/limits-e11): PASS.** Typed misses → 0
+(sales 6 × 2,100: 3/3; sales 10 × 3,000: 3/3; general 10 × 3,000: 3/3; main had 2/3 missed in each). No new miss:
+heard and typed, sales 6 × 2,100, 10 × 3,000, 5 × 3,000, 6 × 1,900, 20 × 600 and general 10 × 3,000 all 3/3; ref-size
+typed 12,500 / 32,000 / 64,000 all 7/7. Aggregate equal to main in facts reaching the request (4,000: 7/7; 11,800: 7/7;
+12,500: 2/7; 32,000: 3/7) with one item fewer above 12,000 (the retriever now counts the tag). One 32,000 answer was a
+provider timeout ("did not produce an answer in time"); rerun: 3/7 in request and answer, as on main.
+The app was killed twice during these probes by memory pressure on the machine (not by the change): results were
+collected over three app launches.
+
+**E12 probe lines (1) and (2), measured 2026-10-04 on `fix/older-speech` (results/limits-e12): PASS.** Transcript
+probe: 36 of 36 fact checks in the request (General 10/20/40/80/160, Team Meet 10/20/40/80/160, Call Center 20/80;
+main: 3/3 only at 10 lines, 2/3 at 20, 1/3 from 40 up), and the answers state all three facts at every size (main:
+"I'll confirm the codename and come back to you"). Pressure probe: all five targets in the request, as on main.
+**Line (3) cannot be read from the probe:** `probe.mjs` did not record the first-word time, on main or here (my
+omission). Amendment, written before the dev run and before looking at any first-word figure: line 3 is read from the
+dev run's heard rows — first word, median ≤ max(m1, m1r) heard median + 150 ms.
