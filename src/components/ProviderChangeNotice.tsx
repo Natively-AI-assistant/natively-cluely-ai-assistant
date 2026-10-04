@@ -139,10 +139,12 @@ const Orb: React.FC<{ tone: Tone; children: React.ReactNode }> = ({ tone, childr
   </div>
 );
 
-const NoticeRow: React.FC<{ orb: React.ReactNode; title: React.ReactNode; children: React.ReactNode }> = ({ orb, title, children }) => (
-  <div className="relative flex items-start gap-3">
+/** The orb sits at the middle of its text. `top` pins it to the first line
+ *  instead: the Provider Changed warning, whose body runs to several lines. */
+const NoticeRow: React.FC<{ orb: React.ReactNode; title: React.ReactNode; top?: boolean; children: React.ReactNode }> = ({ orb, title, top = false, children }) => (
+  <div className={`relative flex ${top ? 'items-start' : 'items-center'} gap-3`}>
     {orb}
-    <div className="flex-1 min-w-0 pt-0.5">
+    <div className={`flex-1 min-w-0${top ? ' pt-0.5' : ''}`}>
       <h3 className="text-[14px] font-semibold text-text-primary leading-tight tracking-tight">{title}</h3>
       {children}
     </div>
@@ -248,6 +250,7 @@ export const ProviderChangeNotice: React.FC<ProviderChangeNoticeProps> = (props)
             {main && (
               <NoticeRow
                 key={episodes.current.main}
+                top={main.kind === 'warning'}
                 orb={
                   <Orb tone={mainTone}>
                     {/* Each slot is a flex box, not a bare span: an inline svg sits on the
