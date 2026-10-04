@@ -42,7 +42,6 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 [![License](https://img.shields.io/badge/License-Personal%20Use%20Source-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blueviolet?style=flat-square)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
 [![Downloads](https://img.shields.io/badge/downloads-300k%2B-success?style=flat-square)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
-
 ![Repo Views](https://img.shields.io/badge/Views-3.8M-red?style=flat-square)
 [![Stars](https://img.shields.io/github/stars/Natively-AI-assistant/natively-cluely-ai-assistant?style=flat-square&color=gold)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
 ![Status](https://img.shields.io/badge/Status-active-success?style=flat-square)
