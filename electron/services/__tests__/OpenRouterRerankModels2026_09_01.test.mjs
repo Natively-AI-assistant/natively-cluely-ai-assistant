@@ -24,9 +24,17 @@ const require = createRequire(import.meta.url);
 const { listOpenRouterRerankModels, defaultRerankModel } =
   require(path.join(repoRoot, 'dist-electron/electron/rag/openrouterRerankModels.js'));
 
-/** The real 2026-09-01 payload, trimmed to the fields this code reads. */
+/**
+ * The real payload, trimmed to the fields this code reads: the seven models of
+ * 2026-09-01 plus the Voyage rerank-3 pair OpenRouter added on 2026-09-30
+ * (re-read live 2026-10-05: nine rerank models).
+ */
 const LIVE_SHAPE = {
   data: [
+    { id: 'voyageai/rerank-3-lite', name: 'VoyageAI by MongoDB: rerank-3-lite', context_length: 32000,
+      architecture: { input_modalities: ['text'], output_modalities: ['rerank'] }, pricing: { prompt: '0', completion: '0' } },
+    { id: 'voyageai/rerank-3', name: 'VoyageAI by MongoDB: rerank-3', context_length: 32000,
+      architecture: { input_modalities: ['text'], output_modalities: ['rerank'] }, pricing: { prompt: '0', completion: '0' } },
     { id: 'qwen/qwen3-reranker-8b', name: 'Qwen: Qwen3 Reranker 8B', context_length: 40960,
       architecture: { input_modalities: ['text'], output_modalities: ['rerank'] }, pricing: { prompt: '0', completion: '0' } },
     { id: 'voyageai/rerank-2.5-lite', name: 'VoyageAI by MongoDB: rerank-2.5-lite', context_length: 32000,
@@ -68,7 +76,7 @@ test('non-rerank models are excluded even if the filter is ignored', async () =>
   const models = await listOpenRouterRerankModels({ fetchImpl: stubFetch(LIVE_SHAPE) });
   assert.ok(!models.some((m) => m.id === 'openai/gpt-5.4'),
     'a chat model in a rerank picker fails only at answer time — filter it here');
-  assert.equal(models.length, 7, 'the 2026-09-01 catalogue is 7 rerank models');
+  assert.equal(models.length, 9, 'the 2026-10-05 catalogue is 9 rerank models');
 });
 
 test('no price is published, because OpenRouter does not publish one', async () => {
@@ -97,9 +105,18 @@ test('the recommendation is the measured one, not the popular one', async () => 
   const models = await listOpenRouterRerankModels({ fetchImpl: stubFetch(LIVE_SHAPE) });
   const recommended = models.filter((m) => m.group === 'recommended');
   assert.equal(recommended.length, 1, 'exactly one recommendation');
-  // 0.864 MRR at 868ms p95 on the 2026-08-31 run — high quality inside the
-  // 1200ms live-path budget, and the cheaper of the two that clear it.
-  assert.equal(recommended[0].id, 'voyageai/rerank-2.5-lite');
+  // 0.917 MRR on the 2026-10-05 run of benchmarks/reranker-eval (n=28), inside
+  // the 1200ms live-path budget, and the cheaper of the rerank-3 pair. It
+  // replaced rerank-2.5-lite, which scored 0.864 on the same queries that day.
+  assert.equal(recommended[0].id, 'voyageai/rerank-3-lite');
+});
+
+test('the previous generation stays on a measured shelf, not in "other"', async () => {
+  const models = await listOpenRouterRerankModels({ fetchImpl: stubFetch(LIVE_SHAPE) });
+  const group = (id) => models.find((m) => m.id === id).group;
+  assert.equal(group('voyageai/rerank-3'), 'quality');
+  assert.equal(group('voyageai/rerank-2.5'), 'quality');
+  assert.equal(group('voyageai/rerank-2.5-lite'), 'quality');
 });
 
 test('an unreachable OpenRouter is an empty catalogue, never a throw', async () => {
@@ -117,5 +134,14 @@ test('no default model is invented when the catalogue is empty', () => {
 
 test('the default comes from the live catalogue', async () => {
   const models = await listOpenRouterRerankModels({ fetchImpl: stubFetch(LIVE_SHAPE) });
+  assert.equal(defaultRerankModel(models), 'voyageai/rerank-3-lite');
+});
+
+test('a catalogue without the current pick falls back to the previous measured one', async () => {
+  // Not "whichever paid model sorts first" — here that would be Qwen, which
+  // nobody chose. The previous recommendation is still served and was measured.
+  const without = { data: LIVE_SHAPE.data.filter((m) => m.id !== 'voyageai/rerank-3-lite') };
+  const models = await listOpenRouterRerankModels({ fetchImpl: stubFetch(without) });
+  assert.equal(models.filter((m) => m.group === 'recommended').length, 0);
   assert.equal(defaultRerankModel(models), 'voyageai/rerank-2.5-lite');
 });

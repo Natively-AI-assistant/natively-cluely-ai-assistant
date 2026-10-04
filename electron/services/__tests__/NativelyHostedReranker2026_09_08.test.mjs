@@ -1,5 +1,5 @@
 /**
- * Natively as a hosted reranker provider — the managed rerank-2.5-lite served by
+ * Natively as a hosted reranker provider — the managed rerank-3-lite served by
  * natively-api's POST /v1/rerank.
  *
  * WHY THIS FILE EXISTS
@@ -55,9 +55,9 @@ describe('the Natively descriptor', () => {
 
   test('offers exactly the one model the server serves', () => {
     const p = hostedRerankProvider('natively');
-    assert.deepEqual(p.models.map(m => m.id), ['rerank-2.5-lite']);
+    assert.deepEqual(p.models.map(m => m.id), ['rerank-3-lite']);
     assert.equal(p.staticCatalogue, true);
-    assert.equal(defaultHostedModel('natively'), 'rerank-2.5-lite');
+    assert.equal(defaultHostedModel('natively'), 'rerank-3-lite');
   });
 
   test('an unknown id is still rejected', () => {
@@ -71,19 +71,23 @@ describe('model resolution', () => {
     // With one model served and nothing for the user to pick, an unset setting
     // must mean "the managed one". Returning undefined would report 'no-model'
     // on a provider the user had just selected.
-    assert.equal(readHostedModel({ provider: 'natively' }), 'rerank-2.5-lite');
+    assert.equal(readHostedModel({ provider: 'natively' }), 'rerank-3-lite');
+    assert.equal(readHostedModel({ provider: 'natively', nativelyModel: 'rerank-3-lite' }), 'rerank-3-lite');
+    // An install that saved the id an earlier build offered keeps sending it.
+    // natively-api accepts 'rerank-2.5-lite' and serves it with rerank-3-lite,
+    // so the saved value needs no migration.
     assert.equal(readHostedModel({ provider: 'natively', nativelyModel: 'rerank-2.5-lite' }), 'rerank-2.5-lite');
   });
 
   test('it does not read the OpenRouter or Jina model fields', () => {
     // Falling through to openrouterModel is what the old two-branch ternary did.
     const m = readHostedModel({ provider: 'natively', openrouterModel: 'x/y', jinaModel: 'jina-reranker-v3' });
-    assert.equal(m, 'rerank-2.5-lite');
+    assert.equal(m, 'rerank-3-lite');
   });
 });
 
 describe('eligibility', () => {
-  const base = { hasApiKey: true, model: 'rerank-2.5-lite', localOnly: false, referenceFilesScopeAllowed: true };
+  const base = { hasApiKey: true, model: 'rerank-3-lite', localOnly: false, referenceFilesScopeAllowed: true };
 
   test('natively is an eligible hosted provider', () => {
     // The gate used to be `provider !== 'openrouter' && provider !== 'jina'`.
@@ -132,7 +136,7 @@ describe('the wire, through the shared client', () => {
 
   test('sends the contract natively-api /v1/rerank actually implements', async () => {
     const { calls, impl } = recordingFetch({
-      model: 'rerank-2.5-lite',
+      model: 'rerank-3-lite',
       tokens: 47,
       results: [{ index: 1, relevance_score: 0.79 }, { index: 0, relevance_score: 0.43 }],
     });
@@ -153,7 +157,7 @@ describe('the wire, through the shared client', () => {
     // needed no second client — and why a TRIAL cannot use it, since a trial
     // authenticates with a paired x-trial-token header instead.
     assert.equal(calls[0].init.headers.Authorization, 'Bearer natively_sk_test');
-    assert.equal(calls[0].body.model, 'rerank-2.5-lite');
+    assert.equal(calls[0].body.model, 'rerank-3-lite');
     assert.equal(calls[0].body.query, 'why');
     assert.deepEqual(calls[0].body.documents, ['b', 'a']);
 
