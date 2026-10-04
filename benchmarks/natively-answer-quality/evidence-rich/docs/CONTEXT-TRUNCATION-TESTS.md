@@ -110,15 +110,17 @@ Two runs: run 1 (all sizes; request chars, provider tokens) and run 2 (1k/10k/10
 - The code trace predicted that with more than 8 small files the files past the 8-item cap are lost. **Not seen**:
   12 small files all reached the request.
 - **A reproducible retrieval miss on the TYPED path** once several files together pass 12,000: at 10 × 3,000 the first
-  and last files' uniquely named facts were not retrieved (three runs, two modes), at 6 × 2,100 the first and middle
-  (and at 6 × 1,900, under the switch, all were read whole). The same handful of other files came back whatever was
-  asked, and the answer offered those instead ("I don't have a code for an Ashbrook depot. The gate release codes I
-  have are for Belbrook, Elm…"). **The same six files on the heard path: all found.** The difference: typed queries
-  skip embeddings while the bundled local embedder is the provider (`Local ONNX provider active for manual query;
-  using lexical fallback`, `ModeHybridRetriever.ts`), and the lexical-only ranking misses a fact whose only
-  distinguishing word is the name. Single-file corpora never missed (§1). Which step of the lexical ranking drops
-  the named chunk: NOT YET IDENTIFIED. Repro: `node evidence-rich/limits/probe.mjs ref-count --mode sales --counts 6
-  --file-tokens 2100` (typed) vs the same with `--surface hotkey`.
+  and last files' uniquely named facts did not reach the request (three runs, two modes), at 6 × 2,100 the first and
+  middle (at 6 × 1,900, under the switch, all were read whole). The answer offered other depots instead ("I don't
+  have a code for an Ashbrook depot. The gate release codes I have are for Belbrook, Elm…").
+  **Cause, found with the retriever's own diagnostics (corrected 2026-10-04 — my first explanation, the typed
+  lexical fallback, was wrong: a run with the embedding search on missed the same facts).** The right chunk WAS
+  retrieved, with the highest keyword score of the six. `computeDocumentAnswerabilityScore` then gave it 0.07 and five
+  wrong chunks 0.24: (1) every word of the question counted as an "entity" at 0.08, capped at 0.25, so the name
+  ("Ashbrook") added 0.01 over "code, gate, depot"; (2) a −0.18 "generic overview" penalty fired because the word
+  "summary" appeared in the chunk's first 220 chars. It ranked 5th of 6 and the packer fitted 4 (it charges ~95 tokens
+  of tag per item that the retriever did not count). The heard runs happened to keep it. Fixed and re-measured as E11
+  (ITERATIONS-ER.md): 0 misses on both surfaces.
 
 ## 5. Realtime transcript (heard path; lines injected through the real `handleTranscript`)
 

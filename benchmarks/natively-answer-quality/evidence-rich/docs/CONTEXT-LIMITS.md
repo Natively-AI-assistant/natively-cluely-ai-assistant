@@ -30,7 +30,7 @@ quote-heavy JSON and numeric CSV about 1.5×.
 | Whole-file read (pack) | 12,000 (`WHOLE_PACK_MAX_TOKENS`) for ALL the mode's files together | tokens (est.) | runtime: ≤ 11,800 → the whole file is in the request; ≥ 12,500 → 3–5 retrieved chunks (~7k chars) | **no cut — a switch**: above it the model sees chunks, not the file | measure a higher threshold (Phase 2) |
 | Retrieved evidence per turn | 1,200–2,400 per mode (2,400 with 2+ files), 6–8 items (×3 when exhaustive) | tokens (est.) / items | runtime: 3–5 items above 12k | yes (items left out, trace only) | see PROMPT-BUDGET.md |
 | Retriever vs packer budget | same number, different measure (packer counts ~95 tokens of tag per item) | tokens (est.) | code: last 1–2 retrieved chunks can be dropped by the packer | yes | count the tag in the retriever, or reserve it |
-| Files per mode | none | files | runtime: 12 small files all whole; above 12,000 in total, TYPED questions miss named facts in other files (6 × 2,100, 10 × 3,000; lexical-only retrieval while the local embedder is active); heard questions found them | no cut — a miss | fix typed-path retrieval (bottleneck 2) |
+| Files per mode | none | files | runtime: 12 small files all whole; above 12,000 in total, named facts in some files were retrieved, then ranked out by the answerability score and dropped by the packer (6 × 2,100, 10 × 3,000, typed) | no cut — a miss | fixed as E11 on the candidate branch |
 | Profile (résumé + JD) whole | 6,000 for the two together (`PROFILE_WHOLE_MAX_TOKENS`) | tokens (est.) | runtime: 2,500 + 2,500 whole; 3,500 + 3,500 and 1,000 + 8,000 passages (a long JD takes the short résumé out too); named facts found either way | no cut — a switch | see PI-LIMITS.md |
 | Profile document ingest | 200,000 (`MAX_PROFILE_DOCUMENT_CHARS`) | chars | refused with an error | no (error shown) | keep |
 | Typed message | none (renderer, IPC, handler, composer) | chars | runtime: 400,000 chars → head, middle markers and tail in the request; BUT line breaks removed and the speech cleaner deletes repeated and "filler" words (right, basically, I mean…) | not truncated; **altered** | do not run the speech cleaner on typed text |
@@ -57,9 +57,10 @@ quote-heavy JSON and numeric CSV about 1.5×.
    long or multi-part question every fact window falls under the 0.2 floor (0.15–0.16) and nothing is admitted.
    Heard answers are Natively's core, so this ranks first.
 2. **Above 12,000 est. tokens of reference files the model sees 3–5 pieces, and typed retrieval misses.** A
-   whole-document question drops from 7/7 to 2–3/7 facts 700 tokens past the switch. On the typed path, with
-   several files, lexical-only retrieval misses uniquely named facts (2 of 3 asked files at 6 × 2,100 and
-   10 × 3,000); the heard path found them. The switch is in chars/4, so it comes 2–2.6× sooner in Chinese/Japanese.
+   whole-document question drops from 7/7 to 2–3/7 facts 700 tokens past the switch. With several files, a uniquely
+   named fact was retrieved and then lost: the answerability score valued the name no more than common words and
+   the packer fitted 4 of 6 picked items (2 of 3 asked files at 6 × 2,100 and 10 × 3,000, typed; not the lexical
+   fallback, as first written). The switch is in chars/4, so it comes 2–2.6× sooner in Chinese/Japanese.
 3. **Typed text is changed before the model reads it.** Line breaks are removed and the speech cleaner deletes
    words it treats as filler ("the right answer" → "the answer"; "basically", "I mean", repeated words). It happens
    on every typed turn that contains those words, and the user's exact words appear nowhere in the request.
