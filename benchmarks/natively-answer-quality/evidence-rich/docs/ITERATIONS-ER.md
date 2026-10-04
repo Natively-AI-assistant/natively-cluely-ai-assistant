@@ -1022,3 +1022,33 @@ pass ran; the rebuilt request equals the recorded one on 504 of 504 replays per 
 replay's own spread, which line 5 was written to catch. At this size a change can no longer be resolved by this
 benchmark with one judge: the 333 dev + counterfactual rows hold about 11 rows of this failure class, and the pass
 replayed twice on the same drafts already differs by one hard fail and 0.04 of a point.
+
+## E10 — the heard "corrected answer" repair inherits the whole prompt (96,000), like the claim pass (E5)
+Written 2026-10-04, BEFORE any replay or judgment. Owner's pick ("let it read everything").
+
+**Change (branch `fix/typed-verbatim` in er-main, one argument):** the document-grounded repair on the heard path
+(`IntelligenceEngine.ts`, the `repairCallArgs(... ['reference_files'])` call) passes
+`CLAIM_VERIFIER_MATERIAL_MAX_CHARS` (96,000) as its inherited-prompt cap instead of the 24,000 default.
+
+**Measurement: offline replay of the repair call** (`evidence-rich/replay-repair.mjs`), on every recorded turn where
+the repair ran in er-dev-m1, er-dev-m1r, er-dev-m2 and er-holdout-m1 (131 turns, all heard, all cut at 24,000).
+- Arm `cut` = the repair message exactly as recorded (inherited prompt cut at 24,000 + marker + repair text).
+- Arm `whole` = the generator's recorded user message whole (≤ 96,000) + `\n\n---\n` + the same repair text.
+- Same system prompt in both arms: the app's live v2 answer prompt + the language suffix. The recorded hashes
+  carry each mode's own instruction layer, which could not be rebuilt offline — identical across arms, so the
+  comparison is controlled; absolute scores are not the app's.
+- Direct DeepSeek (`deepseek-flash`, temperature 0.2, seed 7, thinking off), the provider these runs used; the
+  app's own stops mirrored: first useful text (≥ 5 chars) within 7,000 ms, output cap `repairCapReached(…, 1800)`.
+- k = 2 repetitions per arm.
+
+**Rule (KEEP = land on the branch for Evin; otherwise REVERT the one argument):** all of
+1. Needed-fact strings (oracle `doc_needles`/`answer_needles`) present in the repair output, summed over both
+   repetitions: `whole` ≥ `cut`.
+2. Judge mean over the 131 repair outputs (the repair text judged as the answer), averaged over k:
+   `whole` − `cut` ≥ −0.05.
+3. Hard fails (averaged over k): `whole` ≤ `cut` + 1.
+4. First useful text, median: `whole` ≤ `cut` + 600 ms; and outputs inside the 7,000 ms deadline:
+   `whole` ≥ `cut` − 2 percentage points.
+Judge: gpt-6-astra (canonical, back since 11:02 UTC). If Astra stops answering mid-way, the rest is judged by Opus
+5.5 (provisional, never pooled) and the verdict waits for Astra.
+Descriptive only (not part of the rule): the 11 turns where `cut` lacked a needed fact the generator had.
