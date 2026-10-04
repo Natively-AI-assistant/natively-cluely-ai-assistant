@@ -52,7 +52,10 @@ const PI_CONDITIONS = new Set(['resume_only', 'jd_only', 'resume_jd', 'resume_jd
 const ACTIONS = new Set(['answer_directly', 'answer_with_calculation', 'answer_then_scope_authority', 'surface_conflict', 'prefer_current_source', 'make_current_decision', 'decline_to_invent_stay_useful', 'defer_to_verify', 'explain', 'write_code', 'probe_candidate', 'answer_candidate_question', 'continue_previous_answer']);
 const RESP = new Set(['spoken_reply', 'private_explanation', 'private_advice', 'code', 'words_to_say']);
 const FORBID = new Set(['stale', 'draft', 'fabrication', 'other_profile', 'other_mode', 'unauthorized_promise', 'false_denial', 'over_deferral']);
-const WANT = { dev: { grounded_single: 11, multi_source: 6, conflict_stale: 5, irrelevant_source: 3, missing_evidence: 3, followup: 2 }, holdout: { grounded_single: 7, multi_source: 4, conflict_stale: 3, irrelevant_source: 2, missing_evidence: 2, followup: 2 } };
+// dev2 (2026-10-04, Evin: "you can increase the questions per mode instead of 30 if needed, no cap"): 40 more
+// development items per mode on the SAME documents, in authoring/<mode>/dev2.json, ids ER-D2-<PFX>-NNN. A separate
+// partition, so the frozen dev and holdout series are unchanged.
+const WANT = { dev2: { grounded_single: 15, multi_source: 8, conflict_stale: 7, irrelevant_source: 4, missing_evidence: 4, followup: 2 }, dev: { grounded_single: 11, multi_source: 6, conflict_stale: 5, irrelevant_source: 3, missing_evidence: 3, followup: 2 }, holdout: { grounded_single: 7, multi_source: 4, conflict_stale: 3, irrelevant_source: 2, missing_evidence: 2, followup: 2 } };
 
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
@@ -69,7 +72,7 @@ function loadMode(key) {
   if (!exists(path.join(dir, 'manifest.json'))) return null;
   const manifest = readJson(path.join(dir, 'manifest.json'));
   const opt = (f, d) => (exists(path.join(dir, f)) ? readJson(path.join(dir, f)) : d);
-  return { key, dir, manifest, variants: opt('variants.json', []), configs: opt('configs.json', []), dev: opt('dev.json', null), cf: opt('cf.json', null) };
+  return { key, dir, manifest, variants: opt('variants.json', []), configs: opt('configs.json', []), dev: opt('dev.json', null), dev2: opt('dev2.json', null), cf: opt('cf.json', null) };
 }
 function loadAll() {
   const packs = {};
@@ -136,7 +139,7 @@ function lintItems({ items: rawItems, mode, set, docs, configs, corpusText, ques
   const items = rawItems.map((it) => bindToLoaded(it, configs, docs));
   const E = [], W = [];
   const m = MODES.find((x) => x.key === mode);
-  const idRe = set === 'iso' ? /^ER-ISO-\d{3}$/ : new RegExp(`^ER-${set === 'dev' ? 'D' : set === 'holdout' ? 'H' : 'CF'}-${m.pfx}-`);
+  const idRe = set === 'iso' ? /^ER-ISO-\d{3}$/ : new RegExp(`^ER-${set === 'dev' ? 'D' : set === 'dev2' ? 'D2' : set === 'holdout' ? 'H' : 'CF'}-${m.pfx}-`);
   const counts = Object.fromEntries(CONDITIONS.map((c) => [c, 0]));
   const ids = new Set();
   for (const it of items) {
@@ -265,6 +268,12 @@ function lint({ quiet = false } = {}) {
       out.errors.push(...r.E); out.warnings.push(...r.W); s.dev = (p.dev.items ?? []).length; s.dev_conditions = r.counts;
       for (const [c, n] of Object.entries(WANT.dev)) if (r.counts[c] !== n) out.warnings.push(`${p.key} dev: ${r.counts[c]} ${c} items, brief asks ${n}`);
     } else out.errors.push(`${p.key}: dev.json missing`);
+    if (p.dev2) {
+      // Linted after dev with the same `seen` set, so a dev2 question that repeats a dev question is flagged.
+      const r = lintItems({ items: p.dev2.items ?? [], mode: p.key, set: 'dev2', docs, configs, corpusText, questionsSeen: seen });
+      out.errors.push(...r.E); out.warnings.push(...r.W); s.dev2 = (p.dev2.items ?? []).length; s.dev2_conditions = r.counts;
+      for (const [c, n] of Object.entries(WANT.dev2)) if (r.counts[c] !== n) out.warnings.push(`${p.key} dev2: ${r.counts[c]} ${c} items, brief asks ${n}`);
+    }
     if (p.cf) {
       const items = expandCf(p.cf, p.key);
       const r = lintItems({ items, mode: p.key, set: 'cf', docs, configs, corpusText, questionsSeen: new Set() });
@@ -443,11 +452,12 @@ function freeze(partial = false) {
   const cfgList = [...configs.values()].map((c) => ({ id: c.id, mode: c.mode, base: !!c.base, files: c.files ?? [] }));
   if (partial) for (const m of MODES) if (!cfgList.some((c) => c.mode === m.key && c.base)) cfgList.push({ id: `${m.key}-none`, mode: m.key, base: true, files: [] });
   const modes = MODES.map(({ key, name }) => ({ key, name }));
-  const sets = { dev: [], holdout: [], 'supp-counterfactual': [], 'supp-isolation': [] };
+  const sets = { dev: [], holdout: [], 'supp-counterfactual': [], 'supp-isolation': [], dev2: [] };
   for (const m of MODES) {
     const p = packs[m.key];
     if (!p) continue;
     sets.dev.push(...(p.dev?.items ?? []));
+    sets.dev2.push(...(p.dev2?.items ?? []));
     sets['supp-counterfactual'].push(...expandCf(p.cf ?? {}, m.key));
     if (exists(path.join(AUTH_H, m.key, 'holdout.json'))) sets.holdout.push(...readJson(path.join(AUTH_H, m.key, 'holdout.json')).items);
   }
@@ -455,6 +465,7 @@ function freeze(partial = false) {
   if (exists(iso)) sets['supp-isolation'].push(...resolveIso(readJson(iso).items, configs));
   const frozen = { name: 'evidence-rich-v1', frozen_at: new Date().toISOString(), manifest_sha256: manifestSha, datasets: {} };
   for (const [name, items] of Object.entries(sets)) {
+    if (name === 'dev2' && !items.length) continue;   // not authored yet: nothing to freeze
     const body = { schema_version: 1, partition: name, manifest_sha256: manifestSha, modes, configs: cfgList, items: items.map((it) => ({ partition: name, ...bindToLoaded(it, configs, docs) })) };
     const h = sha256(JSON.stringify(body));
     fs.writeFileSync(path.join(DATASETS, `${name}.json`), JSON.stringify({ dataset_name: `evidence-rich-v1-${name}`, dataset_sha256: h, ...body }, null, 1));
