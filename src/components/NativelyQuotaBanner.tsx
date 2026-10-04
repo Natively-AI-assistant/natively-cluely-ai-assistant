@@ -118,15 +118,15 @@ export const NativelyQuotaBanner: React.FC = () => {
             radius={18}
         >
             {/* Header */}
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                    <AlertTriangle size={14} className={`${amber} shrink-0 mt-[1px]`} strokeWidth={2} />
+                    <AlertTriangle size={14} className={`${amber} shrink-0`} strokeWidth={2} />
                     <span className="text-[13px] font-semibold text-text-primary">Natively quota almost full</span>
                 </div>
                 <button
                     onClick={() => setVisible(false)}
                     aria-label="Dismiss"
-                    className="text-text-tertiary hover:text-text-primary transition-colors shrink-0 cursor-pointer"
+                    className="flex text-text-tertiary hover:text-text-primary transition-colors shrink-0 cursor-pointer"
                 >
                     <X size={14} strokeWidth={2} />
                 </button>
