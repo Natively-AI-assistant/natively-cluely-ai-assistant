@@ -1275,3 +1275,28 @@ formula; the confidence gate reads it (best two over the whole list); the rankin
 Check, written before the run: on `er-dev-e13b` the heard hotkey-to-request median in sales, recruiting, team-meet,
 lecture, seminar and call-center must be back within 150 ms of m1 / m1r (502 / 536 ms), and the E11 probe line must
 still hold (typed 6 × 2,100 and 10 × 3,000: no miss). `er-dev-e13b` (cc) then replaces e13 as the series baseline.
+
+## E15 — a typed question in a live mode is answered to the user, not phrased as a line to the other person
+Written 2026-10-04, BEFORE any replay or judgment of it.
+
+**Measured (er-dev-e13, cc).** 10 of the 91 typed rows are marked by the judge for who the reply addresses (mean 7.49,
+25 points lost; Sales 5, Call Center 3, General 1, Recruiting 1): the seller privately types "they need the netsuite
+link and sso. can both be had on operations?" and the reply is voiced to the prospect ("your customers", "tell me"), or
+is a deferral line to say aloud ("I'll confirm … and come back to you"). The composer attaches a perspective note to a
+HEARD question (`heardQuestionPerspective`: who said it, whose "I" and "you") and nothing to a typed one; the overlay's
+typed box also keeps the spoken-delivery rules (`readingSurface` unset).
+
+**Change:** `typedQuestionPerspective(modeId)` appended to `# Question` when the question was typed in the overlay (not
+heard, not the user's own spoken line, not the launcher's reading surface): typed privately by the user, the other
+person cannot see it, answer the user ("you" = the user; the other person is spoken about, not to); if words to say are
+needed, the fact first, then the line, marked as what to say.
+
+**Measurement 1 — replay (no app):** the 91 typed dev prompts recorded in er-dev-e13, replayed to direct DeepSeek,
+k = 2, with and without the note inserted (`replay-generator.mjs --select typed`, variant
+`replay-variants/e15-typed-note.mjs`); the replayed answers judged by cc.
+The ten rows fixed now, before the replay: GEN-028, SALES-002, SALES-009, SALES-015, SALES-016, SALES-021, REC-009,
+CC-006, CC-015, CC-016.
+**Rule to take it to the app:** (1) the ten rows: mean gain ≥ +0.5; (2) all 91 rows: note − base ≥ +0.05;
+(3) hard fails (mean of k): note ≤ base.
+**Measurement 2 — in the app:** a dev run of the candidate with the note; against the series baseline (er-dev-e13b):
+all rows ≥ baseline − 0.10, hard fails ≤ baseline + 3, typed rows ≥ baseline + 0.05. Both, or it is not kept.
