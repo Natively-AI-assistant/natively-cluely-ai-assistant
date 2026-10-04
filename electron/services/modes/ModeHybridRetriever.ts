@@ -51,6 +51,8 @@ export interface ModeRetrievedChunk {
     anchorScore?: number;
     /** Structural/property answerability boost, same story as above. */
     answerabilityScore?: number;
+    /** Pre-E11 answerability, read by the confidence gate only (see DocumentAnswerabilityScore.gateScore). */
+    answerabilityGateScore?: number;
 }
 
 /**
@@ -429,6 +431,8 @@ interface ChunkCandidate {
      */
     rerankScore?: number;
     answerabilityScore?: number;
+    /** Pre-E11 answerability, read by the confidence gate only (see DocumentAnswerabilityScore.gateScore). */
+    answerabilityGateScore?: number;
     /**
      * ANCHOR_BOOST × (coverage of the query's rare terms)² — see
      * lexicalTokens.anchorCoverage. Part of rankScore and of admission; absent
@@ -1429,10 +1433,18 @@ export class ModeHybridRetriever {
         // Adding only the positive answerability term never LOWERS a chunk's
         // confidence, so a genuinely weak retrieval still trips the gate. Generic:
         // no document, entity, or question text is special-cased.
+        // THE GATE READS THE PRE-E11 SCORE (2026-10-04). E11 made a named match
+        // worth more in the RANKING; read here, the higher top score satisfied
+        // this gate on most heard turns and the bundled rerank stopped being
+        // awaited (heard pre-dispatch 500 ms → 24 ms on the dev run) — the
+        // opposite of the owner's decision of 2026-10-03 to keep it as it is.
+        // The two best gate scores are taken over the whole list, because the
+        // list is ordered by the new ranking score.
         const scoreOf = (c: ChunkCandidate) =>
-            this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + Math.max(0, c.answerabilityScore ?? 0);
-        const topScore = sorted.length > 0 ? scoreOf(sorted[0]) : 0;
-        const secondScore = sorted.length > 1 ? scoreOf(sorted[1]) : 0;
+            this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + Math.max(0, c.answerabilityGateScore ?? c.answerabilityScore ?? 0);
+        const gateScores = sorted.map(scoreOf).sort((x, y) => y - x);
+        const topScore = gateScores[0] ?? 0;
+        const secondScore = gateScores[1] ?? 0;
         const margin = topScore - secondScore;
         const clearedCount = sorted.length;
         const reasons: RetrievalConfidence['reasons'] = [];
@@ -1904,6 +1916,7 @@ export class ModeHybridRetriever {
                         ? {
                             ...c,
                             answerabilityScore: (c.answerabilityScore ?? 0) + 0.6,
+                            answerabilityGateScore: (c.answerabilityGateScore ?? c.answerabilityScore ?? 0) + 0.6,
                             answerabilityBoosts: [...(c.answerabilityBoosts ?? []), 'positional_locator_match'],
                         }
                         : c));
@@ -1959,6 +1972,7 @@ export class ModeHybridRetriever {
                     return {
                         ...candidate,
                         answerabilityScore: (candidate.answerabilityScore ?? 0) + 1.2,
+                        answerabilityGateScore: (candidate.answerabilityGateScore ?? candidate.answerabilityScore ?? 0) + 1.2,
                         answerabilityBoosts: [...(candidate.answerabilityBoosts ?? []), 'table_of_contents_navigation_match'],
                     };
                 });
@@ -2689,6 +2703,7 @@ export class ModeHybridRetriever {
             return {
                 ...c,
                 answerabilityScore: a.score + targetBoost,
+                answerabilityGateScore: a.gateScore + targetBoost,
                 answerabilityBoosts: targetBoost > 0
                     ? [...a.boosts, `target_section:${targetBoost.toFixed(2)}`]
                     : a.boosts,

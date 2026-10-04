@@ -646,6 +646,12 @@ export function expandQueryWithHints(question: string, hints?: RetrievalHints): 
 export interface DocumentAnswerabilityScore {
   queryShape: DocumentQuestionShape;
   score: number;
+  /**
+   * The score as it was computed before E11 (flat 0.08 per entity hit capped at 0.25; the overview penalty on a
+   * word anywhere in the first 220 characters). The retriever's CONFIDENCE GATE reads this one, so E11 changes how
+   * chunks are ranked without changing how often the bundled rerank is awaited (Evin, 2026-10-03: "keep as today").
+   */
+  gateScore: number;
   boosts: string[];
   penalties: string[];
   hasExactEntity: boolean;
@@ -713,11 +719,15 @@ export function computeDocumentAnswerabilityScore(params: {
   // the name as well and scored 0.25 (the old flat 0.08 per hit, capped at
   // 0.25), so the one chunk that could answer was not ranked above the five
   // that could not, and the packer dropped it.
+  // The pre-E11 entity term, kept for gateScore only.
+  const legacyEntity = hasExactEntity ? Math.min(0.25, entityHits.length * 0.08) : 0;
+  let entityTerm = 0;
   if (hasExactEntity) {
     const named = new Set(extractNamedEntities(params.question));
     const namedHits = entityHits.filter(e => named.has(e.toLowerCase()));
     const commonHits = entityHits.length - namedHits.length;
-    score += Math.min(0.30, namedHits.length * 0.15) + Math.min(0.15, commonHits * 0.05);
+    entityTerm = Math.min(0.30, namedHits.length * 0.15) + Math.min(0.15, commonHits * 0.05);
+    score += entityTerm;
     boosts.push(`entity:${entityHits.slice(0, 3).join(',')}`);
     if (namedHits.length) boosts.push(`named:${namedHits.slice(0, 3).join(',')}`);
   }
@@ -747,12 +757,17 @@ export function computeDocumentAnswerabilityScore(params: {
   const genericOverview = headLines.some((line) => OVERVIEW_HEADING_RE.test(line))
     || /\b(abstract|introduction|overview|background|methodology|summary)\b/i.test(section)
     || /\b(chapter outlines|this thesis is organized)\b/i.test(text.slice(0, 220));
-  if (genericOverview && queryShape !== 'broad_overview') { score -= 0.18; penalties.push('generic-overview-specific-query'); }
+  const overviewTerm = genericOverview && queryShape !== 'broad_overview' ? -0.18 : 0;
+  if (overviewTerm) { score += overviewTerm; penalties.push('generic-overview-specific-query'); }
+  // The pre-E11 overview test, kept for gateScore only.
+  const legacyOverviewTerm = /\b(abstract|introduction|overview|background|methodology|chapter outlines|this thesis is organized|summary)\b/i.test(text.slice(0, 220))
+    && queryShape !== 'broad_overview' ? -0.18 : 0;
   if (queryShape === 'document_absent_fact_refusal' && !hasExactEntity && !hasNumericEvidence) { score -= 0.10; penalties.push('absent-probe-low-coverage'); }
 
   return {
     queryShape,
     score: Math.max(-0.3, Math.min(0.8, score)),
+    gateScore: Math.max(-0.3, Math.min(0.8, score - entityTerm + legacyEntity - overviewTerm + legacyOverviewTerm)),
     boosts,
     penalties,
     hasExactEntity,
