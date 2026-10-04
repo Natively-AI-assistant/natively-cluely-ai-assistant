@@ -24,7 +24,7 @@ for (const runName of String(opt('runs')).split(',')) {
   for (const row of run.rows) {
     const w = run.wire[row.benchmark_id]; if (!w) continue; const item = run.ds.byId[row.benchmark_id];
     const user = (w.messages ?? []).filter((m) => m.role !== 'system').map((m) => m.text ?? '').join('\n'); const system = systems[w.system_sha]; if (!system || !user) continue;
-    const pick = select === 'all' ? true : select === 'calc' ? /# Calculation\n/.test(user) : select.split(',').includes(row.benchmark_id);
+    const pick = select === 'all' ? true : select === 'calc' ? /# Calculation\n/.test(user) : select === 'typed' ? row.surface === 'typed' : select === 'heard' ? row.surface !== 'typed' : select.split(',').includes(row.benchmark_id);
     if (!pick) continue;
     const req = (item.oracle?.required_facts ?? []).filter((r) => (r.answer_needles ?? []).length); const forb = (item.oracle?.forbidden_claims ?? []).filter((c) => (c.answer_needles ?? []).length);
     const p = variant ? variant.transform({ system, user, item }) : { system, user };
