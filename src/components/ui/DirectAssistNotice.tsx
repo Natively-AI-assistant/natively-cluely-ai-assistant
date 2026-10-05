@@ -1,6 +1,6 @@
 import React from 'react';
-import { CircleAlert, CornerDownRight, TriangleAlert } from 'lucide-react';
-import type { DirectAssistNoticeView } from '../../lib/directAssistFailure.mjs';
+import { CircleAlert, Clock, CornerDownRight, Loader2, TriangleAlert } from 'lucide-react';
+import type { ChatNoteKind, DirectAssistNoticeView } from '../../lib/directAssistFailure.mjs';
 import { OverlayBannerButton } from './OverlayBanner';
 import SwapText from './SwapText';
 import './DirectAssistNotice.css';
@@ -184,6 +184,61 @@ export const DirectAssistNotice: React.FC<DirectAssistNoticeProps> = ({
             {action}
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * ChatHintLine — a quiet "still working" line in the chat, set like the
+ * notice's footnotes: small, with a turning mark and the same sweep as
+ * "Thinking...". It is shown when a quick action is pressed again while the
+ * first press is still being answered, and it replaces a bare sentence at
+ * reading size ("Still finishing the previous answer — one moment…") that
+ * looked like part of the answer and stayed in the chat for good.
+ *
+ * Renders no English of its own: the sentence is passed in, translated.
+ * A status, not an alert: it interrupts nobody.
+ */
+export const ChatHintLine: React.FC<{ children: string }> = ({ children }) => (
+  <div role="status" data-chat-hint className="ov-notice flex items-center gap-2 max-w-[440px]">
+    <span aria-hidden="true" className="ov-notice-line flex-shrink-0 w-3 h-3" style={step(0)}>
+      <Loader2 className="w-full h-full overlay-text-primary opacity-[0.6] animate-spin motion-reduce:animate-none" strokeWidth={2} />
+    </span>
+    <div className="ov-notice-line font-medium overlay-text-primary text-[11.5px] leading-[1.45]" style={step(0)}>
+      <span className="natively-thinking-label">{children}</span>
+    </div>
+  </div>
+);
+
+/**
+ * ChatNoteLine — a quiet note ABOUT an answer, at the notice's footnote size:
+ * which question a late answer belongs to, that an answer was stopped or
+ * replaced, that there is nothing to answer yet. The overlay used to write
+ * these into the answer's own text ("(Late answer to: …)" in front of it,
+ * "Incomplete — Request cancelled." in italics after it) or as a bare sentence
+ * at reading size, where they read as part of what to say.
+ *
+ * A clock for what is about time, the footnote's corner mark for what happened
+ * to the answer. No colour: none of these is an error.
+ * Renders no English of its own: the sentence is passed in, translated.
+ */
+export const ChatNoteLine: React.FC<{ kind: ChatNoteKind; className?: string; children: string }> = ({
+  kind,
+  className = '',
+  children,
+}) => {
+  const Mark = kind === 'late' || kind === 'noneYet' ? Clock : CornerDownRight;
+  return (
+    <div data-chat-note={kind} className={`ov-notice flex items-start gap-2 max-w-[440px] ${className}`}>
+      <span aria-hidden="true" className="ov-notice-line flex-shrink-0 w-3 h-3 mt-[2.5px]" style={step(0)}>
+        <Mark className="w-full h-full overlay-text-primary opacity-[0.6]" strokeWidth={2} />
+      </span>
+      <div
+        className="ov-notice-line min-w-0 font-medium overlay-text-primary opacity-[0.88] text-[11.5px] leading-[1.45] break-words"
+        style={step(0)}
+      >
+        {children}
       </div>
     </div>
   );

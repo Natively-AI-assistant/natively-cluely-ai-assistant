@@ -321,7 +321,12 @@ import {
 } from '../lib/overlayCustomSize.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
+import { chatFailureFromError, isProviderFailureSentence } from '../lib/chatFailure.mjs';
 import {
+  CHAT_HINTS,
+  CHAT_NOTES,
+  chatNoteText,
+  type ChatNote,
   DIRECT_ASSIST_OPEN_PROVIDERS,
   directAssistFailureText,
   directAssistNoticeView,
@@ -413,7 +418,7 @@ import { TabPicker } from './overlay/TabPicker';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { modelSelectorGroupLabel } from './ui/modelSelectorGroups';
-import { DirectAssistNotice } from './ui/DirectAssistNotice';
+import { ChatHintLine, ChatNoteLine, DirectAssistNotice } from './ui/DirectAssistNotice';
 import RollingTranscript from './ui/RollingTranscript';
 import SwapText from './ui/SwapText';
 import ScreenshotTray from './overlay/ScreenshotTray';
@@ -542,6 +547,14 @@ interface Message {
   // and the row draws DirectAssistNotice from this instead. The provider's
   // own words live only here, never in `text`.
   failure?: DirectAssistAnswerFailure;
+  // A quiet "still working" line: a quick action was pressed again while the
+  // first press is still being answered. The value is the action's key. Drawn
+  // by ChatHintLine and taken away when that action ends.
+  hint?: keyof typeof CHAT_HINTS;
+  // A quiet note about this answer (which question a late one belongs to,
+  // that it was stopped or replaced, that there is nothing to answer yet).
+  // Data; drawn by ChatNoteLine. It used to be written into `text`.
+  note?: ChatNote;
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -1313,7 +1326,18 @@ const MessageRow = React.memo(
             )}
             {/* An answer that failed outright has no text worth a bubble: the
                 notice below stands in for it. A cut-off answer keeps its text. */}
-            {msg.role === 'system' && msg.failure && !msg.failure.partial ? null : renderMessageText(msg)}
+            {/* A late answer says whose it is, above itself. */}
+            {msg.role === 'system' && msg.note?.kind === 'late' && (
+              <ChatNoteLine kind="late" className="mb-1.5">{chatNoteText(msg.note, t)}</ChatNoteLine>
+            )}
+            {msg.role === 'system' && msg.hint ? (
+              <ChatHintLine>{t(CHAT_HINTS[msg.hint])}</ChatHintLine>
+            ) : msg.role === 'system' && msg.note?.alone ? null
+              : msg.role === 'system' && msg.failure && !msg.failure.partial ? null : renderMessageText(msg)}
+            {/* What happened to the answer, under it; or, with no answer, alone. */}
+            {msg.role === 'system' && msg.note && msg.note.kind !== 'late' && (
+              <ChatNoteLine kind={msg.note.kind} className={msg.note.alone ? '' : 'mt-2'}>{chatNoteText(msg.note, t)}</ChatNoteLine>
+            )}
             {/* Direct Assist dropped one or more context fields to fit the
                 model's context window (see requestBuilder's per-source drop
                 order) — surfaced so a thin-looking answer isn't a silent
@@ -1368,6 +1392,11 @@ const MessageRow = React.memo(
     prev.appearance === next.appearance &&
     prev.renderMessageText === next.renderMessageText,
 );
+
+// Marks the notice posted for a What to Answer engine error, so the engine's
+// own sentence for the same failure can replace it. Not a stream intent: no
+// streaming row ever carries it.
+const WHAT_TO_SAY_ERROR_INTENT = 'what_to_say_error';
 
 const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   onMeetingEnded,
@@ -2209,9 +2238,44 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // `modelId` is the stable identifier (UUID for custom providers).
       setCurrentModel(config.modelId);
       if (config.displayName) setCurrentModelDisplayName(config.displayName);
+      chatProviderLabelRef.current = config.provider ? modelSelectorGroupLabel(config.provider) : '';
     } catch {
       // Non-fatal: keep last known values.
     }
+  }, []);
+
+  // A failure on any answer path other than Direct Assist (a quick action, a
+  // typed or spoken question on the legacy stream, an engine error) arrives as
+  // whatever was thrown. It is sorted into the same data a direct-ask failure
+  // carries, so the row draws DirectAssistNotice: the cause in words, never
+  // an emoji cross and a dump. `text` is the one plain sentence Copy takes.
+  // Reads through refs: the callers are long-lived IPC subscriptions.
+  const chatProviderLabelRef = useRef('');
+  const chatFailureT = useRef(t);
+  chatFailureT.current = t;
+  // An answer that arrives long after its question says which question it
+  // answers, as a note above it (it used to be written into the answer as
+  // "(Late answer to: …)"). The note is set on the live row, which the
+  // finalize keeps; with no live row to carry it, the old prefix is the
+  // fallback, so the label is never lost.
+  const labelLateAnswer = useCallback((liveRowId: string | null, question: string | undefined, answer: string) => {
+    if (!question) return answer;
+    if (liveRowId == null) return `${chatNoteText({ kind: 'late', question }, chatFailureT.current)}\n\n${answer}`;
+    setMessages((prev) => prev.map((m) => (m.id === liveRowId ? { ...m, note: { kind: 'late', question } } : m)));
+    return answer;
+  }, []);
+
+  // The engine's own sentence for a provider failure has arrived as the
+  // answer: the notice posted for its raw error a moment before said the same
+  // thing, so it goes. Only while it is still the last row, so an older notice
+  // is never removed.
+  const takeBackWhatToSayNotice = useCallback((answer: string | null | undefined) => {
+    if (!isProviderFailureSentence(answer)) return;
+    setMessages((prev) => (prev[prev.length - 1]?.intent === WHAT_TO_SAY_ERROR_INTENT ? prev.slice(0, -1) : prev));
+  }, []);
+  const failedLine = useCallback((raw: unknown): { text: string; failure: DirectAssistAnswerFailure } => {
+    const failure = chatFailureFromError(raw, { provider: chatProviderLabelRef.current });
+    return { text: directAssistFailureText(failure, chatFailureT.current), failure };
   }, []);
 
   useEffect(() => {
@@ -6738,6 +6802,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (lastOverlayActionRef.current?.key === actionKey) {
       lastOverlayActionRef.current = null;
     }
+    // The "still working" line belongs to the action it was waiting on.
+    setMessages((prev) => (prev.some((m) => m.hint === actionKey) ? prev.filter((m) => m.hint !== actionKey) : prev));
+  }, []);
+
+  // A press that was blocked because the same action is still running. It is
+  // never silent (a blocked press must not look like a dead hotkey), but it is
+  // one quiet line however many times the key is pressed, and it leaves with
+  // the action (endOverlayAction).
+  const postChatHint = useCallback((actionKey: keyof typeof CHAT_HINTS) => {
+    setMessages((prev) => (prev.some((m) => m.hint === actionKey)
+      ? prev
+      : [...prev, { id: genMessageId(), role: 'system', text: CHAT_HINTS[actionKey], hint: actionKey }]));
   }, []);
 
   const consumeDirectPageContext = useCallback(() => {
@@ -6800,21 +6876,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (!active.answerText && terminalLabel === 'Request cancelled.') {
         return prev.filter((_, messageIndex) => messageIndex !== idx);
       }
-      // A failure leaves the text clean — the answer so far, or the plain
-      // sentence — because the notice says the rest ("Answer cut off", why).
-      // A cancel has no notice, so it still marks the text itself.
-      const text = failure
-        ? active.answerText || terminalLabel
-        : active.answerText
-          ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
-          : terminalLabel;
+      // The text stays clean either way: the answer so far, or the plain
+      // sentence. A failure's notice says the rest ("Answer cut off", why);
+      // a cancel's or a replacement's note does (it used to be written into
+      // the text as "_Incomplete — Request cancelled._").
+      const text = active.answerText || terminalLabel;
+      const note: ChatNote = {
+        kind: terminalLabel === 'Request cancelled.' ? 'stopped' : 'superseded',
+        ...(active.answerText ? {} : { alone: true }),
+      };
       const updated = [...prev];
       updated[idx] = {
         ...updated[idx],
         text,
         isStreaming: false,
         isCode: text.includes('```') || text.includes('#include'),
-        ...(failure ? { failure: { ...failure, partial: Boolean(active.answerText) } } : {}),
+        ...(failure ? { failure: { ...failure, partial: Boolean(active.answerText) } } : { note }),
       };
       return updated;
     });
@@ -7333,6 +7410,30 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     [flushToken, pinAnswerPanel],
   );
 
+  // A quick action that failed before a single word arrived leaves its
+  // "Thinking..." placeholder open, and the failure used to be posted under
+  // it: a row that says it is thinking above a row that says why it is not.
+  // The placeholder goes, the same way a discarded What to Answer row does.
+  // Only the action's own placeholder, and only while it is still empty: an
+  // answer that had begun is never thrown away here.
+  const discardEmptyPlaceholder = useCallback((intent: string) => {
+    if (streamingIntentRef.current !== intent || streamingTextRef.current !== '') return;
+    if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
+    streamingNodeRef.current = null;
+    streamingMsgIdRef.current = null;
+    streamingIntentRef.current = null;
+    streamingRenderModeRef.current = 'imperative';
+    if (streamingRafRef.current !== null) {
+      cancelAnimationFrame(streamingRafRef.current);
+      streamingRafRef.current = null;
+    }
+    if (streamingCodeRafRef.current !== null) {
+      cancelAnimationFrame(streamingCodeRafRef.current);
+      streamingCodeRafRef.current = null;
+    }
+    setMessages((prev) => discardStreamingByIntentMessages(prev, intent));
+  }, []);
+
   const displayMessages = useMemo(
     () => collapseConsecutiveDuplicateSystemMessages(messages),
     [messages],
@@ -7494,7 +7595,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           {
             id: genMessageId(),
             role: 'system',
-            text: `Error: ${err.error}`,
+            ...failedLine(err.error),
           },
         ]);
       }),
@@ -7526,6 +7627,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         );
         liveAnswerGenIdRef.current = decision.activeId;
         if (!decision.accept) return;
+        takeBackWhatToSayNotice(data.answer);
         // Staleness bound (2026-07-31): generation supersession is WTA-relative
         // only, so a slow generation stays "current" through manual turns and
         // mode switches — a minutes-old answer then appears with nothing saying
@@ -7535,9 +7637,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const emittedAt = (data as { emittedAt?: number }).emittedAt;
         const STALE_ANSWER_MS = 30_000;
         const isStale = typeof emittedAt === 'number' && Date.now() - emittedAt > STALE_ANSWER_MS;
-        const answerText = isStale && data.question
-          ? `(Late answer to: "${data.question}")\n\n${data.answer}`
-          : data.answer;
         setIsProcessing(false);
         pinAnswerPanel();
         // An answer Natively stopped itself says so under the text (2026-10-04),
@@ -7548,6 +7647,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         if (ownStop && liveRowId != null) {
           setMessages((prev) => prev.map((m) => (m.id === liveRowId ? { ...m, failure: ownStop } : m)));
         }
+        const answerText = labelLateAnswer(liveRowId, isStale ? data.question : undefined, data.answer);
         finalizeStreamingByIntent('what_to_answer', answerText);
       }),
     );
@@ -7800,7 +7900,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       window.electronAPI.onIntelligenceManualResult((data) => {
         if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
-        finalizeStreamingByIntent('chat', `🎯 **Answer:**\n\n${data.answer}`);
+        // The answer is the answer: no emoji-and-"Answer:" label in front of it.
+        finalizeStreamingByIntent('chat', data.answer);
       }),
     );
 
@@ -7808,12 +7909,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       window.electronAPI.onIntelligenceError((data) => {
         if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
+        // The engine's mode is the placeholder's intent for these three.
+        if (data.mode === 'clarify' || data.mode === 'recap' || data.mode === 'follow_up_questions') {
+          discardEmptyPlaceholder(data.mode);
+        }
+        // What to Answer sometimes words its own failure: for a provider
+        // failure the engine follows this event with a sentence as the answer.
+        // The notice is posted regardless, so a failure is never silent, and
+        // marked so that sentence can take it back (onIntelligenceSuggestedAnswer)
+        // rather than say the same thing twice.
         setMessages((prev) => [
           ...prev,
           {
             id: genMessageId(),
             role: 'system',
-            text: `❌ Error (${data.mode}): ${data.error}`,
+            ...failedLine(data.error),
+            ...(data.mode === 'what_to_say' ? { intent: WHAT_TO_SAY_ERROR_INTENT } : {}),
           },
         ]);
       }),
@@ -7914,10 +8025,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // The press was blocked because a prior 'what_to_say' is still streaming.
       // Surface a brief hint instead of silently doing nothing, so a blocked
       // press is never indistinguishable from a crash / dead hotkey.
-      setMessages((prev) => [
-        ...prev,
-        { id: genMessageId(), role: 'system', text: 'Still finishing the previous answer — one moment…' },
-      ]);
+      postChatHint('what_to_say');
       return;
     }
     const dynamicPromptInstruction =
@@ -8127,9 +8235,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setLatestVisionModelUsed(result.visionModelUsed);
       setLatestVisionFailureReason(result.visionFailureReason);
       if (result.answer == null) {
-        const feedback =
-          result.error ??
-          'Could not generate an answer yet. Wait a few seconds after speech and try again.';
+        // A quiet note, not a sentence at reading size where an answer would
+        // be: main's own reason when it gives one, ours otherwise.
+        const feedback = result.error ?? CHAT_NOTES.noneYet;
+        const noneYet: ChatNote = { kind: 'noneYet', alone: true, ...(result.error ? { text: result.error } : {}) };
         // CRITICAL ORDERING: clear streaming refs and wipe imperative DOM
         // BEFORE the `setMessages` that commits the null-feedback. The old
         // order called `flushToken()` first — which exits early when
@@ -8158,7 +8267,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           cancelAnimationFrame(streamingCodeRafRef.current);
           streamingCodeRafRef.current = null;
         }
-        setMessages((prev) => applyWhatToAnswerNullFeedbackMessages(prev, feedback));
+        setMessages((prev) => applyWhatToAnswerNullFeedbackMessages(prev, feedback, undefined, { note: noneYet }));
         pinAnswerPanel();
       }
     } catch (err) {
@@ -8167,7 +8276,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         {
           id: genMessageId(),
           role: 'system',
-          text: `Error: ${err}`,
+          ...failedLine(err),
         },
       ]);
       pinAnswerPanel();
@@ -8202,7 +8311,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         {
           id: genMessageId(),
           role: 'system',
-          text: `Error: ${err}`,
+          ...failedLine(err),
         },
       ]);
     } finally {
@@ -8228,12 +8337,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     try {
       await window.electronAPI.generateRecap();
     } catch (err) {
+      discardEmptyPlaceholder('recap');
       setMessages((prev) => [
         ...prev,
         {
           id: genMessageId(),
           role: 'system',
-          text: `Error: ${err}`,
+          ...failedLine(err),
         },
       ]);
     } finally {
@@ -8256,12 +8366,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     try {
       await window.electronAPI.generateFollowUpQuestions();
     } catch (err) {
+      discardEmptyPlaceholder('follow_up_questions');
       setMessages((prev) => [
         ...prev,
         {
           id: genMessageId(),
           role: 'system',
-          text: `Error: ${err}`,
+          ...failedLine(err),
         },
       ]);
     } finally {
@@ -8284,12 +8395,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     try {
       await window.electronAPI.generateClarify();
     } catch (err) {
+      discardEmptyPlaceholder('clarify');
       setMessages((prev) => [
         ...prev,
         {
           id: genMessageId(),
           role: 'system',
-          text: `Error: ${err}`,
+          ...failedLine(err),
         },
       ]);
     } finally {
@@ -8303,10 +8415,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // double-press of the code-hint hotkey spawned two concurrent IPC/LLM streams;
     // engine generation-id supersession aborted the older one, but both fired.
     if (!tryBeginOverlayAction('code_hint')) {
-      setMessages((prev) => [
-        ...prev,
-        { id: genMessageId(), role: 'system', text: 'Still generating the code hint — one moment…' },
-      ]);
+      postChatHint('code_hint');
       return;
     }
     legacyIntelligenceTombstonedRef.current = false;
@@ -8351,7 +8460,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         {
           id: genMessageId(),
           role: 'system',
-          text: `Error: ${err}`,
+          ...failedLine(err),
         },
       ]);
     } finally {
@@ -8412,7 +8521,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         {
           id: genMessageId(),
           role: 'system',
-          text: `Error: ${err}`,
+          ...failedLine(err),
         },
       ]);
     } finally {
@@ -8639,22 +8748,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // or just update status.
           // Ideally we want to show the partial response AND the error.
           const lastMsg = prev[prev.length - 1];
+          const failed = failedLine(error);
           if (lastMsg && lastMsg.isStreaming) {
             const updated = [...prev];
-            updated[prev.length - 1] = {
-              ...lastMsg,
-              isStreaming: false,
-              text: lastMsg.text + `\n\n[Error: ${error}]`,
-            };
+            // An answer that had begun keeps its text and is marked cut off;
+            // one that had not is replaced by the reason. Either way the
+            // error is no longer written INTO the answer as "[Error: …]".
+            updated[prev.length - 1] = lastMsg.text.trim()
+              ? { ...lastMsg, isStreaming: false, failure: { ...failed.failure, partial: true } }
+              : { ...lastMsg, isStreaming: false, ...failed };
             return updated;
           }
           return [
             ...prev,
-            {
-              id: genMessageId(),
-              role: 'system',
-              text: `❌ Error: ${error}`,
-            },
+            { id: genMessageId(), role: 'system', ...failed },
           ];
         });
       }),
@@ -8865,11 +8972,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             const lastMsg = prev[prev.length - 1];
             if (lastMsg && lastMsg.isStreaming) {
               const updated = [...prev];
-              updated[prev.length - 1] = {
-                ...lastMsg,
-                isStreaming: false,
-                text: lastMsg.text + `\n\n[RAG Error: ${data.error}]`,
-              };
+              // As for a chat stream: the error is not written INTO the
+              // answer as "[RAG Error: …]". What had arrived is kept and
+              // marked cut off; an answer that had not begun is replaced by
+              // the reason.
+              const failed = failedLine(data.error);
+              updated[prev.length - 1] = lastMsg.text.trim()
+                ? { ...lastMsg, isStreaming: false, failure: { ...failed.failure, partial: true } }
+                : { ...lastMsg, isStreaming: false, ...failed };
               return updated;
             }
             return prev;
@@ -8948,31 +9058,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
         if (!question && currentAttachments.length === 0) {
           if (sttUserStatus === 'failed' && sttUserError) {
+            // The Transcription Stopped banner says THAT the mic is no longer
+            // transcribed; this says WHY (a rejected key, a trial that ended,
+            // no credits), which the banner does not. Drawn as the failure
+            // notice: the cause as the headline, the mapper's sentence under
+            // it. It was "<title>: <body>" behind an emoji cross (issue #301
+            // replaced a raw provider error with these words; they are kept).
             const errCat = categorizeSttError(sttUserError);
             setMessages((prev) => [
               ...prev,
               {
                 id: genMessageId(),
                 role: 'system',
-                text: `❌ ${errCat.title}: ${errCat.body}`,
+                text: `${errCat.title}: ${errCat.body}`,
+                failure: { code: 'STT_FAILED', message: errCat.title, detail: errCat.body },
               },
             ]);
           } else if (sttUserStatus === 'reconnecting') {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: '⏳ STT is reconnecting, try again in a moment.',
-              },
-            ]);
+            // Nothing is posted: the Transcription Reconnecting banner is
+            // already on screen and says all there is to say. The branch
+            // stays so a reconnecting mic is not handed off to What to
+            // Answer below.
           } else {
             // Issue #540: a healthy but silent mic (listening through headphones,
             // Bluetooth or USB) means the user wants the other party answered.
             // Hand off to What to Answer, which reads main's speaker-labelled
             // transcript (recency window, question extraction, interim guard) and
-            // says so itself when there is nothing to answer. A failed or
-            // reconnecting mic keeps its diagnostic above instead. Read through
+            // says so itself when there is nothing to answer. A failed mic keeps
+            // its reason above and a reconnecting one its banner. Read through
             // handlersRef: this closure is from the Stop press, before the tail
             // wait. Not awaited, so the Answer lock is released immediately.
             void handlersRef.current.handleWhatToSay();
@@ -9110,7 +9223,7 @@ Provide only the answer, nothing else.`;
               return prev.slice(0, -1).concat({
                 id: genMessageId(),
                 role: 'system',
-                text: `❌ Error starting stream: ${err}`,
+                ...failedLine(err),
               });
             }
             return [
@@ -9118,7 +9231,7 @@ Provide only the answer, nothing else.`;
               {
                 id: genMessageId(),
                 role: 'system',
-                text: `❌ Error: ${err}`,
+                ...failedLine(err),
               },
             ];
           });
@@ -9323,7 +9436,7 @@ Provide only the answer, nothing else.`;
           return prev.slice(0, -1).concat({
             id: genMessageId(),
             role: 'system',
-            text: `❌ Error starting stream: ${err}`,
+            ...failedLine(err),
           });
         }
         return [
@@ -9331,7 +9444,7 @@ Provide only the answer, nothing else.`;
           {
             id: genMessageId(),
             role: 'system',
-            text: `❌ Error: ${err}`,
+            ...failedLine(err),
           },
         ];
       });

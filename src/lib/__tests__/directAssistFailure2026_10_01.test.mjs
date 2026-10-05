@@ -13,6 +13,9 @@ import {
   directAssistFailureReason,
   directAssistFailureText,
   directAssistNoticeView,
+  CHAT_HINTS,
+  CHAT_NOTES,
+  chatNoteText,
 } from '../directAssistFailure.mjs';
 
 // The codes main can send (electron/direct-assist/types.ts), plus the ones the
@@ -380,5 +383,12 @@ test('every sentence the module can ask the translator for is on its published l
       }
     }
   }
+  // The overlay's other answer paths (chatFailure.mjs) reach a few more: a
+  // trial that ended, Natively's own plan, and the quiet line for a quick
+  // action pressed twice.
+  for (const code of ['TRIAL_ENDED', 'PLAN_LIMIT', 'PLAN_EXPIRED']) directAssistNoticeView({ failure: { code }, ended: true }, t);
+  for (const hint of Object.values(CHAT_HINTS)) t(hint);
+  // And the quiet notes about an answer (late, stopped, replaced, none yet).
+  for (const kind of Object.keys(CHAT_NOTES)) chatNoteText({ kind, question: 'q' }, t);
   assert.deepEqual([...asked].sort(), [...DIRECT_ASSIST_PHRASES].sort());
 });
