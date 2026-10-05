@@ -1944,7 +1944,7 @@ export class AppState {
       }
       try {
         if (actionId === 'general:toggle-visibility') {
-          this.toggleMainWindow();
+          this.toggleMainWindow(true);
         } else if (actionId === 'general:toggle-mouse-passthrough') {
           // Adapted from public PR #113 — verify premium interaction
           this.toggleOverlayMousePassthrough();
@@ -7561,7 +7561,7 @@ export class AppState {
     }
   }
 
-  public toggleMainWindow(): void {
+  public toggleMainWindow(onCurrentDisplay = false): void {
     console.log(
       "Screenshots: ",
       this.screenshotHelper.getScreenshotQueue().length,
@@ -7573,8 +7573,18 @@ export class AppState {
 
     if (mode === 'launcher') {
       // In launcher mode, just physically hide/show the window
-      this.windowHelper.toggleMainWindow();
+      this.windowHelper.toggleMainWindow(onCurrentDisplay);
     } else {
+      // Restore an independently hidden overlay without collapsing its UI.
+      // Normal Cmd+B collapse/expand still belongs to the renderer, which
+      // also cancels its pending hide timer when it expands again.
+      if (onCurrentDisplay && !this.windowHelper.isVisible() && this.windowHelper.isOverlayExpanded()) {
+        this.windowHelper.toggleMainWindow(onCurrentDisplay);
+        return;
+      }
+      if (onCurrentDisplay && !this.windowHelper.isOverlayExpanded()) {
+        this.windowHelper.prepareShortcutRestore();
+      }
       // In overlay mode, send toggle-expand IPC to expand/collapse the UI
       const targetWindow = this.windowHelper.getOverlayWindow();
       this.sendToWindow(targetWindow, 'toggle-expand');

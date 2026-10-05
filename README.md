@@ -798,6 +798,7 @@ This runs: Vite build → TypeScript compile → native module build → electro
 
 - Always-on-top translucent overlay
 - Instantly hide/show with shortcuts
+- Restoring with Toggle Visibility (`Cmd+B` / `Ctrl+B` by default) brings Natively to the display under the mouse pointer. It centers when changing displays and keeps its previous position on the same display, adjusting the window to fit the usable area. Screenshot and automatic restores keep their existing placement.
 - Works across all applications
 
 ### Real-time Interview Copilot & Coding Help
