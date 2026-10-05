@@ -254,7 +254,7 @@ import {
 import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
-import { backspace, editCommand, editShortcutLetter, paste, typed } from '../lib/stealthEdit.mjs';
+import { backspace, deleteWord, editCommand, editShortcutLetter, isWordDelete, paste, typed } from '../lib/stealthEdit.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -10700,10 +10700,15 @@ Provide only the answer, nothing else.`;
             window.electronAPI.stealthTapStop().catch(() => {});
           }
           return;
-        case 51: { // Backspace — delete one char, or the whole selection
+        case 51: { // Backspace — word-delete with the modifier (Ctrl on Windows,
+          // Option on macOS; the hooks tag it), else one char or the whole selection.
           const wasSelected = stealthAllSelectedRef.current;
           if (wasSelected) markStealthAllSelected(false);
-          setInputValue((prev) => backspace({ value: prev, allSelected: wasSelected }).value);
+          if (isWordDelete(ev)) {
+            setInputValue((prev) => deleteWord({ value: prev, allSelected: wasSelected }).value);
+          } else {
+            setInputValue((prev) => backspace({ value: prev, allSelected: wasSelected }).value);
+          }
           return;
         }
         // ROUND 4 FIX (#6): Tab (48) and arrows (123-126) used to

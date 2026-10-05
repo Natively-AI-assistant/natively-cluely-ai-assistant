@@ -73,7 +73,7 @@ use std::thread;
 use napi::bindgen_prelude::*;
 
 use crate::app_chord::AppChordInput;
-use crate::edit_shortcut::{edit_letter, FLAG_CMD as EDIT_FLAG_CMD};
+use crate::edit_shortcut::{edit_letter, FLAG_CMD as EDIT_FLAG_CMD, FLAG_OPT as EDIT_FLAG_OPT};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 
 use core_foundation::base::CFRelease;
@@ -411,6 +411,25 @@ fn tap_callback_inner(
             });
             return ptr::null_mut();
         }
+    }
+
+    // ── WORD DELETE (Option+Backspace) ──
+    // Option+Backspace deletes the previous word in the overlay box — the macOS
+    // idiom (Cmd+Backspace is delete-to-line-start, a different action). Deliver
+    // the Backspace keycode (51 = kVK_Delete) tagged with the Option flag so the
+    // renderer runs deleteWord() instead of a one-char backspace. Only Option,
+    // never Cmd/Ctrl, so it cannot shadow another shortcut. Swallow down and up
+    // (return null) so the foreground app never sees it, like the Cmd edit keys.
+    if key_code == 51 && (flags & OPT) != 0 && (flags & (CMD | CTRL)) == 0 && (event_type == 10 || event_type == 11) {
+        send_payload_to_js(&state, CapturedKey {
+            key_code: 51,
+            chars: String::new(),
+            flags: EDIT_FLAG_OPT,
+            is_key_down: event_type == 10,
+            is_outside_mouse_down: false,
+            app_chord_id: String::new(),
+        });
+        return ptr::null_mut();
     }
 
     if (flags & SYSTEM_MODIFIER_MASK) != 0 {

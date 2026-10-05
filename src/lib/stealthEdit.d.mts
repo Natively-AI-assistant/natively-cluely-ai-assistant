@@ -6,3 +6,6 @@ export function editCommand(state: StealthEditState, letter: 'a' | 'c' | 'x'): S
 export function paste(state: StealthEditState, clipboardText: string): StealthEditState;
 export function typed(state: StealthEditState, chars: string): StealthEditState;
 export function backspace(state: StealthEditState): StealthEditState;
+export const WORD_DELETE_FLAGS: number;
+export function isWordDelete(ev: { isKeyDown?: boolean; flags?: number; keyCode?: number } | null | undefined): boolean;
+export function deleteWord(state: StealthEditState): StealthEditState;

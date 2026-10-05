@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EDIT_MODIFIER_FLAGS, editShortcutLetter, pastedText, editCommand, paste, typed, backspace } from '../stealthEdit.mjs';
+import { EDIT_MODIFIER_FLAGS, editShortcutLetter, pastedText, editCommand, paste, typed, backspace, WORD_DELETE_FLAGS, isWordDelete, deleteWord } from '../stealthEdit.mjs';
 
-const CMD = 1 << 20, CTRL = 1 << 18, SHIFT = 1 << 17;
+const CMD = 1 << 20, OPT = 1 << 19, CTRL = 1 << 18, SHIFT = 1 << 17;
 const key = (chars, flags, isKeyDown = true) => ({ chars, flags, isKeyDown });
+const BACKSPACE = 51;
 
 // Ctrl/Cmd+V/A/C/X used to pass through to the foreground app while typing in
 // the overlay, so Ctrl+V pasted into the meeting app. The hooks now deliver them.
@@ -45,4 +46,34 @@ test('typing and Backspace replace or clear a selection', () => {
   assert.deepEqual(typed({ value: 'ol', allSelected: false }, 'd'), { value: 'old', allSelected: false });
   assert.deepEqual(backspace({ value: 'old', allSelected: true }), { value: '', allSelected: false });
   assert.deepEqual(backspace({ value: 'old', allSelected: false }), { value: 'ol', allSelected: false });
+});
+
+// Word-delete: Ctrl+Backspace / Ctrl+Delete (Windows) or Option+Backspace (macOS).
+// The hooks deliver these as the Backspace keyCode (51) tagged with the modifier.
+test('isWordDelete only fires on a Backspace key-down carrying Ctrl or Option', () => {
+  assert.equal(WORD_DELETE_FLAGS, CTRL | OPT);
+  assert.equal(isWordDelete({ keyCode: BACKSPACE, flags: CTRL, isKeyDown: true }), true, 'Ctrl+Backspace (Windows)');
+  assert.equal(isWordDelete({ keyCode: BACKSPACE, flags: OPT, isKeyDown: true }), true, 'Option+Backspace (macOS)');
+  assert.equal(isWordDelete({ keyCode: BACKSPACE, flags: 0, isKeyDown: true }), false, 'plain Backspace is one-char');
+  assert.equal(isWordDelete({ keyCode: BACKSPACE, flags: SHIFT, isKeyDown: true }), false, 'Shift+Backspace is one-char');
+  assert.equal(isWordDelete({ keyCode: BACKSPACE, flags: CMD, isKeyDown: true }), false, 'Cmd+Backspace is NOT word-delete (would be line-delete)');
+  assert.equal(isWordDelete({ keyCode: 0, flags: CTRL, isKeyDown: true }), false, 'only the Backspace keyCode counts');
+  assert.equal(isWordDelete({ keyCode: BACKSPACE, flags: CTRL, isKeyDown: false }), false, 'key-up ignored');
+  assert.equal(isWordDelete(null), false);
+});
+
+test('deleteWord removes the last word and the whitespace before it', () => {
+  assert.deepEqual(deleteWord({ value: 'hello world', allSelected: false }), { value: 'hello', allSelected: false });
+  assert.deepEqual(deleteWord({ value: 'hello world ', allSelected: false }), { value: 'hello', allSelected: false }, 'trailing space too');
+  assert.deepEqual(deleteWord({ value: 'one two three', allSelected: false }), { value: 'one two', allSelected: false });
+  assert.deepEqual(deleteWord({ value: 'solo', allSelected: false }), { value: '', allSelected: false }, 'single word clears');
+  assert.deepEqual(deleteWord({ value: '', allSelected: false }), { value: '', allSelected: false }, 'empty stays empty');
+  // repeated presses chew back word by word
+  let s = { value: 'the quick brown fox', allSelected: false };
+  s = deleteWord(s); assert.equal(s.value, 'the quick brown');
+  s = deleteWord(s); assert.equal(s.value, 'the quick');
+  s = deleteWord(s); assert.equal(s.value, 'the');
+  s = deleteWord(s); assert.equal(s.value, '');
+  // a selection clears everything, same as Backspace on a selection
+  assert.deepEqual(deleteWord({ value: 'hello world', allSelected: true }), { value: '', allSelected: false });
 });

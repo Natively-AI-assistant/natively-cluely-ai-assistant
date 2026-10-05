@@ -58,3 +58,27 @@ export function typed(state, chars) {
 export function backspace(state) {
   return state.allSelected ? { value: '', allSelected: false } : { value: state.value.slice(0, -1), allSelected: false };
 }
+
+/**
+ * CGEventFlags bits a word-delete arrives with: Ctrl (Windows, Ctrl+Backspace /
+ * Ctrl+Delete) or Option (macOS, Option+Backspace). Distinct from
+ * EDIT_MODIFIER_FLAGS on purpose — word-delete is keyed off the Backspace
+ * keyCode (51), never a character, so it can never collide with Cmd/Ctrl+V/A/C/X.
+ */
+export const WORD_DELETE_FLAGS = (1 << 18) | (1 << 19);
+
+/** True when a delivered Backspace (keyCode 51) key-down carries the word-delete modifier. */
+export function isWordDelete(ev) {
+  return !!ev && ev.isKeyDown === true && ev.keyCode === 51 && (Number(ev.flags) & WORD_DELETE_FLAGS) !== 0;
+}
+
+/**
+ * Word-delete: removes the last word and the whitespace before it, so repeated
+ * presses chew back through the box word by word. With a selection it clears
+ * everything (same as Backspace on a selection). The box has no caret, so there
+ * is nothing after the end — "delete word" only ever means backward.
+ */
+export function deleteWord(state) {
+  if (state.allSelected) return { value: '', allSelected: false };
+  return { value: state.value.replace(/\s*\S+\s*$/, ''), allSelected: false };
+}

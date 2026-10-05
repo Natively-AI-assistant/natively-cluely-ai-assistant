@@ -13,7 +13,16 @@
 
 /// Renderer flag bits, the macOS CGEventFlags layout both hooks already use.
 pub const FLAG_CTRL: u32 = 1 << 18;
+pub const FLAG_OPT: u32 = 1 << 19;
 pub const FLAG_CMD: u32 = 1 << 20;
+
+/// Windows word-delete trigger VKs: Backspace (0x08) and Delete (0x2E). Both map
+/// to the overlay's single backward "delete last word" because the box has no
+/// caret (nothing after the end). macOS uses Option+Backspace instead and keys
+/// off the Backspace keycode directly, so this helper is Windows-only.
+pub fn windows_vk_is_word_delete(vk: u32) -> bool {
+    vk == 0x08 || vk == 0x2E
+}
 
 /// The command letter for a keystroke's character, if it is one of the editing
 /// shortcuts. Case-insensitive; anything but a single character is not one.
@@ -71,6 +80,16 @@ mod tests {
     #[test]
     fn flags_match_the_cgevent_layout_the_renderer_reads() {
         assert_eq!(FLAG_CTRL, 0x40000);
+        assert_eq!(FLAG_OPT, 0x80000);
         assert_eq!(FLAG_CMD, 0x100000);
+    }
+
+    #[test]
+    fn windows_word_delete_is_backspace_or_delete_only() {
+        assert!(windows_vk_is_word_delete(0x08)); // VK_BACK
+        assert!(windows_vk_is_word_delete(0x2E)); // VK_DELETE
+        for vk in [0x56u32, 0x41, 0x0D, 0x20, 0x25, 0x2D] {
+            assert!(!windows_vk_is_word_delete(vk), "{vk:#x} must not trigger word-delete");
+        }
     }
 }

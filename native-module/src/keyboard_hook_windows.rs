@@ -62,7 +62,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use crate::edit_shortcut::{windows_vk_letter, FLAG_CTRL as EDIT_FLAG_CTRL};
+use crate::edit_shortcut::{windows_vk_is_word_delete, windows_vk_letter, FLAG_CTRL as EDIT_FLAG_CTRL};
 use crate::app_chord::{
     app_chords_from_inputs, match_app_chord, AppChord, AppChordInput, MOD_ALT, MOD_CTRL, MOD_SHIFT,
 };
@@ -372,6 +372,27 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // like an app chord. App chords matched above still win. Not with Alt, so
     // AltGr text is untouched.
     if is_key_down && ctrl && !alt {
+        // Ctrl+Backspace / Ctrl+Delete → delete the previous word in the overlay
+        // box. Delivered as Backspace (mac keycode 51, which the renderer's
+        // switch keys off) tagged with the Ctrl flag so the renderer runs
+        // deleteWord() rather than a one-char backspace. The box has no caret,
+        // so Delete and Backspace both mean "remove the last word".
+        if windows_vk_is_word_delete(vk) {
+            let delivered = send_payload(&state, CapturedKey {
+                key_code: 51,
+                chars: String::new(),
+                flags: EDIT_FLAG_CTRL,
+                is_key_down: true,
+                is_outside_mouse_down: false,
+                app_chord_id: String::new(),
+            });
+            if delivered {
+                let mut ups = state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner());
+                ups.insert(vk);
+                return LRESULT(1);
+            }
+            // Nowhere to deliver: let the OS have it rather than lose it.
+        }
         if let Some(letter) = windows_vk_letter(vk) {
             let delivered = send_payload(&state, CapturedKey {
                 key_code: 0,
