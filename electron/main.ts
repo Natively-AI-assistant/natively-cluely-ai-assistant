@@ -3859,7 +3859,12 @@ export class AppState {
         || err.message.toLowerCase().includes('auth_timeout')
         || err.message.toLowerCase().includes('invalid_key')
         || err.message.toLowerCase().includes('invalid api')
-        || err.message.toLowerCase().includes('authentication');
+        || err.message.toLowerCase().includes('authentication')
+        // Google STT with no usable Service Account JSON. GoogleSTT has already
+        // disabled the channel and opens no stream until a new key is set
+        // (GoogleSTT.CREDENTIALS_UNAVAILABLE_CODE), so it is terminal by code,
+        // not by whatever words the message happens to contain.
+        || (err as any)?.code === 'google_stt_credentials_unavailable';
 
       const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
         || err.message.toLowerCase().includes('quota');
