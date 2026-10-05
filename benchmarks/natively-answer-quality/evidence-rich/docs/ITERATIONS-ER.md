@@ -1520,3 +1520,15 @@ with astra as much as possible"). Astra reopened 11:00 UTC; calibration 38/38 on
   shows what E16b and E17 do together without an app run (disk: 3.2 GB free, no app run possible now).
 * Judging order, three streams at once: the 23 rows of E16b's line 3 (both builds), the 182 E17 judgments, then the
   rest of E16b's two profile modes, then the second sample, then the other seven modes of the E16b pair.
+
+### E16b — line 3 under Astra, the judge of record (2026-10-05 11:30 UTC)
+The 23 rows that gain the résumé, both builds, judged by gpt-6-astra (charter er1-ebec3e9a021e, calibration 38/38):
+**8.76 → 9.12, +0.36** against a bar of +0.5 (Claude Code judge: 8.26 → 8.70, +0.44). **The verdict stands: not kept.**
+The two judges agree row by row: five rows rise by 3.3 to 6.3 (TI-024, TI-027, D2-TI-006, LFW-015, D2-TI-002), three
+fall by 3.9 to 6.0 (TI-007 10.0 → 4.0 arithmetic_error; LFW-013 9.9 → 5.7 deferral; LFW-009 8.7 → 4.8
+unsupported_personal_claim), fifteen move by less than one point. The rest of the pair was not judged by Astra: line 3
+decides, and Astra's time went to E17.
+What the falls are, for the next attempt: LFW-013's draft was right and the claim pass turned it into "I'll confirm a
+number and come back" (replayed with E17's wording, the pass keeps the draft); TI-007 is an arithmetic slip in the
+draft; LFW-009 is a personal claim attached to a question the profile does not answer — the caveat recorded with E2
+(absent-fact questions get a nearby fact attached more often with whole documents in view).
