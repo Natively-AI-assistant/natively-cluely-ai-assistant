@@ -1507,3 +1507,16 @@ oracle holds an UNRESOLVED conflict (E6's line 3), because that is where a weake
 "two ways": 8 → 1 (line 1: −87.5 %, holds). Pass time p50 1,252 → 1,397 ms, p90 1,572 → 1,842 ms.
 **Judge:** Astra only from here (Evin, 2026-10-05: "dont use claude code as judge since we are low on quota"; "judge
 with astra as much as possible"). Astra reopened 11:00 UTC; calibration 38/38 on charter er1-ebec3e9a021e.
+
+### E17 — how it is read under Astra, and a second sample (written 2026-10-05 11:20 UTC, before any E17 judgment is read)
+* Astra's time is short (the pool has closed after about an hour in each batch), so only the rows where the two arms
+  show DIFFERENT text are judged, both sides: 91 rows, 182 judgments. Rows where the arms show the same text differ by
+  0 and are not judged. Denominators are the rows whose turn ran the pass (472; conflict_stale 77), as the rule says.
+  Check: `ER_JUDGE=astra node evidence-rich/report/rule-e17.mjs`.
+* **Second sample:** the same two wordings replayed on the drafts of er-dev-e16b + er-dev2-e16b (arms `e17b-ctl`,
+  `e17b-conflict`) — other drafts of the same 630 questions. It is read with the same five lines. The rule's verdict
+  is the first sample's, as committed. The second sample is confirmation: E17 goes into the app only if the second
+  sample does not contradict it on line 3 (all rows: effect not below the control arm, hard fails not above). It also
+  shows what E16b and E17 do together without an app run (disk: 3.2 GB free, no app run possible now).
+* Judging order, three streams at once: the 23 rows of E16b's line 3 (both builds), the 182 E17 judgments, then the
+  rest of E16b's two profile modes, then the second sample, then the other seven modes of the E16b pair.
