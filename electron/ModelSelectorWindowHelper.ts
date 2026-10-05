@@ -3,6 +3,7 @@ import path from "node:path"
 import { attachNoActivate } from "./utils/windowsFocusPolicy"
 import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
 import { modelSelectorHeightBudget } from "./utils/modelSelectorHeightBudget"
+import { allowRespawn, hasLiveRenderer, onRendererGone } from "./utils/rendererLiveness"
 
 // Force production mode if running as packaged app — matches WindowHelper.ts's
 // isDev predicate. A stray NODE_ENV=development in a packaged launch's
@@ -28,7 +29,13 @@ export class ModelSelectorWindowHelper {
     // Tallest the window may be where it now sits (see modelSelectorHeightBudget).
     private heightBudget: number = Number.POSITIVE_INFINITY;
 
-    constructor() { }
+    // Set once the app starts quitting: renderers going away then is the
+    // teardown, and nothing must be rebuilt in its place.
+    private quitting = false;
+
+    constructor() {
+        app.once('before-quit', () => { this.quitting = true })
+    }
 
     private windowHelper: WindowHelper | null = null;
 
@@ -39,6 +46,9 @@ export class ModelSelectorWindowHelper {
     // WindowHelper.repositionOverlayPopovers().
     private overlayAnchor: { offsetXFromPanel: number; offsetY: number } | null = null;
 
+    // When the window was last rebuilt after losing its renderer (allowRespawn).
+    private respawnHistory: number[] = [];
+
     public setWindowHelper(wh: WindowHelper): void {
         this.windowHelper = wh;
     }
@@ -48,13 +58,15 @@ export class ModelSelectorWindowHelper {
     }
 
     public preloadWindow(): void {
-        if (!this.window || this.window.isDestroyed()) {
+        if (!this.window || !hasLiveRenderer(this.window)) {
             this.createWindow(-10000, -10000, false);
         }
     }
 
     public showWindow(x: number, y: number, options: WindowActivationOptions = {}): void {
-        if (!this.window || this.window.isDestroyed()) {
+        // Not just isDestroyed(): a window whose renderer has died is still a
+        // window, and showing it puts an empty rectangle on screen.
+        if (!this.window || !hasLiveRenderer(this.window)) {
             this.createWindow(x, y, true, options)
             return
         }
@@ -92,7 +104,8 @@ export class ModelSelectorWindowHelper {
         this.ensureVisibleOnScreen();
 
         // Overlay-anchored open: remember the panel-relative offset (see field
-        // comment) and arm the click-outside catcher.
+        // comment). The click-outside catcher is armed further down, once the
+        // window is on screen.
         if (isOverlay && mainWin && !mainWin.isDestroyed()) {
             const bounds = mainWin.getBounds();
             const margin = this.windowHelper?.getOverlayPanelLeftMargin?.() ?? 0;
@@ -103,7 +116,6 @@ export class ModelSelectorWindowHelper {
         } else {
             this.overlayAnchor = null;
         }
-        this.windowHelper?.notifyOverlayPopover?.('model', this.overlayAnchor !== null);
 
         if (process.platform === 'win32' && this.contentProtection) {
             this.window.setOpacity(0);
@@ -122,6 +134,12 @@ export class ModelSelectorWindowHelper {
             if (activate) this.window.show(); else this.window.showInactive();
             if (activate) this.window.focus();
         }
+        // Arm the click-outside catcher AFTER the show, as the settings
+        // dropdown does. The catcher re-raises Natively's visible windows
+        // above itself (it has no window level to rely on outside macOS);
+        // armed before the show, it skipped this window, and a click on a
+        // model row could land on the catcher and only close the list.
+        this.windowHelper?.notifyOverlayPopover?.('model', this.overlayAnchor !== null);
         // The window is reused, so the renderer never remounts: this is its
         // only cue to replay the open animation and scroll to the checked row.
         this.window.webContents.send('model-selector:shown');
@@ -136,6 +154,12 @@ export class ModelSelectorWindowHelper {
         if (!this.window || this.window.isDestroyed()) return;
         const w = Math.round(Math.min(Math.max(width, 120), 480));
         const h = Math.round(Math.min(Math.max(height, 40), 560, this.heightBudget));
+        // A panel taller than its budget has not heard the budget: it was sent
+        // before the page was listening (a window shown as soon as it was
+        // built). Say it again, or the window is trimmed and the list is not.
+        if (height > this.heightBudget) {
+            this.window.webContents.send('model-selector:height-budget', this.heightBudget);
+        }
         const current = this.window.getBounds();
         if (current.width === w && current.height === h) return;
         this.window.setSize(w, h);
@@ -182,7 +206,7 @@ export class ModelSelectorWindowHelper {
     }
 
     public toggleWindow(x: number, y: number, options: WindowActivationOptions = {}): void {
-        if (this.window && !this.window.isDestroyed()) {
+        if (this.window && hasLiveRenderer(this.window)) {
             if (this.window.isVisible()) {
                 this.hideWindow()
             } else {
@@ -195,6 +219,36 @@ export class ModelSelectorWindowHelper {
 
     public closeWindow(): void {
         this.hideWindow();
+    }
+
+    // The picker's renderer is gone. Nothing reloads it (main.ts leaves this
+    // window alone), so drop the window now and build its replacement the way
+    // startup does: hidden, offscreen, list loaded. The next open is then the
+    // same warm open as any other, instead of this empty window.
+    private discardDeadWindow(win: BrowserWindow): void {
+        if (this.window !== win) return;
+        this.disposeWindow(win);
+        // Never while quitting. Bounded: a renderer that dies on every start
+        // is built on the next open instead of in a loop.
+        if (!this.quitting && allowRespawn(this.respawnHistory, Date.now())) this.preloadWindow();
+    }
+
+    // Tears the window down and forgets it. Builds nothing.
+    private disposeWindow(win: BrowserWindow): void {
+        if (this.window === win) this.window = null;
+        this.overlayAnchor = null;
+        // The next window's renderer has not been told its budget.
+        this.heightBudget = Number.POSITIVE_INFINITY;
+        if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+        this.opacityTimeout = null;
+        // Without this the full-display click catcher stays up behind a picker
+        // that no longer exists, and swallows the next click anywhere.
+        this.windowHelper?.notifyOverlayPopover?.('model', false);
+        if (win.isDestroyed()) return;
+        // Detach first, as hideWindow does: closing a window that is still
+        // attached to the overlay can hand the overlay focus mid-meeting.
+        try { win.setParentWindow(null) } catch { /* already detached */ }
+        win.destroy();
     }
 
     private createWindow(
@@ -245,7 +299,13 @@ export class ModelSelectorWindowHelper {
             windowSettings.y = Math.round(y)
         }
 
-        this.window = new BrowserWindow(windowSettings)
+        // A window left over with a dead renderer (the liveness check sent us
+        // here before its render-process-gone callback ran) must not be leaked.
+        if (this.window) this.disposeWindow(this.window)
+
+        const win = new BrowserWindow(windowSettings)
+        this.window = win
+        onRendererGone(win, () => this.discardDeadWindow(win))
         // Windows counterpart of the NSPanel stealth attributes applied below
         // on macOS: WS_EX_NOACTIVATE so clicking the model selector mid-meeting
         // never steals foreground focus from the meeting app. Dismissal is the

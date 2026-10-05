@@ -136,6 +136,7 @@ export interface ElectronAPI {
   onOverlayUiState?: (
     callback: (state: Record<string, unknown>) => void
   ) => () => void
+  getOverlayUiState?: () => Promise<Record<string, unknown> | null>
   sendOverlayUiAction?: (action: { type: string }) => Promise<void>
   // Managed group drag (macOS + Windows): the pill moves the whole group.
   sendOverlayGroupDrag?: (delta: {
@@ -151,7 +152,9 @@ export interface ElectronAPI {
       | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
       | { phase: 'end'; final?: { width: number; height: number } },
   ) => Promise<{ width: number; height: number } | undefined>
-  setOverlayHoverInteractive?: (interactive: boolean) => Promise<void>
+  setOverlayHoverInteractive?: (interactive: boolean, source?: 'probe', idleMs?: number) => Promise<void>
+  onOverlayHoverReset?: (callback: () => void) => () => void
+  onOverlayHoverProbe?: (callback: (point: { x: number; y: number }) => void) => () => void
   dismissOverlayPopovers?: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
   getRecognitionLanguages: () => Promise<Record<string, any>>

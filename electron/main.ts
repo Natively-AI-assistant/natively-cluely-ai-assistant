@@ -1345,6 +1345,7 @@ import { createForeignWindowCaptureGuard, wrapAsyncDialogs, type ForeignWindowCa
 import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
+import { hasLiveRenderer } from './utils/rendererLiveness'
 import {
   shouldPromoteToRegularAtStartup,
   planDisguiseTitleWrites,
@@ -9667,7 +9668,7 @@ if (process.env.THINKING_MATRIX === '1') {
   // main starts it.
   const requestMeetingStart = (req: MeetingStartRequest) => {
     const launcher = appState.getWindowHelper().getLauncherWindow();
-    if (launcher && !launcher.isDestroyed() && !launcher.webContents.isCrashed()) {
+    if (launcher && hasLiveRenderer(launcher)) {
       launcher.webContents.send('meeting:start-request', req);
       return;
     }
@@ -10050,8 +10051,12 @@ if (process.env.THINKING_MATRIX === '1') {
 
     // Only auto-reload real user-facing windows. Transient/hidden helpers
     // (cropper = screenshot overlay; model-selector = hidden preload with a
-    // known forceRestartOllama side-effect) should NOT be blindly reloaded —
-    // they get recreated on next open. Reload launcher / settings / overlay / aux floating chrome.
+    // known forceRestartOllama side-effect) should NOT be blindly reloaded.
+    // Both replace their own dead window with a new hidden one instead
+    // (discardDeadWindow in each helper): at most three times a minute, and
+    // never while quitting. A rebuilt picker loads its list as the startup one
+    // does, so it restarts Ollama only if Ollama is not answering. Reload
+    // launcher / settings / overlay / aux floating chrome.
     const isRecoverableWindow =
       urlNow === '' /* URL unavailable — assume the main launcher */ ||
       /[?&]window=(launcher|settings|overlay|overlay-pill|overlay-toggle)\b/.test(urlNow) ||

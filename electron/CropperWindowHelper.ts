@@ -2,6 +2,7 @@ import { BrowserWindow, screen, app, ipcMain, IpcMainEvent, globalShortcut } fro
 import path from "node:path"
 import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
 import { attachNoActivate } from "./utils/windowsFocusPolicy"
+import { allowRespawn, onRendererGone } from "./utils/rendererLiveness"
 import { DEV_SERVER_URL } from './devServerUrl';
 
 // Force production mode if running as packaged app — matches WindowHelper.ts's
@@ -202,6 +203,11 @@ export class CropperWindowHelper {
     private isWaitingForSelection: boolean = false;
     private isDisposed: boolean = false;
     private isEscapeRegistered: boolean = false;
+    // When the window was last rebuilt after losing its renderer (allowRespawn).
+    private respawnHistory: number[] = [];
+    // Set once the app starts quitting: a renderer going away then is the
+    // teardown, and no window must be built in its place.
+    private isQuitting: boolean = false;
 
     // IPC listener references for cleanup
     private readonly confirmedListener: (event: IpcMainEvent, bounds: unknown) => void;
@@ -266,6 +272,7 @@ export class CropperWindowHelper {
         // Fallback cleanup: if app quits before dispose() is called, clean up IPC listeners
         // Store reference so we can remove it if dispose() is called first
         this.beforeQuitHandler = () => {
+            this.isQuitting = true;
             if (!this.isDisposed) {
                 console.log('[CropperWindowHelper] before-quit: auto-disposing IPC listeners');
                 this.unregisterEscapeShortcut();
@@ -687,7 +694,13 @@ export class CropperWindowHelper {
 
         const windowSettings = buildCropperWindowSettings(combinedBounds, process.platform);
 
-        this.cropperWindow = new BrowserWindow(windowSettings)
+        const win = new BrowserWindow(windowSettings)
+        this.cropperWindow = win
+        // main.ts does not reload this window when its renderer dies, and a
+        // window with a dead renderer is not destroyed, so every later area
+        // screenshot would show it again: a full-display window nobody can
+        // select in, held up until the selection timeout.
+        onRendererGone(win, () => this.discardDeadWindow(win))
 
         // Issue #518: apply WS_EX_NOACTIVATE on Windows right after construction
         // while the window is still hidden, so clicking or dragging the cropper
@@ -769,6 +782,9 @@ export class CropperWindowHelper {
         });
 
         this.cropperWindow.on('closed', () => {
+            // A window already replaced (discardDeadWindow) must not end the
+            // selection, or drop the reference, of the one that replaced it.
+            if (this.cropperWindow !== win) return;
             this.unregisterEscapeShortcut();
             // Protect against race condition: window closed after successful selection
             if (this.isWaitingForSelection) {
@@ -831,6 +847,32 @@ export class CropperWindowHelper {
                 }
                 this.cropperWindow.hide();
             }
+        }
+    }
+
+    // The cropper's renderer is gone: end any selection in progress (the user
+    // gets a cancelled screenshot, not a dead full-display window), drop the
+    // window, and pre-create its replacement the way startup does.
+    private discardDeadWindow(win: BrowserWindow): void {
+        if (this.isDisposed || this.cropperWindow !== win) return;
+        console.warn('[CropperWindowHelper] renderer gone — replacing the cropper window');
+        this.unregisterEscapeShortcut();
+        if (this.isWaitingForSelection) this.rejectCurrentSelection(null);
+        if (this.opacityTimeout) {
+            clearTimeout(this.opacityTimeout);
+            this.opacityTimeout = null;
+        }
+        this.cropperWindow = null;
+        if (!win.isDestroyed()) win.destroy();
+        // Startup pre-creates the cropper on these two platforms only. Bounded,
+        // so a renderer that dies on every start cannot loop; past the limit
+        // the window is built by the next screenshot instead.
+        if (
+            !this.isQuitting &&
+            (process.platform === 'win32' || process.platform === 'darwin') &&
+            allowRespawn(this.respawnHistory, Date.now())
+        ) {
+            this.preload();
         }
     }
 

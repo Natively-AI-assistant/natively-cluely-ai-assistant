@@ -305,6 +305,7 @@ import {
   collapsedWidthForRow,
   OVERLAY_PANEL_INSET,
   OVERLAY_HOVER_GATE_PAD,
+  OVERLAY_HOVER_PROBE_GRACE_MS,
   defaultCollapsedPanelWidth,
   collapsedPanelForWindow,
   panelWidthForWindow,
@@ -4860,7 +4861,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // panel's transparent gutter passes clicks through to whatever is beneath
     // instead of silently eating them.
     const PAD = OVERLAY_HOVER_GATE_PAD;
+    // When this page last saw the mouse move (0 = never). Reported with a
+    // probe-driven reopen so a log can tell a resting pointer from a dead feed.
+    let lastMoveAt = 0;
     const onMouseMove = (e: MouseEvent) => {
+      lastMoveAt = performance.now();
       // A resize drag renders inside a window grown to its envelope, where
       // this margin math is wrong and a false "outside" would flip the window
       // click-through under a captured pointer. The drag forces interactive at
@@ -4880,7 +4885,49 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       window.electronAPI?.setOverlayHoverInteractive?.(inside).catch(() => {});
     };
     window.addEventListener('mousemove', onMouseMove);
-    return () => window.removeEventListener('mousemove', onMouseMove);
+    // Main resets its side to interactive whenever the overlay is shown. This
+    // flag only reports CHANGES, so it has to be reset with it: left at
+    // "margin" from before the hide, a pointer still over a margin reports
+    // nothing and the margin swallows clicks.
+    const unsubscribeReset = window.electronAPI?.onOverlayHoverReset?.(() => {
+      interactive = true;
+    });
+    // Second way in. A mouse MOVE is what reopens the gate, and there is not
+    // always one: the panel can come under a resting pointer (it widens, an
+    // answer grows it downward, the overlay is repositioned), and the click
+    // that follows then falls through to the app behind. On Windows the moves
+    // themselves come from a low-level hook the system can drop. Main
+    // therefore says where the pointer is while the gate is shut; if that is
+    // over the panel and no mouse move has reopened the gate a few frames
+    // later, reopen it from here. A probe only ever opens the gate.
+    let probeTimer = 0;
+    const unsubscribeProbe = window.electronAPI?.onOverlayHoverProbe?.((point) => {
+      if (isResizingRef.current) return;
+      const inside = pointerOverPanel(point, contentRef.current?.getBoundingClientRect() ?? null, PAD);
+      if (!inside) return;
+      if (interactive) {
+        // This page already believes the gate is open, yet main is asking:
+        // say so again (a no-op for main unless the two had drifted apart).
+        window.electronAPI?.setOverlayHoverInteractive?.(true).catch(() => {});
+        return;
+      }
+      if (probeTimer) return;
+      // The grace keeps the ordinary case quiet: a real mouse move for the
+      // same pointer position is delivered with the next frame.
+      probeTimer = window.setTimeout(() => {
+        probeTimer = 0;
+        if (interactive || isResizingRef.current) return;
+        interactive = true;
+        const idleMs = lastMoveAt ? performance.now() - lastMoveAt : undefined;
+        window.electronAPI?.setOverlayHoverInteractive?.(true, 'probe', idleMs).catch(() => {});
+      }, OVERLAY_HOVER_PROBE_GRACE_MS);
+    });
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      unsubscribeReset?.();
+      unsubscribeProbe?.();
+      window.clearTimeout(probeTimer);
+    };
   }, []);
 
   // Derive the resize-button icon state from the live shell width. Subscribing
