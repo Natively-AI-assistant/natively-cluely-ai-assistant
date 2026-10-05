@@ -225,9 +225,11 @@ export const SkillsSettings: React.FC = () => {
                 if (outcome?.stage === 'failed') {
                     const first = outcome.errors?.[0];
                     setStatus(
+                        // The validator's own sentence, without its field and
+                        // code in brackets in front ("description/missing_description").
                         first?.message
-                            ? `Upload failed (${first.field}/${first.code}): ${first.message}`
-                            : 'Upload failed for an unknown reason.',
+                            ? `Couldn't add this skill. ${first.message}`
+                            : "Couldn't add this skill.",
                     );
                     // The validator may still return a preview even on failure
                     // (e.g. install-time error after a successful validate) —

@@ -102,8 +102,9 @@ export function prepareIntelligenceStreamPlaceholderMessages(
 
 /**
  * Apply WTA null-invoke feedback to message rows (cooldown / empty answer path).
+ * `extra` is merged into the feedback row (the overlay marks it as a note).
  */
-export function applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory = _defaultIdFactory) {
+export function applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory = _defaultIdFactory, extra = {}) {
   if (!Array.isArray(prev)) {
     return [
       {
@@ -112,6 +113,7 @@ export function applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory 
         intent: 'what_to_answer',
         text: feedback,
         isStreaming: false,
+        ...extra,
       },
     ];
   }
@@ -124,6 +126,7 @@ export function applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory 
       ...updated[openIdx],
       text: feedback,
       isStreaming: false,
+      ...extra,
     };
     return updated;
   }
@@ -135,6 +138,7 @@ export function applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory 
       intent: 'what_to_answer',
       text: feedback,
       isStreaming: false,
+      ...extra,
     },
   ];
 }

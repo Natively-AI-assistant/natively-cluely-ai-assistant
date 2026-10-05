@@ -8,7 +8,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose, TriangleAlert
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -3307,8 +3307,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     transition={{ duration: reduceMotion ? 0.15 : 0.25, ease: [0.22, 1, 0.36, 1] }}
                                                     style={{ overflow: 'hidden' }}
                                                 >
-                                                    <p className="text-xs text-yellow-500/80 pb-4">
-                                                        ⚠️ {t('Disable Undetectable mode first to change disguise.')}
+                                                    <p className="flex items-center gap-1.5 text-xs text-yellow-500/80 pb-4">
+                                                        <TriangleAlert size={13} strokeWidth={2} className="flex-shrink-0" aria-hidden="true" />
+                                                        {t('Disable Undetectable mode first to change disguise.')}
                                                     </p>
                                                 </motion.div>
                                             )}

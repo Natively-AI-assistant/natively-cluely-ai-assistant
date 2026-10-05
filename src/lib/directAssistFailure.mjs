@@ -51,6 +51,45 @@ const NO_PROVIDER = 'No AI provider is set up yet';
 const LENGTH_LIMIT = 'It reached the length limit';
 const REPEATING = 'It started repeating itself';
 const OWN_STOP_BY_CODE = { OUTPUT_LIMIT: LENGTH_LIMIT, OUTPUT_REPETITION: REPEATING };
+// A failure that is nobody's provider and needs no provider's words: the
+// sentence is the whole explanation. Used by the overlay's other answer paths
+// (src/lib/chatFailure.mjs), which get a raw error string, not a reason code.
+const TRIAL_ENDED = 'Your free trial has ended';
+// Natively's own plan, when the request went through Natively: not a
+// provider's credits, and nothing in AI Providers fixes it.
+const PLAN_LIMIT = "You've reached your Natively plan's limit";
+const PLAN_EXPIRED = 'Your Natively plan has expired';
+const OWN_SENTENCE_BY_CODE = { TRIAL_ENDED, PLAN_LIMIT, PLAN_EXPIRED };
+
+/**
+ * The quiet line shown when a quick action is pressed again while the first
+ * press is still being answered: a blocked press must never look like a dead
+ * hotkey. Keyed by the overlay's action key. Worded here so they are
+ * translated with the rest.
+ */
+export const CHAT_HINTS = Object.freeze({
+  what_to_say: 'Still finishing the previous answer…',
+  code_hint: 'Still writing the code hint…',
+});
+
+/**
+ * Quiet notes ABOUT an answer, where the overlay used to write into the answer
+ * itself: "(Late answer to: "…")" in front of it, "_Incomplete — Request
+ * cancelled._" after it, and a bare sentence at reading size when there was
+ * nothing to answer yet. Drawn by ChatNoteLine, at footnote size.
+ */
+export const CHAT_NOTES = Object.freeze({
+  late: 'Late answer to “{question}”',
+  stopped: 'Stopped before it finished',
+  superseded: 'Replaced by your next question',
+  noneYet: 'No answer yet. Wait a few seconds after speech, then try again.',
+});
+
+/** A note's sentence, translated, with the question filled in. */
+export function chatNoteText(note, t = identity) {
+  if (note.text) return t(note.text);
+  return fill(CHAT_NOTES[note.kind] ?? '', { question: note.question ?? '' }, t);
+}
 
 /**
  * The notice data for an answer Natively stopped itself, from the stream's
@@ -82,6 +121,9 @@ export const DIRECT_ASSIST_PHRASES = Object.freeze([
   APP_FAULT,
   NOT_COMPLETED,
   NO_PROVIDER,
+  ...Object.values(OWN_SENTENCE_BY_CODE),
+  ...Object.values(CHAT_HINTS),
+  ...Object.values(CHAT_NOTES),
 ]);
 
 /** A cause main names outright. */
@@ -251,6 +293,7 @@ export function directAssistNoticeView({ failure, fallbackNotice, ended = false 
 /** Not a provider failure: our own fault, or the sentence main wrote. */
 function appFaultOrMessage(failure, t) {
   if (failure.code === APP_FAULT_CODE) return t(APP_FAULT);
+  if (OWN_SENTENCE_BY_CODE[failure.code]) return t(OWN_SENTENCE_BY_CODE[failure.code]);
   return failure.message?.trim() || t(NOT_COMPLETED);
 }
 

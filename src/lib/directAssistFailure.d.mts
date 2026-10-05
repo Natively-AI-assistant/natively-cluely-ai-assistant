@@ -50,6 +50,8 @@ export interface DirectAssistNoticeView {
 }
 
 export const DIRECT_ASSIST_PHRASES: readonly string[];
+/** The quiet "still working" line for a quick action pressed twice, by action key. */
+export const CHAT_HINTS: Readonly<Record<'what_to_say' | 'code_hint', string>>;
 export const DIRECT_ASSIST_OPEN_PROVIDERS: string;
 
 export function directAssistFailureReason(
@@ -73,3 +75,16 @@ export function directAssistFailureText(
 ): string;
 
 export function ownStopFailure(reason: string | undefined | null): { partial: true; code: 'OUTPUT_LIMIT' | 'OUTPUT_REPETITION'; provider: '' } | null;
+
+export type ChatNoteKind = 'late' | 'stopped' | 'superseded' | 'noneYet';
+/** A quiet note about an answer. `question` is the late answer's own question. */
+export interface ChatNote {
+  kind: ChatNoteKind;
+  question?: string;
+  /** A sentence main wrote, shown in place of the kind's own. */
+  text?: string;
+  /** There is no answer text: the note is all the row shows. */
+  alone?: boolean;
+}
+export const CHAT_NOTES: Readonly<Record<ChatNoteKind, string>>;
+export function chatNoteText(note: ChatNote, t?: (text: string) => string): string;

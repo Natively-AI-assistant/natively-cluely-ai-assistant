@@ -174,6 +174,65 @@ const ROWS: Record<string, Row> = {
     'No se pudo completar la solicitud.',
   ],
 
+  // ── The overlay's other answer paths (src/lib/chatFailure.mjs) ──
+  'Your free trial has ended': [
+    'Ваш бесплатный пробный период закончился',
+    '你的免费试用已结束',
+    '無料トライアルは終了しました',
+    'Tu prueba gratuita ha terminado',
+  ],
+  "You've reached your Natively plan's limit": [
+    'Вы достигли лимита вашего тарифа Natively',
+    '你已达到 Natively 套餐的上限',
+    'Natively プランの上限に達しました',
+    'Has alcanzado el límite de tu plan de Natively',
+  ],
+  'Your Natively plan has expired': [
+    'Срок действия вашего тарифа Natively истёк',
+    '你的 Natively 套餐已到期',
+    'Natively プランの有効期限が切れました',
+    'Tu plan de Natively ha caducado',
+  ],
+  // A quick action pressed again while the first press is still being answered.
+  'Still finishing the previous answer…': [
+    'Предыдущий ответ ещё не закончен…',
+    '上一个回答还在生成中…',
+    '前の回答をまだ作成中です…',
+    'Aún estoy terminando la respuesta anterior…',
+  ],
+  'Still writing the code hint…': [
+    'Подсказка по коду ещё пишется…',
+    '代码提示还在生成中…',
+    'コードのヒントをまだ作成中です…',
+    'Aún estoy escribiendo la pista de código…',
+  ],
+
+  // ── Quiet notes about an answer ──
+  'Late answer to “{question}”': [
+    'Запоздалый ответ на «{question}»',
+    '对“{question}”的迟到回答',
+    '「{question}」への遅れた回答',
+    'Respuesta tardía a «{question}»',
+  ],
+  'Stopped before it finished': [
+    'Остановлено до завершения',
+    '未完成即已停止',
+    '完了前に停止しました',
+    'Se detuvo antes de terminar',
+  ],
+  'Replaced by your next question': [
+    'Заменено вашим следующим вопросом',
+    '已被你的下一个问题取代',
+    '次の質問に置き換えられました',
+    'Reemplazada por tu siguiente pregunta',
+  ],
+  'No answer yet. Wait a few seconds after speech, then try again.': [
+    'Ответа пока нет. Подождите несколько секунд после речи и попробуйте снова.',
+    '还没有回答。请在对方说完后等几秒再试。',
+    'まだ回答がありません。発話の数秒後にもう一度お試しください。',
+    'Aún no hay respuesta. Espera unos segundos después de que hablen y vuelve a intentarlo.',
+  ],
+
   // ── The one action ──
   'Open AI Providers': [
     'Открыть «AI-провайдеры»',
