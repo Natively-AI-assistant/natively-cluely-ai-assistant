@@ -21,7 +21,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Circle, LayoutList, ArrowLeft, Minus, Square, ChevronRight } from 'lucide-react';
+import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Circle, ChevronRight } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -547,7 +547,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 ? <GuideResolved isLight={isLight} colors={colors} t3={t3} />
                 : isMac
                 ? <GuideSteps isLight={isLight} colors={colors} t3={t3} reduced={reduced} enter={enter} />
-                : <GuideStepsWindows isLight={isLight} colors={colors} t3={t3} reduced={reduced} enter={enter} page={winMicPage} />}
+                : <GuideStepsWindows colors={colors} t3={t3} reduced={reduced} enter={enter} page={winMicPage} />}
             </div>
           </motion.div>
         )}
@@ -802,30 +802,28 @@ function GuideSteps({ isLight, colors, t3, reduced, enter }: {
 }
 
 // ─── Guide: the microphone page, Windows only ─────────────────
-// What "Open Settings" lands on there, drawn from the real page the way the
-// macOS guide draws its alert: a Windows 11 Settings window in miniature (back
-// arrow, caption buttons, the breadcrumb that is the page's title, Fluent's
-// neutral greys rather than this card's blue-blacks).
+// The macOS guide's sibling: the same two pieces in the same materials (the
+// card with the app icon and one sentence, a connector, the settings panel
+// with its switch on, the caption), so the two platforms' cards look like one
+// design. Windows has no consent alert to picture, so the first piece says
+// where "Open Settings" lands (the page's own breadcrumb) and carries no
+// buttons, and the second is the page's "Microphone access" switch where
+// macOS has its "Natively" row.
 //
-// The page's own structure, which is what makes the three switches legible:
-//   - "Microphone access" is a card of its own, with the microphone glyph.
-//   - "Let apps access your microphone" heads a second card, with the list
-//     glyph, and "Let desktop apps access your microphone" sits INSIDE that
-//     card, indented under it with no glyph. It is the one that covers
-//     Natively.
-// Checked against a screenshot of the page. Earlier versions drew three
-// identical rows, which is not how it looks.
+// ONE switch, by Evin's choice ("just this one is enough"). The page has two
+// more that a desktop app also needs ("Let apps access your microphone" and,
+// inside that group, "Let desktop apps access your microphone"); the guide
+// drew all three for a while, and before that imitated the Windows page
+// itself (rows of its long names, a miniature Settings window in Fluent
+// greys), each turned down as ugly beside the macOS guide. Which switch is
+// actually off is said by the Microphone row on the left, in the page's words.
 //
-// Windows lists desktop apps under that last switch only once they have used
-// the microphone, so at onboarding there is no "Natively" row to picture.
-// Every switch is drawn on: the page as it should end up. Which one is off is
-// said by the row on the left, in the page's own words.
-//
-// The names and the path are Windows's own and differ between 10 and 11:
-// windowsMicPage (lib/micPermissionPolicy.mjs) holds both.
-// A still image with an entrance only, as on macOS.
-function GuideStepsWindows({ isLight, colors, t3, reduced, enter, page }: {
-  isLight: boolean;
+// The path and the names are Windows's own and differ between 10 and 11:
+// windowsMicPage (lib/micPermissionPolicy.mjs) holds them. The switch's full
+// name on that release is the row's tooltip. Desktop apps are allowed as a
+// group, so there is no "Natively" row to picture.
+// Still images with an entrance only, as on macOS.
+function GuideStepsWindows({ colors, t3, reduced, enter, page }: {
   colors: CardColors;
   t3: string;
   reduced: boolean;
@@ -838,94 +836,97 @@ function GuideStepsWindows({ isLight, colors, t3, reduced, enter, page }: {
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2, delay } }
     : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { type: 'spring' as const, stiffness: 180, damping: 18, delay } });
 
-  // Windows 11's own surfaces, text and default accent, per theme. The switch
-  // is Fluent's: accent track with a dark knob on dark, a white one on light.
-  const w = isLight ? {
-    window: '#F3F3F3', card: '#FBFBFB', cardEdge: 'rgba(0,0,0,0.07)', edge: 'rgba(0,0,0,0.12)', rule: 'rgba(0,0,0,0.06)',
-    text: 'rgba(0,0,0,0.9)', quiet: 'rgba(0,0,0,0.6)',
-    accent: '#005FB8', knob: '#FFFFFF',
-  } : {
-    window: '#202020', card: '#2B2B2B', cardEdge: 'rgba(255,255,255,0.05)', edge: 'rgba(255,255,255,0.11)', rule: 'rgba(255,255,255,0.07)',
-    text: '#FFFFFF', quiet: 'rgba(255,255,255,0.62)',
-    accent: '#60CDFF', knob: '#000000',
-  };
-  const [app, ...crumbs] = page.path;
-  const [device, apps, desktopApps] = page.switches;
-
-  // One setting: an optional glyph (or the indent where one would be), the
-  // switch's name, and the switch, on.
-  const GLYPH = 13;
-  const GAP = 7;
-  const setting = (label: string, Glyph: React.ElementType | null) => (
-    <div style={{ minHeight: '36px', boxSizing: 'border-box', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: `${GAP}px` }}>
-      {Glyph
-        ? <Glyph size={GLYPH} strokeWidth={1.6} color={w.text} style={{ flexShrink: 0, opacity: 0.82 }} />
-        : <span aria-hidden style={{ width: `${GLYPH}px`, flexShrink: 0 }} />}
-      <span style={{ flex: 1, minWidth: 0, fontSize: '10px', fontWeight: 500, color: w.text, lineHeight: 1.28 }}>
-        {label}
-      </span>
-      <span aria-hidden style={{
-        position: 'relative', flexShrink: 0, boxSizing: 'border-box',
-        width: '26px', height: '13px', borderRadius: '7px', background: w.accent,
-      }}>
-        <span style={{ position: 'absolute', top: '3px', right: '3px', width: '7px', height: '7px', borderRadius: '50%', background: w.knob }} />
-      </span>
-    </div>
-  );
-  const card: React.CSSProperties = { background: w.card, border: `1px solid ${w.cardEdge}`, borderRadius: '4px' };
+  const crumbs = page.path.slice(1);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', position: 'relative', zIndex: 1, width: '100%' }}>
+
+      {/* Step 1 — what is being asked, and the page it is asked on */}
       <motion.div
         {...rise(0.15)}
         style={{
-          // A little past the pane's padding: these names are long, and any
-          // narrower the last one wraps to three lines.
-          width: 'calc(100% + 12px)', minWidth: 0, margin: '0 -6px', boxSizing: 'border-box',
-          background: w.window,
-          borderRadius: '8px',
-          border: `1px solid ${w.edge}`,
+          width: '188px',
+          backgroundColor: colors.mockBg,
+          borderRadius: '12px',
+          padding: '12px 12px 11px',
+          border: colors.mockBorder,
           boxShadow: colors.mockShadow,
-          overflow: 'hidden',
-          textAlign: 'left',
-          // The real page's face where it exists; elsewhere the card's own.
-          fontFamily: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          textAlign: 'center',
         }}
       >
-        {/* Title bar: back, the app's name, then minimise / maximise / close */}
-        <div aria-hidden style={{ height: '24px', display: 'flex', alignItems: 'center', paddingLeft: '9px', color: w.quiet }}>
-          <ArrowLeft size={9} strokeWidth={1.75} style={{ flexShrink: 0, marginRight: '7px' }} />
-          <span style={{ flex: 1, fontSize: '9px', fontWeight: 500, letterSpacing: '0.01em' }}>{app}</span>
-          {[Minus, Square, X].map((Glyph, i) => (
-            <span key={i} style={{ width: '22px', display: 'flex', justifyContent: 'center' }}>
-              <Glyph size={i === 1 ? 7 : 9} strokeWidth={1.5} />
-            </span>
-          ))}
+        <img src={nativelyIcon} alt="" aria-hidden style={{
+          width: '30px', height: '30px', borderRadius: '7px',
+          marginBottom: '7px', boxShadow: colors.mockIconShadow,
+        }} />
+
+        <div style={{
+          fontSize: '10.5px', fontWeight: 600, color: colors.mockTextPrimary,
+          lineHeight: 1.25, letterSpacing: '-0.005em', marginBottom: '8px',
+        }}>
+          Natively needs your microphone.
         </div>
 
-        <div style={{ padding: '3px 7px 8px' }}>
-          {/* The page's breadcrumb, which is its title on Windows */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '0 4px 9px', fontSize: '11px', fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-            {crumbs.map((crumb, i) => (
-              <React.Fragment key={crumb}>
-                {i > 0 && <ChevronRight size={10} strokeWidth={2} color={w.quiet} style={{ flexShrink: 0 }} />}
-                <span style={{ color: i === crumbs.length - 1 ? w.text : w.quiet }}>{crumb}</span>
-              </React.Fragment>
-            ))}
-          </div>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px',
+          maxWidth: '100%', boxSizing: 'border-box',
+          padding: '4px 9px', borderRadius: '6px',
+          background: colors.panelIconBg, border: colors.panelIconBorder,
+          fontSize: '9.5px', fontWeight: 500, color: colors.mockTextPrimary, whiteSpace: 'nowrap',
+        }}>
+          {crumbs.map((crumb, i) => (
+            <React.Fragment key={crumb}>
+              {i > 0 && <ChevronRight size={9} strokeWidth={2} style={{ flexShrink: 0, opacity: 0.5 }} />}
+              <span style={{ opacity: i === crumbs.length - 1 ? 1 : 0.6 }}>{crumb}</span>
+            </React.Fragment>
+          ))}
+        </div>
+      </motion.div>
 
-          <div style={card}>{setting(device, Mic)}</div>
+      {/* Connector */}
+      <div aria-hidden style={{ width: '1.5px', height: '14px', background: colors.connector, borderRadius: '1px' }} />
 
-          <div style={{ ...card, marginTop: '3px' }}>
-            {setting(apps, LayoutList)}
-            <div aria-hidden style={{ height: '1px', background: w.rule }} />
-            {setting(desktopApps, null)}
-          </div>
+      {/* Step 2 — the page's switch, already on */}
+      <motion.div
+        {...rise(0.25)}
+        title={page.switches[0]}
+        style={{
+          width: '188px',
+          backgroundColor: colors.panelBg,
+          borderRadius: '10px',
+          // A touch tighter than the macOS row: "Microphone access" is the
+          // longest label either guide has to fit beside a switch.
+          padding: '9px 10px',
+          border: colors.panelBorder,
+          boxShadow: colors.panelShadow,
+          display: 'flex', alignItems: 'center', gap: '8px',
+          textAlign: 'left',
+        }}
+      >
+        <div style={{
+          width: '22px', height: '22px', borderRadius: '5px', flexShrink: 0,
+          background: colors.panelIconBg, border: colors.panelIconBorder,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Mic size={12} strokeWidth={1.9} color={colors.panelText} style={{ opacity: 0.85 }} />
+        </div>
+        <span style={{ fontSize: '10.5px', fontWeight: 550, color: colors.panelText, flex: 1, minWidth: 0, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
+          {page.label}
+        </span>
+        {/* The macOS guide's switch, in the blue Windows gives one that is on. */}
+        <div aria-hidden style={{
+          width: '26px', height: '15px', borderRadius: '7.5px',
+          padding: '1.5px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          flexShrink: 0, boxSizing: 'border-box',
+          background: 'linear-gradient(160deg, #3D9BFF 0%, #007AFF 100%)',
+          boxShadow: '0 0 8px rgba(0,122,255,0.32)',
+        }}>
+          <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
         </div>
       </motion.div>
 
       <p style={{ fontSize: '10px', fontWeight: 500, color: t3, lineHeight: 1.4, margin: '6px 0 0', textAlign: 'center', opacity: 0.85, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-        All three switches on
+        Windows {page.path[0]}
       </p>
     </div>
   );

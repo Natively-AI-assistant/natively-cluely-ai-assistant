@@ -107,7 +107,11 @@ export function micSettingsUri(platform) {
  * unreadable is drawn as Windows 11, the current release.
  *
  * @param {string|number|undefined|null} platformVersion
- * @returns {{ release: '10'|'11', path: string[], switches: string[] }}
+ * `label` is the first switch's name in short, for a picture too small to
+ * carry Windows 10's "Microphone access for this device". It holds for both
+ * releases.
+ *
+ * @returns {{ release: '10'|'11', path: string[], switches: string[], label: string }}
  */
 export function windowsMicPage(platformVersion) {
   const major = Number.parseInt(String(platformVersion ?? ''), 10);
@@ -120,6 +124,7 @@ export function windowsMicPage(platformVersion) {
         'Allow apps to access your microphone',
         'Allow desktop apps to access your microphone',
       ],
+      label: 'Microphone access',
     };
   }
   return {
@@ -130,6 +135,7 @@ export function windowsMicPage(platformVersion) {
       'Let apps access your microphone',
       'Let desktop apps access your microphone',
     ],
+    label: 'Microphone access',
   };
 }
 
