@@ -38,8 +38,15 @@ const until = Date.now() + waitMs; let open = false;
 while (Date.now() < until) { if (probeOk()) { open = true; break; } await sleep(2 * 60000); }
 if (!open) { log('chain2 gave up: gpt-6-astra did not open within the wait; nothing was judged'); process.exit(3); }
 log('chain2 probe ok: gpt-6-astra is answering');
-const cal = run('calibration (astra)', [path.join(HERE, 'calibrate-er.mjs')]);
-if (cal.status !== 0) { log('calibration did not pass or the pool closed: stopping, nothing is judged with this judge'); process.exit(2); }
+// --calibrated: the gate already passed in THIS batch (the line is in the log); a restart does not spend it again.
+if (args.includes('--calibrated')) {
+  const passed = fs.readFileSync(LOG, 'utf8').split('\n').filter((l) => /end calibration \(astra\): exit 0/.test(l)).at(-1);
+  if (!passed || Date.now() - Date.parse(passed.slice(0, 24)) > 3 * 3600 * 1000) { log('--calibrated given but no passing calibration in the last 3 h: stopping'); process.exit(2); }
+  log(`calibration already passed in this batch (${passed.slice(0, 24)}): not repeated`);
+} else {
+  const cal = run('calibration (astra)', [path.join(HERE, 'calibrate-er.mjs')]);
+  if (cal.status !== 0) { log('calibration did not pass or the pool closed: stopping, nothing is judged with this judge'); process.exit(2); }
+}
 
 const J = path.join(HERE, 'judge-er.mjs'); const R = (r) => `evidence-rich/results/${r}`;
 const PAIR = ['er-dev-e13c', 'er-dev-e16b', 'er-dev2-e13c', 'er-dev2-e16b'];
@@ -58,7 +65,7 @@ const arm = (name) => () => {
   }
   return last;
 };
-const replayDone = () => ['e17-ctl', 'e17-conflict'].every((n) => fs.existsSync(path.join(ER, 'results', 'replay', `${n}.jsonl`)) && fs.readFileSync(path.join(ER, 'results', 'replay', `${n}.jsonl`), 'utf8').split('\n').filter(Boolean).length >= 600);
+const replayDone = () => ['e17-ctl', 'e17-conflict'].every((n) => fs.existsSync(path.join(ER, 'results', 'replay', `${n}.jsonl`)) && fs.readFileSync(path.join(ER, 'results', 'replay', `${n}.jsonl`), 'utf8').split('\n').filter(Boolean).length >= 472); // the claim pass ran on 472 of the 630 turns
 
 const steps = [
   ...PAIR.map((r) => judge(`E16b pair, profile modes: ${r}`, r, PI)),
