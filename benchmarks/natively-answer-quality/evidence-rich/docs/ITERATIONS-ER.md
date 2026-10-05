@@ -1532,3 +1532,19 @@ What the falls are, for the next attempt: LFW-013's draft was right and the clai
 number and come back" (replayed with E17's wording, the pass keeps the draft); TI-007 is an arithmetic slip in the
 draft; LFW-009 is a personal claim attached to a question the profile does not answer — the caveat recorded with E2
 (absent-fact questions get a nearby fact attached more often with whole documents in view).
+
+### E17 — first sample, result and verdict under Astra (2026-10-05 11:38 UTC; arms e17-ctl / e17-conflict on the drafts of er-dev-e13c + er-dev2-e13c; the 91 rows where the arms differ, both sides judged; 472 rows whose turn ran the pass)
+| # | Line | Measured | Holds |
+|---|---|---|---|
+| 1 | Edits that ADD "two ways" fall by at least 70 % | 8 → 1 | yes |
+| 2 | conflict_stale rows: effect ≥ control arm + 0.30; hard fails ≤ control arm | **+0.08** on 77 rows (the 17 that differ: 8.15 → 8.52); hard 3 → 3 | **no** |
+| 3 | All rows: effect ≥ control arm; hard fails ≤ control arm | +0.040 on 472 rows (the 91 that differ: 8.33 → 8.54); hard 15 → 10 | yes |
+| 4 | Rows flagged source_conflict_ignored / stale_source_preferred ≤ control arm + 1 | 2 → 2 | yes |
+| 5 | missing_evidence rows: effect ≥ control arm − 0.10 | +0.10 on 50 rows | yes |
+**Verdict by the rule: not kept** (line 2). Not built into the app.
+Beside the rule: the bar of line 2 was mine and asked for +0.30 averaged over all 77 conflict rows the pass ran on,
+which the 17 rows that differ could only reach by gaining 1.4 points each; they gained 0.37. In this replay the control
+arm adds "two ways" on 8 rows, where the app's own run added it on 12. No row with an unresolved conflict in its
+oracle is among the 91. Twice now (E6 v1, E17) the same idea has removed five hard fails and moved the mean by a few
+hundredths; whether a wording change with that profile is worth making is Evin's call, as recorded for E6.
+The second sample (the E16b drafts) is being judged and is reported when complete.
