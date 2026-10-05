@@ -55,7 +55,7 @@ it. See [`CONTRACT.md`](./CONTRACT.md) for the `/dom` + `/ws` + `/pair` API.
 | `storage` | Persist the pairing token (`chrome.storage.local`) and track the last-active tab (`chrome.storage.session`). |
 | `alarms` | A 25s heartbeat that keeps the MV3 service worker resident so it can receive the desktop's capture push. |
 | `host_permissions: http://127.0.0.1/*`, `http://localhost/*`, `ws://127.0.0.1/*` | Let the service worker make the cross-origin loopback `fetch`/WebSocket to the desktop. **Loopback only** — the extension cannot reach any public site's network. |
-| `optional_host_permissions` (coding/interview sites, plus broad `https://*/*` and `http://*/*` patterns) | Declared but **never granted at install**. Chrome only lets the extension request a site's access at runtime if it is declared here; each grant is one browser prompt from a user gesture (the coding-site batch, a single site, or **Allow on all sites** in the popup) and can be revoked under the extension's Details → Site access. Desktop-initiated capture (automatic, or the desktop hotkey) needs this access for the site; the popup's **Capture this page** works through `activeTab` without it. |
+| `optional_host_permissions` (coding/interview sites, plus broad `https://*/*` and `http://*/*` patterns) | Declared but **never granted at install**. Chrome only lets the extension request a site's access at runtime if it is declared here; each grant is one browser prompt from a click in the popup (**Capture this page** asks for the current site, **Allow on all sites** for every site) and can be revoked under the extension's Details → Site access. Desktop-initiated capture (automatic, or the desktop hotkey) needs this access for the site; the popup's **Capture this page** works through `activeTab` without it. |
 
 There is **no `<all_urls>`** and **no persistent content script**. Extraction
 code is injected via `chrome.scripting.executeScript` into the active tab only,
@@ -116,8 +116,8 @@ changes. You only re-pair if you click **Reset pairing** in Settings → Sync.
   hotkey, popup click, or other user action required for that request. The
   extension holds no access to coding sites after install (they are optional
   host permissions), so a fresh install captures nothing automatically until you
-  grant access: accept the browser prompt when Natively requests the coding
-  sites, or use **Allow on all sites** in the popup. If you decline, manual
+  grant access: click **Capture this page** in the popup on a coding site and
+  accept the browser prompt for it, or use **Allow on all sites**. If you decline, manual
   capture keeps working and automatic capture stays off. Turn the feature off in
   Natively **Settings → Sync → Smart Browser Context**, or use only the manual
   hotkey/popup capture above.
