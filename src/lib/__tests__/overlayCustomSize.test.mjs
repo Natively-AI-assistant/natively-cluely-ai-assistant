@@ -168,7 +168,7 @@ describe('overlayCustomSize', () => {
   });
 
   describe('collapsedWidthFor', () => {
-    test('the DEFAULT window width reproduces the historical 600 exactly', () => {
+    test('the DEFAULT window width reproduces the collapsed default exactly', () => {
       // This is the regression guard for "resizing changed the default look".
       assert.equal(
         collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH),
@@ -176,7 +176,7 @@ describe('overlayCustomSize', () => {
       );
     });
     test('scales proportionally so the side margin keeps its ratio', () => {
-      assert.equal(collapsedWidthFor(1200), 984);
+      assert.equal(collapsedWidthFor(1200), 1007);
     });
     test('converges on the window width for a very narrow overlay', () => {
       // Below the minimum window width the collapsed/expanded distinction is
@@ -381,8 +381,8 @@ describe('overlayCustomSize — controlled resize floors', () => {
       assert.equal(minWindowWidthFor(1920), OVERLAY_DEFAULT_WINDOW_WIDTH);
       assert.equal(minWindowWidthFor(3840), OVERLAY_DEFAULT_WINDOW_WIDTH);
     });
-    test('a collapsed panel at the floor is never narrower than 600', () => {
-      // The user-facing half of the rule: window ≥ 732 ⟺ collapsed panel ≥ 600.
+    test('a collapsed panel at the floor is never narrower than the collapsed default', () => {
+      // The user-facing half of the rule: window ≥ 732 ⟺ collapsed panel ≥ its default.
       assert.equal(collapsedWidthFor(minWindowWidthFor(1470)), OVERLAY_DEFAULT_COLLAPSED_WIDTH);
     });
     test('a display too small for the default cannot produce a floor above its own ceiling', () => {
@@ -650,7 +650,10 @@ describe('overlayCustomSize — smooth resize envelope', () => {
   describe('panelWidthFloorFor', () => {
     test('empty state floors the PANEL at its collapsed default', () => {
       assert.equal(panelWidthFloorFor({ hasContent: false, startWidth: 600 }), 600);
-      assert.equal(panelWidthFloorFor({ hasContent: false, startWidth: 900 }), 600);
+      assert.equal(
+        panelWidthFloorFor({ hasContent: false, startWidth: 900 }),
+        OVERLAY_DEFAULT_COLLAPSED_WIDTH,
+      );
     });
     test('with content the panel floors at its expanded default', () => {
       assert.equal(panelWidthFloorFor({ hasContent: true, startWidth: 900 }), 732);

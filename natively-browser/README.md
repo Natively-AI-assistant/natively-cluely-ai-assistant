@@ -106,15 +106,20 @@ changes. You only re-pair if you click **Reset pairing** in Settings → Sync.
   isn't reachable, the desktop takes a screenshot instead.
 - **From the popup:** click the toolbar icon → **Capture this page** (works while
   Chrome is focused).
-- **Automatic (default on):** when the desktop's **Smart Browser Context**
-  settings have **Auto-detect coding problems** and **Auto-attach coding
-  context** enabled (`electron/services/SettingsManager.ts`'s
-  `getBrowserContextSettings()` — both default `true`), the desktop asks the
-  extension for the active tab's content before answering, on a page it
-  classifies as a coding/interview problem — no hotkey, popup click, or other
-  user action required for that request. Turn this off in Natively
-  **Settings → Sync → Smart Browser Context**, or use only the manual hotkey/
-  popup capture above.
+- **Automatic (setting on by default, needs site access):** when the desktop's
+  **Smart Browser Context** settings have **Auto-detect coding problems** and
+  **Auto-attach coding context** enabled
+  (`electron/services/SettingsManager.ts`'s `getBrowserContextSettings()` — both
+  default `true`), the desktop asks the extension for the active tab's content
+  before answering, on a page it classifies as a coding/interview problem — no
+  hotkey, popup click, or other user action required for that request. The
+  extension holds no access to coding sites after install (they are optional
+  host permissions), so a fresh install captures nothing automatically until you
+  grant access: accept the browser prompt when Natively requests the coding
+  sites, or use **Allow on all sites** in the popup. If you decline, manual
+  capture keeps working and automatic capture stays off. Turn the feature off in
+  Natively **Settings → Sync → Smart Browser Context**, or use only the manual
+  hotkey/popup capture above.
 
 Each capture pushes **once**. The desktop shows a "Captured: \<title\>" chip and
 consumes it on the next "What to say".

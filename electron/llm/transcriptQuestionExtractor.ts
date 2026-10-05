@@ -189,8 +189,19 @@ export function toCandidateFraming(question: string): string {
     // route a self-introduction. Rewriting "yourself"→"myself" there ("introduce
     // myself") breaks intro detection and the name never grounds. Detect and
     // keep these, rewriting only the rest.
-    const INTRO_IDIOM = /\b(introduce yourself|tell me about yourself|describe yourself|about yourself)\b/i;
-    if (INTRO_IDIOM.test(question)) {
+    //
+    // Every second-person INTRO_PATTERN has to be here (premium
+    // IntentClassifier; drift guard in IntroFramingKeepsIntro2026_09_27). Live
+    // 2026-09-27, looking for work: "walk me through your background" became
+    // "walk me through my background", classified GENERAL instead of INTRO, and
+    // the answer was built from two arbitrary résumé nodes — "most recently I
+    // was at Shiplane" for a candidate whose current job is Ledgerly, and an
+    // invented earlier employer. 7 of 24 intro patterns broke this way.
+    // "what do you do" / "who are you" also open ordinary questions ("what do
+    // you do when a deploy fails?"), so they are kept only as the WHOLE ask.
+    const INTRO_IDIOM = /\b(introduce yourself|introducing yourself|tell me about yourself|describe yourself|about yourself|introduction of yourself|introduction of who you are|walk me through your background|give me your introduction)\b/i;
+    const INTRO_WHOLE_ASK = /\b(what do you do(\s+(now|currently|today|these days|for (a )?(living|work)))?|who are you)\s*[?.!]*\s*$/i;
+    if (INTRO_IDIOM.test(question) || INTRO_WHOLE_ASK.test(question)) {
         // Leave the question essentially as-is — it's already a candidate-
         // directed intro request the orchestrator understands.
         return question;

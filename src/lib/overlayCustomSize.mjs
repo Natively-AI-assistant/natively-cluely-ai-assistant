@@ -79,8 +79,20 @@ export const OVERLAY_PANEL_INSET = 6;
  * already swallowed clicks. The band is now 2px, on all four sides.
  */
 export const OVERLAY_HOVER_GATE_PAD = 2;
-/** The panel's collapsed width at the DEFAULT window width. */
-export const OVERLAY_DEFAULT_COLLAPSED_WIDTH = 600;
+/**
+ * The panel's collapsed width at the DEFAULT window width, in the window-era
+ * units collapsedWidthFor scales by (see defaultCollapsedPanelWidth for the
+ * panel the user sees: 604 at the default window).
+ *
+ * 614, not the historical 600 (2026-09-27): with Interview Mode on, Recap
+ * becomes Brainstorm, and English's quick-action row needs a 598px panel with
+ * Inter (603px on the system fallback font), the card's 1px borders included.
+ * At 590 the Answer chip wrapped onto a second line.
+ *
+ * This is the FLOOR. The panel grows past it only where the measured row
+ * needs more (other languages, the fallback font) — collapsedWidthForRow.
+ */
+export const OVERLAY_DEFAULT_COLLAPSED_WIDTH = 614;
 /** Floor for a user-chosen width — below this the footer chrome cannot lay out. */
 export const OVERLAY_MIN_WINDOW_WIDTH = 360;
 /**
@@ -331,10 +343,10 @@ export function resizeEnvelopeFor(params) {
 
 /**
  * The narrowest the PANEL may be dragged — its default for the current state,
- * stated in the panel widths the user actually sees: 600 collapsed with nothing
- * asked, 732 expanded once there is content. Never above where the drag starts:
- * text-only content leaves the panel collapsed at 600, and a 732 floor there
- * would leap it 132px on the first move (see the jump guard in
+ * stated in the panel widths the user actually sees: the collapsed default with
+ * nothing asked, 732 expanded once there is content. Never above where the drag
+ * starts: text-only content leaves the panel collapsed, and a 732 floor there
+ * would leap it on the first move (see the jump guard in
  * computeResizeFrame for the height-side twin of this rule).
  */
 export function panelWidthFloorFor({ hasContent, startWidth }) {
@@ -407,14 +419,12 @@ function clampPinnedAxis(value, lo, hi) {
 /**
  * The panel's COLLAPSED width for a given window width.
  *
- * Scaled proportionally rather than pinned at the historical 600, so the
- * transparent side margin keeps the same ratio the hover gate and the aux
- * window anchor were tuned for. A user who widens the overlay to 1200 gets a
- * proportionally wider collapsed panel (984) rather than a 600px panel adrift
- * in 300px of dead margin on each side.
+ * Scaled proportionally rather than pinned at one width, so the transparent
+ * side margin keeps its ratio. A user who widens the overlay to 1200 gets a
+ * proportionally wider collapsed panel (1007) rather than a narrow panel adrift
+ * in dead margin on each side.
  *
- * At the default 732 this returns exactly 600, so the default path is
- * bit-identical to the pre-resize behaviour.
+ * At the default 732 this returns exactly OVERLAY_DEFAULT_COLLAPSED_WIDTH.
  */
 export function collapsedWidthFor(windowWidth) {
   const ratio = OVERLAY_DEFAULT_COLLAPSED_WIDTH / OVERLAY_DEFAULT_WINDOW_WIDTH;
@@ -423,6 +433,32 @@ export function collapsedWidthFor(windowWidth) {
     Math.min(OVERLAY_MIN_WINDOW_WIDTH, windowWidth),
     windowWidth,
   );
+}
+
+/**
+ * Spare px kept beyond the measured quick-action row. The row's width is read
+ * from layout, so this only has to absorb sub-pixel rounding, not guesswork.
+ */
+export const QUICK_ROW_SLACK = 1;
+
+/**
+ * The collapsed panel width that keeps the quick-action row on one line.
+ *
+ * `collapsed` is the default (collapsedWidthFor), `expanded` the panel's
+ * expanded width, `rowNeed` the row's measured single-line width, card
+ * chrome included (0 = not measured yet). The result is never below the
+ * default and never above the expanded width: a language whose labels need
+ * more than the expanded panel still wraps there, as it would when expanded.
+ *
+ * Why measured and not a constant (2026-09-27): Interview Mode swaps Recap for
+ * Brainstorm, and the translations differ by 60px (English needs a 596px
+ * panel, Russian 656px). One constant either wraps the long languages or
+ * leaves the short ones wider than they need. Measuring also covers the
+ * system fallback font, which is several px wider than Inter.
+ */
+export function collapsedWidthForRow(collapsed, expanded, rowNeed) {
+  if (!(rowNeed > 0)) return collapsed;
+  return Math.min(expanded, Math.max(collapsed, Math.ceil(rowNeed + QUICK_ROW_SLACK)));
 }
 
 /**

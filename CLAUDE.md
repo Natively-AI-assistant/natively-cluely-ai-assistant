@@ -540,6 +540,22 @@ Then, from the worktree root:
   agent-browser network requests
 Re-snapshot after every UI change; refs go stale.
 
+Every window loads the same entry with a different `?window=`, and the names are
+misleading. `?window=settings` is SettingsPopup, the small quick-toggles panel
+(Detectable / Fast Response / Transcript) - it is NOT the Settings panel. The
+Settings panel lives in the LAUNCHER window, and `settings:open-tab` messages the
+launcher rather than opening the settings window. To reach a settings tab:
+  agent-browser tab <launcher target>
+  agent-browser eval "window.electronAPI.openSettingsTab('ai-providers')"
+Tab ids are SETTINGS_NAV_ORDER in src/components/SettingsOverlay.tsx (general,
+plans, ai-providers, retrieval, audio, calendar, skills, keybinds, phone-mirror,
+intelligence, help, about).
+Confirm which document you are on with `agent-browser eval "location.search"`
+before trusting a snapshot. A snapshot of the wrong window looks like a broken
+or empty UI, not like a wrong target.
+After the app exits, agent-browser.json still holds the dead port: "All CDP
+discovery methods failed" means the app is gone, not that the harness broke.
+
 Never use --auto-connect. Stop the app through the launcher, not agent-browser close.
 Never enable the debugging port in packaged builds.
 

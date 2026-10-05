@@ -48,7 +48,7 @@ test('ModeHybridRetriever (round-8): enforceTokenBudget applies a per-section CA
   // With siblings surviving dedup, a section-cap prevents one section from
   // monopolising top-K while still admitting the answer-bearing siblings.
   assert.match(hybridSrc, /SECTION_CAP/);
-  assert.match(hybridSrc, /enforceTokenBudget\(candidates: ChunkCandidate\[\], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K, guaranteePerFile = false, forceDocumentGrounding = false\)/);
+  assert.match(hybridSrc, /enforceTokenBudget\(candidates: ChunkCandidate\[\], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K, guaranteePerFile = false, forceDocumentGrounding = false(, perItemOverheadTokens = 0)?\)/);
 });
 
 test('ModeHybridRetriever: dedup key falls back to per-chunk (not per-file) when no section prefix exists', () => {

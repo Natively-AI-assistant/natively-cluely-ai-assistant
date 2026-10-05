@@ -1,6 +1,9 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
 import "./index.css"
+import { THEME_CACHE_KEY, applyResolvedTheme } from "./lib/themeTransition.mjs"
+import { createSwitchableTooltipGuard, installNativeTooltipGuard, shouldSuppressNativeTooltips } from "./lib/nativeTooltipGuard.mjs"
+import { wireStealthTooltips } from "./lib/stealthTooltips.mjs"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
 // Surface uncaught errors and unhandled promise rejections through console.error
@@ -25,7 +28,6 @@ window.addEventListener('unhandledrejection', (event) => {
 // eslint-disable-next-line no-console
 console.log('[renderer] main.tsx evaluating');
 
-const THEME_CACHE_KEY = 'natively_resolved_theme';
 const launcherIsolation = new URLSearchParams(window.location.search).get('isolate');
 
 if (launcherIsolation === 'shell') {
@@ -50,6 +52,34 @@ document.documentElement.setAttribute(
   new URLSearchParams(window.location.search).get('window') || 'launcher'
 );
 
+// The overlay family never shows a native tooltip: it is a separate OS window
+// outside the overlay's content protection, so it appears in screen shares.
+// Installed before React mounts so no title survives the first commit.
+// The launcher is capture-protected only in Undetectable mode, so it keeps its
+// hover hints otherwise and strips them only while the mode is on.
+const tooltipWindow = new URLSearchParams(window.location.search).get('window') || 'launcher';
+if (shouldSuppressNativeTooltips(tooltipWindow)) {
+  installNativeTooltipGuard(document.documentElement);
+} else if (tooltipWindow === 'launcher') {
+  const launcherTooltipGuard = createSwitchableTooltipGuard(document.documentElement);
+  // A change event is newer than the initial read, so a late read loses.
+  let undetectableEventSeen = false;
+  window.electronAPI?.onUndetectableChanged?.((state) => {
+    undetectableEventSeen = true;
+    launcherTooltipGuard.setActive(state);
+  });
+  window.electronAPI?.getUndetectable?.()
+    .then((state) => { if (!undetectableEventSeen) launcherTooltipGuard.setActive(state); })
+    .catch(() => {});
+}
+
+// Custom (.t-tt) tooltips are in-DOM, so content protection already hides them
+// from captures — but while undetectable nothing hover-revealed should render
+// at all, in ANY window (overlay included: both overlay and meeting are usable
+// mid-session, so no hint is worth even residual risk). Unlike the native
+// guard above this is stealth-driven for every window, not per-route.
+wireStealthTooltips(document.documentElement, window.electronAPI);
+
 // Step 1: Apply cached theme synchronously — before React renders.
 // This ensures useResolvedTheme()'s initial useState read sees the correct value.
 const cachedTheme = localStorage.getItem(THEME_CACHE_KEY) as 'light' | 'dark' | null;
@@ -57,14 +87,14 @@ document.documentElement.setAttribute('data-theme', cachedTheme ?? 'dark');
 
 // Step 2: Confirm/correct from main process (authoritative) and keep cache in sync.
 if (window.electronAPI?.getThemeMode) {
+  // The authoritative re-read is a correction to first paint, not a change the
+  // user made — it snaps. Only a change event dissolves.
   window.electronAPI.getThemeMode().then(({ resolved }) => {
-    document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
+    applyResolvedTheme(resolved, { animate: false });
   }).catch(() => {});
 
   window.electronAPI?.onThemeChanged?.(({ resolved }) => {
-    document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
+    applyResolvedTheme(resolved);
   });
 }
 

@@ -1,0 +1,307 @@
+{
+  "mode": "general",
+  "partition": "supp-quant",
+  "contexts": [
+    {
+      "id": "SQGEN-CTX-1",
+      "kind": "grounded",
+      "title": "Harbor Loft Climbing membership terms and fees",
+      "file_name": "harbor-loft-membership-terms.txt",
+      "text": "HARBOR LOFT CLIMBING - MEMBERSHIP TERMS AND FEES\nEffective 1 March 2026. Applies to both Harbor Loft locations (Quayside and Millrace).\n\n1. Monthly memberships\n- Standard (all hours): $64 per month.\n- Off-Peak (weekdays before 4 pm, weekends after 6 pm): $46 per month.\n- Student (valid student ID, all hours): $52 per month.\nDues are billed on the 1st of each month. New members pay a one-time $25 joining fee, waived during promotional weeks.\n\n2. Annual prepay\nPay 12 months up front and receive 10% off the monthly rate for your plan. Annual prepay is non-refundable after the first 14 days.\n\n3. Freezing your membership\nMembers may freeze for one to three full calendar months in any 12-month period. A frozen month is billed a $12 freeze fee on the 1st of that month instead of your normal dues. Each freeze request also carries a one-time $10 setup fee, charged when the freeze is booked. Freezes must be requested by the 25th of the month before the first frozen month; late requests start the following month. Medical freezes with a doctor's note have no setup fee.\n\n4. Cancelling\nGive 30 days' written notice through the member portal or at the front desk. Your final month's dues are charged as normal. Cancelling during a freeze ends the freeze on the cancellation date.\n\n5. Guest passes\nDay pass for non-members: $18 on weekdays, $22 on Saturdays, Sundays and public holidays. Member-accompanied guests pay $14 any day (limit two guests per visit). A 5-visit punch card costs $80 and never expires. All guests sign a waiver and watch the 6-minute safety video before climbing.\n\n6. Rentals\nShoes $6, harness $5, chalk bag $3, or all three for $11 per visit. Day lockers are free; overnight locker hire is $15 per month.\n\n7. Classes\nIntro to Bouldering (90 minutes): $38. Lead climbing course (three sessions): $165, members $140. Youth squad terms are priced separately; ask the front desk.\n\n8. Payment problems\nIf a dues payment fails we retry after 3 days. A second failure adds an $8 admin fee and suspends check-in until the balance is cleared.\n\nQuestions: members@harborloft.example or the front desk at either location.",
+      "notes": "SQGEN-005: Standard member froze June+July, booked in early May (before the 25th cut-off), charged 86. Policy: 2 x $12 + $10 setup = $34. 86 = one month at full Standard dues ($64) + one $12 freeze month + $10 setup, which only happens for a LATE request; she booked in time, so the charge does not reconcile (overcharge $52). The 'late requests start the following month' clause is a tempting but factually excluded justification. SQGEN-006: non-member Saturday day pass is $22; $18 (weekday) and $14 (member-accompanied) are neighbouring-row traps."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SQGEN-001",
+      "category": "personal_conversation",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "So who owes who, and how much? I'll just send it tonight.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Okay, let me get Saturday straight before I forget. I got both festival tickets, that was ninety-four total."
+        },
+        {
+          "speaker": "user",
+          "text": "Right. And I paid the parking, eighteen, and lunch was on me too, sixty-two something. Sixty-two forty, I think."
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah. And I bought that ice cream later, eleven bucks, but that was just mine, don't count it."
+        },
+        {
+          "speaker": "user",
+          "text": "Fair. The cab home was me as well, thirty-one."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "settle_up",
+        "who_owes_whom",
+        "spoken_numbers"
+      ],
+      "expected_answer_type": "direction and exact amount of the settle-up, speakable",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "ninety-four total",
+        "sixty-two forty",
+        "eleven bucks"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQGEN-002",
+      "category": "planning",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "So what do you and Rafa each owe me for the cabin?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Cabin's all paid, by the way. Seven hundred twenty for the four nights, it's on my card."
+        },
+        {
+          "speaker": "user",
+          "text": "Perfect. And Rafa only made it up for the last two nights, yeah?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah, he drove up Friday. You and I were there all four."
+        },
+        {
+          "speaker": "user",
+          "text": "Then let's do what we said, one flat rate per person per night, so everyone pays for the nights they actually stayed."
+        },
+        {
+          "speaker": "other",
+          "text": "Works for me. Groceries were even, so forget those."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "settle_up",
+        "uneven_split"
+      ],
+      "expected_answer_type": "two amounts owed, speakable",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "seven hundred twenty",
+        "last two nights",
+        "per person per night"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQGEN-003",
+      "category": "planning",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Work out who sends what to whom so we are all even, with the fewest transfers.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Theo here. For Maren's birthday I put the restaurant on my card, two sixty-four with tip."
+        },
+        {
+          "speaker": "other",
+          "text": "Priya. I got the gift, ninety-six."
+        },
+        {
+          "speaker": "user",
+          "text": "I did the cake, forty-eight, and the balloons and decorations, twenty-four."
+        },
+        {
+          "speaker": "other",
+          "text": "Jonah. I haven't paid for anything yet, so I'm the one catching up."
+        },
+        {
+          "speaker": "other",
+          "text": "And Maren's not paying for her own birthday, obviously. It's just the four of us splitting everything."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "settle_up",
+        "who_owes_whom",
+        "four_way",
+        "spoken_numbers"
+      ],
+      "expected_answer_type": "list of named transfers with amounts",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "two sixty-four",
+        "ninety-six",
+        "forty-eight"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQGEN-004",
+      "category": "decision_support",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Okay, this jacket's two forty, it's twenty percent off, and they're doing an extra fifteen percent off at the register today. So that's thirty-five percent off, like a hundred fifty-six, right?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "percent",
+        "discount_stacking",
+        "false_premise"
+      ],
+      "expected_answer_type": "quick correction with the actual price",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQGEN-005",
+      "category": "advice_request",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So I froze my membership for June and July, booked it in the app back in early May, and they took eighty-six dollars for the freeze. I'm on standard. That's just what freezing costs, isn't it?",
+      "context_condition": "grounded",
+      "context_ref": "SQGEN-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "discrepancy",
+        "policy",
+        "billing_dispute"
+      ],
+      "expected_answer_type": "check of the charge against the fee terms",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$12 freeze fee",
+        "one-time $10 setup fee",
+        "by the 25th"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQGEN-006",
+      "category": "factual_question",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "How much is a day pass for a non-member on Saturday if she's climbing on her own?",
+      "context_condition": "grounded",
+      "context_ref": "SQGEN-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "lookup"
+      ],
+      "expected_answer_type": "single price from the fee sheet",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$22 on Saturdays"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQGEN-007",
+      "category": "planning",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Fuel cost for the whole trip, and per person?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "So the drive's about five seventy each way... no wait, eleven forty total, that's the round trip."
+        },
+        {
+          "speaker": "user",
+          "text": "Round trip, yeah. My hatchback does about six point eight litres per hundred."
+        },
+        {
+          "speaker": "other",
+          "text": "And fuel's around one ninety-two a litre here, give or take."
+        },
+        {
+          "speaker": "other",
+          "text": "There's four of us going. Kasia said she'll cover the tolls herself, so leave those out."
+        }
+      ],
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "rate",
+        "spoken_numbers",
+        "chain"
+      ],
+      "expected_answer_type": "trip total and per-person share",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "eleven forty total",
+        "six point eight",
+        "one ninety-two a litre"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQGEN-008",
+      "category": "follow_up",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "What if we take Oskar's SUV instead? It does nine and a half per hundred.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "arithmetic",
+        "rate",
+        "follow_up",
+        "chain",
+        "changed_quantity"
+      ],
+      "expected_answer_type": "recomputed total and per-person share",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "nine and a half per hundred",
+        "eleven forty total"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

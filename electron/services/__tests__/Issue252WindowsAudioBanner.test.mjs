@@ -118,8 +118,11 @@ test('issue #252: Open Settings button does not unconditionally fire x-apple.sys
   // The banner JSX must include a JSX-level conditional keyed on the
   // warning kind so that the audio-capture-failure case renders an
   // in-app settings action instead of the macOS URL.
+  // The block runs to the end of its own fold. It used to be bounded by the
+  // next dismiss ✕ in the file, which belonged to the hand-rolled STT banner
+  // below it; that banner now draws its ✕ inside OverlayBanner.
   const bannerJsx = ui.match(
-    /\{systemAudioWarning && \([\s\S]*?<X className="w-3 h-3" \/>/
+    /\{systemAudioWarning && \([\s\S]*?<\/ChromeFold>/
   );
   assert.ok(bannerJsx, 'banner JSX block should be present');
   assert.match(

@@ -199,11 +199,11 @@ describe('employment-phrased questions about the JOB (owner decision 2026-09-20:
   });
 });
 
-test('the derived salary estimate states that a figure in the job description takes precedence', async () => {
+test('the derived salary estimate is not rendered as evidence at all (2026-09-30)', async () => {
+  // Superseded: this used to check the estimate's "the JD figure takes
+  // precedence" disclaimer. The estimate is no longer served, so a JD's stated
+  // pay has nothing to compete with.
   const { renderProfileSections } = await load('retrieval/profile-retrieval-port.js');
   const sections = renderProfileSections('fact', { salary_estimate: { min: 158000, max: 183000, currency: 'EUR', confidence: 'medium', role: 'Principal Engineer', location: 'Rotterdam' } });
-  const est = sections.find((x) => x.boostKey === 'derived_salary');
-  assert.ok(est, JSON.stringify(sections.map((x) => x.boostKey)));
-  assert.match(est.text, /DERIVED ESTIMATE/);
-  assert.match(est.text, /PRECEDENCE: if the job description states a salary[^.]*THAT is what the position pays/);
+  assert.deepEqual(sections, []);
 });

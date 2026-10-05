@@ -71,7 +71,59 @@ describe('the rule is applied everywhere, identically', () => {
       /const isModelEnabled = \(provider: string, modelId: string\) =>\s*\n?\s*isModelAllowed\(provider, modelId, cloudEnabledModels\[provider\] \|\| \[\]\)/,
       'settings must not re-implement the contract',
     );
-    assert.match(selector, /isModelAllowed\(family, m\.id, allowLists\[family\] \|\| \[\]\)/, 'the overlay must gate on it too');
+    assert.match(selector, /isModelAllowed\(family, allowId, allowLists\[family\] \|\| \[\]\)/, 'the overlay must gate on it too');
+  });
+
+  test('the bare Codex entry is allowed exactly when the Codex default is — picker, overlay and routing agree', () => {
+    // The Codex card's model list (2026-09-26) stores `codex-cli:<model>` ids;
+    // the bare `codex-cli` entry runs the Codex default and is never itself in
+    // the list. Each surface must map it to that default, and ONLY it: mapping
+    // any other id would let an un-ticked model through.
+    assert.match(
+      selector,
+      /const allowId = m\.id === CODEX_CLI_MODEL\.id && codexCliConfig\?\.model\s*\?\s*codexCliSelectorId\(codexCliConfig\.model\) : m\.id;/,
+      'the overlay must map only the bare Codex id to its default model',
+    );
+    assert.match(
+      settings,
+      /if \(isModelEnabled\('codex-cli', codexCliSelectorId\(codexCliConfig\.model\)\)\) \{\s*opts\.push\(\{ id: CODEX_CLI_MODEL\.id/,
+      'settings must list the bare Codex entry only when the Codex default is ticked',
+    );
+    assert.match(
+      settings,
+      /if \(isModelEnabled\('codex-cli', id\) && !opts\.find/,
+      'settings must gate each Codex model by the allow-list, like every cloud card',
+    );
+    const fn = ipc.slice(ipc.indexOf('const modelAvailable ='));
+    assert.match(
+      fn,
+      /const allowListId = modelId === 'codex-cli' \? `codex-cli:\$\{codexConfig\.model\}` : modelId;/,
+      'routing must map only the bare Codex id to its default model',
+    );
+    // Fast Response's own copy (LLMHelper.fastModelAllowed): same opt-in set,
+    // same bare-Codex mapping, or a Background Model the picker hides would
+    // still answer (or a ticked one would not).
+    const llm = fs.readFileSync(path.join(root, 'electron/LLMHelper.ts'), 'utf8');
+    const fast = llm.slice(llm.indexOf('private fastModelAllowed('), llm.indexOf('private fastModelAllowed(') + 1200);
+    assert.match(fast, /listFamily === 'litellm' \|\| listFamily === 'openrouter' \|\| listFamily === 'ninerouter'/,
+      'Fast Response must treat the same gateways as opt-in');
+    assert.match(fast, /modelId === 'codex-cli' \? `codex-cli:\$\{this\.codexCliConfig\.model\}` : modelId/,
+      'Fast Response must map only the bare Codex id to its default model');
+    // Un-ticking the ACTIVE Codex model makes it unavailable, and the write
+    // handler repairs the default at once. Before the Codex list existed that
+    // was unreachable; now the repair must stay on Codex before the ladder
+    // reaches Natively / Gemini / any other key.
+    const repair = ipc.slice(ipc.indexOf('const refreshRuntimeDefaultIfUnavailable ='));
+    assert.match(
+      repair,
+      /const codexFallback = defaultModel\.startsWith\('codex-cli'\)[\s\S]{0,200}?\.find\(modelAvailable\)/,
+      'the Codex fallback must be chosen through modelAvailable(), so it honours the allow-list',
+    );
+    assert.match(
+      repair,
+      /antigravityFallback \? antigravityFallback\s*: codexFallback \? codexFallback\s*: modelAvailable\('natively'\)/,
+      'the Codex rung must run before the cross-provider ladder',
+    );
   });
 
   test('DRIFT GUARD: routing mirrors the opt-in carve-out', () => {
@@ -86,7 +138,7 @@ describe('the rule is applied everywhere, identically', () => {
     assert.match(fn, /const optInFamily = [^;]*family === 'openrouter'/, 'openrouter must be opt-in in routing too');
     assert.match(
       fn,
-      /if \(optInFamily\) \{\s*if \(!enabledForFamily\.includes\(modelId\)\) return false;\s*\} else if \(enabledForFamily\.length > 0/,
+      /if \(optInFamily\) \{\s*if \(!enabledForFamily\.includes\(allowListId\)\) return false;\s*\} else if \(enabledForFamily\.length > 0/,
       'opt-in families must reject an empty allow-list; the others must still treat it as "no filter"',
     );
   });

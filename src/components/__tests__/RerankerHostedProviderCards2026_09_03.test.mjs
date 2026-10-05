@@ -54,7 +54,11 @@ test('the main process advertises more than one hosted provider', () => {
 test('the panel renders one card per DISCOVERED provider, not per literal', () => {
   // The substance: cards come from the list, so a provider added to the table
   // gets a card without touching this file.
-  assert.match(panel, /hostedProviders\.map\(/,
+  // The cards map a FILTERED list (Natively has its own card), so allow one
+  // `.filter(…)` between the list and `.map(`. The old /hostedProviders\.map\(/
+  // never matched the cards: it passed on the fallback sentence's list of
+  // provider names, and it failed when that sentence stopped naming providers.
+  assert.match(panel, /hostedProviders(?:\.filter\([^)]*\))?\.map\(p =>/,
     'the hosted cards must be mapped from the discovered provider list');
   // And the old hardcoded mark must be gone. `provider="openrouter"` as a JSX
   // literal is exactly what pinned the panel to one provider.

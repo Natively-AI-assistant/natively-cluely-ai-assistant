@@ -314,10 +314,19 @@ const api = new Proxy(stub as Record<string, unknown>, {
 // window.electronAPI during mount effects.
 const { default: Launcher } = await import('../components/Launcher');
 
+// Drives the Launcher's `request` prop the way App does for Settings › About:
+// window.__launcherRequest({ kind: 'search' }) or ({ kind: 'meeting', id: 'm2' }).
+type LauncherRequestInput = { kind: 'search' } | { kind: 'meeting'; id: string };
+
 function Preview() {
+    const [request, setRequest] = React.useState<(LauncherRequestInput & { seq: number }) | null>(null);
+    React.useEffect(() => {
+        (window as any).__launcherRequest = (r: LauncherRequestInput) => setRequest({ ...r, seq: Date.now() });
+    }, []);
     return (
         <div className="h-screen w-screen overflow-hidden">
             <Launcher
+                request={request}
                 onStartMeeting={() => {}}
                 onOpenSettings={() => {}}
                 onOpenProfile={() => {}}

@@ -48,6 +48,11 @@ import type { ActiveModeInfo } from './modeProfiles';
  * current live reads (backward compatible).
  */
 export interface WhatToAnswerRequestSnapshot {
+  /** The system-design diagram decision for this turn (diagramPromptSignals.ts),
+   *  resolved once by the engine and frozen here so the non-V3 prompt assembly
+   *  in WhatToAnswerLLM carries the SAME contract and the same design-on-the-
+   *  table block the V3 persona/composer were given. Absent on ordinary turns. */
+  readonly diagramTurn?: import('./diagramPromptSignals').DiagramTurn;
   /** The active mode INFO captured at t0 (the planner's routing prior). Null when
    *  no mode is active or ModesManager was unavailable — same semantics as a live
    *  getActiveModeInfo() returning null (mode-blind). */

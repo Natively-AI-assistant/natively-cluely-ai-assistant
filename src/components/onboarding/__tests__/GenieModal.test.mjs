@@ -2,9 +2,10 @@
  * GenieModal.test.mjs
  *
  * Every launcher popup (Settings, the Modes / Profile Intelligence manager,
- * Update, Review, the trial and support cards, and the notices in the
- * bottom-right corner) opens and closes with the same macOS genie as the
- * browser-extension toaster, through GenieModal.
+ * Update, Review, the trial and support cards) opens and closes with the same
+ * macOS genie as the browser-extension toaster, through GenieModal. The
+ * notices in the bottom-right corner go through GenieModal too, but slide in
+ * from the window's right edge instead (2026-10-04; the last section here).
  *
  *   1. The presence latch (geniePresence.mjs) and the compositor track
  *      (genieMotion.mjs) are pure, so they are EXECUTED here, not read.
@@ -293,7 +294,9 @@ const POPUPS = {
   'components/trial/FreeTrialModal.tsx': 'Trial ended',
   'components/NativelyQuotaBanner.tsx': 'Quota notice',
   'components/HindsightStatusBanner.tsx': 'Long-term memory notice',
-  'components/ProviderChangeNotice.tsx': 'Provider change / re-index notice',
+  // ProviderChangeNotice left the genie on 2026-09-25 by request: it slides in
+  // from the window's right edge like a macOS notification banner instead
+  // (pinned in EmbeddingDegradationSurfaced2026_08_14.test.mjs).
 };
 
 for (const [file, name] of Object.entries(POPUPS)) {
@@ -505,10 +508,9 @@ test('the corner notices go through GenieModal as notices, and stay mounted so t
     'the floating card is decided before the early returns');
   assert.ok(floating.includes("cardProps={{ role: 'status', 'aria-live': 'polite', 'data-genie-view': view }}"), 'still announced politely');
   const app = code('App.tsx');
-  const notice = code('components/ProviderChangeNotice.tsx');
-  assert.ok(/<ProviderChangeNotice\s+open=\{isDefault && \(!!incompatibleWarning \|\| !!reindexShown\)\}\s+warning=\{incompatibleWarning\}\s+progress=\{reindexShown\}/.test(app),
-    'warning and re-index are one card');
-  for (const [src, where] of [[quota, 'quota'], [floating, 'hindsight'], [notice, 'provider change']]) {
+  assert.ok(/<ProviderChangeNotice\s+open=\{isDefault && \(!!incompatibleWarning \|\| !!reindexShown \|\| !!embeddingNotice\)\}\s+warning=\{incompatibleWarning\}\s+progress=\{reindexShown\}\s+degraded=\{embeddingNotice\}/.test(app),
+    'warning, re-index and degraded search are one card');
+  for (const [src, where] of [[quota, 'quota'], [floating, 'hindsight']]) {
     assert.ok(src.includes('modal={false}') && src.includes('placement="bottom-right"'), `${where}: a notice in the corner`);
   }
   assert.ok(!/<AnimatePresence>\s*\{(incompatibleWarning|reindexProgress) && isDefault/.test(app), 'no framer entrance left for either');
@@ -521,18 +523,20 @@ test('the corner notices go through GenieModal as notices, and stay mounted so t
 test('pictures: a card whose content is new each time keeps none', () => {
   assert.ok(/forOpen: \(\) => \{\s*const card = genieRef\.current\?\.cardRef\.current;\s*if \(!card \|\| !keepRef\.current\) return null;/.test(modal), 'no picture to open with');
   assert.ok(modal.includes('keepOnCloseRef.current = card && keepRef.current &&'), 'none kept at the close');
-  assert.ok(modal.includes('if (!open || !shown || !keepPictures) return;'), 'none taken while open');
+  assert.ok(modal.includes('if (!open || !shown || !keepPictures || pictureless) return;'), 'none taken while open (nor with no genie: Settings or reduced motion)');
   assert.ok(modal.includes('if (keepRef.current && last && !changedSinceShotRef.current'), 'the close never reuses a picture from before they were turned off');
   assert.ok(code('components/NativelyQuotaBanner.tsx').includes('keepPictures={false}'), 'quota readings');
+  // A see-through (Liquid Glass) card keeps none either: a picture bakes in the
+  // backdrop from when it was taken, so the next open would pour out a stale one.
+  assert.ok(code('components/HindsightStatusBanner.tsx').includes('keepPictures={false}'), 'long-term memory notice (glass)');
   assert.ok(code('components/trial/FreeTrialModal.tsx').includes('keepPictures={false}'), 'trial usage');
-  assert.ok(code('components/ProviderChangeNotice.tsx').includes('keepPictures={false}'), 'provider change / re-index counts');
 });
 
 test('pictures: a card showing one of several things is keyed by which', () => {
   const update = code('components/UpdateModal.tsx');
-  assert.ok(update.includes("const genieView = `${displayVersion}|${status}|${instructionsArch ?? ''}`;"));
+  assert.ok(update.includes("const genieView = `${displayVersion}|${status}`;"));
   assert.ok(update.includes('openingView={genieView}') && update.includes("cardProps={{ 'data-genie-view': genieView }}"));
-  assert.ok(update.includes("keepPictures={status === 'idle' || status === 'ready' || status === 'instructions'}"), 'never of a download or an error');
+  assert.ok(update.includes("keepPictures={status === 'idle' || status === 'ready'}"), 'never of a download or an error');
   const hind = code('components/HindsightStatusBanner.tsx');
   assert.ok(hind.includes("const view = status ? `${status.state}|${hashOf(status.reason ?? '')}` : undefined;"), 'state, and the reason hashed');
 });
@@ -540,8 +544,8 @@ test('pictures: a card showing one of several things is keyed by which', () => {
 test('pictures: a card that opens reset keeps only its untouched picture', () => {
   assert.ok(code('components/ReviewModal.tsx').includes('keepPictures={step === "review" && rating === 0 && hoverRating === 0 && !text}'));
   // The trial promo is remounted fresh for every showing: a picture of it
-  // starting, or of a failed start's error, is never what the next one shows.
-  assert.ok(code('components/trial/TrialPromoToaster.tsx').includes('keepPictures={!starting && !error}'));
+  // starting, or of a failed start's message, is never what the next one shows.
+  assert.ok(code('components/trial/TrialPromoToaster.tsx').includes('keepPictures={!starting && !message}'));
 });
 
 test('pictures (premium): the Natively API card has one picture per variant', { skip: !existsSync(resolve(SRC, '../premium/src/NativelyApiPromoToaster.tsx')) && 'premium not checked out' }, () => {
@@ -550,7 +554,8 @@ test('pictures (premium): the Natively API card has one picture per variant', { 
   const nap = code('../premium/src/NativelyApiPromoToaster.tsx');
   assert.ok(nap.includes('openingView={variant ?? undefined}'));
   assert.ok(nap.includes("'data-genie-view': variant ?? undefined,"));
-  assert.ok(nap.includes('const visible = isOpen && variant !== null;'), 'the variant is known before the card opens');
+  // (`&& !closing`: the card closes itself before it reports, final review #5.)
+  assert.ok(/const visible = isOpen && variant !== null(?: && !closing)?;/.test(nap), 'the variant is known before the card opens');
 });
 
 // ─── Pictures in memory (executed) ──────────────────────────────
@@ -655,4 +660,347 @@ test('a confirm asked from inside Settings opens above it', () => {
   const genieLayer = Number(modal.match(/zIndex = (\d+),/)?.[1]);
   assert.ok(layer > genieLayer, `${layer} > ${genieLayer}`);
   assert.equal((confirm.match(/style=\{\{ zIndex: CONFIRM_LAYER \}\}/g) || []).length, 2, 'the dim and the panel both');
+});
+
+// Settings → Advanced → "Genie animation" off: every card falls back to the
+// reduced-motion fade, and no picture is decoded ahead of time, taken, or kept.
+test('the genie setting stands the animation down and stops its pictures', () => {
+  assert.ok(hook.includes("const motionNow: CardMotion = osReduced ? 'fade' : genieEnabled ? 'genie' : 'lift';"),
+    'off takes the lift; the OS asking for reduced motion keeps the fade');
+  assert.ok(hook.includes("const reducedNow = motionNow !== 'genie';") && hook.includes('reduced: reducedNow };'), 'the host sees the switch as it is now');
+  // Pictures follow the combined flag, so reduced motion alone also keeps none.
+  assert.ok(modal.includes('const pictureless = genie.reduced;'));
+  assert.ok(/if \(pictureless\) \{ lastShotRef\.current = null; releaseGenieSnapshots\(\); \}\s*else void warmGenieSnapshots\(\);\s*\}, \[pictureless\]\);/.test(modal),
+    'turned off, the decoded pictures are let go; on, they are decoded again');
+  assert.ok(modal.indexOf('const pictureless') > modal.indexOf('const genie = useGenieCard('), 'read after the hook that provides it');
+  const settings = code('components/SettingsOverlay.tsx');
+  assert.ok(settings.includes("label={t('Genie animation')}") && settings.includes('setGenieAnimationEnabled(!genieAnimationEnabled)'), 'the toggle lives in Settings');
+  const row = settings.slice(settings.indexOf("{t('Genie animation')}") - 600, settings.indexOf("{t('Genie animation')}"));
+  assert.ok(row.includes('<PanelBottomClose size={20} />') && !row.includes('Sparkles'), 'a functional glyph, not Sparkles');
+});
+
+// Flipping the switch inside an open Settings card must not pour it out again:
+// the open and close effects fix their mode when they start and do not re-run
+// when it changes.
+test('flipping the switch never restarts a genie that is on screen', () => {
+  const deps = marker => {
+    const at = hook.indexOf(marker);
+    assert.ok(at >= 0, marker);
+    return hook.slice(at, hook.indexOf(']', at) + 1);
+  };
+  assert.equal(deps('}, [shown, genie, scrim, renderGenie]'), '}, [shown, genie, scrim, renderGenie]', 'the open');
+  assert.equal(deps('}, [closing, genie, scrim, finishClose, renderGenie]'), '}, [closing, genie, scrim, finishClose, renderGenie]', 'the close');
+  const render = hook.slice(hook.indexOf('const renderGenie = useCallback('), hook.indexOf("useEffect(() => genie.on('change', renderGenie)"));
+  assert.ok(render.includes('const motion = runMotionRef.current;') && render.trimEnd().endsWith('}, [bandCount]);'), 'renderGenie keeps its identity');
+  assert.ok(/if \(!shown\) return;\s*const motion = runMotionRef\.current = motionNowRef\.current;/.test(hook), 'the open takes the switch as it starts');
+  assert.ok(hook.includes('const motion = runMotionRef.current = genie.get() <= 0.001 ? motionNowRef.current : runMotionRef.current;'),
+    'a close from rest takes it too; one mid-open keeps its open’s mode');
+});
+
+test('letting go of the pictures: an in-flight warm-up or capture does not bring them back', { skip: !snapsMod && 'this Node cannot import .ts' }, async () => {
+  const W = 400, H = 300, DPR = 1;
+  const key = view => `modal|${view}|${W}x${H}|dark|en|${DPR}`;
+  let releaseLoad;
+  const gate = new Promise(r => { releaseLoad = r; });
+  globalThis.window = {
+    devicePixelRatio: DPR,
+    electronAPI: {
+      genieSnapshotList: async () => [key('a'), key('b')],
+      genieSnapshotLoad: async () => { await gate; return new Uint8Array([1]); },
+      genieSnapshotCapture: async () => ({ png: new Uint8Array([2]), width: W, height: H }),
+      genieSnapshotSave: async () => true,
+    },
+  };
+  globalThis.document = {
+    visibilityState: 'visible',
+    documentElement: { getAttribute: a => (a === 'data-theme' ? 'dark' : a === 'lang' ? 'en' : null), classList: { contains: () => false } },
+  };
+  globalThis.createImageBitmap = async () => ({ width: W, height: H, close() {} });
+  try {
+    snapsMod.releaseGenieSnapshots();
+    const card = { getBoundingClientRect: () => ({ left: 0, top: 0, width: W, height: H }) };
+    assert.ok(await snapsMod.captureGenieSnapshot(card, key('kept')));
+    assert.ok(snapsMod.getGenieSnapshot(key('kept')), 'held before');
+    // A warm-up is waiting on disk when the switch goes off.
+    const warming = snapsMod.warmGenieSnapshots();
+    await new Promise(r => setTimeout(r, 400));
+    snapsMod.releaseGenieSnapshots();
+    assert.equal(snapsMod.getGenieSnapshot(key('kept')), null, 'let go');
+    releaseLoad();
+    await warming;
+    assert.equal(snapsMod.getGenieSnapshot(key('a')), null, 'the warm-up did not refill it');
+    assert.equal(snapsMod.getGenieSnapshot(key('b')), null);
+    // A capture that started before the release is returned for its close, not kept.
+    const pending = snapsMod.captureGenieSnapshot(card, key('late'));
+    snapsMod.releaseGenieSnapshots();
+    const late = await pending;
+    assert.equal(late.transient, true);
+    assert.equal(snapsMod.getGenieSnapshot(key('late')), null);
+    // Back on: a fresh warm-up decodes them again.
+    await snapsMod.warmGenieSnapshots();
+    assert.ok(snapsMod.getGenieSnapshot(key('b')), 'decoded again once the genie is back');
+  } finally {
+    snapsMod.releaseGenieSnapshots();
+    delete globalThis.window; delete globalThis.document; delete globalThis.createImageBitmap;
+  }
+});
+
+// ─── Genie off: the lift ────────────────────────────────────────
+
+// A stand-in element for the Web Animations API: records each animate() call,
+// and lets a test freeze or finish them.
+function fakeCard() {
+  const el = { style: {}, anims: [] };
+  el.getAnimations = () => el.anims.filter(a => !a.cancelled);
+  el.animate = (frames, opts) => {
+    let resolve, reject;
+    const finished = new Promise((res, rej) => { resolve = res; reject = rej; });
+    finished.catch(() => {});
+    const prop = Object.keys(frames[1])[0];
+    const a = { frames, opts, prop, id: '', cancelled: false, finished, progress: 0,
+      commitStyles() { const f = frames[0][prop], t = frames[1][prop]; el.style[prop] = a.progress >= 1 ? t : a.progress > 0 ? `${prop}@${a.progress}` : f; },
+      cancel() { if (!a.cancelled) { a.cancelled = true; reject(new Error('cancelled')); } },
+      finish() { a.progress = 1; resolve(a); } };
+    el.anims.push(a);
+    return a;
+  };
+  return el;
+}
+
+test('genie off: the lift, at half the lab’s first speed, eases out and closes quicker than it opens', () => {
+  const { LIFT, LIFT_EASE, liftMs } = genieMod;
+  assert.equal(LIFT_EASE, 'cubic-bezier(0.23, 1, 0.32, 1)');
+  assert.deepEqual(LIFT.hidden, { transform: 'translateY(14px) scale(0.985)', opacity: '0', filter: 'blur(6px)' });
+  assert.deepEqual(LIFT.shown,  { transform: 'translateY(0px) scale(1)', opacity: '1', filter: 'blur(0px)' });
+  assert.deepEqual(LIFT.closed, { transform: 'translateY(8px) scale(0.99)', opacity: '0', filter: 'blur(4px)' });
+  // The lab's Lift (320 / 220 / 260, close 180 / 160 / 160, dim 280 / 180), doubled.
+  assert.deepEqual(LIFT.open, { transform: 640, opacity: 440, filter: 520, dim: 560 });
+  assert.deepEqual(LIFT.close, { transform: 360, opacity: 320, filter: 320, dim: 360 });
+  for (const k of ['transform', 'opacity', 'filter', 'dim']) assert.ok(LIFT.close[k] < LIFT.open[k], `${k}: the close is the quicker`);
+  // Legible before it lands: the fade ends first, the blur next, the travel last.
+  assert.ok(LIFT.open.opacity < LIFT.open.filter && LIFT.open.filter < LIFT.open.transform);
+  assert.equal(liftMs('open'), 640);
+  assert.equal(liftMs('close'), 360);
+});
+
+test('genie off: the lift plays on the compositor, lands with nothing left on the card, and a close reverses from where it is', async () => {
+  const { LIFT, LIFT_EASE, playLift } = genieMod;
+  const card = fakeCard();
+  playLift(card, 'open');
+  assert.deepEqual(card.anims.map(a => a.prop), ['transform', 'opacity', 'filter']);
+  for (const a of card.anims) {
+    assert.equal(a.id, 'lift');
+    assert.equal(a.opts.easing, LIFT_EASE);
+    assert.equal(a.opts.duration, LIFT.open[a.prop]);
+    assert.deepEqual(a.frames, [{ [a.prop]: LIFT.hidden[a.prop] }, { [a.prop]: LIFT.shown[a.prop] }]);
+  }
+  // Landed: the animations go, and so does every inline style they would leave.
+  card.style.transform = 'translateY(0px) scale(1)'; card.style.filter = 'blur(0px)'; card.style.opacity = '1';
+  for (const a of card.anims) a.finish();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(card.getAnimations().length, 0);
+  assert.deepEqual([card.style.transform, card.style.opacity, card.style.filter], ['', '', '']);
+
+  // A close from rest starts at the card as it is and ends at the closed state.
+  const rest = fakeCard();
+  playLift(rest, 'close');
+  for (const a of rest.anims) {
+    assert.equal(a.opts.duration, LIFT.close[a.prop]);
+    assert.deepEqual(a.frames, [{ [a.prop]: LIFT.shown[a.prop] }, { [a.prop]: LIFT.closed[a.prop] }]);
+  }
+
+  // Closed mid-open: the open is frozen where it got to and the close starts from there.
+  const mid = fakeCard();
+  playLift(mid, 'open');
+  for (const a of mid.anims) a.progress = 0.4;
+  playLift(mid, 'close');
+  const live = mid.getAnimations();
+  assert.equal(live.length, 3, 'only the close runs');
+  for (const a of live) assert.deepEqual(a.frames[0], { [a.prop]: `${a.prop}@0.4` }, `${a.prop} reverses from what is on screen`);
+  await new Promise(r => setTimeout(r, 0));
+  assert.notEqual(mid.style.transform, '', 'the cancelled open does not wipe the close');
+});
+
+test('genie off: the hook hands the card to the lift and keeps the clock and the dim in step', () => {
+  assert.ok(hook.includes("const LIFT_OPEN_CLOCK  = { duration: liftMs('open') / 1000, ease: 'linear' as const };"));
+  assert.ok(hook.includes("const LIFT_CLOSE_CLOCK = { duration: liftMs('close') / 1000, ease: 'linear' as const };"));
+  assert.ok(hook.includes("if (motion === 'lift' && card) playLift(card, 'open');"));
+  assert.ok(hook.includes("if (motion === 'lift' && card) playLift(card, 'close');"));
+  const render = hook.slice(hook.indexOf('const renderGenie = useCallback('), hook.indexOf("useEffect(() => genie.on('change', renderGenie)"));
+  assert.ok(render.indexOf("if (motion === 'fade') {") < render.indexOf("if (motion === 'lift') return;"), 'reduced motion is decided first');
+  assert.ok(/const b = animate\(scrim, 1, motion === 'lift' \? LIFT_DIM_OPEN : \{ duration: SCRIM_OPEN_S, ease: EASE_FM as any \}\);/.test(hook));
+  assert.ok(/: motion === 'fade' \? REDUCED_FADE : LIFT_DIM_CLOSE\);/.test(hook), 'the dim leaves with the card');
+  assert.ok(!/settle/.test(modal.replace(/settled/g, '')), 'no per-placement variant any more');
+});
+
+// ─── Corner notices slide ───────────────────────────────────────
+// Every toaster in the window's bottom-right corner comes in from the right
+// edge and leaves through it, on the search-index notice's numbers.
+
+// The curve a CSS cubic-bezier() draws, to measure the motion rather than pin its digits alone.
+const bezier = str => {
+  const [x1, y1, x2, y2] = str.match(/-?[\d.]+/g).map(Number);
+  const at = (m, a, b) => 3 * (1 - m) ** 2 * m * a + 3 * (1 - m) * m * m * b + m ** 3;
+  return t => {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (at(m, x1, x2) < t) lo = m; else hi = m; }
+    return at((lo + hi) / 2, y1, y2);
+  };
+};
+
+test('corner slide: the search-index notice’s clocks, eases and blur, so the corner moves as one', () => {
+  const { SLIDE, SLIDE_EASE, SLIDE_OUT_EASE, SLIDE_FADE_OUT_EASE, SLIDE_EASES, slideMs } = genieMod;
+  const css = read('components/ProviderChangeNotice.css');
+  const slideVars = css.slice(css.indexOf('.lg-notice-slide {'), css.indexOf('}', css.indexOf('.lg-notice-slide {')));
+  const cssVar = name => slideVars.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim();
+  assert.equal(`${slideMs('open')}ms`, cssVar('toast-open'));
+  assert.equal(`${slideMs('close')}ms`, cssVar('toast-close'));
+  assert.equal(SLIDE_EASE, cssVar('toast-ease'));
+  assert.equal(SLIDE_OUT_EASE, cssVar('notice-travel-close-ease'));
+  assert.equal(SLIDE_FADE_OUT_EASE, cssVar('notice-fade-close-ease'));
+  assert.equal(SLIDE.away.filter, `blur(${cssVar('toast-blur')})`);
+  assert.equal(`${SLIDE.open.opacity}ms`, cssVar('notice-fade-open'));
+  assert.equal(`${SLIDE.open.filter}ms`, cssVar('notice-blur-open'));
+  assert.equal(`${SLIDE.close.opacity}ms`, cssVar('notice-fade-close'));
+  assert.equal(`${SLIDE.close.filter}ms`, cssVar('notice-blur-close'));
+  assert.ok(/\.lg-notice\.t-toast \{\s*transition-duration: var\(--notice-fade-close\), var\(--toast-close\), var\(--notice-blur-close\);\s*transition-timing-function: var\(--notice-fade-close-ease\), var\(--toast-ease\), var\(--notice-fade-close-ease\);\s*\}/.test(css),
+    'opacity, transform, filter: the snippet’s property order');
+  assert.ok(/\.lg-notice\.t-toast\.is-open \{\s*transition-duration: var\(--notice-fade-open\), var\(--toast-open\), var\(--notice-blur-open\);/.test(css));
+  // The wrapper carries the travel: the way out on its own curve, the way in on the snippet's.
+  assert.ok(/\.lg-notice-slide \{\s*transform: translateX\(calc\(100% \+ var\(--notice-edge-gap\)\)\);\s*transition: transform var\(--toast-close\) var\(--notice-travel-close-ease\);/.test(css));
+  assert.ok(/\.lg-notice-slide\.is-open \{\s*transform: translateX\(0\);\s*transition: transform var\(--toast-open\) var\(--toast-ease\);/.test(css));
+  assert.deepEqual(SLIDE_EASES.open, { transform: SLIDE_EASE, opacity: SLIDE_EASE, filter: SLIDE_EASE });
+  assert.deepEqual(SLIDE_EASES.close, { transform: SLIDE_OUT_EASE, opacity: SLIDE_FADE_OUT_EASE, filter: SLIDE_FADE_OUT_EASE });
+});
+
+test('corner slide: the way in is seen travelling and lands without overshoot', () => {
+  const { SLIDE, SLIDE_EASE, slideMs } = genieMod;
+  // "A bit slower" (Evin, 2026-10-04): one token step up from a panel's 400.
+  assert.deepEqual(SLIDE.open, { transform: 500, opacity: 250, filter: 350 });
+  assert.equal(slideMs('open'), SLIDE.open.transform, 'the travel is the run');
+  assert.ok(SLIDE.open.opacity < SLIDE.open.filter && SLIDE.open.filter < SLIDE.open.transform, 'solid, then sharp, then landed');
+  assert.equal(SLIDE_EASE, 'cubic-bezier(0.33, 1, 0.68, 1)');
+  const travel = 350, ms = SLIDE.open.transform, f = bezier(SLIDE_EASE);
+  // "Refine it a bit more" (Evin, 2026-10-04). --ease-smooth-out moved 51px in
+  // its first frame here and was 95% done at 234ms: a jump, then a creep.
+  const smoothOut = bezier('cubic-bezier(0.22, 1, 0.36, 1)');
+  const firstFrame = f(16.7 / ms) * travel;
+  assert.ok(firstFrame < 36 && firstFrame < smoothOut(16.7 / ms) * travel * 0.7, `first frame ${firstFrame.toFixed(0)}px`);
+  let t95 = 0; while (f(t95 / ms) < 0.95) t95++;
+  assert.ok(t95 >= 0.6 * ms && t95 <= 0.68 * ms, `95% of the way at ${t95}ms: travelling for most of its clock, settling for the rest`);
+  // No overshoot, and never backwards.
+  let prev = 0;
+  for (let t = 0; t <= ms; t += 5) { const v = f(t / ms); assert.ok(v >= prev - 1e-9 && v <= 1 + 1e-9, `at ${t}ms`); prev = v; }
+});
+
+test('corner slide: the way out is a swipe: answered at once, fastest at the edge, solid until it crosses', () => {
+  const { SLIDE, SLIDE_OUT_EASE, SLIDE_FADE_OUT_EASE, slideMs } = genieMod;
+  assert.deepEqual(SLIDE.close, { transform: 400, opacity: 400, filter: 400 });
+  assert.ok(slideMs('close') < slideMs('open'), 'the close is the quicker');
+  assert.equal(SLIDE_OUT_EASE, 'cubic-bezier(0.4, 0.2, 1, 0.8)');
+  assert.equal(SLIDE_FADE_OUT_EASE, 'cubic-bezier(0.7, 0, 1, 1)');
+  const travel = 350, ms = SLIDE.close.transform, f = bezier(SLIDE_OUT_EASE), fade = bezier(SLIDE_FADE_OUT_EASE);
+  assert.ok(f(50 / ms) * travel >= 20, 'a click on the close is answered: it has visibly moved within 50ms');
+  // It never slows: each 20ms step covers at least as much as the one before.
+  let last = 0;
+  for (let t = 20; t <= ms; t += 20) {
+    const step = (f(t / ms) - f((t - 20) / ms)) * travel;
+    assert.ok(step >= last - 0.01, `slows at ${t}ms`);
+    last = step;
+  }
+  assert.ok(last > 20, `crossing the edge at ${last.toFixed(0)}px per 20ms`);
+  // Solid while most of it is still in the window; the fade is the last stretch.
+  assert.ok(1 - fade(0.5) >= 0.8, 'at half time it is still 80% opaque');
+  assert.ok(f(0.5) < 0.4, 'and less than 40% of the way out');
+  assert.ok(1 - fade(0.9) <= 0.3, 'nearly gone as it clears the edge, shadow and all');
+});
+
+test('corner slide: the travel is each card’s own', () => {
+  const { SLIDE, slideAway } = genieMod;
+  assert.deepEqual(SLIDE.shown, { transform: 'translateX(0px)', opacity: '1', filter: 'blur(0px)' });
+  // The travel is each card's own: its width plus its gap to the edge, whole pixels, never leftwards.
+  assert.deepEqual(slideAway(343.2), { transform: 'translateX(344px)', opacity: '0', filter: 'blur(2px)' });
+  assert.equal(slideAway(-5).transform, 'translateX(0px)');
+});
+
+test('corner slide: in from past the edge, back out through it, reversible, and nothing left on a landed card', async () => {
+  const { SLIDE, SLIDE_EASE, SLIDE_EASES, playSlide, slideAway } = genieMod;
+  const away = slideAway(344);
+  const card = fakeCard();
+  playSlide(card, 'open', 344);
+  assert.deepEqual(card.anims.map(a => a.prop), ['transform', 'opacity', 'filter']);
+  for (const a of card.anims) {
+    assert.equal(a.id, 'slide');
+    assert.equal(a.opts.easing, SLIDE_EASE);
+    assert.equal(a.opts.duration, SLIDE.open[a.prop]);
+    assert.deepEqual(a.frames, [{ [a.prop]: away[a.prop] }, { [a.prop]: SLIDE.shown[a.prop] }]);
+  }
+  card.style.transform = 'translateX(0px)'; card.style.filter = 'blur(0px)'; card.style.opacity = '1';
+  for (const a of card.anims) a.finish();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(card.getAnimations().length, 0);
+  assert.deepEqual([card.style.transform, card.style.opacity, card.style.filter], ['', '', ''], 'a transform or filter left behind would trap position: fixed children');
+
+  const rest = fakeCard();
+  playSlide(rest, 'close', 344);
+  for (const a of rest.anims) {
+    assert.equal(a.opts.duration, SLIDE.close[a.prop]);
+    assert.equal(a.opts.easing, SLIDE_EASES.close[a.prop]);
+    assert.deepEqual(a.frames, [{ [a.prop]: SLIDE.shown[a.prop] }, { [a.prop]: away[a.prop] }], 'out the way it came: to the right');
+  }
+
+  const mid = fakeCard();
+  playSlide(mid, 'open', 344);
+  for (const a of mid.anims) a.progress = 0.4;
+  playSlide(mid, 'close', 344);
+  const live = mid.getAnimations();
+  assert.equal(live.length, 3, 'only the close runs');
+  for (const a of live) assert.deepEqual(a.frames[0], { [a.prop]: `${a.prop}@0.4` }, `${a.prop} reverses from what is on screen`);
+
+  // The lift is untouched by sharing its player.
+  const lifted = fakeCard();
+  genieMod.playLift(lifted, 'open');
+  assert.ok(lifted.anims.every(a => a.id === 'lift'));
+});
+
+test('corner slide: a bottom-right card slides whatever the genie setting says; reduced motion still fades', () => {
+  assert.ok(modal.includes("motion: placement === 'bottom-right' ? 'slide' : undefined,"), 'the corner decides, not each host');
+  assert.ok(hook.includes("const cardMotionNow: CardMotion = options.motion === 'slide' && motionNow !== 'fade' ? 'slide' : motionNow;"),
+    'the OS asking for reduced motion wins; otherwise genie on or off, the corner slides');
+  assert.ok(hook.includes('motionNowRef.current = cardMotionNow;') && hook.includes('useRef<CardMotion>(cardMotionNow)'));
+  // `reduced` stays about the app as a whole: GenieModal lets go of EVERY card's
+  // pictures on it, and a corner notice mounting must not do that to Settings.
+  assert.ok(hook.includes("const reducedNow = motionNow !== 'genie';") && hook.includes('reduced: reducedNow };'));
+  assert.ok(hook.includes("if (motion === 'slide' && card) playSlide(card, 'open', slideTravel());"));
+  assert.ok(hook.includes("if (motion === 'slide' && card) playSlide(card, 'close', slideTravel());"));
+  assert.ok(hook.includes("const SLIDE_OPEN_CLOCK  = { duration: slideMs('open') / 1000, ease: 'linear' as const };"), 'onOpened fires as it lands');
+  assert.ok(hook.includes("const SLIDE_CLOSE_CLOCK = { duration: slideMs('close') / 1000, ease: 'linear' as const };"), 'the card unmounts as it clears the edge');
+  assert.ok(hook.includes("const a = motion === 'slide' ? animate(genie, 0, SLIDE_OPEN_CLOCK)"));
+  assert.ok(hook.includes("const a = motion === 'slide' ? animate(genie, 1, SLIDE_CLOSE_CLOCK)"));
+  const render = hook.slice(hook.indexOf('const renderGenie = useCallback('), hook.indexOf("useEffect(() => genie.on('change', renderGenie)"));
+  assert.ok(render.indexOf("if (motion === 'fade') {") < render.indexOf("if (motion === 'slide') return;"), 'no per-frame write: the slide draws itself');
+  // The travel is measured on the wrap, which is never transformed.
+  assert.ok(/const slideTravel = \(\) => \{\s*const wrap = wrapRef\.current;\s*return wrap \? window\.innerWidth - wrap\.getBoundingClientRect\(\)\.left : 0;\s*\};/.test(hook));
+  // Which cards: the three that sit in the corner through GenieModal.
+  for (const f of ['components/NativelyQuotaBanner.tsx', 'components/HindsightStatusBanner.tsx', 'components/UpdateModal.tsx']) {
+    assert.ok(code(f).includes('placement="bottom-right"'), f);
+  }
+});
+
+test('corner slide: the launcher’s own Refreshed toast is on the same clocks', () => {
+  const launcher = code('components/Launcher.tsx');
+  const toast = launcher.slice(launcher.indexOf('key="refresh-toast"'), launcher.indexOf('className={`fixed bottom-10 right-10'));
+  const { SLIDE } = genieMod;
+  const s = ms => String(ms / 1000);
+  const { SLIDE_EASE, SLIDE_OUT_EASE, SLIDE_FADE_OUT_EASE } = genieMod;
+  const arr = ease => `[${ease.match(/-?[\d.]+/g).join(', ')}]`;
+  const [inE, outE, fadeE] = [SLIDE_EASE, SLIDE_OUT_EASE, SLIDE_FADE_OUT_EASE].map(arr);
+  assert.ok(toast.includes(`{ x: 'calc(0% + 0px)', opacity: 1, filter: 'blur(0px)', transition: { x: { duration: ${s(SLIDE.open.transform)}, ease: ${inE} }, opacity: { duration: ${s(SLIDE.open.opacity)}, ease: ${inE} }, filter: { duration: ${s(SLIDE.open.filter)}, ease: ${inE} } } }`));
+  assert.ok(toast.includes(`{ x: 'calc(100% + 40px)', opacity: 0, filter: 'blur(2px)', transition: { x: { duration: ${s(SLIDE.close.transform)}, ease: ${outE} }, opacity: { duration: ${s(SLIDE.close.opacity)}, ease: ${fadeE} }, filter: { duration: ${s(SLIDE.close.filter)}, ease: ${fadeE} } } }`));
+  // Its own width plus its 40px inset (bottom-10 right-10), not a fixed 300px a long translation would outgrow.
+  assert.ok(toast.includes("{ x: 'calc(100% + 40px)', opacity: 0, filter: 'blur(2px)' }") && !/x: 300/.test(toast));
+  assert.ok(!/spring|scale/.test(toast), 'no spring and no scale: it used to bounce in at 0.9');
+  assert.ok(toast.includes('prefersReducedMotion ? { opacity: 0 }'), 'reduced motion fades in place');
 });

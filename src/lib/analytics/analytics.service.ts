@@ -80,11 +80,40 @@ export function detectProviderType(modelName: string): ModelProviderType {
     return 'cloud';
 }
 
+// --- First-party funnel ---
+//
+// The same moments, reported to Natively's own funnel as "this feature was used
+// today" (src/lib/funnel). The main process allows one event per feature per
+// day and nothing but the feature's name, and does nothing at all when Usage
+// statistics is off. Deliberately independent of whether the GA4 script above
+// loaded: a blocked script must not hide what people use.
+
+type FunnelFeature =
+    | 'answer' | 'follow_up' | 'recap' | 'suggest_questions' | 'clarify' | 'brainstorm'
+    | 'chat' | 'search' | 'copy_answer' | 'pdf_export' | 'calendar_connect';
+
+/** The funnel's name for a command, or null for commands that are navigation rather than use. */
+export function funnelFeatureForCommand(commandType: string): FunnelFeature | null {
+    if (commandType === 'what_to_say') return 'answer';
+    if (commandType.startsWith('follow_up_')) return 'follow_up';
+    if (commandType === 'recap' || commandType === 'suggest_questions' || commandType === 'clarify' || commandType === 'brainstorm') return commandType;
+    if (commandType === 'ai_query_search' || commandType === 'literal_search') return 'search';
+    return null;
+}
+
+function reportFeatureUsed(feature: FunnelFeature | null): void {
+    if (!feature) return;
+    try {
+        (window as any).electronAPI?.funnelTrack?.('feature_used', { feature })?.catch?.(() => { });
+    } catch { /* never into the feature */ }
+}
+
 // --- Service ---
 
 class AnalyticsService {
     private static instance: AnalyticsService;
     private initialized = false;
+    private undetectable = false;
     private sessionStartTime: number = Date.now();
     private assistantStartTime: number | null = null;
     private totalAssistantDuration: number = 0;
@@ -98,8 +127,12 @@ class AnalyticsService {
         return AnalyticsService.instance;
     }
 
+    public setUndetectable(isUndetectable: boolean): void {
+        this.undetectable = isUndetectable;
+    }
+
     public initAnalytics(): void {
-        if (this.initialized) return;
+        if (this.initialized || this.undetectable) return;
 
         try {
             // 1. Initialize dataLayer
@@ -136,7 +169,7 @@ class AnalyticsService {
     // --- Tracking Methods ---
 
     public trackAppOpen(): void {
-        if (!this.initialized) return;
+        if (!this.initialized || this.undetectable) return;
 
         this.trackEvent('app_opened');
 
@@ -148,21 +181,21 @@ class AnalyticsService {
     }
 
     public trackAppClose(): void {
-        if (!this.initialized) return;
+        if (!this.initialized || this.undetectable) return;
 
         this.trackSessionDuration();
         this.trackEvent('app_closed');
     }
 
     public trackAssistantStart(): void {
-        if (!this.initialized) return;
+        if (!this.initialized || this.undetectable) return;
 
         this.assistantStartTime = Date.now();
         this.trackEvent('assistant_started');
     }
 
     public trackAssistantStop(): void {
-        if (!this.initialized) return;
+        if (!this.initialized || this.undetectable) return;
 
         if (this.assistantStartTime) {
             const duration = (Date.now() - this.assistantStartTime) / 1000;
@@ -173,49 +206,54 @@ class AnalyticsService {
     }
 
     public trackModeSelected(mode: AssistantMode): void {
-        if (!this.initialized) return;
+        if (!this.initialized || this.undetectable) return;
 
         this.trackEvent('mode_selected', { mode });
     }
 
     public trackModelUsed(payload: ModelUsedPayload): void {
-        if (!this.initialized) return;
+        if (!this.initialized || this.undetectable) return;
 
         this.trackEvent('model_used', payload);
     }
 
     public trackCopyAnswer(): void {
-        if (!this.initialized) return;
+        reportFeatureUsed('copy_answer');
+        if (!this.initialized || this.undetectable) return;
         this.trackEvent('copy_answer_clicked');
     }
 
     public trackCommandExecuted(commandType: string): void {
-        if (!this.initialized) return;
+        reportFeatureUsed(funnelFeatureForCommand(commandType));
+        if (!this.initialized || this.undetectable) return;
         this.trackEvent('command_executed', { command_type: commandType });
     }
 
     public trackConversationStarted(): void {
-        if (!this.initialized) return;
+        reportFeatureUsed('chat');
+        if (!this.initialized || this.undetectable) return;
         this.trackEvent('conversation_started');
     }
 
     public trackCalendarConnected(): void {
-        if (!this.initialized) return;
+        reportFeatureUsed('calendar_connect');
+        if (!this.initialized || this.undetectable) return;
         this.trackEvent('calendar_connected');
     }
 
     public trackMeetingStarted(): void {
-        if (!this.initialized) return;
+        if (!this.initialized || this.undetectable) return;
         this.trackEvent('meeting_started');
     }
 
     public trackMeetingEnded(): void {
-        if (!this.initialized) return;
+        if (!this.initialized || this.undetectable) return;
         this.trackEvent('meeting_ended');
     }
 
     public trackPdfExported(): void {
-        if (!this.initialized) return;
+        reportFeatureUsed('pdf_export');
+        if (!this.initialized || this.undetectable) return;
         this.trackEvent('pdf_exported');
     }
 

@@ -157,18 +157,16 @@ describe('codexModelOptions (renderer)', () => {
 });
 
 describe('presets and defaults', () => {
-  test('no preset, and neither default, is a model the ChatGPT backend rejects', () => {
+  test('no preset, and not the default, is a model the ChatGPT backend rejects', () => {
     // The renderer preset list and the main-process deny list live in different
     // bundles; this is what keeps them apart.
     for (const m of CODEX_CLI_MODEL_PRESETS) assert.ok(!CHATGPT_UNSUPPORTED_CODEX_MODELS.has(m.id), m.id);
     assert.ok(!CHATGPT_UNSUPPORTED_CODEX_MODELS.has(DEFAULT_CODEX_CLI_CONFIG.model));
-    assert.ok(!CHATGPT_UNSUPPORTED_CODEX_MODELS.has(DEFAULT_CODEX_CLI_CONFIG.fastModel));
   });
 
-  test('both shipped defaults are presets, so the settings field never opens on an unlisted id', () => {
+  test('the shipped default is a preset, so the model list never opens on an unlisted id', () => {
     const ids = CODEX_CLI_MODEL_PRESETS.map((m) => m.id);
     assert.ok(ids.includes(DEFAULT_CODEX_CLI_CONFIG.model), DEFAULT_CODEX_CLI_CONFIG.model);
-    assert.ok(ids.includes(DEFAULT_CODEX_CLI_CONFIG.fastModel), DEFAULT_CODEX_CLI_CONFIG.fastModel);
   });
 
   test('catalogue-era ids resolve to real names on surfaces without catalogue access', () => {
@@ -186,7 +184,8 @@ describe('persisted ChatGPT-incompatible models', () => {
     for (const id of CHATGPT_UNSUPPORTED_CODEX_MODELS) {
       const cfg = CodexCliService.normalizeConfig({ model: id, fastModel: id });
       assert.equal(cfg.model, DEFAULT_CODEX_CLI_CONFIG.model, id);
-      assert.equal(cfg.fastModel, DEFAULT_CODEX_CLI_CONFIG.fastModel, id);
+      // The retired fast model is dropped on load, not carried forward (2026-09-26).
+      assert.equal('fastModel' in cfg, false, id);
     }
   });
 
@@ -198,9 +197,8 @@ describe('persisted ChatGPT-incompatible models', () => {
   });
 
   test('any other persisted model is kept as chosen, listed or not', () => {
-    const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.6-luna', fastModel: 'gpt-9-future' });
+    const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.6-luna' });
     assert.equal(cfg.model, 'gpt-5.6-luna');
-    assert.equal(cfg.fastModel, 'gpt-9-future');
   });
 
   test('startup restore has no model literals of its own — normalizeConfig owns the defaults', () => {

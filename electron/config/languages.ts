@@ -130,7 +130,39 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'hebrew': { label: 'Hebrew', code: 'hebrew', bcp47: 'he-IL', iso639: 'he', group: 'Hebrew' },
     'malay': { label: 'Malay', code: 'malay', bcp47: 'ms-MY', iso639: 'ms', group: 'Malay' },
     'finnish': { label: 'Finnish', code: 'finnish', bcp47: 'fi-FI', iso639: 'fi', group: 'Finnish' },
+    'croatian': { label: 'Croatian', code: 'croatian', bcp47: 'hr-HR', iso639: 'hr', group: 'Croatian' },
+    'estonian': { label: 'Estonian', code: 'estonian', bcp47: 'et-EE', iso639: 'et', group: 'Estonian' },
+    'latvian': { label: 'Latvian', code: 'latvian', bcp47: 'lv-LV', iso639: 'lv', group: 'Latvian' },
+    'lithuanian': { label: 'Lithuanian', code: 'lithuanian', bcp47: 'lt-LT', iso639: 'lt', group: 'Lithuanian' },
+    'maltese': { label: 'Maltese', code: 'maltese', bcp47: 'mt-MT', iso639: 'mt', group: 'Maltese' },
+    'slovak': { label: 'Slovak', code: 'slovak', bcp47: 'sk-SK', iso639: 'sk', group: 'Slovak' },
+    'slovenian': { label: 'Slovenian', code: 'slovenian', bcp47: 'sl-SI', iso639: 'sl', group: 'Slovenian' },
 };
+
+/**
+ * Recognition languages offered ONLY while Parakeet TDT v3 is the active local
+ * model. They exist for its 25-language set; no cloud provider, Apple Speech,
+ * or other local model was verified for them, so every other picker hides them
+ * (getLocalModelLanguageSupport, and isRecognitionLanguageOffered below).
+ */
+export const PARAKEET_ONLY_LANGUAGE_KEYS: ReadonlySet<string> = new Set([
+    'croatian', 'estonian', 'latvian', 'lithuanian', 'maltese', 'slovak', 'slovenian',
+]);
+
+/**
+ * Whether the STT language picker offers `key`.
+ * `localModelKeys` — what the active local model(s) accept; null unless the
+ * provider is local-whisper. `providerKeys` — the active backend's restriction
+ * (local model, NVIDIA, Apple); null for an unrestricted cloud provider.
+ */
+export function isRecognitionLanguageOffered(
+    key: string,
+    localModelKeys: ReadonlySet<string> | null,
+    providerKeys: ReadonlySet<string> | null,
+): boolean {
+    if (PARAKEET_ONLY_LANGUAGE_KEYS.has(key) && !localModelKeys?.has(key)) return false;
+    return !providerKeys || providerKeys.has(key);
+}
 
 export const AI_RESPONSE_LANGUAGES = [
     { label: 'Auto (Detect)', code: 'auto' },

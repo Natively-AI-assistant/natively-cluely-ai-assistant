@@ -1,0 +1,428 @@
+[
+ {
+  "jid": "870ade60af48",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 10,
+   "relevance": 10,
+   "speakability_usability": 10,
+   "cognitive_load": 10,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.6,
+  "one_sentence_reason": "Exact leave time, taxi duration and train pulled from the itinerary, concisely.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "f460e9cd0a7c",
+  "scores": {
+   "correctness": 8,
+   "grounding": 10,
+   "role_fidelity": 8,
+   "direct_usefulness": 5,
+   "relevance": 4,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Avoids the forbidden résumé but gives no background at all, only pleasantries.",
+  "specific_problem": "User asked for their background; the answer offers only 'glad to be here', not a usable intro.",
+  "minimal_improvement": "Offer a two-sentence template with slots for name, child and work."
+ },
+ {
+  "jid": "1207a212b207",
+  "scores": {
+   "correctness": 8,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Correct jammy-egg timing and cold-water step; rightly ignores the irrelevant rowing log.",
+  "specific_problem": "Standard 6-7 minute timings usually assume fridge-cold eggs, so 'add a minute' may overcook.",
+  "minimal_improvement": "Drop or reverse the fridge-cold adjustment."
+ },
+ {
+  "jid": "e0b379b2478f",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 10,
+   "direct_usefulness": 7,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 9,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Correctly finds the one-time move to the 6:00 PM group, but overlooks timing risks and the airport transfer.",
+  "specific_problem": "No warning to message Marta before 2 PM (likely before boarding), that 6:00 is tight after immigration and the 35-min van, or to rebook Lusotransfer.",
+  "minimal_improvement": "Add: message Marta now, update the van booking, and note skipping forfeits non-refundable tickets."
+ },
+ {
+  "jid": "4e628628afb7",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Accurate, clear explanation of mortgage escrow with the key tradeoff.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "e4de2405f9c3",
+  "scores": {
+   "correctness": 8,
+   "grounding": 5,
+   "role_fidelity": 7,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 7,
+   "continuity": 8,
+   "mode_fit": 5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Treats a joking jab as a real interview question and invents specific personal weaknesses and growth history.",
+  "specific_problem": "Two fabricated weaknesses in earnest interview style ignore the 'Ha.' humour of a family-friend chat.",
+  "minimal_improvement": "Answer lightly with a playful deflection or a clearly generic weakness."
+ },
+ {
+  "jid": "c29b80bdbf12",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Sensible climbing-plus-board-game split within budget, speakable to the friend.",
+  "specific_problem": "'Room for both' is ambiguous and there are no concrete game or price examples.",
+  "minimal_improvement": "Name one or two example games and rough costs."
+ },
+ {
+  "jid": "b709cf20e7ba",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 4,
+   "relevance": 4,
+   "speakability_usability": 8,
+   "cognitive_load": 7,
+   "concision": 4,
+   "continuity": 4,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "User asked for simpler, but the answer is nearly the same length and wording as the original.",
+  "specific_problem": "Restates the previous explanation almost verbatim instead of simplifying.",
+  "minimal_improvement": "Give a one- or two-sentence plain version, e.g. a savings pot the lender uses for taxes and insurance."
+ },
+ {
+  "jid": "954d7fd27087",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 6,
+   "direct_usefulness": 5,
+   "relevance": 7,
+   "speakability_usability": 7,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Generic weighing in a first-person 'I'd' voice with an assumed shorter downtown commute; no help deciding.",
+  "specific_problem": "Assumes downtown is closer and answers as if choosing for itself without knowing rent, commute or priorities.",
+  "minimal_improvement": "Ask two or three key facts or give a short decision checklist addressed to the user."
+ },
+ {
+  "jid": "3b9ff27bee4a",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 10,
+   "relevance": 10,
+   "speakability_usability": 10,
+   "cognitive_load": 10,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.5,
+  "one_sentence_reason": "Correct $3,000 deposit due at signing, with relevant payment terms from the quote.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "3b3f28a106d6",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Natural, speakable decision to the mechanic that follows the user's rotor question and the stated mileage.",
+  "specific_problem": "Repeats 'pads at 380' redundantly.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "8162f0ab250e",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Practical private-conversation advice with a ready, non-accusatory script.",
+  "specific_problem": null,
+  "minimal_improvement": "Add a low-friction option such as putting names on slides."
+ },
+ {
+  "jid": "142a1067c51d",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.8,
+  "one_sentence_reason": "Accurate, simple scattering explanation pitched at a seven-year-old.",
+  "specific_problem": "'Scatter' may need a kid-level image.",
+  "minimal_improvement": "Use a bouncing-light analogy for scattering."
+ },
+ {
+  "jid": "23d4c822062b",
+  "scores": {
+   "correctness": 5,
+   "grounding": 5,
+   "role_fidelity": 9,
+   "direct_usefulness": 6,
+   "relevance": 6,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 7,
+   "mode_fit": 7
+  },
+  "hard_flags": [
+   "retrieval_failure"
+  ],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Sensibly asks for terms in writing, but ignores lease clauses that counter Doug's notice claim and asserts an unclear overcharge.",
+  "specific_problem": "Misses the month-to-month-at-same-rent default, Brightwater's 75-day offer duty, and conflicting notice periods/end dates; 'above the lease' depends on disputed base rent.",
+  "minimal_improvement": "Cite the 75-day offer duty and month-to-month default, and flag the rent and end-date conflicts."
+ },
+ {
+  "jid": "77e156eae26e",
+  "scores": {
+   "correctness": 8,
+   "grounding": 8,
+   "role_fidelity": 10,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Resists signing under pressure and asks for the offer in writing, but misses the quote's May 16 window and $900 tile allowance.",
+  "specific_problem": "Concedes 'a real deadline' though the quote holds June 9 until May 16; doesn't question the 'close to two grand' tile value.",
+  "minimal_improvement": "Cite the May 16 signing window and the $900 allowance to push back."
+ },
+ {
+  "jid": "8db8c992e14a",
+  "scores": {
+   "correctness": 2,
+   "grounding": 4,
+   "role_fidelity": 9,
+   "direct_usefulness": 3,
+   "relevance": 7,
+   "speakability_usability": 7,
+   "cognitive_load": 6,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [
+   "major_factual_error"
+  ],
+  "code_central": false,
+  "overall_estimate": 2.5,
+  "one_sentence_reason": "Self-contradictory math: calls $2,250 over a 3% cap it computes as $2,265.",
+  "specific_problem": "From $2,150, $2,250 is about 4.7% (cap $2,214.50); from $2,200 it is within cap. Lease's conflicting base rent ignored.",
+  "minimal_improvement": "Compute from the lease's stated rent correctly and ask Doug which current rent he is using."
+ },
+ {
+  "jid": "1077c39912e5",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 8,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Accurate two-line day-4 summary drawn from the itinerary.",
+  "specific_problem": "Reads like an itinerary rather than a text to mom, with jargon like 'Alfa Pendular' and 'Campanha'.",
+  "minimal_improvement": "Phrase it in a 'we' voice with plain terms."
+ },
+ {
+  "jid": "2fe878cf4941",
+  "scores": {
+   "correctness": 5,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 5,
+   "relevance": 7,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Rightly anchors on the 1 PM dry cleaning, but carless groceries before the gym is impractical and no concrete schedule is given.",
+  "specific_problem": "Groceries then gym without a car means hauling groceries; lunch placement and times are vague.",
+  "minimal_improvement": "Give a timed order: dry cleaning, gym, lunch, groceries last, done by 2."
+ },
+ {
+  "jid": "054e4219f419",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Kind, firm, speakable decline that names the recruitment-dependent model.",
+  "specific_problem": "Does not really address 'would you be good at it'.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "28280700c28c",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 10,
+   "relevance": 10,
+   "speakability_usability": 10,
+   "cognitive_load": 10,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.5,
+  "one_sentence_reason": "Correctly refuses the one-time code and redirects to calling the number on the card; speakable to the caller.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ }
+]

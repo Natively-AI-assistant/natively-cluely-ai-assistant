@@ -20,12 +20,13 @@ import './HowItWorksRefund.css';
 // everywhere; mixing shapes per part is the look that was rejected for About.
 //
 // Motion, transitions.dev values:
-//   tab switch      tabs sliding: a sky-blue Liquid Glass pill (.lg-bubble on
-//                   .lg-sky's #3a9ff7), 250ms smooth-out, labels cross-fade on
-//                   the same clock
+//   tab switch      tabs sliding: an indigo Liquid Glass pill (.lg-bubble fed
+//                   --hiw-indigo), 250ms smooth-out; the arriving label
+//                   whitens on that clock, the leaving one greys at 150ms
 //   part swap       one motion: the box eases to the new part's height (250ms
 //                   smooth-out) while the new part fades in from a 2px blur
-//                   (250ms) and the old fades out (150ms) — see PartPanels
+//                   (250ms) and the old fades out (150ms), each sliding
+//                   the way the pill went (in 8px, out 4px) — see PartPanels
 //   Open / Email    learn-more hover (HowItWorksRefund.css)
 // No framer `layout`/`layoutId`: layout projection caused a scroll regression in
 // this settings scroller (see AIProvidersSettings). Nothing staggers in when the
@@ -42,15 +43,18 @@ const POLICY_URL = 'https://natively.software/refundpolicy';
 const DEMO_URL = 'https://natively.software/pro';
 const CONTACT_EMAIL = 'natively.contact@gmail.com';
 
-/** This section's sky blue — theme-aware, see HowItWorksRefund.css. */
-const SKY = 'var(--hiw-sky)';
-/** Feeds .lg-sky the same theme-aware blue, so the buttons match the pill. */
-const SKY_BUTTON_STYLE = { '--lg-sky-bg': 'var(--hiw-sky)', '--lg-sky-hover': 'var(--hiw-sky-hover)' } as React.CSSProperties;
+/** This section's indigo — theme-aware, see HowItWorksRefund.css. */
+const INDIGO = 'var(--hiw-indigo)';
+/** Feeds .lg-sky the same theme-aware indigo, so the buttons match the pill. */
+const INDIGO_BUTTON_STYLE = { '--lg-sky-bg': 'var(--hiw-indigo)', '--lg-sky-hover': 'var(--hiw-indigo-hover)' } as React.CSSProperties;
 
 const EASE_SMOOTH_OUT = [0.22, 1, 0.36, 1] as const;
 const SWAP_DUR = 0.15;
 const SWAP_BLUR = 'blur(2px)';
 const RESIZE_DUR = 0.25;
+/** A part swap follows the pill: in 8px (--distance-base), out 4px (--distance-micro). */
+const SLIDE_IN = 8;
+const SLIDE_OUT = 4;
 
 type PartId = 'how' | 'refunds' | 'cancel';
 const PARTS: ReadonlyArray<{ id: PartId; name: string }> = [
@@ -58,6 +62,9 @@ const PARTS: ReadonlyArray<{ id: PartId; name: string }> = [
   { id: 'refunds', name: 'Refunds' },
   { id: 'cancel', name: 'Cancel & support' },
 ];
+const partIndex = (id: PartId) => PARTS.findIndex((p) => p.id === id);
+/** Which way the last switch went: 1 = rightward, -1 = leftward, 0 = none yet. */
+type SwitchDir = -1 | 0 | 1;
 
 // One set of steps for both products: the two paths are the same three steps,
 // so a chooser between them (a second pill, then choice cards) added a
@@ -95,7 +102,7 @@ const LearnChevron: React.FC = () => (
 );
 
 /**
- * A segmented switch: the theme's input surface as the track, one sky-blue
+ * A segmented switch: the theme's input surface as the track, one indigo
  * Liquid Glass pill under equal-width cells, moved by a transform. WAI-ARIA
  * tabs — arrows move AND select (a choice here costs nothing to undo), Home/End
  * jump to the ends.
@@ -104,7 +111,7 @@ const LearnChevron: React.FC = () => (
  * which would fight the pill's absolute positioning. `capRadius` pins the
  * rim's corner fade to the pill's real radius (half its rendered height).
  */
-function SkySwitch<T extends string>({
+function IndigoSwitch<T extends string>({
   label,
   idPrefix,
   items,
@@ -153,7 +160,7 @@ function SkySwitch<T extends string>({
       >
         <span
           className="lg-bubble block h-full w-full rounded-full"
-          style={{ '--bubble-user-bg': SKY, '--lg-cap-2': `${capRadius}px` } as React.CSSProperties}
+          style={{ '--bubble-user-bg': INDIGO, '--lg-cap-2': `${capRadius}px` } as React.CSSProperties}
         />
       </span>
       {items.map((item) => {
@@ -169,10 +176,12 @@ function SkySwitch<T extends string>({
             aria-controls={`${idPrefix}-panel-${item.id}`}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(item.id)}
-            // White on the sky pill, as on .lg-sky (2.80:1, the owner's choice
-            // there; see LiquidGlassButton.css). Labels cross-fade on the pill's
-            // own clock, so the colour lands as the pill arrives.
-            className={`relative z-10 rounded-full px-3 py-1.5 text-center outline-none focus-visible:shadow-[0_0_0_4px_var(--toggle-focus-ring)] ${selected ? 'text-white' : 'text-text-secondary hover:text-text-primary'} transition-colors duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none`}
+            // White on the indigo pill (3.28:1, the toggle colour; see
+            // HowItWorksRefund.css). The label the pill lands on turns white
+            // on the pill's own clock (250ms), so the colour arrives with it;
+            // the label it leaves, and a hover, move at 150ms: exits and
+            // hover-ins are quicker than the arrival.
+            className={`relative z-10 rounded-full px-3 py-1.5 text-center outline-none ${selected ? 'text-white duration-[250ms]' : 'text-text-secondary hover:text-text-primary duration-150'} transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none`}
           >
             <span className="block text-xs font-semibold">{item.name}</span>
             {item.sub ? <span className="block text-[11px] font-medium">{item.sub}</span> : null}
@@ -242,14 +251,20 @@ const StepRow: React.FC<{ n: number; title: string; body: string }> = ({ n, titl
  *     height is always measured and never has to be discovered mid-switch;
  *   - on a switch the box eases straight to the new part's height (250ms
  *     smooth-out) WHILE the new part fades in with a 2px blur settling to 0
- *     (250ms) and the old one fades out faster (150ms: exits are quieter).
+ *     (250ms) and the old one fades out faster (150ms: exits are quieter);
+ *   - both follow the pill: the new part slides in 8px from the side the
+ *     pill is heading to, the old drifts 4px the other way (exits travel
+ *     less). The direction lives in state beside the part, set in the same
+ *     update, and the variants read it through `custom`, so a re-measure
+ *     re-render never replays the slide. The incoming start is explicit
+ *     ([8, 0]) because a hidden part may be parked on either side.
  * It used to be three beats — fade out, swap, THEN resize — which read as the
  * card lurching after the content had already changed.
  * No framer `layout`: layout projection caused a scroll regression in this
  * scroller. Heights come from a ResizeObserver; the first measure happens in a
  * layout effect, before paint, so the box never renders at 0.
  */
-const PartPanels: React.FC<{ part: PartId; content: Record<PartId, React.ReactNode> }> = ({ part, content }) => {
+const PartPanels: React.FC<{ part: PartId; dir: SwitchDir; content: Record<PartId, React.ReactNode> }> = ({ part, dir, content }) => {
   const reduceMotion = useReducedMotion();
   const refs = useRef<Partial<Record<PartId, HTMLDivElement | null>>>({});
   const [heights, setHeights] = useState<Partial<Record<PartId, number>>>({});
@@ -295,10 +310,22 @@ const PartPanels: React.FC<{ part: PartId; content: Record<PartId, React.ReactNo
   }, [target, reduceMotion, height]);
 
   const variants = reduceMotion
-    ? { in: { opacity: 1, transition: { duration: 0 } }, out: { opacity: 0, transition: { duration: 0 } } }
+    // x: 0 so a part left parked 4px aside before Reduce Motion was switched
+    // on still comes back to rest.
+    ? { in: { opacity: 1, x: 0, transition: { duration: 0 } }, out: { opacity: 0, transition: { duration: 0 } } }
     : {
-        in: { opacity: 1, filter: 'blur(0px)', transition: { duration: RESIZE_DUR, ease: EASE_SMOOTH_OUT } },
-        out: { opacity: 0, filter: SWAP_BLUR, transition: { duration: SWAP_DUR, ease: EASE_SMOOTH_OUT } },
+        in: (d: SwitchDir) => ({
+          opacity: 1,
+          filter: 'blur(0px)',
+          x: d === 0 ? 0 : [d * SLIDE_IN, 0],
+          transition: { duration: RESIZE_DUR, ease: EASE_SMOOTH_OUT },
+        }),
+        out: (d: SwitchDir) => ({
+          opacity: 0,
+          filter: SWAP_BLUR,
+          x: d * -SLIDE_OUT,
+          transition: { duration: SWAP_DUR, ease: EASE_SMOOTH_OUT },
+        }),
       };
 
   return (
@@ -316,6 +343,7 @@ const PartPanels: React.FC<{ part: PartId; content: Record<PartId, React.ReactNo
             inert={!active}
             initial={false}
             animate={active ? 'in' : 'out'}
+            custom={dir}
             variants={variants}
             style={{ position: 'absolute', top: 0, left: 0, right: 0 }}
             // pt-1 keeps a focus ring on the first control inside clear of
@@ -332,7 +360,13 @@ const PartPanels: React.FC<{ part: PartId; content: Record<PartId, React.ReactNo
 
 export const HowItWorksRefund: React.FC = () => {
   const reduceMotion = useReducedMotion();
-  const [part, setPart] = useState<PartId>('how');
+  const [{ part, dir }, setView] = useState<{ part: PartId; dir: SwitchDir }>({ part: 'how', dir: 0 });
+  const setPart = (next: PartId) => {
+    setView((prev) => (prev.part === next ? prev : {
+      part: next,
+      dir: Math.sign(partIndex(next) - partIndex(prev.part)) as SwitchDir,
+    }));
+  };
 
   const openExternal = (url: string) => {
     (window.electronAPI as any)?.openExternal?.(url);
@@ -346,13 +380,13 @@ export const HowItWorksRefund: React.FC = () => {
         <StepRow key={step.title} n={i + 1} title={step.title} body={step.body} />
       ))}
       {/* The demo is the next thing to do after reading the steps, so it
-          follows them, centred, as the same sky Liquid Glass button as Manage
-          (.lg-sky at its defaults). */}
+          follows them, centred, as the same indigo Liquid Glass button as Manage
+          (.lg-sky fed --hiw-indigo). */}
       <div className="flex justify-center px-4 pt-1 pb-3">
         <LiquidGlassButton
           variant="sky"
           className="lg-sm"
-          style={SKY_BUTTON_STYLE}
+          style={INDIGO_BUTTON_STYLE}
           icon={<CirclePlay size={14} />}
           onClick={() => openExternal(DEMO_URL)}
         >
@@ -381,9 +415,9 @@ export const HowItWorksRefund: React.FC = () => {
         title="Cancel or change your plan"
         description="Do it in the customer portal any time before your renewal date."
         control={(
-          // Sky blue: .lg-sky, the light Liquid Glass material, fed this
-          // section's theme-aware blue (HowItWorksRefund.css).
-          <LiquidGlassButton variant="sky" className="lg-sm" style={SKY_BUTTON_STYLE} onClick={() => openExternal(PORTAL_URL)}>
+          // Indigo: .lg-sky, the light Liquid Glass material, fed this
+          // section's theme-aware indigo (HowItWorksRefund.css).
+          <LiquidGlassButton variant="sky" className="lg-sm" style={INDIGO_BUTTON_STYLE} onClick={() => openExternal(PORTAL_URL)}>
             Manage
           </LiquidGlassButton>
         )}
@@ -441,7 +475,7 @@ export const HowItWorksRefund: React.FC = () => {
           px-4 and their tiles sit on the header's text edge. */}
       <div className="-mx-5 -mt-3 -mb-2">
         <div className="px-[17px] pb-2">
-          <SkySwitch
+          <IndigoSwitch
             label="How it works and refund policy"
             idPrefix="hiw-part"
             items={PARTS}
@@ -451,7 +485,7 @@ export const HowItWorksRefund: React.FC = () => {
           />
         </div>
 
-        <PartPanels part={part} content={content} />
+        <PartPanels part={part} dir={dir} content={content} />
       </div>
     </AccordionSection>
   );

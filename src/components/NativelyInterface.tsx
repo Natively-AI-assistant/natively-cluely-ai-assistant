@@ -9,16 +9,17 @@ import {
   Globe,
   HelpCircle,
   Image,
+  Keyboard,
   Lightbulb,
   List,
   MessageSquare,
   Mic,
+  MicOff,
   Pencil,
   PointerOff,
   RefreshCw,
   SlidersHorizontal,
   X,
-  Zap,
 } from 'lucide-react';
 import {
   mergeRollingTranscriptFinal,
@@ -34,11 +35,13 @@ function SkillPicker({
   selectedIndex,
   anchorEl,
   onSelect,
+  closing = false,
 }: {
   skills: SkillSummary[];
   selectedIndex: number;
   anchorEl: HTMLElement | null;
   onSelect: (s: SkillSummary) => void;
+  closing?: boolean;
 }) {
   const rect = anchorEl?.getBoundingClientRect();
   if (!rect) return null;
@@ -50,7 +53,7 @@ function SkillPicker({
     zIndex: 9999,
   };
   return (
-    <div style={style} className="rounded-xl border border-border-subtle bg-bg-card shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+    <div style={style} className={`ov-skill-picker${closing ? ' is-closing' : ''} rounded-xl border border-border-subtle bg-bg-card shadow-xl overflow-hidden max-h-48 overflow-y-auto`}>
       {skills.map((skill, i) => (
         <button
           key={skill.id}
@@ -65,6 +68,53 @@ function SkillPicker({
   );
 }
 
+/** Must match `.ov-skill-picker.is-closing`'s transition-duration (index.css). */
+const SKILL_PICKER_CLOSE_MS = 150;
+
+/** Keeps the picker mounted for its #05 dropdown close, showing the list it had
+ *  when it closed, so it fades out instead of vanishing. Reopening mid-close
+ *  just drops .is-closing and the picker eases back. */
+function SkillPickerLayer({
+  open,
+  skills,
+  selectedIndex,
+  anchorEl,
+  onSelect,
+}: {
+  open: boolean;
+  skills: SkillSummary[];
+  selectedIndex: number;
+  anchorEl: HTMLElement | null;
+  onSelect: (s: SkillSummary) => void;
+}) {
+  const [closing, setClosing] = useState(false);
+  // Adjusted during render, not in an effect: the render where `open` turns
+  // false must already count as closing, or it would commit null for a frame
+  // and the remount would start from the pre-open state.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    setClosing(!open);
+  }
+  const last = useRef({ skills, selectedIndex });
+  if (open) last.current = { skills, selectedIndex };
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(() => setClosing(false), SKILL_PICKER_CLOSE_MS);
+    return () => clearTimeout(timer);
+  }, [closing]);
+  if (!open && !closing) return null;
+  return (
+    <SkillPicker
+      skills={last.current.skills}
+      selectedIndex={last.current.selectedIndex}
+      anchorEl={anchorEl}
+      onSelect={onSelect}
+      closing={!open}
+    />
+  );
+}
+
 /** Intents that show LLM answer content — pin chat panel on first stream token. */
 const ANSWER_PANEL_INTENTS = new Set([
   'what_to_answer',
@@ -74,46 +124,6 @@ const ANSWER_PANEL_INTENTS = new Set([
   'follow_up_questions',
   'shorten',
 ]);
-
-const CardCopyButton = ({
-  text,
-  onCopy,
-  isLightTheme,
-  isModernTheme: _isModernTheme,
-  isGlassTheme: _isGlassTheme,
-}: {
-  text: string;
-  onCopy: (text: string) => void;
-  isLightTheme?: boolean;
-  isModernTheme?: boolean;
-  isGlassTheme?: boolean;
-}) => {
-  const t = useT();
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    onCopy(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const buttonColorClass = isLightTheme
-    ? 'text-slate-400 hover:text-slate-700'
-    : 'text-slate-500 hover:text-slate-200';
-
-  return (
-    <button
-      onClick={handleCopy}
-      className={`p-1 transition-colors duration-200 flex items-center justify-center ${buttonColorClass}`}
-      title={t("Copy answer")}
-    >
-      {copied ? (
-        <Check className="w-3.5 h-3.5 text-emerald-400" />
-      ) : (
-        <Copy className="w-3.5 h-3.5" />
-      )}
-    </button>
-  );
-};
 
 // Prism grammar names (from mapLanguageForPrism) are lowercase machine
 // identifiers, not display-ready. Maps the common ones this app's code
@@ -183,8 +193,8 @@ const CodeBlockChrome = ({ lang, code }: { lang: string; code: string }) => {
     >
       {lang && (
         <span
-          className="text-[10px] font-mono tracking-wide pointer-events-none"
-          style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
+          className="ov-keep-color text-[10px] font-mono tracking-wide pointer-events-none"
+          style={{ '--ov-keep-color': VIVID_DARK_LINE_NUMBER_COLOR } as React.CSSProperties}
         >
           {displayLanguageName(lang)}
         </span>
@@ -194,33 +204,25 @@ const CodeBlockChrome = ({ lang, code }: { lang: string; code: string }) => {
         onClick={handleCopy}
         title={copied ? t('Copied') : t('Copy code')}
         aria-label={copied ? t('Copied') : t('Copy code')}
-        className="relative w-5 h-5 flex items-center justify-center transition-transform duration-150 active:scale-95"
+        className="relative w-5 h-5 flex items-center justify-center transition-transform duration-150 active:scale-95 text-white/70 hover:text-white/95"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          {copied ? (
-            <motion.span
-              key="check"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.14 }}
-              className="absolute inset-0 flex items-center justify-center"
-            >
-              <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="copy"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.14 }}
-              className="absolute inset-0 flex items-center justify-center text-white/70 hover:text-white/95"
-            >
-              <Copy className="w-3.5 h-3.5" strokeWidth={2} />
-            </motion.span>
-          )}
-        </AnimatePresence>
+        {/* #09 icon swap, the same one the answer cards' copy uses. CSS, not
+            framer: this sits in a block that re-renders while an answer
+            streams, and framer's rAF shares the main thread with the parse.
+            The colour sits on the button: the answer card recolours every
+            span inside it, which turned this icon full white. */}
+        <span className="t-icon-swap ov-copy-swap" data-state={copied ? 'b' : 'a'}>
+          <span
+            className="t-icon flex items-center justify-center"
+            data-icon="a"
+            aria-hidden
+          >
+            <Copy className="w-3.5 h-3.5" strokeWidth={2} />
+          </span>
+          <span className="t-icon flex items-center justify-center" data-icon="b" aria-hidden>
+            <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
+          </span>
+        </span>
       </button>
     </div>
   );
@@ -242,6 +244,13 @@ import {
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
+import {
+  canScrollUp,
+  detectExternalUpwardScroll,
+  isAutoScrollSuppressed as isAutoScrollSuppressedFor,
+  shouldArmFromWheel,
+  suppressionKeyForArm,
+} from '../lib/scrollFollow.mjs';
 import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
@@ -293,6 +302,7 @@ import {
   maxWindowWidthFor,
   maxWindowHeightFor,
   collapsedWidthFor,
+  collapsedWidthForRow,
   OVERLAY_PANEL_INSET,
   OVERLAY_HOVER_GATE_PAD,
   defaultCollapsedPanelWidth,
@@ -311,6 +321,15 @@ import {
 } from '../lib/overlayCustomSize.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
+import {
+  DIRECT_ASSIST_OPEN_PROVIDERS,
+  directAssistFailureText,
+  directAssistNoticeView,
+  ownStopFailure,
+  type DirectAssistAnswerFailure,
+  type DirectAssistFallbackHop,
+  type DirectAssistFallbackNotice,
+} from '../lib/directAssistFailure.mjs';
 import {
   applyFirstStreamingToken,
   commitStreamingFlush,
@@ -348,6 +367,24 @@ import DOMPurify from 'dompurify';
 import { normalizeFinalizedMarkdownMath, renderStreamingMarkdown } from '../lib/streamingMarkdown';
 import ReactMarkdown from 'react-markdown';
 import { useT } from '../i18n';
+// System-design diagram artifacts: a ```mermaid block in an answer is drawn as
+// a diagram card. Mermaid itself is loaded on demand inside mermaidRenderer —
+// none of these imports pull it into this chunk.
+import { DiagramArtifact } from './diagram/DiagramArtifact';
+import { parseFencedBlocks, createFencedBlockTracker, replaceMermaidSource, isVisualBlock, mentionsVisualTag, type FenceBlock } from '../lib/diagram/fencedBlocks.mjs';
+import {
+  shouldUseStreamingDiagramUi,
+  hasOpeningMermaidFence,
+  mayHoldMermaidFence,
+  isMermaidOpeningTail,
+  fastForwardDiagramReveal,
+  completedDiagramCount,
+  previousVersionFor,
+  describeDiagramFromLead,
+} from '../lib/diagram/diagramStreamUi.mjs';
+import { latestDiagramInAnswer } from '../lib/diagram/activeDesign.mjs';
+import { diagramTimings } from '../lib/diagram/diagramTimings.mjs';
+import { useDiagramsEnabled, diagramsEnabledNow, cancelAllDiagramRepairs, warmDiagramRenderer, warmDiagramRendererOnIdle } from '../lib/diagram/diagramRuntime';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -367,10 +404,20 @@ import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
 import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel } from '../utils/modelUtils';
 import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
+import { acceleratorToKeys } from '../utils/keyboardUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
+import { PageContextChip } from './overlay/PageContextChip';
+import { TabPicker } from './overlay/TabPicker';
+import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
+import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
+import { modelSelectorGroupLabel } from './ui/modelSelectorGroups';
+import { DirectAssistNotice } from './ui/DirectAssistNotice';
 import RollingTranscript from './ui/RollingTranscript';
+import SwapText from './ui/SwapText';
+import ScreenshotTray from './overlay/ScreenshotTray';
+import ChromeFold from './overlay/ChromeFold';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
 // `rehypePlugins` as new array literals if defined inline at the call site —
@@ -430,6 +477,12 @@ import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
 // reportShellSize's sync call below).
 const STREAMING_HEIGHT_GROW_BUFFER_PX = 96; // ~4 lines of headroom per forced grow
 
+// Backstop for an action card's slot tween (requestChromeHeightMotion): the bar
+// settles on the tween's own completion; this only fires if that never comes
+// (the bar unmounted mid-tween), and it is generous because main-thread jank
+// can stretch a 250ms tween well past its nominal end.
+const CHROME_MOTION_FALLBACK_MS = 600;
+
 // How long the ResizeObserver's own height reporting stays suppressed PAST the
 // NOMINAL end of an expand/contract animation. Whichever channel is running
 // drives the OS height itself meanwhile (see startTransition / the viewport
@@ -478,10 +531,17 @@ interface Message {
   // and "gone" are different things to a reader judging an answer.
   shortenedFields?: string[];
   // Set when the ladder answered with a DIFFERENT provider than the one the
-  // user selected (a fallback rung fired). Verbatim provider ids, never a
-  // mapping table — the point is telling the user which provider actually
-  // received their request and got billed, not a pretty label.
-  fallbackNotice?: string;
+  // user selected (a fallback rung fired): each provider that failed, why,
+  // and — once someone has answered — who. Kept as data and worded at render
+  // time by directAssistNoticeView. Providers are named the way the model
+  // dropdown names them (modelSelectorGroupLabel), so the notice and the
+  // picker agree on who received the request and got billed.
+  fallbackNotice?: DirectAssistFallbackNotice;
+  // Set when the answer failed: outright, or partway (`partial`). Data, not a
+  // sentence — `text` holds one plain sentence for Copy and later context,
+  // and the row draws DirectAssistNotice from this instead. The provider's
+  // own words live only here, never in `text`.
+  failure?: DirectAssistAnswerFailure;
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -537,6 +597,9 @@ interface ActiveDirectAssistRequest {
   /** True once at least one provider_switch has fired for this request, so
    *  'done' knows whether to surface a fallback notice at all. */
   hasSwitched?: boolean;
+  /** The provider the ladder last moved to. An answer that breaks off
+   *  partway was being written by this one, not by the original selection. */
+  switchedTo?: string;
 }
 
 type DirectAssistRendererEvent =
@@ -550,9 +613,35 @@ type DirectAssistRendererEvent =
       from: { provider: string; model: string };
       to: { provider: string; model: string };
       reason: string;
+      status?: number;
+      detail?: string;
+      waitedMs: number;
+      unreachable?: boolean;
     }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
-  | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
+  | {
+      type: 'error';
+      requestId: string;
+      sequence: number;
+      error: {
+        code: string;
+        message: string;
+        retryable: boolean;
+        status?: number;
+        detail?: string;
+        unreachable?: boolean;
+        /** Every provider tried, when more than one was and none answered. */
+        attempts?: Array<{
+          provider: string;
+          model: string;
+          reason: string;
+          status?: number;
+          detail?: string;
+          unreachable?: boolean;
+          waitedMs: number;
+        }>;
+      };
+    }
   | { type: 'cancel'; requestId: string; sequence: number };
 
 const createDirectAssistRequestId = (): string => {
@@ -567,11 +656,9 @@ const directAssistSkillId = (request: string): string | undefined => {
   return match?.[1];
 };
 
-const directAssistErrorText = (code: string, message: string): string =>
-  `❌ ${code}: ${message}`;
-
 interface NativelyInterfaceProps {
-  onEndMeeting?: () => void;
+  /** The pill's Stop ended the meeting (main already did the stopping). */
+  onMeetingEnded?: () => void;
   overlayOpacity?: number;
   interfaceTheme?: MeetingInterfaceTheme;
 }
@@ -903,12 +990,11 @@ export const StreamingHighlightedCode = React.memo(
 //     does `[...prev]` then mutates only `prev.length - 1`). So === on msg
 //     correctly detects "this row is unchanged."
 //   - appearance: useMemo'd in parent on [overlayOpacity, isLightTheme].
-//   - onCopy / renderMessageText: useCallback'd in parent.
+//   - renderMessageText: useCallback'd in parent.
 interface MessageRowProps {
   msg: Message;
   isLightTheme: boolean;
   appearance: any;
-  onCopy: (text: string) => void;
   renderMessageText: (msg: Message) => React.ReactNode;
 }
 const formatProviderLabel = (provider?: string | null): string => {
@@ -1055,17 +1141,32 @@ const MessageRow = React.memo(
     msg,
     isLightTheme,
     appearance: _appearance,
-    onCopy: _onCopy,
     renderMessageText,
   }: MessageRowProps) {
     const t = useT();
     // Which attached screenshot (if any) is currently enlarged in this card.
     const [expandedPreview, setExpandedPreview] = React.useState<number | null>(null);
-    const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
+    // Worded here, at render time, so it follows the interface language.
+    const directAssistNotice = msg.role === 'system' && (msg.failure || msg.fallbackNotice)
+      ? directAssistNoticeView(
+          { failure: msg.failure, fallbackNotice: msg.fallbackNotice, ended: !msg.isStreaming },
+          t,
+        )
+      : null;
+    // A tilde-fenced diagram has no backtick fence but is the same wide card.
+    const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```') || hasOpeningMermaidFence(msg.text));
+    // A diagram answer's row spans the full width so the DRAWING can: a
+    // diagram is scaled down to fit its card, and the usual 85% column made
+    // real ones hard to read. Its prose and code keep the 85% measure (the
+    // .diagram-answer-parts rule in index.css), so the text does not reflow at
+    // the moment the block's fence arrives mid-stream.
+    const isDiagramMsg = msg.role === 'system' && hasOpeningMermaidFence(msg.text) && diagramsEnabledNow();
     // bubbleMaxClass: user bubbles are tighter; system + code use the same width.
     const bubbleMaxClass =
       msg.role === 'user'
         ? 'max-w-[72%] px-[13.6px] py-[10.2px]'
+        : isDiagramMsg
+        ? 'w-full max-w-full p-0'
         : msg.role === 'system'
         ? 'max-w-[85%] p-0'
         : 'max-w-[85%] px-4 py-3';
@@ -1093,6 +1194,7 @@ const MessageRow = React.memo(
                     : 'bg-blue-600/20 backdrop-blur-md border border-blue-500/30 text-blue-100 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
                   : ''
               }
+              ${msg.role === 'user' ? 'ov-bubble-in' : ''}
               ${
                 msg.role === 'system'
                   ? 'overlay-text-primary font-normal'
@@ -1154,7 +1256,7 @@ const MessageRow = React.memo(
                           title={isOpen ? t('Shrink') : t('Enlarge')}
                           className={`${frameClass} ${
                             isOpen ? 'col-span-full' : ''
-                          } block w-full p-0 transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99] focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-400/60`}
+                          } block w-full p-0 transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99] focus:outline-none`}
                           /* Fixed frame height keeps the bubble's layout (and the
                              overlay's measured content height) stable while the
                              data-URL decodes — a bare auto-height <img> would
@@ -1209,7 +1311,9 @@ const MessageRow = React.memo(
                 <span>{t('Corrected answer')}{msg.correctionNote ? ` — ${msg.correctionNote}` : ''}</span>
               </div>
             )}
-            {renderMessageText(msg)}
+            {/* An answer that failed outright has no text worth a bubble: the
+                notice below stands in for it. A cut-off answer keeps its text. */}
+            {msg.role === 'system' && msg.failure && !msg.failure.partial ? null : renderMessageText(msg)}
             {/* Direct Assist dropped one or more context fields to fit the
                 model's context window (see requestBuilder's per-source drop
                 order) — surfaced so a thin-looking answer isn't a silent
@@ -1231,14 +1335,16 @@ const MessageRow = React.memo(
                 </span>
               </div>
             ) : null}
-            {/* The ladder answered with a different provider than the one the
-                user selected — the label above must never lie about who
-                actually received the request and got billed. */}
-            {msg.role === 'system' && msg.fallbackNotice && (
-              <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
-                <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
-                <span className="truncate max-w-[260px]">{msg.fallbackNotice}</span>
-              </div>
+            {/* A provider failed: another one answered, is being tried, or
+                nobody did. The notice must never lie about who actually
+                received the request and got billed. */}
+            {directAssistNotice && (
+              <DirectAssistNotice
+                view={directAssistNotice}
+                isLightTheme={isLightTheme}
+                actionLabel={t(DIRECT_ASSIST_OPEN_PROVIDERS)}
+                onAction={() => window.electronAPI?.openSettingsTab?.('ai-providers')}
+              />
             )}
             {/* Verified badge: the code in this message passed executed tests. */}
             {msg.role === 'system' && msg.codeVerified && (
@@ -1260,12 +1366,11 @@ const MessageRow = React.memo(
     prev.msg === next.msg &&
     prev.isLightTheme === next.isLightTheme &&
     prev.appearance === next.appearance &&
-    prev.renderMessageText === next.renderMessageText &&
-    prev.onCopy === next.onCopy,
+    prev.renderMessageText === next.renderMessageText,
 );
 
 const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
-  onEndMeeting,
+  onMeetingEnded,
   overlayOpacity = OVERLAY_OPACITY_DEFAULT,
   interfaceTheme = 'default',
 }) => {
@@ -1278,7 +1383,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [availableSkills, setAvailableSkills] = useState<SkillSummary[]>([]);
   const [skillPickerIndex, setSkillPickerIndex] = useState(0);
-  const { shortcuts, isShortcutPressed } = useShortcuts();
+  const { shortcuts, isShortcutPressed, conflicts: shortcutConflicts, globalShortcutsEnabled } = useShortcuts();
   const [messages, setMessages] = useState<Message[]>([]);
   // Keep chat history visible once an answer lands until explicit clear / session reset.
   const [answerPanelPinned, setAnswerPanelPinned] = useState(false);
@@ -1644,11 +1749,85 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // active interrupt in effect, regardless of the raw distance-from-bottom
   // at that instant). Declared once here rather than duplicated inline at
   // both call sites.
-  const isAutoScrollSuppressed = useCallback(() => {
-    const suppressedId = autoScrollSuppressedForMsgIdRef.current;
+  const isAutoScrollSuppressed = useCallback(
+    () => isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current),
+    [],
+  );
+
+  // THE one place a scroll-up detaches the chat from the bottom. Every input
+  // path calls it synchronously, at the moment of the gesture — wheel, the
+  // held-key scroll, the global-shortcut inertial kick, the edge-strip wheel
+  // forward, and the scroll listener's delta check — rather than each path
+  // hoping the rAF-deferred scroll listener still sees a negative delta by the
+  // time it runs. That listener loses the race as soon as anything else writes
+  // scrollTop first, which the per-frame stream follow below now does on every
+  // frame. Arming keys suppression to the live stream, or to the idle sentinel
+  // when nothing is streaming (see suppressionKeyForArm).
+  const armAutoScrollInterrupt = useCallback(() => {
+    const alreadySuppressed = isAutoScrollSuppressedFor(
+      autoScrollSuppressedForMsgIdRef.current,
+      streamingMsgIdRef.current,
+    );
     const streamingId = streamingMsgIdRef.current;
-    return suppressedId !== null && (streamingId === null || streamingId === suppressedId);
+    autoScrollSuppressedForMsgIdRef.current = suppressionKeyForArm(streamingId);
+    // Stop the width/height-transition sticky-bottom pin from re-fighting the
+    // user through that other path too.
+    wasAtBottomRef.current = false;
+    // Snapshot the headroom baseline only on the FIRST tick of a gesture: a
+    // multi-tick flick would otherwise keep moving the start of the escape
+    // forward and defeat reserveScrollHeadroomIfNeeded.
+    if (!alreadySuppressed) {
+      const c = scrollContainerRef.current;
+      if (c) clientHeightAtInterruptRef.current = c.clientHeight;
+    }
+    // The pill promises "there is live output you are not seeing". While idle
+    // there isn't any yet — the messages effect raises it if content arrives.
+    if (streamingId !== null) setJumpToLatestVisible(true);
+  }, [setJumpToLatestVisible]);
+
+  // Every path that hands control back to auto-follow: scrolled back to the
+  // bottom by hand, the pill, a user send. Also puts the width/height
+  // transition pin back — arming turns wasAtBottomRef off and no re-arm path
+  // used to turn it on again, so a code block expanding right after a re-arm
+  // left the chat unpinned. Inlines the headroom reset for the same TDZ
+  // reason the messages effect below does.
+  const resumeAutoScroll = useCallback(() => {
+    autoScrollSuppressedForMsgIdRef.current = null;
+    wasAtBottomRef.current = true;
+    setJumpToLatestVisible(false);
+    if (scrollSpacerRef.current) scrollSpacerRef.current.style.height = '0px';
+    clientHeightAtInterruptRef.current = 0;
+  }, [setJumpToLatestVisible]);
+
+  // Follow the bottom for the frame that just painted. Called by the reveal
+  // ticker after every imperative (plain-text) paint: those tokens bypass
+  // React, so the [messages] effect below never runs for them and nothing
+  // followed the answer while it streamed — the view sat still until finalize
+  // and then jumped. Anything that moved scrollTop UP since our last write is
+  // by definition not us, so it detaches instead of being undone.
+  // Did the scroller's own height change since the last time anything looked?
+  // Growing it makes the browser clamp scrollTop down by itself (see
+  // detectExternalUpwardScroll), so callers must not read that as the user.
+  // Whoever looks first consumes the change; each also resyncs lastScrollTopRef.
+  const lastClientHeightRef = useRef<number>(0);
+  const noteViewportResize = useCallback((c: HTMLElement) => {
+    const resized = c.clientHeight !== lastClientHeightRef.current;
+    lastClientHeightRef.current = c.clientHeight;
+    return resized;
   }, []);
+
+  const followStreamBottom = useCallback(() => {
+    const c = scrollContainerRef.current;
+    if (!c) return;
+    if (isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
+    const max = c.scrollHeight - c.clientHeight;
+    if (detectExternalUpwardScroll({ scrollTop: c.scrollTop, lastScrollTop: lastScrollTopRef.current, maxScroll: max, viewportResized: noteViewportResize(c) })) {
+      armAutoScrollInterrupt();
+      return;
+    }
+    if (c.scrollTop < max) c.scrollTop = max;
+    lastScrollTopRef.current = c.scrollTop;
+  }, [armAutoScrollInterrupt, noteViewportResize]);
 
   // Auto-scroll to bottom on every messages update, unless a scroll-up
   // interrupt is currently active for this message (see isAutoScrollSuppressed
@@ -1672,23 +1851,36 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // suppression naturally lifts without any explicit "new message" handling.
   useEffect(() => {
     if (messages.length === 0) return;
-    if (isAutoScrollSuppressed()) return;
+    const c = scrollContainerRef.current;
+    // A scroll-up that no input path announced (see armAutoScrollInterrupt)
+    // still shows up as scrollTop sitting below our last write — adopt it here
+    // rather than overwrite it.
+    if (
+      c &&
+      !isAutoScrollSuppressed() &&
+      detectExternalUpwardScroll({
+        scrollTop: c.scrollTop,
+        lastScrollTop: lastScrollTopRef.current,
+        maxScroll: c.scrollHeight - c.clientHeight,
+        viewportResized: noteViewportResize(c),
+      })
+    ) {
+      armAutoScrollInterrupt();
+    }
+    if (isAutoScrollSuppressed()) {
+      // Content changed while the user is reading elsewhere: leave the view
+      // alone and make sure the way back is on screen.
+      setJumpToLatestVisible(true);
+      return;
+    }
     // Not (or no longer) suppressed — clear any stale suppression/pill state
     // left over from a prior message and resume following the stream.
-    autoScrollSuppressedForMsgIdRef.current = null;
-    setJumpToLatestVisible(false);
-    // Inlined clearScrollHeadroom's body rather than calling it — that
-    // function is declared later in the component (near pinScrollBottomIfNeeded)
-    // and referencing it from this effect's dependency array would be a TDZ
-    // read, same class of issue already worked around for the refs above.
-    if (scrollSpacerRef.current) scrollSpacerRef.current.style.height = '0px';
-    clientHeightAtInterruptRef.current = 0;
-    const c = scrollContainerRef.current;
+    resumeAutoScroll();
     if (c) {
       c.scrollTop = c.scrollHeight - c.clientHeight;
       lastScrollTopRef.current = c.scrollTop;
     }
-  }, [messages, setJumpToLatestVisible, isAutoScrollSuppressed]);
+  }, [messages, setJumpToLatestVisible, isAutoScrollSuppressed, armAutoScrollInterrupt, resumeAutoScroll, noteViewportResize]);
 
   const hasActiveSystemAnswer = useMemo(
     () =>
@@ -1806,6 +1998,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // immediately contradict eager expansion and schedule a collapse.
   const eagerCodeExpansionHoldRef = useRef(false);
   const animationControlsRef = useRef<ReturnType<typeof animate> | null>(null);
+  // The width the latest startTransition was sent to — so a collapsed width
+  // that changes mid-flight can tell a panel heading to the OLD collapsed width
+  // from one heading somewhere else.
+  const transitionTargetRef = useRef<number | null>(null);
   // Honors the OS "Reduce Motion" accessibility setting (WCAG 2.3.3). When the
   // user prefers reduced motion we SNAP the shell width instead of springing it
   // — same final state, zero animated travel. A ref (not state) so the
@@ -1887,6 +2083,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string }>>(
     [],
   );
+  // Phone Mirror: preview → path of every screenshot the tray held lately, so a
+  // sent question card (which keeps only previews) can name its screenshots.
+  const phoneShotPathsRef = useRef(new Map<string, string>());
+  const phoneSentShotCardsRef = useRef(new Set<string>());
+  // The tray as of the last render, for listeners registered once.
+  const attachedContextRef = useRef(attachedContext);
 
   // Settings State with Persistence
   const [isUndetectable, setIsUndetectable] = useState(false);
@@ -2068,6 +2270,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
 
   const useDarkCodeTheme = !isLightTheme || isGlassTheme || isModernTheme;
+  // Glass and modern keep a dark panel under the light app theme, so only the
+  // default interface theme ever puts the chat's content on a light surface.
+  const isLightSurface = isLightTheme && !isGlassTheme && !isModernTheme;
   const codeTheme = useDarkCodeTheme ? vividDarkCodeTheme : oneLight;
   const codeLineNumberColor = useDarkCodeTheme ? VIVID_DARK_LINE_NUMBER_COLOR : 'rgba(24,24,24,0.4)';
   // Header only shows for the light theme and the modern/glass interface
@@ -2362,8 +2567,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const heightPinStreamIdRef = useRef<string | null>(null);
 
   // The panel fills the window when expanded; the collapsed width scales with
-  // it. collapsedWidthFor(732) === 600 exactly, so with no custom size these
-  // are bit-identical to the constants they replace. Recomputed per render like
+  // it. With no custom size that is 720 expanded and 604 collapsed (widened
+  // from 590 so Interview Mode's Brainstorm row fits; see
+  // OVERLAY_DEFAULT_COLLAPSED_WIDTH). Recomputed per render like
   // the old literals were — every dependency array that listed the literals
   // already lists these, so no memoisation is needed or wanted.
   // What we ASK the OS for — the user's pin, else the default. Never the
@@ -2390,7 +2596,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // new is that the slack now also exists on the VERTICAL axis, and at the
   // panel's fully expanded width.
   const SHELL_WIDTH_EXPANDED = WINDOW_WIDTH - OVERLAY_PANEL_INSET * 2;
-  const SHELL_WIDTH_COLLAPSED = collapsedWidthFor(SHELL_WIDTH_EXPANDED);
+  // The quick-action row's single-line width in EACH mode, measured from two
+  // hidden copies of the row (0 until the first measure). The collapsed panel
+  // grows past its default only as far as the row needs, so Interview Mode's
+  // Brainstorm chip never pushes Answer onto a second line in any language.
+  // See the measuring effect after handleManualResizeToggle.
+  const [quickRowNeeds, setQuickRowNeeds] = useState({ recap: 0, brainstorm: 0 });
+  // The mode whose chip label is ON SCREEN. It trails actionButtonMode: a
+  // longer label waits for the panel to make room, and a shorter one is swapped
+  // in before the panel narrows. Until they agree the panel holds the wider of
+  // the two, so the row never wraps mid-change.
+  const [shownActionMode, setShownActionMode] = useState(actionButtonMode);
+  const quickRowNeed = Math.max(quickRowNeeds[actionButtonMode], quickRowNeeds[shownActionMode]);
+  const SHELL_WIDTH_COLLAPSED = collapsedWidthForRow(
+    collapsedWidthFor(SHELL_WIDTH_EXPANDED),
+    SHELL_WIDTH_EXPANDED,
+    quickRowNeed,
+  );
+  // The same rule at the DEFAULT window, for the reset paths (session reset,
+  // double-click reset). They live in long-lived callbacks, so they read it
+  // through a ref rather than closing over this render's value.
+  const defaultCollapsedForRowRef = useRef(defaultCollapsedPanelWidth());
+  defaultCollapsedForRowRef.current = collapsedWidthForRow(
+    defaultCollapsedPanelWidth(),
+    panelWidthForWindow(OVERLAY_DEFAULT_WINDOW_WIDTH),
+    quickRowNeed,
+  );
   // The OS overlay window's width. Equals SHELL_WIDTH_EXPANDED always (the
   // panel fills the window edge-to-edge when expanded), and at its default
   // equals WindowHelper.OVERLAY_DEFAULT_WIDTH (the window's birth width — the
@@ -2601,6 +2832,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // localisable. Absent for emitters that predate it and for the in-app TCC
     // repair result, which is constructed locally below.
     titleKey?: string;
+    // True when main gave up (no more recovery attempts). Decides the banner's
+    // tone: a terminal fault is an error, a stuck-but-retrying one a warning.
+    terminal?: boolean;
   };
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
   // UX2: in-flight guard for the "Repair Permissions" button so a double-click
@@ -2650,6 +2884,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           message: payload.message,
           channel: payload.channel,
           titleKey: payload.titleKey,
+          terminal: !!payload.terminal,
         });
         setIsExpanded(true);
       }
@@ -2802,6 +3037,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // below the (already fully visible) content, not a clip. Only SHORT
   // answers that end below the scroll cap are guaranteed an exact settle
   // immediately (their last real text change is still a size change).
+  // The last window height this renderer ASKED for (reportShellSize and
+  // resizeOverlayWindow are the only two senders). window.innerHeight trails a
+  // request by an IPC round trip, so "would this report grow the window?" is
+  // asked of this instead.
+  const lastWindowHeightAskedRef = useRef(0);
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
     // Skip IPC while the shell is hidden (Cmd+B has fired hideWindow and the
@@ -2865,6 +3105,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         screenAvailHeight: window.screen?.availHeight,
       });
     }
+    lastWindowHeightAskedRef.current = height;
     if (window.electronAPI?.updateContentDimensionsCentered) {
       void window.electronAPI
         .updateContentDimensionsCentered({ width, height })
@@ -3115,6 +3356,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // expand tween awaits it, because "the window has been ASKED for 496" and
       // "the window IS 496" are one round trip apart and the difference is a
       // frame of clipped footer.
+      lastWindowHeightAskedRef.current = targetHeight;
       if (window.electronAPI?.updateContentDimensionsCentered) {
         return window.electronAPI
           .updateContentDimensionsCentered({ width, height: targetHeight })
@@ -3151,6 +3393,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // waits for the first token (`hasText`); an empty placeholder reports its
   // exact height and is not adopted as the current stream, so the first
   // token still takes the brand-new-card branch and gets its own headroom.
+  // A chrome fold that runs while an answer streams (the screenshot tray
+  // folding on send) can't take the height channel: the stream's growth must
+  // keep flowing. It holds only this: until the fold settles, a streaming
+  // report that would not GROW the window is skipped. Before the first token
+  // the stream reports its exact height every frame, so without the hold a
+  // fold there is one native setBounds per frame on the glass window.
+  const streamShrinkHoldsRef = useRef(0);
+  const streamShrinkHoldUntilRef = useRef(0);
   const driveStreamingHeight = useCallback(
     (targetHeight: number) => {
       const decision = decideStreamingHeightCommit({
@@ -3164,6 +3414,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingHeightStreamIdRef.current = decision.nextStreamId;
       streamingHeightCommittedRef.current = decision.nextCommittedHeight;
       if (decision.action === 'none') return;
+      if (
+        streamShrinkHoldsRef.current > 0 &&
+        Date.now() < streamShrinkHoldUntilRef.current &&
+        decision.height <= lastWindowHeightAskedRef.current
+      ) {
+        return;
+      }
       resizeOverlayWindow(decision.height);
     },
     [resizeOverlayWindow],
@@ -3488,7 +3745,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       verticalScrollCap({ availHeight, chromeHeight }),
     );
     return chromeHeight + Math.min(naturalViewport, cap);
-  }, [shellWidth, SHELL_WIDTH_EXPANDED]);
+  }, [shellWidth, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
 
   // Measure the viewport's NATURAL height and feed it to the commit rule.
   //
@@ -3573,14 +3830,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (growth > 0) spacer.style.height = `${growth}px`;
   }, []);
 
-  // Re-arm counterpart: drop the reserved headroom back to 0. Called from
-  // every path that clears autoScrollSuppressedForMsgIdRef (wheel-down,
-  // geometry re-arm, the jump-to-latest click, and a fresh message starting).
-  const clearScrollHeadroom = useCallback(() => {
-    if (scrollSpacerRef.current) scrollSpacerRef.current.style.height = '0px';
-    clientHeightAtInterruptRef.current = 0;
-  }, []);
-
   const startTransition = useCallback(
     (targetWidth: number) => {
       // The user's drag owns `shellWidth` for its duration. Without this the
@@ -3591,6 +3840,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // toggle, checkCodeVisibility, the aux-window action and queueToken.
       if (isResizingRef.current) return;
       codeExpandedRef.current = targetWidth === SHELL_WIDTH_EXPANDED;
+      transitionTargetRef.current = targetWidth;
 
       const fromWidth = Math.round(shellWidth.get());
 
@@ -3846,6 +4096,110 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     manualWidthOverrideRef.current = target;
     startTransition(target);
   }, [shellWidth, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
+
+  // ── Collapsed width follows the quick-action row ──────────────────────────
+  // Interview Mode swaps Recap for Brainstorm, and in several languages that
+  // chip is long enough to push Answer onto a second line at the default
+  // collapsed width. So the row is measured from layout and the collapsed
+  // width grows to fit it (collapsedWidthForRow: never below the default,
+  // never above the expanded width). English with Inter fits the default and
+  // never moves.
+  const quickRowRef = useRef<HTMLDivElement>(null);
+  const recapRowMeasureRef = useRef<HTMLDivElement>(null);
+  const brainstormRowMeasureRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const row = quickRowRef.current;
+    const card = shellRef.current;
+    const recapRow = recapRowMeasureRef.current;
+    const brainstormRow = brainstormRowMeasureRef.current;
+    if (!row || !card || !recapRow || !brainstormRow || typeof ResizeObserver === 'undefined') return;
+    const px = (v: string) => parseFloat(v) || 0;
+    const measure = () => {
+      // The hidden rows are the real chips laid out on one line at their
+      // natural width, so their width IS the single-line need; add the card
+      // chrome around the row (its borders: card width minus row width).
+      const chrome = px(getComputedStyle(card).width) - px(getComputedStyle(row).width);
+      const next = {
+        recap: px(getComputedStyle(recapRow).width) + chrome,
+        brainstorm: px(getComputedStyle(brainstormRow).width) + chrome,
+      };
+      setQuickRowNeeds((prev) =>
+        Math.abs(prev.recap - next.recap) < 0.25 && Math.abs(prev.brainstorm - next.brainstorm) < 0.25
+          ? prev
+          : next,
+      );
+    };
+    measure();
+    // Fires on language changes and when Inter finishes loading over the
+    // fallback font. Neither the mode nor Answer/Stop moves these rows.
+    const ro = new ResizeObserver(measure);
+    ro.observe(recapRow);
+    ro.observe(brainstormRow);
+    return () => ro.disconnect();
+  }, []);
+
+  // When the collapsed width changes, move a panel that is resting at (or
+  // heading to) the old collapsed width onto the new one. Expanded, dragged
+  // and custom widths are left alone. Only an Interview Mode change animates —
+  // the width follows the mode in the same render, so that is known exactly;
+  // the first measure and a late-loading font snap, inside the reflow they
+  // come with. A spring already in flight is redirected, never stopped: its
+  // completion is what settles the window height.
+  const quickRowModeKey = `${actionButtonMode}|${shownActionMode}`;
+  const appliedModeKeyRef = useRef(quickRowModeKey);
+  const appliedCollapsedRef = useRef(SHELL_WIDTH_COLLAPSED);
+  useLayoutEffect(() => {
+    const modeDriven = appliedModeKeyRef.current !== quickRowModeKey;
+    appliedModeKeyRef.current = quickRowModeKey;
+    const previous = appliedCollapsedRef.current;
+    appliedCollapsedRef.current = SHELL_WIDTH_COLLAPSED;
+    if (previous === SHELL_WIDTH_COLLAPSED) return;
+    if (isResizingRef.current || codeExpandedRef.current) return;
+    const inFlight = animationControlsRef.current !== null;
+    const atPrevious = inFlight
+      ? transitionTargetRef.current === previous
+      : Math.abs(shellWidth.get() - previous) <= 1;
+    if (!atPrevious) return;
+    if (manualWidthOverrideRef.current !== null) {
+      manualWidthOverrideRef.current = SHELL_WIDTH_COLLAPSED;
+    }
+    if (inFlight || (modeDriven && hasRenderedExpandedRef.current)) {
+      startTransition(SHELL_WIDTH_COLLAPSED);
+      return;
+    }
+    transitionTargetRef.current = SHELL_WIDTH_COLLAPSED;
+    shellWidth.set(SHELL_WIDTH_COLLAPSED);
+  }, [SHELL_WIDTH_COLLAPSED, quickRowModeKey, shellWidth, startTransition]);
+
+  // The chip label the swap is heading to. A longer label waits until the
+  // panel is wide enough for the row; if nothing is widening the panel (it is
+  // expanded, dragged, or the window is too narrow) it swaps at once.
+  const [labelActionMode, setLabelActionMode] = useState(actionButtonMode);
+  useEffect(() => {
+    if (labelActionMode === actionButtonMode) return;
+    const target = actionButtonMode;
+    const fits = () => shellWidth.get() + 0.5 >= quickRowNeeds[target];
+    const swap = () => setLabelActionMode(target);
+    if (fits()) {
+      swap();
+      return;
+    }
+    const unsubscribe = shellWidth.on('change', () => {
+      if (fits()) swap();
+    });
+    const raf = requestAnimationFrame(() => {
+      if (animationControlsRef.current === null) swap();
+    });
+    const timer = setTimeout(swap, 1200);
+    return () => {
+      unsubscribe();
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [actionButtonMode, labelActionMode, quickRowNeeds, shellWidth]);
+  const handleModeLabelShown = useCallback((key: string) => {
+    setShownActionMode(key === 'brainstorm' ? 'brainstorm' : 'recap');
+  }, []);
 
   // ── Free-form resize handles ──────────────────────────────────────────────
   // EAST-side directions only ('e', 's', 'se'). A west-side handle would need
@@ -4307,7 +4661,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     setCustomWindowWidth(null);
     setAppliedWindowWidth(null);
     manualWidthOverrideRef.current = null;
-    shellWidth.set(defaultCollapsedPanelWidth());
+    shellWidth.set(defaultCollapsedForRowRef.current);
     // A WIDTH pin re-reports through the sizing effect (it lists
     // `customWindowWidth` in its deps). A height-only pin has no such path:
     // clearing a null width is not a state change, the content did not move
@@ -4354,14 +4708,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         case 'toggle-expand':
           setIsExpanded((prev) => !prev);
           break;
-        case 'end-meeting':
-          if (onEndMeeting) onEndMeeting();
-          else window.electronAPI.quitApp();
+        // Main has already ended the meeting (the pill's Stop no longer
+        // round-trips through this renderer); this is bookkeeping only.
+        case 'meeting-ended':
+          onMeetingEnded?.();
           break;
       }
     });
     return () => unsubscribe?.();
-  }, [handleManualResizeToggle, onEndMeeting]);
+  }, [handleManualResizeToggle, onMeetingEnded]);
 
   // Stream the panel's LIVE right edge (px from the window's left edge) to the
   // main process so the toggle aux window rides the panel's top-right corner
@@ -4629,21 +4984,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       distanceFromBottom,
       alreadySuppressed: isAutoScrollSuppressed(),
       transitionInFlight,
+      viewportResized: noteViewportResize(container),
     });
 
     if (decision === 'arm') {
       // User-initiated upward scroll (our own auto-scroll writes only ever
       // increase/hold scrollTop, see the streaming effect + pinScrollBottomIfNeeded).
-      autoScrollSuppressedForMsgIdRef.current = streamingMsgIdRef.current;
-      // Stop the width/height-transition sticky-bottom pin from re-fighting
-      // the user through that other path too (e.g. a code block auto-
-      // expanding mid-stream).
-      wasAtBottomRef.current = false;
-      clientHeightAtInterruptRef.current = container.clientHeight;
-      // Only show the pill when there's an actual active stream being
-      // withheld — scrolling up in a finished, static conversation must not
-      // surface a pill with no suppression behind it.
-      setJumpToLatestVisible(streamingMsgIdRef.current !== null);
+      // The pill only appears when there is a live stream being withheld;
+      // scrolling up in a finished, static conversation surfaces none until
+      // content actually arrives.
+      armAutoScrollInterrupt();
       return;
     }
 
@@ -4651,23 +5001,71 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Lets a user who scrolled up, read, then scrolled back down
       // themselves resume live-following without waiting for the next
       // message.
-      autoScrollSuppressedForMsgIdRef.current = null;
-      setJumpToLatestVisible(false);
-      clearScrollHeadroom();
+      resumeAutoScroll();
     }
-  }, [setJumpToLatestVisible, clearScrollHeadroom, isAutoScrollSuppressed]);
+  }, [armAutoScrollInterrupt, resumeAutoScroll, isAutoScrollSuppressed, noteViewportResize]);
+
+  // A wheel gesture on the chat, from any element that feeds it — the
+  // container's own listener and the edge strip that forwards to it. Raw input,
+  // read in the tick it fires, so it cannot lose to a scrollTop write. Upward
+  // detaches; a downward tick that lands within reach of the bottom hands
+  // control back (a native clamp from a growing panel can look identical to
+  // that by geometry alone, so only a real wheel-down may clear it).
+  const handleWheelIntent = useCallback(
+    (deltaY: number, deltaX = 0) => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      if (deltaY < 0) {
+        if (
+          shouldArmFromWheel({
+            deltaX,
+            deltaY,
+            scrollTop: container.scrollTop,
+            scrollHeight: container.scrollHeight,
+            clientHeight: container.clientHeight,
+          })
+        ) {
+          armAutoScrollInterrupt();
+        }
+        return;
+      }
+      if (deltaY > 0) {
+        const distanceFromBottom =
+          container.scrollHeight - (container.scrollTop + container.clientHeight);
+        if (distanceFromBottom <= 28) resumeAutoScroll();
+      }
+    },
+    [armAutoScrollInterrupt, resumeAutoScroll],
+  );
 
   // "Jump to latest" pill click handler — the ONE place `behavior: 'smooth'`
   // is used for this scroll container. The per-frame streaming chase (step 4)
   // stays a direct scrollTop write; smooth-scrolling every frame would
   // restart the animation each time and never reach bottom.
   const handleJumpToLatest = useCallback(() => {
-    autoScrollSuppressedForMsgIdRef.current = null;
-    setJumpToLatestVisible(false);
-    clearScrollHeadroom();
+    resumeAutoScroll();
     const c = scrollContainerRef.current;
     if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
-  }, [setJumpToLatestVisible, clearScrollHeadroom]);
+  }, [resumeAutoScroll]);
+
+  // "Show me the newest thing": the user just sent something, or otherwise
+  // asked to be at the bottom. Replaces six bare messagesEndRef.scrollIntoView
+  // calls that bypassed the interrupt state machine altogether — they left
+  // suppression and the pill armed, animated smooth against the direct
+  // scrollTop writes, and could scroll ancestors of a click-through overlay.
+  // Hands control back synchronously (so the messages effect for the row that
+  // was just appended already follows), then settles once layout has caught up.
+  const scrollToLatest = useCallback(() => {
+    resumeAutoScroll();
+    const settle = () => {
+      const c = scrollContainerRef.current;
+      if (!c || isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
+      c.scrollTop = c.scrollHeight - c.clientHeight;
+      lastScrollTopRef.current = c.scrollTop;
+    };
+    settle();
+    setTimeout(settle, 50);
+  }, [resumeAutoScroll]);
 
   // (Re)attach the scroll listener whenever the scroll container mounts.
   // The OUTER shell (the always-mounted `data-shell-root` motion.div) now
@@ -4727,49 +5125,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // upward wheel motion counts. handleScrollInterrupt's own delta<0 check
     // remains a secondary signal for input that doesn't fire wheel events
     // (e.g. dragging the scrollbar thumb directly).
-    const onWheel = (e: WheelEvent) => {
-      if (e.deltaY < 0) {
-        // Upward tick — interrupt, no threshold. Mirrors handleScrollInterrupt's
-        // direction check but reads raw input directly (see the effect-level
-        // comment above for why that avoids the streaming-write race).
-        const alreadySuppressed = isAutoScrollSuppressed();
-        autoScrollSuppressedForMsgIdRef.current = streamingMsgIdRef.current;
-        wasAtBottomRef.current = false;
-        // Snapshot the headroom baseline only on the FIRST tick of a gesture
-        // — a multi-tick trackpad flick fires several wheel events in quick
-        // succession, and re-snapshotting on each one would keep moving the
-        // "start of the escape" baseline forward, defeating
-        // reserveScrollHeadroomIfNeeded the same way a re-snapshot loop did
-        // in handleScrollInterrupt (see its comment for the full mechanism).
-        if (!alreadySuppressed) {
-          const container = scrollContainerRef.current;
-          if (container) clientHeightAtInterruptRef.current = container.clientHeight;
-        }
-        setJumpToLatestVisible(streamingMsgIdRef.current !== null);
-        return;
-      }
-      if (e.deltaY > 0) {
-        // Downward tick — a genuine user-driven re-arm signal, checked here
-        // (not only via handleScrollInterrupt's geometry-only re-arm below)
-        // because a width/height transition growing clientHeight can pull
-        // scrollTop toward the bottom via the BROWSER'S OWN native clamping
-        // (max scrollable position shrinking as the visible area grows) with
-        // no user input at all — that native clamp is indistinguishable from
-        // "the user scrolled back to bottom" by geometry alone, and would
-        // silently clear a real interrupt. A wheel-down tick is unambiguous:
-        // it can only originate from the user.
-        const container = scrollContainerRef.current;
-        if (container) {
-          const distanceFromBottom =
-            container.scrollHeight - (container.scrollTop + container.clientHeight);
-          if (distanceFromBottom <= 28) {
-            autoScrollSuppressedForMsgIdRef.current = null;
-            setJumpToLatestVisible(false);
-            clearScrollHeadroom();
-          }
-        }
-      }
-    };
+    const onWheel = (e: WheelEvent) => handleWheelIntent(e.deltaY, e.deltaX);
     container.addEventListener('scroll', onScroll, { passive: true });
     container.addEventListener('wheel', onWheel, { passive: true });
     return () => {
@@ -4781,9 +5137,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     scrollContainerMounted,
     checkCodeVisibility,
     handleScrollInterrupt,
-    setJumpToLatestVisible,
-    clearScrollHeadroom,
-    isAutoScrollSuppressed,
+    handleWheelIntent,
   ]);
 
   // Cancel all in-flight async work on unmount.
@@ -4902,8 +5256,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // hide so these stay meaningful.
       const c = scrollContainerRef.current;
       if (c) {
+        // A user who detached from the bottom is not "at the bottom" for this
+        // purpose even if they happen to be within a few px of it.
         wasAtBottomBeforeHideRef.current =
-          c.scrollHeight - (c.scrollTop + c.clientHeight) <= 8;
+          c.scrollHeight - (c.scrollTop + c.clientHeight) <= 8 && !isAutoScrollSuppressed();
         scrollHeightBeforeHideRef.current = c.scrollHeight;
       } else {
         wasAtBottomBeforeHideRef.current = false;
@@ -4920,7 +5276,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const hideTimer = setTimeout(() => window.electronAPI.hideWindow(), 400);
       return () => clearTimeout(hideTimer);
     }
-  }, [isExpanded]);
+  }, [isExpanded, isAutoScrollSuppressed]);
 
   // On Cmd+B re-expand: jump the chat to the bottom ONLY when the user was
   // already pinned to the bottom before hiding AND new content streamed in
@@ -4943,10 +5299,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const grewWhileHidden = c.scrollHeight > scrollHeightBeforeHideRef.current + 1;
     if (!grewWhileHidden) return;
     const rafId = requestAnimationFrame(() => {
-      c.scrollTop = c.scrollHeight;
+      // Re-read the node and re-check intent a frame later: the container can
+      // have remounted while hidden, and the user can have detached since.
+      const live = scrollContainerRef.current;
+      if (!live || isAutoScrollSuppressed()) return;
+      live.scrollTop = live.scrollHeight - live.clientHeight;
+      lastScrollTopRef.current = live.scrollTop;
     });
     return () => cancelAnimationFrame(rafId);
-  }, [isExpanded]);
+  }, [isExpanded, isAutoScrollSuppressed]);
 
   // Keyboard shortcut to toggle expanded state (via Main Process)
   useEffect(() => {
@@ -5034,8 +5395,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // the fresh meeting) with no native resize and no sideways motion. The
       // toggle aux window follows via the shellWidth 'change' anchor stream.
       // The DEFAULT collapsed width, not this render's SHELL_WIDTH_COLLAPSED,
-      // which would still reflect a width pinned in the previous meeting.
-      shellWidth.set(defaultCollapsedPanelWidth());
+      // which would still reflect a width pinned in the previous meeting —
+      // widened for the quick-action row, so a new meeting in a long language
+      // does not open wrapped.
+      shellWidth.set(defaultCollapsedForRowRef.current);
       setInputValue('');
       setAttachedContext([]);
       setManualTranscript('');
@@ -5192,6 +5555,94 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const streamingTextRef   = useRef<string>('');
   const streamingMsgIdRef  = useRef<string | null>(null);
   const streamingIntentRef = useRef<string | null>(null);
+
+  // The action bar tweens a card's slot open or closed (DynamicActionBar).
+  // Per-frame setBounds on this transparent, blurred window is the flicker the
+  // height channel exists to avoid, so the bar asks here first. Granted: grow
+  // the window ONCE up front, hold the ResizeObserver's per-frame reports, and
+  // settle ONCE when the bar says the tween is done (the returned function) —
+  // not on a timer: a janky frame can stretch a 250ms tween past any fixed
+  // deadline, and a settle mid-tween shrank the window under a still-growing
+  // slot (live 2026-09-27, one frame cut 18px). A timer only backs it up.
+  // While an answer streams, its growth must keep flowing through
+  // driveStreamingHeight, so the ResizeObserver is NOT held: the grant is a
+  // shrink-only hold (streamShrinkHoldsRef) that settles the same way.
+  // Refused (null) while another transition holds the channel; the bar then
+  // folds a leaving slot in one step. Growth is led EVEN THEN,
+  // grow-only: a window too tall for a moment shows transparent space, one too
+  // short cuts the footer off (live: a card that arrived as an answer was
+  // about to stream left the window 42px short for its whole life).
+  const chromeMotionUntilRef = useRef(0);
+  const chromeMotionOpenRef = useRef(0);
+  // `resize`: an OPEN block's contents changed height (ChromeFold's card
+  // resize). That must never tween against the panel's width spring: a banner
+  // re-wraps every frame of it, and a height on its own curve lags the width
+  // (the 09-13 tear). So it is refused while the width moves or another
+  // transition holds the channel, and the block steps with the width.
+  const requestChromeHeightMotion = useCallback((growPx: number, durationMs: number, options?: { resize?: boolean }): (() => void) | null => {
+    const content = contentRef.current;
+    const log = (msg: string) => { if (process.env.NODE_ENV === 'development') console.log(`[chrome-motion] ${msg} grow=${growPx} ms=${durationMs}`); };
+    if (!content || !isExpandedRef.current || isResizingRef.current) { log('refused hidden-or-resizing'); return null; }
+    const leadGrowth = () => {
+      if (growPx > 0) void resizeOverlayWindow(Math.max(window.innerHeight, content.offsetHeight + growPx));
+    };
+    const now = Date.now();
+    if (
+      options?.resize &&
+      (animationControlsRef.current !== null ||
+        (now < heightReportSuppressedUntilRef.current && heightReportSuppressedUntilRef.current !== chromeMotionUntilRef.current))
+    ) {
+      leadGrowth();
+      log('refused resize: width or another transition moving');
+      return null;
+    }
+    if (streamingMsgIdRef.current !== null) {
+      leadGrowth();
+      streamShrinkHoldsRef.current += 1;
+      const holdUntil = Math.max(streamShrinkHoldUntilRef.current, now + durationMs + CHROME_MOTION_FALLBACK_MS);
+      streamShrinkHoldUntilRef.current = holdUntil;
+      log('streaming: shrink-only hold (growth led)');
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        streamShrinkHoldsRef.current = Math.max(0, streamShrinkHoldsRef.current - 1);
+        if (streamShrinkHoldsRef.current > 0) return;
+        streamShrinkHoldUntilRef.current = 0;
+        // One exact report for where the fold ended, through whichever
+        // channel owns the height now.
+        const el = contentRef.current;
+        if (streamingMsgIdRef.current !== null) {
+          if (el && isExpandedRef.current) driveStreamingHeightRef.current(el.offsetHeight);
+        } else {
+          reportShellSize();
+        }
+      };
+      window.setTimeout(release, holdUntil - now);
+      return release;
+    }
+    const heldUntil = heightReportSuppressedUntilRef.current;
+    if (now < heldUntil && heldUntil !== chromeMotionUntilRef.current) { leadGrowth(); log('refused held (growth led)'); return null; }
+    const until = Math.max(heldUntil, now + durationMs + CHROME_MOTION_FALLBACK_MS);
+    heightReportSuppressedUntilRef.current = until;
+    chromeMotionUntilRef.current = until;
+    chromeMotionOpenRef.current += 1;
+    leadGrowth();
+    log(`granted content=${content.offsetHeight} win=${window.innerHeight}`);
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      chromeMotionOpenRef.current = Math.max(0, chromeMotionOpenRef.current - 1);
+      // One card leaves as the next one shows: release once, when the last does.
+      if (chromeMotionOpenRef.current > 0) return;
+      if (heightReportSuppressedUntilRef.current === chromeMotionUntilRef.current) heightReportSuppressedUntilRef.current = 0;
+      chromeMotionUntilRef.current = 0;
+      reportShellSize();
+    };
+    window.setTimeout(settle, until - now);
+    return settle;
+  }, [reportShellSize, resizeOverlayWindow]);
   // Reveal-ticker's rAF handle (see "Smooth reveal" block above). Originally
   // this was scheduleMarkdownRender's single-shot coalescing handle; it now
   // belongs to the self-rescheduling revealTick loop instead. Deliberately
@@ -5202,6 +5653,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ticker inherits that hardening for free, with zero edits to those sites.
   const streamingRafRef    = useRef<number | null>(null);
   const streamingRenderModeRef = useRef<'imperative' | 'react-code'>('imperative');
+  // Diagram artifacts in the live stream. The tracker scans the ARRIVED text
+  // incrementally (once per frame, never per token) so the reveal can be
+  // fast-forwarded through a Mermaid block — see fastForwardDiagramReveal.
+  // Reset per stream, in lockstep with the pacer (ensureRevealTicker).
+  const diagramRevealTrackerRef = useRef(createFencedBlockTracker());
+  const diagramBlocksCompleteRef = useRef(0);
+  // When the current request was accepted (submit / action press), carried
+  // onto the answer row's timing entry once that row has an id.
+  const diagramRequestAtRef = useRef<number | null>(null);
+  // The last valid diagram shown before the row that is streaming now: kept on
+  // screen, dimmed, while an UPDATE of the same design is still being written.
+  const previousDiagramRef = useRef<{ beforeMsgId: string; source: string } | null>(null);
+  // Answers the user stopped: no automatic repair (a paid call) after a Stop.
+  const diagramRepairBlockedRef = useRef<Set<string>>(new Set());
   // RETIRED: used to be scheduleStreamingCodeRender's own rAF handle (a
   // second, UNPACED render loop that wrote streamingTextRef.current — the
   // full raw arrived text, not the reveal-paced prefix — straight into
@@ -5582,7 +6047,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // burst of tokens landing in one tick showed up all at once regardless of
   // how well-paced the prose path was. Called from revealTick, so it's
   // already coalesced to at most once per frame.
-  const commitRevealedCodeText = useCallback((msgId: string, revealedText: string) => {
+  // Diagram repairs accepted in this window: broken source → the source that
+  // draws. The stream keeps committing text from refs that still hold what the
+  // model wrote (the paced prefix, then the sealed text), so a repair written
+  // only into React state was overwritten by the very next reveal tick and the
+  // card fell back to "syntax error" with its one repair already spent.
+  // Applied wherever streamed text is committed; the refs stay untouched so the
+  // pacer's offsets keep meaning what they meant.
+  const diagramRepairsRef = useRef<Map<string, string>>(new Map());
+  const withDiagramRepairs = useCallback((text: string): string => {
+    const repairs = diagramRepairsRef.current;
+    if (repairs.size === 0 || typeof text !== 'string' || !mentionsVisualTag(text)) return text;
+    let out = text;
+    for (const [original, repaired] of repairs) out = replaceMermaidSource(out, original, repaired);
+    return out;
+  }, []);
+
+  const commitRevealedCodeText = useCallback((msgId: string, rawRevealedText: string) => {
+    const revealedText = withDiagramRepairs(rawRevealedText);
     setMessages((prev) => {
       const idx = prev.findLastIndex((m) => m.id === msgId);
       if (idx === -1) return prev;
@@ -5592,7 +6074,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       updated[idx] = { ...row, text: revealedText, isStreaming: true };
       return updated;
     });
-  }, []);
+  }, [withDiagramRepairs]);
 
   // revealTick: self-rescheduling rAF loop that paces the reveal via the
   // deterministic tickPacer state machine (src/lib/textRevealPacing.mjs —
@@ -5610,6 +6092,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // fade-hold path below and the immediate path seal identically — two
   // copies of this teardown would be a latent source of drift.
   const sealPendingStream = useCallback((pending: { msgId: string; intent: string; text: string }) => {
+    diagramTimings.mark(pending.msgId, 'answer_complete', performance.now());
     pendingFinalizeRef.current = null;
     if (pendingFinalizeTimeoutRef.current !== null) {
       clearTimeout(pendingFinalizeTimeoutRef.current);
@@ -5628,7 +6111,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (direct?.completed && direct.placeholderId === pending.msgId) {
       activeDirectAssistRef.current = null;
     }
-    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
   }, []);
 
   const revealTick = useCallback((ts: number) => {
@@ -5650,6 +6133,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const pacer = revealPacerRef.current;
     const prevLen = pacer.revealedLen;
     tickPacer(pacer, fullText, ts, deltaMs, { reducedMotion: prefersReducedMotionRef.current });
+    // ARTIFACT FAST-FORWARD (the one explicit exception to paced reveal).
+    // A Mermaid block is not prose: once the reveal reaches it, the reveal
+    // jumps to the end of what has ARRIVED of that block, so a finished
+    // diagram is never held back behind a slow reveal of its own source.
+    // Order is kept — text before the block was already revealed, and text
+    // after it resumes at the normal pace. The decision itself is the pure,
+    // tested fastForwardDiagramReveal; this only applies it. Ordinary code
+    // blocks are untouched and keep their per-line reveal.
+    if (streamingRenderModeRef.current === 'react-code' && mentionsVisualTag(fullText) && diagramsEnabledNow()) {
+      const parse = diagramRevealTrackerRef.current.update(fullText);
+      const completeNow = completedDiagramCount(parse.blocks);
+      if (completeNow > diagramBlocksCompleteRef.current) {
+        diagramBlocksCompleteRef.current = completeNow;
+        // Receipt of a complete block — distinct from when it becomes visible.
+        diagramTimings.mark(msgId, 'block_complete', ts);
+      }
+      const forwarded = fastForwardDiagramReveal(parse.blocks, pacer.revealedLen, fullText.length);
+      if (forwarded > pacer.revealedLen) {
+        pacer.revealedLen = forwarded;
+        pacer.charBudget = 0;
+      }
+    }
+    if (pacer.revealedLen > 0) diagramTimings.mark(msgId, 'first_text_visible', ts);
     if (pacer.revealedLen !== prevLen) {
       // Record WHEN these characters became visible, before painting — the
       // paint reads this history back to derive each new word's fade offset.
@@ -5667,6 +6173,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         commitRevealedCodeText(msgId, fullText.slice(0, pacer.revealedLen));
       } else {
         paintRevealedNow(ts);
+        // These tokens never touch React state, so nothing else scrolls for
+        // them — chase the bottom in the same frame they are painted.
+        followStreamBottom();
       }
     }
     // Caught up to everything that has arrived: stop rescheduling instead of
@@ -5729,7 +6238,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       return;
     }
     streamingRafRef.current = requestAnimationFrame(revealTick);
-  }, [paintRevealedNow, commitRevealedCodeText, sealPendingStream]);
+  }, [paintRevealedNow, commitRevealedCodeText, sealPendingStream, followStreamBottom]);
 
   // Ensure the reveal ticker is running for `msgId`. A new msgId resets the
   // pacer to a fresh state (see createPacerState — starts the initial
@@ -5758,6 +6267,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // words either a stale (already-expired) timestamp or, worse, a future
       // one — holding real text invisible.
       resetRevealHistory(revealHistoryRef.current);
+      // Diagram scan state is per stream too: block offsets restart at 0.
+      diagramRevealTrackerRef.current.reset();
+      diagramBlocksCompleteRef.current = 0;
+      // Timing marks for this answer row (content-free; see diagramTimings).
+      {
+        const nowMs = performance.now();
+        const acceptedAt = diagramRequestAtRef.current;
+        // A request mark older than two minutes belongs to some earlier press.
+        if (acceptedAt !== null && nowMs - acceptedAt < 120_000) diagramTimings.mark(msgId, 'request_accepted', acceptedAt);
+        diagramRequestAtRef.current = null;
+        diagramTimings.mark(msgId, 'first_token', nowMs);
+      }
       // Same lockstep reason as the history: these are per-stream one-shots.
       // A carried-over gist timestamp would leave the next answer's chip
       // permanently past its animation (or, if the clock ran backwards,
@@ -5807,7 +6328,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const msgId = reuseMsgId ?? genMessageId();
     streamingMsgIdRef.current = msgId;
     streamingIntentRef.current = intent;
-    streamingRenderModeRef.current = 'imperative';
+    // A whole-payload answer that carries a diagram types out through the
+    // React path, so its diagram mounts as a card when the reveal reaches it
+    // instead of showing as raw Mermaid until the row seals.
+    streamingRenderModeRef.current = diagramsEnabledNow() && hasOpeningMermaidFence(text) ? 'react-code' : 'imperative';
     streamingTextRef.current = text; // the whole answer "arrives" as one token
     pendingFinalizeRef.current = { msgId, intent, text };
     if (pendingFinalizeTimeoutRef.current !== null) {
@@ -5836,7 +6360,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (direct?.completed && direct.placeholderId === pending.msgId) {
         activeDirectAssistRef.current = null;
       }
-      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
     }, safetyNetMs);
     if (!reuseMsgId) {
       setMessages((prev) => prepareIntelligenceStreamPlaceholderMessages(prev, intent, msgId));
@@ -5890,7 +6414,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (direct?.completed && direct.placeholderId === pending.msgId) {
         activeDirectAssistRef.current = null;
       }
-      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, withDiagramRepairs(pending.text)));
     }, safetyNetMs);
     ensureRevealTicker(msgId);
   }, [ensureRevealTicker, computeSafetyNetMs]);
@@ -5954,7 +6478,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           const idx = prev.findLastIndex((m) => m.id === prevId);
           if (idx !== -1) {
             const updated = [...prev];
-            updated[idx] = { ...updated[idx], text: prevText, isStreaming: false };
+            // (A diagram repaired during the stream stays repaired: see withDiagramRepairs.)
+            updated[idx] = { ...updated[idx], text: withDiagramRepairs(prevText), isStreaming: false };
             return updated;
           }
           return prev;
@@ -5969,7 +6494,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       manualWidthOverrideRef.current = null;
     }
 
-    const shouldUseReactCodeUi = shouldUseStreamingCodeUi(intent, token, streamingTextRef.current);
+    // A Mermaid fence switches ANY intent's stream to the React path: the
+    // diagram card is a React component, and a diagram can arrive on any route
+    // (a refinement, a recap, brainstorm) — not only the two intents the code
+    // card's switch is limited to. Content decides, not the action's name.
+    const shouldUseReactCodeUi = shouldUseStreamingCodeUi(intent, token, streamingTextRef.current)
+      || (streamingRenderModeRef.current !== 'react-code'
+        && diagramsEnabledNow()
+        && shouldUseStreamingDiagramUi(token, streamingTextRef.current));
     if (shouldEagerExpandForCodeToken(intent, token, streamingTextRef.current)) {
       eagerCodeExpansionHoldRef.current = true;
       // Respect a manual width pin: don't auto-grow if the user chose a width.
@@ -5978,14 +6510,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
     }
     if (shouldUseReactCodeUi) {
+      // A diagram fence just opened: start loading Mermaid now, so it is ready
+      // by the time the block's closing fence arrives. (A no-op once loaded.)
+      if (streamingRenderModeRef.current !== 'react-code' && diagramsEnabledNow() && hasOpeningMermaidFence(streamingTextRef.current + token)) {
+        warmDiagramRenderer();
+      }
+      const flippedMidStream = streamingRenderModeRef.current !== 'react-code' && streamingMsgIdRef.current !== null;
       streamingRenderModeRef.current = 'react-code';
       if (streamingRafRef.current !== null) {
         cancelAnimationFrame(streamingRafRef.current);
         streamingRafRef.current = null;
       }
-      if (streamingNodeRef.current) {
+      // The imperative node held everything revealed so far, and React state
+      // held nothing (it is not written during imperative streaming). Wiping
+      // the node therefore left the row on its empty state — the "Thinking…"
+      // label, over text that had been on screen — until the next reveal
+      // advance, which can be a sentence hold away. What was revealed is
+      // handed to React in the same breath.
+      const revealedAtFlip = flippedMidStream && streamingMsgIdRef.current !== null
+        ? streamingTextRef.current.slice(0, revealPacerRef.current.revealedLen)
+        : '';
+      // …and the node is wiped only when nothing is handed over. With text to
+      // hand over, the wipe is synchronous and React's commit is not: under
+      // load a frame was painted in between, with the row empty (seen once in
+      // ten runs of the overlay check). React removes this node whole when the
+      // row re-renders under its other key, so it keeps what it shows until then.
+      if (streamingNodeRef.current && !revealedAtFlip) {
         streamingNodeRef.current.innerHTML = '';
       }
+      if (revealedAtFlip && streamingMsgIdRef.current !== null) commitRevealedCodeText(streamingMsgIdRef.current, revealedAtFlip);
     }
 
     streamingTextRef.current += token;
@@ -6152,7 +6705,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Keep eagerCodeExpansionHoldRef until the finalized React row mounts; the
     // visibility scanner clears it as soon as it sees a real [data-code-msg].
     // NOT wrapped in startTransition — ordering must hold.
-    setMessages((prev) => commitStreamingFlush(prev, msgId, text));
+    setMessages((prev) => commitStreamingFlush(prev, msgId, withDiagramRepairs(text)));
   }, []);
 
   const tryBeginOverlayAction = useCallback((actionKey: string): boolean => {
@@ -6215,6 +6768,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const settleDirectAssistIncomplete = useCallback((
     active: ActiveDirectAssistRequest,
     terminalLabel: string,
+    // Set when a provider (or the app) FAILED, as opposed to a cancel. The
+    // row draws the notice from it; `terminalLabel` is then the one plain
+    // sentence kept as the text of an answer that never started.
+    failure?: DirectAssistAnswerFailure,
   ) => {
     if (streamingMsgIdRef.current === active.placeholderId) {
       if (streamingRafRef.current !== null) {
@@ -6243,20 +6800,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (!active.answerText && terminalLabel === 'Request cancelled.') {
         return prev.filter((_, messageIndex) => messageIndex !== idx);
       }
-      const text = active.answerText
-        ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
-        : terminalLabel;
+      // A failure leaves the text clean — the answer so far, or the plain
+      // sentence — because the notice says the rest ("Answer cut off", why).
+      // A cancel has no notice, so it still marks the text itself.
+      const text = failure
+        ? active.answerText || terminalLabel
+        : active.answerText
+          ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
+          : terminalLabel;
       const updated = [...prev];
       updated[idx] = {
         ...updated[idx],
         text,
         isStreaming: false,
         isCode: text.includes('```') || text.includes('#include'),
+        ...(failure ? { failure: { ...failure, partial: Boolean(active.answerText) } } : {}),
       };
       return updated;
     });
     setIsProcessing(false);
   }, []);
+
+  // Every way a direct-ask answer can fail goes through here with DATA; the
+  // wording is directAssistFailureText's and directAssistNoticeView's.
+  const settleDirectAssistFailure = useCallback((
+    active: ActiveDirectAssistRequest,
+    failure: DirectAssistAnswerFailure,
+  ) => {
+    settleDirectAssistIncomplete(active, directAssistFailureText(failure, t), failure);
+  }, [settleDirectAssistIncomplete, t]);
 
   useEffect(() => {
     if (!window.electronAPI?.onDirectAssistEvent) return;
@@ -6309,16 +6881,26 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // produced a single token — and on an A -> B -> C walk, main queues
         // switches and drains them back to back just before the first
         // delta, so the renderer can see switch(A->B) then switch(B->C) with
-        // B never having answered anything. Word this as an ATTEMPT, never
-        // an outcome, so it stays accurate at every intermediate step and
+        // B never having answered anything. So this only RECORDS the hop —
+        // who failed, why, and who is tried next — and names no outcome:
+        // the notice is worded as an attempt at every intermediate step and
         // even if the ladder later fails entirely. 'done' (below) is the
-        // only place that upgrades this to "answered by".
+        // only place that says who answered.
         active.hasSwitched = true;
+        active.switchedTo = event.to.provider;
         const placeholderId = active.placeholderId;
-        const noticeText = `${event.from.provider} didn't respond — trying ${event.to.provider}…`;
+        const hop: DirectAssistFallbackHop = {
+          provider: modelSelectorGroupLabel(event.from.provider),
+          next: modelSelectorGroupLabel(event.to.provider),
+          code: event.reason,
+          status: event.status,
+          detail: event.detail,
+          waitedMs: event.waitedMs,
+          unreachable: event.unreachable,
+        };
         setMessages((prev) => prev.map((message) =>
           message.id === placeholderId
-            ? { ...message, fallbackNotice: noticeText }
+            ? { ...message, fallbackNotice: { hops: [...(message.fallbackNotice?.hops ?? []), hop] } }
             : message,
         ));
         return;
@@ -6344,25 +6926,28 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const answer = event.fullText ?? active.answerText;
         if (!answer) {
           activeDirectAssistRef.current = null;
-          settleDirectAssistIncomplete(
-            active,
-            directAssistErrorText('INCOMPLETE_STREAM', 'The model returned no answer.'),
-          );
+          // Not the provider's doing: main turns a stream that returned
+          // nothing into an error, so a `done` with no text means the text
+          // was lost on the way here.
+          settleDirectAssistFailure(active, {
+            code: 'INTERNAL_ERROR',
+            message: '',
+          });
           return;
         }
 
         // Content actually arrived: if any provider_switch fired for this
         // request, this is where — and only where — the attempt-worded
-        // notice upgrades to an outcome. Name the ORIGINAL selection and the
-        // provider that actually answered (event.provider, from done, not
-        // whichever rung a queued switch last opened). If the ladder never
-        // switched, leave fallbackNotice untouched (absent).
-        if (active.hasSwitched && active.originalProvider) {
-          const finalNoticeText = `${active.originalProvider} didn't respond — answered by ${event.provider}.`;
+        // notice upgrades to an outcome. The hops already name the ORIGINAL
+        // selection first; this adds the provider that actually answered
+        // (event.provider, from done, not whichever rung a queued switch
+        // last opened). If the ladder never switched, there is no notice to
+        // add it to and fallbackNotice stays absent.
+        if (active.hasSwitched) {
           const finalPlaceholderId = active.placeholderId;
           setMessages((prev) => prev.map((message) =>
-            message.id === finalPlaceholderId
-              ? { ...message, fallbackNotice: finalNoticeText }
+            message.id === finalPlaceholderId && message.fallbackNotice
+              ? { ...message, fallbackNotice: { ...message.fallbackNotice, answeredBy: modelSelectorGroupLabel(event.provider) } }
               : message,
           ));
         }
@@ -6405,10 +6990,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
       if (event.type === 'error') {
         activeDirectAssistRef.current = null;
-        settleDirectAssistIncomplete(
-          active,
-          directAssistErrorText(event.error.code, event.error.message),
-        );
+        // With nothing answered yet the error is the SELECTED provider's (main
+        // reports the first rung's failure), the one 'start' recorded. An
+        // answer that had already begun was cut off by whoever was writing
+        // it — the provider the ladder last moved to, if it moved.
+        const failedProvider = (active.answerText.length > 0 && active.switchedTo) || active.originalProvider;
+        settleDirectAssistFailure(active, {
+          provider: failedProvider ? modelSelectorGroupLabel(failedProvider) : undefined,
+          code: event.error.code,
+          message: event.error.message,
+          status: event.error.status,
+          unreachable: event.error.unreachable,
+          detail: event.error.detail,
+          // Nobody answered and more than one provider was tried: each one,
+          // with its own reason.
+          attempts: event.error.attempts?.map((attempt) => ({
+            provider: modelSelectorGroupLabel(attempt.provider),
+            code: attempt.reason,
+            status: attempt.status,
+            unreachable: attempt.unreachable,
+            detail: attempt.detail,
+            waitedMs: attempt.waitedMs,
+          })),
+        });
         return;
       }
 
@@ -6416,7 +7020,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       settleDirectAssistIncomplete(active, 'Request cancelled.');
     });
     return () => unsubscribe?.();
-  }, [finalizeWhenRevealCaughtUp, queueToken, settleDirectAssistIncomplete]);
+  }, [finalizeWhenRevealCaughtUp, queueToken, settleDirectAssistFailure, settleDirectAssistIncomplete]);
 
   const beginDirectAssist = useCallback(async ({
     source,
@@ -6502,24 +7106,30 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (activeDirectAssistRef.current?.requestId !== requestId) return;
       if (!response.accepted || response.requestId !== requestId) {
         activeDirectAssistRef.current = null;
-        const code = response.error?.code || 'DIRECT_ASSIST_REJECTED';
-        const message = response.error?.message || 'Direct Assist could not start this request.';
-        settleDirectAssistIncomplete(active, directAssistErrorText(code, message));
+        // Refused before any provider was asked, so there is no provider to
+        // name: main's own sentence is the explanation.
+        settleDirectAssistFailure(active, {
+          code: response.error?.code || 'DIRECT_ASSIST_REJECTED',
+          message: response.error?.message || '',
+        });
       }
     } catch (error) {
       if (activeDirectAssistRef.current?.requestId !== requestId) return;
       activeDirectAssistRef.current = null;
-      settleDirectAssistIncomplete(
-        active,
-        directAssistErrorText(
-          'DIRECT_ASSIST_UNAVAILABLE',
-          error instanceof Error ? error.message : String(error),
-        ),
-      );
+      // The call itself threw: the request never reached main's handler.
+      settleDirectAssistFailure(active, {
+        code: 'INTERNAL_ERROR',
+        message: '',
+      });
     }
-  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistIncomplete]);
+  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistFailure, settleDirectAssistIncomplete]);
 
   const cancelActiveChatStream = useCallback(() => {
+    // Stop also stops diagram repairs: any in flight is cancelled, and the
+    // answer being stopped never starts an automatic one afterwards.
+    cancelAllDiagramRepairs();
+    if (streamingMsgIdRef.current) diagramRepairBlockedRef.current.add(streamingMsgIdRef.current);
+    if (diagramRepairBlockedRef.current.size > 64) diagramRepairBlockedRef.current.clear();
     const direct = activeDirectAssistRef.current;
     if (direct) {
       activeDirectAssistRef.current = null;
@@ -6561,6 +7171,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const resetChatState = useCallback(() => {
     cancelActiveChatStream();
+    diagramRepairBlockedRef.current.clear();
+    previousDiagramRef.current = null;
     setMessages([]);
     answerPanelPinnedRef.current = false;
     setAnswerPanelPinned(false);
@@ -6642,8 +7254,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             finalizeImperativeStreamMessages(prev, {
               msgId: streamingMsgId,
               intent,
-              bufferedText,
-              finalText: text,
+              // The authoritative final text is the model's text as it was
+              // written: a block that was repaired while it streamed is broken
+              // again in it. Committed as is, the card fell back to "syntax
+              // error" with its one automatic repair already spent.
+              bufferedText: withDiagramRepairs(bufferedText),
+              finalText: withDiagramRepairs(text),
             }),
           );
           return;
@@ -6924,6 +7540,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           : data.answer;
         setIsProcessing(false);
         pinAnswerPanel();
+        // An answer Natively stopped itself says so under the text (2026-10-04),
+        // like a typed one. Attached to the live row before the finalize, which
+        // keeps the row's other fields.
+        const ownStop = ownStopFailure((data as { stopReason?: string }).stopReason);
+        const liveRowId = streamingIntentRef.current === 'what_to_answer' ? streamingMsgIdRef.current : null;
+        if (ownStop && liveRowId != null) {
+          setMessages((prev) => prev.map((m) => (m.id === liveRowId ? { ...m, failure: ownStop } : m)));
+        }
         finalizeStreamingByIntent('what_to_answer', answerText);
       }),
     );
@@ -7219,16 +7843,50 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     };
   }, []);
 
-  // Quick Actions - Updated to use new Intelligence APIs
+  // Phone Mirror shows this tray too. The tray is only ever changed here, so
+  // the whole list is reported on every change (added, removed, cleared, sent),
+  // including the empty one on mount, which clears a tray left by a reload.
+  useEffect(() => {
+    attachedContextRef.current = attachedContext;
+    const known = phoneShotPathsRef.current;
+    for (const shot of attachedContext) {
+      known.delete(shot.preview);
+      known.set(shot.preview, shot.path);
+    }
+    while (known.size > 20) known.delete(known.keys().next().value as string);
+    window.electronAPI?.phoneMirrorSetAttachments?.(
+      attachedContext.map(({ path, preview }) => ({ path, preview })),
+    );
+  }, [attachedContext]);
 
-  // PERF: useCallback so the reference is stable between renders. MessageRow
-  // (memoized below) receives this as a prop; without a stable identity its
-  // memo comparator would never match and the bailout would not fire.
-  const handleCopy = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
-    analytics.trackCopyAnswer();
-    // Optional: Trigger a small toast or state change for visual feedback
+  // The phone took one off its tray (it shows this tray), so it leaves here.
+  useEffect(() => {
+    return window.electronAPI?.onPhoneMirrorDetach?.(({ path }) => {
+      setAttachedContext((prev) => prev.filter((shot) => shot.path !== path));
+    });
   }, []);
+
+  // ...and, like the question card here, the screenshots a question was sent
+  // with. Only the newest cards can be new; main ignores screenshots the tray
+  // never held (a card restored after a reload, say).
+  useEffect(() => {
+    const reported = phoneSentShotCardsRef.current;
+    for (const msg of messages.slice(-8)) {
+      if (msg.role !== 'user' || !msg.hasScreenshot || reported.has(msg.id)) continue;
+      reported.add(msg.id);
+      const previews = msg.screenshotPreviews?.length
+        ? msg.screenshotPreviews
+        : msg.screenshotPreview
+          ? [msg.screenshotPreview]
+          : [];
+      const paths = previews
+        .map((preview) => phoneShotPathsRef.current.get(preview))
+        .filter((path): path is string => !!path);
+      if (paths.length) window.electronAPI?.phoneMirrorImagesSent?.(msg.id, paths);
+    }
+  }, [messages]);
+
+  // Quick Actions - Updated to use new Intelligence APIs
 
   // Labels for synthetic "question card" bubbles shown before a hotkey/button
   // answer. Keyed by action identity (the same string passed to
@@ -7249,6 +7907,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!tryBeginOverlayAction('what_to_say')) {
       // The press was blocked because a prior 'what_to_say' is still streaming.
       // Surface a brief hint instead of silently doing nothing, so a blocked
@@ -7290,9 +7951,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
       // Scroll to bottom when user sends message
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+      scrollToLatest();
     } else {
       // No screenshot attached — still show a question card so the answer
       // never appears with no preceding "question" bubble.
@@ -7521,6 +8180,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleFollowUp = async (intent: string = 'rephrase') => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     const actionKey = `follow_up:${intent}`;
     if (!tryBeginOverlayAction(actionKey)) return;
     setIsExpanded(true);
@@ -7550,6 +8212,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleRecap = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!tryBeginOverlayAction('recap')) return;
     setIsExpanded(true);
     setIsProcessing(true);
@@ -7666,9 +8331,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
       // Scroll to bottom when user sends message
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+      scrollToLatest();
     } else {
       // No screenshot attached — still show a question card so the answer
       // never appears with no preceding "question" bubble.
@@ -7698,6 +8361,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleBrainstorm = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!tryBeginOverlayAction('brainstorm')) return;
     legacyIntelligenceTombstonedRef.current = false;
     liveAnswerGenIdRef.current = null;
@@ -7721,9 +8387,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
       // Scroll to bottom when user sends message
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+      scrollToLatest();
     } else {
       // No screenshot attached — still show a question card so the answer
       // never appears with no preceding "question" bubble.
@@ -7812,6 +8476,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const pendingTextSnapshot = streamingTextRef.current;
         const pendingMsgIdSnapshot = streamingMsgIdRef.current;
         const authoritativeText = finalText || pendingTextSnapshot;
+        // An answer Natively stopped itself — at the length limit, or because it
+        // began repeating — says so under the text (2026-10-04). Attached
+        // before either finalize path; both keep the row's other fields.
+        const ownStop = data?.incomplete ? ownStopFailure(data.incompleteReason) : null;
+        if (ownStop && pendingMsgIdSnapshot != null) {
+          setMessages((prev) => prev.map((m) => (m.id === pendingMsgIdSnapshot ? { ...m, failure: ownStop } : m)));
+        }
 
         setIsProcessing(false);
 
@@ -7889,7 +8560,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               : -1;
           const target = idx !== -1 ? prev[idx] : prev[prev.length - 1];
           if (target && target.role === 'system') {
-            const text = finalText || target.text || pendingTextSnapshot;
+            const text = withDiagramRepairs(finalText || target.text || pendingTextSnapshot);
             if (!text) return prev;
             const isCode =
               text.includes('```') || text.includes('def ') || text.includes('function ');
@@ -7993,6 +8664,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // event adds the user turn + streaming placeholder before tokens arrive.
     cleanups.push(
       window.electronAPI.onPhoneMirrorIncomingChat(({ message }) => {
+        // Main sent the attached screenshots with this question (the phone
+        // shows the same tray), so it takes them as a question typed here
+        // does, even while a Direct answer keeps the question off this chat.
+        const shots = attachedContextRef.current;
+        if (shots.length) setAttachedContext([]);
         if (activeDirectAssistRef.current) return;
         flushToken();
         requestStartTimeRef.current = Date.now();
@@ -8004,7 +8680,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         streamingNodeRef.current = null;
         setMessages((prev) => [
           ...prev,
-          { id: userId, role: 'user', text: message },
+          shots.length
+            ? {
+                id: userId,
+                role: 'user',
+                text: message,
+                hasScreenshot: true,
+                screenshotPreview: shots[0].preview,
+                screenshotPreviews: shots.map((shot) => shot.preview).filter(Boolean),
+              }
+            : { id: userId, role: 'user', text: message },
           {
             id: placeholderId,
             role: 'system',
@@ -8016,9 +8701,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setIsExpanded(true);
         setIsProcessing(true);
         pinAnswerPanel();
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
+        scrollToLatest();
       }),
     );
 
@@ -8203,7 +8886,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     });
 
     return () => cleanups.forEach((fn) => fn());
-  }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
+  }, [currentModel, queueToken, flushToken, scrollToLatest]); // Ensure tracking captures correct model
 
   const handleAnswerNow = async () => {
     if (isManualRecording) {
@@ -8310,9 +8993,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           },
         ]);
 
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
+        scrollToLatest();
 
         if (directAssistEnabled) {
           const directPageContext = consumeDirectPageContext();
@@ -8410,7 +9091,10 @@ Provide only the answer, nothing else.`;
             question,
             currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
             prompt,
-            { skipSystemPrompt: true },
+            // `liveQuestion`: a turn of this session (unlike a question about a
+            // past meeting), so main decides the diagram contract for it with
+            // the design that is on the table.
+            { skipSystemPrompt: true, liveQuestion: true },
           );
         } catch (err) {
           // R-17: a throw from invoke() never reaches the main process, so no
@@ -8472,6 +9156,9 @@ Provide only the answer, nothing else.`;
   }, [inputValue]);
 
   const handleManualSubmit = async () => {
+    // Timing: the moment this request was accepted (content-free; see diagramTimings).
+    diagramRequestAtRef.current = performance.now();
+    warmDiagramRendererOnIdle();
     if (!inputValue.trim() && attachedContext.length === 0) return;
 
     const rawUserText = inputValue;
@@ -8532,9 +9219,7 @@ Provide only the answer, nothing else.`;
     ]);
 
     // Scroll to bottom when user sends message
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
+    scrollToLatest();
 
     if (directAssistEnabled) {
       try {
@@ -8664,6 +9349,79 @@ Provide only the answer, nothing else.`;
     resetChatState();
   };
 
+  // ── Diagram artifacts: per-window state the row renderer reads ──────────
+  const diagramsEnabled = useDiagramsEnabled();
+  // The newest answer row. Only it may start an automatic repair.
+  const latestAnswerIdRef = useRef<string | null>(null);
+  // Recomputed when the ROWS change (a row added, or a row's streaming flag
+  // flipping), not when a streaming row's text grows: the signature below has
+  // no text in it, so the reveal's per-frame commits cost nothing here.
+  const diagramRowsSignature = useMemo(
+    () => messages.map((m) => (m.role === 'system' ? `${m.id}:${m.isStreaming ? 1 : 0}` : '')).join('|'),
+    [messages],
+  );
+  const messagesForDiagramsRef = useRef(messages);
+  messagesForDiagramsRef.current = messages;
+  useEffect(() => {
+    let latestId: string | null = null;
+    let lastValidSource: string | null = null;
+    let previous: { beforeMsgId: string; source: string } | null = null;
+    for (const m of messagesForDiagramsRef.current) {
+      if (m.role !== 'system') continue;
+      latestId = m.id;
+      if (m.isStreaming) {
+        if (lastValidSource) previous = { beforeMsgId: m.id, source: lastValidSource };
+      } else if (mentionsVisualTag(m.text)) {
+        const found = latestDiagramInAnswer(m.text);
+        if (found) lastValidSource = found.source;
+      }
+    }
+    latestAnswerIdRef.current = latestId;
+    previousDiagramRef.current = previous;
+  }, [diagramRowsSignature]);
+
+  // A repaired block drew. Put the working source into the answer that held
+  // the broken one — exact-source match only, so it cannot land in another
+  // answer — so copy, export, a reopened meeting and the next follow-up all
+  // see the diagram that is actually on screen. Stable identity ([]): the
+  // card's memo comparator and the row renderer both depend on it.
+  const handleDiagramRepaired = useCallback((originalSource: string, repairedSource: string) => {
+    // Remembered for the text still to be committed by the running stream.
+    const repairs = diagramRepairsRef.current;
+    repairs.delete(originalSource);
+    repairs.set(originalSource, repairedSource);
+    while (repairs.size > 24) {
+      const oldest = repairs.keys().next().value;
+      if (oldest === undefined) break;
+      repairs.delete(oldest);
+    }
+    setMessages((prev) => {
+      let changed = false;
+      const next = prev.map((m) => {
+        if (m.role !== 'system' || !mentionsVisualTag(m.text)) return m;
+        const text = replaceMermaidSource(m.text, originalSource, repairedSource);
+        if (text === m.text) return m;
+        changed = true;
+        return { ...m, text };
+      });
+      return changed ? next : prev;
+    });
+    // Direct Assist's history is this surface's conversation state: the next
+    // follow-up must start from the diagram that works, not the broken one.
+    directAssistHistoryRef.current = directAssistHistoryRef.current.map((turn) =>
+      turn.role === 'assistant' && mentionsVisualTag(turn.content)
+        ? { ...turn, content: replaceMermaidSource(turn.content, originalSource, repairedSource) }
+        : turn,
+    );
+  }, []);
+
+  // The newest answer's diagram changed height on its own (the drawing arrived
+  // after the last text commit): keep following the bottom, exactly as a text
+  // commit would. followStreamBottom honours a scroll-up by the user.
+  const handleDiagramLayout = useCallback(() => {
+    requestAnimationFrame(() => followStreamBottom());
+  }, [followStreamBottom]);
+
   // PERF: useCallback so MessageRow's memo comparator can rely on a stable
   // function identity. Deps are the things the closure actually reads that
   // can change: theme + memoized markdown components + memoized appearance.
@@ -8698,10 +9456,25 @@ Provide only the answer, nothing else.`;
       // hand off to, and is safe to leave permanently true afterwards: once
       // the paced text contains a fence it never loses it (reveal only
       // grows forward).
+      // A drawing is on its way: the ARRIVED text holds a visual fence the paced
+      // text has not reached yet. Its lead is prose, and it was on screen as
+      // formatted Markdown a frame ago (the imperative path). It goes straight
+      // to the Markdown renderer the finished answer uses — the raw-text
+      // branch below showed it as literal "**"/"#"/"-" until the reveal caught
+      // up with the fence, then formatted it again.
+      const preFenceDiagramStream =
+        msg.id === streamingMsgIdRef.current &&
+        streamingRenderModeRef.current === 'react-code' &&
+        diagramsEnabled &&
+        msg.role === 'system' &&
+        Boolean(msg.text) &&
+        !msg.isCode &&
+        hasOpeningMermaidFence(streamingTextRef.current);
       const isActiveReactCodeStream =
         msg.id === streamingMsgIdRef.current &&
         streamingRenderModeRef.current === 'react-code' &&
-        (msg.isCode || msg.text.includes('```'));
+        // …or a tilde-fenced diagram, which has no backtick fence at all.
+        (msg.isCode || msg.text.includes('```') || hasOpeningMermaidFence(msg.text) || preFenceDiagramStream);
       if (msg.isStreaming && msg.role === 'system' && !msg.isNegotiationCoaching && !isActiveReactCodeStream) {
         // React-code pre-fence gap: streamingRenderModeRef already flipped to
         // 'react-code' (the raw arrived text has a fence) but the paced
@@ -8868,7 +9641,7 @@ Provide only the answer, nothing else.`;
       // Code-containing messages get special styling
       // We split by code blocks to keep the "Code Solution" UI intact for the code parts
       // But use ReactMarkdown for the text parts around it
-      if (msg.isCode || (msg.role === 'system' && msg.text.includes('```'))) {
+      if (msg.isCode || (msg.role === 'system' && (msg.text.includes('```') || hasOpeningMermaidFence(msg.text) || preFenceDiagramStream))) {
         // Teleprompter gist on CODE answers (live report 2026-08-23:
         // "[[GIST]] Use a hash map for O(n) lookup" painted literally): this
         // branch returned before the gist split below ever ran, so every
@@ -8876,6 +9649,185 @@ Provide only the answer, nothing else.`;
         // render the same bottom chip the prose surfaces use.
         const { body: codeGistBody, gist: codeGistLine } = splitGistLine(msg.text);
         const parts = codeGistBody.split(/(```[\s\S]*?(?:```|$))/g);
+
+        // One fenced CODE part → the code card. Shared by the code-only path
+        // (the regex split above, unchanged) and the diagram path below.
+        const renderFencePart = (part: string, key: React.Key): React.ReactNode => {
+          // Language class allows +/#/- so c++, objective-c, f# match.
+          const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
+          const lang = match && match[1] ? match[1] : '';
+          // Raw, UNTRIMMED — see below for why the streaming path
+          // must not trim this.
+          const rawCode = match && match[2]
+            ? match[2]
+            : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '');
+          // Still-open fence on a still-streaming row → the
+          // per-completed-line preview (kills the flicker, adds
+          // the per-line reveal fade). Anything else (already
+          // closed, or streaming already ended) → the static,
+          // full-context-highlighted block, same as always.
+          if (isUnclosedCodeFencePart(part) && msg.isStreaming) {
+            // Deliberately NOT .trim()'d: splitStreamingCodeLines
+            // decides "this line is complete" by finding a
+            // trailing \n. Trimming it here would strip the most
+            // recently arrived line's newline the instant it
+            // lands (before the NEXT character confirms there's
+            // more text after it), so that line would render as
+            // the unhighlighted in-progress line for one extra
+            // tick, then flip to highlighted-and-faded-in a tick
+            // late — a small but real one-tick color pop on every
+            // single line. The static HighlightedCode path below
+            // still trims (rawCode.trim()) since a finalized block
+            // should never show a stray trailing blank line.
+            return (
+              <StreamingHighlightedCode
+                key={key}
+                code={rawCode}
+                lang={lang}
+                isLightTheme={isLightTheme}
+                codeTheme={codeTheme}
+                codeBlockClass={codeBlockClass}
+                codeHeaderClass={codeHeaderClass}
+                codeHeaderTextClass={codeHeaderTextClass}
+                codeLineNumberColor={codeLineNumberColor}
+                appearance={appearance}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+                showCodeHeader={showCodeHeader}
+              />
+            );
+          }
+          return (
+            <HighlightedCode
+              key={key}
+              code={rawCode.trim()}
+              lang={lang}
+              isLightTheme={isLightTheme}
+              codeTheme={codeTheme}
+              codeBlockClass={codeBlockClass}
+              codeHeaderClass={codeHeaderClass}
+              codeHeaderTextClass={codeHeaderTextClass}
+              codeLineNumberColor={codeLineNumberColor}
+              appearance={appearance}
+              isModernTheme={isModernTheme}
+              isGlassTheme={isGlassTheme}
+              showCodeHeader={showCodeHeader}
+            />
+          );
+        };
+        // Regular text - Render with Markdown
+        const renderProsePart = (part: string, key: React.Key): React.ReactNode => (
+          <div key={key} className="markdown-content">
+            <ReactMarkdown
+              remarkPlugins={REMARK_PLUGINS}
+              rehypePlugins={REHYPE_PLUGINS}
+              components={mdComponents.codeText}
+            >
+              {normalizeFinalizedMarkdownMath(part)}
+            </ReactMarkdown>
+          </div>
+        );
+
+        // ── Diagram artifacts ────────────────────────────────────────────
+        // A ```mermaid block is drawn as a diagram card. Dispatch is on the
+        // block's own tag — never on the action that produced the answer and
+        // never by guessing at untagged code. The shared fence scanner decides
+        // what is a complete block, so a closing fence that is still arriving
+        // is not mistaken for one. With the feature switched off this path is
+        // skipped and a Mermaid block is the ordinary code card it always was.
+        const diagramParse = diagramsEnabled && mayHoldMermaidFence(codeGistBody, Boolean(msg.isStreaming))
+          ? parseFencedBlocks(codeGistBody, { final: !msg.isStreaming })
+          : null;
+        const hasDiagram = Boolean(diagramParse && (
+          diagramParse.blocks.some(isVisualBlock)
+          || (msg.isStreaming && isMermaidOpeningTail(diagramParse.tail))
+        ));
+        const renderedParts: React.ReactNode[] = [];
+        if (hasDiagram && diagramParse) {
+          // Keys follow each block's own ordinal, so nothing remounts as the
+          // answer grows or when the authoritative final text replaces it.
+          let lead = '';
+          diagramParse.blocks.forEach((block, i) => {
+            if (block.kind === 'prose') {
+              if (block.text.trim()) {
+                renderedParts.push(renderProsePart(block.text, `p${i}`));
+                lead = block.text;
+              }
+              return;
+            }
+            const fence = block as FenceBlock;
+            if (isVisualBlock(fence)) {
+              const before = previousDiagramRef.current;
+              renderedParts.push(
+                <DiagramArtifact
+                  key={`d${fence.diagramIndex}`}
+                  // What the block is written in decides what draws it: Mermaid,
+                  // the chart adapter, or a notation adapter.
+                  kind={fence.kind as 'mermaid' | 'chart' | 'notation'}
+                  artifactId={`${msg.id}:d${fence.diagramIndex}`}
+                  turnId={msg.id}
+                  source={fence.source}
+                  info={fence.info}
+                  complete={fence.closed}
+                  streaming={Boolean(msg.isStreaming)}
+                  description={describeDiagramFromLead(lead)}
+                  // An update still being written keeps the last valid version
+                  // of the SAME design on screen (decided from shared
+                  // component names — a fresh design shows no "previous").
+                  previousSource={!fence.closed && msg.isStreaming && before?.beforeMsgId === msg.id
+                    ? previousVersionFor(fence.source, before.source)
+                    : undefined}
+                  // One bounded automatic repair, for the newest answer only,
+                  // and never after the user pressed Stop on it.
+                  allowAutoRepair={latestAnswerIdRef.current === msg.id && !diagramRepairBlockedRef.current.has(msg.id)}
+                  onRepaired={handleDiagramRepaired}
+                  // Only the newest answer follows the bottom; an older row
+                  // redrawing (a theme change) must not move the scroll.
+                  onLayout={latestAnswerIdRef.current === msg.id ? handleDiagramLayout : undefined}
+                  themeKey={`${isLightTheme ? 'l' : 'd'}:${interfaceTheme ?? 'default'}`}
+                />,
+              );
+              return;
+            }
+            // Ordinary code in a mixed answer keeps the code card. A plain
+            // backtick fence is passed through byte for byte (exactly what the
+            // regex split would have produced); a tilde or indented fence is
+            // normalised to that form.
+            const raw = codeGistBody.slice(fence.start, fence.end);
+            const plain = fence.fenceChar === '`' && fence.fenceLength === 3 && raw.startsWith('```');
+            const part = plain
+              ? (fence.closed ? raw.replace(/\s+$/, '') : raw)
+              : `\`\`\`${fence.lang}\n${fence.source}${fence.closed ? '\n```' : ''}`;
+            renderedParts.push(renderFencePart(part, `c${fence.fenceIndex}`));
+          });
+          // A fence line still being typed: a code fence shows at once, as it
+          // always has; one that is turning into ```mermaid stays hidden so
+          // the card never appears first as an empty code block.
+          if (msg.isStreaming && diagramParse.tail.kind === 'opening-fence' && !isMermaidOpeningTail(diagramParse.tail)) {
+            renderedParts.push(renderFencePart(diagramParse.tail.text.trimStart(), 'tail'));
+          }
+        } else {
+          // Keys match the diagram path above (p<block>, c<fence>), so a code
+          // card or a paragraph already on screen is not torn down and rebuilt
+          // when a visual fence shows up later in the same answer.
+          let blockOrdinal = 0;
+          let fenceOrdinal = 0;
+          parts.forEach((part, i) => {
+            if (!part) {
+              // An empty piece of the split (an answer that opens with a
+              // fence): rendered as it always was, and not counted.
+              renderedParts.push(renderProsePart(part, `e${i}`));
+              return;
+            }
+            if (part.startsWith('```')) {
+              renderedParts.push(renderFencePart(part, `c${fenceOrdinal}`));
+              fenceOrdinal += 1;
+            } else {
+              renderedParts.push(renderProsePart(part, `p${blockOrdinal}`));
+            }
+            blockOrdinal += 1;
+          });
+        }
         return (
           // code-card-mount-in: a one-time cross-fade (@starting-style, see
           // index.css) for the FIRST render of this branch — i.e. exactly
@@ -8887,95 +9839,11 @@ Provide only the answer, nothing else.`;
           // deliberate cross-fade instead of the hard, silent DOM swap the
           // "different layout before vs after" complaint was describing.
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group code-card-mount-in">
-            {/* No card-level CardCopyButton here — HighlightedCode /
-                StreamingHighlightedCode below already render their own
-                per-block copy button (CodeBlockChrome for the headerless
-                dark theme, or the header row for light/modern/glass). Code
-                messages are almost always a single fenced block, so msg.text
-                and the block's own code are the same content — a second,
-                card-level copy button just duplicated the same action and
-                overlapped it visually (both hover-reveal near the top-right
-                corner of the same card). */}
-            <div className="space-y-2 text-[14.5px] leading-relaxed">
-              {parts.map((part, i) => {
-                if (part.startsWith('```')) {
-                  // Language class allows +/#/- so c++, objective-c, f# match.
-                  const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
-                  if (match || part.startsWith('```')) {
-                    const lang = match && match[1] ? match[1] : '';
-                    // Raw, UNTRIMMED — see below for why the streaming path
-                    // must not trim this.
-                    const rawCode = match && match[2]
-                      ? match[2]
-                      : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '');
-                    // Still-open fence on a still-streaming row → the
-                    // per-completed-line preview (kills the flicker, adds
-                    // the per-line reveal fade). Anything else (already
-                    // closed, or streaming already ended) → the static,
-                    // full-context-highlighted block, same as always.
-                    if (isUnclosedCodeFencePart(part) && msg.isStreaming) {
-                      // Deliberately NOT .trim()'d: splitStreamingCodeLines
-                      // decides "this line is complete" by finding a
-                      // trailing \n. Trimming it here would strip the most
-                      // recently arrived line's newline the instant it
-                      // lands (before the NEXT character confirms there's
-                      // more text after it), so that line would render as
-                      // the unhighlighted in-progress line for one extra
-                      // tick, then flip to highlighted-and-faded-in a tick
-                      // late — a small but real one-tick color pop on every
-                      // single line. The static HighlightedCode path below
-                      // still trims (rawCode.trim()) since a finalized block
-                      // should never show a stray trailing blank line.
-                      return (
-                        <StreamingHighlightedCode
-                          key={i}
-                          code={rawCode}
-                          lang={lang}
-                          isLightTheme={isLightTheme}
-                          codeTheme={codeTheme}
-                          codeBlockClass={codeBlockClass}
-                          codeHeaderClass={codeHeaderClass}
-                          codeHeaderTextClass={codeHeaderTextClass}
-                          codeLineNumberColor={codeLineNumberColor}
-                          appearance={appearance}
-                          isModernTheme={isModernTheme}
-                          isGlassTheme={isGlassTheme}
-                          showCodeHeader={showCodeHeader}
-                        />
-                      );
-                    }
-                    return (
-                      <HighlightedCode
-                        key={i}
-                        code={rawCode.trim()}
-                        lang={lang}
-                        isLightTheme={isLightTheme}
-                        codeTheme={codeTheme}
-                        codeBlockClass={codeBlockClass}
-                        codeHeaderClass={codeHeaderClass}
-                        codeHeaderTextClass={codeHeaderTextClass}
-                        codeLineNumberColor={codeLineNumberColor}
-                        appearance={appearance}
-                        isModernTheme={isModernTheme}
-                        isGlassTheme={isGlassTheme}
-                        showCodeHeader={showCodeHeader}
-                      />
-                    );
-                  }
-                }
-                // Regular text - Render with Markdown
-                return (
-                  <div key={i} className="markdown-content pr-6">
-                    <ReactMarkdown
-                      remarkPlugins={REMARK_PLUGINS}
-                      rehypePlugins={REHYPE_PLUGINS}
-                      components={mdComponents.codeText}
-                    >
-                      {normalizeFinalizedMarkdownMath(part)}
-                    </ReactMarkdown>
-                  </div>
-                );
-              })}
+            {/* Answer cards carry no copy button; the only copy action is
+                the code block's own (CodeBlockChrome, on the headerless dark
+                code theme). */}
+            <div className={`space-y-2 text-[14.5px] leading-relaxed${hasDiagram ? ' diagram-answer-parts' : ''}`}>
+              {renderedParts}
               {codeGistLine ? <div className="overlay-gist-chip">{codeGistLine}</div> : null}
             </div>
           </div>
@@ -8993,16 +9861,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'shorten') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={gistBody}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
-            <div className="text-[14px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -9019,16 +9878,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'recap') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={gistBody}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
-            <div className="text-[14px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -9045,16 +9895,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'follow_up_questions') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={msg.text}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
-            <div className="text-[14px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -9074,15 +9915,6 @@ Provide only the answer, nothing else.`;
 
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={gistBody}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
             <div className="text-[14px] leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
@@ -9125,7 +9957,7 @@ Provide only the answer, nothing else.`;
                 }
                 // Regular text - Render Markdown
                 return (
-                  <div key={i} className="markdown-content pr-6">
+                  <div key={i} className="markdown-content">
                     <ReactMarkdown
                       remarkPlugins={REMARK_PLUGINS}
                       rehypePlugins={REHYPE_PLUGINS}
@@ -9146,16 +9978,7 @@ Provide only the answer, nothing else.`;
       if (msg.role === 'system' && !msg.isNegotiationCoaching) {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={gistBody}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
-            <div className="text-[14px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -9187,7 +10010,10 @@ Provide only the answer, nothing else.`;
     // across renders and changes only on a language switch, so listing it
     // keeps the thinking label translatable without costing MessageRow its
     // React.memo bailout (which compares this callback by identity).
-    [isLightTheme, mdComponents, appearance, t],
+    // diagramsEnabled: flipping the switch must re-dispatch every row (a
+    // Mermaid block is a diagram card when on, a code card when off).
+    // handleDiagramRepaired is stable ([]).
+    [isLightTheme, mdComponents, appearance, t, diagramsEnabled, handleDiagramRepaired, handleDiagramLayout, interfaceTheme],
   );
 
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
@@ -9346,6 +10172,10 @@ Provide only the answer, nothing else.`;
         handleBrainstorm();
       } else if (isShortcutPressed(e, 'scrollUp')) {
         e.preventDefault();
+        // Detach from the bottom now, not after the scroll listener notices —
+        // but only if the chat can actually scroll up.
+        const chat = scrollContainerRef.current;
+        if (chat && canScrollUp(chat)) armAutoScrollInterrupt();
         upHeld = true;
         recomputeDirection();
         startScrollLoop();
@@ -9386,7 +10216,7 @@ Provide only the answer, nothing else.`;
       window.removeEventListener('blur', handleBlur);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [isShortcutPressed]);
+  }, [isShortcutPressed, armAutoScrollInterrupt]);
 
   // General Global Shortcuts (Rebindable)
   // We listen here to handle them when the window is focused (renderer side)
@@ -9534,6 +10364,8 @@ Provide only the answer, nothing else.`;
       // could fire before setAttachedContext had flushed, leaving handleWhatToSay
       // with an empty attachedContext and causing silent failures.
       pendingCaptureRef.current = data;
+      // The answer can start before the tray effect records this one.
+      phoneShotPathsRef.current.set(data.preview, data.path);
 
       setAttachedContext((prev) => {
         if (prev.some((s) => s.path === data.path)) return prev;
@@ -9652,6 +10484,10 @@ Provide only the answer, nothing else.`;
 
       let target: HTMLElement | null;
       if (axis === 'vert') {
+        // The global-shortcut path is how the overlay is scrolled while it is
+        // click-through (native wheel never arrives), so it must detach the
+        // chat itself; only an upward kick that can actually move counts.
+        if (direction < 0 && canScrollUp(container)) armAutoScrollInterrupt();
         target = container;
       } else {
         target = resolveHorizontalTarget(container);
@@ -9679,7 +10515,7 @@ Provide only the answer, nothing else.`;
       if (state.raf !== null) cancelAnimationFrame(state.raf);
       inertialScrollRef.current = null;
     };
-  }, []);
+  }, [armAutoScrollInterrupt]);
 
   // Stealth Global Shortcuts Handler
   // Listens for shortcuts triggered when the app is in the background
@@ -10054,23 +10890,49 @@ Provide only the answer, nothing else.`;
     sttUserError,
     sttInterviewerError,
   );
-  // Only surface the STT pill for genuine problems (config error, failed, or a
-  // dropped-then-reconnecting channel). The neutral 'awaiting-audio' state
-  // ("Listening for audio…") is intentionally suppressed — it added a pill on
-  // every launch and made the top section look padded vs. the prior build.
-  // When an audio-capture-failure banner is showing, it already conveys the
-  // hard failure with actionable UI (repair button + system-settings deep
-  // link). Surfacing the STT "needs attention" error pill at the same time is
-  // the same status on two surfaces — let the richer banner own the error and
-  // suppress the redundant error-tone pill. Reconnecting indication still shows
-  // (the banner only fires on terminal/stuck, not transient reconnects).
+  // Warnings and errors are BANNERS, not pills (owner request: "just the banner
+  // based is enough"). So the status row keeps only the one neutral progress
+  // note, "Preparing Apple Speech…", and the STT states that used to be pills
+  // are drawn by OverlayBanner:
+  //   not configured  -> the Transcription Not Configured banner
+  //   failed          -> error banner below
+  //   reconnecting    -> warning banner below
+  // The neutral 'awaiting-audio' state ("Listening for audio…") stays
+  // suppressed, as before: it showed on every launch.
+  //
+  // When an audio-capture-failure banner is showing it already conveys the
+  // hard failure with the fix, so the STT failure banner stands down rather
+  // than saying the same thing twice.
   const audioFailureBannerActive = systemAudioWarning?.kind === 'audio-capture-failure';
+  const sttFailed = sttUserStatus === 'failed' || sttInterviewerStatus === 'failed';
+  const sttReconnecting = sttUserStatus === 'reconnecting' || sttInterviewerStatus === 'reconnecting';
   const shouldShowSttSummaryPill =
-    (sttSummary.tone === 'error' && !audioFailureBannerActive) ||
-    sttUserStatus === 'reconnecting' ||
-    sttInterviewerStatus === 'reconnecting' ||
-    sttUserStatus === 'preparing' ||
-    sttInterviewerStatus === 'preparing';
+    !sttNotConfigured && !sttFailed && !sttReconnecting &&
+    (sttUserStatus === 'preparing' || sttInterviewerStatus === 'preparing');
+  const sttStatusBanner: { tone: 'warning' | 'error'; title: string; message: string } | null =
+    sttNotConfigured
+      ? null
+      : sttFailed && !audioFailureBannerActive
+        ? {
+            tone: 'error',
+            title: t('Transcription Stopped'),
+            // Two lines: what stopped, then what to do. The provider's own
+            // error (often a bare status like "401 Unauthorized") is not
+            // shown; a code on screen explains nothing.
+            message:
+              sttUserStatus === 'failed' && sttInterviewerStatus === 'failed'
+                ? t('Nothing is being transcribed right now. Check your transcription provider and its key in Settings.')
+                : sttUserStatus === 'failed'
+                  ? t('Your microphone is no longer being transcribed. Check your transcription provider and its key in Settings.')
+                  : t('Interviewer audio is no longer being transcribed. Check your transcription provider and its key in Settings.'),
+          }
+        : sttReconnecting && !sttFailed
+          ? {
+              tone: 'warning',
+              title: t('Transcription Reconnecting'),
+              message: t('The connection to your speech-to-text provider dropped. Retrying.'),
+            }
+          : null;
   // Whether the vision chip will render (mirrors the IIFE's early-return guard).
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =
@@ -10083,7 +10945,15 @@ Provide only the answer, nothing else.`;
   // Suppressed: mode label pill is not required in the UI.
   // Suppressed: LLM privacy label pill is not required in the UI.
   // Suppressed: vision pill ("Vision: provider") is not required in the UI.
-  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext || !!captureFallback;
+  const dismissPageContext = () => {
+    setPageContext(null);
+    try {
+      if (typeof (window as any).lastCapturedDOM === 'string') {
+        (window as any).lastCapturedDOM = '';
+      }
+    } catch (_) {}
+  };
+  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext;
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
 
   // Suppress the shell's scale/translate entry animation until it has rendered
@@ -10153,6 +11023,7 @@ Provide only the answer, nothing else.`;
     : [];
   const clampedPickerIndex = Math.min(skillPickerIndex, Math.max(0, filteredSkills.length - 1));
 
+
   return (
     <>
     {/* The resize toggle and the TopPill render in their OWN aux
@@ -10173,7 +11044,7 @@ Provide only the answer, nothing else.`;
       // flush to the window. Horizontally it keeps contentEl's outer box at the
       // full window width when the panel is expanded, so mx-auto still centres
       // and panelLeft (measured from THIS element) stays self-consistent.
-      className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-[6px] rounded-[24px] font-sans gap-2 overlay-text-primary"
+      className="ov-motion flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-[6px] rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
       {/*
        * Always-mounted: isExpanded drives opacity/scale/pointer-events only.
@@ -10252,7 +11123,9 @@ Provide only the answer, nothing else.`;
             >
               {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
 
-              {hasStatusPill && (
+              {/* Chrome that comes and goes folds open and shut (ChromeFold)
+                  instead of jumping the card and the window. */}
+              <ChromeFold show={hasStatusPill} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} testId="fold-status-pills">
               <div className="relative no-drag flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 pb-1">
                 {shouldShowSttSummaryPill && (
                   <div
@@ -10264,8 +11137,12 @@ Provide only the answer, nothing else.`;
                   </div>
                 )}
                 {pageContext && (
-                  <div
-                    className={`${statusPillBaseClass} ${getStatusToneClass(pageContext.partial ? 'warn' : 'ok')} pr-1.5`}
+                  // The captured page: a clear Liquid Glass chip (owner's pick
+                  // over a banner and a row above the input). It replaced a
+                  // flat green status pill.
+                  <PageContextChip
+                    label={pageContextChipLabel(pageContext)}
+                    partial={!!pageContext.partial}
                     title={
                       pageContext.partial
                         ? `Only part of this page could be read automatically${
@@ -10275,96 +11152,39 @@ Provide only the answer, nothing else.`;
                           ? `${pageContext.url} · ${pageContext.chars.toLocaleString()} chars · used on your next answer`
                           : `${pageContext.chars.toLocaleString()} chars · used on your next answer`
                     }
-                  >
-                    <Globe className="h-3 w-3 opacity-70" />
-                    <span className="max-w-[220px] truncate">
-                      {pageContextChipLabel(pageContext)}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={t("Pick a different browser tab")}
-                      title={t("Capture a different tab")}
-                      className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
-                      onClick={() => { void openTabPicker(); }}
-                    >
-                      <List className="h-2.5 w-2.5" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t("Dismiss captured page context")}
-                      className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
-                      onClick={() => {
-                        setPageContext(null);
-                        try {
-                          if (typeof (window as any).lastCapturedDOM === 'string') {
-                            (window as any).lastCapturedDOM = '';
-                          }
-                        } catch (_) {}
-                      }}
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                )}
-                {captureFallback && (
-                  <div
-                    className={`${statusPillBaseClass} ${getStatusToneClass('warn')} pr-1.5`}
-                    title={captureFallback.detail}
-                  >
-                    <Image className="h-3 w-3 opacity-70" />
-                    <span className="max-w-[260px] truncate">{captureFallback.label}</span>
-                    <button
-                      type="button"
-                      aria-label={t('Dismiss page capture notice')}
-                      className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
-                      onClick={() => setCaptureFallback(null)}
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
+                    // The list button toggles: a second press closes the picker.
+                    onPickTab={() => { if (tabPicker !== null) setTabPicker(null); else void openTabPicker(); }}
+                    pickerOpen={tabPicker !== null}
+                    onDismiss={dismissPageContext}
+                    pickTabLabel={t('Pick a different browser tab')}
+                    dismissLabel={t('Dismiss captured page context')}
+                  />
                 )}
               </div>
-              )}
+              </ChromeFold>
 
               {/* Multi-tab picker — choose which open browser tab to capture. */}
+              <ChromeFold show={tabPicker !== null} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-1 pb-1" testId="fold-tab-picker">
               {tabPicker !== null && (
-                <div className="relative no-drag mx-4 mt-1 mb-1 rounded-[12px] border border-white/10 bg-black/30 backdrop-blur-xl p-2 shadow-sm">
-                  <div className="flex items-center justify-between px-1 pb-1.5">
-                    <span className="text-[11px] font-medium overlay-text-primary">
-                      {tabPickerLoading ? t('Finding open tabs…') : t('Pick a tab to capture')}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={t("Close tab picker")}
-                      className="rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-white/10 transition-opacity"
-                      onClick={() => setTabPicker(null)}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                  {!tabPickerLoading && tabPicker.length === 0 && (
-                    <div className="px-1 py-1 text-[10px] overlay-text-muted">
-                      {t('No capturable tabs — is the browser open and the extension connected?')}
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-0.5 max-h-44 overflow-y-auto">
-                    {tabPicker.map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => { void pickTab(t.id); }}
-                        className="text-left px-2 py-1.5 rounded-md text-[11px] overlay-text-primary hover:bg-white/10 transition-colors"
-                        title={t.url}
-                      >
-                        <span className="block truncate">{t.title || t.url}</span>
-                        <span className="block truncate text-[9px] overlay-text-muted">
-                          {hostnameFromUrl(t.url) || t.url}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <TabPicker
+                  tabs={tabPicker}
+                  loading={tabPickerLoading}
+                  currentUrl={pageContext?.url}
+                  hostOf={hostnameFromUrl}
+                  onPick={(tabId) => { void pickTab(tabId); }}
+                  onClose={() => setTabPicker(null)}
+                  onRetry={() => { void openTabPicker(); }}
+                  labels={{
+                    title: t('Pick a tab to capture'),
+                    loading: t('Finding open tabs…'),
+                    empty: t('No capturable tabs — is the browser open and the extension connected?'),
+                    close: t('Close tab picker'),
+                    retry: t('Try again'),
+                    current: t('Captured'),
+                  }}
+                />
               )}
+              </ChromeFold>
 
               {/*
                 System Audio / Screen Recording Warning Banner.
@@ -10384,6 +11204,7 @@ Provide only the answer, nothing else.`;
                 row wraps (rather than crushing the text into a ~150px ribbon,
                 the shape that shipped the vertical-overflow bug).
               */}
+              <ChromeFold show={!!systemAudioWarning} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-audio-warning">
               {systemAudioWarning && (() => {
                 /*
                   Which macOS pane actually FIXES this warning.
@@ -10469,7 +11290,18 @@ Provide only the answer, nothing else.`;
                   permissionPaneVisited === warningIdentity;
                 return (
                   <OverlayBanner
-                    className="mx-4 mt-3 mb-1"
+                    className="mx-4"
+                    /*
+                      A blocked permission and a capture that gave up are
+                      errors: nothing is being heard and nothing will change
+                      until the user acts. A stuck channel main is still
+                      retrying (a silent mic, an expired grant) is a warning.
+                    */
+                    tone={
+                      systemAudioWarning.kind === 'screen-recording-permission' || systemAudioWarning.terminal
+                        ? 'error'
+                        : 'warning'
+                    }
                     /*
                       The title is an i18n KEY shipped from the main process
                       (main.ts `permissionTitleKey`) so it stays localisable
@@ -10564,52 +11396,193 @@ Provide only the answer, nothing else.`;
                   />
                 );
               })()}
+              </ChromeFold>
 
               {/* PR #173: STT Not Configured Warning Banner */}
+              <ChromeFold show={sttNotConfigured} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-not-configured">
               {sttNotConfigured && (
-                <div className="flex items-center justify-between mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-orange-500/10 border border-orange-500/20 rounded-[12px] shadow-sm relative no-drag group/stt-warning">
-                  <div className="flex flex-col gap-1 pr-3">
-                    <div className="flex items-center gap-2 text-[12.5px] text-orange-600 dark:text-orange-400/90 font-medium leading-tight">
-                      <div className="shrink-0 p-1 bg-orange-500/20 rounded-full">
-                        <svg
-                          className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2.5}
-                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                          />
-                        </svg>
-                      </div>
-                      <span>{t('Transcription Not Configured')}</span>
-                    </div>
-                    <p className="text-[11px] text-orange-600/70 dark:text-orange-400/60 leading-snug pl-[26px]">
-                      {t('No STT provider selected. Open Settings → Audio to pick one.')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => {
-                        window.electronAPI?.toggleSettingsWindow?.();
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 text-orange-700 dark:text-orange-500 text-[11px] font-semibold transition-all active:scale-95 border border-orange-500/20 shadow-sm"
+                /*
+                  The shared banner, as an error: with no provider nothing is
+                  transcribed at all. It was a hand-rolled orange box (orange
+                  text on an orange wash, a dismiss ✕ that only showed on
+                  hover). Title and sentence are the existing keys.
+                */
+                <OverlayBanner
+                  className="mx-4"
+                  tone="error"
+                  icon={<MicOff strokeWidth={2.2} />}
+                  title={t('Transcription Not Configured')}
+                  message={t('No STT provider selected. Open Settings → Audio to pick one.')}
+                  onDismiss={() => setSttNotConfigured(false)}
+                  dismissLabel={t('Dismiss')}
+                  actions={
+                    <OverlayBannerButton
+                      variant="primary"
+                      // Settings › Audio, which is where the sentence sends
+                      // the user. This used to open the quick-toggles popup.
+                      onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
                     >
                       {t('Open Settings')}
-                    </button>
-                    <button
-                      onClick={() => setSttNotConfigured(false)}
-                      className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-orange-600/50 hover:text-orange-700 dark:text-orange-500/50 dark:hover:text-orange-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/stt-warning:opacity-100"
-                      title={t("Dismiss")}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
+                    </OverlayBannerButton>
+                  }
+                />
               )}
+              </ChromeFold>
+
+              {/* Transcription failed or is reconnecting. These two used to
+                  be pills in the status row ("STT needs attention", "STT
+                  reconnecting"); warnings and errors are banners now (owner
+                  request), so each says what happened in a sentence and the
+                  failure carries the fix. */}
+              <ChromeFold show={!!sttStatusBanner} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-status">
+              {sttStatusBanner && (
+                <OverlayBanner
+                  className="mx-4"
+                  tone={sttStatusBanner.tone}
+                  icon={sttStatusBanner.tone === 'error' ? <MicOff strokeWidth={2.2} /> : <RefreshCw strokeWidth={2.2} className="ov-banner-spin" />}
+                  title={sttStatusBanner.title}
+                  message={sttStatusBanner.message}
+                  actions={sttStatusBanner.tone === 'error' ? (
+                    <OverlayBannerButton
+                      variant="primary"
+                      onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
+                    >
+                      {t('Open Settings')}
+                    </OverlayBannerButton>
+                  ) : undefined}
+                />
+              )}
+              </ChromeFold>
+
+              {/* A page capture (Cmd/Ctrl+Shift+Y) fell back to a screenshot,
+                  or captured nothing. It used to be an amber pill whose
+                  explanation lived in a tooltip; the banner shows the
+                  explanation. Label and detail are main's own strings
+                  (electron/services/pageCaptureFallback.ts). */}
+              <ChromeFold show={!!captureFallback} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-capture-fallback">
+              {captureFallback && (
+                <OverlayBanner
+                  className="mx-4"
+                  // "Capture failed — nothing was attached" is the one case
+                  // where neither the page nor a screenshot got through.
+                  tone={captureFallback.label.startsWith('Capture failed') ? 'error' : 'warning'}
+                  icon={<Image strokeWidth={2.2} />}
+                  title={captureFallback.label}
+                  message={captureFallback.detail}
+                  onDismiss={() => setCaptureFallback(null)}
+                  dismissLabel={t('Dismiss page capture notice')}
+                />
+              )}
+              </ChromeFold>
+
+              {/* The two stealth-typing banners sit up here with the rest
+                  (owner request); they used to sit above the prompt input. */}
+              {/* Stealth hotkey conflict banner — shown if globalShortcut.register()
+                                  failed for chat:focusInput (typically because the configured
+                                  activation hotkey is already claimed by another app or by the
+                                  OS). Click-to-activate still works (mousedown listener is
+                                  independent of the hotkey), but the user can rebind in Settings. */}
+              <ChromeFold show={!!stealthHotkeyConflict} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-hotkey-conflict">
+              {stealthHotkeyConflict && (
+                /*
+                  The shared banner, as a warning: clicking the input still
+                  activates stealth typing. It was a hand-rolled rose box
+                  that printed the raw accelerator ("CommandOrControl+
+                  Shift+Space"); the keys are now drawn as the platform's
+                  own keycaps, the way the input placeholder draws them.
+                  No title: the two halves of the sentence are the existing
+                  keys, and they do not split into a heading and a body.
+                */
+                <OverlayBanner
+                  className="mx-4"
+                  data-stealth-ignore="true"
+                  icon={<Keyboard strokeWidth={2.2} />}
+                  message={
+                    <>
+                      {t('Stealth typing hotkey')}{' '}
+                      <span className="ov-banner-keys">
+                        {acceleratorToKeys(stealthHotkeyConflict).map((key, i) => (
+                          <kbd key={i}>{key}</kbd>
+                        ))}
+                      </span>{' '}
+                      {t('is already in use. Click the input to activate, or rebind in Settings.')}
+                    </>
+                  }
+                  onDismiss={() => setStealthHotkeyConflict(null)}
+                  dismissLabel={t('Dismiss')}
+                  dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
+                  actions={
+                    <OverlayBannerButton
+                      variant="primary"
+                      onClick={() => window.electronAPI.openSettingsTab('keybinds')}
+                      data-stealth-ignore="true"
+                    >
+                      {t('Rebind')}
+                    </OverlayBannerButton>
+                  }
+                />
+              )}
+              </ChromeFold>
+
+              {/* Stealth tap permission banner — shown only when the user
+                                  pressed the activation hotkey but Accessibility wasn't
+                                  granted. macOS-only: Accessibility is a TCC concept that
+                                  doesn't exist on Windows, and the underlying CGEventTap
+                                  Rust module ships only in the Darwin binary. Gating here
+                                  is belt-and-suspenders on top of the native-side gate. */}
+              <ChromeFold show={isMac && stealthPermissionMissing} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-accessibility">
+              {isMac && stealthPermissionMissing && (
+                <OverlayBanner
+                  className="mx-4"
+                  data-stealth-ignore="true"
+                  /*
+                    Unified onto the same primitive as the system-audio
+                    banner above: same surface, radius, padding, type ramp,
+                    icon chip, primary/secondary button pair and inline ✕.
+                    Previously this was a second design for the same job
+                    (bare sentence + three flat amber buttons + a "×" glyph).
+                    The heading is new; the sentence below it is byte-for-byte
+                    the existing key, which has shipped ja/ru translations.
+                  */
+                  title={t('Accessibility Access Needed')}
+                  message={t('Stealth typing needs Accessibility access. Grant it in System Settings, then restart Natively.')}
+                  onDismiss={() => setStealthPermissionMissing(false)}
+                  dismissLabel={t('Dismiss')}
+                  dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
+                  actions={
+                    <>
+                      <OverlayBannerButton
+                        variant="primary"
+                        onClick={() => window.electronAPI.stealthTapOpenSettings()}
+                        title={t('Open macOS Accessibility privacy settings')}
+                        data-stealth-ignore="true"
+                      >
+                        {t('Open Settings')}
+                      </OverlayBannerButton>
+                      <OverlayBannerButton
+                        variant="secondary"
+                        onClick={async () => {
+                          if (appRestarting) return; // in-flight guard
+                          setAppRestarting(true);
+                          try {
+                            await window.electronAPI?.restartApp?.();
+                          } catch (err) {
+                            console.warn('[UI] restart-app failed:', err);
+                            setAppRestarting(false);
+                          }
+                        }}
+                        disabled={appRestarting}
+                        aria-busy={appRestarting}
+                        data-stealth-ignore="true"
+                        title={t('Accessibility grants often need a full app restart to take effect')}
+                      >
+                        {appRestarting ? t('Restarting…') : t('Restart Now')}
+                      </OverlayBannerButton>
+                    </>
+                  }
+                />
+              )}
+              </ChromeFold>
 
               {/* Phase 3 — Dynamic action card row (Cluely-style live triggers).
                                 Appears between status pills and rolling transcript so users see
@@ -10619,13 +11592,20 @@ Provide only the answer, nothing else.`;
                 onAcceptAction={(action: DynamicActionPayload) => {
                   void handleWhatToSay(action.promptInstruction);
                 }}
+                surfaceStyle={appearance.chipStyle}
+                requestHeightMotion={requestChromeHeightMotion}
+                // The keycap names the shortcut only when pressing it will
+                // actually fire: global shortcuts on, and the chord not taken
+                // by another app (useShortcuts' registration conflicts).
+                shortcutKeys={globalShortcutsEnabled && !shortcutConflicts.has('acceptSuggestion') ? shortcuts.acceptSuggestion : []}
+                shortcutEnabled={isExpanded}
               />
 
               {/* Rolling Transcript Bar — live transcript + on-demand diagnostics
                   for hard failures. Reconnecting/awaiting-audio status is owned by
                   the top status pill, so the bar no longer mounts for those (which
                   also avoids an empty bar / duplicated status text). */}
-              {showTranscript && rollingTranscript ? (
+              <ChromeFold show={!!(showTranscript && rollingTranscript)} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} testId="fold-transcript">
                 <RollingTranscript
                   text={rollingTranscript}
                   isActive={isInterviewerSpeaking}
@@ -10641,7 +11621,7 @@ Provide only the answer, nothing else.`;
                     provider: sttUserProvider,
                   }}
                 />
-              ) : null}
+              </ChromeFold>
 
               {/* Chat History - Only show if there are messages OR active states,
                   or a pinned height that needs a viewport to fill it. No padding
@@ -10697,38 +11677,39 @@ Provide only the answer, nothing else.`;
                       msg={msg}
                       isLightTheme={isLightTheme}
                       appearance={appearance}
-                      onCopy={handleCopy}
                       renderMessageText={renderMessageText}
                     />
                   ))}
 
-                  {/* Active Recording State with Live Transcription */}
+                  {/* Active Recording State with Live Transcription.
+                      The pale emeralds are for a dark panel; on the light one
+                      they wash out (emerald-300 on the tinted pane is about
+                      1.1:1), so it takes the dark end of the scale, the way
+                      the user bubble swaps blue-100 for blue-900. The label
+                      and the bars are the transcript's colour at full
+                      strength: at emerald-400, the label at 70%, they were
+                      the faintest things on the glass and modern panels.
+                      The fill stays `bg-emerald-500/10` in both: the glass and
+                      modern recipes in index.css select on that class. */}
                   {isManualRecording && (
-                    <div className="flex flex-col items-end gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="ov-listening-in flex flex-col items-end gap-1">
                       {/* Live transcription preview */}
                       {(manualTranscript || voiceInput) && (
-                        <div className="max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-[18px] rounded-tr-[4px]">
-                          <span className="text-[13px] text-emerald-300">
+                        <div className={`max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border rounded-[18px] rounded-tr-[4px] ${isLightSurface ? 'border-emerald-600/30' : 'border-emerald-500/20'}`}>
+                          <span className={`text-[13px] ${isLightSurface ? 'text-emerald-900' : 'text-emerald-300'}`}>
                             {voiceInput}
                             {voiceInput && manualTranscript ? ' ' : ''}
                             {manualTranscript}
                           </span>
                         </div>
                       )}
-                      <div className="px-3 py-2 flex gap-1.5 items-center bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                        <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '0ms' }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '150ms' }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '300ms' }}
-                        />
-                        <span className="text-[10px] text-emerald-400/70 ml-1">{t('Listening...')}</span>
+                      <div className={`px-3 py-2 flex gap-1.5 items-center bg-emerald-500/10 border rounded-full ${isLightSurface ? 'border-emerald-600/30' : 'border-emerald-500/20'}`}>
+                        <span className="ov-listening-wave" aria-hidden>
+                          {[0, 1, 2, 3].map((i) => (
+                            <span key={i} className={`stt-wave-dot w-[3px] h-1.5 rounded-full ${isLightSurface ? 'bg-emerald-700' : 'bg-emerald-300'}`} />
+                          ))}
+                        </span>
+                        <span className={`text-[10px] ml-1 ${isLightSurface ? 'text-emerald-800' : 'text-emerald-300'}`}>{t('Listening...')}</span>
                       </div>
                     </div>
                   )}
@@ -10983,208 +11964,148 @@ Provide only the answer, nothing else.`;
                     </motion.button>
                   )}
                 </AnimatePresence>
-                <div
-                  className={`flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
-                >
-                <button
-                  onClick={handleWhatToSay}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
-                </button>
-                <button
-                  onClick={handleClarify}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
-                </button>
-                <button
-                  onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  {actionButtonMode === 'brainstorm' ? (
-                    <>
-                      <Lightbulb className="w-3 h-3 opacity-70" /> {t('Brainstorm')}
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleFollowUpQuestions}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
-                </button>
-                <button
-                  onClick={handleAnswerNow}
-                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
-                    isManualRecording
-                      ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
-                      : 'overlay-chip-surface overlay-text-interactive'
-                  }`}
-                  style={isManualRecording ? undefined : appearance.chipStyle}
-                >
-                  {isManualRecording ? (
-                    <>
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                {(() => {
+                  const chipClass = `flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`;
+                  const answerChipClass = (recording: boolean) =>
+                    `flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
+                      recording
+                        ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
+                        : 'overlay-chip-surface overlay-text-interactive'
+                    }`;
+                  // A label drawn by CSS (::before + attr), for layout copies
+                  // only: it takes exactly the width real text would, but it is
+                  // not DOM text, so the copies never show up in textContent,
+                  // text queries or text search.
+                  const ghost = (text: string) => <span className="ov-ghost-label" data-label={text} />;
+                  const modeChipContent = (mode: 'recap' | 'brainstorm') =>
+                    mode === 'brainstorm' ? (
+                      <span className="flex items-center gap-1.5">
+                        <Lightbulb className="w-3 h-3 opacity-70" /> {t('Brainstorm')}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
+                      </span>
+                    );
+                  const answerContent = (
+                    <span className="flex items-center gap-1.5">
+                      <Mic className="w-3 h-3 opacity-70" /> {t('Answer')}
+                    </span>
+                  );
+                  const stopContent = (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
                       {t('Stop')}
-                    </>
-                  ) : (
+                    </span>
+                  );
+                  // The Answer chip is as wide as its wider label: invisible
+                  // copies of both share one grid cell with the live label, so
+                  // Answer ⇄ Stop never slides the rest of the row sideways.
+                  const answerSizers = (
                     <>
-                      <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
+                      <span className="ov-chip-sizer flex items-center gap-1.5" aria-hidden>
+                        <span className="w-3 h-3 shrink-0" />
+                        {ghost(t('Answer'))}
+                      </span>
+                      <span className="ov-chip-sizer flex items-center gap-1.5" aria-hidden>
+                        <span className="w-1.5 h-1.5 shrink-0" />
+                        {ghost(t('Stop'))}
+                      </span>
                     </>
-                  )}
-                </button>
-                </div>
+                  );
+                  // The row laid out on one line for one mode, invisible and
+                  // inert: its width is what the collapsed panel needs (see the
+                  // measuring effect). Same classes and icons as the real
+                  // chips; spans, not buttons, and CSS-drawn labels.
+                  const measureRow = (mode: 'recap' | 'brainstorm', ref: React.RefObject<HTMLDivElement | null>) => (
+                    <div ref={ref} className="ov-row-measure flex flex-nowrap items-center gap-1.5 px-4" aria-hidden inert>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        <Pencil className="w-3 h-3 opacity-70" />
+                        {ghost(t('What to answer?'))}
+                      </span>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        <MessageSquare className="w-3 h-3 opacity-70" />
+                        {ghost(t('Clarify'))}
+                      </span>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        {mode === 'brainstorm' ? (
+                          <Lightbulb className="w-3 h-3 opacity-70" />
+                        ) : (
+                          <RefreshCw className="w-3 h-3 opacity-70" />
+                        )}
+                        {ghost(mode === 'brainstorm' ? t('Brainstorm') : t('Recap'))}
+                      </span>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        <HelpCircle className="w-3 h-3 opacity-70" />
+                        {ghost(t('Follow Up Question'))}
+                      </span>
+                      <span className={answerChipClass(false)} style={appearance.chipStyle}>
+                        <span className="ov-chip-stack">{answerSizers}</span>
+                      </span>
+                    </div>
+                  );
+                  return (
+                    <>
+                      <div
+                        ref={quickRowRef}
+                        className={`ov-chip-row ov-quickrow-pad flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3 is-bare'}`}
+                      >
+                        <button onClick={handleWhatToSay} className={chipClass} style={appearance.chipStyle}>
+                          <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
+                        </button>
+                        <button onClick={handleClarify} className={chipClass} style={appearance.chipStyle}>
+                          <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
+                        </button>
+                        <button
+                          onClick={shownActionMode === 'brainstorm' ? handleBrainstorm : handleRecap}
+                          className={chipClass}
+                          style={appearance.chipStyle}
+                        >
+                          <SwapText swapKey={labelActionMode} onShown={handleModeLabelShown}>
+                            {modeChipContent(labelActionMode)}
+                          </SwapText>
+                        </button>
+                        <button onClick={handleFollowUpQuestions} className={chipClass} style={appearance.chipStyle}>
+                          <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
+                        </button>
+                        <button
+                          onClick={handleAnswerNow}
+                          className={answerChipClass(isManualRecording)}
+                          style={isManualRecording ? undefined : appearance.chipStyle}
+                        >
+                          <span className="ov-chip-stack">
+                            {answerSizers}
+                            <span className="flex justify-center">
+                              <SwapText swapKey={isManualRecording ? 'stop' : 'answer'}>
+                                {isManualRecording ? stopContent : answerContent}
+                              </SwapText>
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                      {measureRow('recap', recapRowMeasureRef)}
+                      {measureRow('brainstorm', brainstormRowMeasureRef)}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Input Area */}
               <div className="p-3 pt-0">
-                {/* Latent Context Preview (Attached Screenshot) */}
-                {attachedContext.length > 0 && (
-                  <div
-                    className={`mb-2 rounded-lg p-2 transition-all duration-200 border ${subtleSurfaceClass}`}
-                    style={appearance.subtleStyle}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] font-medium overlay-text-primary">
-                        {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''}{' '}
-                        attached
-                      </span>
-                      <button
-                        onClick={() => setAttachedContext([])}
-                        className="p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                        title={t("Remove all")}
-                        style={appearance.iconStyle}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex gap-1.5 overflow-x-auto max-w-full pb-1">
-                      {attachedContext.map((ctx, idx) => (
-                        <div key={ctx.path} className="relative group/thumb flex-shrink-0">
-                          <img
-                            src={ctx.preview}
-                            alt={`Screenshot ${idx + 1}`}
-                            className={`h-12 w-auto rounded-[10px] border object-cover shadow-sm ${isLightTheme ? 'border-black/15' : 'border-white/20'}`}
-                          />
-                          <button
-                            onClick={() =>
-                              setAttachedContext((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
-                            title={t("Remove")}
-                          >
-                            <X className="w-2.5 h-2.5 text-white" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <span className="text-[10px] overlay-text-muted">
-                      {t('Ask a question or click Answer')}
-                    </span>
-                  </div>
-                )}
-
-                {/* Stealth hotkey conflict banner — shown if globalShortcut.register()
-                                    failed for chat:focusInput (typically because the configured
-                                    activation hotkey is already claimed by another app or by the
-                                    OS). Click-to-activate still works (mousedown listener is
-                                    independent of the hotkey), but the user can rebind in Settings. */}
-                {stealthHotkeyConflict && (
-                  <div
-                    className="mb-2 px-3 py-2 rounded-xl border border-rose-400/40 bg-rose-500/10 text-[11px] flex items-center gap-2"
-                    data-stealth-ignore="true"
-                  >
-                    <span className="overlay-text-primary flex-1">
-                      {t('Stealth typing hotkey')}{' '}
-                      <kbd className="px-1 py-0.5 rounded bg-white/10 font-mono text-[10px]">
-                        {stealthHotkeyConflict}
-                      </kbd>{' '}
-                      {t('is already in use. Click the input to activate, or rebind in Settings.')}
-                    </span>
-                    <button
-                      onClick={() => window.electronAPI.openSettingsTab('keybinds')}
-                      className="px-2 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap"
-                      data-stealth-ignore="true"
-                    >
-                      {t('Rebind')}
-                    </button>
-                    <button
-                      onClick={() => setStealthHotkeyConflict(null)}
-                      className="px-1.5 py-1 rounded-md hover:bg-white/10 transition-colors text-[11px] overlay-text-muted"
-                      aria-label={t("Dismiss")}
-                      data-stealth-ignore="true"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-
-                {/* Stealth tap permission banner — shown only when the user
-                                    pressed the activation hotkey but Accessibility wasn't
-                                    granted. macOS-only: Accessibility is a TCC concept that
-                                    doesn't exist on Windows, and the underlying CGEventTap
-                                    Rust module ships only in the Darwin binary. Gating here
-                                    is belt-and-suspenders on top of the native-side gate. */}
-                {isMac && stealthPermissionMissing && (
-                  <OverlayBanner
-                    className="mb-2"
-                    data-stealth-ignore="true"
-                    /*
-                      Unified onto the same primitive as the system-audio
-                      banner above: same surface, radius, padding, type ramp,
-                      icon chip, primary/secondary button pair and inline ✕.
-                      Previously this was a second design for the same job
-                      (bare sentence + three flat amber buttons + a "×" glyph).
-                      The heading is new; the sentence below it is byte-for-byte
-                      the existing key, which has shipped ja/ru translations.
-                    */
-                    title={t('Accessibility Access Needed')}
-                    message={t('Stealth typing needs Accessibility access. Grant it in System Settings, then restart Natively.')}
-                    onDismiss={() => setStealthPermissionMissing(false)}
-                    dismissLabel={t('Dismiss')}
-                    dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
-                    actions={
-                      <>
-                        <OverlayBannerButton
-                          variant="primary"
-                          onClick={() => window.electronAPI.stealthTapOpenSettings()}
-                          title={t('Open macOS Accessibility privacy settings')}
-                          data-stealth-ignore="true"
-                        >
-                          {t('Open Settings')}
-                        </OverlayBannerButton>
-                        <OverlayBannerButton
-                          variant="secondary"
-                          onClick={async () => {
-                            if (appRestarting) return; // in-flight guard
-                            setAppRestarting(true);
-                            try {
-                              await window.electronAPI?.restartApp?.();
-                            } catch (err) {
-                              console.warn('[UI] restart-app failed:', err);
-                              setAppRestarting(false);
-                            }
-                          }}
-                          disabled={appRestarting}
-                          aria-busy={appRestarting}
-                          data-stealth-ignore="true"
-                          title={t('Accessibility grants often need a full app restart to take effect')}
-                        >
-                          {appRestarting ? t('Restarting…') : t('Restart Now')}
-                        </OverlayBannerButton>
-                      </>
-                    }
-                  />
-                )}
+                {/* Latent Context Preview (Attached Screenshot). It folds open
+                    and closed with the card instead of jumping it. */}
+                <ScreenshotTray
+                  shots={attachedContext}
+                  onRemove={(path) => setAttachedContext((prev) => prev.filter((shot) => shot.path !== path))}
+                  onClear={() => setAttachedContext([])}
+                  overlayVisible={isExpanded}
+                  requestHeightMotion={requestChromeHeightMotion}
+                  surfaceClassName={subtleSurfaceClass}
+                  surfaceStyle={appearance.subtleStyle}
+                  iconStyle={appearance.iconStyle}
+                  isLightTheme={isLightTheme}
+                  t={t}
+                />
 
                 {/* data-stealth-engage marks this subtree as
                                     the ONLY clickable region that engages the
@@ -11277,18 +12198,18 @@ Provide only the answer, nothing else.`;
                     </div>
                   )}
 
-                  {/* Skill picker — portal so it escapes the overflow-hidden shell */}
-                  {filteredSkills.length > 0 && skillPickerQuery !== null &&
-                    createPortal(
-                      <SkillPicker
-                        skills={filteredSkills}
-                        selectedIndex={clampedPickerIndex}
-                        anchorEl={textInputRef.current}
-                        onSelect={selectSkill}
-                      />,
-                      document.body,
-                    )
-                  }
+                  {/* Skill picker — portal so it escapes the overflow-hidden shell.
+                      Always rendered: the layer holds it mounted for its close. */}
+                  {createPortal(
+                    <SkillPickerLayer
+                      open={filteredSkills.length > 0 && skillPickerQuery !== null}
+                      skills={filteredSkills}
+                      selectedIndex={clampedPickerIndex}
+                      anchorEl={textInputRef.current}
+                      onSelect={selectSkill}
+                    />,
+                    document.body,
+                  )}
 
                   {/* Custom Rich Placeholder */}
                   {!inputValue && (
@@ -11344,15 +12265,15 @@ Provide only the answer, nothing else.`;
                         window.electronAPI.toggleModelSelector({ x, y, activate: false });
                       }}
                       className={`
-                                                flex items-center gap-2 px-3 py-1.5
-                                                border rounded-lg transition-colors
-                                                text-xs font-medium w-[140px]
+                                                flex items-center gap-1 pl-3 pr-1.5 h-7
+                                                border rounded-[9px] transition-colors
+                                                text-xs font-medium text-left shrink-0
                                                 interaction-base interaction-press
                                                 ${controlSurfaceClass}
                                             `}
-                      style={appearance.controlStyle}
+                      style={{ ...appearance.controlStyle, width: MODEL_SELECTOR_WIDTH }}
                     >
-                      <span className="truncate min-w-0 flex-1">
+                      <ModelSelectorLabel>
                         {(() => {
                           const m = currentModel;
                           const codexCliName = getCodexCliModelDisplayName(m);
@@ -11363,7 +12284,7 @@ Provide only the answer, nothing else.`;
                           // This MUST sit above the displayName branch below:
                           // getCurrentModelDisplayName() returns currentModelId
                           // verbatim for LiteLLM, so that path would render the
-                          // full id and this chip is a 140px truncating control.
+                          // full id and this chip only shows its first 16 characters.
                           if (m.startsWith('litellm/')) return litellmModelLabel(m);
                           // 9Router stacks the same two prefixes — ours and the
                           // instance's upstream namespace — so a raw id reads
@@ -11372,6 +12293,10 @@ Provide only the answer, nothing else.`;
                           // currentModelId verbatim for a gateway, so below the
                           // displayName branch this chip renders the whole id.
                           if (m.startsWith('ninerouter/')) return gatewayModelLabel(m);
+                          // AgentRouter: one prefix over a bare vendor id, so the
+                          // raw id reads `agentrouter/claude-opus-5` and the 16-char
+                          // chip would show only "agentrouter/clau". Same rule.
+                          if (m.startsWith('agentrouter/')) return gatewayModelLabel(m);
                           // The managed route. LLMHelper.getCurrentModelDisplayName()
                           // returns the id verbatim for it, so the displayName branch
                           // below cannot name it and the chip fell through to `return m`
@@ -11405,21 +12330,9 @@ Provide only the answer, nothing else.`;
                           if (m === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
                           return m;
                         })()}
-                      </span>
-                      <ChevronDown size={14} className="shrink-0 transition-transform" />
+                      </ModelSelectorLabel>
+                      <ChevronDown size={12} className="shrink-0 transition-transform" />
                     </button>
-
-                    {directAssistEnabled && (
-                      <span
-                        className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide text-emerald-300 bg-emerald-400/10 border border-emerald-400/20"
-                        title={t('Direct Assist sends the current request straight to the active model')}
-                        data-testid="direct-assist-badge"
-                      >
-                        {t('Direct')}
-                      </span>
-                    )}
-
-                    <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
 
                     <div className="relative">
                       <button
@@ -11447,16 +12360,8 @@ Provide only the answer, nothing else.`;
 
                           window.electronAPI.toggleSettingsWindow({ x, y });
                         }}
-                        className={`
-                                            w-7 h-7 flex items-center justify-center rounded-lg
-                                            interaction-base interaction-press
-                                            ${
-                                              isSettingsOpen
-                                                ? 'overlay-icon-surface overlay-icon-surface-hover overlay-text-primary'
-                                                : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'
-                                            }
-                                        `}
-                        style={appearance.iconStyle}
+                        data-state={isSettingsOpen ? 'open' : undefined}
+                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon"
                       >
                         <SlidersHorizontal className="w-3.5 h-3.5" />
                       </button>
@@ -11470,16 +12375,8 @@ Provide only the answer, nothing else.`;
                           setIsMousePassthrough(newState);
                           window.electronAPI?.setOverlayMousePassthrough?.(newState);
                         }}
-                        className={`
-                                                    w-7 h-7 flex items-center justify-center rounded-lg
-                                                    interaction-base interaction-press
-                                                    ${
-                                                      isMousePassthrough
-                                                        ? 'overlay-icon-surface overlay-icon-surface-hover text-accent-primary opacity-100'
-                                                        : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'
-                                                    }
-                                                `}
-                        style={appearance.iconStyle}
+                        data-state={isMousePassthrough ? 'on' : undefined}
+                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon"
                       >
                         <PointerOff className="w-3.5 h-3.5" />
                       </button>
@@ -11507,7 +12404,11 @@ Provide only the answer, nothing else.`;
 
               {/* Resize handles. EAST-side only — see handleResizePointerDown
                   for why a west-side handle cannot be made artifact-free.
-                  Double-click any of them to return to automatic sizing. */}
+                  Double-click any of them to return to automatic sizing.
+                  No `title` on any of them: Chromium draws a title as a native
+                  OS tooltip window (macOS and Windows alike) that sits outside
+                  this window's content protection, so it shows up in a screen
+                  share. */}
               <div
                 data-resize-handle="e"
                 className="resize-handle resize-handle-e absolute top-4 bottom-4 right-0 z-50 w-4 no-drag touch-none"
@@ -11517,16 +12418,17 @@ Provide only the answer, nothing else.`;
                 // SIBLING of the scroll container, so a wheel over it would
                 // otherwise do nothing at all. Forward it by hand.
                 onWheel={(e) => {
+                  // Detach before scrolling: the forwarded scrollBy is not a
+                  // wheel event on the container, so its listener never sees it.
+                  handleWheelIntent(e.deltaY, e.deltaX);
                   scrollContainerRef.current?.scrollBy({ top: e.deltaY });
                 }}
-                title={t('Drag to resize width · double-click to reset')}
               />
               <div
                 data-resize-handle="s"
                 className="resize-handle resize-handle-s absolute bottom-0 left-8 right-8 z-50 h-4 no-drag touch-none"
                 onPointerDown={(e) => handleResizePointerDown('s', e)}
                 onDoubleClick={handleResizeReset}
-                title={t('Drag to resize height · double-click to reset')}
               />
             </motion.div>
             {/* SE corner handle — OUTSIDE the card, which is overflow-hidden with a
@@ -11545,7 +12447,6 @@ Provide only the answer, nothing else.`;
               }}
               onPointerDown={(e) => handleResizePointerDown('se', e)}
               onDoubleClick={handleResizeReset}
-              title={t('Drag to resize · double-click to reset')}
             />
           </motion.div>
       {/* end always-mounted shell */}

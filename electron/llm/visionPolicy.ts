@@ -59,7 +59,8 @@ export interface VisionDecision {
 
 export const PRIVATE_VISION_NO_LOCAL_MESSAGE =
   'Screenshots are set to stay on this device, but no local vision model is available right now. '
-  + 'The screenshot was not sent anywhere. Start Ollama with a vision-capable model, or change '
+  + 'The screenshot was not sent anywhere. Start Ollama with a vision-capable model, select a '
+  + 'local endpoint that reads images, or change '
   + '"Keep screenshots on this device" in Settings > AI Providers > Privacy, then ask again.';
 
 export const VISION_ONLY_NO_PROVIDER_MESSAGE =

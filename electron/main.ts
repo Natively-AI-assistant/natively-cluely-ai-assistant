@@ -7,6 +7,12 @@
 // init_DatabaseManager() (which is what loads better-sqlite3).
 // ============================================================================
 import './nativeArchGate';
+// Dev-only prompt recorder: must wrap fetch before any SDK client exists (inert unless NATIVELY_PROMPT_DEBUG=1, never when packaged).
+import './llm/promptDebug';
+// Pin the packaged userData to the historical "Natively" folder BEFORE any
+// import-time reader (CredentialsManager resolves its paths at module scope).
+// Must stay above every other import — see utils/pinUserData.ts.
+import './utils/pinUserData';
 
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
@@ -196,12 +202,20 @@ process.on('uncaughtException', (err) => {
       // app.whenReady() if the bundle is loaded in a non-Electron context.
       const { dialog, app: electronApp } = require('electron');
       // showErrorBox is modal and blocks until the user clicks OK.
-      dialog.showErrorBox(
-        packaged
-          ? 'Natively was built for a different chip — please reinstall'
-          : 'Native modules are wrong architecture — run this command to fix:',
-        detail,
-      );
+      // A system dialog would show in a screen share while Undetectable is on
+      // (stealthPromptGate.ts). Settings are not loaded yet, so the saved flag
+      // is read directly; unreadable settings still get the dialog.
+      const { savedUndetectableOn } = require('./services/stealthPromptGate');
+      if (savedUndetectableOn(electronApp.getPath('userData'))) {
+        console.error('[nativeArch] ' + detail + ' (error dialog skipped: Undetectable is on)');
+      } else {
+        dialog.showErrorBox(
+          packaged
+            ? 'Natively was built for a different chip — please reinstall'
+            : 'Native modules are wrong architecture — run this command to fix:',
+          detail,
+        );
+      }
       electronApp.exit(1);
     } catch {
       // Electron not loaded (running under bare Node in a test) — exit
@@ -830,6 +844,9 @@ type MacScreenCaptureCapability = {
 };
 
 let latestSystemAudioPermissionWarning: string | null = null;
+// Undetectable mode for the windows setContentProtection cannot reach (file
+// pickers, message boxes, tooltips, popups). Built in initializeApp.
+let foreignWindowCaptureGuard: ForeignWindowCaptureGuard | null = null;
 
 function rememberSystemAudioPermissionWarning(message: string): void {
   latestSystemAudioPermissionWarning = message;
@@ -1216,6 +1233,8 @@ import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
 import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
+import { AutoAnswerUsageTelemetry } from "./intelligence/autoAnswer/AutoAnswerUsageTelemetry"
+import { nameTerms, setSttContextTerms } from "./audio/sttContextTerms"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
@@ -1225,9 +1244,12 @@ import { NativelyProSTT } from "./audio/NativelyProSTT"
 import { NvidiaNimStreamingSTT } from "./audio/NvidiaNimStreamingSTT"
 import { AppleSpeechSTT } from "./audio/AppleSpeechSTT"
 import { punctuationSourceFor } from "./llm/punctuationProvenance"
+import { configureVisionCapabilityStore } from "./llm/visionCapabilityStore"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
+import { isSpokenSavedLine } from "./intelligence/savedTranscriptOrigin"
+import { buildSummaryTextForSearch } from "./rag/summaryTextForSearch"
 
 /** Unified type for all STT providers with optional extended capabilities */
 type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT | AppleSpeechSTT) & {
@@ -1304,13 +1326,22 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
+import { buildTelemetrySinks } from "./services/telemetry/telemetrySinks"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
+import { PHONE_IMAGE_PREFIX } from "./utils/phoneImage"
+import { renderPhoneAnswer } from "./services/phoneMirrorMarkdown"
 import { describePageCaptureFallback, describeDoubleCaptureFailure, PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL } from "./services/pageCaptureFallback"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
+import { linkSessionToCalendar, cancelSessionCalendarLink } from './services/calendar/SessionCalendarLinker'
+import { wireExtensionMeetingTabs } from './services/meetingDetection/extensionMeetingTabs'
+import { SHORTCUT_TOUR_ACTIONS } from './services/shortcutTourActions'
+import { wireMeetingDetection, registerMeetingDetection, electronNotify, type MeetingStartRequest } from './services/meetingDetection/wireMeetingDetection'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { nativePromptsBlocked } from './services/stealthPromptGate'
+import { createForeignWindowCaptureGuard, wrapAsyncDialogs, type ForeignWindowCaptureGuard } from './services/foreignWindowCaptureGuard'
 import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
@@ -1323,6 +1354,9 @@ import {
 } from './utils/macDockPolicy'
 import { disguiseAppName } from './utils/disguiseAppName'
 import { disguiseIconRelativePath, shouldSetMacDockIcon } from './utils/disguiseIcon'
+import { createPageTitleGuard } from './utils/windowTitleGuard'
+import { createStealthProtectionLoop } from './utils/stealthProtection'
+import { resolveTrayIcon } from './utils/trayIcon'
 import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
@@ -1344,6 +1378,24 @@ function normalizeDisguiseMode(value: unknown): DisguiseMode {
   return (VALID_DISGUISE_MODES as readonly string[]).includes(value as string)
     ? (value as DisguiseMode)
     : 'none'
+}
+
+// The real dependencies for buildTelemetrySinks(): the app version and the
+// SettingsManager accessors for the persisted telemetry install id. Shared by
+// the startup config site and the runtime setUndetectable() toggle so both
+// rebuild the sink list identically. The settings store is typed with
+// `keyof AppSettings`; the install id is read/written through a string-keyed
+// view (same cast the original inline code used).
+function telemetrySinkDeps() {
+  const sm = SettingsManager.getInstance() as unknown as {
+    get: (key: string) => unknown;
+    set: (key: string, value: unknown) => void;
+  };
+  return {
+    getVersion: () => app.getVersion(),
+    getSetting: (key: string) => sm.get(key),
+    setSetting: (key: string, value: unknown) => sm.set(key, value),
+  };
 }
 
 /** Which capture channels actually started (F-105 per-channel isolation).
@@ -1446,6 +1498,43 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  // First-launch shortcut tour (src/components/onboarding/ShortcutTour.tsx).
+  // While it is up, the shortcuts it teaches are practice presses: they go to
+  // the tour's renderer instead of hiding the launcher it is drawn in or taking
+  // a real screenshot. Cleared the moment that renderer reloads or goes away,
+  // so a crashed tour can never leave the real shortcuts disabled.
+  private shortcutTourContents: Electron.WebContents | null = null;
+  private detachShortcutTour: (() => void) | null = null;
+
+  public setShortcutTour(active: boolean, contents: Electron.WebContents): void {
+    if (!active) {
+      if (this.shortcutTourContents === contents) this.clearShortcutTour();
+      return;
+    }
+    this.clearShortcutTour();
+    this.shortcutTourContents = contents;
+    const clear = () => {
+      if (this.shortcutTourContents === contents) this.clearShortcutTour();
+    };
+    contents.on('did-start-loading', clear);
+    contents.on('destroyed', clear);
+    contents.on('render-process-gone', clear);
+    // Removed with the routing, so re-arming (the tour re-subscribes when its
+    // bindings load) never stacks listeners on the same WebContents.
+    this.detachShortcutTour = () => {
+      contents.removeListener('did-start-loading', clear);
+      contents.removeListener('destroyed', clear);
+      contents.removeListener('render-process-gone', clear);
+    };
+  }
+
+  private clearShortcutTour(): void {
+    this.shortcutTourContents = null;
+    const detach = this.detachShortcutTour;
+    this.detachShortcutTour = null;
+    detach?.();
+  }
+
   // Tracks meeting IDs currently being processed by processCompletedMeetingForRAG.
   // Without this guard, a rapid stop→start→stop cycle could enqueue the same
   // meeting for RAG twice (e.g. recovery retry + normal completion), duplicating
@@ -1578,6 +1667,10 @@ export class AppState {
 
     // 3. Initialize other helpers
     this.screenshotHelper = new ScreenshotHelper(this.view)
+    // Saved provider vision answers (2026-10-01). Before ProcessingHelper,
+    // because its setModel at startup may refresh OpenRouter's catalogue, and
+    // after dev:agent's userData override (module load, above whenReady).
+    configureVisionCapabilityStore(path.join(app.getPath('userData'), 'vision-capabilities.json'))
     this.processingHelper = new ProcessingHelper(this)
 
     this.windowHelper.setContentProtection(this.isUndetectable);
@@ -1843,6 +1936,11 @@ export class AppState {
 
     keybindManager.onShortcutTriggered(async (actionId) => {
       console.log(`[Main] Global shortcut triggered: ${actionId}`);
+      const tour = this.shortcutTourContents;
+      if (tour && !tour.isDestroyed() && SHORTCUT_TOUR_ACTIONS.has(actionId)) {
+        tour.send('onboarding:tour-shortcut', actionId);
+        return;
+      }
       try {
         if (actionId === 'general:toggle-visibility') {
           this.toggleMainWindow();
@@ -2012,6 +2110,7 @@ export class AppState {
           actionId === 'chat:answer' ||
           actionId === 'chat:codeHint' ||
           actionId === 'chat:brainstorm' ||
+          actionId === 'chat:acceptSuggestion' ||
           actionId === 'chat:dynamicAction4' ||
           actionId === 'chat:scrollUp' ||
           actionId === 'chat:scrollDown' ||
@@ -2025,6 +2124,7 @@ export class AppState {
             'chat:answer': 'answer',
             'chat:codeHint': 'codeHint',
             'chat:brainstorm': 'brainstorm',
+            'chat:acceptSuggestion': 'acceptSuggestion',
             'chat:dynamicAction4': 'dynamicAction4',
             'chat:scrollUp': 'scrollUp',
             'chat:scrollDown': 'scrollDown',
@@ -2089,7 +2189,6 @@ export class AppState {
         enabled: !!settingsManager.get('codexCliEnabled'),
         path: settingsManager.get('codexCliPath'),
         model: settingsManager.get('codexCliModel'),
-        fastModel: settingsManager.get('codexCliFastModel'),
         timeoutMs: settingsManager.get('codexCliTimeoutMs'),
         sandboxMode: settingsManager.get('codexCliSandboxMode'),
         serviceTier: settingsManager.get('codexCliServiceTier'),
@@ -2105,10 +2204,18 @@ export class AppState {
 
     // Prime the optional Hindsight long-term-memory server health cache (settings/env
     // config; Noop when unconfigured). Fire-and-forget — never blocks startup.
-    try {
-      const { HindsightManager } = require('./services/HindsightManager');
-      HindsightManager.getInstance().start().catch(() => { /* never blocks startup */ });
-    } catch { /* optional */ }
+    // Stealth: do NOT auto-start Hindsight while undetectable — a local server
+    // still does periodic health probes, and Cloud targets would open outbound
+    // HTTPS to api.hindsight.app, both of which break undetectable network
+    // silence. Toggle-off will (re)start it.
+    if (!this.isUndetectable) {
+      try {
+        const { HindsightManager } = require('./services/HindsightManager');
+        HindsightManager.getInstance().start().catch(() => { /* never blocks startup */ });
+      } catch { /* optional */ }
+    } else {
+      console.log('[HindsightManager] Undetectable mode: Skipping auto-start (toggle-off will start it)');
+    }
 
     this.setupIntelligenceEvents()
 
@@ -2286,6 +2393,10 @@ export class AppState {
     const helper = this.getWindowHelper();
     this.sendToWindow(helper.getLauncherWindow(), 'native-audio-transcript', payload);
     this.sendToWindow(helper.getOverlayWindow(), 'native-audio-transcript', payload);
+    // Phone mirror shows the same live transcript (no-op when it isn't running).
+    try {
+      PhoneMirrorService.getInstance().publishTranscript(payload);
+    } catch { /* mirror only */ }
   }
 
   /**
@@ -2402,6 +2513,12 @@ export class AppState {
 
   private broadcastMeetingState(): void {
     this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
+    // A new meeting starts without the last one's phone images, as the overlay
+    // starts without its attachments (session-reset).
+    if (this.isMeetingActive) this.phoneImages = [];
+    try {
+      PhoneMirrorService.getInstance().publishMeetingState(this.isMeetingActive);
+    } catch { /* mirror only */ }
   }
 
   // Public so the reference-file upload IPC handler can kick a retry for a
@@ -2532,6 +2649,19 @@ export class AppState {
             () => this.ragManager ?? null,
           );
         } catch (e) { console.warn('[AppState] V3 meeting RAG wiring skipped:', e); }
+
+        // A meeting's summary goes into search when its notes are SAVED, not
+        // when the meeting ends (the notes do not exist yet at that point). The
+        // listener reads this.ragManager lazily, like the provider above, so a
+        // later re-init is picked up.
+        try {
+          this.intelligenceManager?.setMeetingNotesSavedListener?.((meetingId: string) => {
+            const rag = this.ragManager;
+            if (!rag) return;
+            rag.indexMeetingSummary(meetingId).catch((e: any) =>
+              console.warn('[AppState] Summary indexing failed (non-fatal):', e?.message || e));
+          });
+        } catch (e) { console.warn('[AppState] notes-saved wiring skipped:', e); }
 
         console.log('[AppState] RAGManager initialized');
       }
@@ -2915,6 +3045,10 @@ export class AppState {
     setTimeout(() => {
       if (process.env.NODE_ENV === "development") {
         console.log("[AutoUpdater] Development mode: Skipping auto check (use manual button)");
+      } else if (this.isUndetectable) {
+        // Stealth: no automatic egress (GitHub releases check). The manual
+        // "check for updates" button stays user-initiated and untouched.
+        console.log("[AutoUpdater] Undetectable mode: Skipping auto check (manual button still works)");
       } else {
         autoUpdater.checkForUpdatesAndNotify().catch(err => {
           console.error("[AutoUpdater] Failed to check for updates:", err);
@@ -3283,6 +3417,15 @@ export class AppState {
     noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
     speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
     prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
+    // The retrieval query's embedding, started when the interviewer stops rather
+    // than when the final lands (~0.7 s later). Filler words are stripped as the
+    // orchestrator strips them from the question, so the texts line up.
+    warmQuery: (text) => {
+      try {
+        const { stripSttFillers } = require('./context-intelligence/question/turn-classifier');
+        this.ragManager?.getEmbeddingPipeline()?.warmQueryEmbedding(stripSttFillers(text) || text);
+      } catch { /* speculative */ }
+    },
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
       judgeCandidate: async (req, signal) => {
         const llm = this.processingHelper?.getLLMHelper?.();
@@ -3296,12 +3439,16 @@ export class AppState {
         return ModesManager.getInstance().getActiveMode()?.name ?? null;
       } catch { return null; }
     },
+    // Who the USER is, so "Raj, can you…" in a team meet stays quiet: the
+    // active résumé's name, else the connected Calendar account's.
+    userName: () => this.currentUserName(),
     telemetry: (event) => {
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
         const { name, meetingGeneration, provider, ...properties } = event;
         telemetryService.track({ name, provider, properties: { meetingGeneration, ...properties } });
       } catch { /* telemetry must never break the pipeline */ }
+      this.autoAnswerUsage.observe(event);
     },
     log: (line) => { if (this._verboseLogging) console.log(line); },
     // review#10 parity (2026-08-25): boot on the registry's no-mode default
@@ -3309,8 +3456,53 @@ export class AppState {
   }, undefined, resolveAutoAnswerThresholds(null));
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
 
+  /** The user's name: the active résumé's, else the connected Calendar account's. */
+  private currentUserName(): string | null {
+    try {
+      const orchestrator = this.knowledgeOrchestrator ?? this.processingHelper?.getLLMHelper?.()?.getKnowledgeOrchestrator?.();
+      const resume = (orchestrator as any)?.activeResume?.structured_data;
+      const fromResume = resume?.identity?.name || resume?.name;
+      if (typeof fromResume === 'string' && fromResume.trim()) return fromResume;
+      const { CalendarManager } = require('./services/CalendarManager');
+      return CalendarManager.getInstance().getConnectionStatus().name ?? null;
+    } catch { return null; }
+  }
+
+  /**
+   * The same Auto Answer events, sent to Pro operational telemetry: one row per
+   * automatic answer, one per meeting, counts and labels only. The engine hook
+   * above also writes them to TelemetryService, whose only active sink is a
+   * local JSONL file. See AutoAnswerUsageTelemetry.ts.
+   */
+  private readonly autoAnswerUsage = new AutoAnswerUsageTelemetry({
+    sink: (row) => {
+      // The same setting TelemetryService honours.
+      if (SettingsManager.getInstance().get('telemetryEnabled') === false) return;
+      const { usageOutbox } = require('./services/UsageOutbox');
+      usageOutbox.recordTelemetry(row);
+    },
+    // The template id (a fixed enum, never the user's mode name); a user mode
+    // is marked custom because it can carry any prompt.
+    mode: () => {
+      const { ModesManager } = require('./services/ModesManager');
+      const am = ModesManager.getInstance().getActiveMode();
+      if (!am) return null;
+      return am.isBuiltin ? am.templateType : `custom:${am.templateType}`;
+    },
+    answerModel: () => {
+      const selection = this.processingHelper?.getLLMHelper?.()?.getDirectAssistSelection?.();
+      if (!selection) return null;
+      // A custom or cURL provider's "model" is the user's own config id.
+      return selection.provider === 'custom' || selection.provider === 'curl'
+        ? { provider: selection.provider }
+        : { provider: selection.provider, model: selection.model };
+    },
+  });
+
   /** A manual What-to-Answer started (hotkey / button / accepted offer): the offer card is committed. */
   public onManualWhatToAnswer(): void {
+    // What streams next is the manual answer, not the automatic one.
+    this.autoAnswerUsage.stopAwaitingAnswer();
     this.simpleAutoAnswer.onManualAnswerStarted();
   }
 
@@ -3384,7 +3576,7 @@ export class AppState {
       const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
       if (apiKey) {
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-        const dg = new DeepgramStreamingSTT(apiKey);
+        const dg = new DeepgramStreamingSTT(apiKey, CredentialsManager.getInstance().getSttModel('deepgram'));
         // Opt-in diarization (#3): only on the remote/system channel ('interviewer'), where
         // multiple people may speak. The mic channel is always the local user ('me'), so
         // diarizing it adds cost with no benefit. Default OFF via flag.
@@ -3424,7 +3616,7 @@ export class AppState {
       const baseUrl = CredentialsManager.getInstance().getOpenAiSttBaseUrl();
       if (apiKey) {
         console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
-        stt = new OpenAIStreamingSTT(apiKey, baseUrl);
+        stt = new OpenAIStreamingSTT(apiKey, baseUrl, CredentialsManager.getInstance().getSttModel('openai'));
       } else {
         console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
@@ -3457,7 +3649,7 @@ export class AppState {
 
       if (apiKey) {
         console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
-        stt = new RestSTT(sttProvider, apiKey, modelOverride, region);
+        stt = new RestSTT(sttProvider, apiKey, modelOverride, region, speaker);
       } else {
         console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
@@ -4033,6 +4225,11 @@ export class AppState {
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
+      // Auto Answer's stall cap: the interviewer talking again ends the stop
+      // it would otherwise promote a frozen interim on.
+      if (this.systemAudioCapture === capture && edge?.channel === 'interviewer' && edge.speaking) {
+        this.simpleAutoAnswer.onLocalSpeechStart();
+      }
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
@@ -4062,7 +4259,7 @@ export class AppState {
         console.warn(`${prefix}MicrophoneCapture produced 0 chunks in ${STUCK_WATCHDOG_MS / 1000}s — likely silent capture (device contention, hot-unplug, or muted input).`);
         this.sendAudioCaptureFailed( {
           channel: 'mic',
-          message: `No audio detected from your microphone for ${STUCK_WATCHDOG_MS / 1000}s. Check that your input device is unmuted and not in use by another app.`,
+          message: `No audio from your microphone for ${STUCK_WATCHDOG_MS / 1000}s. Check it is unmuted and not in use by another app.`,
           attempt: 0,
           maxAttempts: 3,
           terminal: false,
@@ -4159,7 +4356,7 @@ export class AppState {
               console.warn(`${prefix}Mic in HFP (native ${nativeRate}Hz) but no built-in mic to switch to.`);
               this.sendAudioCaptureFailed({
                 channel: 'mic',
-                message: `Your microphone is in low-quality Bluetooth call mode. Set your audio output to the speakers, or use a different mic, for better transcription.`,
+                message: `Your mic is in low-quality Bluetooth call mode. Switch output to the speakers, or use another mic.`,
                 attempt: 0,
                 maxAttempts: 0,
                 terminal: false,
@@ -4296,7 +4493,7 @@ export class AppState {
           this.systemAudioCapture = null;
           this.sendAudioCaptureFailed({
             channel: 'system',
-            message: 'System audio capture failed to initialize. The native audio module could not allocate the capture device. Restarting Natively may help; if the problem persists, file a bug.',
+            message: 'System audio capture could not start. Restart Natively.',
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -4319,7 +4516,7 @@ export class AppState {
           this.microphoneCapture = null;
           this.sendAudioCaptureFailed({
             channel: 'mic',
-            message: 'Microphone capture failed to initialize. The native audio module could not open the default input device. Check that the device is connected and not in exclusive use by another app, then restart Natively.',
+            message: 'The microphone could not be opened. Check it is connected and free, then restart Natively.',
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -4347,7 +4544,7 @@ export class AppState {
         if (!this.googleSTT) {
           this.sendAudioCaptureFailed( {
             channel: 'system',
-            message: `Speech-to-text provider "${sttProv}" failed to initialize for the interviewer channel. Check your API key and credentials in Settings.`,
+            message: `Speech-to-text provider "${sttProv}" could not start for system audio. Check its API key in Settings.`,
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -4367,7 +4564,7 @@ export class AppState {
         if (!this.googleSTT_User) {
           this.sendAudioCaptureFailed( {
             channel: 'mic',
-            message: `Speech-to-text provider "${sttProv}" failed to initialize for the microphone channel. Check your API key and credentials in Settings.`,
+            message: `Speech-to-text provider "${sttProv}" could not start for your microphone. Check its API key in Settings.`,
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -4518,7 +4715,7 @@ export class AppState {
       console.error('[Main] Resume: failed to restart mic capture:', err);
       this.sendAudioCaptureFailed( {
         channel: 'mic',
-        message: 'Microphone failed to restart after wake. Check that no other app holds the mic, then end and restart the meeting.',
+        message: 'Microphone did not restart after wake. Close other apps using the mic, then restart the meeting.',
         attempt: 0,
         maxAttempts: 0,
         terminal: true,
@@ -5118,7 +5315,7 @@ export class AppState {
           // Surface to UI so the user knows the meeting will be system-audio-only.
           this.sendAudioCaptureFailed( {
             channel: 'mic',
-            message: 'No working microphone could be initialized. Disconnect and reconnect your audio devices, or restart the app.',
+            message: 'No working microphone found. Reconnect your audio devices, or restart the app.',
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -6214,7 +6411,7 @@ export class AppState {
       console.error(`[Main] ${context}: mic channel failed to start:`, err);
       this.sendAudioCaptureFailed({
         channel: 'mic',
-        message: `Microphone failed to start (${(err as Error)?.message || 'unknown error'}). Check that no other app holds the mic — the meeting continues with system audio only.`,
+        message: `Microphone failed to start (${(err as Error)?.message || 'unknown error'}). The meeting continues with system audio only.`,
         attempt: 0,
         maxAttempts: 0,
         terminal: true,
@@ -6363,9 +6560,17 @@ export class AppState {
 
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
+    this.autoAnswerUsage.meetingStarted();
+    // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
+    try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
     this.broadcastMeetingState()
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
+      // Which calendar event this is (title, attendees, 1:1 speaker names,
+      // follow-up recipients). Decides at once from the cached list; never
+      // delays the start. See services/calendar/SessionCalendarLinker.ts.
+      linkSessionToCalendar(metadata, () => this.isMeetingActive);
     }
     // Every meeting gets its own conversation history, whether or not a mode
     // is active (the dynamic-action session id below exists only WITH a mode,
@@ -6587,6 +6792,7 @@ export class AppState {
   }
 
   private async endMeetingTransition(): Promise<void> {
+    cancelSessionCalendarLink();
     // Idempotency guard: a double-click on Stop, or a Stop racing with a
     // global-shortcut reset, can deliver two endMeeting() calls within ms of
     // each other. Without this, both invocations would run the synchronous
@@ -6601,6 +6807,8 @@ export class AppState {
     }
 
     this.cancelAutoAnswer();
+    this.autoAnswerUsage.meetingEnded();
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingEnded(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
     // Cover the window between here and `_pendingTeardown` assignment, during which
     // the new in-flight-audio-init await below yields the event loop.
     this._endMeetingInFlight = true;
@@ -6632,7 +6840,12 @@ export class AppState {
     // clear effects) while still painted — combined with a same-instance theme
     // switch, that interleaving produces the half-painted overlay symptom the
     // user can only escape via force-quit. Hide first, then broadcast.
-    this.windowHelper.setWindowMode('launcher');
+    //
+    // Stealth: show the launcher WITHOUT focus while undetectable (same
+    // centerAndShowWindow pattern) — the user often stops transcription while
+    // the proctored test continues, and an activating show would blur the
+    // test page. Normal mode is unchanged (active show + focus).
+    this.windowHelper.setWindowMode('launcher', this.isUndetectable ? true : undefined);
 
     // ─── CLEAR THE OVERLAY TREE WHILE IT IS HIDDEN ─────────────────────────
     // The overlay BrowserWindow is PERSISTENT — created once with show:false
@@ -6855,21 +7068,24 @@ export class AppState {
       const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
       if (!meeting || !meeting.transcript || meeting.transcript.length === 0) return;
 
-      // Convert transcript to RAG format
-      const segments = meeting.transcript.map(t => ({
+      // Convert transcript to RAG format — speech only. The saved rows now
+      // carry each line's origin, so typed chat and the assistant's answers no
+      // longer get chunked and embedded as meeting content in a session that
+      // also has speech (the zero-eligible skip above only covered chat-only
+      // sessions). Filtered BEFORE preprocessing, which merges consecutive
+      // lines by speaker and would fuse a typed line into a spoken one.
+      const segments = meeting.transcript.filter(isSpokenSavedLine).map(t => ({
         speaker: t.speaker,
         text: t.text,
         timestamp: t.timestamp
       }));
+      if (segments.length === 0) return;
 
-      // Generate summary from detailedSummary if available
-      let summary: string | undefined;
-      if (meeting.detailedSummary) {
-        summary = [
-          ...(meeting.detailedSummary.keyPoints || []),
-          ...(meeting.detailedSummary.actionItems || []).map(a => `Action: ${a}`)
-        ].join('. ');
-      }
+      // The summary, if the notes already exist. They usually do not: this
+      // runs as soon as the meeting ends, while the notes are still being
+      // written. The summary is indexed by the notes-saved listener instead
+      // (see setMeetingNotesSavedListener where the RAG manager is created).
+      const summary = buildSummaryTextForSearch(meeting.detailedSummary, meeting.summary) || undefined;
 
       const result = await this.ragManager.processMeeting(meeting.id, segments, summary);
       console.log(`[AppState] RAG processed meeting ${meeting.id}: ${result.chunkCount} chunks`);
@@ -6987,7 +7203,7 @@ export class AppState {
       } catch { /* non-fatal */ }
     })
 
-    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number, generationId?: number, sourceLabel?: string) => {
+    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number, generationId?: number, sourceLabel?: string, stopReason?: string) => {
       // Phase 4 defense-in-depth (forensic-report §6b): forward the optional
       // generationId the engine emits. Id-less emits (legacy answerLLM path,
       // code-hint, brainstorm) continue to ship without it — the renderer
@@ -6997,13 +7213,14 @@ export class AppState {
       // TurnPlan. Falls back to 'General knowledge' for legacy emitters
       // (fallback paths, code-hint, brainstorm) that don't compute it.
       flushBatchesBeforeFinal();
+      this.autoAnswerUsage.answerShown();
       const win = mainWindow()
       // emittedAt (2026-07-31): WTA supersession is generation-relative only —
       // a slow generation stays "current" through any number of manual turns
       // and mode switches, so a minutes-old answer appeared with no marker of
       // what it answered (the live "late CGPA answer" report). The renderer
       // uses this stamp to drop or visibly label stale finals.
-      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence, generationId, sourceLabel: sourceLabel ?? 'General knowledge', emittedAt: Date.now() })
+      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence, generationId, sourceLabel: sourceLabel ?? 'General knowledge', emittedAt: Date.now(), ...(stopReason ? { stopReason } : {}) })
 
     })
 
@@ -7013,6 +7230,7 @@ export class AppState {
       // drop a batch belonging to a superseded live answer. Undefined for the
       // other live streams (code hint / brainstorm) — id-less items are accepted.
       queueBatch('suggested_answer', { token, question, confidence, generationId });
+      this.autoAnswerUsage.answerShown();
     })
 
     // Orphaned-scaffold fix: a what-to-answer stream that already showed a
@@ -7020,6 +7238,7 @@ export class AppState {
     // Tell the renderer to drop the open scaffold row. Flush pending token
     // batches first so a late scaffold batch can't re-mount the row afterwards.
     this.intelligenceManager.on('suggested_answer_discard', (reason: string) => {
+      this.autoAnswerUsage.stopAwaitingAnswer();
       flushBatchesBeforeFinal();
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
@@ -7200,6 +7419,15 @@ export class AppState {
       AppState.instance = new AppState()
     }
     return AppState.instance
+  }
+
+  // Non-constructing read of the singleton. The browser-window-created handler
+  // MUST use this, not getInstance(): the AppState constructor itself creates a
+  // BrowserWindow (CropperWindowHelper.preload), so a window born mid-construction
+  // would otherwise re-enter getInstance() with instance still null and nest a
+  // second AppState — duplicate IPC registrations, repeated init, death spiral.
+  public static peekInstance(): AppState | null {
+    return AppState.instance;
   }
 
   // Getters and Setters
@@ -7570,6 +7798,67 @@ export class AppState {
     return this.screenshotHelper.getImagePreview(filepath)
   }
 
+  // Images the phone sent (uploads, and desktop captures it asked for), kept
+  // for the phone's own typed questions: the overlay gets each one through
+  // screenshot-attached, but a phone question never goes through the overlay.
+  // Cleared at meeting start, when the overlay drops its attachments too.
+  private phoneImages: Array<{ path: string; at: number; used: boolean }> = []
+  private static readonly PHONE_IMAGE_TTL_MS = 15 * 60 * 1000
+
+  /** Save a photo or screenshot sent from the phone and attach it to the next answer. */
+  public async receivePhoneImage(image: { data: Buffer; ext: 'jpg' | 'png' | 'webp' }): Promise<string> {
+    // The prefix tells the vision path it is a phone photo/screenshot, which it
+    // sends at a higher resolution than a capture of this screen.
+    const imagePath = await this.screenshotHelper.addExternalImage(image.data, image.ext, {
+      namePrefix: PHONE_IMAGE_PREFIX,
+    })
+    await this.attachImageToMeeting(imagePath)
+    return imagePath
+  }
+
+  /**
+   * Attach an image to the next answer the way a capture taken on this machine
+   * is (the overlay lists it and sends it with its next request), and remember
+   * it for the phone's next typed question. Returns whether a meeting surface
+   * received it.
+   */
+  public async attachImageToMeeting(imagePath: string): Promise<boolean> {
+    let preview = ''
+    try {
+      preview = await this.getImagePreview(imagePath)
+    } catch {
+      // The preview is only the thumbnail; answers read the file itself.
+    }
+    const helper = this.getWindowHelper()
+    const sent = new Set<number>()
+    let delivered = false
+    for (const win of [helper.getLauncherWindow(), helper.getOverlayWindow()]) {
+      if (!win || sent.has(win.id)) continue
+      if (this.sendToWindow(win, 'screenshot-attached', { path: imagePath, preview })) {
+        sent.add(win.id)
+        delivered = true
+      }
+    }
+    this.phoneImages.push({ path: imagePath, at: Date.now(), used: false })
+    if (this.phoneImages.length > 5) this.phoneImages = this.phoneImages.slice(-5)
+    return delivered
+  }
+
+  /** The phone took this image off the tray: no phone question may use it after this. */
+  public dropPhoneImage(imagePath: string): void {
+    for (const img of this.phoneImages) if (img.path === imagePath) img.used = true
+  }
+
+  /** Images the phone sent that no phone question has used yet (recent, still on disk); marks them used. */
+  public takePhoneChatImages(): string[] {
+    const now = Date.now()
+    const fresh = this.phoneImages.filter(
+      (img) => !img.used && now - img.at < AppState.PHONE_IMAGE_TTL_MS && fs.existsSync(img.path),
+    )
+    for (const img of fresh) img.used = true
+    return fresh.map((img) => img.path)
+  }
+
   public async deleteScreenshot(
     path: string
   ): Promise<{ success: boolean; error?: string }> {
@@ -7602,39 +7891,26 @@ export class AppState {
   public showTray(): void {
     if (this.tray) return;
 
-    // Try to find a template image first for macOS
-    const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
-
-    // Potential paths for tray icon
-    const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
-    const defaultIconPath = app.isPackaged
-      ? path.join(resourcesPath, 'assets', 'icon.png')
-      : path.join(app.getAppPath(), 'src/components/icon.png');
-
-    let iconToUse = defaultIconPath;
-
-    // Check if template exists (sync check is fine for startup/rare toggle)
-    try {
-      if (require('fs').existsSync(templatePath)) {
-        iconToUse = templatePath;
-        console.log('[Tray] Using template icon:', templatePath);
-      } else {
-        // Also check src/components for dev
-        const devTemplatePath = path.join(app.getAppPath(), 'src/components/iconTemplate.png');
-        if (require('fs').existsSync(devTemplatePath)) {
-          iconToUse = devTemplatePath;
-          console.log('[Tray] Using dev template icon:', devTemplatePath);
-        } else {
-          console.log('[Tray] Template icon not found, using default:', defaultIconPath);
+    // The template (16 px + @2x beside it) loads as-is so the @2x representation
+    // survives; only the full-size fallback art is resized. See utils/trayIcon.ts.
+    const choice = resolveTrayIcon({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appPath: app.getAppPath(),
+      exists: (p) => {
+        try {
+          return require('fs').existsSync(p);
+        } catch (e) {
+          console.error('[Tray] Error checking for icon:', e);
+          return false;
         }
-      }
-    } catch (e) {
-      console.error('[Tray] Error checking for icon:', e);
-    }
+      },
+    });
+    console.log(choice.template ? '[Tray] Using template icon:' : '[Tray] Template icon not found, using default:', choice.path);
 
-    const trayIcon = nativeImage.createFromPath(iconToUse).resize({ width: 16, height: 16 });
-    // IMPORTANT: specific template settings for macOS if needed, but 'Template' in name usually suffices
-    trayIcon.setTemplateImage(iconToUse.endsWith('Template.png'));
+    const loadedTrayIcon = nativeImage.createFromPath(choice.path);
+    const trayIcon = choice.resizeTo16 ? loadedTrayIcon.resize({ width: 16, height: 16 }) : loadedTrayIcon;
+    trayIcon.setTemplateImage(choice.template);
 
     this.tray = new Tray(trayIcon)
     this.tray.setToolTip('Natively') // This tooltip might also need update if we change global shortcut, but global shortcut is removed.
@@ -7768,6 +8044,15 @@ export class AppState {
     this.settingsWindowHelper.setContentProtection(state)
     this.modelSelectorWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
+    foreignWindowCaptureGuard?.sync(state)
+
+    // Content-protection re-assertion loop (Final Round StealthService pattern):
+    // setContentProtection is silently undoable (activation-policy flips,
+    // late-created windows), so while undetectable a 500ms idempotent loop
+    // keeps every window protected. Stopped on the way out; timers are
+    // unref'd so they can never keep the process alive.
+    if (state) this.startStealthProtectionLoop();
+    else this.stopStealthProtectionLoop()
 
     if (process.platform === 'win32') {
       this.windowHelper.syncOverlayInteractionPolicy();
@@ -7792,6 +8077,88 @@ export class AppState {
 
     // Persist state via SettingsManager
     SettingsManager.getInstance().set('isUndetectable', state);
+
+    // Rebuild the telemetry sink list to match the new stealth state. Turning
+    // undetectable ON drops the remote sinks (PostHog/Axiom/Sentry) so the app
+    // stops opening outbound connections to third-party analytics hosts; turning
+    // it OFF restores them (when their env credentials are present). configure
+    // with only `sinks` swaps the list in place — enabled/localEnabled/log path
+    // are untouched. Guarded: telemetry must never break a stealth toggle.
+    try {
+      const { telemetryService } = require('./services/telemetry/TelemetryService');
+      telemetryService.configure({ sinks: buildTelemetrySinks(state, telemetrySinkDeps()) });
+    } catch (err) {
+      console.warn('[Stealth] telemetry sink reconfigure threw (non-fatal):', err);
+    }
+
+    // Stealth network policy: silence periodic/automatic egress while
+    // undetectable; restore on the way out. Queued events are RETAINED locally
+    // (outbox/funnel stop only halts dispatch) and drain on resume. Each leg is
+    // individually guarded — networking must never break a stealth toggle.
+    // Explicit user actions (manual update check, manual downloads, calendar
+    // connect) are untouched; product traffic (LLM answers) stays on the
+    // user's configured providers by design — this policy covers background /
+    // automatic traffic. STT is not swapped here (no round-5 hot-swap).
+    if (state) {
+      try { require('./services/UsageOutbox').usageOutbox.stop(); } catch (err) {
+        console.warn('[Stealth] usage-outbox stop threw (non-fatal):', err);
+      }
+      try { require('./services/FunnelTelemetry').funnelTelemetry.stop(); } catch (err) {
+        console.warn('[Stealth] funnel stop threw (non-fatal):', err);
+      }
+      try {
+        this.processingHelper.getLLMHelper().getModelVersionManager().stopScheduler();
+      } catch (err) {
+        console.warn('[Stealth] model-discovery scheduler stop threw (non-fatal):', err);
+      }
+      // Capture-mode diagnostics (LockedIn-style build gate): pre-2004
+      // Windows accepts the exclusion call but renders a black box, so log
+      // which invisibility this machine can actually deliver. Informational
+      // only — the protection calls are unchanged.
+      try {
+        const { resolveWindowsCaptureMode } = require('./utils/windowsCaptureMode');
+        const version = typeof process.getSystemVersion === 'function' ? process.getSystemVersion() : undefined;
+        console.log(
+          `[Stealth] capture mode: ${resolveWindowsCaptureMode(process.platform, version)} (${process.platform}${version ? ` ${version}` : ''})`,
+        );
+      } catch (err) {
+        console.warn('[Stealth] capture-mode resolve threw (non-fatal):', err);
+      }
+      // Pro reconciler skipped while stealth is on (see startup timer below)
+      // Toggle-off runs a catch-up reconcile in setUndetectable.
+      // Hindsight: stop local/Cloud server while stealth is on (health probes
+      // + Cloud HTTPS egress break undetectable network silence).
+      try { require('./services/HindsightManager').HindsightManager.getInstance().stopSync(); } catch (err) {
+        console.warn('[Stealth] Hindsight stop threw (non-fatal):', err);
+      }
+    } else {
+      try {
+        const { usageOutbox } = require('./services/UsageOutbox');
+        usageOutbox.start(() => CredentialsManager.getInstance().getNativelyApiKey());
+      } catch (err) {
+        console.warn('[Stealth] usage-outbox restart threw (non-fatal):', err);
+      }
+      try { require('./services/FunnelTelemetry').funnelTelemetry.start(); } catch (err) {
+        console.warn('[Stealth] funnel restart threw (non-fatal):', err);
+      }
+      try {
+        this.processingHelper.getLLMHelper().getModelVersionManager().resumeScheduler();
+      } catch (err) {
+        console.warn('[Stealth] model-discovery scheduler resume threw (non-fatal):', err);
+      }
+      // Catch-up license reconcile skipped while stealth was on (see startup
+      // timer below) — run it now that network is allowed again. Non-fatal.
+      try {
+        const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
+        void getProEntitlementReconciler().run('stealth-toggle-off');
+      } catch (err) {
+        console.warn('[Stealth] pro-reconcile catch-up threw (non-fatal):', err);
+      }
+      // Hindsight: restart local/Cloud server now that network is allowed again.
+      try { require('./services/HindsightManager').HindsightManager.getInstance().start().catch(() => {}); } catch (err) {
+        console.warn('[Stealth] Hindsight restart threw (non-fatal):', err);
+      }
+    }
 
     // Cancel all pending disguise timers to prevent their app.setName() calls
     // from re-registering the dock icon after we hide it
@@ -7969,6 +8336,10 @@ export class AppState {
     // can arrive later than the toggle path's retry window. Extra isVisible()
     // re-checks are cheap and stop early via the isUndetectable guard.
     this.reassertUndetectableStealth(DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS);
+    // Persisted-ON launch: start the content-protection loop too (the toggle
+    // path starts it in setUndetectable, which a cold launch never passes
+    // through). Inert when not undetectable.
+    if (this.isUndetectable) this.startStealthProtectionLoop();
   }
 
   // Re-drive the app back to a fully-stealth state after any operation that can
@@ -8184,6 +8555,66 @@ export class AppState {
     this._applyDisguise(this.disguiseMode);
   }
 
+  // Attach (idempotently) a page-title-updated guard to a window: while
+  // undetectable, the renderer's <title> ("Natively") must not override the
+  // disguise window title. The page loads async (after createWindow), and
+  // Electron's default page-title-updated behaviour pushes the HTML <title>
+  // into the window title, clobbering the disguise — a proctor enumerating
+  // window titles would read "Natively". In normal mode the guard is inert:
+  // the page title "Natively" is the expected title there.
+  public guardWindowTitle(win: BrowserWindow | null | undefined): void {
+    if (!win || win.isDestroyed()) return;
+    const wc = win.webContents;
+    const marker = wc as unknown as { __nativelyTitleGuard?: boolean };
+    if (marker.__nativelyTitleGuard) return;
+    marker.__nativelyTitleGuard = true;
+    wc.on('page-title-updated', createPageTitleGuard({
+      isUndetectable: () => this.isUndetectable,
+      disguiseTitle: () => disguiseAppName(this.disguiseMode, process.platform).trim(),
+      setTitle: (title) => { if (!win.isDestroyed()) win.setTitle(title); },
+    }));
+  }
+
+  // Periodic content-protection backstop while undetectable (Final Round's
+  // StealthService pattern: creation hook + show/restore listeners + a 500ms
+  // idempotent re-apply loop). setContentProtection is set-once per window but
+  // silently undoable — activation-policy flips (dock hide/show) reset
+  // sharingType, and a lost creation-hook registration leaves a window bare.
+  // The loop only runs while undetectable and never throws; see
+  // utils/stealthProtection.ts.
+  private _stealthProtection = createStealthProtectionLoop({
+    isUndetectable: () => this.isUndetectable,
+    getWindows: () => this.stealthProtectedWindows(),
+  });
+
+  /** All windows under content-protection while undetectable. */
+  private stealthProtectedWindows(): Array<{ label: string; win: unknown }> {
+    return [
+      { label: 'launcher', win: this.windowHelper.getLauncherWindow() },
+      { label: 'overlay', win: this.windowHelper.getOverlayWindow() },
+      { label: 'overlay-pill', win: this.windowHelper.getPillWindow() },
+      { label: 'overlay-toggle', win: this.windowHelper.getToggleWindow() },
+      { label: 'settings', win: this.settingsWindowHelper.getSettingsWindow() },
+      { label: 'model-selector', win: this.modelSelectorWindowHelper.getWindow() },
+      { label: 'cropper', win: this.cropperWindowHelper.getCropperWindow() },
+    ];
+  }
+
+  /** Attach show/restore content-protection guards to one window (idempotent). */
+  public guardWindowProtection(win: BrowserWindow | null | undefined): void {
+    this._stealthProtection.attachWindow(win);
+  }
+
+  /** Start the periodic re-assertion loop. Idempotent; stealth-only. */
+  public startStealthProtectionLoop(): void {
+    this._stealthProtection.start();
+  }
+
+  /** Stop the periodic re-assertion loop. Idempotent. */
+  public stopStealthProtectionLoop(): void {
+    this._stealthProtection.stop();
+  }
+
   private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
     const appName = disguiseAppName(mode, process.platform);
     const isWin = process.platform === 'win32';
@@ -8246,23 +8677,55 @@ export class AppState {
       console.warn(`[AppState] Disguise icon not found: ${iconPath}`);
     }
 
-    // 5. Update Window Titles
+    // 5. Update Window Titles. guardWindowTitle() keeps the renderer's
+    // <title> ("Natively") from clobbering the disguise title while undetectable
+    // (the page loads async, after this). In normal mode the guard is inert.
     const launcher = this.windowHelper.getLauncherWindow();
     if (launcher && !launcher.isDestroyed()) {
+      this.guardWindowTitle(launcher);
+      this.guardWindowProtection(launcher);
       launcher.setTitle(appName.trim());
       this.sendToWindow(launcher, 'disguise-changed', mode);
     }
 
     const overlay = this.windowHelper.getOverlayWindow();
     if (overlay && !overlay.isDestroyed()) {
+      this.guardWindowTitle(overlay);
+      this.guardWindowProtection(overlay);
       overlay.setTitle(appName.trim());
       this.sendToWindow(overlay, 'disguise-changed', mode);
     }
 
     const settingsWin = this.settingsWindowHelper.getSettingsWindow();
     if (settingsWin && !settingsWin.isDestroyed()) {
+      this.guardWindowTitle(settingsWin);
+      this.guardWindowProtection(settingsWin);
       settingsWin.setTitle(appName.trim());
       this.sendToWindow(settingsWin, 'disguise-changed', mode);
+    }
+
+    // Model-selector and cropper: same guard + disguise title. Both are born
+    // outside _applyDisguise's original three — the cropper is even pre-created
+    // during the AppState constructor (so the browser-window-created handler
+    // deliberately skips it via peekInstance) and the model-selector is lazily
+    // created on first open, possibly after the last disguise apply. Without
+    // this they settle on the renderer's <title>Natively</title> while
+    // undetectable. In normal mode the guard is inert and the title is the
+    // expected "Natively".
+    const modelSelectorWin = this.modelSelectorWindowHelper.getWindow();
+    if (modelSelectorWin && !modelSelectorWin.isDestroyed()) {
+      this.guardWindowTitle(modelSelectorWin);
+      this.guardWindowProtection(modelSelectorWin);
+      modelSelectorWin.setTitle(appName.trim());
+      this.sendToWindow(modelSelectorWin, 'disguise-changed', mode);
+    }
+
+    const cropperWin = this.cropperWindowHelper.getCropperWindow();
+    if (cropperWin && !cropperWin.isDestroyed()) {
+      this.guardWindowTitle(cropperWin);
+      this.guardWindowProtection(cropperWin);
+      cropperWin.setTitle(appName.trim());
+      this.sendToWindow(cropperWin, 'disguise-changed', mode);
     }
 
     // Cancel any stale forceUpdate timeouts from previous disguise changes
@@ -8355,6 +8818,11 @@ export class AppState {
   a user's shell would silently give them a second app writing to a throwaway
   directory — and CLAUDE.md forbids enabling this in packaged builds outright.
 */
+// The packaged userData pin now lives in utils/pinUserData.ts, imported at the
+// very top of this file — it must run before import-time readers (e.g.
+// CredentialsManager), which an inline statement here could never beat. The
+// dev-only agent override below still runs at module scope, after all imports,
+// so it keeps winning over the pin.
 const agentUserData = !app.isPackaged ? process.env.NATIVELY_AGENT_USER_DATA : undefined;
 if (agentUserData) {
   // Before whenReady and before anything reads userData, or the log file and
@@ -8402,12 +8870,49 @@ async function initializeApp() {
   app.on('web-contents-created', (_event, contents) => {
     contents.setWindowOpenHandler(({ url }) => {
       if (shouldOpenExternally(url)) {
-        shell.openExternal(url).catch((err) => console.warn('[Main] openExternal failed:', err?.message || err));
+        // Through the funnel service, so a checkout link opened this way leaves
+        // tagged and counted exactly like one sent through 'open-external'.
+        // Every other link is opened unchanged; if the service cannot be
+        // loaded the link still opens.
+        const open = (target: string) => shell.openExternal(target);
+        let handled: Promise<boolean> | null = null;
+        try { handled = require('./services/FunnelTelemetry').funnelTelemetry.openOutgoing(url, 'other', open); } catch { /* analytics never blocks a link */ }
+        (handled ?? open(url).then(() => true, () => false))
+          .then((opened: boolean) => { if (!opened) console.warn('[Main] openExternal failed'); })
+          .catch(() => { /* already reported */ });
       } else {
         console.warn('[Main] Blocked window.open', { protocol: url.split(':')[0] });
       }
       return { action: 'deny' };
     });
+  });
+
+  // Attach the window-title guard to EVERY BrowserWindow at creation time, so
+  // lazily-created or re-created windows (overlay pill/toggle, settings popup,
+  // model-selector, and windows re-created on macOS activate or
+  // render-process-gone) are covered even when _applyDisguise has already run.
+  // _applyDisguise alone only guards windows that exist at disguise-apply time;
+  // anything created after that (the visible meeting pill, the settings popover
+  // used to leave undetectable mode) would otherwise settle on the renderer's
+  // <title>Natively</title>. The guard is idempotent (marker on webContents) and
+  // inert in normal mode (reads isUndetectable at event time). Registered before
+  // whenReady so it covers every window, including the first.
+  //
+  // MUST use peekInstance(), never getInstance(): the AppState constructor
+  // itself creates a BrowserWindow (CropperWindowHelper.preload at construction),
+  // so a window born mid-construction would re-enter getInstance() with instance
+  // still null and nest a second AppState — duplicate IPC registrations
+  // ("second handler for 'keybinds:get-all'"), repeated init, death spiral.
+  // A pre-AppState window (only the constructor-born cropper) is covered by the
+  // explicit cropper block in _applyDisguise instead.
+  app.on('browser-window-created', (_event, win) => {
+    try {
+      const appState = AppState.peekInstance();
+      appState?.guardWindowTitle(win);
+      appState?.guardWindowProtection(win);
+    } catch (err) {
+      console.error('[Main] browser-window-created title guard failed:', err);
+    }
   });
 
   // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
@@ -8525,30 +9030,13 @@ async function initializeApp() {
 
     // Remote sinks are built from env (set at app launch / packaged build). Each
     // is added ONLY when its credential is present, so unset = silently local-only.
-    // A stable, NON-PII install id (random, persisted in settings) lets PostHog
-    // dedupe sessions without ever shipping a key/email.
+    // In undetectable mode the remote sinks are suppressed entirely (see
+    // buildTelemetrySinks): the user is hiding from an OS-level proctor, and an
+    // outbound connection to an analytics host would give the app away over the
+    // network. Local JSONL always remains.
     const release = (typeof app.getVersion === 'function' ? app.getVersion() : undefined) || process.env.APP_VERSION || 'unknown';
-    const environment = process.env.NODE_ENV === 'development' ? 'development' : 'production';
-    let distinctId: string | undefined;
-    try {
-      const sm = SettingsManager.getInstance() as unknown as { get: (k: string) => unknown; set: (k: string, v: unknown) => void };
-      distinctId = sm.get('telemetryInstallId') as string | undefined;
-      if (!distinctId) {
-        distinctId = `nd_${Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-        sm.set('telemetryInstallId', distinctId);
-      }
-    } catch { /* settings unavailable — distinctId stays undefined */ }
-
-    const sinks: Array<Record<string, unknown>> = [{ name: 'local-jsonl', enabled: true }];
-    if (process.env.POSTHOG_API_KEY) {
-      sinks.push({ name: 'posthog', enabled: true, apiKey: process.env.POSTHOG_API_KEY, endpoint: process.env.POSTHOG_HOST || 'https://app.posthog.com', distinctId });
-    }
-    if (process.env.SENTRY_DSN) {
-      sinks.push({ name: 'sentry', enabled: true, dsn: process.env.SENTRY_DSN, release, environment });
-    }
-    if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
-      sinks.push({ name: 'axiom', enabled: true, apiKey: process.env.AXIOM_TOKEN, dataset: process.env.AXIOM_DATASET });
-    }
+    const isUndetectable = SettingsManager.getInstance().get('isUndetectable') ?? false;
+    const sinks = buildTelemetrySinks(isUndetectable, telemetrySinkDeps());
 
     telemetryService.configure({
       userDataPath,
@@ -8557,9 +9045,9 @@ async function initializeApp() {
       sinks,
     });
     const remote = sinks.filter(s => s.name !== 'local-jsonl').map(s => s.name);
-    console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}`);
+    console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}${isUndetectable ? ' [undetectable: remote sinks suppressed]' : ''}`);
     telemetryService.track({ name: 'app_start', properties: { platform: process.platform, release } });
-    logStartupPhase('telemetry-configure:complete', { release, remoteSinks: remote });
+    logStartupPhase('telemetry-configure:complete', { release, remoteSinks: remote, undetectable: isUndetectable });
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }
@@ -8609,9 +9097,33 @@ async function initializeApp() {
     const apiKey = getReviewApiKey();
     getReviewHardwareId()
       .then((hwid: string | null) => reviewService.syncWithBackend(apiKey, hwid))
+      .then(() => {
+        // A review or "Never ask" from another install lands here, after the
+        // card ledger's one-time import: retire the review card now too.
+        const { CardLedger } = require('./services/cards/CardLedger');
+        const { settleReviewCard } = require('./services/cards/mainLegacy');
+        const ledger = settleReviewCard(CardLedger.getInstance(), reviewService.getLocalState());
+        if (ledger) {
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('cards:changed', ledger);
+          });
+        }
+      })
       .catch(() => {});
   } catch (err) {
     console.warn('[Init] ReviewService recordSessionStart failed (non-fatal):', err);
+  }
+
+  // Card ledger (toaster policy): count this real app start and, once, seed
+  // it from the pre-ledger review / donation / trial history.
+  try {
+    const { CardLedger } = require('./services/cards/CardLedger');
+    const { gatherMainLegacy } = require('./services/cards/mainLegacy');
+    const cardLedger = CardLedger.getInstance();
+    cardLedger.recordLaunch();
+    cardLedger.importLegacy('main', gatherMainLegacy());
+  } catch (err) {
+    console.warn('[Init] CardLedger startup failed (non-fatal):', err);
   }
 
   // Generic, provider-agnostic local-model download service. Owns the
@@ -8633,9 +9145,6 @@ async function initializeApp() {
   } catch (e: any) {
     console.warn('[main] LocalModelDownloadService init failed (non-fatal):', e?.message);
   }
-
-  // Apply the full disguise payload (names, dock icon, AUMID) early
-  appState.applyInitialDisguise();
 
   // Ollama is an external optional provider. Do not spawn it on startup unless
   // the user explicitly selected/opted into it; Natively's packaged fallback
@@ -8702,6 +9211,16 @@ async function initializeApp() {
     console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
   }
 
+  // Funnel telemetry: install → trial → paid, for every install, keyed on the
+  // random install id (the usage outbox above reports only for installs that
+  // hold a key). Off in unpackaged builds and when the user has turned
+  // telemetry off; see electron/services/FunnelTelemetry.ts.
+  try {
+    require('./services/FunnelTelemetry').funnelTelemetry.start();
+  } catch (err: any) {
+    console.warn('[Funnel] startup failed (non-fatal):', err?.message || err);
+  }
+
   // Extensions. Until this call nothing constructed an ExtensionManager, so no
   // extension could run in a shipped build regardless of what the on-disk
   // registry said.
@@ -8716,7 +9235,7 @@ async function initializeApp() {
   // a usable window, and every failure inside is already isolated per extension.
   try {
     const { wireExtensions, startExtensions } = require('./services/extensions/appWiring');
-    const extensionManager = wireExtensions();
+    const extensionManager = wireExtensions({ isUndetectable: () => appState.getUndetectable() });
     void startExtensions(extensionManager);
   } catch (err: any) {
     // A subsystem that cannot be built leaves the built-in reranker in place,
@@ -8887,6 +9406,14 @@ if (process.env.THINKING_MATRIX === '1') {
   logStartupPhase('create-window:complete', {
     windowCount: BrowserWindow.getAllWindows().length,
   });
+
+  // Apply the disguise NOW that the windows exist. This is the single disguise
+  // application; the earlier (pre-createWindow) call was removed to avoid
+  // duplicate app.setName()/process.title writes in normal mode which could
+  // churn the dock tile. The browser-window-created handler ensures every
+  // window (including lazily-created pill/toggle/settings/model-selector/cropper
+  // and re-created windows) gets the title guard at creation time.
+  appState.applyInitialDisguise();
 
   // A saved Natively key whose plan includes Pro, with no Pro licence on this
   // device, used to stay that way forever (activation ran once, at key save, and a
@@ -9097,6 +9624,12 @@ if (process.env.THINKING_MATRIX === '1') {
   // server so the phone/companion extension can't connect. If the leak vanishes,
   // PhoneMirror connect is confirmed as the trigger.
   const disablePhoneMirrorOnBoot = process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1';
+  // Photos and screenshots sent from the phone join the screenshot queue and
+  // attach to the next answer, like a capture taken on this machine.
+  PhoneMirrorService.getInstance().setPhoneImageHandler((image) => appState.receivePhoneImage(image));
+  // Answers reach the phone rendered as the overlay renders them: markdown,
+  // tables, math and the [[GIST]] chip.
+  PhoneMirrorService.getInstance().setAnswerRenderer(renderPhoneAnswer);
   if (
     shouldStartPhoneMirrorOnBoot({
       disablePhoneMirror: disablePhoneMirrorOnBoot,
@@ -9109,6 +9642,46 @@ if (process.env.THINKING_MATRIX === '1') {
   } else if (disablePhoneMirrorOnBoot) {
     console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
   }
+  // Each connected browser reports its open meeting tabs, so a session links to
+  // its calendar event by the meeting link itself (services/meetingDetection).
+  const meetingDetectionOn = SettingsManager.getInstance().get('meetingDetectionEnabled') ?? true;
+  wireExtensionMeetingTabs(PhoneMirrorService.getInstance(), meetingDetectionOn);
+
+  // Starts a meeting the way the Launcher's button does (saved devices,
+  // retention, the mic-permission recovery) when a notification asks: the
+  // meeting-detected one and the calendar reminder. The launcher's renderer
+  // runs the start (App.tsx, meeting:start-request); with no live launcher,
+  // main starts it.
+  const requestMeetingStart = (req: MeetingStartRequest) => {
+    const launcher = appState.getWindowHelper().getLauncherWindow();
+    if (launcher && !launcher.isDestroyed() && !launcher.webContents.isCrashed()) {
+      launcher.webContents.send('meeting:start-request', req);
+      return;
+    }
+    appState
+      .startMeeting(req.calendarEventId ? { title: req.title, calendarEventId: req.calendarEventId, source: 'calendar' } : undefined)
+      .catch((err) => console.error('[Main] Meeting start from a notification failed:', err));
+  };
+
+  // When a call starts in Zoom, Teams, Meet (…), offer to start Natively.
+  const meetingDetector = wireMeetingDetection({
+    platform: process.platform,
+    native: loadNativeModule(),
+    self: { pid: process.pid, execPath: process.execPath },
+    isMeetingActive: () => appState.getIsMeetingActive(),
+    promptsBlocked: () => nativePromptsBlocked(() => appState.getUndetectable()) || appState.getDisguise() !== 'none',
+    events: () => {
+      try {
+        return require('./services/CalendarManager').CalendarManager.getInstance().getCachedEvents(30 * 60_000);
+      } catch {
+        return null;
+      }
+    },
+    requestStart: requestMeetingStart,
+    notify: electronNotify,
+  });
+  registerMeetingDetection(meetingDetector, PhoneMirrorService.getInstance());
+  meetingDetector.setEnabled(meetingDetectionOn);
 
   // One-time macOS screen recording permission prompt.
   //
@@ -9204,7 +9777,7 @@ if (process.env.THINKING_MATRIX === '1') {
             console.warn('[Init] Microphone is restricted by device policy at startup.');
             appState.sendAudioCaptureFailed({
               channel: 'mic',
-              message: 'Microphone is restricted by device policy. Contact your administrator to enable microphone access for Natively.',
+              message: 'Microphone is blocked by device policy. Ask your administrator to allow it for Natively.',
               attempt: 0,
               maxAttempts: 0,
               terminal: true,
@@ -9222,20 +9795,81 @@ if (process.env.THINKING_MATRIX === '1') {
     }, 800);
   }
 
+  // Undetectable also covers the process's non-BrowserWindow windows: file
+  // pickers, message boxes, tooltips, popups (foreignWindowCaptureGuard.ts).
+  try {
+    foreignWindowCaptureGuard = createForeignWindowCaptureGuard({
+      native: () => {
+        const { loadNativeModule } = require('./audio/nativeModuleLoader');
+        return loadNativeModule();
+      },
+      ownHandles: () => BrowserWindow.getAllWindows()
+        .filter((w) => !w.isDestroyed())
+        .map((w) => w.getNativeWindowHandle()),
+      isUndetectable: () => appState.getUndetectable(),
+      log: (message) => console.warn(message),
+    });
+    wrapAsyncDialogs(require('electron').dialog, foreignWindowCaptureGuard);
+    foreignWindowCaptureGuard.sync(appState.getUndetectable());
+    // An activation change resets sharing state on macOS; re-apply at once
+    // rather than waiting for the next interval tick.
+    const resweep = () => { foreignWindowCaptureGuard?.sweep(); };
+    app.on('did-become-active', resweep);
+    app.on('browser-window-focus', resweep);
+  } catch (e) {
+    console.error('[Main] Failed to start the foreign-window capture guard:', e);
+  }
+
   // Initialize CalendarManager
   try {
     const { CalendarManager } = require('./services/CalendarManager');
     const calMgr = CalendarManager.getInstance();
+    // Reminders are system notifications (with a chime): their own OS window,
+    // outside content protection. Checked when each one fires, not when it is
+    // scheduled, since the mode can change during the wait.
+    calMgr.setNotificationSuppressor(() => nativePromptsBlocked(() => appState.getUndetectable()));
     calMgr.init();
 
+    // The Launcher card and Settings › Calendar follow the connection wherever it changes.
+    require('./services/calendar/calendarConnectionBroadcast').broadcastCalendarConnection(calMgr, () => BrowserWindow.getAllWindows());
+
+    // Notes name the user by first name ("Evin"), not the account's full name.
+    // Meetings saved before that are carried over once per account name, after
+    // their originals are backed up to userData/backups (calendarNameMigration).
+    // Off the boot path, and again whenever Calendar connects (a new account).
+    const runCalendarNameMigration = () => {
+      try {
+        const status = calMgr.getConnectionStatus();
+        if (!status?.connected || !status.name) return;
+        const { runCalendarNameMigration: run } = require('./services/calendar/calendarNameMigration');
+        const { SettingsManager } = require('./services/SettingsManager');
+        const settings = SettingsManager.getInstance();
+        const db = DatabaseManager.getInstance();
+        const changed: string[] = run({
+          fullName: status.name,
+          getDoneFor: () => settings.get('calendarFirstNameMigratedFor'),
+          setDoneFor: (name: string) => { settings.set('calendarFirstNameMigratedFor', name); },
+          listMentioning: (text: string) => db.listMeetingSummariesMentioning(text),
+          replaceDetailedSummary: (id: string, detailed: any) => db.replaceDetailedSummary(id, detailed),
+          backup: (rows: Array<{ id: string; summaryJson: string }>) => {
+            const dir = path.join(app.getPath('userData'), 'backups');
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, `calendar-first-name-${Date.now()}.json`), JSON.stringify(rows, null, 1));
+          },
+        });
+        if (changed.length) console.log(`[Main] Saved notes now use the first name in ${changed.length} meeting(s).`);
+      } catch (e: any) {
+        console.warn('[Main] Calendar first-name migration skipped:', e?.message);
+      }
+    };
+    setTimeout(runCalendarNameMigration, 8000);
+    calMgr.on('connection-changed', (connected: boolean) => { if (connected) runCalendarNameMigration(); });
+
     calMgr.on('start-meeting-requested', (event: any) => {
-      console.log('[Main] Start meeting requested from calendar notification', event);
-      appState.centerAndShowWindow();
-      appState.startMeeting({
-        title: event.title,
-        calendarEventId: event.id,
-        source: 'calendar'
-      });
+      console.log('[Main] Start meeting requested from calendar notification', event?.id);
+      // Through the renderer's start path, like the Launcher's button (it used
+      // to start in main: default devices, and a mic denial went unhandled).
+      requestMeetingStart({ title: event.title, calendarEventId: event.id, via: 'reminder' });
     });
 
     calMgr.on('open-requested', () => {
@@ -9332,6 +9966,7 @@ if (process.env.THINKING_MATRIX === '1') {
       const { recordAppShutdown } = require('./services/usageInstrumentation');
       recordAppShutdown();
     } catch { /* instrumentation must never block a quit */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.stop(); } catch { /* never blocks a quit */ }
     // Extension utilityProcesses are children of this process. One left running
     // keeps the app alive after every window has closed, which presents as a
     // hang on quit rather than as an error anyone sees. Fire-and-forget:
@@ -9441,16 +10076,23 @@ if (process.env.THINKING_MATRIX === '1') {
         reloadsInWindow: history.length,
         windowMs: RENDERER_RELOAD_WINDOW_MS,
       });
-      try {
-        // dialog is not imported at module top — require it lazily (matches
-        // the native-arch gate handler's pattern above).
-        const { dialog } = require('electron');
-        dialog.showErrorBox(
-          'Natively — display error',
-          'A window keeps crashing while rendering. Please restart Natively. ' +
-          'If this continues, update to the latest version.'
-        );
-      } catch { /* dialog best-effort */ }
+      // A system dialog would show in a screen share (stealthPromptGate.ts),
+      // and this one can fire mid-meeting. While Undetectable is on it is
+      // logged instead; the app still exits below, just without a message.
+      if (nativePromptsBlocked(() => appState.getUndetectable())) {
+        logToFile('[main] render-process-gone-loop-giveup: error dialog skipped (Undetectable is on)');
+      } else {
+        try {
+          // dialog is not imported at module top — require it lazily (matches
+          // the native-arch gate handler's pattern above).
+          const { dialog } = require('electron');
+          dialog.showErrorBox(
+            'Natively — display error',
+            'A window keeps crashing while rendering. Please restart Natively. ' +
+            'If this continues, update to the latest version.'
+          );
+        } catch { /* dialog best-effort */ }
+      }
       // showErrorBox is modal and blocks until the user clicks OK, so the
       // terminal sequence runs AFTER they have seen the message. We told them
       // to restart, so actually end the process — leaving it alive here meant

@@ -1,9 +1,13 @@
 // electron/llm/visionCapability.ts
 //
-// Pure, dependency-free helpers for deciding whether a LOCAL provider (Ollama
-// model, custom cURL endpoint) can actually accept an image. Kept free of fetch
-// / fs / Electron so the decision logic is unit-testable; the I/O (Ollama
-// /api/show probe, reading the model list) stays in LLMHelper and feeds these.
+// Pure helpers for deciding whether a LOCAL provider (Ollama model, custom cURL
+// endpoint) can actually accept an image. Kept free of fetch / fs / Electron so
+// the decision logic is unit-testable; the I/O (Ollama /api/show probe, reading
+// the model list) stays in LLMHelper and feeds these. One import: the cURL
+// parser the dispatch itself uses, so "where does this request go" has a single
+// answer.
+
+import curl2Json from '@bany/curl-to-json';
 //
 // Why this exists: cloud providers (OpenAI/Claude/Gemini/Groq) have known,
 // fixed vision support. Local providers don't — an Ollama install can hold any
@@ -17,9 +21,28 @@
 
 // Name heuristic (fallback only). Ollama's /api/show `capabilities` array is the
 // authoritative source; this regex is used when capabilities are absent (older
-// Ollama servers) or the probe failed.
+// Ollama servers) or the probe failed. The ONLY Ollama list (2026-10-01):
+// modelCapabilities.ts had a second, drifted copy. `qwen[0-9.]*-?vl` because
+// Ollama publishes the family as `qwen2.5vl` (no dash); `qwen2.5-vl`,
+// `qwen3-vl` and Hugging Face names keep theirs.
 const OLLAMA_VISION_NAME_RE =
-  /(llava|bakllava|moondream|llama-?3\.2-vision|llama3\.2-vision|gemma3|minicpm-v|qwen[0-9.]*-vl|qwen-vl|pixtral|llama-?4|granite3\.2-vision|mistral-small3\.1|llama-?guard3-vision)/i;
+  /(llava|bakllava|moondream|llama-?3\.2-vision|llama3\.2-vision|gemma3|minicpm-v|qwen[0-9.]*-?vl|pixtral|llama-?4|granite3\.2-vision|mistral-small3\.1|llama-?guard3-vision)/i;
+
+/**
+ * The names the remote-Ollama rule knew BEFORE 2026-10-01, frozen. A daemon on
+ * another machine may take a keep-on-device screenshot only in the states it
+ * could before (Evin: "keep the old behaviour"), and that rule judged the
+ * selected model by this older, shorter list. The consolidated list above has
+ * more names (llama4, qwen2.5vl, mistral-small3.1, granite3.2-vision,
+ * llama-guard3-vision); through this rule each would be a new state in which a
+ * screenshot leaves the machine. A user who wants one of those on a remote
+ * daemon says so: "Reads images: On" for that model. Do not add names here.
+ */
+const LEGACY_REMOTE_OLLAMA_VISION_NAME_RE = /llava|bakllava|moondream|llama3\.2-vision|llama-3\.2-vision|gemma3|minicpm-v|qwen2\.5-vl|qwen2-vl|pixtral/;
+
+export function isLegacyRemoteOllamaVisionName(modelId: string): boolean {
+  return !!modelId && LEGACY_REMOTE_OLLAMA_VISION_NAME_RE.test(modelId.toLowerCase());
+}
 
 export function isOllamaVisionModelByName(modelId: string): boolean {
   return !!modelId && OLLAMA_VISION_NAME_RE.test(modelId.toLowerCase());
@@ -191,10 +214,53 @@ function firstUrl(curl: string): string {
 }
 
 /**
- * Heuristically decide whether a custom provider's endpoint is loopback/local,
- * so local-only mode keeps using it and the chain doesn't treat it as a cloud
- * provider. Inspects the first http(s) URL in the cURL template for a
- * loopback / link-local / RFC-1918 private host.
+ * The URL a cURL template's request actually GOES to — parsed by the same
+ * parser the dispatch uses (curl2Json), so classification and dispatch cannot
+ * disagree. A bare URL (the Ollama daemon address) is taken as it is. '' when
+ * the command cannot be parsed: unknown is never "local".
+ *
+ * Not `firstUrl`: the first http(s) string in a template is often NOT the
+ * endpoint. `-H "HTTP-Referer: http://localhost:3000"` (which OpenRouter's own
+ * docs suggest), `-x http://127.0.0.1:7890` and a URL inside the body all made
+ * a HOSTED endpoint read as local — exempt from the cloud data scopes, usable
+ * in local-only mode and, in "Keep screenshots on this device", sent the
+ * screenshot (found 2026-10-01).
+ */
+function requestUrl(curl: string): string {
+  const command = (curl || '').trim();
+  if (!command) return '';
+  if (/^https?:\/\/\S+$/i.test(command)) return command;
+  try {
+    const url = (curl2Json(command) as { url?: unknown } | null | undefined)?.url;
+    return typeof url === 'string' ? url : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Loopback, link-local or RFC-1918, decided on the PARSED address — never by a
+ *  string prefix (`10.example.com` and `172.16.evil.com` are public names). */
+function isPrivateHost(rawHost: string): boolean {
+  const host = rawHost.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '::1') return true;
+  if (host.endsWith('.local')) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!v4) return false;
+  const [a, b, c, d] = v4.slice(1).map(Number);
+  if ([a, b, c, d].some((n) => n > 255)) return false;
+  if (a === 127 || a === 10) return true;                 // loopback, RFC-1918
+  if (a === 0 && b === 0 && c === 0 && d === 0) return true;
+  if (a === 192 && b === 168) return true;                 // RFC-1918
+  if (a === 172 && b >= 16 && b <= 31) return true;        // RFC-1918
+  if (a === 169 && b === 254) return true;                 // link-local
+  return false;
+}
+
+/**
+ * Decide whether a custom provider's endpoint is on this machine or the local
+ * network, so local-only mode keeps using it and the chain doesn't treat it as
+ * a cloud provider. Judges the host of the URL the request goes to
+ * (requestUrl) for a loopback / link-local / RFC-1918 address.
  *
  * An explicit `localOnly` flag, when present, wins over URL detection.
  */
@@ -203,24 +269,11 @@ export function customProviderIsLocal(
 ): boolean {
   if (!provider) return false;
   if (typeof provider.localOnly === 'boolean') return provider.localOnly;
-
-  const curl = provider.curlCommand || '';
-  const m = curl.match(/https?:\/\/[^\s'"`]+/i);
-  if (!m) return false;
-  let host: string;
+  const url = requestUrl(provider.curlCommand || '');
+  if (!url) return false;
   try {
-    host = new URL(m[0]).hostname.toLowerCase();
+    return isPrivateHost(new URL(url).hostname);
   } catch {
     return false;
   }
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') return true;
-  if (host.endsWith('.local')) return true;
-  if (host.startsWith('169.254.')) return true;      // link-local
-  if (host.startsWith('10.')) return true;            // RFC-1918
-  if (host.startsWith('192.168.')) return true;       // RFC-1918
-  if (host.startsWith('172.')) {                      // RFC-1918 172.16.0.0–172.31.255.255
-    const second = parseInt(host.split('.')[1], 10);
-    if (second >= 16 && second <= 31) return true;
-  }
-  return false;
 }

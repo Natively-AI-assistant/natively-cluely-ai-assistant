@@ -118,18 +118,20 @@ const delay = <T,>(v: T): Promise<T> =>
 export const RERANKER_SETTINGS_API = {
     getRerankerStatus: async () => delay({
         provider: 'local',
-        openrouterModel: 'voyageai/rerank-2.5-lite',
+        openrouterModel: 'voyageai/rerank-3-lite',
         candidateCount: 15, candidateCountDefault: 30, fallbackToLocal: false,
         hasApiKey: true, eligible: false, ineligibleReason: 'provider-not-selected',
         ineligibleMessage: 'The reranker provider is set to Local.',
         builtIn: { id: 'ms-marco-MiniLM-L-6-v2', name: 'MS MARCO MiniLM L6', bundled: true, cached: true, available: true },
         effective: { kind: 'local', id: 'ettin-reranker-68m' },
-        lastTest: { at: '2026-09-01T10:00:00Z', model: 'voyageai/rerank-2.5-lite', latencyMs: 412, ok: true },
+        lastTest: { at: '2026-09-01T10:00:00Z', model: 'voyageai/rerank-3-lite', latencyMs: 412, ok: true },
     } as any),
     getRerankerCatalog: async () => ({
         stale: false, fetchedAt: Date.now(),
         models: [
-            { id: 'voyageai/rerank-2.5-lite', label: 'VoyageAI: rerank-2.5-lite', vendor: 'voyageai', contextLength: 32000, free: false, multimodal: false, group: 'recommended', note: '32K context' },
+            { id: 'voyageai/rerank-3-lite', label: 'VoyageAI: rerank-3-lite', vendor: 'voyageai', contextLength: 32000, free: false, multimodal: false, group: 'recommended', note: '32K context' },
+            { id: 'voyageai/rerank-3', label: 'VoyageAI: rerank-3', vendor: 'voyageai', contextLength: 32000, free: false, multimodal: false, group: 'quality', note: '32K context' },
+            { id: 'voyageai/rerank-2.5-lite', label: 'VoyageAI: rerank-2.5-lite', vendor: 'voyageai', contextLength: 32000, free: false, multimodal: false, group: 'quality', note: '32K context' },
             { id: 'voyageai/rerank-2.5', label: 'VoyageAI: rerank-2.5', vendor: 'voyageai', contextLength: 32000, free: false, multimodal: false, group: 'quality', note: '32K context' },
             { id: 'cohere/rerank-4-fast', label: 'Cohere: Rerank 4 Fast', vendor: 'cohere', contextLength: 32768, free: false, multimodal: false, group: 'fast', note: '33K context' },
             { id: 'nvidia/llama-nemotron-rerank-vl-1b-v2:free', label: 'NVIDIA: Nemotron Rerank VL', vendor: 'nvidia', contextLength: 10240, free: true, multimodal: true, group: 'multimodal', note: '10K context · multimodal · free tier' },

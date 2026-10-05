@@ -1,0 +1,310 @@
+{
+ "batch": "b016-seminar",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DSEM-CTX-G2": {
+   "title": "Research summary: SMS reminders and clinic attendance, Marlow District pilot",
+   "text": "Research Summary: Timed SMS Reminders and Outpatient Attendance\nMarlow District Pilot, 2025 - summary prepared for the Health Services Research seminar\nAuthors: T. Brannigan (presenting), A. Idowu, M. Castellanos-Reyes\n\nBackground\nMissed outpatient appointments in Marlow District ran at roughly 28% in 2024. We tested whether two timed text reminders improve attendance.\n\nDesign\nCluster-randomised trial across 14 clinics: 7 intervention, 7 control. Clinics volunteered in response to a district-wide invitation; of the 31 district clinics invited, 14 agreed. Randomisation was at clinic level, stratified by clinic size. Over a 12-week period the trial covered 2,406 scheduled appointments among 1,184 patients (1,221 appointments in intervention clinics, 1,185 in control clinics). Clinic staff and patients were not blinded to allocation.\n\nIntervention clinics sent an SMS reminder 48 hours before the appointment and a second SMS 3 hours before. Control clinics continued usual practice (no reminder). Both reminders were always sent together, so the design cannot separate the effect of the 48-hour reminder from the 3-hour reminder.\n\nOutcomes and analysis\nThe primary outcome was attendance at the scheduled appointment. The secondary outcome was late cancellation (less than 24 hours notice). Clinical health outcomes were not measured.\n\nAnalysis was intention-to-treat using mixed-effects logistic regression with a clinic random intercept, adjusting for age band, sex and appointment type. We used a random intercept because appointments within the same clinic are correlated; a simple chi-square test would treat all 2,406 appointments as independent and overstate precision. Appointments with a missing outcome (3.2%) were excluded (complete-case analysis).\n\nResults\n- Attendance: 78.4% in intervention clinics versus 71.9% in control clinics.\n- Adjusted odds ratio 1.41 (95% CI 1.12 to 1.77).\n- Late cancellations fell from 9.3% (control) to 7.1% (intervention).\n- Patients aged 65 and over: OR 1.09 (95% CI 0.81 to 1.47), not significant. This subgroup contributed 412 appointments, and the trial was not powered for subgroup analysis.\n- Delivery: 5,120 messages were sent; 6% were undeliverable (invalid or inactive numbers).\n- Cost: each SMS cost 0.04 per message under the district's bulk contract.\n\nInterpretation\nTwo timed reminders were associated with a 6.5 percentage point increase in attendance. Because only 14 clinics were randomised, the confidence interval is wide despite the number of appointments. The weaker estimate in older patients may reflect lower mobile phone use or simply the small subgroup; the data cannot distinguish these.\n\nLimitations\n- Short follow-up: 12-week duration, so we cannot say whether the effect persists or fades.\n- Volunteer clinics may be more organised or motivated than those that declined.\n- No blinding of clinic staff.\n- 6% of messages were undeliverable and phone number accuracy was not audited.\n- Results were not stratified by income or employment.\n- We did not conduct a cost-effectiveness analysis.\n\nNext steps\nA follow-on trial would randomise from all 31 district clinics, run for 12 months, and test the 48-hour and 3-hour reminders as separate arms."
+  },
+  "DSEM-CTX-G1": {
+   "title": "Thesis chapter 5: STAGE-KD keyword spotting results",
+   "text": "Chapter 5: Results and Discussion\nThesis: Staged Knowledge Distillation for Always-On Keyword Spotting on Microcontrollers\nCandidate: R. Okonkwo-Hale, Department of Electrical Engineering, Veldmoor University (examination copy, final version)\n\n5.1 Experimental setup\nThe teacher network, KWS-Large, has 18.4M parameters. The student, KWS-Tiny, has 212k parameters and is the model deployed on device. All models were trained on the Corvid Commands v2 corpus: 41,300 one-second utterances covering 35 keywords from 1,912 speakers. The test split contains 6,120 utterances from 288 held-out speakers who do not appear in training or validation.\n\nWe compare three ways of training KWS-Tiny: (a) training from scratch with cross-entropy, (b) standard KD, i.e. single-stage logit matching with temperature 4, and (c) STAGE-KD, our three-stage method. STAGE-KD runs logit matching first, then aligns intermediate features at student layers 3 and 6 with teacher layers 8 and 16, and finally fine-tunes for 2 epochs on hard labels with label smoothing of 0.1. Every configuration in Table 5.1 was trained with 5 random seeds; we report mean and standard deviation.\n\nOn-device numbers were measured on an Arlo M4 development board running at 80 MHz. Latency is measured per 1-second window, from feature input to posterior output; front-end feature extraction (40-band log-mel) was not timed separately.\n\n5.2 Main results\nTable 5.1 (test accuracy, mean +/- s.d. over 5 seeds):\n- Scratch: 89.7% +/- 0.6\n- Standard KD: 91.8% +/- 0.4\n- STAGE-KD: 93.2% +/- 0.3\n- Teacher (KWS-Large, reference only): 95.9%\n\nSTAGE-KD closes roughly a third of the gap between standard KD and the teacher. At the operating point of 1 false accept per hour, the false reject rate is 6.8% for STAGE-KD versus 9.4% for standard KD.\n\nOn the Arlo M4, KWS-Tiny runs in 14.2 ms per window with a peak RAM of 96 KB. Because all three training methods produce the same architecture, latency and memory are identical across them. We report latency only; energy per inference was not measured, as the board lacks a current-sense header.\n\n5.3 Significance\nWe compared STAGE-KD against standard KD with a paired bootstrap over test utterances (10,000 resamples), pooling the predictions of the five seeds. We chose this over a t-test across seeds because five seeds give too few samples for a seed-level test to be informative. The difference is significant (p < 0.01). The bootstrap tests were not corrected for multiple comparisons across the ablation variants.\n\n5.4 Ablations\nAblations used 3 seeds only, due to compute limits. Removing stage 2 (feature alignment) lowers accuracy to 92.0%; removing stage 3 (hard-label fine-tuning) lowers it to 92.9%. We read this as stage 2 contributing most of the gain, but the ablation differences are small relative to seed variance and should be treated as indicative.\n\n5.5 Noise robustness\nUnder babble noise at 0 dB SNR, STAGE-KD reaches 71.5% and standard KD 70.9%. This gap is within seed variance, and we make no claim that STAGE-KD improves noise robustness.\n\n5.6 Limitations\n- English only; 71% of speakers self-reported US English, so accent coverage is skewed.\n- One microcontroller (Arlo M4); results may not transfer to other boards or clock speeds.\n- No energy measurements; latency is used as a proxy for cost.\n- Near-field recordings only; nothing was tested beyond 1.5 m.\n- Five seeds limit how precisely we can estimate variance, and the ablations use three.\n- Baselines are limited to scratch training and standard KD.\n\n5.7 Summary\nSTAGE-KD improves a 212k-parameter keyword spotter by 1.4 points over standard KD at no on-device cost, because the deployed architecture is unchanged. Future work: multilingual data, energy profiling, and far-field evaluation."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DSEM-CTX-C1": {
+   "title": "Thesis chapter 5 draft v2 (STAGE-KD), internally inconsistent",
+   "text": "Chapter 5 (DRAFT v2 - do not circulate): Results\nSTAGE-KD for keyword spotting on microcontrollers\nCandidate: R. Okonkwo-Hale\n\nSummary paragraph (carried over from the proposal)\nSTAGE-KD reaches 94.1% test accuracy with a 212k-parameter student, averaged over five seeds, and runs in 11.8 ms on the Arlo M4 with 96 KB peak RAM. The improvement over standard KD is 2.5 points.\n\n5.1 Setup\nStudent KWS-Tiny (212k parameters), teacher KWS-Large (18.4M parameters). Corpus: Corvid Commands v2. Test split: 5,480 utterances from 288 held-out speakers. Every configuration was trained with three seeds because of a cluster outage in March; results below are mean +/- s.d. STAGE-KD runs logit matching, then feature alignment, then a short hard-label fine-tune.\n\n5.2 Results table (three seeds)\n- Scratch: 89.9% +/- 0.7\n- Standard KD: 91.6% +/- 0.5\n- STAGE-KD: 93.2% +/- 0.4\n\nOn-device: 14.2 ms per 1-second window; peak RAM 112 KB (measured with the debug logger enabled).\n\n5.3 Significance\nThe difference between STAGE-KD and standard KD was significant under a paired bootstrap. Number of resamples still to be filled in.\n\n5.4 Noise robustness\nAt 0 dB SNR babble noise, STAGE-KD reaches 71.5% and standard KD 69.0%, suggesting that staged distillation improves noise robustness.\n\n5.5 Notes to self\n[TODO: reconcile the summary paragraph with the table - the summary may be from the older 40-keyword run.]\n[TODO: rerun the remaining two seeds once the cluster is back.]\n[TODO: check whether the RAM figure should be re-measured with logging off.]\n[TODO: supervisor asked whether the robustness claim survives more seeds.]"
+  },
+  "DSEM-CTX-I1": {
+   "title": "Seminar series logistics notes",
+   "text": "Department of Applied Sciences - Spring seminar series: logistics notes\n\nRoom: Lecture Theatre B2 (capacity 60). The projector takes HDMI; bring a USB-C adapter if your laptop needs one. The lectern microphone is wireless and runs on AA batteries; spares are in the top drawer of the lectern.\n\nTiming: each slot is 40 minutes, split into 25 minutes of presentation and 15 minutes of questions. The chair shows a 5-minute and a 1-minute warning card. Please do not run into the next speaker's slot.\n\nCatering: coffee and pastries at 10:30 in the foyer. Lunch orders must reach the department office by Tuesday noon. Dietary requirements go to the office, not to the caterer directly.\n\nRecording: sessions are recorded only if every presenter in the slot consents in writing beforehand. Recordings are stored on the department drive for 90 days and then deleted.\n\nParking: visitor permits are available from reception; the east car park closes at 18:00.\n\nAccessibility: step-free access via the north entrance; a hearing loop is available on request.\n\nQuestions about the series go to the seminar coordinator, room 3.14."
+  },
+  "DSEM-CTX-G3": {
+   "title": "Slide deck: microplastics in Brenn River mussels",
+   "text": "Slide deck: Microplastic Loads in Freshwater Mussels, Brenn River Catchment\nPresenter: J. Saelens, MSc Environmental Science, Harrowgate College. Seminar version, 12 slides.\n\nSlide 1 - Title\nMicroplastic loads in freshwater mussels upstream and downstream of the Kessel wastewater treatment plant.\n\nSlide 2 - Question\nDo mussels downstream of the Kessel plant carry more microplastic particles than mussels upstream?\n\nSlide 3 - Sites and sampling\n6 sites: 3 upstream and 3 downstream of the plant outfall, each 0.5 to 4 km from the outfall. 240 mussels in total, 40 per site, collected by hand in a single sampling season (August 2025). Shell length ranged from 52-88 mm.\n\nSlide 4 - Lab method\nSoft tissue digested in 10% KOH at 40 C for 48 h. Filtrate stained with Nile red and particles counted under fluorescence microscopy. Lower size cutoff: 50 um; smaller particles, including nanoplastics, were not detected.\n\nSlide 5 - Quality control\nProcedural blanks run with every batch of 10 samples; mean 0.6 particles per blank, subtracted from sample counts. Cotton lab coats, filtered water, covered glassware.\n\nSlide 6 - Polymer confirmation\nA random 15% of counted particles were analysed by micro-FTIR. 81% of the analysed particles were confirmed as synthetic polymers; the rest were mostly cellulose or protein. Polyester was the most common polymer (38% of confirmed particles), followed by polypropylene (22%).\n\nSlide 7 - Results: particles per individual\nUpstream mean: 3.8 particles per individual. Downstream mean: 7.1 particles per individual.\n\nSlide 8 - Results: particles per gram\nUpstream: 0.42 particles per gram wet tissue. Downstream: 0.83 particles per gram wet tissue.\n\nSlide 9 - Particle shape\nFibres made up 64% of particles, fragments 29%, films and beads the rest.\n\nSlide 10 - Statistics\nKruskal-Wallis test across the 6 sites: H = 21.4, p < 0.001. Dunn post hoc tests: each downstream site differed from each upstream site; no difference among sites on the same side of the outfall. We used a rank-based test because counts were strongly right-skewed and zero-inflated.\n\nSlide 11 - Limitations\n- One season only; no winter or spring sampling.\n- No water or sediment samples taken at the same time, so we cannot say where the particles come from within the river.\n- Nile red can stain some natural organic matter; FTIR on a 15% subset mitigates but does not remove false positives.\n- Mussel size varied (52-88 mm) and was not fully adjusted for in the analysis.\n- We did not have access to plant discharge records, so counts could not be related to effluent volume.\n- Human consumption risk was not assessed; these are not a commercially harvested population.\n\nSlide 12 - Conclusion\nDownstream mussels carried roughly double the microplastic load of upstream mussels, by count and by tissue weight. Recommend repeat sampling across seasons with paired water samples."
+  }
+ },
+ "items": [
+  {
+   "jid": "7cf459b3839a",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So with fourteen hundred patients, why is the confidence interval on your odds ratio still that wide?",
+   "conversation": [
+    "EXAMINER: Okay, thanks. I noted from your opening that it was about fourteen hundred patients across the district.",
+    "USER (spoken): Yes, roughly, that's right."
+   ],
+   "evidence_ids": [
+    "DSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The unit of randomisation is the clinic, not the patient, so the effective sample size is 14 clinics, 7 per arm. Appointments within a clinic are correlated, which is why we used a mixed-effects model with a clinic random intercept rather than treating all 2,406 appointments as independent. So the interval is wide despite the appointment count, and the summary says exactly that."
+  },
+  {
+   "jid": "f953a6390355",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "examiner is asking whether the method is more robust to noise and whether that fits the ablation story. two sentences I can say",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "On noise robustness, no. Under babble noise at 0 dB SNR, STAGE-KD reaches 71.5% and standard KD 70.9%, and that gap sits within seed variance, so I don't claim any noise-robustness improvement. That's consistent with the ablation story, where the stage 2 and stage 3 differences are also small relative to seed variance and I treat them as indicative rather than as firm effects."
+  },
+  {
+   "jid": "20f1f6ced628",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Before we get into the results, tell us a little about yourself. How did you end up working on this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "Thanks for asking. I came to this through a genuine interest in the problem itself, and one question kept pulling me back: what actually happens if we look at it this way. That curiosity turned into the work I'm about to see, and I'm glad to walk you through it."
+  },
+  {
+   "jid": "977e2112bc0a",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Peer reviewed yet?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not yet. It's under review at the moment, so I can't share the reviewers' comments or a decision date. What I can walk you through is the work itself and what we're claiming, and I'm happy to take questions on the method."
+  },
+  {
+   "jid": "f5b211387196",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So basically you found that the feature alignment stage is what makes it work.",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the reading I'd give it, with one caveat. In the ablations, removing feature alignment drops accuracy to 92.0% and removing the hard-label fine-tuning drops it to 92.9%, so alignment looks like the bigger contributor. But those ablations used only 3 seeds, and the differences are small relative to seed variance, so I'd call it indicative rather than settled."
+  },
+  {
+   "jid": "742e4e77a261",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What's your final accuracy, the number you're actually standing behind?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The number I'm standing behind is **94.1%** test accuracy, averaged over five seeds, with a 212k-parameter student. That's the headline figure in the summary paragraph of Chapter 5.\n\nI should flag one thing honestly: the results table in Section 5.2, which is over three seeds, shows **93.2%** for STAGE-KD, and there's a note in the draft that the summary paragraph may be from an older 40-keyword run and still needs reconciling with the table. So the 94.1% is what I'm presenting, but I'd want to confirm it against the table before I'd call it final."
+  },
+  {
+   "jid": "cd3b0e3698c2",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Your older patients didn't benefit, so really this is an intervention for younger people.",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's not what the data show. The overall effect is a 6.5 percentage point increase in attendance, with an adjusted odds ratio of 1.41. In patients aged 65 and over the odds ratio was 1.09 with a confidence interval of 0.81 to 1.47, so it isn't significant, but that subgroup was only 412 appointments and the trial wasn't powered for subgroup analysis. The summary is explicit that the weaker estimate may reflect lower mobile phone use or simply the small subgroup, and the data can't distinguish those. So I'd say the honest reading is that we can't conclude older patients don't benefit, only that this pilot couldn't detect an effect in them."
+  },
+  {
+   "jid": "c39a6c892ef0",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Five runs isn't many.",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Five seeds is what the setup specifies, and it's a real limit, which is why it's in the limitations section. The reason I didn't lean on a seed-level test is that five samples is too few for that to be informative, so the significance test is a paired bootstrap over test utterances with 10,000 resamples, pooling the five seeds, and that gives p less than 0.01. The ablations use three seeds, which I flag as a further limitation."
+  },
+  {
+   "jid": "02ce448ba6f9",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "shorter",
+   "conversation": [
+    "USER (typed to Natively): examiner says my ablation is underpowered. draft something I can say out loud, honest but not defensive",
+    "NATIVELY: You're right that the ablation is underpowered. It used three seeds, and the differences between variants are small relative to seed variance, so I've treated those numbers as indicative rather than conclusive. The main STAGE-KD versus standard KD comparison is stronger: a paired bootstrap over test utterances with ten thousand resamples, pooled across five seeds, and that difference is significant at p below 0.01. What I'd flag myself is that the bootstrap wasn't corrected for multiple comparisons across the ablation variants, so I'd want more seeds before making a firm claim about which stage contributes most."
+   ],
+   "evidence_ids": [
+    "DSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "You're right that the ablation is underpowered. It used three seeds because of compute limits, and the differences between variants are small relative to seed variance, so I've treated those numbers as indicative rather than conclusive. The main STAGE-KD versus standard KD comparison is stronger: a paired bootstrap over test utterances with ten thousand resamples, pooled across five seeds, significant at p below 0.01. What I'd flag myself is that the bootstrap wasn't corrected for multiple comparisons across the ablation variants, so I'd want more seeds before claiming which stage contributes most."
+  },
+  {
+   "jid": "d18b1a34b2b2",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "examiner says my ablation is underpowered. draft something I can say out loud, honest but not defensive",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "You're right that the ablation is underpowered. It used three seeds, and the differences between variants are small relative to seed variance, so I've treated those numbers as indicative rather than conclusive. The main STAGE-KD versus standard KD comparison is stronger: a paired bootstrap over test utterances with ten thousand resamples, pooled across five seeds, and that difference is significant at p below 0.01. What I'd flag myself is that the bootstrap wasn't corrected for multiple comparisons across the ablation variants, so I'd want more seeds before making a firm claim about which stage contributes most."
+  },
+  {
+   "jid": "fc548c94d3e1",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Twelve weeks is nothing.",
+   "conversation": [
+    "EXAMINER (heard): Let me push on the design. The clinics volunteered, didn't they? So you've got the keen ones in both arms, the staff knew which arm they were in, and nobody was blinded. How much of that six and a half point gap do you actually trust?",
+    "NATIVELY: You're right on all three counts, and the summary lists them as limitations: clinics volunteered, staff weren't blinded, and the design can't separate the two reminders. So I'd treat the 6.5 points as the upper end of what's plausible, not a clean effect. The adjusted odds ratio is 1.41 with a wide interval, 1.12 to 1.77, and that's the honest range.",
+    "EXAMINER (heard): So how would you fix that next time?",
+    "NATIVELY: The summary's next steps already point at the fix: randomise from all 31 district clinics rather than the 14 that volunteered, run it for 12 months instead of 12 weeks, and test the 48-hour and 3-hour reminders as separate arms so we can tell them apart. I'd add blinding of clinic staff where it's feasible, and stratify by income and employment, which we didn't do."
+   ],
+   "evidence_ids": [
+    "DSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Twelve weeks is short, and that's exactly why the summary flags duration as a limitation. The next steps call for 12 months instead, which would let the effect settle and catch anything that only shows up over time. So I'd treat the 12-week result as a signal worth following up, not a final answer."
+  },
+  {
+   "jid": "a7153d2ea66c",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Let me push on the design. The clinics volunteered, didn't they? So you've got the keen ones in both arms, the staff knew which arm they were in, and nobody was blinded. How much of that six and a half point gap do you actually trust?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "You're right on all three counts, and the summary lists them as limitations: clinics volunteered, staff weren't blinded, and the design can't separate the two reminders. So I'd treat the 6.5 points as the upper end of what's plausible, not a clean effect. The adjusted odds ratio is 1.41 with a wide interval, 1.12 to 1.77, and that's the honest range."
+  },
+  {
+   "jid": "5ef9999c8641",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Right. General question then: why bother with a held-out test set at all when you could just cross-validate everything?",
+   "conversation": [
+    "EXAMINER: Is the projector okay for people at the back? Can everyone read the axis labels?",
+    "USER (spoken): I can make the slides bigger if that helps.",
+    "EXAMINER: No, it's fine. And coffee is at half ten, by the way."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Cross-validation reuses every point for both fitting and scoring, so the estimate is still tied to the data you tuned on. A held-out set is the one thing you never touch until the end, which is what makes it an honest check on the final model. In my work I use cross-validation for model selection and keep a separate test set for the final number."
+  },
+  {
+   "jid": "09a13d0f66ba",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "For the non-specialists in the room, what is knowledge distillation, in a sentence or two?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Knowledge distillation is when a smaller model is trained to copy the behaviour of a larger one, learning from its outputs rather than from scratch. The small model picks up the big model's answers and, ideally, its generalisations, so you get most of the accuracy at a fraction of the size and cost.\n\nThat's the general idea, not something from the seminar materials."
+  },
+  {
+   "jid": "d7483dba6a2a",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Thanks, really enjoyed that. How long did the whole project take you, start to finish?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Thanks. The honest answer is that it ran longer than the work itself, because most of the time went into the parts that don't show up in the final result. I'd rather not put a number on it that I can't stand behind, so let me check the timeline and get back to you with the actual start and end dates."
+  },
+  {
+   "jid": "5d5c9fdd3b82",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What's the correlation between your particle counts and the plant's discharge volume on the sampling days?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "We couldn't test that. We didn't have access to the plant's discharge records, so the particle counts couldn't be related to effluent volume on the sampling days. That's listed as a limitation on slide 11, and it's why the conclusion recommends repeat sampling with paired water samples."
+  },
+  {
+   "jid": "3eaedbae6592",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Per gram?",
+   "conversation": [
+    "EXAMINER (heard): So downstream mussels have about twice the plastic, that's the gist?",
+    "NATIVELY: Yes, that's the gist. Downstream mussels carried roughly double the load, both by count, 7.1 versus 3.8 particles per individual, and by tissue weight, 0.83 versus 0.42 particles per gram. That's from slide 12, with the underlying numbers on slides 7 and 8."
+   ],
+   "evidence_ids": [
+    "DSEM-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, per gram of wet tissue. Upstream was 0.42 particles per gram and downstream 0.83, so roughly double. That's slide 8, and the per-individual counts are on slide 7."
+  },
+  {
+   "jid": "7d4dff06e377",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "chair wants the bottom line in one sentence, give it to me",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two timed SMS reminders raised attendance by 6.5 percentage points, from 71.9% to 78.4%, with an adjusted odds ratio of 1.41, though the wide confidence interval and the 14 volunteer clinics mean this is promising rather than definitive."
+  },
+  {
+   "jid": "e8f8064842f6",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "the chair wants me to open with thirty seconds on my background and experience before questions, write it for me",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "Thanks for the chance to open. I'll keep this brief and then take questions. My work sits at the intersection of the problem this thesis addresses, and I've spent the past stretch of my career building toward it, first through the foundations and then through the specific methods and questions that shaped this project. What I want to do in the next half hour is walk you through what I set out to understand, how I approached it, and what I found. I'll leave the details for your questions."
+  },
+  {
+   "jid": "143886e24274",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Why mixed effects rather than a plain chi-square on attendance?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Because appointments within the same clinic aren't independent. A plain chi-square treats all 2,406 appointments as if they were separate observations, which overstates precision. The mixed-effects model with a clinic random intercept accounts for that clustering, and it also lets us adjust for age band, sex and appointment type."
+  }
+ ]
+}

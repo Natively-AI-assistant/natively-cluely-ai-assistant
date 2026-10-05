@@ -9,11 +9,14 @@ import {
   type StructuredProfileFacts,
 } from './manualProfileIntelligence';
 import type { AnswerType } from './AnswerPlanner';
+import { stripUnsupportedDerivedResumeFields } from '../context-intelligence/retrieval/profile-derived-support';
 
 type MaybeStructured<T> = T | null | undefined;
 
 interface StructuredDocument<T> {
   structured_data?: MaybeStructured<T>;
+  /** Raw parsed document text (knowledge_documents.raw_text), when stored. */
+  raw_text?: string | null;
 }
 
 export interface ProfileAnswerBackendOrchestrator {
@@ -46,9 +49,15 @@ export interface BuildManualProfileBackendAnswerResult {
   profileFactsReady: boolean;
 }
 
+// Derived-evidence hygiene (2026-09-30): the same rule the V3 profile port
+// applies — a project description the extractor wrote, not found in the raw
+// résumé text, and placeholder identity values are not the candidate's facts.
 const activeResumeFacts = (
   orchestrator?: ProfileAnswerBackendOrchestrator | null,
-): MaybeStructured<StructuredProfileFacts> => orchestrator?.activeResume?.structured_data ?? null;
+): MaybeStructured<StructuredProfileFacts> => stripUnsupportedDerivedResumeFields(
+  orchestrator?.activeResume?.structured_data ?? null,
+  orchestrator?.activeResume?.raw_text,
+);
 
 const activeJobFacts = (
   orchestrator?: ProfileAnswerBackendOrchestrator | null,

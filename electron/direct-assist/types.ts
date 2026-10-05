@@ -14,6 +14,7 @@ export const DIRECT_ASSIST_PROVIDERS = [
   'nvidia_nim',
   'openrouter',
   'fluxion',
+  'agentrouter',
   'litellm',
   'ninerouter',
   'ollama',
@@ -170,6 +171,14 @@ export interface DirectAssistRequest {
   readonly requestedLanguage: string | null;
   readonly requestedFormat: string | null;
   readonly maxContextChars: number;
+  /**
+   * Everything the model may be sent, in characters (context window less its
+   * output budget). The user prompt is fitted to `maxContextChars`; what is
+   * left of this is the room the system prompt has.
+   */
+  readonly modelInputChars?: number;
+  /** A small local model: it gets the short form of any optional contract. */
+  readonly smallModel?: boolean;
 }
 
 export interface DirectAssistPreparedPrompt {
@@ -249,10 +258,40 @@ export const DIRECT_ASSIST_ERROR_CODES = [
 
 export type DirectAssistErrorCode = typeof DIRECT_ASSIST_ERROR_CODES[number];
 
-export interface DirectAssistErrorPayload {
+/**
+ * What can be said about a failure beyond its code. `detail` is the one field
+ * on this contract that may hold provider text: one line, keys removed, at
+ * most 240 characters — see describeDirectAssistFailure. Both are absent when
+ * there is nothing to add.
+ */
+export interface DirectAssistFailureInfo {
+  readonly status?: number;
+  readonly detail?: string;
+  /** The provider was never reached (offline, connection refused). */
+  readonly unreachable?: true;
+}
+
+/** One provider that was tried and failed, with its own reason. */
+export interface DirectAssistAttemptFailure extends DirectAssistFailureInfo {
+  readonly provider: DirectAssistProvider;
+  readonly model: string;
+  readonly reason: DirectAssistErrorCode;
+  /** How long it was given, retries included. */
+  readonly waitedMs: number;
+}
+
+export interface DirectAssistErrorPayload extends DirectAssistFailureInfo {
   readonly code: DirectAssistErrorCode;
+  /** A fixed sentence of ours. Never provider text. */
   readonly message: string;
   readonly retryable: boolean;
+  /**
+   * Present only when the ladder walked MORE than one provider and none
+   * answered: every provider actually tried, in order. `code`, `message` and
+   * the fields above still describe the first one — the user's selection. A
+   * provider the time budget refused to open is not listed: it did not fail.
+   */
+  readonly attempts?: readonly DirectAssistAttemptFailure[];
 }
 
 export type DirectAssistStreamEvent =
@@ -282,9 +321,17 @@ export type DirectAssistStreamEvent =
       readonly sequence: number;
       readonly from: { readonly provider: DirectAssistProvider; readonly model: string };
       readonly to: { readonly provider: DirectAssistProvider; readonly model: string };
-      /** Why the previous rung was abandoned. Content-free, like every other
-       *  field on this contract. */
+      /** Why the previous rung was abandoned, as a code. */
       readonly reason: DirectAssistErrorCode;
+      /** The same failure's HTTP status, when the provider gave one. */
+      readonly status?: number;
+      /** The provider's own explanation — see DirectAssistFailureInfo. Absent
+       *  when the rung was ended by our own timeout: it said nothing. */
+      readonly detail?: string;
+      /** How long the previous rung was given, retries included. */
+      readonly waitedMs: number;
+      /** The previous rung was never reached at all. */
+      readonly unreachable?: true;
     }
   | {
       readonly type: 'done';

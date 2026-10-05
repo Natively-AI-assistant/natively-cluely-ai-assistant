@@ -65,6 +65,14 @@ export interface RetrievalAttemptTrace {
   rejections?: Array<{ sourceId: string; reason: string; documentTitle?: string; documentStatus?: string }>;
   durationMs: number;
   failed?: string;
+  /**
+   * The pass SUCCEEDED but without its semantic arm (2026-09-30): the query
+   * embed hard-failed mid-turn ('hybrid_threw'), no embedder was available
+   * ('embedding_unavailable'), or the bundled local embedder is lexical-only
+   * during a meeting ('local_lexical'). Distinct from `failed`, which means no
+   * candidates could be produced at all.
+   */
+  degraded?: string;
 }
 
 export interface ClaimTrace {

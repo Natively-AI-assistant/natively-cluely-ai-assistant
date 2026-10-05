@@ -40,7 +40,9 @@ export type AutoAnswerEndpointSource =
     | 'utterance_end'
     | 'vad'
     | 'quiet_window'
-    | 'semantic';
+    | 'semantic'
+    // A stalled interim promoted to stand in for its final (SimpleAutoAnswer STALL_PROMOTE_MS).
+    | 'stt_stall';
 
 export type AutoAnswerPace = 'fast' | 'balanced' | 'relaxed';
 
@@ -111,6 +113,9 @@ export type AutoAnswerSkipReason =
     | 'cooldown'
     | 'stale_generation'
     | 'queue_full'
+    // A question already ruled NOT an ask came back inside a later candidate
+    // (someone replied to it) and the judge answered it this time.
+    | 'already_ruled_out'
     // ── RETIRED 2026-09-03: the user channel is inert ─────────────────────
     // Nothing emits these three any more. The user answers the moment the
     // question lands, so their own speech no longer suppresses, cancels or

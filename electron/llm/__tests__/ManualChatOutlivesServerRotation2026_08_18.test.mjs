@@ -118,12 +118,18 @@ test('the phone-mirror call site passes BOTH route flags', () => {
     /firstUsefulDeadlineMs\(\s*'general_meeting_answer'\s*,\s*phoneUsingLocalLlm\s*,\s*phoneViaServerCascade\s*[,)]/.test(codeOnly),
     'the phone-mirror handler must pass isLocal AND viaServerCascade into firstUsefulDeadlineMs (CR-05)',
   );
+  // Both read through the phone answer's own view (LLMHelper.textTurn, keyed
+  // by the signal its answer call carries) since 2026-09-26, like manual chat.
   assert.ok(
-    /phoneViaServerCascade\s*=\s*llmHelper\.isUsingNativelyServerCascade\?\.\(\)\s*===\s*true/.test(codeOnly),
+    /const phoneLlm = llmHelper\.textTurn\?\.\(phoneController\.signal\) \?\? llmHelper;/.test(codeOnly),
+    'the phone route reads must come from this answer\'s view of the helper',
+  );
+  assert.ok(
+    /phoneViaServerCascade\s*=\s*phoneLlm\.isUsingNativelyServerCascade\?\.\(\)\s*===\s*true/.test(codeOnly),
     'phone viaServerCascade must come from the same LLMHelper route predicate as manual chat',
   );
   assert.ok(
-    /phoneUsingLocalLlm\s*=\s*llmHelper\.isUsingOllama\(\)\s*\|\|\s*llmHelper\.isUsingCodexCli\(\)/.test(codeOnly),
+    /phoneUsingLocalLlm\s*=\s*phoneLlm\.isUsingOllama\(\)\s*\|\|\s*phoneLlm\.isUsingCodexCli\(\)/.test(codeOnly),
     'phone isLocal must be derived the same way as manual chat, or a cold local load aborts at 7s',
   );
 

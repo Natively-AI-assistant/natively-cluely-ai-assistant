@@ -5,6 +5,13 @@
  */
 export const FLUXION_REFERRAL_URL = 'https://fluxionai.world/register?source=github&campaign=natively&promo=NATIVELY';
 
+/**
+ * AgentRouter's "Get API key" link on its provider card — Natively's own
+ * referral code (`aff=9ZCx`), as Evin supplied it. Not the `aff=IPN5` code in
+ * AgentRouter's docs navigation, which is someone else's.
+ */
+export const AGENTROUTER_REFERRAL_URL = 'https://agentrouter.org/register?aff=9ZCx';
+
 /** Inbound address for advertising and sponsorship enquiries. */
 export const SPONSORSHIP_EMAIL = 'natively.contact@gmail.com';
 

@@ -1,0 +1,722 @@
+{
+  "mode": "lecture",
+  "partition": "holdout",
+  "contexts": [
+    {
+      "id": "HLEC-CTX-G1",
+      "kind": "grounded",
+      "title": "ECON 214 Lecture 9 slides: Price Discrimination",
+      "file_name": "econ214-lecture09-price-discrimination.txt",
+      "text": "ECON 214 - Intermediate Microeconomics\nLecture 9: Price Discrimination\nInstructor: Prof. Dalia Ferreira-Stone. Slides v2, posted after class.\n\n1. Why firms price discriminate\n- A single-price monopolist leaves consumer surplus on the table and creates deadweight loss (DWL).\n- Three conditions must all hold: market power, a way to sort buyers (or let them sort themselves), and no resale (arbitrage blocked).\n- Prof's phrase for the third condition: \"the resale wall.\" If the resale wall comes down, every scheme collapses back to a single price, because low-price buyers resell to high-price buyers until the prices meet.\n\n2. The three degrees (course convention - use these labels on exams)\n- First degree (perfect): each unit is sold at that buyer's reservation price. Consumer surplus = 0, output equals the competitive quantity, DWL = 0.\n- Second degree: the price depends on the quantity or version bought (block pricing, bundles, \"good / better / best\" tiers). Buyers self-select from one menu that is offered to everyone.\n- Third degree: different prices to observably different groups (students, seniors, regions). Rule: set MR in each market equal to the common MC. The group with less elastic demand pays the higher price.\n\n3. Worked example (Slide 14) - the Lakeview Ferry\n- Tourist demand: P = 120 - 2Q. Commuter demand: P = 60 - Q.\n- MC = 20 for both groups; no fixed cost in this example.\n- Tourists: MR = 120 - 4Q = 20, so Q = 25 and P = 70.\n- Commuters: MR = 60 - 2Q = 20, so Q = 20 and P = 40.\n- Total profit = (70 - 20)(25) + (40 - 20)(20) = 1250 + 400 = 1650.\n- The ferry enforces the split by checking commuter passes at the gate.\n- Compare with the single-price case in Problem Set 4, Q3. You compute the uniform price yourself. Do not assume it is the average of 70 and 40, and remember that the aggregate demand curve has a kink.\n\n4. The inverse elasticity check (Slide 16)\n- Lerner index: (P - MC)/P = -1/Ed, where Ed is the price elasticity of demand at the chosen point.\n- Tourists: (70 - 20)/70 = 0.714, so |Ed| = 1.4.\n- Commuters: (40 - 20)/40 = 0.5, so |Ed| = 2.\n- Prof: \"If your Lerner numbers don't match the elasticities you computed from the demand curves, you made an algebra error, not a conceptual one.\"\n\n5. Welfare - what is on the exam\n- Third-degree discrimination can raise or lower total welfare compared with a single price.\n- A necessary condition for a welfare gain is that total output rises. The prof calls this \"the output test.\" If output stays the same or falls, welfare cannot have gone up.\n- Do NOT write that price discrimination is always inefficient; that answer loses points.\n- Second degree: menus are designed so high-value buyers don't pick the low tier. This is the incentive-compatibility constraint. We cover it intuitively only; the formal screening model is taught in ECON 315 and is not on this course's exams.\n\n6. Admin\n- Midterm 2: Thursday, Oct 22, in class, 75 minutes. Covers Lectures 6-10.\n- Allowed: one handwritten double-sided formula sheet and a non-graphing calculator.\n- Office hours moved to Wednesday 3-5 pm, Room HB 211, this week only.\n- Problem Set 4 is due Monday before class.\n- Next lecture (10): two-part tariffs and the \"Disneyland dilemma.\"",
+      "notes": null
+    },
+    {
+      "id": "HLEC-CTX-G2",
+      "kind": "grounded",
+      "title": "CS 3410 Lecture 12 notes: Page Replacement and Thrashing",
+      "file_name": "cs3410-lecture12-page-replacement.txt",
+      "text": "CS 3410 - Operating Systems\nLecture 12: Page Replacement, Working Sets, and Thrashing\nProf. Emeka Lindqvist. Lecture notes posted by the course staff.\n\n1. The problem\n- When memory is full, a page fault forces the kernel to pick a victim frame. How it picks is the page replacement policy.\n- Cost model for this course: a hit costs 100 ns; a fault serviced from the SSD costs 80 microseconds.\n- Prof: \"One fault in a thousand references nearly doubles your effective access time. Faults are not a rounding error.\"\n\n2. The policies we compare\n- OPT (Belady's MIN): evict the page whose next use is furthest in the future. Not implementable; used only as a yardstick.\n- FIFO: evict the page that was loaded earliest. Simple, and it suffers from Belady's anomaly.\n- LRU: evict the page unused for the longest time. LRU is a stack algorithm, so it never shows Belady's anomaly. Exact LRU needs a timestamp or a list update on every memory reference, which no real MMU provides.\n- Clock (second chance): frames sit in a circle with one use bit per frame, set by the hardware whenever the page is referenced. On a fault the hand sweeps: if the use bit is 1, clear it and advance; if it is 0, evict that page. A newly loaded page starts with its use bit set to 1.\n\n3. Slide 9 - Belady's anomaly (FIFO)\n- Reference string: 1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5\n- With 3 frames: 9 faults. With 4 frames: 10 faults.\n- \"More memory, more faults\" can only happen for policies that are not stack algorithms.\n\n4. Slide 11 - in-class trace (3 frames, all empty at the start)\n- Reference string: 7, 0, 1, 2, 0, 3, 0, 4, 2, 3\n- Results: FIFO: 9 faults. LRU: 8 faults. Clock: 7 faults.\n- Yes, Clock beat LRU on this string. Prof: \"Clock approximates LRU on average, not on every string. Don't write that Clock is always worse than LRU.\"\n- Clock trace convention for this course: empty frames are filled in order starting at frame 0; the hand starts at frame 0; after any replacement the hand points to the frame after the one just filled.\n\n5. Working sets and thrashing\n- Working set W(t, Delta): the set of distinct pages referenced in the last Delta references. In this course Delta = 10,000 references unless a problem says otherwise.\n- Thrashing: the sum of the working set sizes exceeds the number of physical frames, so processes spend more time faulting than running. CPU utilization drops, a naive scheduler admits more processes to use the idle CPU, and things get worse.\n- Page fault frequency (PFF): give a process more frames when its fault rate is above an upper bound, take frames away when it is below a lower bound.\n- Tern (our teaching kernel, used in Lab 5): the thrash monitor suspends the process with the largest resident set when the system-wide fault rate exceeds 1 fault per 500 references for 3 consecutive sampling windows.\n\n6. Exam notes\n- Final exam: you will trace Clock by hand on a new string. Show the use bits and the hand position after every fault.\n- Enhanced second chance (use bit plus dirty bit, four classes) was mentioned for context only and is NOT on the final.\n- Know why LRU has no Belady's anomaly (the stack property). You do not need the proof.\n- Lab 5 is due Friday at 11:59 pm. The autograder checks your thrash monitor against the Tern rule above.",
+      "notes": null
+    },
+    {
+      "id": "HLEC-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Riverside Hall residents newsletter (October)",
+      "file_name": "riverside-hall-newsletter-oct.txt",
+      "text": "Riverside Hall Residents' Newsletter - October\n\nLaundry room update: The basement laundry room will be closed Monday through Wednesday next week while facilities replaces two dryers and the lint vent. The machines in Harbor Hall across the courtyard are open to Riverside residents with your ID card during the closure.\n\nQuiet hours: Starting this month, weeknight quiet hours begin at 10 pm instead of 11 pm on floors two through four, after a vote at the September floor meeting. Weekend quiet hours are unchanged.\n\nBike storage: The covered bike cage behind the east entrance has new locks. Registered bikes need a new orange tag from the front desk by October 20; untagged bikes will be moved to the overflow rack by the parking lot.\n\nPumpkin night: The Hall Council is hosting pumpkin carving in the ground floor lounge on the last Friday of the month from 7 to 9 pm. Pumpkins, cider and carving kits are provided while supplies last. Sign up on the sheet by the mailboxes.\n\nLost and found: A blue umbrella, a set of keys on a green lanyard and a graphing calculator are waiting at the front desk. Items not claimed by November 1 will be donated.",
+      "notes": null
+    },
+    {
+      "id": "HLEC-CTX-C1",
+      "kind": "conflicting",
+      "title": "ECON 214 Midterm 2 cheat notes (unofficial, classmate)",
+      "file_name": "econ214-midterm2-cheat-notes.txt",
+      "text": "ECON 214 Midterm 2 cheat notes (unofficial, from a classmate's shared drive)\n\nMidterm 2 is Thursday Oct 22. Covers Lectures 6-9.\n\nPrice discrimination basics\n- You need market power, a way to separate buyers, and no resale.\n- First degree: every buyer pays their reservation price. Consumer surplus = 0 and deadweight loss is at its maximum here.\n- Second degree: different prices for different groups like students vs seniors.\n- Third degree: set MR = MC in each market. Charge the higher price to the group with MORE elastic demand since they respond more.\n\nLakeview Ferry (slide 14)\n- Tourists: P = 120 - 2Q, commuters: P = 60 - Q, MC = 20.\n- Tourists: Q = 25, P = 70. Commuters: Q = 20, P = 40.\n- Profit = 1650.\n- Single price: it's just the average of the two prices, so 55. Easy marks.\n- Reminder: tourists pay 80 because tourist demand is less elastic, commuters pay 40.\n\nWelfare\n- Price discrimination is always inefficient compared with a single price, so just write that on the exam.\n- Output test: if output goes up, welfare definitely goes up.\n- Third degree: less elastic group pays more (this is the one that shows up every year).\n\nLerner index\n- (P - MC)/P = 1/Ed. Tourists come out to about 0.71.\n\nLogistics\n- Midterm is Tuesday Oct 24, 90 minutes, same room.\n- One formula sheet, single-sided, typed is fine.\n- Anything through lecture 10 is fair game according to the TA.\n- Bring a calculator, graphing is okay I think.\n\nScreening model (the incentive compatibility stuff) - this is definitely on the exam, practice the full derivation.",
+      "notes": "Internal contradictions: exam date Thu Oct 22 vs Tue Oct 24 (and 90 vs no stated length); coverage Lectures 6-9 vs through lecture 10; third degree higher price to MORE elastic group vs less elastic group pays more; tourist ferry price 70 vs 80 (profit 1650 only fits one); formula sheet rules differ from the official slides. Also states claims the official slides reject: uniform price = average of the two prices, price discrimination always inefficient, output rising guarantees a welfare gain, first degree has maximal DWL, second degree defined as group pricing, Lerner sign dropped, screening model on the exam."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "HLEC-001",
+      "category": "terminology",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "what's a monopsony",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn"
+      ],
+      "expected_answer_type": "brief definition with a quick example",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-002",
+      "category": "scientific",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So the reason the sky looks blue and not violet, even though violet light scatters more, comes down to two separate things. Think about what they are before Thursday.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "explanation of both reasons for the student",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-003",
+      "category": "historical",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "People will tell you the Peace of Westphalia invented state sovereignty in 1648. I think that's mostly a story nineteenth-century lawyers told about themselves, and I want you to be suspicious of it.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "judgment"
+      ],
+      "expected_answer_type": "context on the standard view and the critique",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-004",
+      "category": "formula",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "write out the lerner index check she did for the ferry and what the two numbers tell me",
+      "context_condition": "grounded",
+      "context_ref": "HLEC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "formula walkthrough using the slide numbers",
+      "claim_trap": "none",
+      "needles": [
+        "0.714",
+        "|Ed| = 2"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-005",
+      "category": "professor_meaning",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "So remember, once the resale wall comes down, all of this is moot.",
+      "context_condition": "grounded",
+      "context_ref": "HLEC-CTX-G1",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "The commuter fare only works because they check your commuter pass at the gate."
+        },
+        {
+          "speaker": "other",
+          "text": "If a commuter could buy ten tickets at forty and sell them to tourists on the dock, what happens to the tourist price?"
+        },
+        {
+          "speaker": "user",
+          "text": "it goes down?"
+        },
+        {
+          "speaker": "other",
+          "text": "It goes down until it hits the commuter price. Exactly."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "explanation of the professor's phrase for the student",
+      "claim_trap": "none",
+      "needles": [
+        "collapses back to a single price",
+        "arbitrage blocked"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-006",
+      "category": "business_econ",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "ok for the ferry example: why do tourists pay more, would total output be higher or lower than if the ferry charged everyone one price, and does that mean welfare went up or down? walk me through each part",
+      "context_condition": "grounded",
+      "context_ref": "HLEC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "stepwise worked explanation covering all three parts",
+      "claim_trap": "none",
+      "needles": [
+        "output test",
+        "MC = 20"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-007",
+      "category": "exam_relevance",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "do we need enhanced second chance for the final",
+      "context_condition": "grounded",
+      "context_ref": "HLEC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn"
+      ],
+      "expected_answer_type": "direct yes/no on exam scope with what to study",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "NOT on the final"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-008",
+      "category": "derivation",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "I'll leave the derivation of the Black-Scholes PDE from the replicating portfolio to you. It's three lines if you're careful with Ito's lemma.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "step-by-step derivation for the student",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-009",
+      "category": "didnt_understand",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "wait what",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "An eigenvector of a matrix is a direction that the matrix only stretches or shrinks. It doesn't change direction."
+        },
+        {
+          "speaker": "other",
+          "text": "The eigenvalue is just the stretch factor. If it's negative, the vector flips around, but it stays on the same line."
+        },
+        {
+          "speaker": "other",
+          "text": "So when I say the matrix has eigenvalue three along this axis, I mean everything on that axis gets three times longer."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn",
+        "follow_up"
+      ],
+      "expected_answer_type": "plain re-explanation of what the professor just said",
+      "claim_trap": "none",
+      "needles": [
+        "stretch factor",
+        "stays on the same line"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-010",
+      "category": "didnt_understand",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "didn't get that",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "insufficient_info",
+        "short_turn"
+      ],
+      "expected_answer_type": "short clarifying question or admission of missing context",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-011",
+      "category": "example",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "give me a real-world example of opportunity cost that isn't about pizza or movies",
+      "context_condition": "irrelevant",
+      "context_ref": "HLEC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "one concrete everyday example with brief explanation",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-012",
+      "category": "simple_explain",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "explain entropy simply, not the messy-room disorder thing the textbook does",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "simple intuitive explanation",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-013",
+      "category": "connect_earlier",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "And this is the exact same trick we used back in lecture four, so if you remember that, today should feel easy.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "ambiguous"
+      ],
+      "expected_answer_type": "handles unknown earlier lecture without inventing its content",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-014",
+      "category": "summarize_point",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "summarize the lakeview ferry example from these notes in three bullets I can paste into my study sheet",
+      "context_condition": "conflicting",
+      "context_ref": "HLEC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "conflicting_source"
+      ],
+      "expected_answer_type": "short summary that flags inconsistent figures",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-015",
+      "category": "exam_relevance",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "when exactly is midterm 2, what does it cover, and what am I allowed to bring",
+      "context_condition": "conflicting",
+      "context_ref": "HLEC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "adversarial",
+        "conflicting_source"
+      ],
+      "expected_answer_type": "logistics answer that surfaces the contradictions",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-016",
+      "category": "example",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "she wants each of us to connect virtual memory to something from our own work experience. what should I say about mine?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "general help without asserting the student's background",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HLEC-017",
+      "category": "business_econ",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Before we move on, I'd like a couple of you to tell me where you've actually run into market power in your own jobs or internships. Anyone? Don't be shy.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "explanation or prompts without inventing personal history",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HLEC-018",
+      "category": "scientific",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Three things for Thursday. One, why does a catalyst not shift the equilibrium. Two, what does it do to the activation energy of the reverse reaction. And three, the one everyone gets wrong, why can't a catalyst make a non-spontaneous reaction go.",
+      "context_condition": "irrelevant",
+      "context_ref": "HLEC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "explanation answering all three parts",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-019",
+      "category": "cs_concept",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "You, in the back with the laptop. What's the difference between big O and big Theta? Go.",
+      "context_condition": "irrelevant",
+      "context_ref": "HLEC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion"
+      ],
+      "expected_answer_type": "concise distinction the student can grasp quickly",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-020",
+      "category": "historical",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Napoleon was famously tiny, about five foot two, which is of course where we get the Napoleon complex.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial"
+      ],
+      "expected_answer_type": "explanation that addresses the false premise",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-021",
+      "category": "cs_concept",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "explain the clock algorithm the way I'd need to trace it on the final, using the slide 11 string",
+      "context_condition": "grounded",
+      "context_ref": "HLEC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "step-by-step trace with use bits and hand",
+      "claim_trap": "none",
+      "needles": [
+        "use bit",
+        "Clock: 7 faults"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-022",
+      "category": "follow_up_clarify",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "simpler",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "shorter plainer version of previous explanation",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-023",
+      "category": "compare",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "ok now compare it to true LRU: why did clock beat LRU on that string, why don't real kernels do exact LRU, and which one does the Tern lab kernel use",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 3,
+      "tags": [
+        "follow_up",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "comparison answering each ask, flagging unknowns",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "LRU: 8 faults"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-024",
+      "category": "terminology",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "A p-value is not the probability that the null hypothesis is true. I cannot stress this enough. Something like half of all published papers get this wrong.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 1,
+      "tags": [
+        "adversarial"
+      ],
+      "expected_answer_type": "correct explanation without endorsing unsourced statistic",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-025",
+      "category": "follow_up_clarify",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Then what is it?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "precise definition building on previous turn",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-026",
+      "category": "formula",
+      "difficulty": "easy",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "If the marginal propensity to consume is point eight, then the spending multiplier follows immediately. Write that down.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "formula with the computed value",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-027",
+      "category": "derivation",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Why?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn",
+        "ambiguous"
+      ],
+      "expected_answer_type": "derivation of the multiplier formula",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-028",
+      "category": "deep_explain",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "And before anyone asks, yes, taxes and imports change that number, and real-world estimates come in a lot lower than what you just wrote. Figure out why on both counts, and what the multiplier becomes with a twenty-five percent income tax.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 3,
+      "tags": [
+        "follow_up",
+        "judgment"
+      ],
+      "expected_answer_type": "deeper explanation plus worked tax case",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-029",
+      "category": "professor_meaning",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "The Coase theorem says it doesn't matter who holds the property right, you'll get the efficient outcome either way. Lovely result. Almost never applies.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "explanation of the theorem and the professor's caveat",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HLEC-030",
+      "category": "follow_up_clarify",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Why almost never?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "reasons the assumptions fail in practice",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    }
+  ]
+}

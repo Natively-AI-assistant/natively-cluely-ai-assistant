@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
+import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipTestLabel, type AipTone } from './AIProvidersSettings';
+import { PICKER_MENU_WIDTH, Presence, RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, SwapLabel, capPickerLabel, useMotionReadyAfter } from './SettingsRow';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 // Embeddings — configured INDEPENDENTLY of the generation model.
@@ -199,6 +200,9 @@ interface EmbeddingModelSelectProps {
     ariaLabel?: string;
     /** Native tooltip — used to explain why the control is disabled. */
     title?: string;
+    /** Sizes the open menu. Defaults to fitting its options; the Active card's
+     *  picker passes w-full so the menu is exactly as wide as its button. */
+    menuClassName?: string;
 }
 
 const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
@@ -212,6 +216,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     containerClassName = AIP_ACTIVE_SELECT_CONTAINER,
     ariaLabel,
     title,
+    menuClassName = PICKER_MENU_WIDTH,
 }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
@@ -232,6 +237,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
         || (selectedOption ? (selectedOption.triggerName || selectedOption.name) : null)
         || (value && value.includes('::') ? bareModelName(value.split('::').slice(1).join('::')) : null)
         || (placeholder || t('Select model'));
+    const shownLabel = capPickerLabel(resolvedLabel);
 
     return (
         <div className={containerClassName} ref={containerRef}>
@@ -241,18 +247,18 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
                 aria-label={ariaLabel}
-                title={title}
+                title={title ?? (shownLabel !== resolvedLabel ? resolvedLabel : undefined)}
                 disabled={disabled}
                 className={`aip-select-trigger cursor-pointer flex items-center justify-between w-full ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
             >
-                <span className="truncate pr-2 text-xs">{resolvedLabel}</span>
+                <span className="truncate pr-2 text-xs">{shownLabel}</span>
                 <ChevronDown size={14} strokeWidth={1.75} className={`aip-select-chevron transition-transform duration-150 shrink-0 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
 
             {isOpen && (
                 <div
                     role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 w-full z-50 max-h-60 p-1 custom-scrollbar shadow-lg"
+                    className={`aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 ${menuClassName} z-50 max-h-60 p-1 custom-scrollbar shadow-lg`}
                 >
                     {options.map((option) => (
                         <button
@@ -267,6 +273,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
                                 setIsOpen(false);
                             }}
                             className={`aip-select-option flex items-center justify-between w-full text-left px-3 py-2 rounded-md text-xs cursor-pointer ${value === option.id ? 'aip-text font-medium' : ''}`}
+                            title={option.name}
                         >
                             <span className="truncate flex-1">{option.name}</span>
                             {value === option.id && (
@@ -323,6 +330,8 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
     const [providers, setProviders] = useState<CatalogProvider[]>([]);
     const [loaded, setLoaded] = useState(false);
+    // Keys that load with the panel land; keys saved afterwards animate in.
+    const motionReady = useMotionReadyAfter(loaded);
     const [hasCatalog, setHasCatalog] = useState<Record<string, boolean>>({});
     const [fetchingModels, setFetchingModels] = useState<string | null>(null);
     const [active, setActive] = useState<ActiveDescription>({ configured: false });
@@ -956,14 +965,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                     className="aip-btn-seg aip-field-seg"
                                     data-tone={savedKey[p.id] ? 'ok' : undefined}
                                 >
-                                    {savingKey[p.id]
-                                        ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                        : savedKey[p.id]
-                                            ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                            : t('Save')}
+                                    <AipSaveLabel saving={!!(savingKey[p.id])} saved={!!(savedKey[p.id])} dots />
                                 </button>
                             </div>
-                            {storedKeys[p.id] && (
+                            {/* Arrives with the saved key, like AI Providers' cards. */}
+                            <Presence kind="control" id={storedKeys[p.id] ? 'remove' : null} ready={motionReady} className="shrink-0">
                                 <button
                                     onClick={() => void handleRemoveKey(p.id as 'gemini' | 'openai' | 'openrouter' | 'voyage')}
                                     className="aip-btn shrink-0"
@@ -973,7 +979,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 >
                                     <Trash2 size={14} strokeWidth={1.75} />
                                 </button>
-                            )}
+                            </Presence>
                         </div>
                     </div>
                 )}
@@ -1001,11 +1007,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                     className="aip-field-seg"
                                     data-tone={endpointSaved ? 'ok' : undefined}
                                 >
-                                    {endpointSaving
-                                        ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                        : endpointSaved
-                                            ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                            : t('Save')}
+                                    <AipSaveLabel saving={!!(endpointSaving)} saved={!!(endpointSaved)} dots />
                                 </button>
                             </div>
                         </div>
@@ -1024,10 +1026,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 data-tone={testStatus[p.id] === 'success' ? 'ok' : testStatus[p.id] === 'error' ? 'danger' : undefined}
                                 title={testErrors[p.id] || t('Test Connection')}
                             >
-                                {testStatus[p.id] === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
-                                    testStatus[p.id] === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</> :
-                                        testStatus[p.id] === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
-                                            <>{t('Test Connection')}</>}
+                                <AipTestLabel status={testStatus[p.id] ?? 'idle'} />
                             </button>
                         )}
 
@@ -1101,8 +1100,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 // width belongs to.
                                 ariaLabel={target ? `${t('Output width for')} ${target.label || target.id}` : t('Output width')}
                                 title={hint}
-                                // Narrow: it holds "3072d", not a model name.
-                                containerClassName="relative shrink-0 w-[104px]"
                                 value={current ? String(current) : ''}
                                 options={(fixedWidth || !widths ? (current ? [current] : []) : widths)
                                     .map(d => ({ id: String(d), name: `${d}d` }))}
@@ -1294,7 +1291,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         onClick={() => void testLocalModel(m.id)}
                                         title={t('Measure how long one embedding takes on this device')}
                                     >
-                                        <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                        <SwapLabel id={testingLocalModelId === m.id ? 'testing' : 'test'} sizers={[t('Test'), t('Testing…')]}>
+                                            {testingLocalModelId === m.id ? t('Testing…') : t('Test')}
+                                        </SwapLabel>
                                     </button>
                                 )}
                                 {installed && !isSelected && !m.bundled && (
@@ -1321,7 +1320,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                             .filter(Boolean).join(' · ')}
                     </span>
                     {test?.latencyMs !== undefined && (
-                        <span className="text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
+                        <span className="aip-panel-fade text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
                     )}
                     {test?.error && <span className="aip-danger-fg">{test.error}</span>}
                 </div>
@@ -1331,7 +1330,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 )}
 
                 {needsLicence && (
-                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 mt-1" role="note">
+                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 !mt-2.5" role="note">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">
                             {t('Licence requires acceptance before downloading.')}
@@ -1512,8 +1511,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         </p>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="shrink-0" {...{ [RETRIEVAL_HERO_PICKER_ATTR]: '' }} style={{ minWidth: RETRIEVAL_HERO_PICKER_MIN_WIDTH }}>
                         <EmbeddingModelSelect
+                            // The menu matches the button's width; a name too
+                            // long for it truncates and shows whole on hover.
+                            menuClassName="w-full"
                             value={activeOptionId}
                             displayLabel={activeDisplayLabel}
                             options={activeOptions}

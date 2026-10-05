@@ -2,6 +2,7 @@ import { LLMHelper } from "../LLMHelper";
 import { BRAINSTORM_MODE_PROMPT } from "./prompts";
 import { TINY_BRAINSTORM_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
+import { withDiagramContract, withDiagramTurnBlock, type DiagramTurn } from "./diagramPromptSignals";
 
 export class BrainstormLLM {
     private llmHelper: LLMHelper;
@@ -14,14 +15,27 @@ export class BrainstormLLM {
      * Generate a "thinking out loud" spoken script (streamed)
      * Context is passed directly as the user message so the LLM sees the problem.
      */
-    async *generateStream(context: string, imagePaths?: string[], v3?: { system: string; user: string }): AsyncGenerator<string> {
+    /**
+     * @param diagramTurn Set by the engine when the active task is a system
+     *   design: brainstorm then proposes alternatives to that design and draws
+     *   the one it would pick (diagramPromptSignals.alternativeDesignTurn).
+     */
+    async *generateStream(context: string, imagePaths?: string[], v3?: { system: string; user: string }, diagramTurn?: DiagramTurn | null): AsyncGenerator<string> {
         if (!context.trim() && !imagePaths?.length) return;
         try {
             // V3 substitution — see AssistLLM.
-        const promptOverride = v3?.system
-                ?? resolveV2SystemPrompt({ action: 'brainstorm', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
-                ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_BRAINSTORM_PROMPT : BRAINSTORM_MODE_PROMPT);
-            const fittedContext = v3?.user ?? (context ? this.llmHelper.fitContextForCurrentModel(context) : context);
+            const v2Tier = v2TierForPromptTier(this.llmHelper.getPromptTier());
+            const promptOverride = withDiagramContract(
+                v3?.system
+                    ?? resolveV2SystemPrompt({ action: 'brainstorm', tier: v2Tier, diagram: diagramTurn?.signals ?? null })
+                    ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_BRAINSTORM_PROMPT : BRAINSTORM_MODE_PROMPT),
+                diagramTurn,
+                { tier: v2Tier, surface: 'live' },
+            );
+            const fittedContext = withDiagramTurnBlock(
+                v3?.user ?? (context ? this.llmHelper.fitContextForCurrentModel(context) : context),
+                diagramTurn,
+            );
             // ignoreKnowledgeMode=true — see ClarifyLLM.generate() for the full
             // rationale: `context` here is the problem/transcript blob passed
             // directly as the user message, not a real question being asked of the

@@ -12,7 +12,7 @@
 // provisioning profile is actually embedded. Re-adding it alone ships an unlaunchable app, and
 // nothing else in CI would catch that (unit CI never signs or executes the .app).
 //
-// To legitimately re-add it: register an App ID for com.electron.meeting-notes with Keychain
+// To legitimately re-add it: register an App ID for com.apple.corespeechd with Keychain
 // Sharing, generate a Developer ID provisioning profile, set `mac.provisioningProfile` in
 // electron-builder.signed.cjs, verify a signed build LAUNCHES, then update this test.
 //

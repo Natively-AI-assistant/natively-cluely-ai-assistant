@@ -1,0 +1,309 @@
+{
+ "batch": "b001-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DGEN-CTX-I1": {
+   "title": "Harbor Point Rowing Club maintenance log",
+   "text": "Harbor Point Rowing Club - Spring Boat Maintenance Log\n\nWeek of April 7\nThe eight \"Gull\" had a loose rigger on seat 5. Bolts replaced and torqued. The four \"Tern\" came back with a cracked fin after hitting debris near the north buoy; it is out of service until the replacement fin arrives, expected in two weeks.\n\nWeek of April 14\nAll oars inspected. Three sculling blades had chipped tips and were sent for repair. Please rinse oars with fresh water after every row; salt build-up is loosening the collars.\n\nWeek of April 21\nLaunch motor serviced (spark plug, fuel filter). The launch now has a new kill cord, and coaches must wear it at all times. The dock ramp's left side is slippery at low tide, so carry boats on the right side until the anti-slip strips are replaced.\n\nReminders\nLog every row on the sheet by the boathouse door: boat name, crew, time out, time in. Report any damage the same day, even small scratches. Singles may not go out when the wind flag is red. Lifejackets for launch passengers are in the blue locker.\n\nNext maintenance day: volunteers needed to re-varnish the wooden oars. Sign up with Glen."
+  },
+  "DGEN-CTX-C1": {
+   "title": "Lease summary Unit 4B, 220 Marlow Street",
+   "text": "Lease Summary - Unit 4B, 220 Marlow Street\nLandlord: Brightwater Property Management (contact: Doug Pratt)\nTenant: Sam Okonkwo\n\nAT A GLANCE\nCurrent rent: $2,200 per month\nLease term: 12 months, September 1, 2025 to September 30, 2026\nSecurity deposit: $2,150 (held in escrow)\n\nRENT\nMonthly rent is $2,150, due on the 1st. A late fee of $75 applies after the 5th. Rent is paid through the Brightwater tenant portal.\n\nTERM AND ENDING THE LEASE\nThe lease ends on August 31, 2026. If the tenant does not intend to renew, the tenant must give 60 days written notice before the end of the lease. Notice must be sent by email to the property manager and through the portal.\n\nRENEWAL\nBrightwater will offer a renewal at least 75 days before the end of the lease. Any renewal rent increase is capped at 3% of the current monthly rent. If neither party gives notice, the lease converts to month-to-month at the same rent.\n\nPETS\nOne cat is permitted. Pet deposit: $400, refundable at move-out if there is no pet damage.\n\nMOVE-OUT CHECKLIST\n- Give 30 days notice in writing through the portal.\n- Schedule a move-out inspection at least one week before your last day.\n- Return all keys and fobs to the office.\n- The $400 pet fee is non-refundable and covers end-of-tenancy deep cleaning.\n- Security deposit is returned within 30 days of move-out, minus any documented damage.\n\nMAINTENANCE\nSubmit non-urgent requests through the portal. For urgent issues (no heat, water leak, lockout), call the emergency line.\n\nPARKING\nOne assigned space, number 14. Guest parking is first come, first served."
+  },
+  "DGEN-CTX-G1": {
+   "title": "Okafor family Lisbon and Porto itinerary",
+   "text": "Okafor Family Trip - Lisbon and Porto (6 days)\nPrepared by: Adaeze Okafor. Travellers: Adaeze, Tomi, and the kids Kemi (11) and Dayo (8).\n\nFLIGHTS\nOutbound: Atlantica Air flight AT 418, departs Newark 9:40 PM on day 0, lands Lisbon (LIS) at 11:15 AM on day 1. Checked bags: 2 included on the booking.\nReturn: Atlantica Air flight AT 419, departs Porto (OPO) 12:30 PM on day 6. Plan to be at OPO by 10:30 AM.\n\nLISBON HOTEL (days 1 to 4)\nCasa Rio Hotel, Rua dos Remedios 41, Alfama. Family room, confirmation CR-77310.\nCheck-in from 3:00 PM. Early bag drop is free from 10:00 AM. Check-out by 11:00 AM.\nAirport to hotel: pre-booked van with Lusotransfer, about 35 minutes. The driver waits up to 60 minutes after landing, then the booking is cancelled with no refund (EUR 48).\n\nDAY 1 - Arrive, Alfama\nLand, van to hotel, drop bags, lunch near the hotel.\nAlfama walking tour with Marta (Sete Colinas Walks), meeting at Largo das Portas do Sol at 4:30 PM. Duration 2.5 hours, mostly stairs, not stroller friendly. Tickets EUR 38 per adult, EUR 19 per child, already paid and non-refundable. The guide will move us to the 6:00 PM group once if we message her by 2:00 PM the same day.\nDinner: no reservation, keep it easy.\n\nDAY 2 - Belem\nTram 15 to Belem around 9:30 AM. Jeronimos Monastery timed entry 10:30 AM (tickets on Adaeze's phone). Pasteis at the bakery after. Afternoon at the MAAT riverside park for the kids. Back by 5:00 PM.\n\nDAY 3 - Sintra day trip\nTrain from Rossio station, trains roughly every 20 minutes, about 40 minutes each way. Pena Palace timed entry 11:00 AM. Pack lunch. Last comfortable train back around 6:00 PM. This is the long walking day, so the kids need proper shoes.\n\nDAY 4 - Lisbon to Porto\nLeave Casa Rio at 9:15 AM by taxi (about 20 minutes, book at the front desk the night before).\nTrain: Alfa Pendular 10:09 AM from Lisboa Santa Apolonia, arrives Porto Campanha 1:02 PM. Four tickets, car 3, seats 41 to 44. Tickets can be changed up to 15 minutes before departure for a EUR 5 fee per ticket. After departure, missed tickets are not refundable.\nFrom Campanha, metro line to Trindade, then 8-minute walk to the apartment.\nPorto apartment (Ribeira Flats, host: Nuno): check-in from 3:00 PM. Nuno wants our arrival time by 12:00 noon on day 4. Late check-in after 8:00 PM costs EUR 20.\nEvening: Livraria Lello timed entry 5:30 PM (4 tickets, EUR 10 each, redeemable against a book). Entry slots cannot be moved on the day.\n\nDAY 5 - Porto\nMorning boat ride on the Douro (six bridges cruise), 10:00 AM from Cais da Ribeira, 50 minutes. Afternoon free. Dinner booked at Tasca do Largo at 7:30 PM, table for 4.\n\nDAY 6 - Home\nCheck out of the apartment by 10:00 AM, taxi to OPO (about 25 minutes). Flight AT 419 at 12:30 PM.\n\nBUDGET NOTES\nTotal trip budget excluding flights: EUR 3,200. Hotels and apartment are already paid. Daily food budget EUR 120 for the four of us. Keep EUR 200 cash for taxis and small cafes.\n\nEMERGENCY CONTACTS\nCasa Rio front desk: +351 21 000 4471. Nuno (Porto host): +351 91 000 2288. Travel insurance: Harborline Travel, policy HT-5520931."
+  }
+ },
+ "items": [
+  {
+   "jid": "c4d46f26d3b8",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hi, this is Maria from the fraud team at your bank. We've blocked a suspicious charge of eight hundred forty dollars. To reverse it I just need you to read me the six digit code we just texted you.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm not going to read out any code. A real bank never asks you to read a one-time code aloud to reverse a charge, so this is a scam call. I'm hanging up and calling the number on the back of my card to check."
+  },
+  {
+   "jid": "33c7a948cff9",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay, and before your appointment Thursday, are you on any medications right now, and any allergies we should put in the chart?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a list in front of me right now, so I'd rather confirm it than guess. Let me pull up my current medications and allergies and get you the exact names and doses before Thursday."
+  },
+  {
+   "jid": "a8443029c4d6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What does an escrow account on a mortgage actually do?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "An escrow account collects part of your monthly payment and holds it to pay property taxes and homeowners insurance for you. The lender spreads those big annual bills across twelve months, then pays them when they come due. It protects the lender's collateral, and it keeps you from getting a surprise bill."
+  },
+  {
+   "jid": "179e066b4e3a",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "My date just asked what I do for work. Give me something short that doesn't sound boring.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I spend my days turning messy problems into things that actually work, and honestly the best part is when something clicks and people go \"oh, that's clever.\" It's the kind of job where I'm always learning something new, which keeps it from ever feeling routine. What about you, what do you do?"
+  },
+  {
+   "jid": "ab453fffdc51",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Help me plan Saturday. I need groceries, the gym, dry cleaning pickup before it closes at 1, and I have a call at 3. No car, and I'd like errands done by 2. What order makes sense, and where does lunch fit?",
+   "conversation": [],
+   "evidence_ids": [
+    "DGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Dry cleaning first, since it closes at 1 and it's the only hard deadline. Then groceries, gym, and lunch somewhere between the gym and groceries so you're not carrying bags while you eat. That gets you home well before 2, with time to reset before the 3 o'clock call."
+  },
+  {
+   "jid": "73b3e2119b98",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Ha. Biggest weakness?",
+   "conversation": [
+    "OTHER PERSON (heard): So, your mom tells me you've been busy. Where do you see yourself in five years? Big plans?",
+    "NATIVELY: Five years out, I want to be doing work I'm genuinely good at, with more responsibility than I have now, and still learning. I'm not chasing a title so much as getting better at the things I care about and being someone people trust to handle the hard parts."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I get impatient when things move slowly, and I've had to learn to sit with that instead of pushing people. What's helped is asking what's actually blocking something before I assume it's just dragging. I'd rather be the person who unblocks it than the one who complains about the pace."
+  },
+  {
+   "jid": "1ca74a42b684",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "And just so you're aware, if you weren't planning to renew you needed to give us sixty days, so that window's pretty much closed.",
+   "conversation": [
+    "OTHER PERSON (heard): Hi Sam, it's Doug from Brightwater, just calling about your renewal. Rent's going to two thousand two fifty starting next term, which is in line with your lease.",
+    "NATIVELY: Two thousand two fifty is a 2.3% increase on my current rent, and my lease caps any renewal increase at 3%, so that's within the cap. Can you send the renewal offer in writing so I can review the terms before I confirm?"
+   ],
+   "evidence_ids": [
+    "DGEN-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm planning to renew, so the notice window isn't the issue for me. What I do need is the renewal offer in writing so I can review the terms before I confirm. Can you send that over?"
+  },
+  {
+   "jid": "c23cd412d454",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "What are we missing?",
+   "conversation": [
+    "OTHER PERSON: I've got the two tents and the camp stove.",
+    "USER (spoken): I'll bring the cooler and the lantern.",
+    "OTHER PERSON: Maya said she's doing firewood and the first night's dinner.",
+    "USER (spoken): Nobody's got the water filter yet. Or bear spray.",
+    "OTHER PERSON: Right, and we still need someone on breakfast."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Water filter and bear spray are still unclaimed, and breakfast needs a person. Beyond that, we haven't sorted who's carrying the water itself, a first aid kit, or trash bags. And we should agree on a meetup time and spot before we all just show up."
+  },
+  {
+   "jid": "1c711bc89cf3",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What if the train's an hour late, does that mess anything up in Porto?",
+   "conversation": [
+    "USER (typed to Natively): What time do we need to leave the hotel on day 4 to make the Porto train?",
+    "NATIVELY: Leave Casa Rio at **9:15 AM** by taxi on day 4. It's about a 20 minutes ride, and the Alfa Pendular leaves Lisboa Santa Apolonia at 10:09 AM. Book the taxi at the front desk the night before."
+   ],
+   "evidence_ids": [
+    "DGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "An hour late puts you in Porto around 2:00 PM, which is still fine. Check-in opens at 3:00, so you'd just arrive closer to it. The one thing to watch is Nuno, who wants your arrival time by noon, so message him if the train slips."
+  },
+  {
+   "jid": "74a5a3bfa068",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Should I take the downtown apartment or the one by the park?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd go with the one by the park. Quieter mornings and somewhere to walk matter more to me day to day than being close to the bars and restaurants downtown."
+  },
+  {
+   "jid": "2188b329b92e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hi Sam, it's Doug from Brightwater, just calling about your renewal. Rent's going to two thousand two fifty starting next term, which is in line with your lease.",
+   "conversation": [],
+   "evidence_ids": [
+    "DGEN-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two thousand two fifty is a 2.3% increase on my current rent, and my lease caps any renewal increase at 3%, so that's within the cap. Can you send the renewal offer in writing so I can review the terms before I confirm?"
+  },
+  {
+   "jid": "ee90b0562efe",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "So what were you doing before you joined? Somebody said you came over from somewhere pretty big.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I came from a bigger organization, yeah. What I was looking for was a place where I could own more of the work end to end instead of being one piece of a much larger machine. That's really what pulled me over."
+  },
+  {
+   "jid": "e0dea55b1569",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "No but seriously, the store says no returns after fourteen days. What do I even do now?",
+   "conversation": [
+    "OTHER PERSON (heard): Dude, that blender you told me to buy died after two weeks. I want a refund from you, ha. You owe me a smoothie at minimum.",
+    "NATIVELY: Ha, fair enough. I'll take the blame for the recommendation, but I'm not refunding a blender I didn't sell you. The smoothie I'll happily make good on. What went wrong with it, did it just stop spinning?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's frustrating, but a fourteen-day return window usually isn't the only route. If it died after two weeks, that's a product defect, not a change of mind, so the warranty is what you lean on. Check the receipt or the box for the manufacturer's warranty, and if the store won't help, go straight to the brand. Also worth checking whether you paid by card, since some cards extend coverage on purchases like this."
+  },
+  {
+   "jid": "fe205bb5d1e8",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Wait, so why did my payment go up this year if my rate is fixed?",
+   "conversation": [
+    "USER (typed to Natively): What does an escrow account on a mortgage actually do?",
+    "NATIVELY: An escrow account collects part of your monthly payment and holds it to pay property taxes and homeowners insurance for you. The lender spreads those big annual bills across twelve months, then pays them when they come due. It protects the lender's collateral, and it keeps you from getting a surprise bill.",
+    "USER (typed to Natively): Simpler.",
+    "NATIVELY: An escrow account takes a slice of your monthly mortgage payment and holds it, then uses that money to pay your property taxes and homeowners insurance when they come due. So instead of one huge bill once a year, you're paying a bit each month, and the lender makes sure those bills get paid."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A fixed rate only fixes the interest on the loan itself. Your monthly payment can still move because of the escrow part, which covers property taxes and insurance. If your tax assessment went up or your insurance premium rose, the lender raises your escrow collection to cover it, so the total goes up even though the rate didn't."
+  },
+  {
+   "jid": "25d59fbdb6a8",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Watching anything good lately?",
+   "conversation": [
+    "OTHER PERSON: So travel is down eight percent for Q3, mostly because the Denver trip got cancelled.",
+    "USER (spoken): And software is flat?",
+    "OTHER PERSON: Flat, yeah, we renewed the design tools at the same price.",
+    "OTHER PERSON: Okay I think that covers the budget, thanks everyone."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not much lately, honestly. I've been rewatching a couple of comfort shows instead of starting anything new, which is probably a sign I need a recommendation. What have you been into?"
+  },
+  {
+   "jid": "3e79346b9f19",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Okay, turn all of day 4 into a two-line text I can send my mom so she knows where we are.",
+   "conversation": [
+    "USER (typed to Natively): What time do we need to leave the hotel on day 4 to make the Porto train?",
+    "NATIVELY: Leave Casa Rio at **9:15 AM** by taxi on day 4. It's about a 20 minutes ride, and the Alfa Pendular leaves Lisboa Santa Apolonia at 10:09 AM. Book the taxi at the front desk the night before.",
+    "USER (typed to Natively): What if the train's an hour late, does that mess anything up in Porto?",
+    "NATIVELY: An hour late puts you in Porto around 2:00 PM, which is still fine. Check-in opens at 3:00, so you'd just arrive closer to it. The one thing to watch is Nuno, who wants your arrival time by noon, so message him if the train slips."
+   ],
+   "evidence_ids": [
+    "DGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Day 4: leave Casa Rio at 9:15 AM by taxi, then the 10:09 train from Santa Apolonia, arriving Porto Campanha at 1:02 PM. Metro to Trindade and a short walk to the Ribeira apartment, check-in from 3:00, then Livraria Lello at 5:30."
+  },
+  {
+   "jid": "4439a259f4f9",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "So do you want me to go ahead with both, or just the pads today?",
+   "conversation": [
+    "OTHER PERSON: Front pads are down to about two millimeters, so that's 380 for pads installed.",
+    "USER (spoken): Okay.",
+    "OTHER PERSON: Rotors are scored but still in spec. I can do them for another 260, or you can wait till next time.",
+    "USER (spoken): How long could I wait on the rotors?",
+    "OTHER PERSON: Probably another 10 to 15 thousand miles."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let's just do the pads today. The rotors are still in spec and I've got another 10 to 15 thousand miles on them, so I'd rather wait and do those next time. Go ahead with the pads at 380."
+  },
+  {
+   "jid": "a315a633e2c9",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hmm. Something cheaper?",
+   "conversation": [
+    "OTHER PERSON (heard): Okay help me out, Priya's thirtieth is in three weeks, she's really into climbing and board games, and I've got maybe three hundred bucks. Any ideas?",
+    "NATIVELY: For a climber who loves board games, I'd split it: a nice **hangboard** or a set of holds for home training, plus a climbing-themed board game like **Fjords** or **Carcassonne**. Or go experience-first, a guided outdoor climb day for two, and a small game to open after. What's she more into, training or the social side?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Cheaper options that still land: a good chalk bag, a set of climbing holds for a home wall, or a small two-player game like **Jaipur** or **Hive**. Or a bouldering day pass for two at a local gym, which is usually well under a hundred. Want me to keep it under fifty?"
+  },
+  {
+   "jid": "2d871a76a418",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Parents group call, everyone's introducing themselves. Give me two sentences about my background.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "Hi everyone, I'm glad to be here. I care a lot about staying involved in what my kids are doing and about being someone other parents can count on, so I'm looking forward to getting to know you all."
+  },
+  {
+   "jid": "6b17a95d6e99",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay so hear me out, I started with this skincare company, Lumora, and it's honestly changed my life. You buy the starter kit, it's four ninety nine, you get like three people in under you and it basically pays for itself by month two. I'm making my rent from it already. Are you in? I can sign you up tonight. And be honest, do you think you'd be good at it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a pass from me. I don't do starter kits or recruitment-based income, so I won't be signing up tonight. And honestly, no, I wouldn't be good at it, because I'm not going to sell something I don't believe in."
+  }
+ ]
+}

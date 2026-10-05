@@ -1,0 +1,234 @@
+{
+  "mode": "sales",
+  "partition": "supp-quant",
+  "contexts": [
+    {
+      "id": "SQSALES-CTX-1",
+      "kind": "grounded",
+      "title": "Kestrel Fieldworks cold-chain monitoring price sheet",
+      "file_name": "kestrel-price-sheet-2026-07.txt",
+      "text": "KESTREL FIELDWORKS - COLD-CHAIN MONITORING\nPrice sheet for US customers, revision 2026-07. All prices USD, excluding sales tax.\n\nHARDWARE (one-time)\n- KG-4 gateway hub: $540 each. One hub supports up to 24 sensors of any type. Hubs talk over the building's own network and cannot serve sensors in a different building, so every building (site) needs its own hub or hubs.\n- TS-2 temperature and humidity sensor: $78 each.\n- DS-1 door-open sensor: $34 each. Door sensors count toward a hub's 24-sensor capacity.\n- Replacement batteries (4-pack): $19.\n\nINSTALLATION (one-time)\n- Standard installation: $1,200 per site. Covers mounting and commissioning of up to 2 hubs and all of their sensors.\n- Each additional hub at the same site: $150 installation.\n- After-hours installation (evenings or weekends), only when requested: add 25% to the installation price.\n\nMONITORING SUBSCRIPTION (recurring)\nBilled monthly per active sensor. Every account includes its first 10 sensors at no monitoring charge; the rate below applies to each sensor above those 10. The rate is set by the account's TOTAL sensor count and applies to every billable sensor (it is not graduated).\n- 1 to 100 sensors on the account: $5.50 per billable sensor per month\n- 101 to 250 sensors: $4.75 per billable sensor per month\n- 251 or more sensors: $4.00 per billable sensor per month\nAnnual prepay: 5% off monitoring when the full year is paid up front. Monthly billing has no discount.\n\nOPTIONAL ADD-ONS (recurring)\n- Cellular backup: $9 per hub per month.\n- Extended data retention (7 years instead of 2): $40 per account per month.\n- SMS alert bundle beyond 500 messages: $12 per additional 500.\n\nWARRANTY AND SUPPORT\nHubs and sensors carry a 3-year limited warranty. Sensors that fail calibration inside warranty are replaced at no charge; we cover shipping one way. Support is by email and phone, 7 am to 7 pm Central, Monday to Saturday; critical temperature alerts are routed 24/7.\n\nCONTRACT NOTES\nQuotes are valid for 30 days. Hardware ships within 10 business days of order. Monitoring begins on the day each sensor is first commissioned and is billed in full for that month. Sensors removed from service stop billing from the next calendar month once they are decommissioned in the dashboard.",
+      "notes": "SQSALES-001: hubs cannot be shared across buildings: warehouse 50 sensors -> 3 hubs, annex 14+8=22 -> 1 hub (pooling 72 sensors would wrongly give 3). Door sensors count toward capacity. Installation 2 x 1,200 + 1 extra warehouse hub x 150 = 2,550. First 10 sensors per ACCOUNT free; tier set by total (72 -> $5.50, not graduated); monthly billing so the 5% prepay discount does NOT apply; after-hours surcharge only if requested. Year one = 9,974 one-time + 341 x 12 = 14,066. SQSALES-002 (discrepancy): 41 sensors, one site, no add-ons -> 31 billable x 5.50 = 170.50/month; even ignoring the free 10 the maximum is 225.50; the stated 286 equals 52 billable sensors (62 sensors) and does not reconcile."
+    },
+    {
+      "id": "SQSALES-CTX-2",
+      "kind": "grounded",
+      "title": "Lumenpath order form terms and Q4 2026 price schedule",
+      "file_name": "lumenpath-order-form-q4-2026.txt",
+      "text": "LUMENPATH - ORDER FORM TERMS AND PRICE SCHEDULE\nField-team scheduling platform. Valid for orders signed 1 October to 31 December 2026. USD.\n\nPLANS\n- Team: $32 per seat per month, minimum 10 seats, monthly or annual billing.\n- Business: $49 per seat per month, minimum 35 seats, billed annually in advance (seat price x 12 x seats). If fewer than 35 seats are ordered, the invoice is for 35.\n- Enterprise: custom pricing, minimum 250 seats.\nSeats can be added mid-term and are prorated to the term end date. Seats cannot be reduced until renewal.\n\nONE-TIME ONBOARDING\n- Team: self-serve, no charge.\n- Business: $4,500 for accounts up to 60 seats; $6,000 for 61 seats or more. Onboarding is charged once, at the start of the first term, and is never discounted.\n\nMULTI-YEAR TERMS (Business and Enterprise)\n- 2-year term: 6% off the seat price for the whole term.\n- 3-year term: 12% off the seat price for the whole term, and the discounted seat price is locked for all three years.\nMulti-year terms are still invoiced one year at a time.\n\nOTHER DISCOUNTS\n- Registered nonprofits and schools: 8% off the seat price.\n- Discounts do not stack. Where more than one discount applies, only the single largest one is used.\n\nADD-ONS (annual, Business and Enterprise)\n- EU data residency: $3,200 per year per account.\n- Advanced routing: $6 per seat per month.\n- Premium support (1-hour response): 15% of annual seat fees.\n\nRENEWALS\nRenewals are quoted at the list price in effect on the renewal date, plus any add-ons active at that time. One-year renewals of accounts still on the 2025 price schedule are capped at a 7% increase per seat.\n\nPAYMENT\nInvoices are due Net 30. Card payments carry no surcharge. Late balances accrue 1% per month after 15 days' notice.\n\nSERVICE\nUptime target 99.9% measured monthly; service credits are described in the Service Level Addendum, not in this form. Customer data is exported on request within 10 business days of termination.",
+      "notes": "Chain c01: 38 seats Business 1-year = 38 x 49 x 12 = 22,344 + 4,500 onboarding = 26,844; 3-year: 49 x 0.88 = 43.12 -> 517.44/seat/yr x 38 = 19,662.72/yr x 3 = 58,988.16 + 4,500 once (never discounted) = 63,488.16; drop to 34 seats -> Business minimum 35 is invoiced -> 35 x 517.44 x 3 = 54,331.20 + 4,500 = 58,831.20. SQSALES-006: discounts do not stack; nonprofit 8% beats 2-year 6% -> 49 x 0.92 = 45.08 (stacked 42.14 / compounded 42.38 are wrong). SQSALES-007 (consistent): renewal 40 seats x 588 = 23,520 + EU data residency 3,200 = 26,720, the quote is correct. Noise: 7% renewal cap (applies to 2025-schedule accounts only), premium support 15%, advanced routing."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SQSALES-001",
+      "category": "pricing_question",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Okay, so two buildings. The main warehouse needs fifty temperature sensors, and the annex needs fourteen temperature sensors plus eight door sensors. What does year one cost us, all in? Paying monthly, no cellular backup.",
+      "context_condition": "grounded",
+      "context_ref": "SQSALES-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "capacity",
+        "one_time_vs_recurring",
+        "year_one_total",
+        "free_allowance",
+        "tiered_pricing"
+      ],
+      "expected_answer_type": "year-one total with its main components",
+      "claim_trap": "company_fact",
+      "needles": [
+        "up to 24 sensors",
+        "$1,200 per site",
+        "first 10 sensors"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQSALES-002",
+      "category": "objection_handling",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Quick billing question while I have you. We've had the same forty-one sensors at our one site since spring, no add-ons, and September's monitoring line came to two hundred eighty-six dollars. That's just the normal rate, right?",
+      "context_condition": "grounded",
+      "context_ref": "SQSALES-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "discrepancy",
+        "billing_dispute"
+      ],
+      "expected_answer_type": "check of the invoice line against the price sheet",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$5.50 per billable sensor",
+        "first 10 sensors"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQSALES-003",
+      "category": "pricing_question",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Alright, Business plan, thirty-eight seats, one-year term. What's the total for year one including onboarding?",
+      "context_condition": "grounded",
+      "context_ref": "SQSALES-CTX-2",
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "one_time_vs_recurring",
+        "year_one_total",
+        "chain"
+      ],
+      "expected_answer_type": "year-one total, speakable",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$49 per seat per month",
+        "$4,500"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQSALES-004",
+      "category": "negotiation",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And if we signed the three-year term instead, what's the total across all three years?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "arithmetic",
+        "multi_year",
+        "percent",
+        "follow_up",
+        "chain",
+        "changed_quantity"
+      ],
+      "expected_answer_type": "three-year total, speakable",
+      "claim_trap": "company_fact",
+      "needles": [
+        "12% off the seat price",
+        "charged once"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQSALES-005",
+      "category": "negotiation",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What if we drop to thirty-four seats on the three-year deal?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 3,
+      "tags": [
+        "arithmetic",
+        "minimum_seats",
+        "follow_up",
+        "chain",
+        "changed_quantity"
+      ],
+      "expected_answer_type": "recomputed three-year total, speakable",
+      "claim_trap": "company_fact",
+      "needles": [
+        "minimum 35 seats",
+        "the invoice is for 35"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQSALES-006",
+      "category": "pricing_question",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "Prospect is a registered nonprofit and wants the 2-year term on Business. Do the 6% and the 8% stack? What's the per-seat monthly price?",
+      "context_condition": "grounded",
+      "context_ref": "SQSALES-CTX-2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "discount_stacking",
+        "percent"
+      ],
+      "expected_answer_type": "yes/no on stacking plus the per-seat price",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Discounts do not stack",
+        "8% off the seat price"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQSALES-007",
+      "category": "objection_handling",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So the renewal quote says twenty-six thousand seven hundred twenty. Forty seats at forty-nine a month is about twenty-three and a half. Where's the other three grand coming from? That doesn't look right to me.",
+      "context_condition": "grounded",
+      "context_ref": "SQSALES-CTX-2",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "So for the renewal, same forty seats on Business, one-year term?"
+        },
+        {
+          "speaker": "other",
+          "text": "Same forty, one year. We're not growing this year."
+        },
+        {
+          "speaker": "user",
+          "text": "And you're keeping EU data residency for the Lisbon team?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yes, we have to, legal won't let us drop it."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "consistent",
+        "billing_dispute"
+      ],
+      "expected_answer_type": "reconciliation of the quote, speakable",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$3,200 per year per account",
+        "twenty-six thousand seven hundred twenty",
+        "EU data residency"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

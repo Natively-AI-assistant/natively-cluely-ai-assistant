@@ -1,0 +1,306 @@
+{
+  "mode": "technical-interview",
+  "partition": "final-hard",
+  "contexts": [
+    {
+      "id": "FTECH-CTX-G1",
+      "kind": "grounded",
+      "title": "Candidate's take-home write-up: etcd cluster debug (Nimbuscrest)",
+      "file_name": "Marrow_Takehome_Writeup_Fleet_Reliability.txt",
+      "text": "TAKE-HOME WRITE-UP: FLEET RELIABILITY CLUSTER DEBUG\nCandidate: Dashiell Marrow | Submitted to Nimbuscrest Cloud | Time used: 84 of 90 minutes\n\nEnvironment as given\nThree control-plane nodes (fr-cp-1, fr-cp-2, fr-cp-3), Kubernetes 1.30 with stacked etcd 3.5 on each node. Each node has local NVMe and a shared volume mounted at /mnt/shared.\n\nSymptoms\n- kubectl calls failed intermittently with \"etcdserver: request timed out\".\n- etcd logged 14 leader elections in the first 20 minutes I watched.\n- API server latency for LIST calls jumped from about 80 ms to several seconds during each election.\n\nStep 1: clocks\nchronyc tracking on fr-cp-3 showed an offset of 1.8 s from the other two nodes. I corrected it by restarting chronyd against the internal NTP pool. The election rate did not change (13 elections in the next 20 minutes), so I recorded the skew as a secondary finding, not the root cause. Raft elections in etcd are driven by heartbeat and election timeouts measured locally, not by wall-clock agreement between nodes.\n\nStep 2: disk\nI pulled etcd_disk_wal_fsync_duration_seconds from each member. p99 on fr-cp-1 was 480 ms; on fr-cp-2 and fr-cp-3 it was 6 ms. The etcd guidance we follow wants WAL fsync p99 under 10 ms. On fr-cp-1, /var/lib/etcd was a symlink into /mnt/shared, which is an NFS export. Every time fr-cp-1 was leader it stalled on fsync, missed heartbeats (heartbeat-interval 100 ms, election-timeout 1000 ms), and the followers started a new election.\n\nStep 3: fix\nI removed fr-cp-1 from the cluster with etcdctl member remove, wiped its data directory, pointed it at /var/lib/etcd on local NVMe, and added it back with etcdctl member add. It then caught up from the leader's snapshot. I chose remove and re-add over copying the files because a copy would have carried over a WAL written during the fsync stalls, and the member had to go down either way. During the change the cluster ran on the two healthy members, so writes continued, but it could not have survived another failure until fr-cp-1 caught up.\n\nResult: fsync p99 on fr-cp-1 dropped to 7 ms, and there were 0 leader elections in the following 60 minutes of observation.\n\nStep 4: certificates\nWhile checking member health I noticed the peer TLS certificate on fr-cp-2 expires on 2026-10-03. I renewed it with kubeadm certs renew etcd-peer and restarted that member. This was not causing the outage but would have caused one.\n\nNot finished\n- I wrote a Prometheus alert for WAL fsync p99 above 25 ms for 10 minutes, but did not have time to test that it fires.\n- I did not check whether other workloads also write to /mnt/shared from fr-cp-1.\n\nWhat I would monitor\n- WAL fsync and backend commit durations per member.\n- Leader changes per hour, alerting above 3.\n- Certificate expiry, alerting 30 days out.",
+      "notes": null
+    },
+    {
+      "id": "FTECH-CTX-G2",
+      "kind": "grounded",
+      "title": "Tallowmarket Partner Payouts API v0.3 draft (design exercise)",
+      "file_name": "Tallowmarket_Partner_Payouts_API_v0.3.txt",
+      "text": "TALLOWMARKET PARTNER PAYOUTS API - v0.3 DRAFT\nOwner: Payments & Ledger | Status: draft for interview design exercise\n\nOverview\nPartners (logistics co-ops that aggregate many growers) use this API to request payouts to growers once deliveries are confirmed. All amounts are integers in minor units. v0.3 supports USD only.\n\nAuthentication\nOAuth 2.0 client credentials. Tokens last 60 minutes. Every request must carry a bearer token scoped to payouts:write or payouts:read.\n\nPOST /v1/payouts\nCreates a payout request.\nBody fields:\n- grower_id (string, required)\n- amount_minor (integer, required, 1 to 25,000,000)\n- currency (string, required, must be \"USD\")\n- order_ids (array of strings, 1 to 50 items)\n- memo (string, optional, up to 140 characters)\nHeaders:\n- Idempotency-Key (required, UUID v4)\n\nIdempotency rules\n- Keys are retained for 24 hours after the first request that used them.\n- Same key and identical body: the original response is returned again with the header Idempotent-Replayed: true. No second payout is created.\n- Same key and a different body: 422 with error code idempotency_key_reused.\n- Same key while the first request is still being processed: 409 with error code request_in_progress. The client should retry after a short delay.\n\nPayout statuses\npending -> held -> released, or pending -> held -> reversed.\n- pending: accepted, not yet funded from escrow.\n- held: funds reserved in escrow.\n- released: sent in the nightly settlement batch.\n- reversed: cancelled while held. Once released, a payout cannot be reversed through this API.\n\nPOST /v1/payouts/{id}/reverse\nAllowed only while status is held. Returns 409 with error code not_reversible otherwise.\n\nGET /v1/payouts/{id}\nReturns the payout and its status history with timestamps.\n\nRate limits\n50 requests per second per partner, with bursts up to 100. Over the limit the API returns 429 with a Retry-After header in seconds.\n\nWebhooks\nEvents: payout.released and payout.reversed. Delivery is at-least-once; each event carries an event_id that partners should use to deduplicate. Failed deliveries (any non-2xx or no response within 10 seconds) are retried up to 8 times with exponential backoff over about 24 hours. Payloads are signed with HMAC-SHA256 in the Tallow-Signature header.\n\nErrors\nErrors return JSON with code, message and request_id. Error codes are stable; messages may change.\n\nOut of scope for v0.3\nRefunds, chargebacks, multi-currency payouts, and payout scheduling. These will be designed separately.\n\nOpen questions for the exercise\n- How should the idempotency store be built so the 409 and 422 cases behave correctly under concurrent retries?\n- Should GET support listing payouts by grower with cursor pagination?",
+      "notes": null
+    },
+    {
+      "id": "FTECH-CTX-C1",
+      "kind": "conflicting",
+      "title": "Fleet Reliability take-home brief (errata merged)",
+      "file_name": "Nimbuscrest_Takehome_Brief_Errata.txt",
+      "text": "NIMBUSCREST CLOUD - FLEET RELIABILITY TAKE-HOME (candidate copy, errata merged)\n\nOverview\nYou will receive SSH access to a three-node Kubernetes control plane (fr-cp-1, fr-cp-2, fr-cp-3) whose etcd cluster is unhealthy. Your job is to find what is wrong, fix it, and write up what you did. You have 90 minutes from the moment you first log in.\n\nEnvironment\n- Kubernetes 1.30, stacked etcd 3.5 on each control-plane node.\n- Each node has a local NVMe disk and a shared volume mounted at /mnt/shared.\n- Once you are done, the cluster must be able to tolerate the loss of two members.\n\nRules\n- Do not restart etcd members; we want to see how you diagnose without disruption.\n- You may use any tools already installed. Do not install packages from the internet.\n- Keep a timestamped log of the commands you run.\n\nWhat to submit\n- A write-up of no more than two pages: symptoms, root cause, fix, and what you would monitor.\n- Your command log.\n\nERRATA (added after the brief was first sent)\n- E1: The environment now has five control-plane nodes (fr-cp-1 through fr-cp-5). Ignore the node count above.\n- E2: The etcd version is 3.4.27, not 3.5.\n- E3: You have 2 hours. The timer starts when the environment is provisioned, not at first login.\n- E4: You may restart any member if you explain why in the write-up.\n\nGrading\nWe look at the order in which you ruled things out, not only at whether you found everything. Partial solutions with a clear write-up are fine.",
+      "notes": "Internal contradictions: three nodes in the overview vs five control-plane nodes in errata E1; \"tolerate the loss of two members\" is impossible with three members but fine with five; etcd 3.5 vs 3.4.27 (E2); 90 minutes from first login vs 2 hours from provisioning (E3); \"do not restart etcd members\" vs E4 allowing restarts. Also disagrees with the candidate write-up (FTECH-CTX-G1), which describes three nodes, etcd 3.5 and 90 minutes."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "FTECH-001",
+      "category": "api_design",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Using the payouts spec I sent over: if a partner retries the create payout call with the same idempotency key but a different amount, what should they get back? Then sketch how you'd store idempotency keys so that works under concurrent retries, including what happens while the first request is still in flight.",
+      "context_condition": "grounded",
+      "context_ref": "FTECH-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_needed",
+        "multi_ask"
+      ],
+      "expected_answer_type": "spec-consistent behavior plus storage design",
+      "claim_trap": "company_fact",
+      "needles": [
+        "idempotency_key_reused",
+        "request_in_progress",
+        "24 hours"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "FTECH-002",
+      "category": "api_design",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "The spec I sent also covers refund webhooks, right? So walk me through how often a failed refund webhook gets retried and for how long.",
+      "context_condition": "grounded",
+      "context_ref": "FTECH-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "false_premise",
+        "trap_absent_fact",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "answer faithful to what the spec does and does not cover",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "FTECH-003",
+      "category": "resume_project_deep_dive",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "he's asking which of my projects used Temporal and what it replaced. short answer",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "typed_request",
+        "resume_needle"
+      ],
+      "expected_answer_type": "short first-person answer from the resume",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Metronome",
+        "38 cron scripts"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "FTECH-004",
+      "category": "database_design",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Does that still work?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "For this part, assume ledger entries are append-only. We never update an entry, corrections go in as reversal entries."
+        },
+        {
+          "speaker": "user",
+          "text": "Got it, so a balance is just the sum of entries for an account."
+        },
+        {
+          "speaker": "other",
+          "text": "Right. We're at about four hundred thousand entries a day, heading to one and a half million. Finance needs the balance as of any past timestamp, to the second, for audits."
+        },
+        {
+          "speaker": "user",
+          "text": "Okay, then I'd keep a running balance column on each entry."
+        },
+        {
+          "speaker": "other",
+          "text": "Careful, entries can be inserted with an effective time in the past. Backdated entries happen a few hundred times a day."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "transcript_needed",
+        "short_turn",
+        "follow_up"
+      ],
+      "expected_answer_type": "verdict on the proposal and a revised design",
+      "claim_trap": "code_correctness",
+      "needles": [
+        "effective time",
+        "append-only"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "FTECH-005",
+      "category": "resume_project_deep_dive",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "When you were working on Harrow, what peak write rate did it hit, and how did you partition it?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "false_premise",
+        "trap_absent_fact",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "first-person answer that does not claim the interviewer's system",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "FTECH-006",
+      "category": "debugging",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Walk me through how you got to the root cause on the take-home, and why you didn't stop once you'd fixed the clock skew.",
+      "context_condition": "grounded",
+      "context_ref": "FTECH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_needed",
+        "profile_switch"
+      ],
+      "expected_answer_type": "first-person walkthrough consistent with the write-up",
+      "claim_trap": "personal_history",
+      "needles": [
+        "480 ms",
+        "1.8 s",
+        "NFS"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "FTECH-007",
+      "category": "tradeoffs_followups",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "he's asking why I removed and re-added the etcd member instead of just copying the data dir to local disk, and what I didn't finish. what did I actually do",
+      "context_condition": "grounded",
+      "context_ref": "FTECH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "typed_request",
+        "doc_needed",
+        "profile_switch"
+      ],
+      "expected_answer_type": "first-person rationale and unfinished items from the write-up",
+      "claim_trap": "personal_history",
+      "needles": [
+        "snapshot",
+        "25 ms"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "FTECH-008",
+      "category": "approach_only",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Going by the brief we sent you, how many members could the cluster lose and still take writes once you were done, and how much time did you have to get there?",
+      "context_condition": "conflicting",
+      "context_ref": "FTECH-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "conflicting_context",
+        "ambiguous",
+        "profile_switch"
+      ],
+      "expected_answer_type": "answer that reconciles or flags the brief's inconsistencies",
+      "claim_trap": "company_fact",
+      "needles": [
+        "five control-plane nodes",
+        "2 hours"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "FTECH-009",
+      "category": "resume_project_deep_dive",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Tell me about Lanternfish. How exactly did it measure DNS lookup time per pod, and what did it tell you about checkout?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "resume_needle",
+        "partial_unsupported",
+        "profile_switch"
+      ],
+      "expected_answer_type": "first-person answer; stated facts only, no invented internals",
+      "claim_trap": "personal_history",
+      "needles": [
+        "31% of p99 latency",
+        "Prometheus"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "FTECH-010",
+      "category": "behavioral_in_tech_round",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Walk me through the worst incident you handled as primary on-call at Cindervale: what paged you, what you found, how long it took to mitigate, and what the postmortem changed.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "trap_absent_fact",
+        "multi_ask",
+        "profile_switch"
+      ],
+      "expected_answer_type": "first-person answer that does not invent an incident",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    }
+  ]
+}

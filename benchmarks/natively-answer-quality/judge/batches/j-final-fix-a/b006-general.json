@@ -1,0 +1,169 @@
+{
+ "batch": "b006-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FGEN-CTX-G1": {
+   "title": "Maple Court Apartments - resident notice, fall building works",
+   "text": "MAPLE COURT APARTMENTS - RESIDENT NOTICE\nIssued September 28, 2026 by the Management Office, 410 Alder Street\n\nDear residents,\n\nThis notice covers building work planned for October and November, plus a few reminders about payments and common areas. Please keep it for reference.\n\n1. Water shutoff\nThe water supply to all units will be shut off on Wednesday, October 14, from 9:00 a.m. to 1:00 p.m. while the plumbing contractor replaces the main riser valve on the ground floor. Please fill containers the night before if you need water during that window. When service returns, run your cold tap for two to three minutes to clear any discoloured water. If water has not returned by 2:00 p.m., call the office.\n\n2. Elevator modernization\nThe passenger elevator will be out of service from Monday, October 19 through Friday, November 6 while the cab, controls and doors are replaced. The freight elevator is not available to residents during this period. Residents who need mobility assistance during the elevator work should contact the office by October 9 so we can arrange help with groceries and deliveries. Large deliveries and move-ins will not be scheduled during these three weeks.\n\n3. Parking permits\nAnnual parking permits expire on October 31. Renewal costs $45 per vehicle and can be completed through the resident portal or at the office. Vehicles without a current permit after November 7 may be towed at the owner's expense. Guest parking is limited to 48 hours per visit; guests must display a paper pass available from the office.\n\n4. Rent payments\nRent is due on the 1st of each month. A late fee of $75 applies if rent has not been received by the end of the 5th. Payments through the resident portal by bank transfer (ACH) have no processing fee. Card payments are accepted but carry a 2.5% processing fee charged by the payment provider. Cash is not accepted at the office.\n\n5. Package room\nThe package room on the lobby level is open from 7:00 a.m. to 10:00 p.m. daily. Packages not collected within 10 days will be returned to the carrier. Perishable deliveries should be picked up the same day.\n\n6. Pest inspection\nOur pest control vendor will carry out a routine inspection of all kitchens and bathrooms on Tuesday, October 27, between 8:00 a.m. and 3:00 p.m. You do not need to be home. Please clear the area under your kitchen sink.\n\n7. Quiet hours and common areas\nQuiet hours are 10:00 p.m. to 7:00 a.m. The rooftop terrace closes for the season on November 1. The bike storage room is currently full; ask the office to join the waitlist.\n\n8. Lease renewals\nResidents whose leases end in the coming months will receive a renewal offer at least 60 days before the lease end date. If you have not received yours by then, please contact the office.\n\nOffice hours are Monday to Friday, 9:00 a.m. to 5:30 p.m. The property manager is Dana Okafor. For after-hours emergencies such as flooding or no heat, call the emergency line listed on the back of your unit door.\n\nThank you for your patience while we complete these improvements.\n\nMaple Court Management Office"
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "FGEN-CTX-C1": {
+   "title": "Brightline Home Renovations - quote Q-2291, hall bathroom remodel",
+   "text": "BRIGHTLINE HOME RENOVATIONS\nQuote Q-2291 - Hall bathroom remodel\nPrepared for: homeowner, 27 Birchwood Lane\nPrepared by: Sam Ferreira, project lead\nDate: September 24, 2026\n\nSummary\nFull remodel of the hall bathroom: remove existing tub and tile, install walk-in shower, new vanity, toilet, flooring, lighting and exhaust fan. Quoted total: $14,200, including materials, labor, disposal and permit.\n\nSchedule\nStart date: Monday, October 12. Estimated duration: 3 weeks.\n\nLine items\nDemolition and disposal - $1,350\nPlumbing rough-in and fixtures - $3,900\nWalk-in shower, tile and glass - $5,200\nVanity, toilet and hardware - $2,300\nFlooring - $1,200\nElectrical, lighting and fan - $1,100\nPaint and finish - $600\nLine item total: $15,650\n\nPayment terms\nA deposit of 30% is due on signing to reserve the start date. The balance is due in two installments: 40% at completion of rough-in and the remainder at final walkthrough. For this project the deposit is $5,000.\n\nPermits\nBrightline pulls the building permit on your behalf. Permit fees are billed separately at cost, typically $250 to $400 depending on the city.\n\nWarranty\nAll workmanship carries a 2-year warranty from the completion date. Manufacturer warranties apply to fixtures.\n\nTimeline notes\nWork begins October 19 pending tile delivery. Most bathrooms of this size take approximately 5 weeks, including inspection. Water to the bathroom will be off for most of the project; the rest of the house stays connected.\n\nTerms\nThis quote is valid for 30 days. Changes after signing are handled by written change order. Workmanship warranty: 12-month on labor, excluding misuse and normal wear.\n\nQuestions: Sam Ferreira, project lead."
+  },
+  "FGEN-CTX-G3": {
+   "title": "Harbor & Pine customer experience team offsite - planning notes",
+   "text": "HARBOR & PINE - CUSTOMER EXPERIENCE TEAM OFFSITE\nPlanning notes, owner: Priya Nandakumar (updated September 29)\n\nWhen and where\nThursday, November 12, 9:30 a.m. to 4:30 p.m.\nThe Linden Room, Corbett Street Library Annex, 2nd floor, 118 Corbett Street.\nDoors open at 9:00 a.m. for coffee. We start at 9:30 sharp.\nRemote teammates can join the morning sessions by video; the link will be in the calendar invite. The afternoon planning block is in-person only.\n\nPurpose\nAgree on the team's top 3 priorities for Q1, reset how we hand off escalations between the phone and email queues, and spend some unstructured time together. This is not a performance review day.\n\nAgenda\n9:30 - Welcome and ground rules (Priya)\n10:00 - Retro on Q3 and Q4: what worked, what didn't (facilitated by Tomasz Weller)\n11:15 - Break\n11:30 - Escalation handoff workshop (Janelle Ortiz)\n12:15 - Lunch, catered by Tamarind Kitchen\n1:30 - Q1 planning block (no-laptop session; bring a notebook)\n3:00 - Break\n3:15 - Commitments and owners\n4:00 - Wrap-up and feedback\n4:30 - Optional: bowling at Lucky Lanes, two blocks away (team pays for lanes; drinks are on you)\n\nFood\nLunch is a buffet with vegetarian, vegan and gluten-free options. If you have an allergy or other dietary need, fill in the dietary form linked in the invite by Thursday, November 5. After that date we cannot guarantee a separate meal. Coffee, tea and snacks are provided all day.\n\nBudget\nTotal budget is $1,800, covering the room ($450), catering ($950), bowling lanes ($200) and supplies ($200). Anything outside these lines needs Priya's approval in advance.\n\nTravel\nMost of us are local. If you drive, mileage is reimbursed at 0.62 per mile through the usual expense form; submit within 30 days. The annex has a small lot that fills up by 9:00 a.m.; the city garage on Pell Street is the backup and is not reimbursed. Anyone travelling from the Westbrook office can book the 7:40 a.m. train; tickets are reimbursed.\n\nWhat to bring\nA notebook and pen, one example of an escalation that went badly and one that went well (anonymised), and your honest opinion.\n\nCoverage\nThe support queues stay open that day. Ravi and Min-jung are covering phones and are joining by video for the morning only. Please set your status to out of office.\n\nQuestions go to Priya in the team channel."
+  },
+  "FGEN-CTX-I1": {
+   "title": "Sourdough starter feeding schedule",
+   "text": "SOURDOUGH STARTER - FEEDING SCHEDULE\n\nDay 1: Mix 50 g whole wheat flour with 50 g lukewarm water in a clean jar. Cover loosely and leave at room temperature, ideally 24 to 26 C.\n\nDay 2: You may see a few bubbles or nothing at all. Both are normal. Leave it alone.\n\nDays 3 to 6: Once a day, discard all but 50 g of the starter, then add 50 g flour (half whole wheat, half white) and 50 g water. Stir well and mark the level on the jar with a rubber band.\n\nDays 7 onward: Switch to two feedings a day, about 12 hours apart. A healthy starter should roughly double within 4 to 8 hours of feeding and smell pleasantly sour, like yogurt.\n\nTroubleshooting\n- Grey liquid on top (\"hooch\") means it is hungry. Pour it off and feed.\n- No rise after day 10: move it somewhere warmer and use more whole wheat flour.\n- Pink or orange streaks: throw it out and start again.\n\nStorage\nOnce established, keep it in the fridge and feed once a week. Take it out the night before baking and give it two room-temperature feedings before mixing dough."
+  }
+ },
+ "items": [
+  {
+   "jid": "a2e828efddc2",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay but then is a taco a sandwich too?",
+   "conversation": [
+    "OTHER PERSON (heard): Okay, settle this for us. Is a hot dog a sandwich?",
+    "NATIVELY: Honestly, it depends on who you ask, and that's the fun of it. Structurally, yes: a hot dog is meat in a split roll, which is basically a sandwich. But culturally it's its own thing, so I'd say it's a sandwich the way a taco is, technically, but nobody calls it one."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Only if you're being strict about it. A taco is filling in a folded tortilla, so by the \"stuff in bread\" test it counts. But nobody orders a taco sandwich, and that's the tell. The structure says yes, the language says no, and honestly the language wins."
+  },
+  {
+   "jid": "69b68902bce6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay, there's four of us, one car, we want to do the lake on Saturday, somebody has to grab the cooler from my brother's place, and we need to be back for Priya's thing at seven. How do we make that work?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Four of us in one car works if we sort the cooler first, since that's the detour. Whoever's closest to your brother's grabs it on the way, and we aim to leave the lake with enough buffer to be back before seven. What time are we thinking of heading out?"
+  },
+  {
+   "jid": "6a1cdf97700d",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "We need a name for the office fantasy football league. You got anything?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A few that usually land: **Fourth and Goal**, **Waiver Wire Warriors**, **The Tax Evaders**, or **Bench Warmers**. My pick would be something that nods at what the office actually does, so it feels like ours and not a generic league name. What's the team vibe?"
+  },
+  {
+   "jid": "fc2f42e136ba",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Ugh, my mom's staying with me that week and she can't really do stairs. Is the building doing anything to help people like that?",
+   "conversation": [
+    "OTHER PERSON (heard): Hey, did you see the notice about the water being shut off? When is that again?",
+    "NATIVELY: Yeah, it's **Wednesday, October 14**, from **9 a.m. to 1 p.m.**, while they replace the main riser valve. If the water's not back by 2, call the office.",
+    "OTHER PERSON (heard): And the elevator thing, how long is that going on for?",
+    "NATIVELY: The elevator's out from **Monday, October 19** through **Friday, November 6**, while they replace the cab, controls and doors. The freight elevator isn't available to residents during that stretch either, and if you need help with groceries or deliveries, contact the office by October 9."
+   ],
+   "evidence_ids": [
+    "FGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notice says residents who need mobility assistance during the elevator work should contact the office by October 9, and they'll arrange help with groceries and deliveries. So your mom's situation is exactly what that's for. I'd call the office before the 9th and tell them she can't do stairs."
+  },
+  {
+   "jid": "e2260ca05572",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay, so what are we telling Rosa? Which day and what time?",
+   "conversation": [
+    "OTHER PERSON: Okay so for Rosa's farewell lunch, Tuesday doesn't work for Ben, and Wednesday Rosa has her last client call.",
+    "OTHER PERSON: Thursday everyone's free except Leila, who's out until one. Friday is the office closure.",
+    "USER (spoken): So Thursday could work if we go a bit later?",
+    "OTHER PERSON: Yeah, if we book for 1:30 that works."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Thursday at 1:30. That's the one that works for everyone, since Leila's back after one and Ben can make Thursday too."
+  },
+  {
+   "jid": "d7d69cdeede6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Give me a quick rundown of my background so I can introduce myself to this guy at the meetup.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I don't have your background details in front of me, so I can't give you a rundown of your own history. The easiest fix: tell me a few lines about what you do and what you're working on, and I'll turn it into a clean intro. Or if you'd rather wing it, a simple opener works well: \"Hi, I'm here for the meetup, what brought you along?\" and let the conversation build from there."
+  },
+  {
+   "jid": "d03c195bbfac",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What's the actual total on this quote, when does the work start, and how much deposit are they asking for?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The quote's summary says the total is **$14,200**, but the line items add up to **$15,650**, so that's a discrepancy worth flagging. On timing, the schedule says work starts Monday, **October 12**, though a timeline note says it begins October 19 pending tile delivery. The deposit is **$5,000**, which is 30% due on signing."
+  },
+  {
+   "jid": "0bc73509c323",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "What do you do?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I work in software, mostly on the engineering side, and what I enjoy most is taking a messy problem and turning it into something clean and usable. Day to day that means building, reviewing, and working closely with the people around me to get things shipped."
+  },
+  {
+   "jid": "21a6b28ddac5",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What's the total budget for the offsite, and who do I ask if we want to add something?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The total budget is **$1,800**, split across the room at $450, catering at $950, bowling lanes at $200, and supplies at $200. Anything outside those lines needs **Priya's approval** in advance, and questions generally go to Priya in the team channel."
+  },
+  {
+   "jid": "3757b423b4fc",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Write me a two-line text to cancel dinner tonight, I'm sick.",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Hey, I'm really sorry but I have to cancel dinner tonight. I'm feeling sick and don't want to pass it on, so let's find another night soon."
+  }
+ ]
+}

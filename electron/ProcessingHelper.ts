@@ -77,6 +77,7 @@ export class ProcessingHelper {
     const nvidiaNimKey = credManager.getNvidiaNimApiKey();
     const openrouterKey = credManager.getOpenrouterApiKey();
     const fluxionKey = credManager.getFluxionApiKey();
+    const agentrouterKey = credManager.getAgentRouterApiKey();
 
     if (geminiKey) {
       console.log("[ProcessingHelper] Loading stored Gemini API Key from CredentialsManager");
@@ -113,6 +114,7 @@ export class ProcessingHelper {
     // 'openai' client for a user whose group is Anthropic and turn every boot
     // into a wrong-endpoint failure.
     if (fluxionKey) this.llmHelper.setFluxionConfig(fluxionKey, credManager.getFluxionProtocol());
+    if (agentrouterKey) this.llmHelper.setAgentRouterApiKey(agentrouterKey);
 
     const litellmBaseURL = credManager.getLitellmBaseURL();
     if (litellmBaseURL) {
@@ -163,6 +165,8 @@ export class ProcessingHelper {
 
       // CRITICAL: Ensure demo meeting has chunks
       ragManager.ensureDemoMeetingProcessed().catch(console.error);
+      // Once per launch: summaries for meetings indexed before their notes existed.
+      ragManager.backfillMeetingSummaries().catch(console.error);
 
       // CRITICAL: Cleanup stale queue items to prevent "Chunk not found" errors
       ragManager.cleanupStaleQueueItems();
@@ -175,6 +179,10 @@ export class ProcessingHelper {
 
     // NEW: Load Default Model Config
     const defaultModel = credManager.getDefaultModel();
+    // The one-time image test may run from here on (2026-10-01): keys are
+    // hydrated above, and main configured the capability store before this
+    // helper existed. Before the `if`, so a later selection is tested too.
+    this.llmHelper.enableVisionProbing();
     if (defaultModel) {
       console.log(`[ProcessingHelper] Loading stored Default Model: ${defaultModel}`);
       const customProviders = credManager.getCustomProviders();

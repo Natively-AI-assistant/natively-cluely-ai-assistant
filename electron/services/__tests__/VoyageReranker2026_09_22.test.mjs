@@ -38,8 +38,11 @@ describe('Voyage reranker wire format', () => {
     assert.ok(v, 'hostedRerankProvider must know voyage');
     assert.equal(v.baseUrl, 'https://api.voyageai.com/v1');
     assert.deepEqual(v.wire, { topField: 'top_k', resultsField: 'data' });
-    assert.equal(defaultHostedModel('voyage'), 'rerank-2.5');
-    assert.deepEqual(v.models.map((m) => m.id), ['rerank-2.5', 'rerank-2.5-lite']);
+    assert.equal(defaultHostedModel('voyage'), 'rerank-3');
+    // The current pair first; the 2.5 pair stays because Voyage still serves it
+    // and an install may have one saved.
+    assert.deepEqual(v.models.map((m) => m.id), ['rerank-3', 'rerank-3-lite', 'rerank-2.5', 'rerank-2.5-lite']);
+    assert.deepEqual(v.models.filter((m) => m.recommended).map((m) => m.id), ['rerank-3']);
   });
 
   test('a Voyage call sends top_k (not top_n) to /rerank and reads the order from data', async () => {
@@ -106,7 +109,10 @@ describe('Voyage in the reranker config', () => {
   });
 
   test('an unset Voyage model means the recommended one, not no-model', () => {
-    assert.equal(readHostedModel({ provider: 'voyage' }), 'rerank-2.5');
+    assert.equal(readHostedModel({ provider: 'voyage' }), 'rerank-3');
+    assert.equal(readHostedModel({ provider: 'voyage', voyageModel: 'rerank-3-lite' }), 'rerank-3-lite');
+    // A model saved by an earlier build is kept, not swapped for the new default.
+    assert.equal(readHostedModel({ provider: 'voyage', voyageModel: 'rerank-2.5' }), 'rerank-2.5');
     assert.equal(readHostedModel({ provider: 'voyage', voyageModel: 'rerank-2.5-lite' }), 'rerank-2.5-lite');
   });
 });

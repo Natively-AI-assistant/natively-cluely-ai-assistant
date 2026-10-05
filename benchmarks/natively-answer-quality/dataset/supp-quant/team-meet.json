@@ -1,0 +1,119 @@
+{
+  "mode": "team-meet",
+  "partition": "supp-quant",
+  "contexts": [
+    {
+      "id": "SQTEAM-CTX-1",
+      "kind": "grounded",
+      "title": "Platform team Q3 budget and tooling review notes",
+      "file_name": "platform-q3-budget-review-2026-09-24.txt",
+      "text": "PLATFORM TEAM - Q3 BUDGET AND TOOLING REVIEW\nNotes, 24 September 2026. Present: Hollis (lead), Marguerite, Dev, Oyelaran, Sunniva. Notes by Sunniva.\n\n1. Contractor spend (Halvorsen Data)\n- Q3 contractor budget: $96,000 (July to September).\n- Rate: Halvorsen first quoted $124/hour; we signed at $118/hour in the July 8 SOW.\n- July invoice: $31,400 (paid).\n- August invoice: $28,750 (paid). Breakdown on the invoice: 220 hours at the SOW rate plus the fixed-fee warehouse migration of $2,790 that Hollis approved in July.\n- September invoice not received yet. Halvorsen's own estimate is about $22,000.\n- Hollis: no new contractor work starts before October without a budget check.\n\n2. Cloud spend\n- Annual cloud budget $240,000. Spend January to August: $153,600. Dev flagged the storage line rising 4% month on month since May.\n- Action: Dev to tag the three untagged staging clusters by Oct 3.\n\n3. CI tooling proposal (Pipewright)\n- Oyelaran presented Pipewright to replace the self-hosted runners.\n- Cost: $18,000 one-time setup and migration, then $1,250 per month subscription.\n- Expected saving: about 60 engineer-hours per month of runner maintenance and flaky-build triage. Finance's loaded engineering cost for planning is $85/hour.\n- Marguerite asked for a payback estimate before the October planning meeting. Decision deferred.\n\n4. Hiring\n- One backend req approved for Q4; the posting goes live Oct 6. Panel: Hollis, Dev, Marguerite.\n\n5. On-call\n- Rota changes from weekly to 4-day shifts starting Oct 13. Sunniva to update the pager schedule.\n\n6. Office move\n- Floor 5 move is Nov 2-3. Everyone packs desks by Oct 31.\n\nAction items\n- Sunniva: circulate these notes; update the pager schedule.\n- Dev: tag staging clusters; storage cost breakdown.\n- Oyelaran: Pipewright payback estimate; confirm SSO support.\n- Hollis: confirm the September Halvorsen invoice with finance when it lands.",
+      "notes": "SQTEAM-001 (lookup): signed rate $118/hour; $124 was only the first quote. SQTEAM-002: saving 60 x 85 = 5,100/month minus 1,250 subscription = 3,850 net; payback 18,000 / 3,850 = 4.68 months (ignoring the subscription gives 3.53; 18,000/1,250 = 14.4 is meaningless). SQTEAM-003 (discrepancy): 96,000 - 31,400 - 28,750 = 35,850 left before September; about 13,850 after the ~22,000 estimate; 'about fifty K left' does not reconcile. SQTEAM-004 (consistent): 220 x 118 = 25,960 + 2,790 approved migration fee = 28,750, the invoice is correct. Noise: cloud spend 153,600 of 240,000, hiring, on-call, office move."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SQTEAM-001",
+      "category": "decisions",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Sorry, quick one, what hourly rate did we actually sign with Halvorsen? I've seen two numbers floating around.",
+      "context_condition": "grounded",
+      "context_ref": "SQTEAM-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "lookup"
+      ],
+      "expected_answer_type": "single figure from the notes, speakable",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "$118/hour"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQTEAM-002",
+      "category": "prioritization",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "How many months until Pipewright pays for itself, using the numbers in the notes?",
+      "context_condition": "grounded",
+      "context_ref": "SQTEAM-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "payback",
+        "rate"
+      ],
+      "expected_answer_type": "payback period with the working",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "$18,000 one-time",
+        "$1,250 per month",
+        "$85/hour"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQTEAM-003",
+      "category": "risks",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Honestly I think we're fine on contractors, we've still got about fifty K of the Q3 budget left for September.",
+      "context_condition": "grounded",
+      "context_ref": "SQTEAM-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "discrepancy",
+        "budget"
+      ],
+      "expected_answer_type": "constructive correction with the remaining budget",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "$96,000",
+        "$31,400",
+        "$28,750"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQTEAM-004",
+      "category": "disagreement",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Can I flag something? Halvorsen's August invoice is twenty-eight seven fifty, but two hundred twenty hours at a hundred eighteen is only about twenty-six grand. Are they padding it?",
+      "context_condition": "grounded",
+      "context_ref": "SQTEAM-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "consistent",
+        "budget"
+      ],
+      "expected_answer_type": "reconciliation of the invoice for the meeting",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "$2,790",
+        "220 hours"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

@@ -4,7 +4,11 @@
 
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
+import { makeUsagePreviews } from './services/meeting/usagePreviews';
 import type { AttemptId, TurnIdentity } from './llm/turnIdentity';
+import { stripGistTrailer } from '../src/lib/displayMarkup';
+import { createActiveDesignState, type ActiveDesign } from '../src/lib/diagram/activeDesign.mjs';
+import { replaceMermaidSource } from '../src/lib/diagram/fencedBlocks.mjs';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -36,6 +40,11 @@ function isCannedFallbackPhrase(text: string): boolean {
  */
 export type TranscriptOrigin = 'stt' | 'manual_chat' | 'assistant' | 'system_instruction' | 'test';
 
+// Label, inside [..], of a line the user typed to the assistant in the rolling
+// context. Defined in its own module so the other formatter can share it.
+import { TYPED_TURN_LABEL } from './llm/typedTurnLabel';
+export { TYPED_TURN_LABEL };
+
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
@@ -49,6 +58,11 @@ export interface TranscriptSegment {
     confidence?: number;
     /** Where this segment came from. Absent = legacy/unknown writer (see TranscriptOrigin). */
     origin?: TranscriptOrigin;
+    /** An assistant line that answers something the user TYPED (overlay chat or
+     *  phone), as opposed to a live suggestion nobody asked for in writing.
+     *  Meeting notes keep these beside the typed question they answer; every
+     *  other reader still sees origin 'assistant' and treats it as before. */
+    chatReply?: boolean;
     /** STT provider id that produced this segment (WTA audit F9, additive). */
     sttProvider?: string;
     /** Punctuation provenance (WTA audit F9): 'unavailable' means the provider
@@ -88,6 +102,8 @@ export interface SuggestionTrigger {
 // Context item matching Swift ContextManager structure
 export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
+    /** A user line that was TYPED to the assistant, not said in the meeting. */
+    typed?: boolean;
     text: string;
     timestamp: number;
     /** STT provider id (WTA audit F9, additive; absent on legacy/assistant items). */
@@ -160,6 +176,10 @@ export class SessionTracker {
     private currentMeetingMetadata: {
         title?: string;
         calendarEventId?: string;
+        /** Filled in at start by SessionCalendarLinker when the session matches an event. */
+        calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot;
+        /** The call it is in (a meeting tab's key), for who spoke when (meetingDetection/callRoster). */
+        callKey?: string;
         source?: 'manual' | 'calendar';
     } | null = null;
 
@@ -190,6 +210,14 @@ export class SessionTracker {
     private detectedCodingQuestion: string | null = null;
     private codingQuestionSource: 'screenshot' | 'transcript' | null = null;
     private codingQuestionSetAt: number | null = null;
+
+    // The system design currently on the table (latest valid Mermaid diagram,
+    // its view and version). ONE shared instance for every route that records
+    // through addAssistantMessage — typed chat, What to Answer, Auto Answer,
+    // follow-ups — so a design drawn on one surface can be refined from
+    // another. Cleared with the session context (new meeting, mode switch,
+    // reset); expires on its own after a quiet half hour.
+    private activeDesign = createActiveDesignState();
 
     // Rolling buffer for multi-segment interviewer question detection
     private recentInterviewerBuffer: { text: string; timestamp: number }[] = [];
@@ -289,6 +317,9 @@ export class SessionTracker {
      */
     clearSessionContext(): void {
         this.contextItems = [];
+        this.activeDesign.clear();
+        this.pendingDiagramRepairs = [];
+        this.lastRepairedAnswer = null;
         this.detectedCodingQuestion = null;
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
@@ -349,6 +380,7 @@ export class SessionTracker {
             role,
             text,
             timestamp: segment.timestamp,
+            ...(role === 'user' && segment.origin === 'manual_chat' ? { typed: true } : {}),
             // F9 provenance rides along when the seam supplied it (additive;
             // legacy writers leave both undefined = neutral treatment).
             ...(segment.sttProvider ? { sttProvider: segment.sttProvider } : {}),
@@ -385,7 +417,11 @@ export class SessionTracker {
      */
     addAssistantMessage(
         text: string,
-        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        // `answersSpokenQuestion`: the Answer button sends what the user SAID
+        // through the typed-chat handler, so its reply arrives on the
+        // 'manual_chat' surface too. It is a live suggestion, not a reply to
+        // typed chat, and must not be tagged (or noted) as one.
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean; answersSpokenQuestion?: boolean },
         // Phase 9 surface isolation (2026-07-14): OPTIONAL — absent means the
         // caller hasn't been updated yet, and this write behaves exactly as
         // before (shared lastAssistantMessage / assistantResponseHistory
@@ -401,6 +437,14 @@ export class SessionTracker {
         // lastCommittedAttemptBySurface above).
         identity?: TurnIdentity,
     ): boolean {
+        // A diagram of this answer that the overlay already repaired (the
+        // repair can land while the answer is still streaming, before any of
+        // it is recorded here) is recorded repaired.
+        {
+            const before = text;
+            text = this.withPendingDiagramRepairs(text);
+            this.lastRepairedAnswer = text !== before ? { before: stripGistTrailer(before), after: stripGistTrailer(text) } : null;
+        }
         console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only', surface: surface ?? 'unspecified' });
 
         // TurnIdentity write guard — checked FIRST, before any other filter
@@ -444,7 +488,11 @@ export class SessionTracker {
             }
         } catch { /* non-fatal — fall through to normal filtering */ }
 
-        const cleanText = text.trim();
+        // The trailing [[GIST]] line is display metadata (the overlay/phone
+        // chip), never answer text: history, the meeting transcript, the
+        // usage log and every follow-up that re-reads the last answer get the
+        // answer without it. One chokepoint for all ~30 callers.
+        const cleanText = stripGistTrailer(text).trim();
         if (cleanText.length < 10) {
             console.warn(`[SessionTracker] Ignored short message (<10 chars)`);
             return false;
@@ -470,7 +518,8 @@ export class SessionTracker {
             confidence: 1.0,
             // Defect B (2026-08-01): assistant answers are NOT meeting evidence.
             // Meeting-memory extraction filters on origin === 'stt'.
-            origin: 'assistant'
+            origin: 'assistant',
+            ...((surface === 'manual_chat' || surface === 'phone_mirror') && writeDecision?.answersSpokenQuestion !== true ? { chatReply: true } : {}),
         });
 
         // Compact transcript with summarization instead of losing early context
@@ -483,6 +532,9 @@ export class SessionTracker {
         if (surface) {
             this.lastAssistantMessageBySurface[surface] = cleanText;
         }
+        // A final answer carrying a valid diagram becomes (or updates) the
+        // design on the table. An answer without one leaves it untouched.
+        try { this.activeDesign.observeAnswer(cleanText); } catch { /* continuity only */ }
         if (identity) {
             this.lastCommittedAttemptBySurface[surface ?? 'unspecified'] = identity.attemptId;
         }
@@ -592,7 +644,8 @@ export class SessionTracker {
             if (seg.timestamp < cutoff) continue;
             const text = (seg.text || '').trim();
             if (!text) continue;
-            out.push({ role: this.mapSpeakerToRole(seg.speaker), text, timestamp: seg.timestamp });
+            const role = this.mapSpeakerToRole(seg.speaker);
+            out.push({ role, text, timestamp: seg.timestamp, ...(role === 'user' && seg.origin === 'manual_chat' ? { typed: true } : {}) });
         }
         return out;
     }
@@ -667,6 +720,18 @@ export class SessionTracker {
     }
 
     /**
+     * What people SAID in the last `lastSeconds`, formatted like
+     * getFormattedContext, read from the durable transcript. getFormattedContext
+     * reads the rolling window, which is evicted after three minutes whatever
+     * is asked for: "draw what we discussed" was handed at most three minutes
+     * of a meeting however long the window it asked for. Speech only — the
+     * assistant's own suggestions are not something anyone described.
+     */
+    getFormattedSpeech(lastSeconds: number = 600): string {
+        return this.formatContextItems(this.getDurableContext(lastSeconds).filter((item) => item.role !== 'assistant' && !item.typed));
+    }
+
+    /**
      * Formatted context including rolling interim interviewer speech.
      */
     getFormattedContextWithInterim(lastSeconds: number = 120): string {
@@ -675,8 +740,14 @@ export class SessionTracker {
 
     private formatContextItems(items: ContextItem[]): string {
         return items.map(item => {
+            // A typed line is the user's, but it was never said aloud. Labelled
+            // [ME] it reached the prompt as the meeting's own speech — a typed
+            // "hi" was handed to the model as something said in the meeting,
+            // beside the same "hi" as a User line (2026-10-04). The label is
+            // upper-case words only so the label strippers and the two turn
+            // parsers (TYPED_TURN_LABEL's importers) treat it like the others.
             const label = item.role === 'interviewer' ? 'INTERVIEWER' :
-                item.role === 'user' ? 'ME' :
+                item.role === 'user' ? (item.typed ? TYPED_TURN_LABEL : 'ME') :
                     'ASSISTANT (PREVIOUS SUGGESTION)';
             return `[${label}]: ${item.text}`;
         }).join('\n');
@@ -776,20 +847,154 @@ export class SessionTracker {
     /**
      * Public method to log usage from external sources (e.g. IPC direct chat)
      */
-    logUsage(type: string, question: string, answer: string): void {
-        this.fullUsage.push({
+    logUsage(type: string, question: string, answer: string, imagePaths?: readonly string[]): void {
+        this.pushUsage({
             type,
             timestamp: Date.now(),
             question,
-            answer,
+            answer: typeof answer === 'string' ? stripGistTrailer(answer) : answer,
             source: type === 'chat' ? 'manual_chat' : 'external',
+            imagePaths,
         });
-        this.capUsageArray();
     }
 
+    // ============================================
+    // Active design (system-design diagrams)
+    // ============================================
+
+    /** The design on the table, or null. */
+    getActiveDesign(): ActiveDesign | null {
+        try { return this.activeDesign.get(); } catch { return null; }
+    }
+
+    /** A fresh design turn is starting; remember what it asked (a hint only). */
+    noteDesignQuestion(question: string | null | undefined): void {
+        try { this.activeDesign.noteDesignQuestion(question); } catch { /* hint only */ }
+    }
+
+    /**
+     * Says what the turn being answered is: a follow-up on the design (keep it
+     * in focus through the answer), or not one (`false`: forget a mark left by
+     * a follow-up that was never answered).
+     */
+    touchActiveDesign(followsUp: boolean = true, mayFollowUp: boolean = false): void {
+        try {
+            if (followsUp) this.activeDesign.touch();
+            else this.activeDesign.untouch();
+            // An undecided turn: the model was handed the design and decides
+            // whether the turn is about it (see activeDesign.consider).
+            if (!followsUp && mayFollowUp) this.activeDesign.consider();
+        } catch { /* hint only */ }
+    }
+
+    /** Drop the design (a new meeting must not inherit the previous one's). */
+    clearActiveDesign(): void {
+        this.activeDesign.clear();
+        this.pendingDiagramRepairs = [];
+        this.lastRepairedAnswer = null;
+    }
+
+    /**
+     * The renderer repaired a Mermaid block that did not parse. Put the working
+     * source wherever the broken one was recorded — the design on the table,
+     * the last answer, and the usage log that becomes the saved meeting — so a
+     * reopened meeting draws the repaired diagram. Exact-source match only: a
+     * repair can never be merged into a different answer.
+     */
+    applyDiagramRepair(originalSource: string, repairedSource: string): boolean {
+        let changed = false;
+        try { changed = this.activeDesign.applyRepair(originalSource, repairedSource) || changed; } catch { /* ignore */ }
+        const swap = (text: unknown): unknown => {
+            if (typeof text !== 'string') return text;
+            const next = replaceMermaidSource(text, originalSource, repairedSource);
+            if (next !== text) changed = true;
+            return next;
+        };
+        this.lastAssistantMessage = swap(this.lastAssistantMessage) as string | null;
+        for (const key of Object.keys(this.lastAssistantMessageBySurface) as ConversationSurface[]) {
+            this.lastAssistantMessageBySurface[key] = swap(this.lastAssistantMessageBySurface[key]) as string;
+        }
+        // Only the most recent entries: a repair belongs to an answer just shown.
+        for (const entry of this.fullUsage.slice(-6)) {
+            if (entry && typeof entry.answer === 'string') entry.answer = swap(entry.answer);
+        }
+        for (const item of this.contextItems.slice(-6)) {
+            if (item.role === 'assistant') item.text = swap(item.text) as string;
+        }
+        for (const seg of this.fullTranscript.slice(-12)) {
+            if (seg.speaker === 'assistant') seg.text = swap(seg.text) as string;
+        }
+        for (const h of this.assistantResponseHistory.slice(-4)) {
+            h.text = swap(h.text) as string;
+        }
+        // The overlay accepts a repair when its card draws — which can be while
+        // the answer is still streaming, before any of it has been recorded.
+        // Nothing matched then, and the broken source was recorded afterwards
+        // (as the saved answer AND as the design on the table). It is kept for
+        // a short while and applied to what is recorded next.
+        if (!changed) this.rememberPendingDiagramRepair(originalSource, repairedSource);
+        return changed;
+    }
+
+    private pendingDiagramRepairs: Array<{ original: string; repaired: string; at: number }> = [];
+    /** The last answer a pending repair was applied to, as written and as recorded (for the usage log's copy). */
+    private lastRepairedAnswer: { before: string; after: string } | null = null;
+    private static readonly PENDING_DIAGRAM_REPAIR_TTL_MS = 5 * 60 * 1000;
+    private static readonly PENDING_DIAGRAM_REPAIR_MAX = 8;
+
+    private rememberPendingDiagramRepair(original: string, repaired: string): void {
+        if (typeof original !== 'string' || typeof repaired !== 'string' || !original.trim() || original === repaired) return;
+        this.pendingDiagramRepairs = this.pendingDiagramRepairs.filter((r) => r.original !== original);
+        this.pendingDiagramRepairs.push({ original, repaired, at: Date.now() });
+        while (this.pendingDiagramRepairs.length > SessionTracker.PENDING_DIAGRAM_REPAIR_MAX) this.pendingDiagramRepairs.shift();
+    }
+
+    /** An answer about to be recorded, with any diagram the overlay already repaired swapped in (exact source only). */
+    private withPendingDiagramRepairs(text: string): string {
+        if (typeof text !== 'string' || this.pendingDiagramRepairs.length === 0) return text;
+        const cutoff = Date.now() - SessionTracker.PENDING_DIAGRAM_REPAIR_TTL_MS;
+        this.pendingDiagramRepairs = this.pendingDiagramRepairs.filter((r) => r.at >= cutoff);
+        let out = text;
+        try {
+            for (const repair of [...this.pendingDiagramRepairs]) {
+                const next = replaceMermaidSource(out, repair.original, repair.repaired);
+                if (next !== out) {
+                    out = next;
+                    // Spent: one repair belongs to one answer.
+                    this.pendingDiagramRepairs = this.pendingDiagramRepairs.filter((r) => r !== repair);
+                }
+            }
+        } catch { /* the answer is recorded as written */ }
+        return out;
+    }
+
+    /**
+     * `imagePaths`: the screenshots the answer used. They are not stored; their
+     * previews are made in the background (usagePreviews.ts) and land on the same
+     * entry object as `images`, which is what DatabaseManager.saveMeeting persists.
+     * The screenshot files are temporary (ScreenshotHelper deletes them), so this
+     * has to happen now rather than at save time.
+     */
     pushUsage(entry: any): void {
+        // The same object stays in the log (callers may hold it); only the file
+        // paths come off it, so they are never persisted.
+        const imagePaths = entry?.imagePaths;
+        if (entry && 'imagePaths' in entry) delete entry.imagePaths;
+        // Same rule as logUsage: the usage log (ai_interactions) stores the
+        // answer without its [[GIST]] display line. In place, for the same reason.
+        if (entry && typeof entry.answer === 'string') entry.answer = stripGistTrailer(entry.answer);
+        // (The usage entry is written after the assistant message; a repair
+        // spent there is found here through the message it was applied to.)
+        if (entry && typeof entry.answer === 'string' && this.lastRepairedAnswer && entry.answer === this.lastRepairedAnswer.before) {
+            entry.answer = this.lastRepairedAnswer.after;
+        }
         this.fullUsage.push(entry);
         this.capUsageArray();
+        if (Array.isArray(imagePaths) && imagePaths.length > 0) {
+            makeUsagePreviews(imagePaths)
+                .then((images) => { if (images.length > 0) entry.images = images; })
+                .catch((err) => console.warn('[SessionTracker] Screenshot previews for usage failed:', err?.message ?? err));
+        }
     }
 
     // ============================================
@@ -825,6 +1030,9 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.activeDesign.clear();
+        this.pendingDiagramRepairs = [];
+        this.lastRepairedAnswer = null;
         this.sessionEpoch++;
         this.contextEpoch++;
     }

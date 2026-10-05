@@ -55,7 +55,8 @@ export interface RetrievalQueryDecision {
  */
 export const SCREEN_TEXT_QUERY_MAX_CHARS = 2000;
 
-const TURN_LABEL_RE = /^\[(INTERVIEWER|ME|ASSISTANT)\]: /;
+// ME TYPED: a line the user typed to the assistant (SessionTracker.TYPED_TURN_LABEL).
+const TURN_LABEL_RE = /^\[(INTERVIEWER|ME TYPED|ME|ASSISTANT)\]: /;
 
 /**
  * Drop `[ASSISTANT]: ` turns (including their continuation lines, which carry

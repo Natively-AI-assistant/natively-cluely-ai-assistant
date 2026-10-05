@@ -1,0 +1,153 @@
+{
+ "batch": "b004-sales",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HSALES-CTX-G1": {
+   "title": "Brightloom Relay product and pricing sheet",
+   "text": "Brightloom Relay - Product and Pricing Sheet (FY2026, rep-facing)\nKestrel Forge Software, Inc. | Effective 1 March 2026 | Owner: Revenue Operations\n\nWHAT IT IS\nBrightloom Relay is field-service scheduling and dispatch software for trades businesses with 5 to 500 field technicians (HVAC, plumbing, electrical, pest control, appliance repair). It replaces whiteboards, shared calendars and phone tag between the office and the field.\n\nCORE MODULES\n- Dispatch Board: a drag-and-drop dispatch board with every technician as a row and every job as a colour-coded block by status (Unassigned, Scheduled, En Route, On Site, Done). Dispatchers see live technician location, updated every 60 seconds while a tech is clocked in, plus skill tags and overtime warnings before they assign a job.\n- Relay Field app (iOS and Android): job details, customer history, photos, checklists, signature capture and on-site quoting. The app works offline; jobs, notes and photos queue on the phone and sync when signal returns. Offline mode keeps up to 7 days of assigned jobs on the device.\n- Customer notifications: automatic \"on my way\" text with a live arrival window. Each account includes 1,000 SMS messages per month; extra messages are $0.02 each.\n- Route optimization: re-sequences a technician's day to cut drive time. Growth and Enterprise only.\n- Invoicing and payments: invoice straight from the job, card-on-file, and sync to QuickBooks Online on all plans. NetSuite connector (Enterprise only).\n- Reporting: first-time-fix rate, jobs per tech per day, revenue per job, on-time arrival percentage.\n\nINTEGRATIONS\nNative: QuickBooks Online, NetSuite (Enterprise only), Salesforce, HubSpot, Google Calendar, Microsoft 365 Calendar.\nNot currently supported: SAP (any edition), Sage Intacct, Xero. Customers on these systems can use the open REST API (limit 600 requests per minute per account) or a nightly scheduled CSV export. There is no committed date for new accounting connectors; do not promise one.\n\nPLANS AND LIST PRICING (per field technician seat)\n- Starter: $29 per technician per month billed annually, or $34 billed monthly. Up to 15 technicians. Dispatch Board, Field app, notifications, QuickBooks Online sync. No route optimization.\n- Growth: $54 per technician per month, billed annually only. 10-seat minimum. Everything in Starter plus route optimization, custom checklists, and Salesforce and HubSpot sync.\n- Enterprise: custom pricing, minimum annual contract value $40,000. Everything in Growth plus the NetSuite connector, a sandbox environment, data residency choice and a named Customer Success Manager.\nOffice seats (dispatchers, office admins) are free up to 5 per account; each additional office seat is $15 per month.\n\nONE-TIME IMPLEMENTATION FEE\n- Starter: self-serve onboarding, no fee.\n- Growth: guided implementation, $2,500 one-time. Covers data import, 2 remote training sessions and 30 days of go-live support.\n- Enterprise: scoped per project, starting at $7,500.\n\nDISCOUNTING GUIDELINES (internal - do not read out)\n- Multi-year prepay: 2-year term 8% off list, 3-year term 12% off list (Growth and Enterprise).\n- Reps may approve up to 10% additional discount on their own. Above 10% needs Sales Director approval; above 20% needs CRO approval.\n- Implementation fee waivers need Sales Director approval.\n- Nonprofit pricing: 15% off Starter or Growth with documentation.\n- No free trials. A 30-day paid pilot on Growth is available for up to 10 technicians at $64 per technician for the pilot month, credited against year one if the customer signs within 45 days of pilot end.\n\nPOSITIONING NOTES\nLead with dispatcher time saved and on-time arrivals, not features. Typical reference customers are 20 to 80 technician shops moving off a whiteboard or a shared calendar. Do not quote customer results by name without a signed reference agreement."
+  },
+  "HSALES-CTX-G2": {
+   "title": "Brightloom Relay security, support and terms summary",
+   "text": "Brightloom Relay - Security, Support and Commercial Terms Summary\nKestrel Forge Software, Inc. | Version 2026.2 | Owner: Legal and Security\n\nSECURITY AND COMPLIANCE\n- SOC 2 Type II: the current report covers 1 January to 31 December 2025. It is shared under a mutual NDA through the customer trust portal, usually within 2 business days of the NDA being signed.\n- ISO 27001: not certified. Kestrel Forge has not committed to a certification date; do not state one.\n- Penetration testing: annual test by an independent firm. An executive summary letter is available under NDA; the full report is not shared.\n- Encryption: AES-256 at rest, TLS 1.2 or higher in transit.\n- Hosting: AWS. Default region is US (Ohio). EU data residency (Frankfurt) is available on Enterprise only.\n- Single sign-on: SAML 2.0 SSO (Okta, Microsoft Entra ID, Google Workspace) is Enterprise only, as is SCIM user provisioning. Starter and Growth use email and password with optional authenticator-app two-factor.\n- Health data: Brightloom Relay is not designed to store protected health information, and Kestrel Forge does not sign Business Associate Agreements.\n- Subprocessors are listed on the trust portal; customers get 30 days notice of changes.\n\nSUPPORT\n- Starter: email and in-app chat, 8am to 6pm US Central, Monday to Friday. Target first response: 1 business day.\n- Growth: adds phone support in the same hours. Priority 1 (system down) first response within 4 business hours.\n- Enterprise: 24/7 phone line for Priority 1, first response within 1 hour, plus a named Customer Success Manager.\n\nUPTIME\n- Enterprise SLA: 99.9% monthly uptime for the Dispatch Board and the API. Service credits: 10% of the monthly fee if uptime falls below 99.9%, 25% if it falls below 99.0%. Credits are the sole remedy and must be requested within 30 days of the end of the affected month. The mobile app's offline mode is not covered by the SLA.\n- Starter and Growth: no contractual SLA. A public status page shows live and historical uptime.\n\nCONTRACT TERMS\n- Subscriptions are annual and auto-renew for 12 months unless either party gives 60 days written notice before the renewal date.\n- Renewal price increases are capped at 5% per year for Growth and Enterprise.\n- No termination for convenience during a term. Seats can be added at any time (prorated) but reduced only at renewal.\n- Payment terms: Net 30 standard. Net 45 with Finance approval. Longer terms are not offered.\n- Refunds: annual fees are non-refundable except for SLA service credits. Monthly Starter customers can cancel at any time, effective at the end of the billing month.\n- Customer data can be exported at any time via CSV or the API. After termination, data is retained for 90 days and then deleted within a further 30 days.\n\nWHO TO LOOP IN\nSecurity questionnaires: security-review team via the deal desk, 5 business day turnaround. Redlines: Legal, 7 business day turnaround. Reps must not agree to non-standard terms on a call."
+  },
+  "HSALES-CTX-I1": {
+   "title": "Kestrel Forge spring offsite logistics",
+   "text": "Kestrel Forge - Spring Offsite Logistics (internal)\nFrom: People Operations\n\nDates: Wednesday 22 April to Friday 24 April.\nVenue: Pinecrest Lodge, about two hours north of the office. Check-in from 3pm on Wednesday; check-out by 11am Friday.\n\nTravel\n- A coach leaves the office car park at 12:30pm Wednesday. Please be there by 12:15.\n- If you are driving, parking at the lodge is free but limited to 40 spaces. Carpool sign-up sheet is on the kitchen noticeboard.\n- Mileage is reimbursed at the standard rate if you drive more than one colleague.\n\nSchedule\n- Wednesday evening: welcome dinner and quiz night (teams are pre-assigned, no swapping).\n- Thursday: morning hike or yoga, afternoon workshops on planning for next year, evening bonfire.\n- Friday: brunch, then the coach back at 11:30am.\n\nFood\nTell People Operations about dietary needs by 3 April. The lodge can do vegetarian, vegan, gluten-free and nut-free meals. Anything else, let us know early.\n\nWhat to bring\nWalking shoes, a warm layer for the bonfire, a refillable water bottle. Rooms are shared by two; room lists go out one week before.\n\nQuestions to the People Operations channel."
+  }
+ },
+ "items": [
+  {
+   "jid": "dc38157c61cc",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "So the invoices just flow straight into our accounting system like they would with QuickBooks, right? That was kind of the whole point for us.",
+   "conversation": [
+    "USER (spoken): What are you using for accounting today?",
+    "PROSPECT: We moved everything onto SAP Business One last year. Took forever, not doing that again.",
+    "USER (spoken): Got it. And invoicing happens in the office after the job?",
+    "PROSPECT: Yeah, usually a day or two later, which is part of the problem."
+   ],
+   "evidence_ids": [
+    "HSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "SAP isn't one of our native connectors, so I want to be straight with you rather than let you find that out later. QuickBooks Online syncs natively on every plan, and NetSuite is there on Enterprise, but SAP Business One isn't supported today, and I won't promise a date for it. What we do have is an open REST API and a nightly scheduled CSV export, so invoices can still land in SAP, just through one of those rather than a built-in sync. Would it help if I walked your finance lead through what that setup actually looks like?"
+  },
+  {
+   "jid": "e65b6335cdeb",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They want net 90.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Net 90 is a real stretch for us on cash flow, so let me be straight about that. What I can do is hold the pricing where it is and look at splitting the terms, say 30 up front and the balance at 90, if that helps your side. Would that work for your finance team?"
+  },
+  {
+   "jid": "bcdd537b742e",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Here's where I am. If you can do twenty-five percent off, waive the onboarding fee, and give us a way out after six months if the techs hate it, I'll sign today. Otherwise we wait until next year.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can do the 25 percent off and waive onboarding, and I'm fine putting a six-month exit in writing if the techs aren't happy. What I can't do is stack all three as open-ended, so let's put the exit terms on paper today and get signatures moving."
+  },
+  {
+   "jid": "42b76d980a70",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They asked what the dispatcher actually sees all day. Give me two sentences I can read out.",
+   "conversation": [],
+   "evidence_ids": [
+    "HSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The dispatcher lives on the **Dispatch Board**, where every technician is a row and every job is a colour-coded block by status, from Unassigned through Done. They can see live technician location updating every 60 seconds while a tech is clocked in, plus skill tags and overtime warnings before they assign the next job."
+  },
+  {
+   "jid": "007ee237a9f3",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Okay, then I want that ninety-nine point nine nine in the order form. What do we get back if you miss it, and does that cover the phone app too?",
+   "conversation": [
+    "PROSPECT: What happens if your system goes down on a Monday morning? That's our busiest day.",
+    "USER (spoken): Honestly it basically doesn't. We guarantee ninety-nine point nine nine percent uptime.",
+    "PROSPECT: Even on the Growth plan? That's what we'd be buying.",
+    "USER (spoken): Yeah, that's across the board."
+   ],
+   "evidence_ids": [
+    "HSALES-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "I have to be straight with you, and I'd rather correct myself now than have it show up in a contract. The 99.99% I said isn't something we can put in writing. The contractual SLA is on Enterprise: 99.9% monthly uptime for the Dispatch Board and the API, with service credits of 10% of the monthly fee if we fall below that, and 25% if we fall below 99.0%. Credits are the only remedy, and they have to be requested within 30 days of the end of the affected month. Growth has no contractual SLA, just the public status page.\n\nOn the phone app, the mobile app's offline mode isn't covered by the SLA at all, so I don't want to tell you it is. If uptime in writing is what matters most here, let's look at Enterprise together. Can I put a side-by-side of Growth and Enterprise in front of you this week?"
+  },
+  {
+   "jid": "2bb75ee74e65",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Is that per user?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, that's per user. So the number holds whether you're rolling it out to five people or five hundred, and you only pay for the seats you actually activate. Want me to put the per-seat math in writing for your team size?"
+  },
+  {
+   "jid": "91380be06df4",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Half my techs are over fifty and a couple still carry flip phones. They are not going to use an app.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's fair, and honestly the app isn't the point. What matters is that work orders and updates get to them where they already are, so we can set it up so jobs come through as a text or a phone call, no smartphone needed. Would it help if I showed you what that looks like for a couple of your techs?"
+  },
+  {
+   "jid": "bc00525f77fa",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Meaning what, exactly?",
+   "conversation": [
+    "PROSPECT: And how does pricing work for the people in the office? We've got dispatchers and a couple of admins.",
+    "USER (spoken): We price per field technician, and office seats are free up to five per account."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It means the price is based only on how many field techs you have. Your dispatchers and admins don't add anything as long as you're at five office seats or fewer. So with a couple of admins and your dispatchers, you're likely still inside that, and the only thing that moves the number is adding field techs. How many field techs are you running today?"
+  },
+  {
+   "jid": "343db7c1d181",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Okay so we've got about forty field techs and six people in the office doing dispatch. What would Growth actually run us for a year?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Growth runs **$54 per tech per month**, billed annually, so forty techs is **$25,920 a year**. Office seats are free up to five, and you've got six, so that sixth dispatcher seat adds $15 a month, which is $180 for the year. That puts you at **$26,100** all in, plus a one-time $2,500 guided implementation for data import, two training sessions and thirty days of go-live support.\n\nWant me to put that in writing with the route optimization and dispatch board walkthrough so your six dispatchers can see it?"
+  },
+  {
+   "jid": "1b1709296928",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They're also talking to Routewise. Give me one question I can ask that gets them thinking about switching costs, no trash talk.",
+   "conversation": [],
+   "evidence_ids": [
+    "HSALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "They're evaluating Routewise too, which is normal. The question I'd ask is: what would it actually take to move off your current setup, and who inside your team would have to be involved in that switch? That gets them thinking about migration effort, retraining, and internal buy-in without me saying a word against Routewise. Then I'd follow with: how much does that switching cost weigh against the gap you're trying to close?"
+  }
+ ]
+}

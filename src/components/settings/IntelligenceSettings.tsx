@@ -1,7 +1,7 @@
 import {
   AlertCircle, BookmarkCheck, Brain, Check, Copy, Download, FolderOpen, Gauge, History, Image as ImageIcon,
   ImageDown, Loader2, MessagesSquare, RefreshCw, Repeat2, Route, Save, ScrollText, ShieldAlert,
-  SlidersHorizontal, Tags, Trash2, Wand2, Wifi, WifiOff,
+  SlidersHorizontal, Tags, Trash2, Wand2, Wifi, WifiOff, Workflow,
   // Reply, UserCheck — icons of the two commented-out switches below (conversationMemoryV2, profileTreeV2)
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -76,6 +76,11 @@ const FLAG_META: Record<string, { label: string; desc: string; group: FlagGroup 
   speakerLabelsV1: { label: 'Speaker labels', desc: 'Uses the names you give speakers in your notes and action items.', group: 'notes' },
   // profileTreeV2: { label: 'Extra candidate-voice check', desc: 'One more pass to catch answers that slip out of your first-person voice.', group: 'notes' }, // commented out — see conversationMemoryV2 above
   answerDiversityGuard: { label: 'Repetition guard', desc: 'Rewords a live answer’s opening when it repeats an earlier one.', group: 'notes' },
+  // System-design diagram artifacts (2026-10-01). One switch for both halves — the
+  // diagram contract in the answer prompt and the Mermaid renderer — so there is no
+  // "renderer on, generator off" state. Call sites: electron/llm/diagramPromptSignals.ts
+  // (every prompt path) and src/lib/diagram/diagramRuntime.ts (every surface that draws).
+  systemDesignDiagrams: { label: 'Diagrams and charts', desc: 'Draws diagrams and charts in answers when they help. Off shows them as code.', group: 'notes' },
   // inMeetingSearchV2 / lectureIntelligenceV2 / diagramIntelligence removed (2026-09-25),
   // together with the "Try it" section that was their ONLY caller in the app: those three
   // flags gate nothing but the search-in-meeting / generate-lecture-notes /
@@ -120,6 +125,7 @@ const FLAG_ICON: Record<string, LucideIcon> = {
   // conversationMemoryV2: Reply,   // switch commented out (see FLAG_META)
   // profileTreeV2: UserCheck,      // switch commented out (see FLAG_META)
   answerDiversityGuard: Repeat2,
+  systemDesignDiagrams: Workflow,
   globalSearchV2: History,
   trace: Route,
 };
@@ -303,17 +309,19 @@ const ContextDebugSection: React.FC = () => {
       description={t('Local logs. Verbose adds document text.')}
       control={levelPicker}
     >
-      {envForced ? (
+      {/* Both notices fold in and out like the log path below, rather than
+          shoving the rows under them (Verbose turns the second one on). */}
+      <Collapse open={!!envForced}>
         <SettingsNotice tone={tones.warn} icon={<ShieldAlert size={14} />}>
           {t('Set by NATIVELY_CONTEXT_DEBUG — the environment variable overrides this setting.')}
         </SettingsNotice>
-      ) : null}
+      </Collapse>
 
-      {cfg.contentInclusion ? (
+      <Collapse open={!!cfg.contentInclusion}>
         <SettingsNotice tone={tones.warn} icon={<ShieldAlert size={14} />}>
           {t('Full local evidence logging is enabled (development build). Logs may contain sensitive personal data.')}
         </SettingsNotice>
-      ) : null}
+      </Collapse>
 
       {/* The log path grows in when logging is switched on and folds away with Off. */}
       <Collapse open={cfg.level !== 'off' && !!logPath}>
@@ -871,7 +879,7 @@ export const IntelligenceSettings: React.FC = () => {
                       </li>
                       <li>
                         <span className="font-semibold text-text-primary">{t('2. Start it.')}</span>{' '}
-                        {t('This launcher lives in the')} <button type="button" onClick={() => openExternal('https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant')} className="text-accent-primary hover:underline">{t('Natively source repository')}</button>, {t('not the installed app — clone it, then from the repo root run and keep it running while you use the app (requires Node.js, and on Windows a bash shell such as WSL or Git Bash):')}
+                        {t('This launcher lives in the')} <button type="button" onClick={() => openExternal('https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant')} className="text-accent-primary hover:underline">{t('Natively source repository')}</button>{t(', not the installed app — clone it, then from the repo root run and keep it running while you use the app (requires Node.js, and on Windows a bash shell such as WSL or Git Bash):')}
                         <CopyBlock text="bash scripts/hindsight-start.sh" />
                         <span className="mt-1.5 block">
                           {t('Starts the embedded memory server on port 8888.')}

@@ -306,7 +306,7 @@ function codexHelper({ localOnly = false } = {}) {
   const h = Object.create(LLMHelper.prototype);
   h.isCodexAvailable = () => true;
   h.isLocalOnlyMode = localOnly;
-  h.codexCliConfig = { path: 'codex', model: 'gpt-5.4', fastModel: 'gpt-5.3-codex', timeoutMs: 60_000 };
+  h.codexCliConfig = { path: 'codex', model: 'gpt-5.4', timeoutMs: 60_000 };
   h.currentModelId = 'codex-cli';
   return h;
 }

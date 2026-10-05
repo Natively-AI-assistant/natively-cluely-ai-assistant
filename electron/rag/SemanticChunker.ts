@@ -139,16 +139,35 @@ export function chunkTranscript(
     return chunks;
 }
 
+/** Clock-time milliseconds are 13 digits; no offset into a meeting comes close. */
+const CLOCK_TIME_FLOOR_MS = 1e11;
+
 /**
- * Format chunks for display in context
+ * Format chunks for display in context.
+ *
+ * The bracket is the chunk's time INTO ITS MEETING. Stored chunk times are
+ * clock time (the transcript's Date.now() stamps), so printing them raw gave
+ * every chunk a header like "[29851971:37]". `meetingStartMs` is the start of
+ * the chunk's meeting on the same clock; without it a clock-time chunk gets no
+ * bracket rather than a wrong one. A chunk whose times are already offsets
+ * (the demo meeting) prints as before.
  */
-export function formatChunkForContext(chunk: Chunk): string {
-    const minutes = Math.floor(chunk.startMs / 60000);
-    const seconds = Math.floor((chunk.startMs % 60000) / 1000);
-    const timestamp = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+export function formatChunkForContext(chunk: Chunk, meetingStartMs?: number): string {
+    let offsetMs: number | undefined = chunk.startMs;
+    if (chunk.startMs >= CLOCK_TIME_FLOOR_MS) {
+        offsetMs = typeof meetingStartMs === 'number' && meetingStartMs > 0 && chunk.startMs >= meetingStartMs
+            ? chunk.startMs - meetingStartMs
+            : undefined;
+    }
+    let bracket = '';
+    if (typeof offsetMs === 'number' && Number.isFinite(offsetMs) && offsetMs >= 0) {
+        const minutes = Math.floor(offsetMs / 60000);
+        const seconds = Math.floor((offsetMs % 60000) / 1000);
+        bracket = `[${minutes}:${seconds.toString().padStart(2, '0')}]`;
+    }
 
     // Chunks built since 2026-09-24 label every turn inside the text; older
     // rows in the store do not, and keep the single-speaker prefix.
-    if (/^(?:ME|THEM|ASSISTANT): /m.test(chunk.text)) return `[${timestamp}]\n${chunk.text}`;
-    return `[${timestamp}] ${chunk.speaker}: ${chunk.text}`;
+    if (/^(?:ME|THEM|ASSISTANT): /m.test(chunk.text)) return bracket ? `${bracket}\n${chunk.text}` : chunk.text;
+    return `${bracket ? `${bracket} ` : ''}${chunk.speaker}: ${chunk.text}`;
 }

@@ -754,6 +754,39 @@ the chip beside a plain twin using the real host rules pulled from `index.css`
 (box unchanged, interior equals the host fill, crescent reads, high-contrast
 state; each mutation-tested), and by rendering the real Usage tab in both themes.
 
+### Glass on a plain body: the overlay banner
+
+The meeting overlay's warning and error banner
+(`src/components/ui/OverlayBanner`) keeps a PLAIN body, the overlay's own
+raised-field surface, and puts the material only on the parts that carry the
+tone and the action. A version on the clear pane (`.lg-notice`) was built and
+shown beside it; the owner picked the plain body.
+
+| Part | Material |
+| --- | --- |
+| the mark (26px disc) | `lavender` + `.lg-badge`, tinted with the banner's tone |
+| the primary action | `lavender` + `.lg-sm .lg-wide`, the same tint |
+| the follow-up action | `clear` + `.lg-sm .lg-wide` |
+| the dismiss ✕ | not glass: a plain icon |
+
+**The tint is the tone, not the accent**: yellow glass on a warning, red on an
+error (owner request; it was the toggle's blue). One R, G, B triple per tone
+and scope feeds the fill, the hover, the lower rings and the glow, so the mark
+and the button are one glass in one colour.
+
+**`lavender`'s 42% sheen is for a pale body on a light page.** On the overlay's
+dark panel that much white reads as a painted stripe, so the sheen strength is
+a token and the dark scopes turn it down to 20%.
+
+**The light treatment follows the panel, not the colour theme.** The kit keys
+light mode to `[data-theme='light']`. The overlay's liquid-glass and modern
+interface themes keep a DARK panel in the light colour theme, where the light
+`clear` button (a dark hairline on a near-transparent fill) has nothing to
+stand against. `OverlayBanner.css` hands those two scopes the dark values back.
+
+Derived, not measured. Rendered in the overlay's four theme scopes (dark,
+light, liquid-glass, modern) across all 26 banner states.
+
 ### Light mode is derived, not measured
 
 Everything else in this document was sampled from a reference. Light mode was

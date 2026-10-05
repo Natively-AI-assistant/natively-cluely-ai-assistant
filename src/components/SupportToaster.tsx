@@ -22,9 +22,6 @@ import supportArt from '../assets/cards/support.jpg';
 
 const SUPPORT_URL = 'https://buymeacoffee.com/evinjohnn';
 
-// Returning to the app after this long from the support page is taken as a
-// donation, and the card retires itself.
-const PRESUMED_DONATION_MS = 20_000;
 
 // ─── Tokens ────────────────────────────────────────────────────
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
@@ -83,7 +80,8 @@ const ITEM = {
 
 interface SupportToasterProps {
   isOpen: boolean;
-  onDismiss: () => void;
+  /** Why it closed, for the host's card ledger: 'acted' once a donation is presumed, else nothing. */
+  onDismiss: (reason?: 'acted') => void;
   className?: string;
 }
 
@@ -99,28 +97,12 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
   // card closes itself first and reports once the genie has played.
   const [open, setOpen] = useState(true);
   const dismissedRef = useRef(false);
-  const dismiss = () => {
+  const dismissReasonRef = useRef<'acted' | undefined>(undefined);
+  const dismiss = (reason?: 'acted') => {
     dismissedRef.current = true;
+    dismissReasonRef.current = reason;
     setOpen(false);
   };
-
-  // When the user left for the support page. Set on click, read on refocus.
-  const clickTimeRef = useRef<number | null>(null);
-
-  // Coming back after a while from the support page is treated as a donation.
-  useEffect(() => {
-    const handleFocus = async () => {
-      if (clickTimeRef.current === null) return;
-      const elapsed = Date.now() - clickTimeRef.current;
-      clickTimeRef.current = null;
-      if (elapsed > PRESUMED_DONATION_MS) {
-        await window.electronAPI?.setDonationComplete?.();
-        dismiss();
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
 
   // Escape closes it, like every other card in the onboarding set.
   useEffect(() => {
@@ -135,13 +117,16 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
     if (!isOpen || !open) { setPlateHover(false); setCtaActive(false); setCtaPressed(false); }
   }, [isOpen, open]);
 
+  // "Support the Builder" is the card's action: the page opens and the card
+  // retires (toaster policy §6 row 10). A real donation is recorded by
+  // set-donation-complete, from wherever it happens.
   const handleSupport = () => {
-    clickTimeRef.current = Date.now();
     if (window.electronAPI?.openExternal) {
       window.electronAPI.openExternal(SUPPORT_URL);
     } else {
       window.open(SUPPORT_URL, '_blank');
     }
+    dismiss('acted');
   };
 
   const ctaDur = ctaActive ? CTA_IN : CTA_OUT;
@@ -151,8 +136,8 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
       open={isOpen && open}
       label="SupportToaster"
       zIndex={9999}
-      onBackdropClick={dismiss}
-      onClosed={() => { if (dismissedRef.current) onDismiss(); }}
+      onBackdropClick={() => dismiss()}
+      onClosed={() => { if (dismissedRef.current) onDismiss(dismissReasonRef.current); }}
       // Dims, never blurs (3a9901ae4): frosting the whole launcher behind the
       // card left it unreadable.
       backdropStyle={{ background: isLight ? 'rgba(10,10,18,0.30)' : 'rgba(0,0,0,0.80)' }}
@@ -276,7 +261,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
 
             <button
               type="button"
-              onClick={dismiss}
+              onClick={() => dismiss()}
               style={{
                 background: 'none', border: 0, padding: '9px 0',
                 cursor: 'pointer', fontFamily: FONT,
@@ -319,7 +304,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
 
             <button
               type="button"
-              onClick={dismiss}
+              onClick={() => dismiss()}
               aria-label="Close"
               style={{
                 position: 'absolute', top: '8px', right: '8px', zIndex: 2,

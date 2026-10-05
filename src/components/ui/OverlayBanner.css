@@ -1,0 +1,419 @@
+/*
+  OverlayBanner — the overlay's warning and error banner.
+
+  THE BODY IS PLAIN: the overlay's own raised-field tokens (--overlay-input-bg,
+  --overlay-border-soft), the surface the prompt input below it uses. Every
+  colour theme and interface theme defines them, so the banner takes each
+  theme's surface with no branch of its own. A version whose body was the
+  Liquid Glass kit's clear pane (.lg-notice) was built and shown beside this
+  one; the owner picked this.
+
+  It used to be a tinted wash (amber, orange or rose at 10%), and a wash is
+  only as clean as what is under it: over the dark slate panel amber went
+  brown, over the light blue-tinted panel it went beige.
+
+  THE GLASS IS IN THREE PLACES, all from src/ui-components:
+    the mark        a tinted glass disc, the banner's tone
+    the primary     a tinted glass button, the same tone
+    the follow-up   a clear glass button
+  The dismiss ✕ is a plain icon (owner request).
+
+  Scopes, same as the overlay tokens in index.css:
+    default                       dark
+    [data-theme='light']          light
+    liquid-glass / modern         always a dark panel, in either colour theme
+  Every --ovb-* token has its default on the base rule itself, so no scope can
+  leave one undefined (an undefined custom property drops its declaration).
+
+  The tone tokens are defined for .ov-banner AND .ov-tone-scope. The second is
+  for glass that wants a banner's colours without being a banner: the
+  captured-page chip (src/components/overlay/PageContextChip).
+*/
+
+:is(.ov-banner, .ov-tone-scope) {
+  --ovb-warning: #fbbf24;
+  --ovb-error: #f87171;
+  --ovb-ok: #34d399;
+  /* The primary action wears the banner's own tone: an amber glass button on
+     a warning, a red one on an error (owner request; it was the toggle's
+     blue). A TINT, not a fill, so the banner's surface shows through it.
+     --ovb-cta-tone is an R, G, B triple so the fill, the hover, the lower
+     rings and the glow are all the one colour at different strengths; the
+     error triple and label are set per scope below. */
+  --ovb-cta-tone: 251, 191, 36;
+  --ovb-cta-fg: #fff1c2;
+  --ovb-cta-fill: 0.32;
+  --ovb-cta-fill-hover: 0.46;
+  --ovb-cta-rim: rgba(255, 255, 255, 0.46);
+  --ovb-cta-sheen: rgba(255, 255, 255, 0.2);
+  --ovb-cta-under: rgba(0, 0, 0, 0.3);
+  --ovb-keycap-bg: rgba(255, 255, 255, 0.08);
+
+  /* Clear glass takes its label colour from here (color: inherit). */
+  color: var(--overlay-text-primary);
+}
+
+/* The banner's own body. The tokens above are shared with .ov-tone-scope (the
+   page-context chip), which has no body of its own. */
+.ov-banner {
+  background: var(--overlay-input-bg);
+  border: 1px solid var(--overlay-border-soft);
+  border-radius: 14px;
+}
+
+/* The red triple and label come after the base rule; each scope below repeats
+   the pair at its own specificity so the amber default of that scope cannot
+   outrank it. */
+:is(.ov-banner, .ov-tone-scope)[data-tone='error'] {
+  --ovb-cta-tone: 248, 113, 113;
+  --ovb-cta-fg: #ffe1e1;
+  --ovb-cta-fill: 0.3;
+  --ovb-cta-fill-hover: 0.44;
+}
+:is(.ov-banner, .ov-tone-scope)[data-tone='ok'] {
+  --ovb-cta-tone: 52, 211, 153;
+  --ovb-cta-fg: #d7fbe9;
+  --ovb-cta-fill: 0.26;
+  --ovb-cta-fill-hover: 0.4;
+}
+
+[data-theme='light'] :is(.ov-banner, .ov-tone-scope) {
+  /* Darker marks: amber-400 and red-400 wash out on a near-white field. */
+  --ovb-ok: #047857;
+  --ovb-warning: #b45309;
+  --ovb-error: #dc2626;
+  /* A pale tint with a DEEP label, as the onboarding's light button does: a
+     light label on a pale tint would run about 1.3:1. */
+  /* Yellow-500 at a heavier alpha than the red below: over this theme's
+     blue-tinted panel a thin amber tint mixes to beige, not yellow. */
+  --ovb-cta-tone: 234, 179, 8;
+  --ovb-cta-fg: #7a4004;
+  --ovb-cta-fill: 0.44;
+  --ovb-cta-fill-hover: 0.58;
+  --ovb-cta-rim: rgba(255, 255, 255, 0.78);
+  --ovb-cta-sheen: rgba(255, 255, 255, 0.42);
+  --ovb-cta-under: rgba(60, 30, 0, 0.14);
+  --ovb-keycap-bg: rgba(118, 118, 128, 0.14);
+}
+
+[data-theme='light'] :is(.ov-banner, .ov-tone-scope)[data-tone='error'] {
+  --ovb-cta-tone: 220, 38, 38;
+  --ovb-cta-fg: #8f1010;
+  --ovb-cta-fill: 0.28;
+  --ovb-cta-fill-hover: 0.4;
+}
+[data-theme='light'] :is(.ov-banner, .ov-tone-scope)[data-tone='ok'] {
+  --ovb-cta-tone: 16, 185, 129;
+  --ovb-cta-fg: #065f46;
+  --ovb-cta-fill: 0.3;
+  --ovb-cta-fill-hover: 0.42;
+}
+
+[data-interface-theme='liquid-glass'] :is(.ov-banner, .ov-tone-scope),
+[data-theme='light'] [data-interface-theme='liquid-glass'] :is(.ov-banner, .ov-tone-scope),
+[data-interface-theme='modern'] :is(.ov-banner, .ov-tone-scope),
+[data-theme='light'] [data-interface-theme='modern'] :is(.ov-banner, .ov-tone-scope) {
+  --ovb-ok: #34d399;
+  --ovb-warning: #fbbf24;
+  --ovb-error: #f87171;
+  --ovb-cta-tone: 251, 191, 36;
+  --ovb-cta-fg: #fff1c2;
+  --ovb-cta-fill: 0.32;
+  --ovb-cta-fill-hover: 0.46;
+  --ovb-cta-rim: rgba(255, 255, 255, 0.46);
+  --ovb-cta-sheen: rgba(255, 255, 255, 0.2);
+  --ovb-cta-under: rgba(0, 0, 0, 0.3);
+  --ovb-keycap-bg: rgba(255, 255, 255, 0.08);
+}
+[data-interface-theme='liquid-glass'] :is(.ov-banner, .ov-tone-scope)[data-tone='error'],
+[data-theme='light'] [data-interface-theme='liquid-glass'] :is(.ov-banner, .ov-tone-scope)[data-tone='error'],
+[data-interface-theme='modern'] :is(.ov-banner, .ov-tone-scope)[data-tone='error'],
+[data-theme='light'] [data-interface-theme='modern'] :is(.ov-banner, .ov-tone-scope)[data-tone='error'] {
+  --ovb-cta-tone: 248, 113, 113;
+  --ovb-cta-fg: #ffe1e1;
+  --ovb-cta-fill: 0.3;
+  --ovb-cta-fill-hover: 0.44;
+}
+[data-interface-theme='liquid-glass'] :is(.ov-banner, .ov-tone-scope)[data-tone='ok'],
+[data-theme='light'] [data-interface-theme='liquid-glass'] :is(.ov-banner, .ov-tone-scope)[data-tone='ok'],
+[data-interface-theme='modern'] :is(.ov-banner, .ov-tone-scope)[data-tone='ok'],
+[data-theme='light'] [data-interface-theme='modern'] :is(.ov-banner, .ov-tone-scope)[data-tone='ok'] {
+  --ovb-cta-tone: 52, 211, 153;
+  --ovb-cta-fg: #d7fbe9;
+  --ovb-cta-fill: 0.26;
+  --ovb-cta-fill-hover: 0.4;
+}
+
+/* ── The mark ──
+   A Liquid Glass disc: the kit's badge at 26px, in the same tinted material
+   as the primary button (the tone triple and fill strength are the button's
+   own tokens), so the two read as one glass in one colour. The icon keeps the
+   tone's full colour. (0,3,0), to beat .lg-button.lg-badge's 16px tag box and
+   .lg-button.lg-lavender's fill.
+
+   A disc is all cap, so the kit's length-pinned cap fade leaves the specular
+   as a short arc across the top: a bead lit from above. */
+.lg-button.lg-badge.ov-banner-mark {
+  --lg-pill-h: 26px;
+  --ovb-tone: var(--ovb-cta-tone, 251, 191, 36);
+  --lg-lav-bg: rgba(var(--ovb-tone), var(--ovb-cta-fill, 0.32));
+  --lg-lav-fg: var(--ovb-warning);
+  --lg-lav-rim: var(--ovb-cta-rim, rgba(255, 255, 255, 0.46));
+  --lg-rim-2: rgba(var(--ovb-tone), 0.32);
+  --lg-rim-3: rgba(var(--ovb-tone), 0.14);
+  width: 26px;
+  padding: 0;
+  text-transform: none;
+  background:
+    linear-gradient(180deg,
+      var(--ovb-cta-sheen, rgba(255, 255, 255, 0.2)) 0%,
+      rgba(255, 255, 255, 0.05) 30%,
+      rgba(255, 255, 255, 0) 100%),
+    var(--lg-lav-bg);
+  box-shadow:
+    inset 0 -1px 0 var(--ovb-cta-under, rgba(0, 0, 0, 0.3)),
+    0 1px 2px rgba(0, 0, 0, 0.12);
+}
+:is(.ov-banner, .ov-tone-scope)[data-tone='error'] .lg-button.lg-badge.ov-banner-mark {
+  --lg-lav-fg: var(--ovb-error);
+}
+:is(.ov-banner, .ov-tone-scope)[data-tone='ok'] .lg-button.lg-badge.ov-banner-mark {
+  --lg-lav-fg: var(--ovb-ok);
+}
+.ov-banner-mark .lg-icon {
+  justify-content: center;
+}
+.ov-banner-mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Copy ── */
+.ov-banner-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--overlay-text-primary);
+}
+/* The primary token at 76%, not --overlay-text-secondary: the same choice
+   DirectAssistNotice makes, because it holds 4.5:1 on the light theme where
+   the secondary and muted tokens do not. */
+.ov-banner-message {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--overlay-text-primary) 76%, transparent);
+}
+/* A banner with no title: its one sentence is the headline. */
+.ov-banner-message--lead {
+  font-size: 12px;
+  color: var(--overlay-text-primary);
+}
+
+.ov-banner-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 0 2px;
+  vertical-align: baseline;
+}
+.ov-banner-keys kbd {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--overlay-text-primary);
+  background: var(--ovb-keycap-bg);
+  border: 1px solid var(--overlay-border-soft);
+}
+
+/* ── Actions ──
+   Both actions are the shared Liquid Glass button at the banner's scale. (0,3,0), so they beat .lg-button.lg-sm's own 30px box.
+
+     primary    `lavender`: a translucent tint over a blurred backdrop, a
+                bright rim on the top face. The kit's own description of the
+                variant ("a TINT, not a colour"), in the banner's tone: amber
+                on a warning, red on an error.
+     secondary  `clear`: no body of its own, the rim is all it adds.
+
+   The glow under the primary is the onboarding's, pulled in for a 26px pill
+   inside a banner: at 14px/30px it would spill across the banner's bottom edge. */
+.lg-button.lg-sm.ov-banner-btn--primary,
+.lg-button.lg-sm.ov-banner-btn--secondary {
+  --lg-pill-h: 26px;
+  --lg-label-size: 11.5px;
+  padding: 0 13px;
+}
+.lg-button.lg-sm.ov-banner-btn--primary {
+  --ovb-tone: var(--ovb-cta-tone, 251, 191, 36);
+  --lg-lav-bg: rgba(var(--ovb-tone), var(--ovb-cta-fill, 0.32));
+  --lg-lav-hover: rgba(var(--ovb-tone), var(--ovb-cta-fill-hover, 0.46));
+  --lg-lav-fg: var(--ovb-cta-fg, #fff1c2);
+  --lg-lav-rim: var(--ovb-cta-rim, rgba(255, 255, 255, 0.46));
+  --lg-rim-2: rgba(var(--ovb-tone), 0.32);
+  --lg-rim-3: rgba(var(--ovb-tone), 0.14);
+  --lg-lens-rim-soft: rgba(var(--ovb-tone), 0.28);
+  /* The variant's sheen is 42% white, tuned for a pale body on a light page.
+     On a dark panel that much white reads as a painted stripe, so the sheen
+     strength is a token and the dark scopes turn it down. */
+  background:
+    linear-gradient(180deg,
+      var(--ovb-cta-sheen, rgba(255, 255, 255, 0.2)) 0%,
+      rgba(255, 255, 255, 0.05) 22%,
+      rgba(255, 255, 255, 0) 100%),
+    var(--lg-lav-bg);
+  box-shadow:
+    inset 0 -1px 0 var(--ovb-cta-under, rgba(0, 0, 0, 0.3)),
+    0 1px 2px rgba(0, 0, 0, 0.14),
+    0 6px 14px -8px rgba(var(--ovb-tone), 0.45);
+}
+
+/* ── Dismiss ── a plain ✕ (owner request: no glass disc round it). */
+.ov-banner-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--overlay-text-muted);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.ov-banner-dismiss:hover {
+  color: var(--overlay-text-primary);
+}
+
+/*
+  The clear button's dark material, handed back to the two interface themes
+  whose panel is dark in the light colour theme. The kit keys the button's
+  light treatment (a dark hairline on a near-transparent fill) to
+  [data-theme='light'], and on a dark panel that has nothing to stand against.
+  Values are .lg-clear's own dark ones.
+*/
+[data-theme='light'] [data-interface-theme='liquid-glass'] :is(.ov-banner, .ov-tone-scope) .lg-button.lg-clear,
+[data-theme='light'] [data-interface-theme='modern'] :is(.ov-banner, .ov-tone-scope) .lg-button.lg-clear {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0) 11%,
+      rgba(255, 255, 255, 0) 89%, rgba(255, 255, 255, 0.055) 100%),
+    rgba(255, 255, 255, 0.06);
+  --lg-tint-hover: rgba(255, 255, 255, 0.1);
+  --lg-lens-tint: rgba(255, 255, 255, 0.055);
+  --lg-lens-rim: rgba(255, 255, 255, 0.3);
+  --lg-lens-rim-soft: rgba(255, 255, 255, 0.13);
+  --lg-rim-1: rgba(255, 255, 255, 0.148);
+  box-shadow: none;
+}
+[data-theme='light'] [data-interface-theme='liquid-glass'] :is(.ov-banner, .ov-tone-scope) .lg-button.lg-clear::after,
+[data-theme='light'] [data-interface-theme='modern'] :is(.ov-banner, .ov-tone-scope) .lg-button.lg-clear::after {
+  opacity: 0.5;
+}
+
+/* High contrast: the hairline border becomes a defined one. */
+@media (prefers-contrast: more) {
+  .ov-banner {
+    border-color: var(--overlay-text-primary);
+  }
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────────────
+   On the transitions.dev motion-token scale, under the meeting overlay's own
+   rules (the `@overlay-motion` block in index.css). The tokens are not
+   installed globally, so the values are literals; the token each one stands
+   for is named beside it.
+
+    - Only transform, opacity and filter move, and only on TEXT and ICONS. The
+      mark and the buttons are glass: fading or blurring a box that holds glass
+      makes it the backdrop root, and the glass samples nothing until the fade
+      ends (see ChromeFold). So the disc and the pills never fade; what is
+      drawn inside them does.
+    - Entrances use @starting-style: they play once, when the node is
+      inserted, and never replay on a re-render or across Cmd+B.
+    - No shake on an error. A shake is for a rejected input, and this arrives
+      in the middle of a meeting.
+
+   What plays:
+    - the banner arriving ...... #18 texts reveal: the title, then the message
+    - the icon in the mark ..... one pop (badge pop open); again when a banner
+                                 already up changes tone
+    - a title or message that changes while the banner is up ... #04 text
+      states swap (SwapText), timed by the `.ov-motion` variables
+    - "Reconnecting" ........... its refresh icon turns, as a spinner does
+    - the ✕ .................... sinks a little while pressed */
+:is(.ov-banner, .ov-tone-scope) {
+  --ovb-reveal-dur: 500ms;                                /* --duration-very-slow: text reveal */
+  --ovb-reveal-distance: 8px;                             /* --distance-base: a 2-line banner is ~46px tall, 12px would cross a third of it */
+  --ovb-reveal-blur: 3px;                                 /* --blur-medium: text reveal */
+  --ovb-reveal-ease: cubic-bezier(0.22, 1, 0.36, 1);      /* --ease-smooth-out */
+  --ovb-stagger: 40ms;                                    /* --duration-stagger */
+  --ovb-pop-dur: 500ms;                                   /* --duration-very-slow: badge appear */
+  --ovb-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);      /* --ease-bounce: badge pop open */
+  --ovb-pop-delay: 80ms;                                  /* --duration-micro */
+  --ovb-pop-from: 0.25;                                   /* the icon swap's start scale */
+}
+
+.ov-banner-line {
+  transition:
+    opacity   var(--ovb-reveal-dur) var(--ovb-reveal-ease),
+    transform var(--ovb-reveal-dur) var(--ovb-reveal-ease),
+    filter    var(--ovb-reveal-dur) var(--ovb-reveal-ease);
+  transition-delay: calc(var(--i, 0) * var(--ovb-stagger));
+}
+@starting-style {
+  .ov-banner-line {
+    opacity: 0;
+    transform: translateY(var(--ovb-reveal-distance));
+    filter: blur(var(--ovb-reveal-blur));
+  }
+}
+/* The swap span is inline-block in the snippet; a banner line is a block that
+   wraps, so here it fills the line it sits in. */
+.ov-banner-line > .t-text-swap {
+  display: block;
+}
+
+.ov-banner-mark-icon {
+  transition:
+    transform var(--ovb-pop-dur) var(--ovb-pop-ease),
+    opacity   150ms ease-out;                             /* --duration-quick, --ease-out */
+  transition-delay: var(--ovb-pop-delay);
+}
+@starting-style {
+  .ov-banner-mark-icon {
+    opacity: 0;
+    transform: scale(var(--ovb-pop-from));
+  }
+}
+
+/* A banner that is waiting on something (transcription reconnecting): the
+   caller puts this on its refresh icon. */
+.ov-banner-spin {
+  animation: ov-banner-spin 1400ms linear infinite;       /* --ease-linear: spinner */
+}
+@keyframes ov-banner-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* The ✕ sinks while held: quick in, eased back on release. On the icon, not
+   the button, which is an overlay surface (its transition is the theme's). */
+.ov-banner-dismiss svg {
+  transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1);   /* --duration-quick, --ease-smooth-out */
+}
+.ov-banner-dismiss:active svg {
+  transform: scale(0.82);
+  transition-duration: 80ms;                              /* --duration-micro */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ov-banner-line,
+  .ov-banner-mark-icon,
+  .ov-banner-dismiss svg {
+    transition: none !important;
+  }
+  .ov-banner-spin {
+    animation: none !important;
+  }
+}

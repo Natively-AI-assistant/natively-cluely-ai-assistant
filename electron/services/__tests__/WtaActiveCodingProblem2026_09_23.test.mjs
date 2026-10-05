@@ -81,9 +81,16 @@ describe('WTA keeps the active coding problem for a coding continuation (#539)',
     // meeting is one retrievable window — so the old problem may appear as
     // quoted MEETING_TRANSCRIPT evidence. It must appear NOWHERE else: not as
     // the question, not as the active coding problem.
-    const outsideTranscriptEvidence = prompt.replace(
-      /<evidence[^>]*source_type="MEETING_TRANSCRIPT"[^>]*>[\s\S]*?<\/evidence>/g, '');
+    // 2026-10-04 (E12): the live speech window now reads the durable transcript
+    // (ten minutes, 6,000 chars), so what the interviewer SAID five minutes ago
+    // is also in "# Conversation so far" as their own line. That is speech, kept
+    // on purpose; the problem must still not be the question or the active
+    // coding problem.
+    const outsideTranscriptEvidence = prompt
+      .replace(/<evidence[^>]*source_type="MEETING_TRANSCRIPT"[^>]*>[\s\S]*?<\/evidence>/g, '')
+      .replace(/# Conversation so far[\s\S]*?(?=\n# |$)/, '');
     assert.doesNotMatch(outsideTranscriptEvidence, /rotate the active encryption key/);
+    assert.doesNotMatch(prompt, /# Question\n[^\n]*rotate the active encryption key/);
   });
 
   // The old turns can still reach the prompt through the durable meeting-transcript

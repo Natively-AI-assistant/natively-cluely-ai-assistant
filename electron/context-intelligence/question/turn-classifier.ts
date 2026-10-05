@@ -422,6 +422,18 @@ const DEVICE_SYMPTOM_RE = /\b(overheat\w*|(?:gets?|getting|becomes?|becoming|is|
 const MATH_OPERAND_RE = /\d[\d,.]*\s*(?:%|percent)|[$€£₹]\s?\d|\d[\d,.]*\s*(?:rupees|dollars|euros|pounds|cents)\b|\d\s*(?:\+|−|\*|×|\/|÷)\s*\d|\b\d[\d,.]*\s+(?:per|each|apiece)\b/i;
 const MATH_ASK_RE = /\bwhat (?:is|was|will|would)(?: be)? the (?:[\w-]+ )?(?:price|cost|amount|value|total|percentage|interest|profit|loss|average|difference|change)\b|\bhow (?:much|many)\b|\bcalculate\b|\bcompute\b|\bwhat is \d/i;
 const PROJECT_RE = /\b(project|built|build|shipped|implemented|designed|architect(ed|ure) of your)\b/;
+// Status and current-work asks about the user's own work (2026-09-29). With no
+// pronoun ("Give me a quick project update.") or with "are you" ("what are you
+// working on right now?") nothing above marks them, so they routed
+// GENERAL_TECHNICAL/FAST: no notice, no worked status example, and the live
+// answers were a hand-back ("tell me which project…") or an invented status.
+// A STATUS ask is classified exactly like "are we on schedule?" (MEETING_FACT
+// + DOCUMENT_FACT): the status lives in what was said in the meeting or in the
+// project's documents, and those are the sources planned in every mode. A
+// CURRENT-WORK ask ("what are you working on?") is the user's own work, like
+// any personal project question.
+const USER_STATUS_RE = /\b(?:(?:project|status|progress|quick) update|where (?:do|does) (?:things|it|that|the project|we) stand|what(?:'s| is) the (?:latest |current )?status|how(?:'s| is) (?:the|your) project (?:going|coming along))\b/;
+const CURRENT_WORK_RE = /\b(?:what are you (?:currently |actually )?working on|what(?:'s| is) on your plate)\b/;
 // Matches BOTH orderings, because interviewers use both interchangeably:
 //   "experience WITH Kubernetes"   (preposition-led)
 //   "your Kubernetes EXPERIENCE"   (noun-final)
@@ -431,6 +443,24 @@ const PROJECT_RE = /\b(project|built|build|shipped|implemented|designed|architec
 // permitted. Gated on `personal`, so the bare nouns cannot over-trigger.
 const SKILL_RE = /\b(experience|expertise|background|proficien\w*|familiar with|worked with|know how to|skills?|leadership|hands-on|languages?|technolog\w*)\b/;
 const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chose to|choose to)\b/;
+// A "why don't you <start/tell/walk…>" is an INVITATION, not a request for a
+// reason (2026-09-30, measured live in looking-for-work): "Thanks for hopping
+// on. Why don't you start by telling me a bit about yourself?" matched the
+// bare `why` above, claimed USER_MOTIVATION — which PROHIBITS the résumé — and,
+// because a named aspect suppresses the catch-all employment claim, planned
+// [PROFILE_FACT] alone. PROFILE_FACT has no production store, so the intro went
+// out with zero evidence over a hydrated résumé. Only the invitation shape is
+// removed: "why don't you like on-call?" and "why didn't you use Kafka?" still
+// ask for a reason, because neither verb invites the listener to begin.
+const SUGGESTION_WHY_RE = /\bwhy (?:don['’]?t|do not) (?:you|we) (?:just |first |quickly |briefly |go ahead and )?(?:start|begin|kick|go ahead|tell|walk|give|share|introduce|talk|describe|run|take)\b|\bwhy not (?:start|begin|tell|walk|give|share|introduce|talk|describe)\b/;
+const asksForReason = (clause: string): boolean => MOTIVATION_RE.test(clause.replace(SUGGESTION_WHY_RE, ' '));
+// A SELF-INTRODUCTION request (2026-09-30). The answer IS the résumé — who the
+// user is, what they have done — so it always claims USER_EMPLOYMENT, even when
+// the same clause also names another aspect ("tell me about yourself and why
+// this role" keeps its motivation claim AND reaches the résumé). Before this,
+// the employment claim came only from the "no aspect named" catch-all, so any
+// co-occurring aspect cue silently took the résumé out of the plan.
+const SELF_INTRO_RE = /\b(?:tell (?:me|us) (?:\w+ ){0,4}about (?:yourself|you)\b|about (?:yourself|myself)\b|introduce (?:yourself|myself)\b|self-?introduction|(?:your|my) background\b|walk (?:me|us) through (?:your|my) (?:background|resume|résumé|cv|career)\b)/;
 // The presence-check shape of a skill question — "do I HAVE it", not "tell me
 // about it". Used to widen a personal skill claim into a résumé-vs-JD
 // comparison in modes that carry a JD.
@@ -468,7 +498,13 @@ const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|
 // concept question, took the FAST path, and a JD that lists SIX named stages
 // lost to a generic three-round model answer — with a clean trace (answerability
 // FULL, zero evidence). The stages live in the JD, so this is a JOB claim.
-const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|requirement\w*|minimum quals?|(interview|hiring|recruitment) (process|stages?|rounds?|loops?|steps?|timeline))\b/;
+// Deictic job-posting nouns added 2026-09-30: "based on the job post what are
+// the rounds…" with only a job description uploaded claimed the user side,
+// planned [RESUME, PROFILE_FACT, REFERENCE_FILE] — none of which existed — and
+// answered "I don't have the job post in front of me". Determiner-bound on
+// purpose: "how do I write a good job posting?" is general advice, not a
+// pointer at the JD this user uploaded.
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|(?:the|this|that|their|your) (?:job (?:post(?:ing)?|listing|ad(?:vert(?:isement)?)?|spec)|posting)|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|requirement\w*|minimum quals?|(interview|hiring|recruitment) (process|stages?|rounds?|loops?|steps?|timeline))\b/;
 
 // Split 2026-08-01 (Defect A): the old single MEETING_RE conflated TRANSCRIPT
 // EVENTS (things people said/decided/assigned — only the live transcript can
@@ -917,11 +953,17 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         && !SYSTEM_DESIGN_RE.test(clause)));
 
     if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
+    if (!aboutAssistant && USER_STATUS_RE.test(clause)) {
+      types.add('MEETING_FACT'); noteClaim('MEETING_STATEMENT', clause);
+      types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+    }
+    if (!aboutAssistant && CURRENT_WORK_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
     // "why did you choose/build X" asks for a REASON. Motivation is authoritative
     // only from explicit user context, so it must be claimed separately: a
     // USER_PROJECT claim is satisfied by evidence that the project exists, which
     // says nothing about why it was built (measured failure C-03).
-    if (personal && MOTIVATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_MOTIVATION', clause); }
+    if (personal && asksForReason(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_MOTIVATION', clause); }
+    if (personal && SELF_INTRO_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause); }
     if (personal && SKILL_RE.test(clause)) {
       types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause);
       // A PRESENCE CHECK ("Do I have Kubernetes experience?") in a mode that
@@ -951,7 +993,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // its authority still PROHIBITS the job description, so this cannot become a
     // route for JD requirements to describe the candidate.
     const namedAnAspect = PROJECT_RE.test(clause) || SKILL_RE.test(clause)
-      || EDUCATION_RE.test(clause) || EMPLOYMENT_RE.test(clause) || MOTIVATION_RE.test(clause);
+      || EDUCATION_RE.test(clause) || EMPLOYMENT_RE.test(clause) || asksForReason(clause);
     // …and never for a clause that is plainly a technical task: "can I solve
     // this with dynamic programming" is about the problem, not the person, and
     // a USER_EMPLOYMENT claim here demands résumé evidence for an algorithm

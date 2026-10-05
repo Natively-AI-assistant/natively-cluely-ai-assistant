@@ -1,0 +1,287 @@
+{
+ "batch": "b012-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DLEC-CTX-G2": {
+   "title": "CS 261 Lecture 11 notes - Binary heaps and build-heap",
+   "text": "CS 261 - Data Structures\nLecture 11 Notes: Binary Heaps and Build-Heap\nProf. Tomasz Reinholt-Vega | Carrow Institute of Technology\n\n1. What a binary heap is\nA binary heap is a complete binary tree stored in an array that satisfies the heap-order property. In CS 261 we use MIN-heaps by default: every node's key is less than or equal to the keys of its children, so the smallest key sits at the root.\n\n2. CS 261 array convention (differs from the 0-indexed code you will see online)\nWe store the heap 1-indexed. Index 0 is left empty (we write it as _).\n- parent(i) = floor(i / 2)\n- left(i) = 2i\n- right(i) = 2i + 1\nIf you see parent(i) = floor((i - 1) / 2) and left(i) = 2i + 1 online, that is the 0-indexed layout. Both are correct for their own layout, but on CS 261 quizzes you must use the 1-indexed formulas.\n\n3. Height convention\nIn CS 261 the height of a tree counts NODES on the longest root-to-leaf path, so a single node has height 1 and an empty tree has height 0. (Most textbooks count edges, so for them a single node has height 0.) With our convention a heap with n keys has height floor(log2 n) + 1. Example: n = 7 gives height 3.\n\n4. Sift-down (heapify at index i)\nCompare the key at i with its children. If the smaller child is smaller than the key at i, swap with that smaller child and repeat from the child's index. Stop when the key is no larger than both children or when i has no children. Cost: O(height).\n\n5. Build-heap (bottom-up)\nCall sift-down on i = floor(n / 2), floor(n / 2) - 1, ..., 1. Leaves (indices greater than floor(n / 2)) are already heaps, so we skip them.\nTotal cost is O(n), not O(n log n). Most nodes live near the bottom and can only sift down a short distance; the sum of heights over all nodes is bounded by a linear function of n.\n\n6. Worked example (show the array after every sift-down call; this is required on quizzes)\nInput, n = 7: [_, 9, 4, 7, 1, 8, 2, 6]\nStart at i = floor(7 / 2) = 3.\n- sift-down(3): 7 vs children 2 (i=6) and 6 (i=7). Swap with 2. Array: [_, 9, 4, 2, 1, 8, 7, 6]\n- sift-down(2): 4 vs children 1 (i=4) and 8 (i=5). Swap with 1. Index 4 has no children. Array: [_, 9, 1, 2, 4, 8, 7, 6]\n- sift-down(1): 9 vs children 1 (i=2) and 2 (i=3). Swap with 1. Continue at i=2: 9 vs children 4 (i=4) and 8 (i=5). Swap with 4. Index 4 has no children. Array: [_, 1, 4, 2, 9, 8, 7, 6]\nResult: [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps total.\n\n7. Other operations\n- peek-min: O(1), it is A[1].\n- insert: put the key at A[n + 1], then sift-up. O(log n).\n- extract-min: move A[n] to A[1], shrink the heap, sift-down(1). O(log n).\n- Finding the MAXIMUM in a min-heap is not cheap: the max is somewhere among the leaves, so it takes O(n) in general.\n\n8. Logistics\nQuiz 4 (next Thursday) covers heaps: sift-down traces, build-heap traces, and the index formulas above. Traces must use the 1-indexed layout. Priority queues and heapsort are on Quiz 5, not Quiz 4.\nOffice hours this week move to Wednesday 3-5 pm in Lowry 118 because of the department colloquium."
+  },
+  "DLEC-CTX-C1": {
+   "title": "ECON 214 TA recitation handout - Elasticity quick guide",
+   "text": "ECON 214 Recitation Handout - Week 6\nElasticity Quick Guide\nPrepared by TA Marcus Delacroix-Byrne for the Friday recitation sections\n\nFormula\nOwn-price elasticity of demand = % change in quantity demanded / % change in price, where each percentage change is computed from the ORIGINAL value:\n% change in Q = (Q2 - Q1) / Q1\n% change in P = (P2 - P1) / P1\nKeep the negative sign. A demand elasticity of -1.5 should be written as -1.5 so the grader can see you know demand slopes down.\n\nClassification\n- E below -1 (for example -1.5): elastic\n- E between -1 and 0: inelastic\n- E equal to -1: for this course, treat unit elastic as elastic, since the revenue logic is the same.\n\nPractice example: the Quad coffee cart\nThe cart raises the price of a small drip coffee from $3.00 to $3.60 and daily sales fall from 500 to 400 cups.\n% change in Q = -100 / 500 = -20%\n% change in P = 0.60 / 3.00 = 20%\nE = -20% / 20% = -1.00, so demand here is elastic (unit elastic counts as elastic).\n\nTotal revenue\nRevenue before: $1,500 per day. Revenue after: $1,440 per day. Because the cart is on the elastic side, revenue moves in the opposite direction from price.\n\nExam tips\n- On Midterm 2 either the original-value method or the midpoint method gets full credit, so use whichever is faster for you.\n- A formula sheet will be stapled to the back of Midterm 2, so you do not need to memorize the formulas.\n- Cross-price elasticity: take the absolute value, same as own-price, and report it to two decimals.\n- If a question does not say which price is the starting price, use the lower price as the base.\n\nOffice hours for recitation questions: Fridays 1-2 pm, Econ Commons table 4."
+  }
+ },
+ "items": [
+  {
+   "jid": "e039b9da0dcf",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Quick show of hands, who here has worked with messy real-world data at a job or an internship? Because this next part on data cleaning, missing values, duplicates, that stuff, lands a lot better if you've lived it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I've run into messy data plenty, and honestly the cleaning is usually most of the work. Missing values and duplicates are the easy part to spot, the hard part is deciding what to do with them without quietly changing the story the data's telling. So yes, this part lands for me."
+  },
+  {
+   "jid": "e0323784d8c2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Now repeat it forever.",
+   "conversation": [
+    "PROFESSOR (heard): Classic prisoner's dilemma. Each prisoner does better by confessing no matter what the other one does, so they both confess, even though both staying quiet would leave them better off.",
+    "NATIVELY: That's the core of it, yes. The key idea is that confessing is a **dominant strategy**: it gives a better payoff whether the other prisoner stays quiet or confesses, so a rational player picks it regardless. The twist is that when both follow that logic, they land on a worse outcome than if they had both stayed quiet, which is why the equilibrium isn't the best joint result."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the **iterated prisoner's dilemma**. When the game repeats, the same logic applies round by round, but now each player's choice can respond to what the other did before, so cooperation can actually hold up as a strategy. The one-shot dominant strategy stops being the whole story once the game has a future."
+  },
+  {
+   "jid": "fbf00d62b61f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "another one, different numbers",
+   "conversation": [
+    "USER (typed to Natively): teach me build-heap properly using his worked example: why we start at floor(n/2), what each sift-down does to the array, and why the whole thing is O(n) and not O(n log n).",
+    "NATIVELY: Start at floor(n/2) because everything past it is a leaf, and a single node is already a valid heap. So the last node with children is floor(n/2), and we sift down from there back to the root.\n\nIn the example, n = 7, so we start at i = 3. Sift-down(3) swaps 7 with its smaller child 2, giving [_, 9, 4, 2, 1, 8, 7, 6]. Sift-down(2) swaps 4 with 1, giving [_, 9, 1, 2, 4, 8, 7, 6]. Sift-down(1) swaps 9 with 1, then 9 with 4, giving [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps total.\n\nIt's O(n), not O(n log n), because most nodes sit near the bottom and can only fall a short distance. Summing each node's height gives a linear bound.",
+    "USER (typed to Natively): simpler please",
+    "NATIVELY: Start at floor(n/2) because everything after that index is a leaf, and a lone leaf is already a valid heap. So floor(n/2) is the last node that actually has children, and we sift down from there back up to the root.\n\nIn the example, n = 7, so we start at i = 3. Sift-down(3) swaps 7 with its smaller child 2, giving [_, 9, 4, 2, 1, 8, 7, 6]. Sift-down(2) swaps 4 with 1, giving [_, 9, 1, 2, 4, 8, 7, 6]. Sift-down(1) swaps 9 with 1, then 9 with 4, giving [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps total.\n\nIt's O(n), not O(n log n), because most nodes sit near the bottom and can only fall a short distance. Adding up each node's height gives a total that grows linearly with n."
+   ],
+   "evidence_ids": [
+    "DLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Same idea, fresh numbers. Take n = 8, so the array is [_, 10, 3, 8, 1, 7, 2, 9, 4]. Start at floor(8/2) = 4, since indices 5 through 8 are leaves.\n\nSift-down(4): 1 has child 4, swap, giving [_, 10, 3, 8, 4, 7, 2, 9, 1]. Sift-down(3): 8 has children 7 and 2, swap with 2, giving [_, 10, 3, 2, 4, 7, 8, 9, 1]. Sift-down(2): 3 has children 4 and 7, swap with 4, giving [_, 10, 4, 2, 3, 7, 8, 9, 1]. Sift-down(1): 10 has children 4 and 2, swap with 2, then 10 has children 3 and 7, swap with 3, giving [_, 2, 4, 3, 10, 7, 8, 9, 1]. Five swaps total.\n\nStill O(n), not O(n log n), because most nodes are near the bottom and can only fall a short way. Adding up each node's height grows linearly with n."
+  },
+  {
+   "jid": "d9e5313485f5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And that's the same logic behind why cartels like the one we looked at last week keep falling apart.",
+   "conversation": [
+    "PROFESSOR (heard): Classic prisoner's dilemma. Each prisoner does better by confessing no matter what the other one does, so they both confess, even though both staying quiet would leave them better off.",
+    "NATIVELY: That's the core of it, yes. The key idea is that confessing is a **dominant strategy**: it gives a better payoff whether the other prisoner stays quiet or confesses, so a rational player picks it regardless. The twist is that when both follow that logic, they land on a worse outcome than if they had both stayed quiet, which is why the equilibrium isn't the best joint result.",
+    "PROFESSOR (heard): Now repeat it forever.",
+    "NATIVELY: That's the **iterated prisoner's dilemma**. When the game repeats, the same logic applies round by round, but now each player's choice can respond to what the other did before, so cooperation can actually hold up as a strategy. The one-shot dominant strategy stops being the whole story once the game has a future."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, it's the same structure. A cartel is a group of firms trying to hold the cooperative outcome, keeping prices high and output low, but each member has a private incentive to cheat by undercutting slightly and grabbing more of the market. In a one-shot setting that temptation wins, so the agreement is unstable. What holds it together is the repeated game: everyone knows they'll meet again, so cheating today gets punished by a price war tomorrow, and that threat of retaliation is what makes cooperation sustainable. Cartels still break down because that punishment is hard to coordinate and enforce across many firms, and because each member is tempted to defect just before the others do."
+  },
+  {
+   "jid": "c3bf4474db14",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So in the trial the p-value came out at 0.03, and what that tells us is there's only a three percent chance the null hypothesis is true.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's actually a common misreading. A p-value of 0.03 means that if the null hypothesis were true, you'd see data at least this extreme only about 3 percent of the time. It's the probability of the data given the null, not the probability of the null given the data. To get the chance the null is true, you'd need a Bayesian posterior, which also depends on your prior."
+  },
+  {
+   "jid": "00c3e6646d07",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "wait he just said left child is 2i+1 but the notes say something else. what did he mean, and which formulas do I use on the quiz?",
+   "conversation": [
+    "PROFESSOR: Okay, so to get from a node to its children you just do the arithmetic.",
+    "PROFESSOR: Left child of i is at 2i plus 1, right child at 2i plus 2, and the parent is i minus 1 over 2, rounded down."
+   ],
+   "evidence_ids": [
+    "DLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "He's using the 0-indexed layout, where left is 2i+1 and parent is floor((i-1)/2). The notes use CS 261's 1-indexed layout, where index 0 stays empty: parent is floor(i/2), left is 2i, right is 2i+1. Both are correct for their own layout, but on the quiz you use the 1-indexed formulas."
+  },
+  {
+   "jid": "ef50028d7b8b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Le Chatelier's principle: if you disturb a system at equilibrium, it shifts in the direction that partly undoes the disturbance.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Le Chatelier's principle says a system at equilibrium responds to a disturbance by shifting in the direction that partially counteracts it. The classic cases: add more reactant and the reaction shifts toward products; increase pressure and it shifts toward the side with fewer gas molecules; raise the temperature and it shifts in the endothermic direction, since that absorbs the added heat. It's a qualitative rule about which way the equilibrium moves, not how fast it gets there."
+  },
+  {
+   "jid": "1ab9d4a32e78",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "what did he say about the second law earlier, and how does it connect to this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The second law says entropy in an isolated system never decreases, so heat flows from hot to cold on its own and never the reverse. That's what sets the arrow of time: reversible mechanics looks the same forwards and backwards, but entropy gives a direction. It connects here because whatever process we're looking at only runs one way, and the reason is that the reverse would lower total entropy."
+  },
+  {
+   "jid": "e83f5c0b8433",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And that's why the firm's short-run supply curve is just its marginal cost curve, but only the part above the minimum of AVC.",
+   "conversation": [
+    "PROFESSOR: Remember from Tuesday, marginal cost is what it costs to make one more unit, and the MC curve crosses average variable cost at its minimum.",
+    "PROFESSOR: And the shutdown rule: in the short run a firm keeps producing as long as price covers average variable cost, not average total cost. Fixed costs are sunk either way.",
+    "PROFESSOR: Okay, let's draw the firm's cost curves again."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's right. The firm produces where price equals marginal cost, so the MC curve tells you how much it supplies at each price. But below the minimum of AVC the firm shuts down and supplies nothing, so only the portion of MC above that point counts as the supply curve. The shut-down point is exactly where MC crosses AVC at its minimum."
+  },
+  {
+   "jid": "b23257f359b7",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "she wrote T(n) = 2T(n/2) + Theta(n) for merge sort and I have no idea how to read that",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a **recurrence relation**. It's a compact way of saying how much work merge sort does on an input of size n. Read it as: to sort n items, you do two sorts of half the items, plus some extra work that grows linearly with n.\n\nThe pieces: T(n) is the total time for n elements. The **2T(n/2)** means two subproblems, each half the size, because merge sort splits the array in two and recurses on both. The **Theta(n)** is the merge step, where you walk through both sorted halves and combine them, which takes time proportional to n.\n\nSo the whole line says: total time equals the time for the two halves plus the linear merge. Solving it gives Theta(n log n), which is the familiar merge sort running time."
+  },
+  {
+   "jid": "366c7fd64772",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "what did she mean by 'the corridor is really just a floor'?",
+   "conversation": [
+    "PROFESSOR: The Fed doesn't really set 'the interest rate.' It sets a target range for the federal funds rate.",
+    "PROFESSOR: Back when reserves were scarce, it hit that target with open market operations, buying and selling securities pretty much every day.",
+    "PROFESSOR: Now we're in an ample reserves regime, so the main tool is the interest rate on reserve balances, and honestly the corridor is really just a floor."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "She means the \"corridor\" of rates around the target isn't doing much work anymore. In an ample reserves regime, the interest rate on reserve balances acts as a floor, since banks won't lend below what they can earn at the Fed. So the upper bound is mostly decorative, and the floor is what actually holds the rate up."
+  },
+  {
+   "jid": "08add531a989",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "is this on the exam?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't tell you what's on your exam, since I don't have your syllabus or the lecturer's guidance in front of me. What I can say is that if a topic came up in the lecture and the lecturer spent real time on it, that's usually a signal it matters. The safest move is to check the syllabus or ask the lecturer directly which topics are in scope."
+  },
+  {
+   "jid": "6d2a77fe815c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So, can anyone tell me why the sky is blue but sunsets are red? Anybody? Think about wavelength, and think about how much air the light has to go through.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sunlight contains all colors, but the atmosphere scatters short wavelengths much more than long ones, so blue light gets bounced around the sky in every direction while red passes through. At sunset the light travels through far more air, and most of the blue is scattered away before it reaches you, leaving the reds and oranges to come straight through."
+  },
+  {
+   "jid": "a85bad78b47a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Okay so most of the ATP in the cell comes from oxidative phosphorylation in the mitochondria, and that happens across the inner membrane, which is why the inner membrane is folded up into all these cristae.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, and the folding matters because it packs a lot of inner membrane into a small space, so there's more surface area for the electron transport chain and ATP synthase to sit in. The proton gradient builds up across that membrane, and the ATP synthase uses the flow back through it to make ATP. So the cristae aren't just a shape, they're what lets the mitochondria make enough ATP to keep up with demand."
+  },
+  {
+   "jid": "5baa1f8f688d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So to pull it together: long-term you've got the alliance system, militarism, nationalism and imperialism, and then the short-term trigger is Sarajevo and the July Crisis. Next week we'll look at why the war didn't end by Christmas like everyone expected it to.",
+   "conversation": [
+    "PROFESSOR: So Franz Ferdinand is shot in Sarajevo on June 28th, 1914, and for about a month nothing much seems to happen.",
+    "PROFESSOR: Then the July Crisis. Germany gives Austria-Hungary what historians call the blank cheque, unconditional support for whatever Vienna does to Serbia.",
+    "PROFESSOR: Austria sends an ultimatum it basically expects Serbia to reject, Russia starts mobilizing, and the German war plan needs to go through Belgium, which brings Britain in."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a clean way to frame it. The long-term causes set the conditions, and the short-term trigger is what actually set it off: the alliance system, militarism, nationalism and imperialism built the powder keg, and Sarajevo plus the July Crisis lit it. The distinction matters because neither alone explains the war. The structural pressures made a general conflict likely, but it took the specific sequence of the assassination, the blank cheque, the ultimatum, and the mobilizations to turn likelihood into fact."
+  },
+  {
+   "jid": "11eebf1b3c52",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "One more thing for Midterm 2. There's no formula sheet this time, and elasticity answers only get full credit if you use the midpoint formula. I know some of you have a handout that says otherwise.",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The handout from recitation says either the original-value method or the midpoint method gets full credit, and that a formula sheet will be stapled to the back of Midterm 2. That's the opposite of what was just announced, so the exam instructions are the ones to follow: no formula sheet, and midpoint only.\n\nFor the midpoint formula, each percentage change uses the average of the two values as the base:\n\n% change in Q = (Q2 − Q1) / [(Q1 + Q2) / 2]\n% change in P = (P2 − P1) / [(P1 + P2) / 2]\n\nE = % change in Q / % change in P\n\nThe intuition is that it gives the same elasticity whichever direction you move, so it doesn't matter which price you call the starting point."
+  },
+  {
+   "jid": "79fd51e4a265",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And this is why industry loves catalysts, right? You add a catalyst to the contact process and it pushes the equilibrium over toward sulfur trioxide, so you end up with a higher yield.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not quite. A catalyst speeds up the rate at which the reaction reaches equilibrium, but it doesn't shift the position of equilibrium itself. In the contact process, the catalyst is vanadium pentoxide, and it lets the reaction reach equilibrium faster at a lower temperature, which is where the yield of sulfur trioxide is already favored. The higher yield comes from the temperature and pressure conditions, not from the catalyst pushing the equilibrium over."
+  },
+  {
+   "jid": "f2ec139bf905",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Classic prisoner's dilemma. Each prisoner does better by confessing no matter what the other one does, so they both confess, even though both staying quiet would leave them better off.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the core of it, yes. The key idea is that confessing is a **dominant strategy**: it gives a better payoff whether the other prisoner stays quiet or confesses, so a rational player picks it regardless. The twist is that when both follow that logic, they land on a worse outcome than if they had both stayed quiet, which is why the equilibrium isn't the best joint result."
+  },
+  {
+   "jid": "fa5b85c00eeb",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "But a lot of historians now call that the Westphalian myth. If you actually read the treaties, they say surprisingly little about sovereignty.",
+   "conversation": [
+    "PROFESSOR (heard): So the Peace of Westphalia, 1648, ends the Thirty Years' War, and it's usually taught as the moment the modern system of sovereign states is born.",
+    "NATIVELY: The Peace of Westphalia is actually two treaties signed in 1648, at Münster and Osnabrück, and together they ended the Thirty Years' War and, in a separate settlement, the Eighty Years' War between Spain and the Dutch Republic. The reason it gets taught as the birth of the sovereign state system is that it shifted authority away from the papacy and the Holy Roman Emperor toward individual rulers, establishing the idea that each state has **territorial sovereignty** and that no outside power can dictate its internal affairs. It also introduced the notion of a **balance of power**, since the settlement was designed to prevent any single state from dominating Europe. So the \"Westphalian system\" is really a shorthand for that principle of non-interference in domestic affairs, even though historians debate how much of it was genuinely new in 1648 versus a gradual development."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the revisionist reading, and it's a fair correction. The treaties are mostly about specific grievances: religious rights, territorial boundaries, reparations, and the constitutional balance inside the Holy Roman Empire. The word \"sovereignty\" in the modern sense barely appears. What they actually did was weaken the Emperor's authority over the German princes and settle confessional disputes, not declare a new doctrine of statehood. So the \"Westphalian system\" is more a nineteenth and twentieth century label projected backward than something the 1648 documents themselves announce. The treaties mattered enormously, but as a settlement of specific conflicts, not as a founding charter of sovereignty."
+  },
+  {
+   "jid": "8329b3ab7046",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Which means we're basically 97 percent sure the drug works.",
+   "conversation": [
+    "PROFESSOR (heard): So in the trial the p-value came out at 0.03, and what that tells us is there's only a three percent chance the null hypothesis is true.",
+    "NATIVELY: That's actually a common misreading. A p-value of 0.03 means that if the null hypothesis were true, you'd see data at least this extreme only about 3 percent of the time. It's the probability of the data given the null, not the probability of the null given the data. To get the chance the null is true, you'd need a Bayesian posterior, which also depends on your prior."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the same misreading in reverse. The 0.03 is the probability of seeing data this extreme if the null were true, so it doesn't flip into a 97 percent chance the drug works. Getting that number would take a Bayesian posterior, and that depends on the prior you start with, so it isn't just 1 minus the p-value."
+  }
+ ]
+}

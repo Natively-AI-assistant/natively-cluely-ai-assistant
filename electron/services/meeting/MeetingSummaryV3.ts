@@ -272,6 +272,9 @@ const WRAPPING_SINGLE_QUOTES_RE = /^['‘’]+|['‘’]+$/g;
 // author who genuinely named a meeting "Sync On" keeps it.
 const DANGLING_WORD_RE = /[\s,]+(?:and|or|but|with|for|to|of|in|on|at|by|from|as|the|a|an)$/i;
 
+/** A hyphen / en dash / em dash / bullet followed by a space, at the start of a title. */
+const LEADING_LIST_MARKER_RE = /^[-–—•]+\s+/;
+
 export function cleanMeetingTitle(
   value: unknown,
   opts?: { maxWords?: number; maxChars?: number },
@@ -295,10 +298,14 @@ export function cleanMeetingTitle(
     text
       .replace(/\*+/g, '')
       .replace(/`/g, '')
-      .replace(/^#+\s*/, ''),
+      .replace(/^#+\s*/, '')
+      // A list marker the model put in front of the title ("- Summary was missing…").
+      .replace(LEADING_LIST_MARKER_RE, ''),
   ));
 
   text = stripQuotes(cleanString(text.replace(TITLE_PREAMBLE_RE, ''))).trim();
+  // ...and again once wrapping quotes are off: "\"- Q4 planning\"" only shows its marker now.
+  text = text.replace(LEADING_LIST_MARKER_RE, '');
   if (!text) return '';
 
   let words = text.split(' ');

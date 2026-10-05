@@ -1,0 +1,422 @@
+[
+ {
+  "jid": "0f1318891706",
+  "scores": {
+   "correctness": 9,
+   "grounding": 7.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Accepts ownership naturally and sketches a sensible approach without inventing past-job details.",
+  "specific_problem": "'The part I care about most' is an invented preference; slightly long for a spoken reply.",
+  "minimal_improvement": "Drop the invented preference line and trim the approach to one sentence."
+ },
+ {
+  "jid": "39a36bfdd040",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 7,
+   "relevance": 8,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.2,
+  "one_sentence_reason": "Safely avoids confirming an unverified prior agreement and asks for confirmation.",
+  "specific_problem": "'If design is frozen, then yes, no more changes' is circular filler; 'in front of me' is slightly awkward.",
+  "minimal_improvement": "Just ask briefly to confirm what was agreed Monday before locking the screens."
+ },
+ {
+  "jid": "7e04b74f0ed9",
+  "scores": {
+   "correctness": 7,
+   "grounding": 7,
+   "role_fidelity": 7.5,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.3,
+  "one_sentence_reason": "Volunteers the user for an unknown task, then says it will confirm the owner, which is contradictory.",
+  "specific_problem": "Commits the user without knowing what 'this' is; 'confirm the owner' clashes with just taking it.",
+  "minimal_improvement": "Ask what the item is or volunteer conditionally before committing."
+ },
+ {
+  "jid": "65318cd12fd7",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.7,
+  "one_sentence_reason": "Pins a vague status to a target and asks for the dependencies, good meeting behaviour.",
+  "specific_problem": "Does not ask for a concrete date or owner of the dependencies.",
+  "minimal_improvement": "Ask for a specific day alongside the dependencies."
+ },
+ {
+  "jid": "2f346d36b817",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.1,
+  "one_sentence_reason": "Addresses all three questions (message, single owner, shift not re-plan) without inventing facts.",
+  "specific_problem": "Says one person should own the message but never proposes who; 'who's calling each pilot' slightly contradicts a single owner.",
+  "minimal_improvement": "Propose an owner (e.g. the PM) or ask the room to name one person now."
+ },
+ {
+  "jid": "2d32559ff5aa",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9.5,
+   "cognitive_load": 9.5,
+   "concision": 9.5,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.6,
+  "one_sentence_reason": "Accurately reports the parked crash-free target, both proposals, and the 22 October revisit from the notes.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "7fb1b526c217",
+  "scores": {
+   "correctness": 9,
+   "grounding": 8.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.8,
+  "one_sentence_reason": "Gives a ready-to-say, non-defensive line declining SSO for the pilot and inviting hard-gate objections.",
+  "specific_problem": "'Bring SSO in right after' implies a timing commitment the user may not control.",
+  "minimal_improvement": "Soften to 'plan SSO for the next phase' rather than 'right after'."
+ },
+ {
+  "jid": "39dba4361b26",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.5,
+  "one_sentence_reason": "Correctly states the impact, v4 fallback, 5 October go/no-go, and read-only consequence from the release plan.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "bc3b6750727c",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9.5,
+   "concision": 8.5,
+   "continuity": 9,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.1,
+  "one_sentence_reason": "Correctly gives the 1 October signing date and Hiro as owner.",
+  "specific_problem": "Markdown bold in a spoken line; the closing sentence adds little.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "6b5c05186090",
+  "scores": {
+   "correctness": 9,
+   "grounding": 8.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.7,
+  "one_sentence_reason": "Backs the estimate with the user's asserted experience without inventing employers, apps or numbers.",
+  "specific_problem": "Generic; could be stronger by inviting a line-by-line breakdown of the three weeks.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "10d71f7a2e35",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 4,
+   "relevance": 3.5,
+   "speakability_usability": 8,
+   "cognitive_load": 7,
+   "concision": 3.5,
+   "continuity": 4,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4.5,
+  "one_sentence_reason": "Asked for 'shorter', the answer is virtually the same length and content as before.",
+  "specific_problem": "Failed the explicit request to shorten; only a few words changed.",
+  "minimal_improvement": "Cut to one or two short sentences, e.g. the done/open/what-slips question."
+ },
+ {
+  "jid": "18d7ff4ba2bf",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 8.5,
+   "continuity": 9,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.4,
+  "one_sentence_reason": "Sensible follow-up: have him walk through the doc and point at specific done/open items.",
+  "specific_problem": "Could give a ready-to-say line rather than only advice.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "8852e4f0938a",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 8.5,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.4,
+  "one_sentence_reason": "Correctly flags Tidewater (Canada) is in the plan's beta and notes the email fallback, asking to verify before parking.",
+  "specific_problem": "Does not note the colleague's 200-user figure conflicts with the plan's 400, nor the 10-business-day registration lead time.",
+  "minimal_improvement": "Mention the plan's 400 users across three customers and the registration lead time."
+ },
+ {
+  "jid": "4ca8dc1eb810",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 10,
+   "relevance": 10,
+   "speakability_usability": 10,
+   "cognitive_load": 10,
+   "concision": 10,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.8,
+  "one_sentence_reason": "Accurately recaps release-notes owner and the related dependencies from the conversation.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "427108eec5a6",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 7.5,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.1,
+  "one_sentence_reason": "Avoids inventing a decision and offers to confirm and follow up.",
+  "specific_problem": "Could also invite someone in the room who attended to fill in now.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "68bd8d4bb383",
+  "scores": {
+   "correctness": 8,
+   "grounding": 8,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 7.5,
+   "relevance": 8.5,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 9,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.6,
+  "one_sentence_reason": "Reasonable hold-then-update-once advice grounded in the notes' unchecked buffer and prior 28 October message.",
+  "specific_problem": "Omits that the notes give this decision to Hiro and are an unreviewed draft; markdown bold in speech.",
+  "minimal_improvement": "Note Hiro owns the customer update and the notes are a draft to confirm first."
+ },
+ {
+  "jid": "595097b65d27",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9.5,
+   "cognitive_load": 9.5,
+   "concision": 9.5,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.6,
+  "one_sentence_reason": "Accurately reports the Kestrel decision, prices, reason and contract owner/date from the notes.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "db51ab174d3f",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 8.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 7.5,
+   "continuity": 8,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.3,
+  "one_sentence_reason": "Gives the correct reasons for Kestrel (price and Canadian registration support).",
+  "specific_problem": "Repeats the contract line from the previous answer; 'don't have to wait on that' overstates the notes.",
+  "minimal_improvement": "Drop the repeated contract sentence and the 'no wait' inference."
+ },
+ {
+  "jid": "27b54a06c587",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 7.5,
+   "relevance": 8.5,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 9,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.8,
+  "one_sentence_reason": "Honestly says no size yet, points to Lena's Monday estimate and that nothing is confirmed to drop.",
+  "specific_problem": "Misses that the notes are an unreviewed draft and contradict themselves on the freeze date (16 vs 9 October), which matters for 'fits before freeze'.",
+  "minimal_improvement": "Flag the draft status and the conflicting freeze dates before planning around it."
+ },
+ {
+  "jid": "2d4adcac9d97",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9.5,
+   "role_fidelity": 8,
+   "direct_usefulness": 5.5,
+   "relevance": 6.5,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 7,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.4,
+  "one_sentence_reason": "Safe but repeats the prior non-answer, pushing the question back to the asker.",
+  "specific_problem": "'Don't have last week's agreement in front of me' again; offers no path like checking notes or deciding now.",
+  "minimal_improvement": "Propose settling scope now or checking last week's notes, rather than repeating."
+ }
+]

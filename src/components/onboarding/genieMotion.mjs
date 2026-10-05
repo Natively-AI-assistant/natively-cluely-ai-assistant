@@ -289,3 +289,151 @@ export function genieTrack(from, to, ease, durationMs, geom, rows, hz = 120) {
   }
   return { offsets, bands, layerOpacity, shadowTransform, shadowOpacity };
 }
+
+// ─── Without the genie: Lift ────────────────────────────────────
+// Turned off in Settings (and the OS not asking for reduced motion, which
+// keeps its plain fade), a card lifts in instead: it rises 14 px out of a soft
+// 6 px focus, from 98.5 %, and lands; closing, it sinks 8 px back into a
+// 4 px focus as it fades. Chosen by Evin in the motion lab at half the lab's
+// first speed, so the durations are twice the usual UI ones.
+// Every property has its own clock on the one strong ease-out (Emil
+// Kowalski's (0.23, 1, 0.32, 1)): the fade finishes first, the blur next,
+// and the travel settles last, so the card is legible before it has landed.
+// The close is the quicker of the two.
+
+/** Emil Kowalski's strong ease-out. */
+export const LIFT_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+
+export const LIFT = {
+  hidden: { transform: 'translateY(14px) scale(0.985)', opacity: '0', filter: 'blur(6px)' },
+  shown:  { transform: 'translateY(0px) scale(1)',      opacity: '1', filter: 'blur(0px)' },
+  closed: { transform: 'translateY(8px) scale(0.99)',   opacity: '0', filter: 'blur(4px)' },
+  open:  { transform: 640, opacity: 440, filter: 520, dim: 560 },
+  close: { transform: 360, opacity: 320, filter: 320, dim: 360 },
+};
+
+const LIFT_PROPS = ['transform', 'opacity', 'filter'];
+
+/** How long a lift runs, ms: its slowest property. */
+export function liftMs(phase) {
+  return Math.max(...LIFT_PROPS.map(k => LIFT[phase][k]));
+}
+
+/**
+ * Play the lift on `card` with the Web Animations API (on the compositor,
+ * not a per-frame main-thread write). A lift that is already running is
+ * frozen where it has got to and the new one starts from there, so a close
+ * during the open reverses from what is on screen. A finished open leaves
+ * nothing on the card: a transform or a filter would become the containing
+ * block of anything position: fixed inside it (a dropdown, a tooltip).
+ * Returns a function that stops it.
+ */
+export function playLift(card, phase) {
+  return playSurface(card, phase, { id: 'lift', ease: LIFT_EASE, hidden: LIFT.hidden, shown: LIFT.shown, closed: LIFT.closed, ms: LIFT[phase] });
+}
+
+/**
+ * The lift's and the slide's shared player: three properties, each on its own
+ * clock. `ease` is one curve for all three, or one per property.
+ */
+function playSurface(card, phase, { id, ease, hidden, shown, closed, ms }) {
+  const running = card.getAnimations().filter(a => a.id === id);
+  let from;
+  if (running.length) {
+    for (const a of running) { try { a.commitStyles(); } catch { /* not rendered */ } a.cancel(); }
+    from = {};
+    for (const k of LIFT_PROPS) from[k] = card.style[k] || shown[k];
+  } else {
+    from = phase === 'open' ? hidden : shown;
+  }
+  const to = phase === 'open' ? shown : closed;
+  const anims = LIFT_PROPS.map(k => {
+    const a = card.animate([{ [k]: from[k] }, { [k]: to[k] }], { duration: ms[k], easing: typeof ease === 'string' ? ease : ease[k], fill: 'both' });
+    a.id = id;
+    return a;
+  });
+  let stopped = false;
+  if (phase === 'open') {
+    Promise.all(anims.map(a => a.finished)).then(() => {
+      if (stopped) return;
+      for (const a of anims) a.cancel();
+      for (const k of LIFT_PROPS) card.style[k] = '';
+    }, () => { /* cancelled: a close took over */ });
+  }
+  return () => { stopped = true; for (const a of anims) a.cancel(); };
+}
+
+// ── The slide: a notice in the window's bottom-right corner ─────────────────
+// A corner notice arrives the way a macOS notification banner does: in from
+// the window's right edge, and back out through it. It does this whatever the
+// genie setting says; the OS asking for reduced motion still gets the fade.
+//
+// The numbers are the search-index notice's too (ProviderChangeNotice.css), so
+// every card in that corner moves as one. Third version (2026-10-04), after
+// Evin's "a bit slower" and then "refine it a bit more":
+//
+//   in    travel 500ms on SLIDE_EASE (ease-out cubic). The first two versions
+//         used --ease-smooth-out, which over a 350px travel moves 51px in its
+//         first frame and is 95% done at 234ms: a jump, then 270ms of creep.
+//         This curve moves 34px in the first frame and reaches 95% at 319ms,
+//         so the card is SEEN travelling for most of its clock, and still
+//         lands with no overshoot.
+//         fade 250ms, blur 2px over 350ms: solid and sharp before it lands.
+//   out   travel 400ms on SLIDE_OUT_EASE: a swipe, not a dash. It starts with
+//         speed (about 25px in the first 50ms, so a click on the close is
+//         answered at once) and keeps accelerating, crossing the window's
+//         edge at its fastest. The second version shot away on an ease-out
+//         (96% gone in 200ms) and dissolved.
+//         fade and blur on SLIDE_FADE_OUT_EASE over the same 400ms: held for
+//         the first half (81% opaque at 200ms) and gone only as the card
+//         crosses the edge. The fade is there for the card's shadow, which
+//         reaches back inside the window after the card itself has left.
+//   travel         the card's own width plus its gap to the edge, so it
+//                  starts and ends fully past the edge.
+//
+// Motion tokens (transitions-polish): the clocks are --duration-very-slow in
+// and --duration-slow out (the close is the quicker), the blur --blur-small.
+// The curves are deliberately NOT --ease-smooth-out: that token is tuned for
+// in-place surfaces of a few pixels, and on a full off-edge travel it reads as
+// a jump.
+
+/** Ease-out cubic: the way in. */
+export const SLIDE_EASE = 'cubic-bezier(0.33, 1, 0.68, 1)';
+/** The way out: already moving at the start, fastest at the edge. */
+export const SLIDE_OUT_EASE = 'cubic-bezier(0.4, 0.2, 1, 0.8)';
+/** The fade and blur on the way out: hold, then go as the card crosses the edge. */
+export const SLIDE_FADE_OUT_EASE = 'cubic-bezier(0.7, 0, 1, 1)';
+
+export const SLIDE = {
+  /** Past the edge. Its transform is the travel, measured per card (slideAway). */
+  away:  { opacity: '0', filter: 'blur(2px)' },
+  shown: { transform: 'translateX(0px)', opacity: '1', filter: 'blur(0px)' },
+  open:  { transform: 500, opacity: 250, filter: 350 },
+  close: { transform: 400, opacity: 400, filter: 400 },
+};
+
+/** Each property's curve, per phase. */
+export const SLIDE_EASES = {
+  open:  { transform: SLIDE_EASE, opacity: SLIDE_EASE, filter: SLIDE_EASE },
+  close: { transform: SLIDE_OUT_EASE, opacity: SLIDE_FADE_OUT_EASE, filter: SLIDE_FADE_OUT_EASE },
+};
+
+/** How long a slide runs, ms. */
+export function slideMs(phase) {
+  return Math.max(...LIFT_PROPS.map(k => SLIDE[phase][k]));
+}
+
+/** The state past the edge, for a card whose left side is `travelPx` from the window's right edge. */
+export function slideAway(travelPx) {
+  return { ...SLIDE.away, transform: `translateX(${Math.max(0, Math.ceil(travelPx))}px)` };
+}
+
+/**
+ * Play the slide on `card`, the lift's way: on the compositor, a close during
+ * the open reversing from what is on screen, and a finished open leaving
+ * nothing on the card. Returns a function that stops it.
+ */
+export function playSlide(card, phase, travelPx) {
+  const away = slideAway(travelPx);
+  return playSurface(card, phase, { id: 'slide', ease: SLIDE_EASES[phase], hidden: away, shown: SLIDE.shown, closed: away, ms: SLIDE[phase] });
+}

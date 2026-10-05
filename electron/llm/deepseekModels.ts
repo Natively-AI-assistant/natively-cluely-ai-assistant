@@ -14,8 +14,10 @@
 // Both current models: 1M context, 384K max output, thinking ON by default
 // (`thinking: {type: 'disabled'}` turns it off), effort low/high/max
 // (api-docs.deepseek.com/quick_start/pricing, /guides/thinking_mode).
-// deepseek-flash also accepts images; Natively still routes DeepSeek as
-// text-only, which is a routing decision, not a model limit.
+// deepseek-flash also accepts images, and since 2026-10-01 Natively sends it
+// screenshots when it is the selected model (streamWithDeepseek attaches them;
+// the vision resolver decides which DeepSeek model may get one). V4 Pro does
+// not read images: it answers HTTP 200 with a made-up reply.
 //
 // Platform note: pure constants and string matching, identical on macOS and
 // Windows.
@@ -57,7 +59,9 @@ export function deepseekWireModel(modelId: string): string {
  *     `ollama-` prefix, never by this).
  *   - `deepseek-chat` / `deepseek-reasoner`, discontinued 2026-07-24.
  *   - Any gateway-prefixed id (`fluxion/`, `openrouter/`, `litellm/`,
- *     `ninerouter/`): those bill the gateway's key, not the DeepSeek key.
+ *     `ninerouter/`, `agentrouter/`): those bill the gateway's key, not the
+ *     DeepSeek key. (`agentrouter/deepseek-v4-flash` in particular must never
+ *     reach deepseekWireModel: it is AgentRouter's CURRENT id.)
  */
 export function isDeepseekModelId(modelId: string | null | undefined): boolean {
     return /^deepseek-(?:v\d|flash(?:$|-))/i.test(modelId || '');

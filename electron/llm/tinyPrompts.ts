@@ -62,7 +62,7 @@ const TINY_CODING_FORMAT_RULE = `Coding format:
 - If the user asks for complexity only (time/space, big-O): give ONLY the time and space complexity for the problem already in the conversation. No code.
 - If the user asks for a dry run / trace only: give ONLY the step-by-step trace of the existing solution. No new code.
 - If the user asks to explain without code: prose only, NO code block.
-- Otherwise (a full coding problem): use the exact coding headings from CORE RULES (## Approach / ## Technique / Data Structure / Algorithm Used / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points).`;
+- Otherwise (a full coding problem): use the exact coding headings from CORE RULES (## Approach / ## Technique / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points).`;
 
 export const TINY_SYSTEM_PROMPT = `${TINY_CORE}
 

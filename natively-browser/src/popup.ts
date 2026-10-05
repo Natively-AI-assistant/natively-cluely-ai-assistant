@@ -25,6 +25,10 @@ const connectBtn = $<HTMLButtonElement>('connectBtn');
 const captureBtn = $<HTMLButtonElement>('captureBtn');
 const unpairBtn = $<HTMLButtonElement>('unpairBtn');
 const allSitesBtn = $<HTMLButtonElement>('allSitesBtn');
+// Lets the Meet reader run on meet.google.com: who is in the call and who is
+// speaking, for names on Natively's transcript (sent to the local app only,
+// while its meeting detection is on).
+const meetNamesBtn = $<HTMLButtonElement>('meetNamesBtn');
 const allSitesHint = $<HTMLElement>('allSitesHint');
 const msg = $('msg');
 
@@ -200,6 +204,29 @@ allSitesBtn.addEventListener('click', async () => {
   }
 });
 
+meetNamesBtn.addEventListener('click', async () => {
+  meetNamesBtn.disabled = true;
+  const r = await requestOriginPermission(chrome.permissions, 'https://meet.google.com/*');
+  meetNamesBtn.disabled = false;
+  if (r.granted) {
+    await send({ type: 'meet-reader-refresh' }).catch(() => {});
+    setMsg('Natively will put names on your Google Meet transcripts.', 'ok');
+    await refreshMeetNames();
+  } else {
+    setMsg('Not allowed: Meet transcripts keep "Speaker 1".', 'warn');
+  }
+});
+
+/** Hide the Meet button once meet.google.com is allowed (all sites covers it too). */
+async function refreshMeetNames(): Promise<void> {
+  try {
+    const r = await send<{ granted: boolean }>({ type: 'meet-reader-status' });
+    meetNamesBtn.classList.toggle('hidden', !!r?.granted);
+  } catch {
+    /* leave it shown */
+  }
+}
+
 unpairBtn.addEventListener('click', async () => {
   await send({ type: 'unpair' });
   setMsg('Unpaired.', '');
@@ -212,6 +239,7 @@ pairInput.addEventListener('keydown', (e) => {
 
 void refreshStatus();
 void refreshAllSites();
+void refreshMeetNames();
 
 /** Hide the all-sites button once granted; show the explainer while offered. */
 async function refreshAllSites(): Promise<void> {

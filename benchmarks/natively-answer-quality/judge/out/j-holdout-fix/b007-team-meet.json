@@ -1,0 +1,422 @@
+[
+ {
+  "jid": "e92580804254",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.3,
+  "one_sentence_reason": "Constructive pushback on scope creep without inventing facts; speakable and firm.",
+  "specific_problem": "Ends without a concrete next step or owner for sizing the work.",
+  "minimal_improvement": "Close with who sizes it and when it gets decided."
+ },
+ {
+  "jid": "4ce02de08cf4",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 9.5,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.4,
+  "one_sentence_reason": "All six action items, owners and dates match the 8 Sept notes exactly and follow the 'shorter' request.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "ec0cf5f14bbb",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 7.5,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 7.5,
+   "continuity": 8,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.8,
+  "one_sentence_reason": "Reframes 'fewer surprises' sensibly and asks for specifics, but largely repeats the prior turn's ask.",
+  "specific_problem": "Second consecutive turn asking the colleague to name worries; no concrete proposal to move forward.",
+  "minimal_improvement": "Offer a concrete step (e.g., a quick risk list review) instead of re-asking."
+ },
+ {
+  "jid": "8951481b6999",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.6,
+  "one_sentence_reason": "Acknowledges the risk and forces a concrete choice between scoping down and deferring; good meeting language.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "3f14931b659c",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.2,
+  "one_sentence_reason": "Decisions, open items and the date change all match the notes accurately and are readable aloud.",
+  "specific_problem": "Omits that Cohort A dates are also expected to shift and Leila's PTO overlapping the Cohort A window.",
+  "minimal_improvement": "Add one line that cohort dates will move with the shadow-run extension."
+ },
+ {
+  "jid": "96b4e85200ee",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.8,
+  "one_sentence_reason": "Asks for an owner and offers pairing without assigning the new hire; ignores irrelevant facilities doc correctly.",
+  "specific_problem": "'Someone who's still finding their footing' implicitly singles out the new hire in front of the group.",
+  "minimal_improvement": "Drop the new-hire reference and just ask for the person with the most cutover context."
+ },
+ {
+  "jid": "a9112082747d",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.7,
+  "one_sentence_reason": "Correct: plan lists the PDF redesign as out of scope; clear answer for Design.",
+  "specific_problem": "Lists every other out-of-scope item, which the question did not need.",
+  "minimal_improvement": "Keep only the PDF answer and the routing suggestion."
+ },
+ {
+  "jid": "91964094c31a",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 9.5,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.7,
+  "one_sentence_reason": "Explains when fix-forward fits and why this change is risky, then drives to a decision; consistent with prior turn.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "f3bab6d0c221",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 10,
+   "cognitive_load": 10,
+   "concision": 10,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.6,
+  "one_sentence_reason": "Correct owner and dry-run date from the notes, said in one natural line.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "603d7d988d74",
+  "scores": {
+   "correctness": 7,
+   "grounding": 6,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 6.5,
+   "relevance": 8,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.6,
+  "one_sentence_reason": "Hedged but commits the user to a 'yellow' rating with no status evidence behind it.",
+  "specific_problem": "Gives leadership a RAG colour without any grounding; bold markdown in spoken text.",
+  "minimal_improvement": "Say status isn't confirmed yet and commit to a grounded update, or make the colour conditional."
+ },
+ {
+  "jid": "e732b0aa08a4",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.2,
+  "one_sentence_reason": "Polite pushback that names the load and asks Marcus to choose, as requested.",
+  "specific_problem": "'The rewrite is the one I'd protect' then offers to hand off part of it, which is slightly contradictory; on-call not offered as a lever.",
+  "minimal_improvement": "Make the options clean: credentials slip a week, or someone else covers part of the rewrite/on-call."
+ },
+ {
+  "jid": "73cb79e4fce1",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 6.5,
+   "relevance": 7,
+   "speakability_usability": 7.5,
+   "cognitive_load": 7.5,
+   "concision": 8,
+   "continuity": 8.5,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Accurately reports what the draft says and commits to check with Dev, but the reasoning is muddled.",
+  "specific_problem": "Treats 'pushed out' as a date question; Cohort B's TBC date has no bearing on whether the redesign was descoped.",
+  "minimal_improvement": "Say the draft lists it with Cohort B, it may be stale, and confirm whether it was moved out of scope."
+ },
+ {
+  "jid": "58ee4db381e4",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.3,
+  "one_sentence_reason": "Spots the draft's internal contradiction (22nd vs 29 Sept) and the out-of-date caveat; safe next step.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "aa8b5b023e2c",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 8,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.6,
+  "one_sentence_reason": "Correctly says it was not decided, who raised it and who is bringing the answer, plus a sayable line.",
+  "specific_problem": "If today is the 15 Sept sync, the suggested line defers to the very meeting in progress instead of asking Siobhan for the answer.",
+  "minimal_improvement": "Make the line ask Siobhan for Revenue's answer now."
+ },
+ {
+  "jid": "df31b266f7ed",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9.5,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 6.5,
+   "relevance": 8,
+   "speakability_usability": 9,
+   "cognitive_load": 9.5,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.8,
+  "one_sentence_reason": "Safely avoids inventing a due date and commits to confirm.",
+  "specific_problem": "Hana is likely in the room; deferring past the meeting is less useful than asking her directly.",
+  "minimal_improvement": "Turn it to Hana: 'Hana, what date are you working to?'"
+ },
+ {
+  "jid": "4245d6e99ee8",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.8,
+  "one_sentence_reason": "Corrects the false big-bang memory with the recorded cohort decision and its rationale, tactfully.",
+  "specific_problem": "Slightly long for a spoken correction with full cohort breakdown.",
+  "minimal_improvement": "Trim cohort sizes; keep decision, reason and invite to flag."
+ },
+ {
+  "jid": "980c7ce3e23f",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.3,
+  "one_sentence_reason": "Accurately captures freeze window, Revenue heads-up, Ledgerd unchanged and Siobhan's ownership in two sentences.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "c708b78b8417",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 7.5,
+   "relevance": 8,
+   "speakability_usability": 9,
+   "cognitive_load": 9.5,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.2,
+  "one_sentence_reason": "Avoids an unsupported yes/no and commits to reply before the leadership update.",
+  "specific_problem": "No conditional path or rough estimate to help the asker in the next hour.",
+  "minimal_improvement": "Add a time-bound promise, e.g. 'I'll have a firm yes or no in 30 minutes.'"
+ },
+ {
+  "jid": "61fba754d6e9",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.6,
+  "one_sentence_reason": "Good clarifying question that turns a vague concern into specifics tied to timeline.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "2ae42518b17e",
+  "scores": {
+   "correctness": 7,
+   "grounding": 9,
+   "role_fidelity": 7.5,
+   "direct_usefulness": 6.5,
+   "relevance": 8,
+   "speakability_usability": 8,
+   "cognitive_load": 7.5,
+   "concision": 8,
+   "continuity": 7,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.8,
+  "one_sentence_reason": "Takes ownership of the action item but its content is confused.",
+  "specific_problem": "Says 'I'll come back with the spots' then 'once I have your list', so ownership of identifying risks is ambiguous; no due date.",
+  "minimal_improvement": "State one owner, one deliverable and a date (e.g., 'I'll list top three risks by Thursday')."
+ }
+]

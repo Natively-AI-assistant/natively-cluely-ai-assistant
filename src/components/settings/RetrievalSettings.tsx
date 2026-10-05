@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Boxes, ListOrdered } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_CSS } from './AIProvidersSettings';
+import { RETRIEVAL_HERO_PICKER_ATTR } from './SettingsRow';
 import { EmbeddingSettings, type EmbeddingSettingsParts } from './EmbeddingSettings';
 import { RerankerSettings, type RerankerSettingsParts } from './RerankerSettings';
 
@@ -50,9 +51,38 @@ interface RetrievalLayoutProps {
     navSeq?: number;
 }
 
+/**
+ * Gives the two stacked hero pickers one width: the wider of their two current
+ * labels. A fixed width that fits every catalogue name (about 170px) would pad
+ * a short name like "voyage-4" out to it, so this measures instead. Each picker
+ * box has min-width RETRIEVAL_HERO_PICKER_MIN_WIDTH. Resetting the variable to
+ * 0 lets both fall back to their own width, and the wider one is written back.
+ * It runs before paint: a layout effect after each render, and a
+ * ResizeObserver on the labels for a change inside a child's own render.
+ */
+function useMatchedHeroPickers(rootRef: React.RefObject<HTMLDivElement | null>) {
+    useLayoutEffect(() => {
+        const root = rootRef.current;
+        if (!root) return;
+        const sync = () => {
+            const boxes = Array.from(root.querySelectorAll<HTMLElement>(`[${RETRIEVAL_HERO_PICKER_ATTR}]`));
+            root.style.setProperty('--retrieval-hero-picker-w', '0px');
+            if (boxes.length < 2) return;
+            const widest = Math.max(...boxes.map((box) => box.getBoundingClientRect().width));
+            root.style.setProperty('--retrieval-hero-picker-w', `${Math.ceil(widest)}px`);
+        };
+        sync();
+        const observer = new ResizeObserver(sync);
+        root.querySelectorAll(`[${RETRIEVAL_HERO_PICKER_ATTR}] .aip-select-trigger > span`).forEach((label) => observer.observe(label));
+        return () => observer.disconnect();
+    });
+}
+
 const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, initialTab, navSeq }) => {
     const t = useT();
     const aipTheme = useResolvedTheme();
+    const rootRef = useRef<HTMLDivElement>(null);
+    useMatchedHeroPickers(rootRef);
 
     const [activeTab, setActiveTab] = useState<RetrievalTabId>(initialTab ?? 'embedding');
     /* Honour a deep link that arrives while this layout is ALREADY mounted
@@ -109,7 +139,7 @@ const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, 
     return (
         // One `.aip-root`, one AIP_CSS. Both child components can emit their own
         // wrapper and style tag, and here they must not — this page mounts both.
-        <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
+        <div ref={rootRef} className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
             {/* ONE header for both halves. Each child component still owns a
                 heading for its STANDALONE layout, but neither exposes it as a
                 part, so nothing is built here for a caller that would not

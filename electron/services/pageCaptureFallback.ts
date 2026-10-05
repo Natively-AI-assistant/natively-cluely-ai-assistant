@@ -61,8 +61,8 @@ export function describePageCaptureFallback(rawReason: unknown): PageCaptureFall
       kind: 'not-connected',
       label: 'Screenshot instead — extension not connected',
       detail:
-        'The browser extension is not connected, so a screenshot was attached instead of page context. ' +
-        'Pair it in Settings → Sync → Browser Extension, then press the capture hotkey again.',
+        'The browser extension is not connected, so a screenshot was attached instead. ' +
+        'Pair it in Settings → Sync → Browser Extension.',
       reason,
     };
   }
@@ -72,8 +72,8 @@ export function describePageCaptureFallback(rawReason: unknown): PageCaptureFall
       kind: 'needs-host-permission',
       label: 'Screenshot instead — grant this site',
       detail:
-        'The extension is connected but your browser has not granted it access to this site, so a screenshot was attached instead. ' +
-        'Click the Natively extension icon on that tab (it shows a "!" badge) and press Capture once to grant this site — or press "Allow on all sites" there once and the hotkey will capture every site from then on.',
+        'The extension has no access to this site, so a screenshot was attached instead. ' +
+        'Click the Natively extension icon on that tab to grant it.',
       reason,
     };
   }
@@ -83,8 +83,8 @@ export function describePageCaptureFallback(rawReason: unknown): PageCaptureFall
       kind: 'timeout',
       label: 'Screenshot instead — browser timed out',
       detail:
-        'The browser extension did not respond in time, so a screenshot was attached instead of page context. ' +
-        'If this keeps happening, reopen the browser or re-pair the extension in Settings → Sync.',
+        'The browser extension did not respond in time, so a screenshot was attached instead. ' +
+        'If it keeps happening, re-pair it in Settings → Sync.',
       reason,
     };
   }
@@ -94,7 +94,7 @@ export function describePageCaptureFallback(rawReason: unknown): PageCaptureFall
       kind: 'no-tab',
       label: 'Screenshot instead — no capturable tab',
       detail:
-        'No capturable browser tab was found (browser-internal pages cannot be read), so a screenshot was attached instead.',
+        'No capturable browser tab was found, so a screenshot was attached instead.',
       reason,
     };
   }
@@ -131,11 +131,11 @@ export function describeDoubleCaptureFailure(
     kind: 'error',
     label: 'Capture failed — nothing was attached',
     detail:
-      `Neither capture worked. Page context: ${base.reason}. Screenshot: ${shot}. ` +
+      `Page context: ${base.reason}. Screenshot: ${shot}. ` +
       (base.kind === 'needs-host-permission'
-        ? 'Click the Natively extension icon on that tab and capture once to grant this site. '
+        ? 'Click the Natively extension icon on that tab to grant this site. '
         : base.kind === 'not-connected'
-          ? 'Pair the browser extension in Settings → Sync → Browser Extension. '
+          ? 'Pair the extension in Settings → Sync → Browser Extension. '
           : '') +
       screenshotPermissionHint(platform),
     reason: base.reason,
@@ -156,10 +156,10 @@ export function describeDoubleCaptureFailure(
  */
 function screenshotPermissionHint(platform: NodeJS.Platform): string {
   if (platform === 'darwin') {
-    return 'Screenshots additionally require Screen Recording permission (System Settings → Privacy & Security → Screen Recording).';
+    return 'Screenshots need Screen Recording permission.';
   }
   if (platform === 'win32') {
-    return 'Screenshots can also fail when the target window blocks capture (protected/DRM content), in a remote-desktop session, or when security software blocks screen capture — try capturing a different window.';
+    return 'Protected (DRM) windows block screenshots.';
   }
-  return 'Screenshots can also fail when the target window blocks screen capture.';
+  return 'The target window may block screenshots.';
 }

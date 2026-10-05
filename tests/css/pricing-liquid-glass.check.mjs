@@ -147,6 +147,13 @@ body { margin: 0; }
   <div data-theme="dark" id="darkRoot">${surfaces('default')}${meters}</div>
   <div data-theme="light" id="lightRoot">${surfaces('default')}${meters}</div>
   <div data-theme="dark" id="glassRoot">${surfaces('liquid-glass')}</div>
+  <!-- The interaction-state pass (section 6) runs on these. NativelyProSettings
+       maps "default" to "liquid-glass" before writing the attribute, so the Pro
+       cards and pills never render on "default" at all; these four roots are
+       the themes a user can actually see them in. -->
+  <div data-theme="light" id="lightGlassRoot">${surfaces('liquid-glass')}</div>
+  <div data-theme="dark" id="modernRoot">${surfaces('modern')}</div>
+  <div data-theme="light" id="lightModernRoot">${surfaces('modern')}</div>
 </body>`;
 
 // ── colour helpers (same shapes as cta-liquid-glass.check.mjs) ───────────────
@@ -206,7 +213,7 @@ async function measure() {
   writeFileSync(fixture, page(loadCss()));
   try {
     await win.loadFile(fixture);
-    return await win.webContents.executeJavaScript(`
+    const rest = await win.webContents.executeJavaScript(`
       new Promise((r, reject) => requestAnimationFrame(() => requestAnimationFrame(() => {
        try {
         const read = (rootId, id) => {
@@ -280,11 +287,97 @@ async function measure() {
        } catch (e) { reject(new Error('fixture probe threw: ' + (e && e.stack || e))); }
       })));
     `);
+    rest.states = await probeStates(win);
+    return rest;
   } finally {
     win.destroy();
     rmSync(fixture, { force: true });
   }
 }
+
+// ── Interaction states ───────────────────────────────────────────────────────
+// Everything above reads the RESTING surface. This pass forces :hover and
+// :active through the DevTools protocol (a script cannot produce them) and
+// reads where each state settles.
+//
+// What it guards (2026-09-26). The pills' hover is a radial gloss, and it was
+// painted as the element's BACKGROUND. A gradient cannot be interpolated, so
+// it landed in one frame while the fill and shadow around it eased over
+// 180ms: the "hover is too fast" the product owner reported. An attempt to
+// fix that by dropping the gloss (and the cards' hover ring) was REJECTED:
+// the glossy hover, the ring and the rest of that look are wanted, and only
+// the timing was the problem. So the gloss now paints on ::after, which fades,
+// on a slower clock (300ms in, 400ms out), and these assertions keep both
+// halves: the gloss must still be there, and nothing may snap to it.
+const STATE_ROOTS = ['glassRoot', 'lightGlassRoot', 'modernRoot', 'lightModernRoot'];
+const STATE_IDS = ['ctaY', 'ctaL', 'cardY', 'cardL', 'teaser', 'teaserCta'];
+const FINE = '(hover: hover) and (pointer: fine)';
+
+async function probeStates(win) {
+  const dbg = win.webContents.debugger;
+  dbg.attach('1.3');
+  try {
+    await dbg.sendCommand('DOM.enable');
+    await dbg.sendCommand('CSS.enable');
+    const { root } = await dbg.sendCommand('DOM.getDocument', { depth: -1 });
+    const forced = new Set();
+    const force = async (ids, classes) => {
+      for (const r of STATE_ROOTS) for (const id of ids) {
+        const { nodeId } = await dbg.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: `#${r} #${id}` });
+        await dbg.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: classes });
+        forced.add(nodeId);
+      }
+    };
+    const release = async () => {
+      for (const nodeId of forced) await dbg.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: [] });
+      forced.clear();
+    };
+    // The slowest transition on these surfaces is the 400ms leave, so 650ms
+    // guarantees the reads are destinations rather than mid-flight values.
+    const settle = () => win.webContents.executeJavaScript(
+      'new Promise((r) => setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(r)), 650))');
+    const read = () => win.webContents.executeJavaScript(`(() => {
+      const out = { fine: matchMedia(${JSON.stringify(FINE)}).matches };
+      for (const r of ${JSON.stringify(STATE_ROOTS)}) {
+        out[r] = {};
+        for (const id of ${JSON.stringify(STATE_IDS)}) {
+          const el = document.getElementById(r).querySelector('#' + id);
+          const cs = getComputedStyle(el), after = getComputedStyle(el, '::after');
+          out[r][id] = {
+            bgImage: cs.backgroundImage, property: cs.transitionProperty, duration: cs.transitionDuration,
+            afterImage: after.backgroundImage, afterOpacity: after.opacity,
+            afterProperty: after.transitionProperty, afterDuration: after.transitionDuration,
+          };
+        }
+      }
+      return out;
+    })()`);
+    const snap = async (ids, classes) => {
+      await force(ids, classes);
+      await settle();
+      const s = await read();
+      await release();
+      await settle();
+      return s;
+    };
+    const states = { rest: await read() };
+    states.hover = await snap(['ctaY', 'ctaL', 'cardY', 'cardL', 'teaser'], ['hover']);
+    states.active = await snap(['ctaY', 'ctaL'], ['hover', 'active']);
+    return states;
+  } finally {
+    try { dbg.detach(); } catch { /* window is being destroyed anyway */ }
+  }
+}
+
+// Seconds of the longest transition in a computed transition-duration list.
+const maxSeconds = (list) => Math.max(...String(list).split(',').map((d) => Number.parseFloat(d)));
+// Seconds for one named property in a computed transition list.
+const secondsFor = (property, duration, name) => {
+  const props = String(property).split(',').map((x) => x.trim());
+  const durs = String(duration).split(',').map((d) => Number.parseFloat(d));
+  const i = props.indexOf(name);
+  return i === -1 ? null : durs[i % durs.length];
+};
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
@@ -617,6 +710,43 @@ app.whenReady().then(async () => {
   ]) {
     if (!d || !g) continue;
     if (d.bg !== g.bg) fail(`${name} paints ${d.bg} on data-interface-theme="default" but ${g.bg} on ="liquid-glass" — the presence-anchored material lost the source-order tie to a value-anchored rule, so those users still see the retired gloss.`);
+  }
+
+  // ── 6. interaction states (see probeStates) ────────────────────────────────
+  const S = m.states;
+  if (!S.rest.fine) {
+    fail(`matchMedia('${FINE}') is false in this window, so every hover rule on this surface is switched off and the hover assertions below would pass on nothing. Run on a machine with a mouse or trackpad.`);
+  }
+  const MIN_IN = 0.25;
+  for (const r of STATE_ROOTS) {
+    const at = (state, id) => S[state][r][id];
+    const where = (id) => `${r} #${id}`;
+    const pills = r.startsWith('light') ? ['ctaY', 'ctaL', 'teaserCta'] : ['ctaY', 'ctaL'];
+
+    for (const id of pills) {
+      const rest = at('rest', id), hover = at('hover', id);
+      if (hover.bgImage !== rest.bgImage) fail(`${where(id)}: hover swaps the element's background-image ${rest.bgImage} -> ${hover.bgImage}. A gradient cannot transition, so it lands in one frame; the gloss belongs on ::after, which fades.`);
+      if (!/radial-gradient/.test(hover.afterImage) || hover.afterOpacity !== '1') fail(`${where(id)}: the hover gloss is gone (::after ${hover.afterImage}, opacity ${hover.afterOpacity}). The glossy hover is the wanted look; only its timing was changed.`);
+      if (rest.afterOpacity !== '0') fail(`${where(id)}: the gloss layer shows at rest (opacity ${rest.afterOpacity}).`);
+      const layerIn = secondsFor(hover.afterProperty, hover.afterDuration, 'opacity');
+      if (!(layerIn >= MIN_IN)) fail(`${where(id)}: the gloss fades in over ${layerIn}s; under ${MIN_IN}s it reads as a snap again.`);
+    }
+
+    for (const id of ['ctaY', 'ctaL']) {
+      const rest = at('rest', id), hover = at('hover', id), active = at('active', id);
+      if (!(maxSeconds(hover.duration) >= MIN_IN)) fail(`${where(id)}: hover arrives in ${hover.duration}; the owner found the old 180ms too fast.`);
+      if (!(maxSeconds(rest.duration) >= maxSeconds(hover.duration))) fail(`${where(id)}: the leave (${rest.duration}) is quicker than the arrival (${hover.duration}).`);
+      if (!(maxSeconds(active.duration) < maxSeconds(hover.duration))) fail(`${where(id)}: the press runs on the hover clock (${active.duration}); a press has to land faster than the hover, or it trails the finger.`);
+    }
+
+    for (const id of ['cardY', 'cardL', 'teaser']) {
+      const rest = at('rest', id), hover = at('hover', id);
+      for (const prop of ['box-shadow', 'border-color']) {
+        const t = secondsFor(hover.property, hover.duration, prop);
+        if (!(t >= MIN_IN)) fail(`${where(id)}: ${prop} ${t === null ? 'does not transition' : `arrives in ${t}s`} on hover, so the hover ring and shadow snap in.`);
+      }
+      if (secondsFor(rest.afterProperty, rest.afterDuration, 'box-shadow') === null) fail(`${where(id)}: the rim (::after) transitions only ${rest.afterProperty}, so its hover change snaps.`);
+    }
   }
 
   if (failures.length) {

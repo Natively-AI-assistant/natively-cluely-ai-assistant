@@ -15,6 +15,7 @@ import {
   getPermissions,
   getRowCopy,
   getPlatformFacts,
+  HELP_CLIP_IDS,
 } from '../helpContent.mjs';
 
 describe('supported platforms', () => {
@@ -127,13 +128,30 @@ describe('platform facts', () => {
     assert.equal(win.restartAfterGrant, false);
   });
 
-  test('recordings made on macOS show on Windows only when nothing in them is macOS-specific', () => {
-    assert.deepEqual(mac.recordings, { overlay: true, speechProviders: true, activeModel: true });
-    // The overlay clip shows ⌘ keycaps and the provider list shows Apple Speech.
-    assert.equal(win.recordings.overlay, false);
-    assert.equal(win.recordings.speechProviders, false);
-    // The Active Model menu has nothing platform-specific in it.
-    assert.equal(win.recordings.activeModel, true);
+  test('every clip is decided on both platforms', () => {
+    assert.deepEqual(Object.keys(mac.clips).sort(), [...HELP_CLIP_IDS].sort());
+    assert.deepEqual(Object.keys(win.clips).sort(), [...HELP_CLIP_IDS].sort());
+  });
+
+  test('macOS shows every recording; they were all made there', () => {
+    for (const id of HELP_CLIP_IDS) assert.equal(mac.clips[id], true, id);
+  });
+
+  test('Windows never gets a recording with something macOS-only in it', () => {
+    // ⌘ keycaps (overlay, Sync's extension row), Apple Speech, macOS disguise
+    // names, the Screen Recording permission, and Retrieval's "this Mac" cards.
+    for (const id of ['answer', 'autoanswer', 'overlay', 'permissions', 'speech', 'retrieval', 'stealth', 'sync']) {
+      assert.equal(win.clips[id], false, id);
+    }
+    // Nothing platform-specific in these.
+    for (const id of ['model', 'verify', 'phone', 'modes', 'profile', 'notes', 'followup', 'calendar', 'search']) {
+      assert.equal(win.clips[id], true, id);
+    }
+  });
+
+  test('meeting detection states the older-macOS condition, and nothing it cannot back on Windows', () => {
+    assert.match(mac.meetingDetection, /macOS 13 and earlier/);
+    assert.equal(win.meetingDetection, null);
   });
 
   test('both platforms return the same shape (contract drift guard)', () => {

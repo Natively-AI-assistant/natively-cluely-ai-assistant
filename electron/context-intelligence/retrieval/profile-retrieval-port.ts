@@ -40,6 +40,7 @@ import { Bm25Index, DEFAULT_BM25 } from './bm25';
 // Pure tokenizer/statistics module — no Electron, no DB — so the rule above holds.
 import { buildLexicalStats, anchoringChunkIndexes, anchorTerms, anchorCoverage, questionContentWords, PROBE_MIN_COVERAGE, PROBE_MIN_ANCHORS } from '../../services/modes/lexicalTokens';
 import { semanticChunks } from '../../services/modes/semanticChunker';
+import { stripUnsupportedDerivedResumeFields, isGeneratedArtifactCard, isExtractorPlaceholder, buildSupportIndex, assessDerivedSupport } from './profile-derived-support';
 
 /**
  * 'fact' (2026-08-02) carries DERIVED profile facts — things the app computed
@@ -62,6 +63,9 @@ export interface ProfileCardLike {
   title: string;
   body: string;
   approvalStatus?: string;
+  /** OKF provenance ('structured_profile' | 'aot_artifact' | …). An
+   *  'aot_artifact' card is model-composed and never served as evidence. */
+  generatedFrom?: string;
 }
 
 export interface ProfileDocLike {
@@ -125,6 +129,8 @@ export interface ProfilePortInput {
    * chunks are used exactly as before.
    */
   rawRetriever?: (query: string, opts: { topK: number; timeoutMs?: number }) => Promise<RawRetrievedChunk[]>;
+  /** false keeps passages even for a profile that fits (PROFILE_WHOLE_MAX_TOKENS). Default: whole. */
+  wholeDocuments?: boolean;
 }
 
 export interface RawRetrievedChunk {
@@ -141,6 +147,57 @@ const TYPE_FOR_KIND: Record<ProfileDocKind, SourceType> = {
   jd: 'JOB_DESCRIPTION',
   fact: 'PROFILE_FACT',
 };
+
+// ── A PROFILE THAT FITS THE PROMPT IS HANDED OVER WHOLE (2026-10-03) ─────────
+//
+// Measured on the evidence-rich benchmark, with a 1,048-word résumé and a
+// 760-word job description loaded through Profile Intelligence: a turn carries
+// at most six profile passages out of about seventy, and of the rows whose
+// answer rests on a résumé or JD fact, every needed fact was in the prompt on
+// 13 of 33. With it there the answers scored 9.5, without it 6.6 ("I'll confirm
+// the before-and-after figures and come back to you", from a candidate whose
+// résumé states them). The two documents together are about 2,700 tokens.
+//
+// So when every registered résumé / JD has its raw text and together they fit
+// this size, a turn that reads the profile gets each PLANNED document as one
+// item holding its whole text, in place of that document's raw-text passages
+// and the semantic arm (no embed / rerank round trip). What does not change:
+// structured sections, cards, the complete-inventory sections that license
+// "X is not listed", derived facts, the planned-type gate (a turn that plans
+// only the résumé still gets no JD), and a larger profile, which keeps
+// retrieval exactly as it was. The plan makes the room (orchestrator.decide).
+//
+// 6,000 tokens: about ten pages of the two documents, and small enough that a
+// full reference pack (mode-retrieval-port WHOLE_PACK_MAX_TOKENS) plus the
+// profile stays under what the claim pass is shown
+// (llm/claimVerifier CLAIM_VERIFIER_MATERIAL_MAX_CHARS).
+/** Whole-profile threshold, in the packer's estimateTokens units (~4 chars/token). */
+export const PROFILE_WHOLE_MAX_TOKENS = 6000;
+/** The `section` of a whole-document item. */
+export const PROFILE_WHOLE_SECTION = 'Document (whole)';
+
+/**
+ * Size and count of the profile documents a mode would be handed whole, or null
+ * when they are not (a document without raw text, too large, none authorized).
+ * The callers pass it to the plan; the port applies the same rule to itself.
+ */
+export function profileWholeInfo(
+  docs: ReadonlyArray<Pick<ProfileDocLike, 'kind' | 'sourceId' | 'versionId' | 'rawText'>>,
+  allowedSourceTypes: readonly SourceType[],
+  profileSources: readonly SourceType[],
+): { tokens: number; docs: number } | null {
+  const authorized = new Set<SourceType>((profileSources ?? []).filter((t) => (allowedSourceTypes ?? []).includes(t)));
+  let tokens = 0; let count = 0;
+  for (const doc of docs ?? []) {
+    if (doc.kind !== 'resume' && doc.kind !== 'jd') continue;
+    if (!authorized.has(TYPE_FOR_KIND[doc.kind]) || !doc.sourceId || !doc.versionId) continue;
+    const raw = typeof doc.rawText === 'string' ? doc.rawText.trim() : '';
+    if (!raw) return null;                                       // size unknown: retrieval as before
+    tokens += Math.ceil(raw.length / 4);
+    count += 1;
+  }
+  return count > 0 && tokens <= PROFILE_WHOLE_MAX_TOKENS ? { tokens, docs: count } : null;
+}
 
 // ── deterministic section rendering ─────────────────────────────────────────
 
@@ -318,8 +375,11 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
 function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
   const out: ProfileSection[] = [];
 
+  // Extractor placeholders ("Unknown Role", "Unknown Location") are not in the
+  // job description; rendering them made the app's default read as a JD fact.
+  const real = (v: unknown): string => (isExtractorPlaceholder(v) ? '' : str(v));
   const role = [
-    str(sd.title), str(sd.company), str(sd.location),
+    real(sd.title), str(sd.company), real(sd.location),
     str(sd.level) ? `Level: ${str(sd.level)}` : '',
     str(sd.employment_type) ? `Employment type: ${str(sd.employment_type)}` : '',
     str(sd.description_summary),
@@ -379,63 +439,20 @@ function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
 }
 
 /**
- * DERIVED profile facts (2026-08-02). Currently the résumé-based salary
- * estimate; the shape is a list so further computed facts can join it.
+ * Profile FACTS (kind 'fact' → PROFILE_FACT): things the user stated or
+ * verified about themselves that no uploaded document holds.
  *
- * Every section states, in its own text, that the value is an ESTIMATE derived
- * from the résumé and is neither written on the résumé nor an employer offer.
- * That sentence is the whole safety property of this source: the retrieved
- * chunk is what the model sees, so the qualification has to travel WITH the
- * number, not sit in a policy the prompt might not restate.
- *
- * Never a completeInventory: one derived figure enumerates nothing, so it must
- * not license "you have no other compensation expectation" style absences.
+ * The résumé-based salary ESTIMATE rendered here from 2026-08-02 to 2026-09-30
+ * and is now refused by design, even if a caller still hands it in: it is a
+ * model's market estimate for a role and location, not the candidate's
+ * expectation, and PROFILE_FACT carries first-person authority (USER_* claims).
+ * Served as evidence, the model stated the estimate as the user's own figure.
+ * No other fact type exists yet, so this renders nothing; a future verified
+ * fact joins here, and must never be a completeInventory (one fact enumerates
+ * nothing).
  */
-function renderFactSections(sd: Record<string, unknown>): ProfileSection[] {
-  const out: ProfileSection[] = [];
-
-  const salary = (sd.salary_estimate ?? null) as Record<string, unknown> | null;
-  if (salary && typeof salary === 'object') {
-    const min = typeof salary.min === 'number' ? salary.min : null;
-    const max = typeof salary.max === 'number' ? salary.max : null;
-    const currency = str(salary.currency);
-    if (min !== null && max !== null && max > 0) {
-      const band = `${currency ? `${currency} ` : ''}${min.toLocaleString('en-US')}–${max.toLocaleString('en-US')}`;
-      const confidence = str(salary.confidence);
-      const role = str(salary.role);
-      const location = str(salary.location);
-      const factors = lines(salary.justification_factors);
-      out.push({
-        section: 'Expected salary (derived estimate)',
-        // OWN key, not 'compensation': the requirements intent rule spills a
-        // 0.3 boost onto 'compensation' (so the JD comp band surfaces on
-        // "do I meet the bar" questions — correct for the JD). A policy-only
-        // chunk keyed the same way would be admitted on every requirements
-        // question. derived_salary is boosted ONLY by the genuine
-        // salary/compensation rule below.
-        boostKey: 'derived_salary',
-        text: [
-          `Estimated market compensation for the candidate: ${band} per year.`,
-          role || location
-            ? `Basis: ${[role, location].filter(Boolean).join(' in ')}.`
-            : '',
-          confidence ? `Confidence: ${confidence}.` : '',
-          factors.length ? `Factors considered: ${factors.join('; ')}.` : '',
-          'IMPORTANT: this is a DERIVED ESTIMATE calculated from the résumé '
-            + '(role, location, skills and years of experience). It is NOT stated '
-            + 'anywhere on the résumé, and it is NOT an offer or a figure from the '
-            + 'job description. Present it as an estimate. PRECEDENCE: if the job '
-            + 'description states a salary, range, equity or bonus, THAT is what the '
-            + 'position pays — answer a question about the position\'s pay from the '
-            + 'job description, and offer this estimate only as the candidate\'s '
-            + 'market expectation, never in place of a stated figure.',
-        ].filter(Boolean).join(' '),
-        completeInventory: false,
-      });
-    }
-  }
-
-  return out;
+function renderFactSections(_sd: Record<string, unknown>): ProfileSection[] {
+  return [];
 }
 
 export function renderProfileSections(kind: ProfileDocKind, structured: unknown): ProfileSection[] {
@@ -568,6 +585,9 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
   const chunkVersions = new Map<string, string>();
   const sourceScopes = new Map<string, EvidenceScope>();
   const chunks: PortChunk[] = [];
+  /** Raw text of each registered résumé / JD; `wholeBlocked` when one of them has none. */
+  const wholeTexts = new Map<string, { fileName: string; text: string }>();
+  let wholeBlocked = false;
 
   for (const doc of input.docs) {
     const mapped = TYPE_FOR_KIND[doc.kind];
@@ -590,13 +610,33 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       });
     };
 
-    for (const s of renderProfileSections(doc.kind, doc.structured)) {
+    // DERIVED-EVIDENCE HYGIENE (2026-09-30, see profile-derived-support.ts): a
+    // résumé's structured extraction may hold a project description the
+    // extractor WROTE and placeholder identity values. Only what the raw
+    // résumé text supports is rendered as RESUME evidence.
+    const structured = doc.kind === 'resume'
+      ? stripUnsupportedDerivedResumeFields(doc.structured, doc.rawText)
+      : doc.structured;
+    const supportIndex = doc.kind === 'resume' ? buildSupportIndex(doc.rawText) : null;
+    for (const s of renderProfileSections(doc.kind, structured)) {
       push(s.section, s.text, s.boostKey, s.completeInventory, s.inventoryCategory);
     }
     for (const c of doc.cards ?? []) {
       if (c.approvalStatus === 'rejected') continue;
+      // AOT artifact cards (intro, pivot scripts, mock-answer keys, culture
+      // mapping, negotiation strategy) are model output about the candidate,
+      // not the document: never evidence.
+      if (isGeneratedArtifactCard(c)) continue;
       const body = str(c.body);
       if (!body) continue;
+      // A project card's body leads with the project description (card
+      // templates render it first, then "Technologies: …"): the same derived
+      // field, held to the same rule, so a card cannot smuggle it back in.
+      if (doc.kind === 'resume' && c.type === 'candidate_project') {
+        const lead = (body.split('\n')[0] ?? '').trim();
+        const isDescription = Boolean(lead) && lead !== str(c.title) && !/^technologies:/i.test(lead);
+        if (isDescription && !assessDerivedSupport(lead, supportIndex).supported) continue;
+      }
       push(c.title || 'Card', `${c.title ? `${c.title}: ` : ''}${body}`, `card_${c.type ?? 'unknown'}`, false);
     }
     // LOSSLESS raw-text sections (deep-test D1), so a fact with no schema slot
@@ -618,6 +658,10 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
     }
 
     if (idx === 0) continue;                                    // nothing renderable ⇒ not registered
+    if (doc.kind === 'resume' || doc.kind === 'jd') {
+      if (raw) wholeTexts.set(doc.sourceId, { fileName: doc.fileName, text: raw });
+      else wholeBlocked = true;
+    }
     sourceTypes.set(doc.sourceId, mapped);
     activeVersions.set(doc.sourceId, doc.versionId);
     chunkVersions.set(doc.sourceId, doc.versionId);
@@ -625,6 +669,11 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
   }
 
   if (sourceTypes.size === 0) return null;
+
+  // Handed over whole (see PROFILE_WHOLE_MAX_TOKENS): every registered résumé /
+  // JD has raw text and together they fit.
+  const wholeTokens = [...wholeTexts.values()].reduce((n, d) => n + Math.ceil(d.text.length / 4), 0);
+  const wholeEligible = input.wholeDocuments !== false && !wholeBlocked && wholeTexts.size > 0 && wholeTokens <= PROFILE_WHOLE_MAX_TOKENS;
 
   // Corpus arbitration over THIS port's chunks (see orchestrator). Statistics
   // are built once per port — a port is constructed per turn from documents
@@ -647,7 +696,11 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
 
   const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; sourceTypes?: readonly SourceType[]; intentQuery?: string }): Promise<LegacyChunk[]> => {
+    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; sourceTypes?: readonly SourceType[]; intentQuery?: string; wholeProfile?: boolean }): Promise<LegacyChunk[]> => {
+      // Whole only when the PLAN says so: it is the plan that made the room for
+      // the documents (item cap, token budget). Without it the packer would cut
+      // them, so a caller that has not sized the profile gets passages as before.
+      const whole = wholeEligible && opts.wholeProfile === true;
       // Only the PLANNED types compete for the top-k (2026-09-11). Measured in
       // technical-interview: "Tell me about your education — degree, school,
       // coursework" planned [RESUME, …] without JOB_DESCRIPTION, but the JD's
@@ -742,7 +795,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       // chunk, BM25's hit went with it. The two arms fail differently; neither
       // may silence the other.
       let semanticRaw: RawRetrievedChunk[] = [];
-      if (input.rawRetriever) {
+      if (input.rawRetriever && !whole) {
         // A DEADLINE and a VOICE (review finding, reproduced): the arm was awaited
         // with no budget — a 6 s embedding stall held back BM25 evidence that was
         // already computed and the turn took 6,008 ms — and a throwing arm left
@@ -856,7 +909,18 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
         }
       }
 
-      return scoredChunks
+      // WHOLE: each document once, entire, in place of its passages. Score 1, like
+      // a reference file read whole: nothing here was ranked, and the document
+      // must not lose its place to the sections cut from it.
+      const wholeRows = whole
+        ? [...wholeTexts.entries()].map(([sourceId, d]) => ({
+          c: { sourceId, fileName: d.fileName, section: PROFILE_WHOLE_SECTION, text: d.text, chunkIndex: 200_000, boostKey: 'whole_document', completeInventory: false } as PortChunk,
+          score: 1,
+        }))
+        : [];
+
+      return (whole ? scoredChunks.filter((s) => s.c.boostKey !== 'raw_document') : scoredChunks)
+        .concat(wholeRows)
         .concat([...semanticByText.values()].map((row) => ({ ...row, i: -1 })))
         .filter((s) => s.score > 0.05)
         .filter((s) => !planned || planned.has(sourceTypes.get(s.c.sourceId) as SourceType))
@@ -881,7 +945,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
           // the record actually enumerates.
           metadata: c.completeInventory
             ? { completeInventory: true, ...(c.inventoryCategory ? { inventoryCategory: c.inventoryCategory } : {}) }
-            : {},
+            : (c.boostKey === 'whole_document' ? { wholeDocument: true } : {}),
         }));
     },
   });

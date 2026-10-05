@@ -23,6 +23,15 @@ pub mod speaker;
 #[cfg(target_os = "macos")]
 pub mod stealth_window;
 
+// Undetectable mode: keeps file pickers, message boxes, tooltips and popups
+// (every non-BrowserWindow window of the process) out of screen capture.
+// macOS and Windows implementations live side by side in the module.
+pub mod capture_exclusion;
+
+// Meeting detection: which processes hold a microphone, and the visible windows
+// (owner + title). macOS and Windows implementations side by side.
+pub mod meeting_signals;
+
 #[cfg(target_os = "macos")]
 pub mod keyboard_tap;
 

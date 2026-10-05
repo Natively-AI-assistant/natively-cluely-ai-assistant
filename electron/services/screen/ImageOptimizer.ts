@@ -191,7 +191,7 @@ export class ImageOptimizer {
       throw new Error(`ImageOptimizer: cannot stat source image: ${err?.message || err}`);
     }
 
-    const pipeline = sharp(sourcePath, { failOnError: false });
+    const pipeline = sharp(sourcePath, { failOn: 'none' });
     const metadata = await pipeline.metadata();
     const originalWidth = metadata.width ?? 0;
     const originalHeight = metadata.height ?? 0;

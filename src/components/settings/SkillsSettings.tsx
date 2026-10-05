@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
     Check,
     CheckCircle,
@@ -23,6 +23,7 @@ import {
     Collapse,
     CollapseItem,
     Presence,
+    SwapLabel,
     SettingsDisclosureButton,
     SettingsMotionReady,
     useMotionReadyAfter,
@@ -87,6 +88,12 @@ export const SkillsSettings: React.FC = () => {
     const motionReady = useMotionReadyAfter(loadedOnce);
     // Only a load that runs long enough to notice gets the spinner.
     const refreshing = useSettledFlag(loading);
+    // skills:list is a synchronous read of the local folder, a few ms, so the
+    // spinner above almost never shows and a click looked like it did nothing.
+    // Each click turns the glyph once instead: a running total of turns, so a
+    // second click mid-turn adds one more rather than restarting from 0deg.
+    const [refreshTurns, setRefreshTurns] = useState(0);
+    const reduceMotion = useReducedMotion();
     const [status, setStatus] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [preview, setPreview] = useState<{
@@ -255,6 +262,48 @@ export const SkillsSettings: React.FC = () => {
         }
     };
 
+    // Upload asks main for the file. A picker opened from this page's
+    // <input type="file"> bypasses the dialog wrapper that keeps pickers out of
+    // screen capture in Undetectable mode; main's goes through it. The hidden
+    // input stays only for an older main process without skills:pick-file.
+    const pickingRef = useRef(false);
+    const pickAndUpload = async () => {
+        const pick = window.electronAPI?.skillsPickFile;
+        if (typeof pick !== 'function') {
+            uploadInputRef.current?.click();
+            return;
+        }
+        // One picker at a time: `uploading` only covers the upload, not the
+        // time the picker is open, so a second click would open a second one.
+        if (pickingRef.current) return;
+        pickingRef.current = true;
+        let picked: Awaited<ReturnType<typeof pick>>;
+        try {
+            picked = await pick();
+        } catch (e: any) {
+            picked = { canceled: false, error: e?.message };
+        } finally {
+            pickingRef.current = false;
+        }
+        if (picked.canceled) return;
+        if (!picked.payload) {
+            setSuccess(null);
+            setPreview(null);
+            setStatus(picked.error || t('Could not read that file.'));
+            return;
+        }
+        setUploading(true);
+        setSuccess(null);
+        try {
+            const outcome = await runUpload(picked.payload, false);
+            if (outcome?.stage === 'validated') {
+                setPreview({ payload: picked.payload, preview: outcome.preview });
+            }
+        } finally {
+            setUploading(false);
+        }
+    };
+
     // Drag-and-drop handler. v1: only FILE drops are accepted via drag-drop.
     // Folder drops (which would need a recursive FileSystemDirectoryEntry walk)
     // are NOT supported here — users wanting to install a folder of files
@@ -417,14 +466,30 @@ export const SkillsSettings: React.FC = () => {
                     </p>
                 </div>
                 <button
-                    onClick={loadSkills}
+                    onClick={() => {
+                        setRefreshTurns((n) => n + 1);
+                        void loadSkills();
+                    }}
                     disabled={loading}
                     className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle hover:bg-bg-item-surface transition-[color,background-color,transform,opacity] duration-150 ease-out text-xs font-medium text-text-secondary hover:text-text-primary active:scale-[0.97] motion-reduce:active:scale-100 mt-1 disabled:opacity-60"
                 >
                     {/* Cross-fades to a spinner and back, instead of a spinning
                         glyph that snapped to 0deg mid-turn when loading ended. */}
                     <Presence kind="icon" id={refreshing ? 'busy' : 'idle'}>
-                        {refreshing ? <Loader2 size={13} strokeWidth={2.5} className="animate-spin" /> : <RefreshCw size={13} strokeWidth={2.5} />}
+                        {refreshing ? <Loader2 size={13} strokeWidth={2.5} className="animate-spin" /> : (
+                            // One turn per click: 500ms (--duration-very-slow) on
+                            // --ease-smooth-out, so it answers at once and lands
+                            // softly. initial={false}: when the spinner hands back
+                            // after a slow load, the glyph returns at rest.
+                            <motion.span
+                                className="inline-flex"
+                                initial={false}
+                                animate={{ rotate: reduceMotion ? 0 : refreshTurns * 360 }}
+                                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                            >
+                                <RefreshCw size={13} strokeWidth={2.5} />
+                            </motion.span>
+                        )}
                     </Presence>
                     {t('Refresh')}
                 </button>
@@ -489,7 +554,7 @@ export const SkillsSettings: React.FC = () => {
                         variant="sky"
                         className="lg-sm shrink-0"
                         disabled={uploading}
-                        onClick={() => uploadInputRef.current?.click()}
+                        onClick={() => { void pickAndUpload(); }}
                     >
                         {t('Upload')}
                     </LiquidGlassButton>
@@ -497,6 +562,11 @@ export const SkillsSettings: React.FC = () => {
             </div>
 
             {/* Preview card — shown when validate-only succeeded. */}
+            {/* Preview, success and status fold open and closed (Collapse) instead
+                of shoving the installed list in one frame. The stack's 20px gap
+                rides inside each fold (pt-5) so it opens with it. */}
+            <Collapse open={!!preview} className="!mt-0" skipStagger>
+            <div className="pt-5">
             {preview && (
                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                     <div className="flex items-start justify-between gap-4">
@@ -564,7 +634,9 @@ export const SkillsSettings: React.FC = () => {
                             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-60"
                         >
                             <Check size={13} strokeWidth={2.5} />
-                            {installing ? t('Installing…') : t('Install')}
+                            <SwapLabel id={installing ? 'installing' : 'install'} sizers={[t('Install'), t('Installing…')]}>
+                                {installing ? t('Installing…') : t('Install')}
+                            </SwapLabel>
                         </button>
                         <button
                             onClick={handleCancel}
@@ -578,17 +650,24 @@ export const SkillsSettings: React.FC = () => {
                 </div>
             )}
 
-            {success && (
-                <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs text-green-400">
-                    {success}
-                </div>
-            )}
+            </div>
+            </Collapse>
 
-            {status && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                    {status}
+            <Collapse open={!!success} className="!mt-0" skipStagger>
+                <div className="pt-5">
+                    <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs text-green-400">
+                        {success}
+                    </div>
                 </div>
-            )}
+            </Collapse>
+
+            <Collapse open={!!status} className="!mt-0" skipStagger>
+                <div className="pt-5">
+                    <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                        {status}
+                    </div>
+                </div>
+            </Collapse>
 
             <div>
                 <div className="flex items-center justify-between mb-2">
@@ -649,7 +728,7 @@ export const SkillsSettings: React.FC = () => {
                                                 </span>
                                                 <button
                                                     onClick={() => setConfirmingId(null)}
-                                                    className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-muted transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
+                                                    className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Cancel (Escape)")}
                                                 >
                                                     {t('Cancel')}
@@ -657,7 +736,7 @@ export const SkillsSettings: React.FC = () => {
                                                 <button
                                                     onClick={() => commitDeleteSkill(skill.id, skill.name)}
                                                     disabled={deletingIds.has(skill.id)}
-                                                    className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
+                                                    className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Delete this skill")}
                                                 >
                                                     {deletingIds.has(skill.id) ? t('Deleting…') : t('Delete')}
@@ -668,7 +747,7 @@ export const SkillsSettings: React.FC = () => {
                                                 <button
                                                     onClick={() => requestDeleteSkill(skill.id)}
                                                     disabled={deletingIds.has(skill.id)}
-                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
+                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Delete skill")}
                                                     aria-label={`Delete ${skill.name}`}
                                                 >

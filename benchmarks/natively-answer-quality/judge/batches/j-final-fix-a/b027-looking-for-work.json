@@ -1,0 +1,278 @@
+{
+ "batch": "b027-looking-for-work",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "JOB-CTX-I1": {
+   "title": "Apartment lease summary",
+   "text": "SUMMARY OF RESIDENTIAL LEASE - UNIT 4C, HARBOR LANE APARTMENTS\n\nTenant: Jordan Vale. Landlord: Beacon Row Property Management (fictional).\nLease term: 12 months, starting 1 March through the last day of February.\nMonthly rent: $1,640, due on the first of each month. A late fee of $60 applies after the fifth day.\nSecurity deposit: $1,640, refundable within 30 days of move-out less documented damage.\nUtilities: Tenant pays electricity and internet. Landlord covers water, sewer and trash.\nParking: One assigned space, number 27. Guest parking is limited to 48 hours.\nPets: One cat under 12 pounds allowed with a $300 non-refundable pet fee. No dogs.\nMaintenance: Non-emergency requests are answered within three business days through the resident portal. Emergencies (no heat, flooding) are answered within four hours by the on-call line.\nRenewal: Tenant must give written notice 60 days before the end of the term if not renewing. Otherwise the lease converts to month-to-month at a rate of $1,715.\nEarly termination: Permitted with 45 days notice and payment of two months' rent.\nQuiet hours: 10 pm to 7 am. No smoking anywhere inside the building.\nMove-out: Tenant must schedule a walkthrough at least one week before the end of the term. Cleaning charges of up to $185 apply if the unit is not returned in move-in condition.\nGuests: Any guest staying longer than 14 consecutive days must be added to the lease.\nContact: office hours are weekdays 9 am to 5 pm; the portal is monitored on weekends for emergencies only."
+  },
+  "FJOB-CTX-G1": {
+   "title": "Portfolio case study: Saltmarsh offline field inspections",
+   "text": "PORTFOLIO CASE STUDY - SALTMARSH: OFFLINE-FIRST FIELD INSPECTIONS\nMy role: mobile and sync engineer (1 of 3 engineers). Timeline: April 2024 - January 2025.\n\nTHE PROBLEM\nFerrow County Water Authority sends inspectors out to check backflow valves, hydrants and meter vaults. Before Saltmarsh they filled in paper forms, then retyped them at the office. About a third of the sites have no cell signal at all, so an online-only app was never going to work. There were 42 inspectors when we started.\n\nWHAT WE BUILT\n- A React Native app (iOS and Android) that stores every inspection in SQLite on the device and works fully offline.\n- A small Go sync service in front of PostgreSQL.\n- A web dashboard for supervisors (built by my teammate Ines Carvalho; I only touched the export endpoint).\n\nTHE PART I OWNED: THE SYNC ENGINE\n- Every record is split into fields, and each field carries its own version stamp: a hybrid logical clock value plus the device ID.\n- When two inspectors edit the same inspection offline, the server merges field by field. If they changed different fields, both edits survive. If they changed the same field, the higher clock wins and the losing value is kept in a \"conflict shelf\" that the supervisor sees on the dashboard.\n- Photos never conflict: they are append-only and keyed by a content hash, so a re-upload after a dropped connection is a no-op.\n- Sync runs in batches of 50 records with a resumable cursor, so a sync that dies halfway through a canyon picks up where it stopped.\n- In the first 6 months after launch, 214 field-level conflicts went to the conflict shelf. Supervisors overrode the automatic winner 9 times.\n\nRESULTS\n- Average time per inspection went from 26 minutes to 11 minutes (the county's own time study, 3 weeks before and 3 weeks after).\n- Crash-free sessions went from 97.1% in the beta to 99.6% at the 1.0 release.\n- Retyping at the office went away entirely; the county reassigned one clerk position to scheduling.\n\nWHAT WENT WRONG\n- In version 1.3 I shipped on-device photo compression to cut upload size. It worked, but it ran on the main thread at full resolution and drained batteries: inspectors reported phones dying by early afternoon. I rolled it back within 4 days, then moved compression to a background worker that only runs while charging. My lesson: I tested on a new phone plugged into my desk, not on a three-year-old phone in the field in August.\n- I underestimated how long the Android permission flow for background location would take to get through review. We slipped the 1.0 date by two weeks.\n\nWHAT I WOULD DO DIFFERENTLY\n- Put a field test with real inspectors into every release, not just the big ones.\n- Write the conflict rules down as a one-page spec earlier. We argued about \"last writer wins\" for weeks before agreeing on per-field clocks.\n\nSTACK\nReact Native, TypeScript, SQLite (op-sqlite), Go, PostgreSQL, Sentry, GitHub Actions, Fastlane."
+  },
+  "JOB-CTX-G1": {
+   "title": "Candidate resume: Nadia Kovacs",
+   "text": "NADIA KOVACS\nSenior Program Manager, Supply Chain Software\nColumbus, Ohio | nadia.kovacs@example.com | 555-0142\n\nSUMMARY\nProgram manager with nine years in warehouse, returns and fulfilment software. I take messy multi-site rollouts and turn them into programs with a plan, a budget and a weekly rhythm that operations teams actually follow. Strongest at working between engineering, warehouse floor staff and vendors.\n\nEXPERIENCE\n\nTallgrass Logistics - Senior Program Manager, Returns Platform (Sep 2021 - present)\n- Led the migration of 14 regional warehouses onto a single returns-processing platform over 16 months, on a $2.4M program budget, with a cross-functional team of 9 (4 engineers, 3 warehouse leads, 1 analyst, 1 vendor manager).\n- Proposed a same-day triage rule for returned items after shadowing night-shift staff for two weeks. Piloted at two sites, then rolled out to all 14. Average returns processing time fell from 6.4 days to 4.4 days (31 percent).\n- Renegotiated terms with 3 carriers, saving about $610,000 a year.\n- Missed the original go-live for the Midwest cluster by six weeks in 2023 after underestimating vendor API rate limits. Rebuilt the cutover plan, added a load-testing gate that is now required on every program, and shipped the cluster with no customer-facing outage.\n- Mentored 3 junior coordinators; two have since been promoted.\n\nFernhill Software - Program Manager, Warehouse Systems (Jun 2018 - Feb 2021)\n- Delivered a handheld scanner rollout across 6 sites and 220 devices, on schedule and 4 percent under a $780,000 budget.\n- Built a weekly operations dashboard adopted by 40 site managers; escalations to engineering dropped 22 percent in the first two quarters.\n- Ran the customer-facing incident review for warehouse outages, a role I took on because nobody else owned it.\n\nCobalt Bay Systems - Operations Analyst (Jul 2015 - May 2018)\n- Built a forecasting model for inbound freight that improved dock scheduling accuracy by 12 percent.\n- Wrote the first standard operating procedures for the Portland cross-dock, later reused at two other sites.\n\nCAREER BREAK (Feb 2021 - Sep 2021)\nRelocated from Portland to Columbus and spent time supporting a parent through a health issue. Completed the Supply Chain Analytics Certificate (120 hours, Ridgemont Extension) and built a Python simulation of warehouse slotting that I later used at Tallgrass.\n\nEDUCATION AND CERTIFICATIONS\nB.S. Industrial Engineering, Ridgemont State University, 2015\nProject Management Professional (PMP), 2019\nSupply Chain Analytics Certificate, Ridgemont Extension, 2021\n\nSKILLS\nProgram planning, vendor negotiation, SQL, Python (analysis and simulation), Jira, dashboard design, stakeholder communication, incident review facilitation.\n\nVOLUNTEER\nCentral Ohio Food Network, logistics volunteer (2019 - present). Rebuilt the volunteer scheduling process and reduced no-shows by 35 percent."
+  }
+ },
+ "items": [
+  {
+   "jid": "7d31b2fc79f0",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What's your biggest strength?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "My biggest strength is probably that I stay calm and clear when things get messy. When a problem is ambiguous or a deadline is tight, I'm the person who breaks it into pieces, figures out what actually matters, and keeps the team moving instead of spinning. I'd rather ask the hard question early than let it surface later. That's served me well in situations where the path forward wasn't obvious, and it's the thing people tend to rely on me for."
+  },
+  {
+   "jid": "9b10357b08a4",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "That's above what we budgeted.",
+   "conversation": [
+    "INTERVIEWER (heard): What are your salary expectations for this role?",
+    "NATIVELY: I'd rather hear what range I've set for the role, since that tells me whether we're in the same ballpark. If you can share the band, I'll tell you honestly where I'd land in it. What I care about most is the scope of the work and how the team measures success, so if those line up, I'm confident we can make the numbers work."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I appreciate you being straight with me. I don't have a number in mind that I'm anchored to, so if the band is fixed, help me understand what's flexible around it, things like scope, level, or a review timeline. If the work and the growth are right, I'm confident we can find a number that works for both of us."
+  },
+  {
+   "jid": "99b44fd76f61",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What specifically did you do?",
+   "conversation": [
+    "INTERVIEWER (heard): Tell me about a time you failed at something at work.",
+    "NATIVELY: When I fail at something, I try to own it fast and get specific about what went wrong, rather than explaining it away. I go back to the people affected, say plainly that I got it wrong, and focus on what I'd do differently. The part I care most about is making sure the same mistake doesn't repeat, so I look for the process or assumption that let it happen and fix that, not just the symptom. I'd rather be the person who surfaces a problem early than the one who hides it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a specific incident I can walk you through in detail, so let me be concrete about the mechanics instead. When I get something wrong, I go straight to the people affected, name exactly what I got wrong, and then trace back to the assumption or process that let it happen so it doesn't repeat."
+  },
+  {
+   "jid": "1ab5c6304c51",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Are we on the same page?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, I think so. Just to be sure I'm tracking you, my understanding is that we're aligned on the role and what you're looking for. If there's a specific piece you want me to confirm, tell me which one."
+  },
+  {
+   "jid": "2b9c0a462bfd",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Give me a strength that fits a customer-facing role, one or two sentences.",
+   "conversation": [],
+   "evidence_ids": [
+    "JOB-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm good at reading people quickly and adjusting how I explain things, so customers feel heard instead of handled. In a customer-facing role that's what keeps conversations calm and gets to a resolution faster."
+  },
+  {
+   "jid": "9268408f456d",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can you explain that?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd be glad to. Which part would you like me to go into, the approach I took or the result? I can walk through either in as much detail as you need."
+  },
+  {
+   "jid": "3ace7d224d29",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Who needs to know about this?",
+   "conversation": [
+    "INTERVIEWER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "INTERVIEWER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The people who need to know are whoever's downstream of the integration: the teams building on it, and anyone whose own dates depend on that original timeline. I'd flag it to them now rather than at the next status, since the two-week slip plus an already tight date means the impact compounds. I'd also want the vendor's fix and a revised date confirmed before I pass on a new commitment."
+  },
+  {
+   "jid": "c0f7573f2e93",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What did the county end up paying for Saltmarsh, and did it get rolled out to any other counties after that?",
+   "conversation": [],
+   "evidence_ids": [
+    "FJOB-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The case study doesn't state what the county paid, so I can't give you a figure there. On rollout, it only covers Ferrow County Water Authority, with 42 inspectors at the start, so I don't have anything on other counties adopting it. What I can speak to is the results: inspection time dropped from 26 minutes to 11, and the office retyping went away entirely."
+  },
+  {
+   "jid": "21c36a48ecef",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about something you taught yourself recently, why you picked it, and how you've used it since.",
+   "conversation": [],
+   "evidence_ids": [
+    "JOB-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have a specific recent self-taught skill on file for you, so I'd answer from how you actually approach this kind of thing. Here's a shape that works:\n\nHonestly, the last thing I taught myself was driven by a gap I kept running into at work. I picked it because it was the thing slowing me down most, not because it looked good on a list. I learned it the way I learn most things: a small real problem to solve, then building something with it rather than just reading about it. Since then it's become part of how I work day to day.\n\nIf you want, tell me the actual skill and I'll tighten it into a specific answer."
+  },
+  {
+   "jid": "2fafe51ef433",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a real weakness, not 'I work too hard.' Something that actually cost you, what happened, and what you've done about it since.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The weakness that's actually cost me is that I take on too much myself instead of delegating early. It's meant I've been the bottleneck on work that should have moved faster without me. What I've changed is setting explicit handoffs and checking in on outcomes rather than doing the task myself."
+  },
+  {
+   "jid": "40e62e1f5e6a",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can you give me an example?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sure. When I'm working through a problem, I like to start by writing down what I actually know versus what I'm assuming, because those two get tangled fast. A recent example: I was debugging something that only failed under load, and my first instinct was to blame the database. Writing it out made me realize I hadn't confirmed that at all, so I tested the assumption first, and it turned out to be something else entirely. That habit of separating fact from guess has saved me a lot of wasted time."
+  },
+  {
+   "jid": "645557bd0141",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "A real one, please.",
+   "conversation": [
+    "INTERVIEWER (heard): What would your last manager say is your biggest weakness?",
+    "NATIVELY: My last manager would probably say my biggest weakness is that I take on too much myself before asking for help. I like to work through a problem on my own first, and sometimes that means I hold onto something longer than I should instead of pulling the team in earlier. I've gotten better at it by setting checkpoints to flag when I'm stuck, but it's still something I actively watch."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair enough. I can get impatient when progress is slow, and it shows. I push for decisions before everyone's had their say, and I've had to learn to slow down and let the room catch up. It's a real one, and I still work on it."
+  },
+  {
+   "jid": "272e1b38100a",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What do you know about our company, what do you think our biggest challenge is, and why do you want to work here rather than at one of our competitors?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'll be honest: I don't have a detailed picture of your company yet, so I'd rather not pretend I do. What I can tell you is what draws me to this kind of role and why I'd pick it over a competitor. I want to work where the problems are still being figured out, where I can own something end to end rather than inherit a finished process. That's the work I do best. I'd also want to hear from you what you see as the biggest challenge right now, because that tells me where I could actually help."
+  },
+  {
+   "jid": "6406b74d8c11",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "You keep saying we. I want to know what you did, not the team. What was your part, what would have failed without you, and how could I verify it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair pushback. The honest answer is that I can't hand you a clean list of what I personally did on a project I haven't walked you through yet, so let me be specific about how I work instead. When I'm on a team, I tend to own the piece that has no obvious owner, the thing that quietly blocks everyone else, and I make sure it's visible who's carrying what. If you want to verify it, ask me about a specific project and I'll walk you through my exact part, what I decided, and who else was involved. That's a fairer test than me claiming credit in the abstract."
+  },
+  {
+   "jid": "5cb82ea602a9",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "How do I explain a nine month gap in my work history?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd name it directly and keep it brief: say what the gap was for, what I did with the time, and that I'm ready to get back to work. If it was personal, I'd say so without over-explaining, then pivot to why this role is the right next step. The honest version usually lands better than a rehearsed one."
+  },
+  {
+   "jid": "c8f66494fe2d",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "I have your resume here, but I'd rather hear it from you. Walk me through your background, tell me what drew you to your current role, and where you see this next step fitting in.",
+   "conversation": [],
+   "evidence_ids": [
+    "JOB-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I've spent nine years in warehouse, returns and fulfilment software, mostly as a program manager. Right now I'm at Tallgrass Logistics, where I lead the Returns Platform. The work I'm proudest of there is a same-day triage rule I proposed after shadowing night-shift staff for two weeks. We piloted it at two sites, then rolled it out to all 14, and average returns processing time went from 6.4 days to 4.4 days. Before that I was at Fernhill Software running warehouse systems programs, and I started out as an operations analyst at Cobalt Bay.\n\nWhat drew me to this role is that it sits right where I like to work, between engineering, warehouse floor staff and vendors, on messy multi-site rollouts. That's the part of the job I'm strongest at, and it's what I want to keep doing at a bigger scale."
+  },
+  {
+   "jid": "494437e60a49",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Which of my past jobs is the best example for this role?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The best example is whichever role lines up most closely with what this job actually needs day to day, so I'd start by mapping the core responsibilities here against what I owned in each past role, then pick the one with the strongest overlap in scope and outcomes. If you tell me the role and your history, I can point to the specific one."
+  },
+  {
+   "jid": "ad7b533987a8",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Is that realistic for you, or would you need notice time?",
+   "conversation": [
+    "INTERVIEWER: We're hoping to have someone in seat by the first of November because of a product launch.",
+    "USER (spoken): Got it.",
+    "INTERVIEWER: It's a firm date on our side."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd need to check my notice period and confirm the exact timing, but the first of November is something I want to make work. Can I come back to you with a firm answer shortly?"
+  },
+  {
+   "jid": "0cf146e3ed0d",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What did you learn?",
+   "conversation": [
+    "INTERVIEWER (heard): Tell me about a time you failed at something at work.",
+    "NATIVELY: When I fail at something, I try to own it fast and get specific about what went wrong, rather than explaining it away. I go back to the people affected, say plainly that I got it wrong, and focus on what I'd do differently. The part I care most about is making sure the same mistake doesn't repeat, so I look for the process or assumption that let it happen and fix that, not just the symptom. I'd rather be the person who surfaces a problem early than the one who hides it.",
+    "INTERVIEWER (heard): What specifically did you do?",
+    "NATIVELY: I don't have a specific incident I can walk you through in detail, so let me be concrete about the mechanics instead. When I get something wrong, I go straight to the people affected, name exactly what I got wrong, and then trace back to the assumption or process that let it happen so it doesn't repeat."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The biggest thing I've learned is that owning a mistake early costs far less than defending it. Once I trace a failure back to the assumption or process behind it, I stop treating it as a personal hit and start treating it as a signal. That's made me quicker to raise problems instead of sitting on them."
+  },
+  {
+   "jid": "61cb118a9ef0",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And if that didn't work?",
+   "conversation": [
+    "INTERVIEWER: We're growing fast, and the person in this role will end up leading a small team of five analysts.",
+    "USER (spoken): That's exciting.",
+    "INTERVIEWER: Some of them are more senior than whoever takes the job.",
+    "INTERVIEWER (heard): How would you earn the respect of people who are more experienced than you?",
+    "NATIVELY: I'd start by being genuinely useful before trying to lead anything. With people who've been doing the work longer than I have, respect comes from listening first, asking good questions, and learning how they actually work. Then I'd earn it by being reliable and clear about what I own, and by giving credit where it's due. I'd rather be the person who makes their job easier than the one who arrives with answers.",
+    "INTERVIEWER (heard): What if one of them openly pushed back on your decisions in a meeting?",
+    "NATIVELY: I'd take it as useful, not as a challenge to my authority. In the meeting I'd hear them out, ask what they're seeing that I'm not, and if they're right, I'd say so and adjust. If we still disagree, I'd explain my reasoning, make the call, and own it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If they still push back after that, I'd take it offline rather than let it turn into a public standoff. I'd ask what's really behind it, whether it's the decision or how it was made, and look for what they need to get on board. If it keeps happening, that's a pattern I'd address directly and honestly, one on one."
+  }
+ ]
+}

@@ -1,0 +1,91 @@
+{
+  "mode": "lecture",
+  "partition": "supp-quant",
+  "contexts": [
+    {
+      "id": "SQLEC-CTX-1",
+      "kind": "grounded",
+      "title": "ECON 110 week 6 handout: price elasticity of demand",
+      "file_name": "econ110-week6-elasticity-handout.txt",
+      "text": "ECON 110 - PRINCIPLES OF MICROECONOMICS\nWeek 6 handout: price elasticity of demand. Prof. R. Ansbach, Fall 2026.\n\nCourse admin (reminder)\n- Grade weights: problem sets 30%, midterm 30%, final exam 40%. Your problem-set score is the average of your best 8 of 10 sets.\n- Final exam: Thursday 10 December, 9:00-12:00, Hollingworth Hall. A formula sheet is provided.\n- Office hours move to Tuesday 2-4 pm this week only.\n\n1. Definition\nPrice elasticity of demand (PED) measures how strongly quantity demanded responds to a change in price:\nPED = (% change in quantity demanded) / (% change in price).\nPED is negative for normal demand curves; we usually talk about its absolute value.\n- |PED| > 1: elastic (quantity responds more than proportionally)\n- |PED| = 1: unit elastic\n- |PED| < 1: inelastic\n\n2. Why we use the midpoint (arc) method\nSimple percentage changes depend on the direction you measure in: going from 10 to 12 is +20%, but going back from 12 to 10 is -16.7%. The midpoint method divides each change by the AVERAGE of the start and end values, so the answer is the same in both directions:\n% change in Q = (Q2 - Q1) / ((Q1 + Q2) / 2)\n% change in P = (P2 - P1) / ((P1 + P2) / 2)\nUse the midpoint method on problem sets and exams unless a question says otherwise.\n\n3. Worked example\nCoffee kiosk: price rises from $3.00 to $3.50, cups sold per day fall from 400 to 360.\n% change in Q = -40 / 380 = -10.5%\n% change in P = 0.50 / 3.25 = 15.4%\nPED = -0.68, so demand is inelastic. Revenue rises from $1,200 to $1,260.\n\n4. Estimates from the readings (Aldmere Transit Study; fictional data for class use)\n- City bus ridership, short run (first year after a fare change): -0.3\n- City bus ridership, long run (after five years): -0.7\n- Cinema tickets: -1.6\n- Cigarettes: -0.4\nLong-run demand is more elastic because people have time to find substitutes (move closer to work, buy a bike, car-pool).\n\n5. Elasticity and total revenue\nIf demand is elastic, a price increase reduces total revenue; if it is inelastic, a price increase raises total revenue.\n\n6. Common mistakes\nMixing up percentage points and percent; forgetting the negative sign; using simple percentage changes when the midpoint method is asked for.",
+      "notes": "SQLEC-001: midpoint: dQ = -300 / 1,050 = -28.57%; dP = 10 / 45 = 22.22%; PED = -1.29, elastic (revenue 48,000 -> 45,000). Trap: simple percentages give -25% / +25% = -1.0, 'unit elastic'. SQLEC-002: weights 30/30/40: 0.3 x 91 + 0.3 x 72 = 48.9; (80 - 48.9) / 0.4 = 77.75. Trap: equal weights give 77; 'best 8 of 10' is noise because the student states the average. SQLEC-003 (lookup): long-run bus ridership -0.7; the short-run -0.3 is the neighbouring-row trap."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SQLEC-001",
+      "category": "formula",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Try this one yourselves. A concert venue raises ticket prices from forty to fifty dollars and attendance drops from twelve hundred to nine hundred a night. Midpoint method: what's the elasticity, and is demand elastic or inelastic here?",
+      "context_condition": "grounded",
+      "context_ref": "SQLEC-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "percent",
+        "elasticity"
+      ],
+      "expected_answer_type": "worked calculation with the classification",
+      "claim_trap": "none",
+      "needles": [
+        "midpoint method",
+        "((Q1 + Q2) / 2)"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQLEC-002",
+      "category": "exam_relevance",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "I have a 91 average on problem sets and got 72 on the midterm. What do I need on the final to finish with an 80?",
+      "context_condition": "grounded",
+      "context_ref": "SQLEC-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "weighted_average"
+      ],
+      "expected_answer_type": "required final exam score with the working",
+      "claim_trap": "none",
+      "needles": [
+        "problem sets 30%",
+        "midterm 30%",
+        "final exam 40%"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQLEC-003",
+      "category": "connect_earlier",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And remember the transit numbers in your handout, what did the study find for bus ridership in the long run?",
+      "context_condition": "grounded",
+      "context_ref": "SQLEC-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "lookup"
+      ],
+      "expected_answer_type": "single figure from the handout",
+      "claim_trap": "research_claim",
+      "needles": [
+        "long run (after five years): -0.7"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

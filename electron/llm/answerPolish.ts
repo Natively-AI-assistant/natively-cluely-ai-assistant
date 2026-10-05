@@ -21,7 +21,10 @@ import { isProviderRejectionLine } from './providerErrorClassifier';
 
 // ── Artifact cleanup ─────────────────────────────────────────────────────────
 
-const CODE_FENCE_RE = /```[\s\S]*?```/g;
+// A fenced block, in either CommonMark fence character. A model that writes
+// `~~~mermaid` is as fenced as one that writes backticks, and everything that
+// protects a block from prose clean-up has to see it.
+const CODE_FENCE_RE = /(```|~~~)[\s\S]*?\1/g;
 
 /**
  * Remove rendering artifacts from a final answer:
