@@ -35,6 +35,18 @@ export type SttErrorCategoryId =
 export function categorizeSttError(rawError: string): SttErrorCategory {
     const lower = rawError.toLowerCase();
 
+    // 0. Google STT with no usable service-account key. GoogleSTT sends its
+    // own worded message for this (credentialsUnavailableError); "API key"
+    // below would be the wrong thing to tell someone whose provider takes a
+    // key FILE, and the generic fallback would tell them nothing.
+    if (lower.includes('service account json')) {
+        return {
+            title: 'Google Key Missing',
+            body: 'Google speech-to-text needs a Service Account JSON. Add one in Audio Settings, or choose another speech provider.',
+            category: 'auth',
+        };
+    }
+
     // 1. Authentication errors — immediately fatal
     if (
         rawError.startsWith('401 ')
