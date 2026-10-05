@@ -348,6 +348,13 @@ const ModelSelectorWindow = () => {
             .catch((err: any) => console.error("Failed to set model:", err));
     };
 
+    // The empty list's one row. A model is added in Settings, so go there and
+    // take this menu out of the way (it would otherwise stay open over it).
+    const openProviders = () => {
+        window.electronAPI?.openSettingsTab?.('ai-providers')?.catch?.(() => {});
+        window.electronAPI?.modelSelectorCloseIfOpen?.()?.catch?.(() => {});
+    };
+
     // Same isDarkBg concept SettingsPopup.tsx already established for this
     // exact reason: liquid-glass and modern meeting-interface themes always
     // render a dark panel regardless of the OS light/dark setting, so row
@@ -470,9 +477,29 @@ const ModelSelectorWindow = () => {
                             <span className="text-[12px]">Loading models…</span>
                         </div>
                     ) : availableModels.length === 0 ? (
-                        <div className="px-2 py-2">
-                            <div className="text-[12px] leading-[18px] font-medium overlay-text-primary">No models connected</div>
-                            <div className="text-[11px] leading-4 mt-0.5 overlay-text-muted">Connect one in Settings.</div>
+                        // An empty state, not a list: one quiet line that says
+                        // why there is nothing here, and one button that fixes
+                        // it (the owner's pick of three). The button fills the
+                        // menu and has a resting fill, so it reads as something
+                        // to press; a plain row here looked like a model that
+                        // was permanently hovered. Its 10px corners sit
+                        // concentric with the panel's 14px ones across the 4px
+                        // of padding. Both lines are short on purpose: at this
+                        // width "No models connected" and "Connect one in
+                        // Settings." each wrapped.
+                        <div className="flex flex-col gap-1.5 pt-1.5">
+                            <div className="text-center text-[11px] leading-4 select-none whitespace-nowrap" style={{ color: headerColor }}>
+                                No models yet
+                            </div>
+                            <button
+                                type="button"
+                                onClick={openProviders}
+                                // Answers on press, not on release: the fill
+                                // and the 3% squeeze start at pointer-down.
+                                className="w-full h-[28px] rounded-[10px] text-[12px] font-medium whitespace-nowrap overlay-text-primary bg-[var(--overlay-control-bg)] hover:bg-[var(--overlay-control-hover-bg)] transition-[background-color,transform] duration-100 ease-out active:scale-[0.97] motion-reduce:transform-none"
+                            >
+                                Add a model
+                            </button>
                         </div>
                     ) : (
                         <div
