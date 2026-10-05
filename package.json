@@ -334,7 +334,7 @@
     "@anthropic-ai/sdk": "^0.127.0",
     "@bany/curl-to-json": "^1.2.10",
     "@deepgram/sdk": "^3.13.0",
-    "@google-cloud/speech": "^7.5.0",
+    "@google-cloud/speech": "^8.1.1",
     "@google/genai": "^1.44.0",
     "@grpc/grpc-js": "^1.14.5",
     "@grpc/proto-loader": "^0.8.0",
