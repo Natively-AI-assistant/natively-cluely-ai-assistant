@@ -287,6 +287,25 @@ export function isProviderTransportError(text: string): boolean {
   return text.trim() === PROVIDER_TRANSPORT_ERROR_TEXT;
 }
 
+/** A canned "nothing to rewrite" INABILITY STUB from a repair/rewrite call.
+ *  Repair prompts ask the model to REWRITE a previous response; when the
+ *  payload is missing (or the model ignores it) the model narrates the task
+ *  instead of performing it — observed live 2026-07-26 on the screenshot →
+ *  WTA flow: "I don't have the original question or answer to rewrite."
+ *  passed the ≥5-char acceptance check and REPLACED the real, already-
+ *  streamed answer. Acceptance checks in every repair site must reject
+ *  these. Bounded to short texts: a real answer long enough to discuss
+ *  rewriting (>300 chars) is never rejected. */
+export function isRepairInabilityStub(text: string): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  if (!t || t.length > 300) return false;
+  return /\b(?:don'?t|do(?:es)? not|doesn'?t)\s+have\b[\s\S]*\b(?:original|previous|prior)\b[\s\S]*\b(?:question|answer|response|text|message)\b/i.test(t)
+    || /\b(?:nothing|no (?:answer|response|text|content|message))\b[\s\S]*\bto\s+(?:rewrite|refine|rework|revise)\b/i.test(t)
+    || /\bplease\s+(?:provide|share|paste)\b[\s\S]*\b(?:question|answer|response|text)\b[\s\S]*\b(?:rewrite|refine|revise)\b/i.test(t)
+    || /\b(?:can(?:'|no)?t|cannot|unable to)\s+(?:rewrite|refine|revise)\b[\s\S]*\bwithout\b/i.test(t);
+}
+
 /** A leading META-COMMENTARY preamble the model sometimes emits before the real
  *  answer — narrating the task instead of just answering. Observed live (E2E
  *  campaign): "No identity question was actually asked. If I'm asking for a
