@@ -1548,3 +1548,33 @@ arm adds "two ways" on 8 rows, where the app's own run added it on 12. No row wi
 oracle is among the 91. Twice now (E6 v1, E17) the same idea has removed five hard fails and moved the mean by a few
 hundredths; whether a wording change with that profile is worth making is Evin's call, as recorded for E6.
 The second sample (the E16b drafts) is being judged and is reported when complete.
+
+### E17 — second sample under Astra (2026-10-05 12:03 UTC; arms e17b-ctl / e17b-conflict on the drafts of er-dev-e16b + er-dev2-e16b; 95 rows differ, all judged; 467 rows whose turn ran the pass)
+Edits that add "two ways": 16 → 3. Line 2: +0.29 on 77 conflict rows (the 23 that differ: 7.24 → 8.20), hard 3 → 4:
+no. Line 3: +0.069 on 467 rows, hard 10 → 10: yes. **Line 4: rows flagged source_conflict_ignored /
+stale_source_preferred 1 → 5: no.** Line 5: +0.01: yes. By condition, rows that differ: conflict_stale +0.96,
+irrelevant_source +0.64, grounded_single +0.29, missing_evidence +0.01, multi_source −0.16.
+**E17 is not kept, and the second sample says why it should not be:** the wording trades the hedge for the opposite
+error. With "do not add a second value", replies that had named the superseded value as superseded lose that clause
+and are flagged for ignoring the conflict (CC-021 9.7 → 8.7, D2-CC-028 9.0 → 7.9), and one reply took the stale value
+(D2-REC-025 5.2 → 2.9).
+
+## E18 — the claim pass says whether a conflict is settled (rule written 2026-10-05 12:06 UTC, before any replay)
+**Change:** the CONFLICT line ends with "settled: <the one that holds now>" or "open". Open: as today (neither value
+asserted, "given two ways", needs confirming). Settled: the reply gives the value that holds now, corrects a draft that
+gave the other, keeps a draft that gave the right one, leaves nothing "to confirm", and may name the earlier value in
+one clause as no longer in force. Wording fixed in `replay-variants/e18-settled.mjs`. No app code reads the line.
+**Measured by** `replay-claim-pass.mjs`, arm `e18` on the drafts of er-dev-e13c + er-dev2-e13c and arm `e18b` on those
+of er-dev-e16b + er-dev2-e16b, each against the control arm already replayed on the same drafts (`e17-ctl`,
+`e17b-ctl`). Astra; rows where the two arms show different text, both sides. **The two samples are pooled** (939 rows
+whose turn ran the pass).
+| # | Line | Bar |
+|---|---|---|
+| 1 | Edits that add "two ways" | fall by at least 60 % against the control arms (24 pooled) |
+| 2 | conflict_stale rows that differ: mean change; hard fails | ≥ +0.5; ≤ control arms |
+| 3 | All rows: effect of the pass; hard fails | ≥ control arms; ≤ control arms |
+| 4 | Rows flagged source_conflict_ignored or stale_source_preferred | ≤ control arms + 1 |
+| 5 | missing_evidence rows: effect of the pass | ≥ control arms − 0.10 |
+| 6 | Pass time, p90 | ≤ control arms + 400 ms |
+Every line must hold on the pooled samples. If it does, the wording is built into the app and confirmed on the next
+app run.
