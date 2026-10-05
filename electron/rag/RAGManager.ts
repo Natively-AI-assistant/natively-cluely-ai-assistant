@@ -476,6 +476,9 @@ export class RAGManager {
      * Call when a meeting session begins.
      */
     startLiveIndexing(meetingId: string): void {
+        // Set before the readiness check: a meeting is live whether or not it
+        // can be indexed as it goes (see isMeetingLive).
+        this._meetingLive = true;
         if (!this.embeddingPipeline.isReady()) {
             console.log('[RAGManager] Embedding pipeline not ready, skipping live indexing');
             return;
@@ -528,7 +531,43 @@ export class RAGManager {
      * with the complete, properly indexed version.
      */
     async stopLiveIndexing(): Promise<void> {
+        this._meetingLive = false;
         await this.liveIndexer.stop();
+    }
+
+    // Process-wide, like _jobGuards: a manager constructed while a meeting is
+    // running must still see that meeting.
+    private get _meetingLive(): boolean {
+        return (globalThis as unknown as Record<string, unknown>).__nativelyMeetingLiveV1__ === true;
+    }
+    private set _meetingLive(v: boolean) {
+        (globalThis as unknown as Record<string, unknown>).__nativelyMeetingLiveV1__ = v;
+    }
+
+    /**
+     * True from the start of a meeting to its end. NOT the same as
+     * liveIndexer.isRunning(): live indexing is skipped when no embedding
+     * provider is ready at meeting start (the bundled model before its first
+     * load, a hosted provider still resolving), and a background job that
+     * asked only the indexer would then load a model and embed past meetings
+     * in the middle of a live one.
+     */
+    private isMeetingLive(): boolean {
+        // The app's own answer when it has been wired in. The flag below is a
+        // single boolean that ANY stopLiveIndexing clears, and the teardown of
+        // one meeting can run after the next has started (main.ts handles that
+        // overlap) — it would mark the new meeting as over.
+        if (this._meetingActiveProbe) {
+            try { return this._meetingActiveProbe() === true || this.liveIndexer.isRunning(); } catch { /* fall back to the flag */ }
+        }
+        return this._meetingLive || this.liveIndexer.isRunning();
+    }
+
+    private _meetingActiveProbe: (() => boolean) | null = null;
+
+    /** Let the app say whether a meeting is running (see isMeetingLive). */
+    setMeetingActiveProbe(probe: (() => boolean) | null): void {
+        this._meetingActiveProbe = probe;
     }
 
     /**
@@ -777,6 +816,107 @@ export class RAGManager {
         return DatabaseManager.getInstance().getMeetingDetails(meetingId);
     }
 
+    private hasQueuedOrEmbeddedChunks(meetingId: string): boolean {
+        return !!this.db.prepare(`
+            SELECT 1 WHERE EXISTS (SELECT 1 FROM chunks c WHERE c.meeting_id = ? AND c.embedding IS NOT NULL)
+               OR EXISTS (SELECT 1 FROM embedding_queue q WHERE q.meeting_id = ? AND q.chunk_id IS NOT NULL AND q.status IN ('pending', 'processing'))
+        `).get(meetingId, meetingId);
+    }
+
+    /**
+     * Queue meetings whose chunks are stored but were never queued: no chunk
+     * embedded, and no chunk row of ANY status in the queue. That is what a
+     * quit, or a provider that dropped out, leaves between saving a meeting's
+     * chunks and queueing them, and nothing else ever looks at such a meeting
+     * again — the pipeline only works from queue rows. The chunks are already
+     * there, so this only queues them; it reads no transcript.
+     *
+     * A meeting whose chunks FAILED keeps its failed queue rows and is left to
+     * the pipeline's own retry rules. Runs on every launch (one indexed query
+     * when there is nothing to do). Returns the number of meetings queued.
+     */
+    private async queueStrandedMeetings(max = 50): Promise<number> {
+        const rows = this.db.prepare(`
+            SELECT DISTINCT c.meeting_id AS id FROM chunks c
+            WHERE c.meeting_id != 'live-meeting-current'
+              AND NOT EXISTS (SELECT 1 FROM chunks e WHERE e.meeting_id = c.meeting_id AND e.embedding IS NOT NULL)
+              AND NOT EXISTS (SELECT 1 FROM embedding_queue q WHERE q.meeting_id = c.meeting_id AND q.chunk_id IS NOT NULL)
+            LIMIT ?
+        `).all(max) as { id: string }[];
+        if (rows.length === 0) return 0;
+        if (!(await this.embeddingPipeline.ensureProviderLoaded())) return 0;
+        let queued = 0;
+        for (const row of rows) {
+            if (!this.isDatabaseUsable() || this.isMeetingLive() || !this.embeddingPipeline.isReady()) break;
+            if (this._reprocessInFlight.has(row.id)) continue;
+            try {
+                await this.embeddingPipeline.queueMeeting(row.id);
+                if (this.hasQueuedOrEmbeddedChunks(row.id)) queued++;
+            } catch (e: any) {
+                console.warn(`[RAGManager] Could not queue stranded meeting ${row.id}:`, e?.message || e);
+            }
+            await new Promise<void>(resolve => setImmediate(resolve));
+        }
+        if (queued > 0) console.log(`[RAGManager] Queued ${queued} meeting(s) whose chunks were stored but never queued`);
+        return queued;
+    }
+
+    private static readonly VECTOR_HEALTH_CURSOR_KEY = 'vector_health_scan_cursor_v1';
+
+    /**
+     * One pass over every stored vector, looking for the ones that cannot be
+     * searched — all zeros, or holding a NaN or an infinity. A build before
+     * 2026-10-05 stored whatever the provider returned; the store refuses such
+     * a vector now, so this only has to clean up once. Each one found is
+     * cleared and its chunk (or summary) queued again; if the provider returns
+     * the same vector it is refused and the item is marked failed, which is
+     * the truth about it.
+     *
+     * Reads 200 rows a turn (86 ms in all for 12,000 vectors at 3,072
+     * dimensions, measured) with a cursor in app_state, so a quit resumes and
+     * a finished pass costs one row read per launch. Stops for a live meeting.
+     * Returns the number of vectors cleared.
+     */
+    private async requeueUnusableStoredVectors(): Promise<number> {
+        const KEY = RAGManager.VECTOR_HEALTH_CURSOR_KEY;
+        const stored = (this.db.prepare('SELECT value FROM app_state WHERE key = ?').get(KEY) as { value?: string } | undefined)?.value;
+        if (stored === 'done') return 0;
+        const save = this.db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)');
+        const nextTurn = () => new Promise<void>(resolve => setImmediate(resolve));
+        let cleared = 0;
+
+        // Summaries first: one row a meeting, so this is short. Done again if
+        // the pass is interrupted before the chunk cursor is first saved.
+        if (stored === undefined) {
+            let last = 0;
+            for (;;) {
+                if (!this.isDatabaseUsable() || this.isMeetingLive()) return cleared;
+                const page = this.vectorStore.clearUnusableStoredEmbeddings('chunk_summaries', last, 500);
+                if (page.lastId === null) break;
+                cleared += page.cleared;
+                last = page.lastId;
+                await nextTurn();
+            }
+        }
+
+        let cursor = stored !== undefined && Number.isFinite(Number(stored)) ? Number(stored) : 0;
+        for (;;) {
+            if (!this.isDatabaseUsable() || this.isMeetingLive()) break;
+            const page = this.vectorStore.clearUnusableStoredEmbeddings('chunks', cursor, 200);
+            if (page.lastId === null) { save.run(KEY, 'done'); break; }
+            cleared += page.cleared;
+            cursor = page.lastId;
+            save.run(KEY, String(cursor));
+            await nextTurn();
+        }
+        if (cleared > 0) {
+            console.log(`[RAGManager] Cleared ${cleared} stored vector(s) that could not be searched and queued them to be embedded again`);
+            // The rows were queued with the clearing, in one transaction; this only starts the work.
+            this.embeddingPipeline.processQueue().catch(e => console.warn('[RAGManager] Queue did not start after the vector clean-up:', e?.message || e));
+        }
+        return cleared;
+    }
+
     private _chunkBackfillTimer: ReturnType<typeof setTimeout> | null = null;
     // Process-wide, like _jobGuards and for the same reason: two instances over
     // one database must not both re-embed the same meetings.
@@ -839,14 +979,22 @@ export class RAGManager {
             this._chunkBackfillLiveWaits++;
             this.scheduleChunkBackfill(RAGManager.CHUNK_BACKFILL_LIVE_RECHECK_MS);
         };
-        if (this.liveIndexer.isRunning()) { waitForLiveMeeting(); return 0; }
+        if (this.isMeetingLive()) { waitForLiveMeeting(); return 0; }
 
         this._chunkBackfillInFlight = true;
         let indexed = 0;
+        let stranded = 0;
         let examined = 0;
         try {
+            // Every launch, before (and after) the one-time walk below.
+            // Counted apart from the walk: these were only queued, and adding
+            // them to `indexed` would use up the walk's per-launch allowance.
+            stranded = await this.queueStrandedMeetings();
+            if (!this.isDatabaseUsable()) return stranded;
+            await this.requeueUnusableStoredVectors();
+            if (!this.isDatabaseUsable()) return stranded;
             const stored = (this.db.prepare('SELECT value FROM app_state WHERE key = ?').get(CURSOR_KEY) as { value?: string } | undefined)?.value;
-            if (stored === 'done') return 0;
+            if (stored === 'done') return stranded;
             let cursor = stored !== undefined && Number.isFinite(Number(stored)) ? Number(stored) : Number.MAX_SAFE_INTEGER;
             const page = this.db.prepare(`
                 SELECT m.rowid AS rid, m.id FROM meetings m
@@ -880,8 +1028,9 @@ export class RAGManager {
                     // out, or a quit: stop BEFORE this meeting, cursor on the last
                     // one actually handled.
                     if (!this.isDatabaseUsable() || !this.embeddingPipeline.isReady() || this.embeddingPipeline.isRunningOnUnpinnedFallback()) { interrupted = true; break; }
-                    if (this.liveIndexer.isRunning()) { interrupted = true; waitForLiveMeeting(); break; }
+                    if (this.isMeetingLive()) { interrupted = true; waitForLiveMeeting(); break; }
                     examined++;
+                    let leftUnqueued = false;
                     if (!this._reprocessInFlight.has(row.id)) {
                         this._reprocessInFlight.add(row.id);
                         try {
@@ -894,7 +1043,12 @@ export class RAGManager {
                             if (segments.length > 0) {
                                 const summary = buildSummaryTextForSearch(meeting.detailedSummary, meeting.summary) || undefined;
                                 const { chunkCount } = await this.processMeeting(row.id, segments, summary, { providerLoad: 'await' });
-                                if (chunkCount > 0) indexed++;
+                                // Chunks saved but nothing queued: the provider
+                                // dropped out, or the app is quitting. Counting
+                                // that as done would put the cursor past a
+                                // meeting nobody will embed.
+                                if (chunkCount > 0 && !this.hasQueuedOrEmbeddedChunks(row.id)) leftUnqueued = true;
+                                else if (chunkCount > 0) indexed++;
                             }
                         } catch (e: any) {
                             console.warn(`[RAGManager] Transcript re-index skipped ${row.id}:`, e?.message || e);
@@ -902,6 +1056,7 @@ export class RAGManager {
                             this._reprocessInFlight.delete(row.id);
                         }
                     }
+                    if (leftUnqueued) { interrupted = true; break; }
                     cursor = row.rid;
                     saveCursor.run(CURSOR_KEY, String(cursor));
                     await new Promise<void>(resolve => setImmediate(resolve));
@@ -915,7 +1070,7 @@ export class RAGManager {
         } finally {
             this._chunkBackfillInFlight = false;
         }
-        return indexed;
+        return indexed + stranded;
     }
 
     /**
@@ -1100,7 +1255,7 @@ export class RAGManager {
             for (const meetingId of meetingIds) {
                 // Pause (capped) if a live meeting is indexing — live work has priority.
                 let waits = 0;
-                while (this.liveIndexer.isRunning()) {
+                while (this.isMeetingLive()) {
                     if (waits >= RAGManager.REINDEX_MAX_LIVE_WAITS) {
                         console.warn(`[RAGManager] Re-index pausing exceeded cap (${RAGManager.REINDEX_MAX_LIVE_WAITS} waits) due to continuous live meetings. Bailing; will resume next launch.`);
                         // Bail cleanly so the toast resolves; the count-based trigger

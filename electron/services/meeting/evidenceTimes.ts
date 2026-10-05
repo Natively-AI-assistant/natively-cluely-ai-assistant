@@ -71,6 +71,11 @@ function citedElapsedMs(value: unknown, clock: ChunkClock): number | undefined {
   if (clock.lines.some(line => Math.floor(line.elapsedMs / 1000) * 1000 === value)) return value;
   if (clock.lines.some(line => Math.floor(line.elapsedMs / 1000) === value)) return value * 1000;
   const inRange = (ms: number) => ms >= clock.firstElapsedMs - RANGE_SLACK_MS && ms <= clock.lastElapsedMs + RANGE_SLACK_MS;
+  // Milliseconds were asked for, and a label in milliseconds is a whole number
+  // of seconds times 1000. A number that is NOT a multiple of 1000 and fits
+  // the chunk when read as seconds is seconds — otherwise, in the first chunk,
+  // "95" (meaning 1:35) is in range as 95 ms and lands on 0:00.
+  if (value % 1000 !== 0 && inRange(value * 1000)) return value * 1000;
   if (inRange(value)) return value;
   if (inRange(value * 1000)) return value * 1000;
   return undefined;

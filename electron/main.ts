@@ -2663,6 +2663,14 @@ export class AppState {
           });
         } catch (e) { console.warn('[AppState] notes-saved wiring skipped:', e); }
 
+        // Background indexing jobs (past-meeting re-index, clean-ups, the
+        // provider-switch re-index) stand down while a meeting is running. They
+        // ask here rather than keep their own flag: one meeting's teardown can
+        // finish after the next meeting has started.
+        try {
+          this.ragManager.setMeetingActiveProbe?.(() => this.isMeetingActive);
+        } catch (e) { console.warn('[AppState] meeting-active wiring skipped:', e); }
+
         console.log('[AppState] RAGManager initialized');
       }
     } catch (error) {

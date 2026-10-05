@@ -38,6 +38,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..', '..', '..');
 const DB_PATH = path.join(root, 'dist-electron/electron/db/DatabaseManager.js');
 const { VectorStore } = require(path.join(root, 'dist-electron/electron/rag/VectorStore.js'));
+const { prepareVecRowWriter: writer } = require(path.join(root, 'dist-electron/electron/db/vecRowWrite.js'));
 
 const DIM = 16;                 // 64 bytes a vector
 const BUDGET = 200;             // bytes one launch may copy in these tests
@@ -195,7 +196,9 @@ describe('a table left incomplete by the migration that re-inserted nothing', ()
     if (!usable()) return;
     const ids = brokenV30();
     relaunch();
-    assert.deepEqual(pending()[CHUNKS], { recreated: false, cursor: 0 }, 'not written off as densely packed');
+    // Recorded to be FILLED, not dropped: the table has the right shape, it is only short of rows.
+    assert.deepEqual(pending()[CHUNKS], { recreated: true, cursor: 0 }, 'not written off as densely packed');
+    assert.equal(vecCount(), 3, 'the rows it has are kept');
     assert.equal((await search(7)).ids[0], ids[7], 'the older chunk is found before the refill');
 
     await quiet(() => dbMgr.runPendingVecRebuilds());
@@ -215,14 +218,17 @@ describe('a table left incomplete by the migration that re-inserted nothing', ()
 });
 
 describe('vectors whose chunk rows are gone', () => {
-  test('a large table carrying them is rebuilt without them', async () => {
+  test('they are deleted at launch, whatever the size of the table, without rebuilding it', async () => {
     if (!usable()) return;
-    seed(40, { vecRowsFor: (ids) => [...ids, 9001, 9002, 9003] });
+    const ids = seed(40, { vecRowsFor: (ids) => [...ids, 9001, 9002, 9003] });
     relaunch();
-    assert.ok(pending()[CHUNKS], 'recorded for the background pass');
-    await quiet(() => dbMgr.runPendingVecRebuilds());
+    assert.deepEqual(pending(), {}, 'three stray rows are not a reason to recopy 40');
+    assert.doesNotMatch(ddl(CHUNKS), /chunk_size/, 'the table was not dropped');
     assert.equal(vecCount(), 40);
-    assert.equal(db().prepare(`SELECT COUNT(*) AS n FROM ${CHUNKS}_rowids WHERE rowid >= 9001`).get().n, 0);
+    const found = await search(7);
+    assert.equal(found.native, true);
+    assert.equal(found.ids[0], ids[7]);
+    assert.equal(db().prepare(`SELECT COUNT(*) AS n FROM ${CHUNKS} WHERE chunk_id >= 9001`).get().n, 0);
   });
 
   test('a large table that is complete and exact is left alone and searched natively', async () => {
@@ -262,6 +268,14 @@ describe('the background pass can be interrupted', () => {
     assert.deepEqual(pending(), {});
   });
 
+  // What the normal embed path does for a new chunk: the BLOB and the vec0 row.
+  const embedLive = (index) => {
+    const d = db();
+    const id = Number(d.prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count, embedding) VALUES ('m1', ?, 'Me', 1, 2, 'new', 1, ?)`).run(index, vec(index)).lastInsertRowid);
+    writer(d, CHUNKS, 'chunk_id')(id, vec(index));
+    return id;
+  };
+
   test('a vector embedded while the table is recorded is not lost', async () => {
     if (!usable()) return;
     seed(40, { metric: false, userVersion: 29 });
@@ -271,6 +285,415 @@ describe('the background pass can be interrupted', () => {
     await quiet(() => dbMgr.runPendingVecRebuilds());
     assert.equal(vecCount(), 41);
     assert.equal((await search(99)).ids[0], id);
+  });
+
+  // The copy and the normal embed path write the same table. vec0 rejects a
+  // second INSERT for a key, so a resumed pass counted the rows embedded in
+  // between as failures — and when a slice held only those, it threw the whole
+  // table away and started again on the next launch (code review, 2026-10-05).
+  test('rows the normal embed path wrote in between are updated, not counted as failures', async () => {
+    if (!usable()) return;
+    const ids = seed(2500, { metric: false, userVersion: 29 });
+    relaunch();
+    const run = quiet(() => dbMgr.runPendingVecRebuilds());
+    await new Promise(resolve => setImmediate(resolve));
+    close();
+    await run;
+
+    open(BUDGET);
+    const live = [3001, 3002, 3003, 3004, 3005].map(embedLive);     // embedded this session, vec0 row included
+    // The pass had reached the end of the old rows when the app quit.
+    const record = pending();
+    record[CHUNKS].cursor = ids[ids.length - 1];
+    db().prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(PENDING_KEY, JSON.stringify(record));
+    const before = vecCount();
+
+    assert.equal(await quiet(() => dbMgr.runPendingVecRebuilds()), 5, 'the slice holds only rows that are already there');
+    assert.deepEqual(pending(), {}, 'finished, not thrown away to start again');
+    assert.equal(vecCount(), before, 'no row was duplicated or dropped');
+    assert.equal((await search(3003)).ids[0], live[2]);
+  });
+
+  test('one table that cannot be rebuilt does not hold up the next', async () => {
+    if (!usable()) return;
+    seed(40, { metric: false, userVersion: 29 });
+    relaunch();
+    // A recorded table whose dimension can never be created, listed first.
+    const record = { vec_chunks_99999999: { recreated: false, cursor: 0 }, ...pending() };
+    db().prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(PENDING_KEY, JSON.stringify(record));
+
+    assert.equal(await quiet(() => dbMgr.runPendingVecRebuilds()), 40);
+    assert.equal(vecCount(), 40);
+    assert.deepEqual(Object.keys(pending()), ['vec_chunks_99999999'], 'the good table is done; the bad one stays recorded');
+  });
+
+  test('a record that says "recreated" for a table that is gone starts over', async () => {
+    if (!usable()) return;
+    seed(40, { metric: false, userVersion: 29 });
+    relaunch();
+    db().exec(`DROP TABLE ${CHUNKS}`);
+    db().prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(PENDING_KEY, JSON.stringify({ [CHUNKS]: { recreated: true, cursor: 17 } }));
+
+    assert.equal(await quiet(() => dbMgr.runPendingVecRebuilds()), 40);
+    assert.equal(vecCount(), 40);
+    assert.deepEqual(pending(), {});
+  });
+});
+
+describe('writing a vector for a key that already has one', () => {
+  test('the defect: vec0 rejects INSERT OR REPLACE on an existing key', () => {
+    if (!usable()) return;
+    const ids = seed(2);
+    assert.throws(
+      () => db().prepare(`INSERT OR REPLACE INTO ${CHUNKS}(chunk_id, embedding) VALUES (?, ?)`).run(BigInt(ids[0]), vec(50)),
+      /UNIQUE constraint failed/,
+      'if this stops throwing, sqlite-vec gained REPLACE and vecRowWrite.ts can be simplified',
+    );
+  });
+
+  test('the writer replaces the vector in place, and inserts when there is none', () => {
+    if (!usable()) return;
+    const ids = seed(2);
+    const write = writer(db(), CHUNKS, 'chunk_id');
+    const stored = (id) => Buffer.from(db().prepare(`SELECT embedding AS e FROM ${CHUNKS} WHERE chunk_id = ?`).get(BigInt(id)).e);
+    write(ids[0], vec(50));
+    assert.deepEqual(stored(ids[0]), vec(50), 'the old vector is gone');
+    assert.equal(vecCount(), 2);
+    write(777, vec(51));
+    assert.deepEqual(stored(777), vec(51));
+    assert.equal(vecCount(), 3);
+    assert.throws(() => writer(db(), 'chunks', 'id'), /not a vec0 table/);
+  });
+
+  test("vec0 lists its keys through its own interface, which is what the contents check reads", () => {
+    if (!usable()) return;
+    const ids = seed(2);
+    // vecTableDrift asks `SELECT chunk_id FROM <table>` — the public
+    // interface, not the `_rowids` shadow table. If this stops working the
+    // check degrades to "cannot tell" and leaves tables alone.
+    assert.deepEqual(db().prepare(`SELECT chunk_id FROM ${CHUNKS} ORDER BY chunk_id`).all().map(r => Number(r.chunk_id)), ids);
+    const src = fs.readFileSync(path.join(root, 'electron/db/DatabaseManager.ts'), 'utf8');
+    const check = src.slice(src.indexOf('private vecTableDrift('), src.indexOf('/** One-time: see the note on stale summary vectors'));
+    assert.ok(check.length > 200);
+    assert.doesNotMatch(check, /_rowids/, 'no dependency on the shadow table');
+    assert.match(check, /return null;/, 'an unreadable table is "cannot tell", never "wrong"');
+  });
+
+  test('a stored vector with no direction is never a perfect match', async () => {
+    if (!usable()) return;
+    const ids = seed(3);
+    const d = db();
+    const insChunk = d.prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count, embedding) VALUES ('m1', ?, 'Me', 1, 2, 'bad vector', 1, ?)`);
+    const zero = Buffer.alloc(DIM * 4);
+    const nan = Buffer.from(new Float32Array(Array.from({ length: DIM }, (_, i) => (i === 0 ? NaN : 0.1))).buffer);
+    const bad = [zero, nan].map((buf, i) => {
+      const id = Number(insChunk.run(50 + i, buf).lastInsertRowid);
+      writer(d, CHUNKS, 'chunk_id')(id, buf);
+      return id;
+    });
+    d.prepare(`INSERT INTO meetings (id, title, start_time, duration_ms, embedding_space) VALUES ('m1b', 't', 1, 1, ?)`).run(SPACE);
+    const sumId = Number(d.prepare(`INSERT INTO chunk_summaries (meeting_id, summary_text, embedding) VALUES ('m1b', 'bad', ?)`).run(zero).lastInsertRowid);
+    // The defect, at the source: vec0 has no distance for these rows.
+    const raw = d.prepare(`SELECT chunk_id, distance FROM ${CHUNKS} WHERE embedding MATCH ? ORDER BY distance LIMIT 10`).all(vec(1));
+    assert.ok(raw.some(r => bad.includes(Number(r.chunk_id)) && r.distance === null), `precondition: vec0 returns a NULL distance (${JSON.stringify(raw.map(r => r.distance))})`);
+    writer(d, SUMMARIES, 'summary_id')(sumId, zero);
+
+    const vs = store();
+    const hits = vs.searchSimilarNative(asArray(vec(1)), undefined, 10, 0.25, SPACE);
+    assert.equal(hits.some(h => bad.includes(h.id)), false, 'no chunk with a zero or NaN vector is returned');
+    assert.equal(hits[0].id, ids[1]);
+    assert.ok(hits.every(h => Number.isFinite(h.similarity)));
+    const sums = vs.searchSummariesNative(asArray(vec(900)), 10, SPACE);
+    assert.equal(sums.some(s => s.meetingId === 'm1b'), false);
+    assert.equal(sums[0]?.meetingId, 'm1');
+  });
+
+  // vec0 sorts rows with no distance FIRST, so dropping them after the LIMIT
+  // left nothing: 200 such rows among 300 good ones gave 0 hits where the
+  // exact search finds 8 (code review, 2026-10-05).
+  test('enough bad vectors to fill the top-k do not empty the result', async () => {
+    if (!usable()) return;
+    seed(2);
+    relaunch(16 * 1024 * 1024);
+    // The reviewer's case as reproduced: 768 dimensions, 300 good vectors, 200 of zeros.
+    const W = 768;
+    const wide = (seed) => Buffer.from(new Float32Array(Array.from({ length: W }, (_, i) => Math.sin(seed * 1.7 + i * 0.9) + (i === seed % W ? 2 : 0))).buffer);
+    const d = db();
+    const insChunk = d.prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count, embedding) VALUES ('m1', ?, 'Me', 1, 2, 'wide', 1, ?)`);
+    const write = writer(d, `vec_chunks_${W}`, 'chunk_id');
+    const good = [];
+    d.transaction(() => {
+      for (let i = 0; i < 300; i++) { const id = Number(insChunk.run(1000 + i, wide(i)).lastInsertRowid); write(id, wide(i)); good.push(id); }
+      const zero = Buffer.alloc(W * 4);
+      for (let i = 0; i < 200; i++) write(Number(insChunk.run(2000 + i, zero).lastInsertRowid), zero);
+    })();
+    const raw = d.prepare(`SELECT distance FROM vec_chunks_${W} WHERE embedding MATCH ? ORDER BY distance LIMIT 32`).all(wide(7));
+    const withoutDistance = raw.filter(r => r.distance === null).length;
+    // Measured on this build: all 32 of the 32 fetched rows.
+    assert.ok(withoutDistance > 0, `precondition: rows with no distance are in the fetched top-k (${withoutDistance} of ${raw.length})`);
+
+    const vs = store();
+    const query = Array.from(new Float32Array(wide(7).buffer, wide(7).byteOffset, W));
+    const hits = await vs.searchSimilar(query, { limit: 8, minSimilarity: 0.25, spaceKey: SPACE });
+    const exactHits = vs.searchSimilarJS(query, undefined, 8, 0.25, SPACE);
+    assert.ok(hits.length > 0, 'not emptied by the rows with no distance');
+    assert.equal(hits[0].id, good[7]);
+    assert.deepEqual(hits.map(h => h.id), exactHits.map(h => h.id), 'the same answer as the exact search');
+  });
+
+  test('no writer in the app uses INSERT OR REPLACE on a vec0 table', () => {
+    for (const file of ['electron/rag/VectorStore.ts', 'electron/db/DatabaseManager.ts']) {
+      const code = fs.readFileSync(path.join(root, file), 'utf8').split('\n').filter(l => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
+      assert.doesNotMatch(code, /INSERT OR REPLACE INTO (\$\{|vec_)/, file);
+    }
+    const vs = fs.readFileSync(path.join(root, 'electron/rag/VectorStore.ts'), 'utf8');
+    assert.match(vs, /prepareVecRowWriter\(this\.db, `vec_chunks_\$\{dim\}`, 'chunk_id'\)\(chunkId, blob\)/);
+    assert.match(vs, /prepareVecRowWriter\(this\.db, `vec_summaries_\$\{dim\}`, 'summary_id'\)\(row\.id, blob\)/);
+  });
+});
+
+// What a released build leaves: cosine tables at the default block size, a
+// complete chunk table, a summary vector, and none of this build's flags.
+describe('a profile from a released build', () => {
+  const released = (count) => {
+    const ids = seed(count);
+    db().prepare(`DELETE FROM app_state WHERE key LIKE 'vec_%'`).run();
+    return ids;
+  };
+
+  test('both tables end up at the current block size, with every vector, in one launch', async () => {
+    if (!usable()) return;
+    const ids = released(5);
+    relaunch(16 * 1024 * 1024);
+    assert.match(ddl(CHUNKS), /chunk_size\s*=\s*64/);
+    assert.match(ddl(SUMMARIES), /chunk_size\s*=\s*64/, 'the one-time summary rewrite must not leave this table at the old block size');
+    assert.equal(vecCount(CHUNKS), 5);
+    assert.equal(vecCount(SUMMARIES), 1);
+    assert.deepEqual(pending(), {});
+    const flags = Object.fromEntries(db().prepare(`SELECT key, value FROM app_state WHERE key LIKE 'vec_%'`).all().map(r => [r.key, r.value]));
+    assert.deepEqual(flags, { [SETTLED_KEY]: '1', vec_summary_vectors_rewritten_v1: '1' });
+    assert.equal((await search(3, 1)).ids[0], ids[3]);
+  });
+
+  test('the file gives the old blocks back', () => {
+    if (!usable()) return;
+    // Real widths, so the old blocks are megabytes: one 1,024-vector block of
+    // 3,072 dimensions is 12.6 MB, and there are two tables.
+    const W = 3072;
+    const d = db();
+    d.exec(`DROP TABLE IF EXISTS vec_chunks_${W}; DROP TABLE IF EXISTS vec_summaries_${W};`);
+    d.exec(`CREATE VIRTUAL TABLE vec_chunks_${W} USING vec0(chunk_id INTEGER PRIMARY KEY, embedding float[${W}] distance_metric=cosine)`);
+    d.exec(`CREATE VIRTUAL TABLE vec_summaries_${W} USING vec0(summary_id INTEGER PRIMARY KEY, embedding float[${W}] distance_metric=cosine)`);
+    const wide = (seed) => Buffer.from(new Float32Array(Array.from({ length: W }, (_, i) => Math.sin(seed + i))).buffer);
+    d.prepare(`INSERT INTO meetings (id, title, start_time, duration_ms, embedding_space) VALUES ('big', 't', 1, 1, ?)`).run(SPACE);
+    const chunkId = d.prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count, embedding) VALUES ('big', 0, 'Me', 1, 2, 'text', 1, ?)`).run(wide(1)).lastInsertRowid;
+    d.prepare(`INSERT INTO vec_chunks_${W}(chunk_id, embedding) VALUES (?, ?)`).run(BigInt(chunkId), wide(1));
+    const sumId = d.prepare(`INSERT INTO chunk_summaries (meeting_id, summary_text, embedding) VALUES ('big', 's', ?)`).run(wide(2)).lastInsertRowid;
+    d.prepare(`INSERT INTO vec_summaries_${W}(summary_id, embedding) VALUES (?, ?)`).run(BigInt(sumId), wide(2));
+    d.prepare(`DELETE FROM app_state WHERE key LIKE 'vec_%'`).run();
+    close();
+    const file = path.join(tmp, 'natively.db');
+    const before = fs.statSync(file).size;
+    assert.ok(before > 24 * 1024 * 1024, `precondition: two default blocks (${(before / 1048576).toFixed(1)} MB)`);
+
+    open(16 * 1024 * 1024);
+    assert.match(ddl(`vec_summaries_${W}`), /chunk_size\s*=\s*64/);
+    assert.match(ddl(`vec_chunks_${W}`), /chunk_size\s*=\s*64/);
+    close();
+    const after = fs.statSync(file).size;
+    assert.ok(after < 5 * 1024 * 1024, `${(before / 1048576).toFixed(1)} MB -> ${(after / 1048576).toFixed(1)} MB`);
+    open(16 * 1024 * 1024);
+  });
+});
+
+describe('the store writing to vec0 (through the manager opened here, not the hidden second one)', () => {
+  // Each compiled file carries its own DatabaseManager singleton; VectorStore's
+  // would open this same database and repair it behind the test's back.
+  const nativeStore = () => { const vs = store(); vs.ensureVecTable = (dim) => dbMgr.ensureVecTableForDim(dim); return vs; };
+  const sumVec = (id) => db().prepare(`SELECT embedding AS e FROM ${SUMMARIES} WHERE summary_id = ?`).get(BigInt(id))?.e;
+
+  test('a re-embedded summary replaces its vector; changing its text removes the old one at once', async () => {
+    if (!usable()) return;
+    seed(2);
+    relaunch(16 * 1024 * 1024);
+    const vs = nativeStore();
+    const id = Number(db().prepare(`SELECT id FROM chunk_summaries WHERE meeting_id = 'm1'`).get().id);
+    vs.storeSummaryEmbedding('m1', asArray(vec(41)));
+    assert.deepEqual(Buffer.from(sumVec(id)), vec(41), 'a second write to the same key lands');
+
+    assert.equal(vs.saveSummary('m1', 'the notes were regenerated'), true);
+    assert.equal(sumVec(id), undefined, 'the old vector must not rank the new text');
+    assert.deepEqual(vs.searchSummariesNative(asArray(vec(41)), 5, SPACE), []);
+    assert.equal(vs.saveSummary('m1', 'the notes were regenerated'), true, 'still waiting to be embedded');
+
+    vs.storeSummaryEmbedding('m1', asArray(vec(42)));
+    assert.deepEqual(Buffer.from(sumVec(id)), vec(42));
+    const hit = vs.searchSummariesNative(asArray(vec(42)), 5, SPACE)[0];
+    assert.equal(hit.summaryText, 'the notes were regenerated');
+    assert.ok(hit.similarity > 0.999);
+
+    vs.saveSummary('m1', 'the notes were regenerated');             // same text: nothing is cleared
+    assert.deepEqual(Buffer.from(sumVec(id)), vec(42));
+  });
+
+  // Seen in the app the first time the 384-wide local model stored a vector:
+  // the BLOB was written before the table was created, so the new table looked
+  // like one "created beside stored vectors" and was sent for a refill.
+  test('the first vector of a new width does not send its own table for a background refill', () => {
+    if (!usable()) return;
+    seed(2);
+    relaunch(16 * 1024 * 1024);
+    const W = 12;
+    const wide = Array.from({ length: W }, (_, i) => Math.cos(i + 1));
+    const d = db();
+    assert.equal(!!d.prepare(`SELECT 1 FROM sqlite_master WHERE name = 'vec_summaries_${W}'`).get(), false, 'precondition: a width nothing has used');
+    const chunkId = Number(d.prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count) VALUES ('m1', 70, 'Me', 1, 2, 'new width', 1)`).run().lastInsertRowid);
+    const vs = nativeStore();
+    quiet(() => { vs.storeSummaryEmbedding('m1', wide); vs.storeEmbedding(chunkId, wide); });
+    assert.deepEqual(pending(), {}, 'nothing recorded: the table was created before the vector was stored');
+    assert.equal(d.prepare(`SELECT COUNT(*) AS n FROM vec_summaries_${W}`).get().n, 1);
+    assert.equal(d.prepare(`SELECT COUNT(*) AS n FROM vec_chunks_${W}`).get().n, 1);
+  });
+
+  test('a chunk vector written twice ends up as the second one; a vector for a deleted chunk is not written', () => {
+    if (!usable()) return;
+    const ids = seed(2);
+    relaunch(16 * 1024 * 1024);
+    const vs = nativeStore();
+    vs.storeEmbedding(ids[0], asArray(vec(77)));
+    assert.deepEqual(Buffer.from(db().prepare(`SELECT embedding AS e FROM ${CHUNKS} WHERE chunk_id = ?`).get(BigInt(ids[0])).e), vec(77));
+    vs.storeEmbedding(424242, asArray(vec(78)));
+    assert.equal(db().prepare(`SELECT COUNT(*) AS n FROM ${CHUNKS} WHERE chunk_id = 424242`).get().n, 0);
+  });
+});
+
+describe('the checks that run on every launch', () => {
+  const settled = () => db().prepare('SELECT value FROM app_state WHERE key = ?').get(SETTLED_KEY)?.value === '1';
+
+  test('contents that drift after the block-size question is settled are still repaired', async () => {
+    if (!usable()) return;
+    const ids = seed(3);
+    relaunch(16 * 1024 * 1024);
+    assert.equal(settled(), true);
+    assert.equal(vecCount(), 3);
+    // A launch where the extension did not load: the vector went to the BLOB column only.
+    const lost = Number(db().prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count, embedding) VALUES ('m1', 9, 'Me', 1, 2, 'blob only', 1, ?)`).run(vec(9)).lastInsertRowid);
+    assert.equal(store().searchSimilarNative(asArray(vec(9)), undefined, 1, -1, SPACE)[0]?.id === lost, false, 'precondition: a native query cannot see it');
+
+    relaunch(16 * 1024 * 1024);
+    assert.equal(vecCount(), 4);
+    const found = await search(9, 1);
+    assert.equal(found.native, true);
+    assert.deepEqual(found.ids, [lost]);
+    assert.equal(ids.length, 3);
+  });
+
+  const blobOnly = (index) => Number(db().prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count, embedding) VALUES ('m1', ?, 'Me', 1, 2, 'blob only', 1, ?)`).run(index, vec(index)).lastInsertRowid);
+
+  test('one missing row in a large table is written at launch; the table is not recopied', async () => {
+    if (!usable()) return;
+    seed(40);
+    relaunch();
+    assert.equal(settled(), true);
+    const lost = blobOnly(99);
+    relaunch();                                                     // budget 200 bytes; one vector is 64
+    assert.deepEqual(pending(), {});
+    assert.equal(vecCount(), 41);
+    assert.doesNotMatch(ddl(CHUNKS), /chunk_size/, 'not dropped and rebuilt for one row');
+    const found = await search(99, 1);
+    assert.equal(found.native, true);
+    assert.deepEqual(found.ids, [lost]);
+  });
+
+  test('more missing rows than the launch may write are recorded, and the table is kept', async () => {
+    if (!usable()) return;
+    seed(40);
+    relaunch();
+    const lost = [90, 91, 92, 93, 94].map(blobOnly);                // 320 bytes, budget 200
+    relaunch();
+    assert.deepEqual(pending()[CHUNKS], { recreated: true, cursor: 0 });
+    assert.equal((await search(92, 1)).ids[0], lost[2], 'found from the stored vectors meanwhile');
+    await quiet(() => dbMgr.runPendingVecRebuilds());
+    assert.equal(vecCount(), 45);
+    assert.deepEqual(pending(), {});
+  });
+
+  // A launch without the extension stores BLOBs only, and a width that is not
+  // pre-created (the bundled model's 384) then has vectors and no table. The
+  // first vector stored later created an EMPTY table, and native search
+  // answered from that one row (code review, 2026-10-05).
+  describe('a stored width that has no table', () => {
+    const W = 8;
+    const wide = (seed) => Buffer.from(new Float32Array(Array.from({ length: W }, (_, i) => Math.cos(seed * 2.1 + i))).buffer);
+    const addWide = (index) => Number(db().prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count, embedding) VALUES ('m1', ?, 'Me', 1, 2, 'wide', 1, ?)`).run(index, wide(index)).lastInsertRowid);
+    const wideCount = () => db().prepare(`SELECT COUNT(*) AS n FROM vec_chunks_${W}`).get().n;
+    const tableExists = () => !!db().prepare(`SELECT 1 FROM sqlite_master WHERE name = 'vec_chunks_${W}'`).get();
+
+    test('gets one at launch, with its vectors in it', () => {
+      if (!usable()) return;
+      seed(2);
+      for (let i = 0; i < 5; i++) addWide(i);                       // 160 bytes, inside the budget of 200... with the 2 x 64 above it is not
+      assert.equal(tableExists(), false);
+      relaunch(16 * 1024 * 1024);
+      assert.equal(tableExists(), true);
+      assert.equal(wideCount(), 5);
+      assert.deepEqual(pending(), {});
+    });
+
+    test('too many to write at launch: created, recorded, and filled after launch', async () => {
+      if (!usable()) return;
+      seed(2);
+      for (let i = 0; i < 20; i++) addWide(i);                      // 640 bytes, budget 200
+      relaunch();
+      assert.equal(tableExists(), true);
+      assert.deepEqual(pending()[`vec_chunks_${W}`], { recreated: true, cursor: 0 });
+      await quiet(() => dbMgr.runPendingVecRebuilds());
+      assert.equal(wideCount(), 20);
+    });
+
+    test('created mid-session beside stored vectors, it is recorded instead of answering from one row', async () => {
+      if (!usable()) return;
+      seed(2);
+      relaunch(16 * 1024 * 1024);                                   // settled, nothing of this width yet
+      for (let i = 0; i < 5; i++) addWide(i);                       // written while the extension was away
+      quiet(() => dbMgr.ensureVecTableForDim(W));                   // the first store of the session
+      assert.equal(tableExists(), true);
+      assert.deepEqual(pending()[`vec_chunks_${W}`], { recreated: true, cursor: 0 });
+      assert.equal(pending()[`vec_summaries_${W}`], undefined, 'no summary of that width is stored');
+      await quiet(() => dbMgr.runPendingVecRebuilds());
+      assert.equal(wideCount(), 5);
+      assert.deepEqual(pending(), {});
+    });
+  });
+
+  // Between 2026-10-04 and 2026-10-05 a re-embedded summary kept its old
+  // vector in vec0. The key is present on both sides, so comparing keys cannot
+  // find it; every summary vector is written again, once.
+  test('a summary whose vec0 row holds an older vector than its BLOB is corrected, once', async () => {
+    if (!usable()) return;
+    seed(2);
+    relaunch(16 * 1024 * 1024);
+    const d = db();
+    const sumId = Number(d.prepare(`SELECT id FROM chunk_summaries WHERE meeting_id = 'm1'`).get().id);
+    d.prepare('UPDATE chunk_summaries SET embedding = ? WHERE id = ?').run(vec(555), sumId);   // the BLOB moved on; vec0 did not
+    d.prepare('DELETE FROM app_state WHERE key = ?').run('vec_summary_vectors_rewritten_v1');   // a profile from before this build
+    const inVec = () => Buffer.from(db().prepare(`SELECT embedding AS e FROM ${SUMMARIES} WHERE summary_id = ?`).get(BigInt(sumId)).e);
+    assert.notDeepEqual(inVec(), vec(555), 'precondition');
+
+    relaunch(16 * 1024 * 1024);
+    assert.deepEqual(inVec(), vec(555));
+    assert.equal(db().prepare('SELECT value FROM app_state WHERE key = ?').get('vec_summary_vectors_rewritten_v1')?.value, '1');
+  });
+
+  test('the upgrade launch spends its budget once, not once in the migration and once after', () => {
+    if (!usable()) return;
+    // Two tables that are only the wrong block size: 192 and 64 bytes, budget 200.
+    seed(3, { userVersion: 29 });
+    relaunch();
+    assert.match(ddl(SUMMARIES), /chunk_size\s*=\s*64/, 'the smaller one is done');
+    assert.doesNotMatch(ddl(CHUNKS), /chunk_size/, 'the other waits for the next launch');
+    relaunch();
+    assert.match(ddl(CHUNKS), /chunk_size\s*=\s*64/);
   });
 });
 

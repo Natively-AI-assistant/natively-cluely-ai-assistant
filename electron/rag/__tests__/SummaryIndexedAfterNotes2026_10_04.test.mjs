@@ -113,7 +113,7 @@ describe('wiring', () => {
   test('saving a summary keeps its row id', () => {
     const store = read('electron/rag/VectorStore.ts');
     const body = store.slice(store.indexOf('saveSummary(meetingId: string, summaryText: string)'));
-    assert.match(body.slice(0, 700), /ON CONFLICT\(meeting_id\) DO UPDATE SET/);
+    assert.match(body.slice(0, 1800), /ON CONFLICT\(meeting_id\) DO UPDATE SET/);
     assert.ok(!/INSERT OR REPLACE INTO chunk_summaries/.test(store), 'REPLACE would orphan the old vector');
   });
 

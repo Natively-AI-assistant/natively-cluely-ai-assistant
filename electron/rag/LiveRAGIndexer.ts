@@ -291,7 +291,17 @@ export class LiveRAGIndexer {
                     this.embeddedChunks = [];
                 }
                 for (let i = 0; i < batch.length && i < embeddings.length; i++) {
-                    this.vectorStore.storeEmbedding(batch[i].id, embeddings[i]);
+                    try {
+                        this.vectorStore.storeEmbedding(batch[i].id, embeddings[i]);
+                    } catch (storeErr: any) {
+                        // A vector that cannot be searched is refused by the
+                        // store. Retrying would get the same vector every tick
+                        // and hold the rest of the batch behind it, so the chunk
+                        // counts as handled here; the meeting is indexed again
+                        // in full when it ends.
+                        if (!storeErr?.unusableEmbedding) throw storeErr;
+                        console.warn(`[LiveRAGIndexer] ${storeErr.message}`);
+                    }
                     embeddedCount++;
                 }
                 if (embeddedCount > 0 && provider && space && dimensions) {
