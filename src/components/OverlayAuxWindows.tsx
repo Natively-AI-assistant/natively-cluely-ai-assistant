@@ -12,8 +12,9 @@ import { getGlassOverlayAppearance, getOverlayAppearance } from '../lib/overlayA
 // these roots own rendering and user actions.
 //
 // State flows one way: the overlay renderer broadcasts OverlayUiState over
-// 'overlay-ui-state' (relayed + cached by the main process, replayed on
-// (re)load); user actions flow back over 'overlay-ui-action'. Layout actions
+// 'overlay-ui-state' (relayed + cached by the main process; a window that
+// (re)loads asks for the cached state); user actions flow back over
+// 'overlay-ui-action'. Layout actions
 // reach the overlay renderer, which invokes the exact same handlers the inline
 // components used; Stop (end-meeting) is ended by main itself — see
 // electron/utils/overlayUiActionRouter.ts.
@@ -38,15 +39,42 @@ const DEFAULT_STATE: Required<Omit<OverlayUiState, 'hasContent'>> & OverlayUiSta
   interfaceTheme: 'default',
 };
 
-function useOverlayUiState(): OverlayUiState {
+// `synced` is false until this window knows whether a broadcast preceded it.
+// Until then DEFAULT_STATE may be wrong (a toggle reloaded mid-meeting is not
+// on a narrow, dark, default-theme panel), so the roots stay hidden: nothing
+// is painted in the wrong state and no click lands on it.
+function useOverlayUiState(): { state: OverlayUiState; synced: boolean } {
   const [state, setState] = useState<OverlayUiState>(DEFAULT_STATE);
+  const [synced, setSynced] = useState(false);
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onOverlayUiState?.((next) =>
       setState((prev) => ({ ...prev, ...(next as OverlayUiState) })),
     );
-    return () => unsubscribe?.();
+    // Catch up on a broadcast sent before this window was listening: after a
+    // reload mid-meeting the toggle otherwise comes back as "Expand" on a
+    // panel that is already wide. Asked AFTER subscribing, so nothing sent in
+    // between is missed.
+    let alive = true;
+    const ask = window.electronAPI?.getOverlayUiState?.();
+    if (!ask) {
+      setSynced(true);
+    } else {
+      ask
+        .then((last) => {
+          if (alive && last) setState((prev) => ({ ...prev, ...(last as OverlayUiState) }));
+        })
+        .catch(() => {})
+        // Answered, empty or failed: the defaults are the best there is now.
+        .finally(() => {
+          if (alive) setSynced(true);
+        });
+    }
+    return () => {
+      alive = false;
+      unsubscribe?.();
+    };
   }, []);
-  return state;
+  return { state, synced };
 }
 
 function useOverlayAuxAppearance(state: OverlayUiState) {
@@ -220,7 +248,7 @@ function useManagedGroupDrag(rootRef: React.RefObject<HTMLDivElement | null>): b
 }
 
 export function OverlayPillWindow() {
-  const state = useOverlayUiState();
+  const { state, synced } = useOverlayUiState();
   const appearance = useOverlayAuxAppearance(state);
   const rootRef = useRef<HTMLDivElement>(null);
   const dragManaged = useManagedGroupDrag(rootRef);
@@ -257,6 +285,8 @@ export function OverlayPillWindow() {
       className="w-fit h-fit bg-transparent select-none"
       style={{
         ['--overlay-opacity' as '--overlay-opacity']: String(state.overlayOpacity ?? 1),
+        // Keeps its layout box (the size report below reads it) while hidden.
+        visibility: synced ? 'visible' : 'hidden',
       } as React.CSSProperties}
     >
       {/* Mirrors the old in-window behavior: on Cmd+B collapse the pill fades
@@ -282,7 +312,7 @@ export function OverlayPillWindow() {
 }
 
 export function OverlayToggleWindow() {
-  const state = useOverlayUiState();
+  const { state, synced } = useOverlayUiState();
   const appearance = useOverlayAuxAppearance(state);
   const themeAttr = state.interfaceTheme ?? 'default';
   const rootRef = useRef<HTMLDivElement>(null);
@@ -298,6 +328,7 @@ export function OverlayToggleWindow() {
       className="w-full h-full bg-transparent select-none"
       style={{
         ['--overlay-opacity' as '--overlay-opacity']: String(state.overlayOpacity ?? 1),
+        visibility: synced ? 'visible' : 'hidden',
       } as React.CSSProperties}
     >
       <ResizeToggle

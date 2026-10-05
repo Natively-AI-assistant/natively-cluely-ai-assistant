@@ -135,3 +135,4 @@ export function defaultCollapsedPanelWidth(): number;
 export function panelWidthForWindow(windowWidth: number): number;
 export function collapsedPanelForWindow(windowWidth: number): number;
 export const OVERLAY_HOVER_GATE_PAD: number;
+export const OVERLAY_HOVER_PROBE_GRACE_MS: number;

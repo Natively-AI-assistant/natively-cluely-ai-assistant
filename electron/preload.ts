@@ -92,13 +92,16 @@ interface ElectronAPI {
   }) => Promise<{ width: number; height: number } | undefined>;
   sendOverlayUiState: (state: Record<string, unknown>) => Promise<void>;
   onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => () => void;
+  getOverlayUiState: () => Promise<Record<string, unknown> | null>;
   sendOverlayToggleAnchor: (payload: { panelRight: number; panelLeft?: number }) => Promise<void>;
   overlayResizeEnvelope: (
     payload:
       | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
       | { phase: 'end'; final?: { width: number; height: number } },
   ) => Promise<{ width: number; height: number } | undefined>;
-  setOverlayHoverInteractive: (interactive: boolean) => Promise<void>;
+  setOverlayHoverInteractive: (interactive: boolean, source?: 'probe', idleMs?: number) => Promise<void>;
+  onOverlayHoverReset: (callback: () => void) => () => void;
+  onOverlayHoverProbe: (callback: (point: { x: number; y: number }) => void) => () => void;
   dismissOverlayPopovers: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>;
   sendOverlayUiAction: (action: { type: string }) => Promise<void>;
   sendOverlayGroupDrag: (delta: {
@@ -1395,6 +1398,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('overlay-ui-state', subscription);
     };
   },
+  // Aux window → main: the last broadcast, for a window that (re)loaded after it.
+  getOverlayUiState: () => ipcRenderer.invoke('overlay-ui-state:get'),
   // Overlay renderer → main: live panel right edge (toggle window rides it).
   sendOverlayToggleAnchor: (payload: { panelRight: number; panelLeft?: number }) =>
     ipcRenderer.invoke('overlay-toggle-anchor', payload),
@@ -1405,8 +1410,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | { phase: 'end'; final?: { width: number; height: number } },
   ) => ipcRenderer.invoke('overlay-resize-envelope', payload),
   // Overlay renderer → main: hover hit-test (margins click-through gate).
-  setOverlayHoverInteractive: (interactive: boolean) =>
-    ipcRenderer.invoke('overlay-hover-interactive', interactive),
+  setOverlayHoverInteractive: (interactive: boolean, source?: 'probe', idleMs?: number) =>
+    ipcRenderer.invoke('overlay-hover-interactive', interactive, source, idleMs),
+  // Main → overlay renderer: main reset the gate to interactive (overlay shown).
+  onOverlayHoverReset: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('overlay-hover-reset', subscription);
+    return () => {
+      ipcRenderer.removeListener('overlay-hover-reset', subscription);
+    };
+  },
+  // Main → overlay renderer: where the pointer is, while the gate is shut.
+  onOverlayHoverProbe: (callback: (point: { x: number; y: number }) => void) => {
+    const subscription = (_: any, point: { x: number; y: number }) => callback(point);
+    ipcRenderer.on('overlay-hover-probe', subscription);
+    return () => {
+      ipcRenderer.removeListener('overlay-hover-probe', subscription);
+    };
+  },
   // Any Natively window → main: dismiss the overlay dropdowns (settings /
   // model selector). Used by the click-catcher, the aux windows, and the
   // overlay renderer's click-outside handler.
