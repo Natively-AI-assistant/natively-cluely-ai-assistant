@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import { loadRun, readJsonl } from '../objective.mjs';
 const JUDGE = process.env.ER_JUDGE || 'astra';
 const plan = JSON.parse(fs.readFileSync('evidence-rich/results/replay/astra-plan.json', 'utf8'));
-const B = process.argv.includes('--sample-b'); // the second sample: the same wordings on the E16b runs' drafts
-const RUNS = B ? ['er-dev-e16b', 'er-dev2-e16b'] : ['er-dev-e13c', 'er-dev2-e13c']; const CTL = B ? 'e17b-ctl' : 'e17-ctl', NEW = B ? 'e17b-conflict' : 'e17-conflict'; const PAIRS = B ? plan.e17bpairs : plan.e17pairs;
+const B = process.argv.includes('--sample-b'); const E18 = process.argv.includes('--e18'); // --e18 [--sample-b]: the E18 arm against the same control arm // the second sample: the same wordings on the E16b runs' drafts
+const RUNS = B ? ['er-dev-e16b', 'er-dev2-e16b'] : ['er-dev-e13c', 'er-dev2-e13c']; const CTL = B ? 'e17b-ctl' : 'e17-ctl', NEW = E18 ? (B ? 'e18b' : 'e18') : (B ? 'e17b-conflict' : 'e17-conflict'); const PAIRS = E18 ? (B ? plan.e18bpairs : plan.e18pairs) : (B ? plan.e17bpairs : plan.e17pairs);
 const J = (name) => Object.fromEntries(readJsonl(`evidence-rich/judge/out/base/${name}.${JUDGE}.jsonl`).filter((j) => j.ok).map((j) => [j.benchmark_id, j]));
 const cache = {}; const get = (name) => (cache[name] ??= J(name));
 const side = (run, id, src, arm) => get(src === 'new' ? `rp-${arm}--${run}` : src === 'draft' ? `${run}.draft` : run)[id];

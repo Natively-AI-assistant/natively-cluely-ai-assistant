@@ -1578,3 +1578,19 @@ whose turn ran the pass).
 | 6 | Pass time, p90 | ≤ control arms + 400 ms |
 Every line must hold on the pooled samples. If it does, the wording is built into the app and confirmed on the next
 app run.
+
+### Astra batch of 2026-10-05, 11:00 – 12:05 UTC (65 minutes; closed with HTTP 402 on both keys)
+Calibration 38/38. Judged in this batch: E16b's line 3 (46), E17's first sample (182), E17's second sample (190), 60
+rows of the E16b pair's profile modes before that was stopped, and part of E10 (72 → 132 of 524 judgments; **three
+turns have all four of their judgments, so E10 still has no Astra verdict**). Twelve calls at once gave "fetch failed"
+on about a third of them; nine was fine; the retries at six were clean.
+* **E16b: not kept** (line 3: +0.36 against +0.5). Confirmed by the judge of record.
+* **E17: not kept** (line 2 on the first sample; line 4 on the second: conflict flags 1 → 5).
+* **E18** (rule above): replayed on both draft sets, not judged. Judge-free lines: edits that add "two ways" 24 → 1
+  (line 1 holds); pass time p90 1,572 → 1,743 ms and 1,570 → 1,753 ms (line 6 holds); rebuilt request equals the
+  recorded one on 939 of 939. Rows where it differs from the control arm: 102 and 111; 220 judgments still needed
+  (the control side is half judged already).
+**Next batch:** `evidence-rich/results/astra-next.sh` — probe, calibration, then two streams: E18 on both samples, then
+the rest of E10. Read with `ER_JUDGE=astra node evidence-rich/report/rule-e17.mjs --e18 [--sample-b]` (pool the two
+by hand: the rule is on the pooled samples) and `ER_JUDGE=astra node evidence-rich/replay-repair-judge.mjs verdict`.
+No app run is possible until the disk has about 6 GB free (3.2 GB now; other sessions' installs).
