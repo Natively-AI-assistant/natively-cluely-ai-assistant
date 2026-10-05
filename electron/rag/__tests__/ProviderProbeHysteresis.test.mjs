@@ -47,28 +47,28 @@ describe('EmbeddingProviderResolver.probeAvailable — cloud hysteresis', () => 
   test('cloud provider that fails once then succeeds is considered AVAILABLE (no demotion)', async () => {
     const gemini = fakeProvider('gemini', [false, true]);
     const ok = await probeAvailable(gemini);
-    assert.equal(ok, true, 'transient first-probe failure must not demote a cloud provider');
+    assert.equal(ok, 'available', 'transient first-probe failure must not demote a cloud provider');
     assert.ok(gemini.calls() >= 2, 'should have retried at least once');
   });
 
   test('cloud provider that fails ALL attempts is unavailable (genuinely down)', async () => {
     const gemini = fakeProvider('gemini', [false]);
     const ok = await probeAvailable(gemini);
-    assert.equal(ok, false, 'a persistently-failing cloud provider is correctly unavailable');
+    assert.equal(ok, 'transient', 'a persistently-failing cloud provider is unavailable — and named transient so a pinned one is re-probed later (2026-09-11)');
     assert.equal(gemini.calls(), 3, 'cloud retries exactly CLOUD_PROBE_ATTEMPTS times');
   });
 
   test('cloud provider available on first try → no extra probes (fast path)', async () => {
     const openai = fakeProvider('openai', [true]);
     const ok = await probeAvailable(openai);
-    assert.equal(ok, true);
+    assert.equal(ok, 'available');
     assert.equal(openai.calls(), 1, 'no wasted retries when first probe succeeds');
   });
 
   test('NON-cloud (local) provider is probed exactly once — no retry', async () => {
     const local = fakeProvider('local', [false]);
     const ok = await probeAvailable(local);
-    assert.equal(ok, false);
+    assert.equal(ok, 'transient');
     assert.equal(local.calls(), 1, 'local/ollama probes are cheap+deterministic — never retried');
   });
 

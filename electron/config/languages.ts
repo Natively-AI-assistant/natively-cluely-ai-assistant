@@ -165,3 +165,39 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Malay', code: 'Malay' },
     { label: 'Finnish', code: 'Finnish' },
 ];
+
+/**
+ * Map a persisted STT language to a key RECOGNITION_LANGUAGES actually has.
+ *
+ * Every language has a plain key — 'spanish', 'french' — except English, which
+ * exists only as english-us/uk/in/au/ca. Installs predating that split still
+ * have a bare 'english' persisted, which resolves to nothing, and BOTH readers
+ * of this value are downstream of here: main.ts feeds it to the provider and
+ * ipcHandlers hands it to Settings. Normalising once, at the single source,
+ * keeps the two from disagreeing — Settings was telling users
+ * `"english" isn't available in Apple Speech` while the provider was happily
+ * transcribing en-US.
+ *
+ * It also un-breaks the other providers, which were silently no-oping on
+ * 'english': GoogleSTT warns and returns on an unknown key, Deepgram's
+ * `if (config && …)` skips it. They looked correct only because their own
+ * default is English.
+ *
+ * An unrecognised key is returned unchanged rather than forced to 'auto', so
+ * this can only ever resolve a value, never silently switch someone's language.
+ */
+export function normalizeSttLanguageKey(stored: string | undefined | null): string {
+    const key = (stored ?? '').trim();
+    if (!key) return 'auto';
+    if (RECOGNITION_LANGUAGES[key]) return key;
+    // Group name ('english' -> the English family). Prefer the entry whose
+    // bcp47 matches its own declared `primary`, which is the family's default.
+    const lower = key.toLowerCase();
+    const family = Object.entries(RECOGNITION_LANGUAGES)
+        .filter(([, l]) => String((l as any)?.group ?? '').toLowerCase() === lower);
+    if (family.length) {
+        const primary = family.find(([, l]) => (l as any)?.primary === (l as any)?.bcp47);
+        return (primary ?? family[0])[0];
+    }
+    return key;
+}

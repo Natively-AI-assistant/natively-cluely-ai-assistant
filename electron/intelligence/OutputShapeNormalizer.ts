@@ -105,7 +105,15 @@ export function normalizeOutputShape(input: NormalizeInput): NormalizeResult {
 /**
  * The full answer contract for a delivered answer: normalize shape, then check the
  * session diversity guard and, if repeated across a DIFFERENT ask, attempt a
- * deterministic speakable rewrite. Records the (final) answer into the guard.
+ * deterministic repair. Records the (final) answer into the guard.
+ *
+ * Repair ladder mirrors the manual path's inline logic exactly (electron/ipcHandlers.ts,
+ * around the _manualDiversityGuard.check call): (1) vary the OPENING first — cheapest,
+ * keeps every fact — when the repeat reason is about the opening/first sentence; (2) fall
+ * back to scaffold compression otherwise or if (1) didn't produce something non-repeating.
+ * (Fixed 2026-07-28 code review: an earlier version of this facade only ever tried
+ * compressToSpeakable, which is a no-op on plain prose with no visible scaffold — so a
+ * repeated plain-spoken answer was correctly DETECTED but never actually repaired.)
  *
  * `guard` is the caller's per-session AnswerDiversityGuard (the manual path keeps one
  * already). Pure aside from mutating the passed guard's history. Never throws.
@@ -121,13 +129,25 @@ export function applyAnswerContract(
   try {
     repetition = input.guard.check(text, input.answerType, input.question);
     if (repetition.repeated && !input.isCoding) {
-      const speakable = compressToSpeakable(text);
-      if (
-        speakable.length >= 40 &&
-        speakable !== text &&
-        !input.guard.check(speakable, input.answerType, input.question).repeated
-      ) {
-        text = speakable;
+      let repaired = text;
+      if (repetition.reason === 'same_opening_window' || repetition.reason === 'same_first_sentence') {
+        const varied = varySpokenOpening(text, input.guard.size);
+        if (varied !== text && !input.guard.check(varied, input.answerType, input.question).repeated) {
+          repaired = varied;
+        }
+      }
+      if (repaired === text) {
+        const speakable = compressToSpeakable(text);
+        if (
+          speakable.length >= 40 &&
+          speakable !== text &&
+          !input.guard.check(speakable, input.answerType, input.question).repeated
+        ) {
+          repaired = speakable;
+        }
+      }
+      if (repaired !== text) {
+        text = repaired;
         applied.push('diversity_repair');
       }
     }

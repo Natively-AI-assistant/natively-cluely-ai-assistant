@@ -1,0 +1,319 @@
+{
+ "blind_id": "S-3416dc6b",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 64290,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 20425,
+  "candidatesTokenCount": 2131,
+  "totalTokenCount": 28428,
+  "cachedContentTokenCount": 12232,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 20425
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 12232
+   }
+  ],
+  "thoughtsTokenCount": 5872,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 4,
+  "entity_retention": 8,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 4,
+  "structure": 4,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Included hallucinated meta-commentary: 'The benefits package was not yet discussed because the chunk ends when Maya asks about benefits.'",
+   "Reported superseded salary band ($128k-$146k) and Maya's initial target ($155k) as current risks and open questions, directly contradicting the correct values stated elsewhere in the notes.",
+   "The first summary bullet is cut off mid-word ('hybrid rath')."
+  ],
+  "missing_important_information": [
+   "Series B money is mostly going into product and engineering hiring.",
+   "Brightlane is moving everyone to three days a week in office starting January.",
+   "Onboarding includes two or three ride-alongs with nurses.",
+   "Corvella uses an outside immigration firm for H-1B transfers."
+  ],
+  "hallucinated_information": [
+   "The benefits package was not yet discussed because the chunk ends when Maya asks about benefits."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The base salary band is $128,000 to $146,000 (listed as a current risk and open question)."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Maya's $155,000 base target is above the role's stated salary-band maximum (listed as a current risk and open question)."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Meta-commentary about the chunk ending."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "missing"
+   },
+   {
+    "id": "F23",
+    "status": "partial"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "partial"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "partial"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe repetition, with identical sentences copy-pasted across multiple sections, resulting in a very low conciseness score. There are critical contradictions regarding compensation: the notes correctly state the updated salary band and target in some places, but list the superseded values as current risks and open questions. Additionally, the notes include a hallucinated meta-commentary about the 'chunk ending' and feature a cut-off summary bullet. While most facts are retained, the structural and factual inconsistencies make the notes highly flawed."
+ }
+}

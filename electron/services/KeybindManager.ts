@@ -1,6 +1,16 @@
 import { app, globalShortcut, Menu, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import {
+    type KeybindRegistrationFailures,
+    NO_REGISTRATION_FAILURES,
+    recordRegistrationOutcome,
+    beginFullRegistrationPass,
+    listRegistrationFailures,
+} from './keybindRegistrationState';
+import { isRegisterableAccelerator, probeAccelerator } from './acceleratorValidation';
+import { buildChordTable, type Win32Chord } from './winChord';
+import { SettingsManager } from './SettingsManager';
 
 export interface KeybindConfig {
     id: string;
@@ -16,14 +26,14 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'general:toggle-mouse-passthrough', label: 'Toggle Mouse Passthrough', accelerator: 'CommandOrControl+Shift+B', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+B' },
     { id: 'general:process-screenshots', label: 'Process Screenshots', accelerator: 'CommandOrControl+Enter', isGlobal: true, defaultAccelerator: 'CommandOrControl+Enter' },
     { id: 'general:capture-and-process', label: 'Capture Screen & Ask AI (Global)', accelerator: 'CommandOrControl+Shift+Enter', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Enter' },
-    { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: true, defaultAccelerator: 'CommandOrControl+R' },
+    { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: false, defaultAccelerator: 'CommandOrControl+R' },
     { id: 'general:take-screenshot', label: 'Take Screenshot', accelerator: 'CommandOrControl+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+H' },
     { id: 'general:selective-screenshot', label: 'Selective Screenshot', accelerator: 'CommandOrControl+Shift+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+H' },
     // Capture the active browser tab's page context via the companion extension;
     // falls back to a screenshot when no extension/browser is reachable. Works
     // from any focused app (including the Natively overlay), which the old
     // Chrome-owned hotkey could not. See natively-browser/README.md.
-    { id: 'general:capture-dom', label: 'Capture Page / Screen (Browser)', accelerator: 'CommandOrControl+Shift+Y', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Y' },
+    { id: 'general:capture-dom', label: 'Capture Page / Screen (Browser)', accelerator: 'CommandOrControl+Y', isGlobal: true, defaultAccelerator: 'CommandOrControl+Y' },
 
     // Chat - Global shortcuts (work even when app is not focused - stealth mode)
     { id: 'chat:whatToAnswer', label: 'What to Answer', accelerator: 'CommandOrControl+1', isGlobal: true, defaultAccelerator: 'CommandOrControl+1' },
@@ -69,6 +79,19 @@ export class KeybindManager {
     private onShortcutTriggeredCallbacks: ((actionId: string) => void)[] = [];
     private activeMode: 'launcher' | 'overlay' = 'launcher';
     private healthCheckTimer: NodeJS.Timeout | null = null;
+    // Ids whose globalShortcut.register() call did not take. Kept as state
+    // rather than fire-and-forget IPC because the first registration pass runs
+    // from the constructor — before any BrowserWindow exists — so every push at
+    // that point is sent to nobody. A renderer mounting later reads this via
+    // `keybinds:get-registration-failures` to seed its conflict UI. Rules live
+    // in keybindRegistrationState.ts so they can be tested without Electron.
+    private registrationFailures: KeybindRegistrationFailures = NO_REGISTRATION_FAILURES;
+    // Accelerators already reported as unrepresentable. Purely a log damper: the
+    // health check re-tests every keybind every 10 s, and without this an
+    // accelerator the user cannot see is broken would print an error six times a
+    // minute for the life of the process. Cleared by a full re-registration pass
+    // so a rebind is reported afresh.
+    private unusableAccelerators: Set<string> = new Set();
     // How often to poll that OS-registered shortcuts are still alive (ms).
     // 10 s is aggressive enough to recover within one poll cycle after a
     // passthrough toggle, sleep/wake, or workspace switch.
@@ -79,15 +102,35 @@ export class KeybindManager {
         this.activeMode = mode;
         console.log(`[KeybindManager] Mode changed to: ${mode}. Refreshing global shortcuts.`);
         this.registerGlobalShortcuts();
+        this.notifyChordsChanged();
+    }
+
+    public getGlobalShortcutsEnabled(): boolean {
+        return SettingsManager.getInstance().get('globalShortcutsEnabled') !== false;
+    }
+
+    public setGlobalShortcutsEnabled(enabled: boolean): void {
+        if (this.getGlobalShortcutsEnabled() === enabled) return;
+        SettingsManager.getInstance().set('globalShortcutsEnabled', enabled);
+        console.log(`[KeybindManager] Global shortcuts ${enabled ? 'enabled' : 'disabled'}`);
+        this.registerGlobalShortcuts();
+        this.notifyChordsChanged();
+        this.broadcastUpdate();
     }
 
     private shouldRegister(actionId: string): boolean {
+        // Issue #517: with global shortcuts off, only Toggle Visibility stays
+        // OS-wide. Without it a hidden stealth window (no Dock/taskbar icon)
+        // has no way back short of the tray or a relaunch.
+        if (!this.getGlobalShortcutsEnabled()) return actionId === 'general:toggle-visibility';
         if (this.activeMode === 'overlay') return true;
 
-        // In launcher mode, register visibility + movement shortcuts
+        // In launcher mode, register visibility shortcuts. window:move-* is NOT
+        // global here (issue #517): Cmd/Ctrl+Shift+Arrow is word selection in
+        // every editor and browser, and the launcher moves itself with those
+        // keys through its own focused handler (Launcher.tsx).
         if (actionId === 'general:toggle-visibility') return true;
         if (actionId === 'general:toggle-mouse-passthrough') return true;
-        if (actionId.startsWith('window:move-')) return true;
 
         // Screenshot & screen-analyze shortcuts must work globally in BOTH modes.
         // Without these, Cmd+H / Cmd+Shift+H / Cmd+Shift+Enter do nothing in
@@ -127,6 +170,33 @@ export class KeybindManager {
         this.onShortcutTriggeredCallbacks.push(callback);
     }
 
+    /**
+     * The app's global shortcuts as a Win32 chord table for the native stealth
+     * hook (Windows). The supported set is Ctrl-based letters, digits, Enter,
+     * Space, and arrow shortcuts; everything else stays with RegisterHotKey.
+     * Harmless on macOS (the macOS tap ignores this table). See winChord.ts and
+     * native-module/src/app_chord.rs.
+     */
+    public getGlobalChordTable(): Win32Chord[] {
+        return buildChordTable(
+            Array.from(this.keybinds.values()).filter(kb => this.shouldRegister(kb.id)),
+        );
+    }
+
+    /**
+     * Dispatch an action by id exactly as a fired global shortcut would. Used by
+     * the Windows stealth hook when it swallows one of the app's own chords (so
+     * the chord fires the action instead of leaking into the foreground app).
+     * Guarded to global binds only — the hook is never given non-global ids, but
+     * this keeps a stray id from dispatching an unexpected action. RegisterHotKey
+     * never double-fires because the hook swallowed the key before the OS saw it.
+     */
+    public triggerActionById(actionId: string): void {
+        const kb = this.keybinds.get(actionId);
+        if (!kb || !kb.isGlobal) return;
+        this.onShortcutTriggeredCallbacks.forEach(cb => cb(actionId));
+    }
+
     public static getInstance(): KeybindManager {
         if (!KeybindManager.instance) {
             KeybindManager.instance = new KeybindManager();
@@ -163,6 +233,20 @@ export class KeybindManager {
                 for (const fileKb of data) {
                     if (this.keybinds.has(fileKb.id)) {
                         const current = this.keybinds.get(fileKb.id)!;
+
+                        // Drop an accelerator Electron cannot even convert (e.g. a
+                        // bare "₹" recorded from an Option+key press on a non-US
+                        // layout). Every globalShortcut call with it throws, so
+                        // leaving it in the map re-arms the crash on every launch.
+                        // Clearing it here — and persisting below — is what recovers
+                        // a user who is already crash-looping, without making them
+                        // hand-edit keybinds.json.
+                        if (fileKb.accelerator && fileKb.accelerator.trim() !== ''
+                            && !isRegisterableAccelerator(fileKb.accelerator)) {
+                            console.warn(`[KeybindManager] Discarding unusable accelerator for ${fileKb.id}: ${JSON.stringify(fileKb.accelerator)}`);
+                            fileKb.accelerator = '';
+                            hadConflicts = true; // reuse the same persist trigger
+                        }
 
                         // Deduplicate: If another keybind is already using this accelerator, skip or clear it
                         if (fileKb.accelerator && fileKb.accelerator.trim() !== '') {
@@ -223,6 +307,19 @@ export class KeybindManager {
     public setKeybind(id: string, accelerator: string) {
         if (!this.keybinds.has(id)) return;
 
+        // Refuse an accelerator Electron cannot convert rather than persisting it
+        // and discovering the problem from a thrown TypeError later. Keeping the
+        // existing binding is the least surprising outcome: the recorder shows the
+        // old chord still in place, which reads as "that key didn't take".
+        if (accelerator && accelerator.trim() !== '' && !isRegisterableAccelerator(accelerator)) {
+            console.warn(`[KeybindManager] Rejected unusable accelerator for ${id}: ${JSON.stringify(accelerator)}`);
+            // Settings applies the new combo optimistically while this round-trips,
+            // so returning silently would leave it displaying a shortcut main
+            // never accepted. Push the authoritative table back instead.
+            this.broadcastUpdate();
+            return;
+        }
+
         const currentKb = this.keybinds.get(id)!;
         const oldAccelerator = currentKb.accelerator || '';
 
@@ -255,36 +352,100 @@ export class KeybindManager {
     public resetKeybinds() {
         this.keybinds.clear();
         DEFAULT_KEYBINDS.forEach(kb => this.keybinds.set(kb.id, { ...kb }));
+        SettingsManager.getInstance().set('globalShortcutsEnabled', true);
         this.save();
         this.registerGlobalShortcuts();
         this.broadcastUpdate();
     }
 
+    /**
+     * Records the outcome of one register() attempt and tells every live
+     * renderer about it.
+     *
+     * Both halves matter. The push clears or raises a badge in a Settings
+     * window that is already open; the map is what a Settings window opened
+     * *later* reads back, since the boot-time registration pass has no
+     * renderer to talk to. Emitting without recording was the original bug:
+     * a conflict present at launch produced no badge until the user happened
+     * to edit some unrelated shortcut and trigger a full re-registration.
+     */
+    private markRegistration(id: string, accelerator: string, ok: boolean): void {
+        const before = this.registrationFailures;
+        this.registrationFailures = recordRegistrationOutcome(before, id, accelerator, ok);
+
+        // Broadcast ONLY on a real change. recordRegistrationOutcome returns the
+        // same object reference when the outcome is unchanged — deliberately, so
+        // repeated identical verdicts do not churn state — and this used to
+        // ignore that. The health check re-tests every registered shortcut every
+        // 10 s, so a shortcut permanently held by another app meant an IPC
+        // message to every open window every 10 s for the life of the process,
+        // all of them telling the renderer something it already knew.
+        if (this.registrationFailures === before) return;
+
+        const channel = ok ? 'keybinds:registration-succeeded' : 'keybinds:registration-failed';
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (!win.isDestroyed()) {
+                win.webContents.send(channel, { id, accelerator });
+            }
+        });
+    }
+
     public registerGlobalShortcuts() {
         globalShortcut.unregisterAll();
+        this.unusableAccelerators.clear();
+        // Drop verdicts this pass is about to re-derive; KEEP verdicts for ids
+        // it will not attempt. The predicate mirrors the filter in the loop
+        // below, so the two cannot drift: an id is re-tested only if it is
+        // global, has a non-empty accelerator, and shouldRegister() allows it in
+        // the current mode. In launcher mode that excludes all of chat:*, whose
+        // recorded conflicts must survive — Settings is opened from the
+        // launcher, so that is precisely when the renderer reads the snapshot.
+        this.registrationFailures = beginFullRegistrationPass(
+            this.registrationFailures,
+            (id) => {
+                const kb = this.keybinds.get(id);
+                if (!kb) return true; // unknown id: nothing to preserve it for
+                if (!kb.isGlobal || !kb.accelerator || kb.accelerator.trim() === '') return true;
+                return this.shouldRegister(id);
+            },
+        );
 
         this.keybinds.forEach(kb => {
             if (kb.isGlobal && kb.accelerator && kb.accelerator.trim() !== '') {
                 if (!this.shouldRegister(kb.id)) return;
 
                 const acc = kb.accelerator.trim();
+                // Never hand Electron a string it cannot convert: register(),
+                // unregister() and isRegistered() all THROW on one rather than
+                // returning false. Badged like an OS conflict because the
+                // user-visible symptom is the same — a hotkey that never fires.
+                if (!isRegisterableAccelerator(acc)) {
+                    console.error(`[KeybindManager] Unusable accelerator for ${kb.id}, not registering: ${JSON.stringify(acc)}`);
+                    this.markRegistration(kb.id, acc, false);
+                    return;
+                }
                 try {
                     globalShortcut.register(acc, () => {
                         this.onShortcutTriggeredCallbacks.forEach(cb => cb(kb.id));
                     });
                     if (globalShortcut.isRegistered(acc)) {
                         console.log(`[KeybindManager] Registered global shortcut: ${acc} -> ${kb.id}`);
+                        // Let any stale "hotkey conflict" banner for this id clear itself
+                        // (e.g. after the user rebinds it in Settings) instead of lingering
+                        // until manually dismissed.
+                        this.markRegistration(kb.id, acc, true);
                     } else {
                         console.warn(`[KeybindManager] Failed to register global shortcut (likely in use by OS): ${acc}`);
                         // Notify renderer so the UI can surface a warning to the user (issue #136)
-                        BrowserWindow.getAllWindows().forEach(win => {
-                            if (!win.isDestroyed()) {
-                                win.webContents.send('keybinds:registration-failed', { id: kb.id, accelerator: acc });
-                            }
-                        });
+                        this.markRegistration(kb.id, acc, false);
                     }
                 } catch (e) {
                     console.error(`[KeybindManager] Exception while registering global shortcut ${acc}:`, e);
+                    // A throw here is usually a malformed accelerator rather than an
+                    // OS conflict, but the user-visible symptom is identical — a
+                    // hotkey that never fires — so it earns the same badge. Leaving
+                    // this branch silent meant an unparseable combo showed nothing.
+                    this.markRegistration(kb.id, acc, false);
                 }
             }
         });
@@ -313,7 +474,24 @@ export class KeybindManager {
             if (!this.shouldRegister(kb.id)) return;
 
             const acc = kb.accelerator.trim();
-            if (globalShortcut.isRegistered(acc)) return; // still alive — nothing to do
+            // THIS probe is what killed the app. A bare globalShortcut.isRegistered()
+            // here sat outside the try below, so Electron's conversion TypeError for
+            // an unrepresentable accelerator escaped the forEach, escaped the
+            // health-check setInterval, and became an uncaughtException — a fatal
+            // main-process error ~10 s after every launch. probeAccelerator()
+            // validates first and swallows anything the validator has not learned.
+            const state = probeAccelerator(acc, a => globalShortcut.isRegistered(a));
+            if (state === 'alive') return; // still alive — nothing to do
+            if (state === 'invalid') {
+                // Unrecoverable by definition, so do not count it as "lost" and do
+                // not retry it every 10 s. Log once per process, not per tick.
+                if (!this.unusableAccelerators.has(acc)) {
+                    this.unusableAccelerators.add(acc);
+                    console.error(`[KeybindManager] Accelerator ${JSON.stringify(acc)} (${kb.id}) is not representable — skipping until it is rebound.`);
+                }
+                this.markRegistration(kb.id, acc, false);
+                return;
+            }
 
             lost++;
             try {
@@ -323,11 +501,21 @@ export class KeybindManager {
                 if (globalShortcut.isRegistered(acc)) {
                     recovered++;
                     console.warn(`[KeybindManager] Recovered lost shortcut: ${acc} -> ${kb.id}`);
+                    // Drop any conflict badge this id is still wearing. The health
+                    // check is the only thing that notices when the app that stole
+                    // the combo quits, so without this the user is told to rebind a
+                    // shortcut that already works again.
+                    this.markRegistration(kb.id, acc, true);
                 } else {
                     console.error(`[KeybindManager] Could not recover shortcut ${acc} -> ${kb.id} (OS conflict?)`);
+                    // Conversely, a shortcut lost *after* startup never went through
+                    // registerGlobalShortcuts() again, so this is the only place it
+                    // can be flagged.
+                    this.markRegistration(kb.id, acc, false);
                 }
             } catch (e) {
                 console.error(`[KeybindManager] Exception re-registering shortcut ${acc}:`, e);
+                this.markRegistration(kb.id, acc, false);
             }
         });
 
@@ -471,6 +659,16 @@ export class KeybindManager {
         console.log('[KeybindManager] Application menu updated');
     }
 
+    /**
+     * The current set of global shortcuts the OS refused, as
+     * `{ id, accelerator }` pairs. Reflects the live registration state for
+     * the *current* mode — an id skipped by shouldRegister() is not a
+     * conflict, it simply is not registered right now.
+     */
+    public getRegistrationFailures(): { id: string; accelerator: string }[] {
+        return listRegistrationFailures(this.registrationFailures);
+    }
+
     private broadcastUpdate() {
         // Notify main process listeners
         this.onUpdateCallbacks.forEach(cb => cb());
@@ -492,13 +690,71 @@ export class KeybindManager {
         ipcMain.handle('keybinds:set', (_, id: string, accelerator: string) => {
             console.log(`[KeybindManager] Set ${id} -> ${accelerator}`);
             this.setKeybind(id, accelerator);
+            this.notifyChordsChanged();
             return true;
+        });
+
+        // Snapshot companion to the keybinds:registration-failed push. A
+        // renderer cannot rely on the push alone: the first registration pass
+        // happens in the constructor, long before any window exists.
+        ipcMain.handle('keybinds:get-registration-failures', () => {
+            return this.getRegistrationFailures();
+        });
+
+        ipcMain.handle('keybinds:get-global-enabled', () => this.getGlobalShortcutsEnabled());
+
+        ipcMain.handle('keybinds:set-global-enabled', (_, enabled: unknown) => {
+            if (typeof enabled !== 'boolean') return this.getGlobalShortcutsEnabled();
+            this.setGlobalShortcutsEnabled(enabled);
+            return this.getGlobalShortcutsEnabled();
         });
 
         ipcMain.handle('keybinds:reset', () => {
             console.log('[KeybindManager] Reset defaults');
             this.resetKeybinds();
+            this.notifyChordsChanged();
             return this.getAllKeybinds();
         });
+    }
+
+    /**
+     * DEV/TEST ONLY — no-op unless NATIVELY_DEBUG_HOTKEYS=1. Simulate the OS
+     * silently dropping a global-shortcut registration, to verify by hand on
+     * Windows that the hook-level swallow (during stealth typing) and the
+     * always-on shortcut-guard still FIRE the action and don't leak the key into
+     * the foreground app. Unregisters the accelerator without re-registering; the
+     * health poll (or a resume/display/unlock event) recovers it within ~10s, so
+     * press the chord promptly after calling this. Returns true if the drop took.
+     */
+    public debugDropRegistration(id: string): boolean {
+        if (process.env.NATIVELY_DEBUG_HOTKEYS !== '1') return false;
+        const kb = this.keybinds.get(id);
+        if (!kb || !kb.accelerator) return false;
+        try {
+            globalShortcut.unregister(kb.accelerator);
+            const dropped = !globalShortcut.isRegistered(kb.accelerator);
+            console.warn(`[KeybindManager] DEBUG dropped ${kb.accelerator} -> ${id} (dropped=${dropped})`);
+            return dropped;
+        } catch (e) {
+            console.error('[KeybindManager] debugDropRegistration failed:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Tell the Windows stealth shortcut-guard that the chord table
+     * changed, so an already-running guard re-arms with the new accelerators.
+     * Lazy require() to avoid a StealthKeyboardManager ↔ KeybindManager import
+     * cycle; no-op when the guard isn't running or off Windows.
+     */
+    private notifyChordsChanged(): void {
+        if (process.platform !== 'win32') return;
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { StealthKeyboardManager } = require('./StealthKeyboardManager');
+            StealthKeyboardManager.getInstance().refreshShortcutGuard();
+        } catch (e) {
+            console.error('[KeybindManager] notifyChordsChanged failed:', e);
+        }
     }
 }

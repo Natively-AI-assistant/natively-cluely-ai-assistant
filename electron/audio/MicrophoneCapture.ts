@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
+import { normalizeSpeechEdge } from './speechEdge';
 
 // RustMicCapture is the native Rust class (napi-rs) that captures microphone input.
 // Uses LAZY init — the native monitor is NOT created in the constructor. Constructing
@@ -23,6 +24,12 @@ export class MicrophoneCapture extends EventEmitter {
     //     complete before constructing a new native instance / starting again,
     //   - destroy() awaits this before removing listeners and nulling fields.
     private _teardownPromise: Promise<void> | null = null;
+    // Resolves when the setImmediate orphan-stop scheduled by a FAILED start()
+    // has actually released the native handle. start()'s failure path nulls
+    // this.monitor synchronously but defers `dying.stop()` by a tick, so
+    // "monitor === null" alone does NOT mean the HAL is free — retargetDevice()
+    // awaits this before letting a caller open a different device.
+    private _orphanTeardown: Promise<void> | null = null;
     // When false, the post-teardown pre-warm step (which constructs a fresh
     // RustMicCapture so the next meeting's start() doesn't pay the cpal init
     // cost on the Electron main thread) is skipped. Disabled by:
@@ -84,6 +91,48 @@ export class MicrophoneCapture extends EventEmitter {
     }
 
     /**
+     * Re-point this wrapper at a different input device.
+     *
+     * Exists for the "saved device is gone" retry: because init is LAZY, a bad
+     * device id cannot be detected until start() constructs the native monitor
+     * and throws. Re-targeting THIS instance and starting again is cheaper and
+     * safer than destroy/recreate — the caller keeps its wireMicCapture()
+     * wiring — and awaiting any pending orphan teardown (below) keeps a closing
+     * handle from racing the fresh device open.
+     *
+     * Deliberately refuses to run on a live wrapper: swapping deviceId while a
+     * cpal stream is open would silently desync this.deviceId from the device
+     * actually being captured.
+     */
+    public async retargetDevice(deviceId?: string | null): Promise<void> {
+        if (this.monitor || this.isRecording) {
+            throw new Error(
+                '[MicrophoneCapture] retargetDevice() requires an inactive wrapper with no native monitor',
+            );
+        }
+        // Two distinct start() failure paths, only one of which leaves the HAL
+        // free immediately:
+        //   - `new RustMicCapture()` threw  -> no handle was ever opened.
+        //   - `monitor.start()` threw       -> a handle WAS opened; the catch
+        //     nulls this.monitor but defers its stop() by a tick.
+        // Awaiting here is what actually delivers the "no teardown racing a
+        // fresh device open" property this method claims — without it, the
+        // caller's next start() opens a second native handle while the first is
+        // still closing, and if the failed id resolved to the current default
+        // they contend for the same device (Windows WASAPI exclusive mode).
+        if (this._orphanTeardown) {
+            await this._orphanTeardown;
+            this._orphanTeardown = null;
+        }
+        this.deviceId = deviceId || null;
+        // A wrapper that has never captured successfully must not re-open the
+        // mic during stop()'s post-teardown pre-warm (same rule start()'s
+        // failure path enforces).
+        this.preWarmEnabled = false;
+        console.log(`[MicrophoneCapture] Re-targeted to device: ${this.deviceId || 'default'}`);
+    }
+
+    /**
      * Start capturing microphone audio
      */
     public start(): void {
@@ -91,7 +140,11 @@ export class MicrophoneCapture extends EventEmitter {
 
         if (!RustMicCapture) {
             console.error('[MicrophoneCapture] Cannot start: Rust module missing');
-            return;
+            // F-107: see SystemAudioCapture.start() — a silent return here hid
+            // a missing/wrong-arch native module entirely. Throwing matches
+            // this wrapper's existing construction-failure contract and lets
+            // every call site surface a terminal channel banner.
+            throw new Error('Native audio engine unavailable — the audio capture module failed to load. Reinstall the app (dev: npm run build:native).');
         }
 
         // PRIMARY construction site (lazy init). The wrapper does NOT construct
@@ -150,6 +203,15 @@ export class MicrophoneCapture extends EventEmitter {
                     return;
                 }
                 this.emit('speech_ended');
+            }, (err: Error | null, edge: any) => {
+                // Joint dual-channel transition (Auto Answer V3, Amendment 1).
+                // Optional third callback; absent consumers cost nothing.
+                if (err) {
+                    console.error('[MicrophoneCapture] Speech edge callback error:', err);
+                    return;
+                }
+                const normalized = normalizeSpeechEdge(edge);
+                if (normalized) this.emit('speech_edge', normalized);
             });
 
             // Enable pre-warm for the NEXT stop() cycle only after the JS-side
@@ -162,6 +224,30 @@ export class MicrophoneCapture extends EventEmitter {
             console.error('[MicrophoneCapture] Failed to start:', error);
             this.isRecording = false;
             this.preWarmEnabled = false;
+            // ORPHAN-HANDLE FIX (F-106) — mirror of SystemAudioCapture's:
+            // construction already opened the cpal input stream (macOS orange
+            // mic indicator, Windows device handle), and with isRecording
+            // false every later stop()/destroy() early-returns — the open
+            // device would be held until the GC finalizer runs, blocking
+            // immediate retries (Settings > Audio test) and keeping the
+            // indicator lit. Stop the dying instance on the next tick so the
+            // device releases deterministically; the next start() takes the
+            // lazy-init branch and constructs fresh.
+            const dying = this.monitor;
+            this.monitor = null;
+            if (dying) {
+                this._orphanTeardown = new Promise<void>((resolve) => {
+                    setImmediate(() => {
+                        try {
+                            dying.stop();
+                        } catch (e) {
+                            console.error('[MicrophoneCapture] Error stopping orphaned monitor after failed start:', e);
+                        } finally {
+                            resolve();
+                        }
+                    });
+                });
+            }
             this.emit('error', error);
             throw error;
         }

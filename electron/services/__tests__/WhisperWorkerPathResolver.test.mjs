@@ -60,3 +60,37 @@ test('resolveWhisperWorkerPath points at a real whisperWorker.js after build', (
         `was MODULE_NOT_FOUND for whisperWorker.js (see PR #244).`,
     );
 });
+
+// Regression coverage for the follow-up bug: build-electron.js gives every
+// .ts file under electron/ its own esbuild entry point, so this resolver's
+// __dirname takes on whichever caller's bundle it's inlined into. The test
+// above only exercises the resolver's OWN compiled location
+// (dist-electron/electron/audio/whisper/), which is exactly why the broken
+// candidate list shipped undetected — LocalWhisperSTT.ts (audio/) and
+// LocalModelDownloadService.ts (services/) each have a different __dirname
+// and neither was covered. Exercise findFirstExistingPath with the same
+// candidate shape the resolver builds, from each real caller depth, against
+// the actual built dist-electron/ tree.
+const distElectronDir = path.resolve(__dirname, '../../../dist-electron/electron');
+
+test('the whisper worker resolves from every known caller depth after build', () => {
+    const candidatesFor = (dir) => ([
+        path.join(dir, 'whisperWorker.js'),
+        path.join(dir, 'whisper', 'whisperWorker.js'),
+        path.join(dir, '..', 'audio', 'whisper', 'whisperWorker.js'),
+        path.join(dir, 'audio', 'whisper', 'whisperWorker.js'),
+    ]);
+    const callerDirs = {
+        'modelPreloader.ts (electron/audio/whisper/)': path.join(distElectronDir, 'audio', 'whisper'),
+        'LocalWhisperSTT.ts (electron/audio/)': path.join(distElectronDir, 'audio'),
+        'LocalModelDownloadService.ts (electron/services/)': path.join(distElectronDir, 'services'),
+        'fully bundled into main.js (electron/)': distElectronDir,
+    };
+    for (const [label, dir] of Object.entries(callerDirs)) {
+        const resolved = findFirstExistingPath(candidatesFor(dir));
+        assert.ok(
+            fs.existsSync(resolved),
+            `${label}: expected a candidate to resolve to an existing whisperWorker.js from __dirname=${dir}, got ${resolved}`,
+        );
+    }
+});

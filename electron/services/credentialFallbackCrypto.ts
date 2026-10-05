@@ -14,8 +14,14 @@
  *   strictly beats the alternatives it replaces:
  *     - vs. plaintext-at-rest: secrets are not readable in the file (GCM ciphertext).
  *     - vs. today's silent data loss: keys actually survive a restart.
- *     - machine/install-bound: copying the file to another machine, or leaking it via
- *       cloud backup/sync, does not reveal the keys (the salt+material won't match).
+ *     - blob-scoped, NOT machine-bound (corrected 2026-08-18, F-704): the key is
+ *       scrypt(CONSTANT, per-install-random-salt) and the salt lives in the SAME
+ *       userData directory as the ciphertext. Leaking the .enc file ALONE reveals
+ *       nothing, but copying the WHOLE profile (Time Machine, Migration
+ *       Assistant, a synced AppData folder, a support bundle) carries salt and
+ *       blob together and the key re-derives identically. No caller may assume
+ *       machine binding — CredentialsManager's stale-fallback path did, and
+ *       silently destroyed the user's current credentials as a result.
  *
  * Kept as a pure module (no Electron imports) so it is unit-testable in plain Node.
  */

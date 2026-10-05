@@ -57,6 +57,35 @@ test('allocation reserves résumé, project, and JD despite verbose high-score r
   ]));
 });
 
+test('allocation enforces a total character budget without dropping required-kind reservations', () => {
+  const oversized = (id) => item(id, 'mode_reference_chunk', 0.9, 'x'.repeat(4000));
+  const required = item('resume:cedar', 'profile_resume', 0.5, 'x'.repeat(200));
+  const requiredProject = item('project:cedar', 'profile_project', 0.5, 'x'.repeat(200));
+  const requiredJd = item('jd:lattice', 'profile_jd', 0.5, 'x'.repeat(200));
+  const allocated = allocateRequiredEvidenceFamilies({
+    items: [
+      oversized('reference:big-1'),
+      oversized('reference:big-2'),
+      oversized('reference:big-3'),
+      required,
+      requiredProject,
+      requiredJd,
+    ],
+    requiredKinds: ['reference_files', 'profile_resume', 'projects', 'profile_jd'],
+    maxItems: 6,
+    maxChars: 1500,
+  });
+  assert.deepEqual(allocated.missingKinds, []);
+  // Required kinds MUST remain even when they alone blow the budget; the cap
+  // only bounds additional top-up evidence after reservation.
+  const selectedKinds = new Set(allocated.items.map((i) => i.sourceKind));
+  assert.ok(selectedKinds.has('profile_resume'));
+  assert.ok(selectedKinds.has('profile_project'));
+  assert.ok(selectedKinds.has('profile_jd'));
+  const totalChars = allocated.items.reduce((acc, i) => acc + (i.text?.length ?? 0), 0);
+  assert.ok(totalChars <= 1500 + 600, `reserved evidence (${totalChars} chars) may not exceed cap+reservation headroom significantly`);
+});
+
 test('coordinator retrieves reference and profile families concurrently then keeps every required family', async () => {
   const calls = [];
   const coordinator = new TurnEvidenceCoordinator();
@@ -72,6 +101,10 @@ test('coordinator retrieves reference and profile families concurrently then kee
   assert.deepEqual(new Set(result.pack.items.map((i) => i.sourceKind)), new Set([
     'mode_reference_chunk', 'profile_resume', 'profile_project', 'profile_jd',
   ]));
+  assert.equal(Object.isFrozen(result.pack), true, 'the canonical result pack must be immutable');
+  assert.equal(Object.isFrozen(result.pack.items), true, 'item selection must not be mutable after resolution');
+  assert.equal(Object.isFrozen(result.pack.items[0]), true, 'each selected evidence item must be immutable');
+  assert.throws(() => result.pack.items.push(item('late', 'profile_resume')), TypeError);
 });
 
 test('coordinator fails closed when a required project family is absent', async () => {
@@ -84,4 +117,90 @@ test('coordinator fails closed when a required project family is absent', async 
   });
   assert.equal(result.pack.answerPolicy, 'refuse_insufficient_evidence');
   assert.deepEqual(result.failures, [{ family: 'projects', reason: 'required_family_starved' }]);
+});
+
+test('coordinator refuses when selected evidence does not satisfy the requested property', async () => {
+  const fundingContract = {
+    ...contract,
+    requestedProperty: 'funding_source',
+  };
+  const referenceOnlyDecision = {
+    ...allDecision,
+    requiredEvidenceKinds: ['reference_files'],
+    allowedEvidenceKinds: ['reference_files'],
+  };
+  const coordinator = new TurnEvidenceCoordinator();
+  const result = await coordinator.resolve({
+    decision: referenceOnlyDecision,
+    contract: fundingContract,
+    retrieveReferenceEvidence: async () => pack([
+      { ...item('reference:collab', 'mode_reference_chunk'), supports: { property: 'unknown' } },
+    ]),
+  });
+  assert.equal(result.pack.answerPolicy, 'refuse_insufficient_evidence');
+  assert.equal(result.pack.coverage.propertySatisfied, false);
+  assert.equal(result.pack.coverage.hasDirectEvidence, true);
+});
+
+test('a thrown profile retriever does not discard already-retrieved reference evidence', async () => {
+  const referenceOnlyDecision = {
+    ...allDecision,
+    requiredEvidenceKinds: ['reference_files'],
+    allowedEvidenceKinds: ['reference_files'],
+  };
+  const coordinator = new TurnEvidenceCoordinator();
+  const result = await coordinator.resolve({
+    decision: referenceOnlyDecision,
+    contract,
+    retrieveReferenceEvidence: async () => pack([item('reference:amber', 'mode_reference_chunk')]),
+    retrieveProfileEvidence: async () => { throw new Error('profile source down'); },
+  });
+  assert.equal(result.failures.length, 0);
+  assert.equal(result.pack.items.some((i) => i.sourceKind === 'mode_reference_chunk'), true);
+  assert.equal(result.pack.answerPolicy, 'answer');
+});
+
+test('a required family whose retriever throws is reported as starved, not a full-turn rejection', async () => {
+  const coordinator = new TurnEvidenceCoordinator();
+  const result = await coordinator.resolve({
+    decision: allDecision,
+    contract,
+    retrieveReferenceEvidence: async () => pack([item('reference:amber', 'mode_reference_chunk')]),
+    retrieveProfileEvidence: async () => { throw new Error('profile source down'); },
+  });
+  assert.equal(result.pack.answerPolicy, 'refuse_insufficient_evidence');
+  assert.ok(result.failures.some((f) => f.family === 'resume'));
+});
+
+test('maxItems is a soft cap: required-kind reservations always survive', () => {
+  const allocated = allocateRequiredEvidenceFamilies({
+    items: [
+      item('reference:a', 'mode_reference_chunk', 1),
+      item('reference:b', 'mode_reference_chunk', 1),
+      item('resume:cedar', 'profile_resume', 0.1),
+      item('project:cedar', 'profile_project', 0.1),
+      item('jd:lattice', 'profile_jd', 0.1),
+    ],
+    requiredKinds: ['reference_files', 'profile_resume', 'projects', 'profile_jd'],
+    maxItems: 2,
+  });
+  assert.deepEqual(allocated.missingKinds, []);
+  assert.ok(allocated.items.length >= 4, 'all 4 required-kind reservations must survive despite maxItems=2');
+});
+
+test('coordinator no longer starves projects when ProfileEvidenceService emits profile_project items', async () => {
+  const coordinator = new TurnEvidenceCoordinator();
+  const result = await coordinator.resolve({
+    decision: allDecision,
+    contract,
+    retrieveReferenceEvidence: async () => pack([item('reference:amber', 'mode_reference_chunk')]),
+    retrieveProfileEvidence: async () => pack([
+      item('resume:cedar', 'profile_resume'),
+      item('project:cedar', 'profile_project'),
+      item('jd:lattice', 'profile_jd'),
+    ]),
+  });
+  assert.equal(result.failures.length, 0);
+  assert.ok(result.pack.items.some((i) => i.sourceKind === 'profile_project'));
+  assert.equal(result.pack.answerPolicy, 'answer');
 });

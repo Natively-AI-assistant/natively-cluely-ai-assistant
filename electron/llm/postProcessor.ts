@@ -82,10 +82,10 @@ export function reduceDashes(text: string): string {
 
     // Restore code
     inlineCodes.forEach((c, i) => {
-        result = result.replace(`INL${i}`, c);
+        result = result.replace(`INL${i}`, () => c);
     });
     codeBlocks.forEach((c, i) => {
-        result = result.replace(`CODE${i}`, c);
+        result = result.replace(`CODE${i}`, () => c);
     });
 
     return result;
@@ -124,14 +124,22 @@ export class StreamingDashReducer {
 // letter prose connector (never a code/math/numeric minus).
 function reduceProseDashes(segment: string): string {
     const inline: string[] = [];
-    let s = segment.replace(/`[^`\n]+`/g, (m) => { inline.push(m); return ` INL${inline.length - 1} `; });
+    // NO space padding around the placeholders (2026-09-07). They used to be
+    // padded so the prose-connector rule could not see the letters around a
+    // code span — but that rule needs a LETTER on each side, and the control
+    // byte that frames the placeholder is not one, so the pads bought nothing
+    // and cost a live defect: `\s*[—–]\s*` → ", " ate a pad whenever a span
+    // was followed by a dash ("`03_debugging_scenarios.md` — Section"), the
+    // exact-string restore no longer matched, and the raw placeholder reached
+    // the user ("**Source:** \u0001INL0\u0001, Section DEBUG-201").
+    let s = segment.replace(/`[^`\n]+`/g, (m) => { inline.push(m); return `INL${inline.length - 1}`; });
     const math: string[] = [];
-    s = s.replace(/\$[^$\n]+\$/g, (m) => { math.push(m); return ` MATH${math.length - 1} `; });
+    s = s.replace(/\$[^$\n]+\$/g, (m) => { math.push(m); return `MATH${math.length - 1}`; });
     s = s
         .replace(/\s*[—–]\s*/g, ", ")
         .replace(/(?<=[A-Za-z]) - (?=[A-Za-z])/g, ", ");
-    math.forEach((m, i) => { s = s.replace(` MATH${i} `, m); });
-    inline.forEach((c, i) => { s = s.replace(` INL${i} `, c); });
+    math.forEach((m, i) => { s = s.replace(`MATH${i}`, () => m); });
+    inline.forEach((c, i) => { s = s.replace(`INL${i}`, () => c); });
     return s;
 }
 
@@ -210,7 +218,7 @@ function stripMarkdown(text: string): string {
     // Extract code blocks to protect them
     result = result.replace(/```[\s\S]*?```/g, (match) => {
         codeBlocks.push(match);
-        return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+        return `CODEBLOCK${codeBlocks.length - 1}`;
     });
 
     // Remove headers (# ## ### etc.)
@@ -256,7 +264,7 @@ function stripMarkdown(text: string): string {
     // Restore code blocks
     // Add newlines around them for better formatting
     codeBlocks.forEach((block, index) => {
-        result = result.replace(`__CODE_BLOCK_${index}__`, `\n${block}\n`);
+        result = result.replace(`CODEBLOCK${index}`, () => `\n${block}\n`);
     });
 
     return result.trim();

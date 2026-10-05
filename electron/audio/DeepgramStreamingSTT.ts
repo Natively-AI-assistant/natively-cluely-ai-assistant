@@ -9,11 +9,19 @@
 
 import { EventEmitter } from 'events';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 8000;
+// Real-time silence streamed after the local VAD's speech end. endpointing
+// (300 ms, below) already fires inside the native hangover (>= 500 ms), but
+// UtteranceEnd needs a 1000 ms gap after the last word — at the keepalive
+// cadence (20 ms per 100 ms) that gap took ~2.6 s of wall time to accumulate.
+// hangover (>= 500) + 700 = 1200 ms of real silence covers it with margin.
+// See realtimeSilenceTail.ts.
+export const DEEPGRAM_SILENCE_TAIL_MS = 700;
 
 export class DeepgramStreamingSTT extends EventEmitter {
     private apiKey: string;
@@ -44,10 +52,21 @@ export class DeepgramStreamingSTT extends EventEmitter {
     // remote speakers can be distinguished. Default OFF — must never destabilize the
     // realtime path for users who don't enable it.
     private diarize = false;
+    private readonly silenceTail = new RealtimeSilenceTail({
+        tailMs: DEEPGRAM_SILENCE_TAIL_MS,
+        format: () => ({ sampleRate: this.sampleRate, channels: this.numChannels }),
+        sink: (pcm) => this.sendAudio(pcm),
+    });
 
     constructor(apiKey: string) {
         super();
         this.apiKey = apiKey;
+    }
+
+    /** Local VAD: the speaker stopped. Keep the endpointer's clock real-time. */
+    public notifySpeechEnded(): void {
+        if (!this.isActive) return;
+        this.silenceTail.start();
     }
 
     /** Enable/disable provider diarization. Restarts the stream if active (it's a connect param). */
@@ -106,6 +125,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
     public stop(): void {
         this.shouldReconnect = false;
+        this.silenceTail.cancel();
         this.clearTimers();
 
         if (this.live) {
@@ -135,6 +155,12 @@ export class DeepgramStreamingSTT extends EventEmitter {
     }
 
     public write(chunk: Buffer): void {
+        if (!this.isActive) return;
+        this.silenceTail.observe(chunk);
+        this.sendAudio(chunk);
+    }
+
+    private sendAudio(chunk: Buffer): void {
         if (!this.isActive) return;
 
         if (!this.isOpen) {
@@ -169,6 +195,14 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 model: 'nova-3',
                 language: this.languageCode,
                 smart_format: true,
+                // smart_format HOLDS a streaming final when the utterance ends
+                // in what looks like an incomplete entity (a number, a date),
+                // "until the speaker continues to non-entity speech, OR ...
+                // after 3 seconds of silence" (developers.deepgram.com/docs/
+                // smart-format) — and that silence is audio time, which the
+                // native keepalive stretches ~5×. no_delay releases the final
+                // immediately; formatting still applies where it is ready.
+                no_delay: true,
                 interim_results: true,
                 encoding: 'linear16',
                 sample_rate: this.sampleRate,
@@ -180,19 +214,44 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 ...(this.diarize ? { diarize: true } : {}),
             });
 
+            // F-203: identity guard. restartStream() does a synchronous
+            // stop()+start() without detaching listeners, so the OLD
+            // connection's events would otherwise run against the NEW one:
+            // flipping isOpen/isConnecting for the wrong connection,
+            // registering a SECOND Transcript listener on the live connection
+            // (every final emitted twice into handleTranscript and the RAG
+            // feed), and clearing the live keepalive timers so Deepgram
+            // idle-closes it. Mirrors NativelyProSTT's documented pattern.
+            const live = this.live;
+
             this.live.on(LiveTranscriptionEvents.Open, () => {
+                if (live !== this.live) return; // F-203 stale-connection guard
                 this.isConnecting = false;
                 this.isOpen = true;
                 console.log('[DeepgramStreaming] Connected');
 
-                // Register Transcript inside Open per SDK README pattern
-                this.live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
+                // Register Transcript inside Open per SDK README pattern.
+                // Bound to the captured `live` so a stale Open can never add a
+                // duplicate listener to the current connection.
+                live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
                     try {
                         const alt = data.channel?.alternatives?.[0];
                         const transcript = alt?.transcript;
                         const isFinal = data.is_final ?? false;
                         console.log(`[DeepgramStreaming] Transcript event`, { final: isFinal, length: transcript?.length ?? 0 });
-                        if (!transcript) return;
+                        // Auto Answer V3 endpoint normalization (additive):
+                        // live-verified (2026-08-24) that Deepgram delivers
+                        // speech_final=true on trailing EMPTY-transcript results
+                        // after endpointing silence — the endpoint must be
+                        // surfaced BEFORE the empty-transcript return below.
+                        // For a text-carrying final, the transcript is emitted
+                        // first (further down) and this fires after it, keeping
+                        // endpoint-after-final ordering for consumers.
+                        const speechFinal = isFinal && data.speech_final === true;
+                        if (!transcript) {
+                            if (speechFinal) this.emit('endpoint', { type: 'speech_final' });
+                            return;
+                        }
                         // Opt-in diarization: derive the dominant speaker index across the words
                         // in this result and surface it as a canonical id (speaker_<n+1>). Only
                         // emitted when diarize is on AND a numeric speaker index is present, so
@@ -208,6 +267,11 @@ export class DeepgramStreamingSTT extends EventEmitter {
                             confidence: alt?.confidence ?? 1.0,
                             ...(speakerId ? { speakerId } : {}),
                         });
+                        // Auto Answer V3 endpoint normalization (additive): Deepgram
+                        // distinguishes is_final (segment) from speech_final (utterance).
+                        if (speechFinal) {
+                            this.emit('endpoint', { type: 'speech_final' });
+                        }
                     } catch (err) {
                         console.error('[DeepgramStreaming] Parse error:', err);
                     }
@@ -240,12 +304,21 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 }, 5000);
             });
 
+            // UtteranceEnd (utterance_end_ms above) — the fallback endpoint when
+            // no speech_final fired for the utterance. Additive; nothing else
+            // consumes it.
+            this.live.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+                try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* listeners never break the socket */ }
+            });
+
             this.live.on(LiveTranscriptionEvents.Error, (err: any) => {
+                if (live !== this.live) return; // F-203 stale-connection guard
                 console.error('[DeepgramStreaming] Error:', err);
                 this.emit('error', err instanceof Error ? err : new Error(String(err)));
             });
 
             this.live.on(LiveTranscriptionEvents.Close, (event: any) => {
+                if (live !== this.live) return; // F-203 stale-connection guard
                 const code = event?.code ?? 'unknown';
                 const reason = event?.reason || '(empty)';
                 console.log(`[DeepgramStreaming] Closed (code=${code}, reason=${reason})`);

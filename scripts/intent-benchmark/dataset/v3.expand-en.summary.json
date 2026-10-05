@@ -1,0 +1,622 @@
+{
+  "written": 2006,
+  "rejectedCells": [
+    {
+      "modeKey": "general",
+      "category": "fragment",
+      "withFiles": true,
+      "problems": [
+        "only 45.8% of inputs are <=5 words (min 55%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "general",
+      "category": "ambiguous",
+      "withFiles": true,
+      "problems": [
+        "repairs/restarts in only 4.2% of inputs (min 5%)"
+      ]
+    },
+    {
+      "modeKey": "general",
+      "category": "trap",
+      "withFiles": true,
+      "problems": [
+        "33.3% duplicate inputs (max 2%)",
+        "fillers in only 12.5% of inputs (min 15%) — reads as written prose"
+      ]
+    },
+    {
+      "modeKey": "technical-interview",
+      "category": "normal_request",
+      "withFiles": false,
+      "problems": [
+        "punctuation in 4.2% of inputs (max 2%) — the local STT models emit none"
+      ]
+    },
+    {
+      "modeKey": "technical-interview",
+      "category": "fragment",
+      "withFiles": false,
+      "problems": [
+        "only 40.0% of inputs are <=5 words (min 55%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "technical-interview",
+      "category": "ambiguous",
+      "withFiles": true,
+      "problems": [
+        "only 4.2% of inputs are <=5 words (min 25%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "technical-interview",
+      "category": "multi_intent",
+      "withFiles": true,
+      "problems": [
+        "fillers in only 18.2% of inputs (min 20%) — reads as written prose",
+        "repairs/restarts in only 4.5% of inputs (min 8%)"
+      ]
+    },
+    {
+      "modeKey": "looking-for-work",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "4.2% duplicate inputs (max 2%)"
+      ]
+    },
+    {
+      "modeKey": "looking-for-work",
+      "category": "fragment",
+      "withFiles": false,
+      "problems": [
+        "only 20.0% of inputs are <=5 words (min 55%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "sales",
+      "category": "fragment",
+      "withFiles": true,
+      "problems": [
+        "only 54.2% of inputs are <=5 words (min 55%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "recruiting",
+      "category": "fragment",
+      "withFiles": false,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 3%)"
+      ]
+    },
+    {
+      "modeKey": "recruiting",
+      "category": "ambiguous",
+      "withFiles": true,
+      "problems": [
+        "punctuation in 4.2% of inputs (max 2%) — the local STT models emit none",
+        "only 16.7% of inputs are <=5 words (min 25%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "team-meet",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "uppercase in 6.3% of inputs (max 2%)"
+      ]
+    },
+    {
+      "modeKey": "team-meet",
+      "category": "fragment",
+      "withFiles": false,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 3%)"
+      ]
+    },
+    {
+      "modeKey": "team-meet",
+      "category": "ambiguous",
+      "withFiles": true,
+      "problems": [
+        "fillers in only 12.5% of inputs (min 15%) — reads as written prose",
+        "only 16.7% of inputs are <=5 words (min 25%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "team-meet",
+      "category": "trap",
+      "withFiles": true,
+      "problems": [
+        "41.7% duplicate inputs (max 2%)"
+      ]
+    },
+    {
+      "modeKey": "lecture",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "4.2% duplicate inputs (max 2%)"
+      ]
+    },
+    {
+      "modeKey": "lecture",
+      "category": "fragment",
+      "withFiles": false,
+      "problems": [
+        "only 50.0% of inputs are <=5 words (min 55%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "lecture",
+      "category": "ambiguous",
+      "withFiles": true,
+      "problems": [
+        "uppercase in 4.2% of inputs (max 2%)",
+        "only 8.3% of inputs are <=5 words (min 25%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "seminar",
+      "category": "fragment",
+      "withFiles": true,
+      "problems": [
+        "punctuation in 4.2% of inputs (max 2%) — the local STT models emit none"
+      ]
+    },
+    {
+      "modeKey": "call-center",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "4.2% duplicate inputs (max 2%)"
+      ]
+    },
+    {
+      "modeKey": "call-center",
+      "category": "fragment",
+      "withFiles": true,
+      "problems": [
+        "only 37.5% of inputs are <=5 words (min 55%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "custom-therapy-supervision",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "only 29.2% of inputs are <=5 words (min 30%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "custom-therapy-supervision",
+      "category": "fragment",
+      "withFiles": false,
+      "problems": [
+        "punctuation in 20.0% of inputs (max 2%) — the local STT models emit none",
+        "only 0.0% of inputs are <=5 words (min 55%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "custom-investor-update",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "punctuation in 4.2% of inputs (max 2%) — the local STT models emit none"
+      ]
+    },
+    {
+      "modeKey": "custom-investor-update",
+      "category": "normal_request",
+      "withFiles": false,
+      "problems": [
+        "punctuation in 12.5% of inputs (max 2%) — the local STT models emit none"
+      ]
+    },
+    {
+      "modeKey": "custom-investor-update",
+      "category": "ambiguous",
+      "withFiles": true,
+      "problems": [
+        "repairs/restarts in only 4.2% of inputs (min 5%)"
+      ]
+    },
+    {
+      "modeKey": "custom-code-review",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "4.2% duplicate inputs (max 2%)"
+      ]
+    },
+    {
+      "modeKey": "custom-code-review",
+      "category": "normal_request",
+      "withFiles": true,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 8%)"
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "id": "ti-0365",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "ti-0374",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "lfw-0263",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "lfw-0272",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "sal-0368",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "rec-0428",
+      "problems": [
+        "needs_response=no requires voice=silent"
+      ]
+    },
+    {
+      "id": "rec-0442",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "rec-0480",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "lec-0315",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "lec-0318",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "lec-0334",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "lec-0336",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "sem-0232",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "sem-0244",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "sem-0280",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "sem-0284",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "sem-0298",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "sem-0433",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "sem-0455",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cc-0301",
+      "problems": [
+        "needs_response=no requires voice=silent"
+      ]
+    },
+    {
+      "id": "cus-ther-0076",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-ther-0084",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-ther-0093",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-inv-0144",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-inv-0148",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-inv-0151",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-inv-0155",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-cr-0332",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-cr-0338",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-cr-0342",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-cr-0346",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    },
+    {
+      "id": "cus-cr-0352",
+      "problems": [
+        "needs_response=no requires grounding=none"
+      ]
+    }
+  ],
+  "perMode": {
+    "general": 164,
+    "technical-interview": 147,
+    "looking-for-work": 177,
+    "sales": 210,
+    "recruiting": 204,
+    "team-meet": 172,
+    "lecture": 136,
+    "seminar": 205,
+    "call-center": 144,
+    "custom-therapy-supervision": 158,
+    "custom-investor-update": 114,
+    "custom-code-review": 175
+  },
+  "perCategory": {
+    "no_response": 654,
+    "normal_request": 582,
+    "multi_intent": 218,
+    "fragment": 157,
+    "trap": 261,
+    "ambiguous": 134
+  },
+  "cells": 150,
+  "realismByMode": {
+    "general": {
+      "n": 164,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3475609756097561,
+      "repairRate": 0.16463414634146342,
+      "shortRate": 0.3170731707317073,
+      "duplicateRate": 0,
+      "medianLength": 8,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "technical-interview": {
+      "n": 147,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3333333333333333,
+      "repairRate": 0.14285714285714285,
+      "shortRate": 0.3401360544217687,
+      "duplicateRate": 0,
+      "medianLength": 7,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "looking-for-work": {
+      "n": 177,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.4011299435028249,
+      "repairRate": 0.192090395480226,
+      "shortRate": 0.1977401129943503,
+      "duplicateRate": 0,
+      "medianLength": 9,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "sales": {
+      "n": 210,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.4095238095238095,
+      "repairRate": 0.19047619047619047,
+      "shortRate": 0.2714285714285714,
+      "duplicateRate": 0,
+      "medianLength": 8,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "recruiting": {
+      "n": 204,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3284313725490196,
+      "repairRate": 0.19607843137254902,
+      "shortRate": 0.24019607843137256,
+      "duplicateRate": 0,
+      "medianLength": 8,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "team-meet": {
+      "n": 172,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.36046511627906974,
+      "repairRate": 0.08139534883720931,
+      "shortRate": 0.3488372093023256,
+      "duplicateRate": 0,
+      "medianLength": 7,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "lecture": {
+      "n": 136,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3382352941176471,
+      "repairRate": 0.20588235294117646,
+      "shortRate": 0.15441176470588236,
+      "duplicateRate": 0,
+      "medianLength": 9,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "seminar": {
+      "n": 205,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.35121951219512193,
+      "repairRate": 0.16585365853658537,
+      "shortRate": 0.32195121951219513,
+      "duplicateRate": 0,
+      "medianLength": 7,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "call-center": {
+      "n": 144,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3263888888888889,
+      "repairRate": 0.2361111111111111,
+      "shortRate": 0.125,
+      "duplicateRate": 0,
+      "medianLength": 9,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": [
+        "only 12.5% of inputs are <=5 words (min 15%) — real turns are often very short"
+      ]
+    },
+    "custom-therapy-supervision": {
+      "n": 158,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.4050632911392405,
+      "repairRate": 0.25949367088607594,
+      "shortRate": 0.18354430379746836,
+      "duplicateRate": 0,
+      "medianLength": 10,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "custom-investor-update": {
+      "n": 114,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.35964912280701755,
+      "repairRate": 0.15789473684210525,
+      "shortRate": 0.23684210526315788,
+      "duplicateRate": 0,
+      "medianLength": 9,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "custom-code-review": {
+      "n": 175,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.33714285714285713,
+      "repairRate": 0.15428571428571428,
+      "shortRate": 0.36,
+      "duplicateRate": 0,
+      "medianLength": 7,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    }
+  },
+  "deduped": 71,
+  "parroted": 241
+}

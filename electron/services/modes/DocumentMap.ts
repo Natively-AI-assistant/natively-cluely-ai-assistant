@@ -1,6 +1,10 @@
 // electron/services/modes/DocumentMap.ts
 //
 // Document Map for document-grounded custom modes (round-6 rebuild, 2026-06-29).
+
+import { normalizeLineEndings } from './semanticChunker';
+import { normalizeDocumentGroundedRetrievalQuery } from '../../llm/documentGroundedPrompt';
+import { includesPlannerTerm } from './retrievalTextMatch';
 //
 // WHY THIS EXISTS
 // ---------------
@@ -232,6 +236,8 @@ function detectTocRegion(lines: string[]): { start: number; end: number; count: 
  * and degrades gracefully on plain text without markers.
  */
 export function buildDocumentMap(content: string): DocumentMap {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const lines = content.split('\n');
     const toc = detectTocRegion(lines);
     const tocStart = toc ? toc.start : -1;
@@ -350,6 +356,8 @@ export function buildDocumentMap(content: string): DocumentMap {
  * consistent delimited table.
  */
 export function tabularChunks(content: string, rowsPerChunk?: number): string[] | null {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length < 3) return null; // need a header + at least a couple rows
     // Pick the delimiter from the header: comma or tab, whichever splits into >=2
@@ -363,6 +371,28 @@ export function tabularChunks(content: string, rowsPerChunk?: number): string[] 
     const sample = lines.slice(1, Math.min(lines.length, 60));
     const consistent = sample.filter((l) => Math.abs(l.split(delim).length - cols) <= 1).length;
     if (consistent < sample.length * 0.8) return null;
+
+    // Field-shape guard (2026-07-23): column-count consistency alone accepts
+    // comma-rich PROSE — an academic paper's pdf-parse text has a comma on most
+    // lines with a stable ±1 field count, so a whole prose document (e.g.
+    // "Attention Is All You Need") was mis-detected as a 2-column CSV and chunked
+    // as `[Table rows N-M]` with ZERO `[Section N.N | …]` tags, defeating the
+    // hybrid retriever's section-target restore and starving §5.2-type answers.
+    // A genuine data cell is short and mostly a single token (a name, number, or
+    // short label); a prose clause between commas is a multi-word phrase. Reject
+    // when fields are predominantly multi-word — cleanly separates real CSV/TSV
+    // (≈1.0 words/field, 0% multi-word) from prose (≈5 words/field, ~50%+).
+    let fieldCount = 0;
+    let multiWordFields = 0;
+    for (const line of sample) {
+        for (const field of line.split(delim)) {
+            fieldCount++;
+            if (field.trim().split(/\s+/).filter(Boolean).length >= 3) multiWordFields++;
+        }
+    }
+    // >=30% of fields being 3+ words is far above any real table (a lone free-text
+    // "description"/"notes" column tops out well under this) yet far below prose.
+    if (fieldCount > 0 && multiWordFields / fieldCount >= 0.3) return null;
 
     const headerLine = header.trim();
     const rows = lines.slice(1);
@@ -399,12 +429,70 @@ export function sentenceAwareWindows(text: string, targetWords: number, overlapW
     if (!clean) return [];
     const wordCount = (s: string) => (s.match(/\S+/g) || []).length;
     if (wordCount(clean) <= targetWords) return [clean];
+    // Hard word-cap fallback for text the sentence splitter cannot DIVIDE —
+    // deliberately NOT for a sentence that is merely long.
+    //
+    // Two different situations reach the one-piece case, and they want opposite
+    // treatment:
+    //
+    //   (a) A genuine, over-long sentence. Splitting it is actively harmful: the
+    //       RFC 8259 case this file's test is built on split "Implementations
+    //       MUST NOT add a byte order mark" so that a chunk carried "byte order
+    //       mark" WITHOUT "MUST NOT" — a retrieved fragment that states the
+    //       opposite of the source. Semantic integrity beats the word cap here,
+    //       and `SentenceAwareChunking` pins that.
+    //
+    //   (b) A body with no sentence structure at all. This used to hit the same
+    //       `return [clean]` and hand back the WHOLE text as one window, with
+    //       `targetWords` silently ignored. That is not an edge case here:
+    //       realtime STT emits unpunctuated transcripts (Soniox sends none at
+    //       all), as do OCR dumps, table/CSV extractions and minified content. A
+    //       5600-word document became ONE chunk — retrieval granularity gone, and
+    //       the embedder truncates at its token limit, so most of the document
+    //       was never searchable.
+    //
+    // A length ceiling separates them. Real sentences, even legal or normative
+    // ones, do not run to hundreds of words; text claiming to be a single
+    // sentence several times the window size is unpunctuated prose, not a clause
+    // worth protecting. Below the ceiling we keep it whole and accept one
+    // oversized chunk; above it we window by words.
+    //
+    // The discriminator is STRUCTURE first, length only as a backstop.
+    //
+    // A piece is windowed when it is over-long AND either
+    //   (a) it contains no sentence-terminal punctuation at all — then it is not
+    //       a sentence in any meaningful sense, it is an unpunctuated transcript
+    //       or an OCR/table dump, and there is no clause to protect; or
+    //   (b) it is longer than a generous absolute ceiling — the backstop for a
+    //       structureless run that happens to carry one trailing period, which
+    //       would otherwise slip past (a) and reproduce the original bug.
+    //
+    // Length alone was NOT enough, and picking `3x` first was a mistake worth
+    // recording: a `3 * 140 = 420` ceiling exactly swallowed a 420-word
+    // three-paragraph fixture (ModeLocalRerank's), collapsing three chunks into
+    // one. Any single number is arbitrary at its boundary; whether the text has
+    // sentences at all is not.
+    const HAS_SENTENCE_PUNCTUATION = /[.!?]/;
+    const ABSOLUTE_CEILING_WORDS = targetWords * 3;
+    const wordWindows = (s: string): string[] => {
+        const w = s.match(/\S+/g) || [];
+        if (w.length <= targetWords) return [s];
+        const structureless = !HAS_SENTENCE_PUNCTUATION.test(s);
+        if (!structureless && w.length <= ABSOLUTE_CEILING_WORDS) return [s];
+        const step = Math.max(1, targetWords - overlapWords);
+        const out: string[] = [];
+        for (let i = 0; i < w.length; i += step) {
+            out.push(w.slice(i, i + targetWords).join(' '));
+            if (i + targetWords >= w.length) break;
+        }
+        return out;
+    };
     const sentences: string[] = [];
     for (const part of clean.split(/(?<=[.!?][")\]]?)\s+(?=[A-Z0-9"[(])/)) {
         const p = part.trim();
-        if (p) sentences.push(p);
+        if (p) sentences.push(...wordWindows(p));
     }
-    if (sentences.length <= 1) return [clean];
+    if (sentences.length <= 1) return sentences.length === 1 ? [sentences[0]] : [clean];
     const windows: string[] = [];
     let cur: string[] = [];
     let curWords = 0;
@@ -466,6 +554,26 @@ export function selectTableOfContentsEntries(query: string, map: DocumentMap): s
     return scored.filter((item) => item.hits === best.hits && item.score >= best.score * 0.8).map((item) => item.entry);
 }
 
+/**
+ * The titles of a numbered section's ANCESTORS, outermost first.
+ *
+ * "4.2.1" -> ["4 Method", "4.2 Training"]. Returns [] for a top-level or
+ * unnumbered section, which correctly yields no `[context: …]` prefix: there is
+ * no ancestry to disambiguate against.
+ */
+function ancestorTitles(map: DocumentMap, num: string): string[] {
+    if (!num || !num.includes('.')) return [];
+    const parts = num.split('.');
+    const byNum = new Map(map.sections.map((s) => [s.num, s]));
+    const out: string[] = [];
+    for (let i = 1; i < parts.length; i++) {
+        const prefix = parts.slice(0, i).join('.');
+        const ancestor = byNum.get(prefix);
+        if (ancestor?.heading) out.push(`${prefix} ${ancestor.heading}`);
+    }
+    return out;
+}
+
 export function sectionAwareChunksFromMap(
     map: DocumentMap,
     chunkWords: number,
@@ -488,9 +596,26 @@ export function sectionAwareChunksFromMap(
         const tag = section.num
             ? `[Section ${section.num} | p${section.pageStart}${section.pageEnd !== section.pageStart ? '-' + section.pageEnd : ''}]`
             : `[p${section.pageStart}]`;
-        const headingLine = section.heading && section.heading !== 'Preamble'
-            ? `${tag} ${section.heading}`
-            : tag;
+        // ANCESTOR PATH (T9, 2026-08-28), appended AFTER the tag and never in
+        // place of it: five call sites parse `[Section N.N | pX]` anchored at
+        // position 0 (ModeHybridRetriever.ts:1118, :1216, :1802, :2020 and
+        // documentGroundedPrompt.ts:653, :699), so substituting the format would
+        // break section-targeted retrieval, the section-restore pass and the
+        // prompt's own SECTION-TAGGED RELEVANCE rule at once.
+        //
+        // The path is derived from the section NUMBER, which is what carries
+        // hierarchy in a numbered document: 4.2.1's ancestors are 4 and 4.2, and
+        // they are already in this map. That gives "4 Method > 4.2 Training" in
+        // front of a chunk that would otherwise say only "4.2.1 Optimizer" —
+        // the same identity fix as the flat path, expressed in the vocabulary
+        // this document shape actually uses.
+        const ancestors = ancestorTitles(map, section.num);
+        const ctx = ancestors.length ? `[context: ${ancestors.join(' > ')}]` : '';
+        const headingLine = [
+            tag,
+            ctx,
+            section.heading && section.heading !== 'Preamble' ? section.heading : '',
+        ].filter(Boolean).join(' ');
         const words = body.split(/\s+/).filter(Boolean);
         if (words.length <= chunkWords) {
             chunks.push(`${headingLine}\n${body}`);
@@ -512,7 +637,7 @@ export function sectionAwareChunksFromMap(
  * confidently; the caller then falls back to global retrieval.
  */
 export function resolveTargetSections(query: string, map: DocumentMap): string[] {
-    const q = query.toLowerCase();
+    const q = normalizeDocumentGroundedRetrievalQuery(query).toLowerCase();
     const qWords = new Set(
         q.replace(/[^a-z0-9#-]+/g, ' ').split(/\s+/).filter(w => w.length > 2),
     );
@@ -605,8 +730,29 @@ export function resolveTargetSections(query: string, map: DocumentMap): string[]
     const strongTitleTargets = scored
         .filter(s => s.score >= 1.0 && (s.wordHits >= 2 || s.distinctiveHit))
         .slice(0, 4).map(s => s.num);
-    if (strongTitleTargets.length > 0) return strongTitleTargets;
-    return resolveByContent(query, map, qOrdinals);
+
+    const contentTargets = resolveByContent(query, map, qOrdinals);
+    if (strongTitleTargets.length === 0) return contentTargets;
+
+    // An entity title can be a strong locator while a narrower section body
+    // contains the requested fact. Retain exact title routing first, then append
+    // content candidates that match a question term NOT already in that title.
+    // This keeps title-only entity queries precise while letting verb/noun drift
+    // ("weigh" → "weighs") surface a specifications subsection.
+    const titleTerms = new Set(
+        strongTitleTargets.flatMap((target) => {
+            const section = map.sections.find((s) => s.num === target);
+            return section ? tokenizeTitle(section.heading) : [];
+        }),
+    );
+    const extraContentTargets = map.sections
+        .filter((section) => section.num && section.body)
+        .filter((section) => {
+            const body = section.body.toLowerCase();
+            return [...qWords].some((word) => !titleTerms.has(word) && includesPlannerTerm(body, word));
+        })
+        .map((section) => section.num);
+    return [...new Set([...strongTitleTargets, ...extraContentTargets])].slice(0, 4);
 }
 
 /**
@@ -624,7 +770,7 @@ export function resolveTargetSections(query: string, map: DocumentMap): string[]
  * but NOT in §4.2.2 or §4.2.3, providing a decisive discriminating signal.
  */
 function resolveByContent(query: string, map: DocumentMap, qOrdinals: Set<string> = new Set()): string[] {
-    const q = query.toLowerCase();
+    const q = normalizeDocumentGroundedRetrievalQuery(query).toLowerCase();
     const qWords = new Set(q.replace(/[^a-z0-9#-]+/g, ' ').split(/\s+/).filter(w => w.length > 2));
     const STOPWORDS = new Set([
         'what', 'which', 'where', 'when', 'how', 'why', 'who', 'whom',
@@ -654,7 +800,7 @@ function resolveByContent(query: string, map: DocumentMap, qOrdinals: Set<string
     const sf = new Map<string, number>();
     for (const w of contentWords) {
         let n = 0;
-        for (const lb of lowerBodies) if (lb.includes(w)) n++;
+        for (const lb of lowerBodies) if (includesPlannerTerm(lb, w)) n++;
         sf.set(w, n);
     }
     const total = sectionsWithBody.length;
@@ -662,14 +808,18 @@ function resolveByContent(query: string, map: DocumentMap, qOrdinals: Set<string
     const bodyScored: Array<{ num: string; score: number }> = [];
     for (let i = 0; i < sectionsWithBody.length; i++) {
         const bodyLower = lowerBodies[i];
-        if (!bodyLower.includes(rarest)) continue;
+        // An entity word is often the rarest term, but a field/value subsection
+        // may deliberately omit that entity while carrying the requested fact
+        // (e.g. a table row headed "Weight"). Score every section on the terms
+        // it actually contains; the entity-bearing parent remains a strong
+        // advisory target, while the fact-bearing child can now join it.
         let score = 0;
         for (const w of contentWords) {
-            if (!bodyLower.includes(w)) continue;
+            if (!includesPlannerTerm(bodyLower, w)) continue;
             const freq = sf.get(w) || total;
             score += Math.log((total + 1) / (freq + 1));
         }
-        // Title-word tiebreak: a section whose HEADING contains a content word is
+            // Title-word tiebreak: a section whose HEADING contains a content word is
         // the authoritative source for that concept — a strong bonus so that
         // §3.2.3 "Preprocessing and RLDS format" decisively outranks §3.3 for
         // "what format was the dataset stored in?", and §3.2.1 "Robotic Task
@@ -714,5 +864,10 @@ function resolveByContent(query: string, map: DocumentMap, qOrdinals: Set<string
     bodyScored.sort((a, b) => b.score - a.score);
     if (bodyScored.length === 0) return [];
     const top = bodyScored[0].score;
-    return bodyScored.filter(s => s.score >= top * 0.8).slice(0, 3).map(s => s.num);
+    // Near-ties are advisory routing alternatives, not confidence failures. Use
+    // an absolute slack as well as the existing proportional band so a compact
+    // value-bearing subsection (one decisive field term) stays alongside an
+    // entity-bearing parent when both plausibly answer the question.
+    const cutoff = Math.max(top * 0.8, top - 1.5);
+    return bodyScored.filter(s => s.score >= cutoff).slice(0, 3).map(s => s.num);
 }

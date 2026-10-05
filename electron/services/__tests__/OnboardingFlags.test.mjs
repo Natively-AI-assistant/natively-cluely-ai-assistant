@@ -23,7 +23,7 @@ test('onboarding:get-flags IPC handler exists and maps to SettingsManager', () =
   assert.match(handlerBlock, /sm\.get\('permsShown'\)/);
 });
 
-test('onboarding:set-flag IPC handler exists and validates keys', () => {
+test('onboarding:set-flag validates keys and reports refused persistence', () => {
   const source = read('electron/ipcHandlers.ts');
   const handlerBlock = sliceSafeHandleBlock(source, 'onboarding:set-flag');
 
@@ -32,5 +32,8 @@ test('onboarding:set-flag IPC handler exists and validates keys', () => {
   assert.match(handlerBlock, /seenProfileOnboarding/);
   assert.match(handlerBlock, /seenModesOnboarding/);
   assert.match(handlerBlock, /permsShown/);
-  assert.match(handlerBlock, /SettingsManager\.getInstance\(\)\.set\(/);
+  assert.match(handlerBlock, /if \(!SettingsManager\.getInstance\(\)\.set\(/,
+    'the SettingsManager result must control the response');
+  assert.match(handlerBlock, /settings_store_degraded/,
+    'a refused write must be reported instead of returning success');
 });

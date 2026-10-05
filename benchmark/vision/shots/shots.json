@@ -1,0 +1,86 @@
+{
+ "captured_at": "2026-09-17T18:03:42.253Z",
+ "viewport": "1440x900 @1x",
+ "bars": [
+  [
+   "Mon",
+   62
+  ],
+  [
+   "Tue",
+   118
+  ],
+  [
+   "Wed",
+   47
+  ],
+  [
+   "Thu",
+   155
+  ],
+  [
+   "Fri",
+   91
+  ],
+  [
+   "Sat",
+   133
+  ],
+  [
+   "Sun",
+   74
+  ]
+ ],
+ "captured": [
+  {
+   "id": "aoc_part2",
+   "url": "https://adventofcode.com/2023/day/1",
+   "kind": "real",
+   "visible_chars": 1660
+  },
+  {
+   "id": "stock_financials",
+   "url": "https://stockanalysis.com/stocks/aapl/financials/",
+   "kind": "real",
+   "visible_chars": 1345
+  },
+  {
+   "id": "github_code_small",
+   "url": "https://github.com/expressjs/express/blob/master/lib/utils.js",
+   "kind": "real",
+   "visible_chars": 8899
+  },
+  {
+   "id": "wikipedia_table",
+   "url": "https://en.wikipedia.org/wiki/List_of_countries_by_GDP_(nominal)",
+   "kind": "real",
+   "visible_chars": 1241
+  },
+  {
+   "id": "github_repo",
+   "url": "https://github.com/expressjs/express",
+   "kind": "real",
+   "visible_chars": 3528
+  },
+  {
+   "id": "hn_frontpage",
+   "url": "https://news.ycombinator.com",
+   "kind": "real",
+   "visible_chars": 3186
+  },
+  {
+   "id": "grafana_home",
+   "url": "https://play.grafana.org",
+   "kind": "real",
+   "visible_chars": 1824
+  },
+  {
+   "id": "chart_nolabels",
+   "kind": "synthetic"
+  },
+  {
+   "id": "code_bug",
+   "kind": "synthetic"
+  }
+ ]
+}

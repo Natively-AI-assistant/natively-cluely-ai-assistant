@@ -3,13 +3,54 @@
 // Decision-engine tests for the stage catalog. Validates each stage's
 // shouldShowToaster behavior against fixture contexts.
 //
-// Run: node --test src/lib/onboarding/__tests__/stageCatalog.test.mjs
+// Run: node --experimental-strip-types --test src/lib/onboarding/__tests__/stageCatalog.test.mjs
+// (--experimental-strip-types is required: this file imports stageCatalog.ts
+// directly, see the drain-loop invariant below.)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { shouldShowToaster } from '../orchestrator.mjs';
-import { STAGES } from '../stageCatalog.mjs';
+import {
+  STAGES,
+  QUIET_WINDOW_STAGE,
+  REVIEW_PROMPT_MIN_SESSIONS,
+  REVIEW_PROMPT_MIN_USAGE_MS,
+} from '../stageCatalog.mjs';
+import { STAGES as STAGES_TS, QUIET_WINDOW_STAGE as QUIET_WINDOW_STAGE_TS } from '../stageCatalog.ts';
+
+// ─── Drain-loop safety invariant ────────────────────────────────────
+// A gate-only stage is auto-completed inside evaluateAndDispatch()'s
+// `do { … } while (progressMade && !activeToasterId)` loop. completeToaster()
+// records completion, but shouldShowToaster() only suppresses a completed stage
+// when `onceEver` is set. So a gate-only stage WITHOUT onceEver stays eligible
+// after completing, keeps setting progressMade=true, and the loop spins
+// synchronously forever — pegging the renderer main thread and OOM-crashing it
+// (the 2026-07-19 quiet_window regression: RSS → ~9 GB, exitCode-5 crash).
+// This invariant makes that misconfiguration a failing test, not a field crash.
+//
+// Checked against BOTH catalogs: stageCatalog.mjs is a hand-maintained mirror
+// used only so this suite can run under `node --test` without a build step —
+// stageCatalog.ts is what the app actually ships. A test that only checked
+// the .mjs mirror could stay green while the real .ts catalog regresses.
+function assertEveryGateOnlyStageIsOnceEver(stages, label) {
+  for (const s of stages) {
+    if (s.isGateOnly) {
+      assert.equal(
+        s.onceEver, true,
+        `[${label}] gate-only stage "${s.id}" must set onceEver:true or evaluateAndDispatch spins forever`,
+      );
+    }
+  }
+}
+
+test('INVARIANT: every gate-only stage is onceEver — stageCatalog.mjs (test mirror)', () => {
+  assertEveryGateOnlyStageIsOnceEver([...STAGES, QUIET_WINDOW_STAGE], 'stageCatalog.mjs');
+});
+
+test('INVARIANT: every gate-only stage is onceEver — stageCatalog.ts (production)', () => {
+  assertEveryGateOnlyStageIsOnceEver([...STAGES_TS, QUIET_WINDOW_STAGE_TS], 'stageCatalog.ts');
+});
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 
@@ -278,24 +319,51 @@ test('ads: skipped when isPremium', () => {
 
 // ─── Review prompt ────────────────────────────────────────────────
 
-test('review_prompt: requires startupCount >= 6 AND totalUsageMs >= 45min', () => {
+// Engagement is "sessions OR usage", matching the review ledger
+// (electron/services/ReviewPromptLogic.ts). It previously read
+// requiresStartupCount: 6 + requiresTotalUsageMs: 45min in `triggers`, but the
+// orchestrator ANDs triggers — so the catalog demanded BOTH, a strictly harder
+// gate than the ledger's OR, and the ledger's own thresholds never bound.
+
+test('review_prompt: enough sessions alone qualifies, even with little usage', () => {
   const ctx = makeCtx({
     completed: { ads: 1 },
-    startupCount: 6,
-    totalUsageMs: 44 * 60 * 1000,
+    startupCount: REVIEW_PROMPT_MIN_SESSIONS,
+    totalUsageMs: 60 * 1000, // one minute — nowhere near the usage gate
+    homepageMountedFor: 11_000,
+  });
+  assert.equal(show('review_prompt', ctx), true);
+});
+
+test('review_prompt: enough usage alone qualifies, even on first session', () => {
+  const ctx = makeCtx({
+    completed: { ads: 1 },
+    startupCount: 1,
+    totalUsageMs: REVIEW_PROMPT_MIN_USAGE_MS,
+    homepageMountedFor: 11_000,
+  });
+  assert.equal(show('review_prompt', ctx), true);
+});
+
+test('review_prompt: withheld until at least one engagement gate is met', () => {
+  const ctx = makeCtx({
+    completed: { ads: 1 },
+    startupCount: REVIEW_PROMPT_MIN_SESSIONS - 1,
+    totalUsageMs: REVIEW_PROMPT_MIN_USAGE_MS - 1,
     homepageMountedFor: 11_000,
   });
   assert.equal(show('review_prompt', ctx), false);
 });
 
-test('review_prompt: fires when both gates met', () => {
+test('review_prompt: engagement does not bypass the other triggers', () => {
+  // Fully engaged, but the ads stage has not completed — order still holds.
   const ctx = makeCtx({
-    completed: { ads: 1 },
-    startupCount: 6,
-    totalUsageMs: 46 * 60 * 1000,
+    completed: {},
+    startupCount: 99,
+    totalUsageMs: 99 * 60 * 1000,
     homepageMountedFor: 11_000,
   });
-  assert.equal(show('review_prompt', ctx), true);
+  assert.equal(show('review_prompt', ctx), false);
 });
 
 // ─── Backgrounding / meeting ──────────────────────────────────────

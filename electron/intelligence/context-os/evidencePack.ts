@@ -107,14 +107,34 @@ export interface EvidenceResolverMetadata {
   retrievedSources: SourceKind[];
 }
 
+/**
+ * RC9 (Phase 6 Slice 4, context-rebuild, 2026-07-25, target arch §5): WHY a
+ * pack's `items` is empty — distinguishes a genuine no-match from an
+ * embedding-provider outage or a policy-forbidden turn, none of which
+ * should be reported to the user identically ("I don't have that
+ * information" is honest for `no_match`, misleading for
+ * `embedding_provider_down`). Only meaningful when `items.length === 0`.
+ */
+export type ZeroEvidenceReason =
+  | 'no_match'                 // genuinely nothing scored above threshold
+  | 'embedding_provider_down'  // RC9: distinguish outage from no-match
+  | 'not_permitted_by_policy'  // CanonicalTurn/isLayerAllowed forbids every candidate source
+  | 'no_sources_configured';   // e.g. no résumé uploaded at all
+
 export interface EvidencePack {
   /**
    * Stable identity for THIS pack instance (Phase 6/M4). The exact pack used for
    * generation must be the exact pack used for post-generation validation —
    * `packId` lets a validator assert it is checking the same evidence the answer
    * was produced from, instead of a re-fetched block.
+   *
+   * MANDATORY as of Phase 6 Slice 4 (context-rebuild, 2026-07-25, item 5) —
+   * every real construction site was audited and already supplies it (via
+   * `emptyEvidencePack()` or the `${turnId}:pack:${n}` convention); one gap
+   * found and fixed during this audit (`ProfileEvidenceService.ts`'s second
+   * return path).
    */
-  packId?: string;
+  packId: string;
   /** Regeneration lineage: an expanded pack increments version + links parent. */
   version?: number;
   parentPackId?: string;
@@ -129,6 +149,8 @@ export interface EvidencePack {
   resolver?: EvidenceResolverMetadata;
   conflicts: EvidenceConflict[];
   answerPolicy: AnswerPolicy;
+  /** RC9 — see ZeroEvidenceReason above. Only meaningful when `items` is empty. */
+  zeroEvidenceReason?: ZeroEvidenceReason;
 }
 
 // ── Small pure helpers ───────────────────────────────────────────────────────

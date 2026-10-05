@@ -69,8 +69,16 @@ function isLocalTarget(rawUrl: string | undefined | null): boolean {
 export class HindsightManager {
   private static instance: HindsightManager | null = null;
   static getInstance(): HindsightManager {
-    if (!HindsightManager.instance) HindsightManager.instance = new HindsightManager();
-    return HindsightManager.instance;
+    // Instance anchored on globalThis (11 dist bundles; MeetingPersistence
+    // lazily requires its own copy). Per-bundle instances meant per-bundle
+    // `pendingStart`/`serverProcess` — two copies could EACH spawn a hindsight
+    // server, and only the spawning copy's kill ran on quit.
+    const g = globalThis as unknown as Record<string, HindsightManager | undefined>;
+    if (!g.__nativelyHindsightManagerV1__) {
+      g.__nativelyHindsightManagerV1__ = HindsightManager.instance ?? new HindsightManager();
+    }
+    HindsightManager.instance = g.__nativelyHindsightManagerV1__;
+    return g.__nativelyHindsightManagerV1__;
   }
 
   /** Cached health result + when it was taken. */

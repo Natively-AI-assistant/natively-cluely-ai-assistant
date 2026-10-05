@@ -8,7 +8,7 @@
 //
 // Pure, deterministic, no I/O, no profile strings.
 
-import type { IntentResult } from '../llm/IntentClassifier';
+import type { IntentResult } from '../llm/PlannerDecision';
 import {
   planAnswer,
   detectExplicitCodingContract,

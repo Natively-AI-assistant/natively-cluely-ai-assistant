@@ -3,6 +3,21 @@ import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
+
+/**
+ * Real-time silence guaranteed after the local VAD says speech ended.
+ *
+ * The relay's Soniox endpointer finalizes after 900 ms of AUDIO silence, but
+ * after the native hangover the client sends one 20 ms keepalive per 100 ms
+ * (audio clock at 1/5 speed), and the relay's VAD gate stops forwarding after
+ * 2.5 s of wall time without voice — before Soniox has seen its 900 ms. The
+ * utterance then stayed unfinal until the speaker talked again: measured live
+ * (2026-09-24), interviewer sentences finalized up to a minute late, and the
+ * user's reply landed in the middle of them. Same value as the direct Soniox
+ * provider (SONIOX_SILENCE_TAIL_MS), same mechanism (PR 599).
+ */
+export const NATIVELY_SILENCE_TAIL_MS = 1200;
 import {
     resolveRelaySession as defaultResolveRelaySession,
     buildFallbackChain,
@@ -89,6 +104,11 @@ export class NativelyProSTT extends EventEmitter {
     private intentionalClose   = false;  // set true before deliberate closeUpstream() to suppress auto-reconnect
     private sampleRate    = 16000;
     private audioChannels = 1;
+    private readonly silenceTail = new RealtimeSilenceTail({
+        tailMs: NATIVELY_SILENCE_TAIL_MS,
+        format: () => ({ sampleRate: this.sampleRate, channels: this.audioChannels }),
+        sink: (pcm) => this.sendLive(pcm),
+    });
     private buffer: Buffer[] = [];
     // Soft cap: at 48 kHz stereo / 20 ms frames a chunk is ~3.8 KB, so 500 chunks
     // ≈ 10 s of audio. Above this, the disconnect window has clearly exceeded
@@ -255,7 +275,19 @@ export class NativelyProSTT extends EventEmitter {
         // CoreAudio Tap) ~5-7s after start(), which is exactly when the first
         // chunk arrives — long before the server has confirmed the
         // handshake.
-        if (this.isActive && this.isConnected) {
+        // F-204: gate on the states the comment above actually describes, not
+        // on `isConnected`. isConnected only flips when the SERVER's
+        // {status:'connected'} frame arrives — a full round-trip AFTER the
+        // auth frame (which commits sample_rate) was sent in ws.on('open').
+        // Gating on it left the window readyState===OPEN && !isConnected
+        // silently un-reconnected: the old rate was already committed
+        // server-side, so the server transcoded stale-rate while the bytes
+        // arrived at the new rate — exactly the garbled-transcript failure
+        // this block exists to prevent. Live-reproduced in
+        // scripts/audit/F-204-repro.mjs.
+        const socket = this.ws;
+        const preHandshake = !socket || socket.readyState === WebSocket.CONNECTING;
+        if (this.isActive && !preHandshake) {
             console.log(`[NativelyProSTT:${this.channel}] Rate changed mid-stream — reconnecting WS so server uses the new declared rate.`);
             this.reconnectAttempts = 0;     // fresh session — reset backoff
             this.intentionalClose  = true;  // don't re-trigger via close handler
@@ -323,8 +355,12 @@ export class NativelyProSTT extends EventEmitter {
         }
     }
 
-    /** No-op — Natively API server handles VAD internally */
-    public notifySpeechEnded(): void {}
+    /** Local VAD: the speaker stopped. Keep the relay's endpointer clock real-time
+     *  until it can finalize (see NATIVELY_SILENCE_TAIL_MS). */
+    public notifySpeechEnded(): void {
+        if (!this.isActive) return;
+        this.silenceTail.start();
+    }
 
     /** No-op — Natively API server finalizes via VAD; no client-side flush available */
     public finalize(): void {}
@@ -366,6 +402,7 @@ export class NativelyProSTT extends EventEmitter {
 
     public stop(): void {
         this.isActive         = false;
+        this.silenceTail.cancel();
         this._chunksSent      = 0;
         this.intentionalClose = false;  // Reset so a subsequent start() can reconnect normally
 
@@ -417,6 +454,7 @@ export class NativelyProSTT extends EventEmitter {
 
     public write(chunk: Buffer): void {
         if (!this.isActive) return;
+        this.silenceTail.observe(chunk);
 
         if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.buffer.push(chunk);
@@ -445,6 +483,13 @@ export class NativelyProSTT extends EventEmitter {
             console.log(`[NativelyProSTT:${this.channel}] Sent chunk #${this._chunksSent} (${chunk.length}B) to server`);
         }
         this.ws.send(chunk);
+    }
+
+    /** Injected silence goes straight to an OPEN socket and is never buffered:
+     *  a tail that cannot be delivered now is worthless later. */
+    private sendLive(pcm: Buffer): void {
+        if (!this.isActive || !this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        this.ws.send(pcm);
     }
 
     // ── Internal ──────────────────────────────────────────────
@@ -637,10 +682,26 @@ export class NativelyProSTT extends EventEmitter {
                             kind: this.target ? this.kindForUrl(connectUrl) : 'railway',
                         });
                     }
+                    // Speaker label, when the relay sends one. The app's PRIMARY
+                    // speaker separation is physical — mic and system audio are
+                    // two devices and two sessions — and nothing here changes
+                    // that. This is the second-order case that separation cannot
+                    // reach: several voices INSIDE the meeting-audio channel (a
+                    // panel, a colleague answering a colleague, a two-speaker
+                    // video). Soniox stt-rt-v5 can label them per token, so if
+                    // the relay ever forwards the tag — the same way it already
+                    // forwards per-token `language` — Auto Answer's judge picks
+                    // it up with no further client work. Absent field → absent
+                    // label → today's behaviour exactly.
+                    const speakerId = typeof msg.speaker === 'string' ? msg.speaker
+                        : typeof msg.speaker === 'number' ? `speaker_${msg.speaker}`
+                        : typeof msg.speaker_id === 'string' ? msg.speaker_id
+                        : undefined;
                     this.emit('transcript', {
                         text:       msg.text,
                         isFinal:    msg.is_final    ?? false,
                         confidence: msg.confidence  ?? 1.0,
+                        ...(speakerId ? { speakerId } : {}),
                     });
                 }
             } catch (err) {
@@ -947,6 +1008,11 @@ export class NativelyProSTT extends EventEmitter {
             language_alternates: this.languageAlternates,
             audio_channels:      this.audioChannels,
             channel:             this.channel,
+            // Opt out of the cumulative transcript on every final. This client has
+            // never read it, and it made each final frame bigger than the last —
+            // ~15 MB per channel per meeting-hour, measured 2026-09-21. Only a
+            // boolean false opts out; a server that predates the flag ignores it.
+            full_text:           false,
         };
         if (this.apiKey === TRIAL_SENTINEL_KEY) {
             try {
@@ -1035,16 +1101,74 @@ export class NativelyProSTT extends EventEmitter {
 
         if (this.ws) {
             const dying = this.ws;
+            const readyState = dying.readyState;
             this.ws = null;
-            // Strip every JS-side listener BEFORE close(). The libuv socket can
-            // still deliver 'message'/'close' events that were already in
-            // flight from the kernel — without removeAllListeners() they would
-            // bubble up to handlers that mutate state on `this` and corrupt
-            // the new connection. The handler-side `guard(ws === this.ws)`
-            // makes this safe even if removeAllListeners() somehow misses
-            // anything, but doing both is the production-grade pattern.
-            try { dying.removeAllListeners(); } catch {}
-            try { dying.close(); } catch {}
+
+            // Strip the state-mutating listeners BEFORE close(). The libuv
+            // socket can still deliver 'open'/'message' events that were
+            // already in flight from the kernel — without removing them they
+            // would bubble up to handlers that mutate state on `this` and
+            // corrupt the new connection. The handler-side
+            // `guard(ws === this.ws)` makes this safe even if the removal
+            // somehow misses anything, but doing both is the production-grade
+            // pattern.
+            //
+            // CRITICAL (2026-08-07): this used to be a blanket
+            // removeAllListeners(), which ALSO stripped 'error'. That is the
+            // one listener we must keep. ws@8's close() on a CONNECTING socket
+            // routes through abortHandshake(), which ends in:
+            //
+            //     process.nextTick(emitErrorAndClose, websocket, err)
+            //
+            // so 'error' is emitted unconditionally ONE TICK LATER with the
+            // message "WebSocket was closed before the connection was
+            // established". With no listener attached, Node's EventEmitter
+            // promotes it to a process-level uncaughtException — and main.ts's
+            // handler responds by closing the SQLite singleton irreversibly,
+            // silently killing meeting persistence for the rest of the session.
+            //
+            // There is no way to suppress that emit: terminate() takes the same
+            // abortHandshake path, and deferring the close() to a later tick
+            // does not help either (both measured against ws@8.21.0). See
+            // websockets/ws#1835 — abortHandshake is deliberately private and
+            // the library's contract is that the caller keeps an 'error'
+            // listener attached across the cancellation.
+            for (const event of ['open', 'message', 'ping', 'pong', 'upgrade', 'unexpected-response']) {
+                try { dying.removeAllListeners(event); } catch {}
+            }
+            try { dying.removeAllListeners('error'); } catch {}
+            try { dying.removeAllListeners('close'); } catch {}
+
+            // Narrow cancellation listeners for the DETACHED socket only. They
+            // are permitted precisely because `dying` is no longer `this.ws`:
+            // an error on the still-owned active socket keeps the normal
+            // provider error path installed by connect(). They release each
+            // other on 'close' so a discarded socket does not retain listeners
+            // — these sockets are cycled on every meeting.
+            const consumeDetachedError = (error: Error): void => {
+                if (process.env.NATIVELY_STT_LIFECYCLE_DEBUG === '1') {
+                    console.log(
+                        `[NativelyProSTT:${this.channel}] detached socket error ` +
+                        `state=${readyState} message=${error?.message}`,
+                    );
+                }
+            };
+            const releaseDetachedListeners = (): void => {
+                try { dying.removeListener('error', consumeDetachedError); } catch {}
+                try { dying.removeListener('close', releaseDetachedListeners); } catch {}
+            };
+            try { dying.on('error', consumeDetachedError); } catch {}
+            try { dying.on('close', releaseDetachedListeners); } catch {}
+
+            // Only CONNECTING/OPEN sockets need a close. A CLOSING socket is
+            // already tearing down (its 'close' will fire and release the
+            // listeners); a CLOSED one will never emit again, so release now
+            // rather than leaving the pair attached forever.
+            if (readyState === WebSocket.CONNECTING || readyState === WebSocket.OPEN) {
+                try { dying.close(); } catch { releaseDetachedListeners(); }
+            } else if (readyState === WebSocket.CLOSED) {
+                releaseDetachedListeners();
+            }
         }
     }
 }

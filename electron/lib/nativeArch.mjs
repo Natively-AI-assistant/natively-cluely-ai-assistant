@@ -23,7 +23,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, openSync, readSync, closeSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -40,6 +40,17 @@ export const TARGETS = Object.freeze([
 
 /** Mach-O arch token printed by `file` for each Node arch string. */
 const ARCH_TO_MACHO = { arm64: 'arm64', x64: 'x86_64' };
+
+/**
+ * PE `IMAGE_FILE_HEADER.Machine` values → Node arch strings.
+ * A Windows `.node` is a DLL, so its architecture is readable straight from
+ * the PE header — no external tool needed (Windows has no `file(1)`).
+ */
+const PE_MACHINE_TO_ARCH = Object.freeze({
+  0x8664: 'x64',
+  0x014c: 'ia32',
+  0xaa64: 'arm64',
+});
 
 // ---------------------------------------------------------------------------
 // Hardware-truth arch (immune to Rosetta).
@@ -73,12 +84,67 @@ export function detectHardwareArch() {
 // ---------------------------------------------------------------------------
 
 /**
- * Read the Mach-O arch of a .node file via the `file` utility.
+ * Read the architecture a Windows `.node` (a DLL) was compiled for, straight
+ * from its PE header. Windows has no `file(1)`, and a wrong-bitness addon is
+ * exactly as fatal there as a wrong-arch Mach-O is on macOS: `dlopen` fails
+ * with "%1 is not a valid Win32 application" (ERROR_BAD_EXE_FORMAT).
+ *
+ * Layout walked here (PE/COFF spec):
+ *   0x00  "MZ"                     DOS signature
+ *   0x3C  int32 LE  e_lfanew       offset of the PE header
+ *   +0    "PE\0\0"                 PE signature
+ *   +4    uint16 LE Machine        the architecture we want
+ *
+ * Only the first 4 bytes at each offset are read — no need to load a 2 MB
+ * binary to answer a 2-byte question.
  *
  * @param {string} absPath  absolute path to a compiled .node
- * @returns {'arm64' | 'x64' | `unknown (${string})`}
+ * @returns {'arm64' | 'x64' | 'ia32' | `unknown (${string})`}
  */
-export function binaryArch(absPath) {
+export function pePlatformArch(absPath) {
+  let fd;
+  try {
+    fd = openSync(absPath, 'r');
+
+    const dos = Buffer.alloc(2);
+    if (readSync(fd, dos, 0, 2, 0) < 2 || dos.toString('latin1') !== 'MZ') {
+      return 'unknown (not a PE image: missing MZ signature)';
+    }
+
+    const lfanew = Buffer.alloc(4);
+    if (readSync(fd, lfanew, 0, 4, 0x3c) < 4) return 'unknown (truncated DOS header)';
+    const peOffset = lfanew.readInt32LE(0);
+    if (peOffset <= 0) return `unknown (bad PE offset ${peOffset})`;
+
+    const head = Buffer.alloc(6);
+    if (readSync(fd, head, 0, 6, peOffset) < 6) return 'unknown (truncated PE header)';
+    if (head.toString('latin1', 0, 4) !== 'PE\0\0') return 'unknown (missing PE signature)';
+
+    const machine = head.readUInt16LE(4);
+    return PE_MACHINE_TO_ARCH[machine] || `unknown (PE machine 0x${machine.toString(16).padStart(4, '0')})`;
+  } catch (error) {
+    return `unknown (${error.message})`;
+  } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd); } catch { /* already gone */ }
+    }
+  }
+}
+
+/**
+ * Read the arch a .node file was compiled for, using whichever container
+ * format the platform produces.
+ *
+ * `platform` is injectable so both branches are testable from either host —
+ * the format is a property of the FILE, not of the machine reading it.
+ *
+ * @param {string} absPath  absolute path to a compiled .node
+ * @param {NodeJS.Platform} [platform]
+ * @returns {'arm64' | 'x64' | 'ia32' | `unknown (${string})`}
+ */
+export function binaryArch(absPath, platform = os.platform()) {
+  if (platform === 'win32') return pePlatformArch(absPath);
+
   // `file` prints e.g. "...: Mach-O 64-bit bundle arm64"
   const out = execFileSync('file', ['-b', absPath], { encoding: 'utf8' });
   if (/\barm64\b/.test(out)) return 'arm64';
@@ -138,7 +204,15 @@ export function resolveTargetPath(rel, { repoRoot, resourcesPath } = {}) {
  * @returns {{ ok: boolean, skipped?: boolean, hardware?: string, mismatches: Array<{ path: string, actual: string, expected: string }>, fix: string, packaged?: boolean }}
  */
 export function verifyAll(repoRoot = process.cwd(), opts = {}) {
-  if (os.platform() !== 'darwin') {
+  const platform = opts.platform || os.platform();
+
+  // macOS: Rosetta can poison a build with the wrong Mach-O slice.
+  // Windows: a rebuild that loses `/p:Platform=x64` silently emits a 32-bit
+  //   DLL, and Electron then fails with "is not a valid Win32 application".
+  //   This branch existed as `skipped` for both, so that failure shipped
+  //   invisibly — the guard passed while both addons were the wrong bitness.
+  // Linux is not a supported target, so it stays skipped.
+  if (platform !== 'darwin' && platform !== 'win32') {
     return { ok: true, skipped: true, mismatches: [] };
   }
 
@@ -152,7 +226,7 @@ export function verifyAll(repoRoot = process.cwd(), opts = {}) {
       // creates these; absence isn't an arch error.
       continue;
     }
-    const actual = binaryArch(abs);
+    const actual = binaryArch(abs, platform);
     if (String(actual).startsWith('unknown')) {
       // `file -b` output can vary across macOS releases/locales. Unknown probe
       // output is not proof of a wrong-arch binary, so fail open instead of
@@ -164,7 +238,9 @@ export function verifyAll(repoRoot = process.cwd(), opts = {}) {
       mismatches.push({
         path: rel,
         actual,
-        expected: ARCH_TO_MACHO[expected] || expected,
+        // Report the token the platform's own tooling uses, so the message
+        // matches what a developer sees from `file` / a PE dump.
+        expected: platform === 'win32' ? expected : ARCH_TO_MACHO[expected] || expected,
       });
     }
   }
@@ -173,7 +249,7 @@ export function verifyAll(repoRoot = process.cwd(), opts = {}) {
     ok: mismatches.length === 0,
     hardware: expected,
     mismatches,
-    fix: buildFixCommand({ packaged: opts.packaged }),
+    fix: buildFixCommand({ packaged: opts.packaged, platform }),
     packaged: !!opts.packaged,
   };
 }
@@ -197,6 +273,18 @@ const PACKAGED_REINSTALL_MESSAGE =
   'history and settings.';
 
 /**
+ * Windows counterpart. The macOS text talks about Apple Silicon and DMGs,
+ * neither of which exists here; the realistic Windows cause is a 32-bit
+ * installer on a 64-bit machine.
+ */
+const PACKAGED_REINSTALL_MESSAGE_WINDOWS =
+  'This copy of Natively was built for a different processor architecture\n' +
+  'than this PC. Please download the correct installer and reinstall:\n\n' +
+  '  https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest\n\n' +
+  'Your data is safe — reinstalling over the current app keeps meeting\n' +
+  'history and settings.';
+
+/**
  * The single command the user (or our dialog) should suggest.
  * Always wraps in `arch -arm64` on macOS so the toolchain itself runs
  * natively, not under Rosetta.
@@ -205,8 +293,11 @@ const PACKAGED_REINSTALL_MESSAGE =
  * from a terminal — return a reinstall-the-DMG message instead.
  */
 export function buildFixCommand(opts = {}) {
-  if (opts.packaged) return PACKAGED_REINSTALL_MESSAGE;
-  if (os.platform() === 'darwin') {
+  const platform = opts.platform || os.platform();
+  if (opts.packaged) {
+    return platform === 'win32' ? PACKAGED_REINSTALL_MESSAGE_WINDOWS : PACKAGED_REINSTALL_MESSAGE;
+  }
+  if (platform === 'darwin') {
     return 'arch -arm64 npm run rebuild:native';
   }
   return 'npm run rebuild:native';

@@ -75,12 +75,16 @@ describe('nativeArch packaged resolution (v2.8.2 fix)', () => {
   test('resolveTargetPath produces app.asar.unpacked paths, not app.asar paths', () => {
     const rel = 'node_modules/better-sqlite3/build/Release/better_sqlite3.node';
     const resolved = cjs.resolveTargetPath(rel, { resourcesPath: SHIPPED_RESOURCES });
+    // Compare on a separator-normalised copy: resolveTargetPath uses path.join,
+    // which emits backslashes on Windows, so hard-coding '/' made this assert
+    // fail on Windows for a path that is in fact correct.
+    const normalised = resolved.split(path.sep).join('/');
     assert.ok(
-      resolved.includes('app.asar.unpacked/'),
+      normalised.includes('app.asar.unpacked/'),
       `path must include 'app.asar.unpacked/' (got: ${resolved})`,
     );
     assert.ok(
-      !resolved.includes('app.asar/'),
+      !normalised.includes('app.asar/'),
       `path must NOT include 'app.asar/' (got: ${resolved})`,
     );
   });
@@ -97,11 +101,21 @@ describe('nativeArch packaged resolution (v2.8.2 fix)', () => {
   });
 
   test('Packaged fix command is end-user-actionable, not a developer shell command', () => {
-    const msg = cjs.buildFixCommand({ packaged: true });
+    // Pass the platform explicitly: this asserts the macOS wording, and there
+    // is now a separate Windows message, so relying on the host's platform
+    // made the assertion depend on where the suite happened to run.
+    const msg = cjs.buildFixCommand({ packaged: true, platform: 'darwin' });
     assert.ok(!msg.includes('npm run'), 'must NOT suggest npm scripts to end-users');
     assert.ok(!msg.includes('arch -'), 'must NOT suggest shell-arch wrappers');
     assert.ok(msg.includes('releases/latest'), 'must point users to the release page');
     assert.ok(msg.includes('arm64'), 'must explain the two DMG flavors');
+  });
+
+  test('Packaged fix command on Windows is actionable and free of macOS wording', () => {
+    const msg = cjs.buildFixCommand({ packaged: true, platform: 'win32' });
+    assert.ok(!msg.includes('npm run'), 'must NOT suggest npm scripts to end-users');
+    assert.ok(msg.includes('releases/latest'), 'must point users to the release page');
+    assert.ok(!/Mac|DMG|Apple Silicon/.test(msg), 'macOS wording must not leak into the Windows dialog');
   });
 
   test('NEGATIVE: a real wrong-arch .node tree under app.asar.unpacked fires ok:false', {

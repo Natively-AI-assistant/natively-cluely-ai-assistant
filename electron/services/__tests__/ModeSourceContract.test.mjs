@@ -183,8 +183,17 @@ test('defaultSourceContractForNewMode: per-template allowedExplicitSwitches (ren
     { template: 'recruiting',        expect: ['reference_files'] },
     { template: 'team-meet',         expect: ['reference_files'] },
     { template: 'lecture',           expect: ['reference_files'] },
-    { template: 'looking-for-work',  expect: ['profile', 'job_description'] },
-    { template: 'technical-interview', expect: ['profile', 'job_description'] },
+    // UPDATED 2026-08-28 (T8). `reference_files` is now PERMITTED in the two
+    // interview-prep templates. Note what this list is: per
+    // turnSourceDecision.ts invariant 1, `allowedExplicitSwitches` is "the
+    // user's exact permission set for explicit source requests" — selecting a
+    // switch that is not in it DENIES the grant. So this permits the user to
+    // say "use my reference files" in Technical Interview; it does not make the
+    // mode read them on its own. `sourceAuthority` stays `profile_only`, so
+    // `forceDocumentGrounding` is still false until the user asks. An upload is
+    // not consent; a switch is.
+    { template: 'looking-for-work',  expect: ['profile', 'job_description', 'reference_files'] },
+    { template: 'technical-interview', expect: ['profile', 'job_description', 'reference_files'] },
   ];
   for (const { template, expect: expected } of cases) {
     const contract = defaultSourceContractForNewMode(template);

@@ -285,8 +285,13 @@
     <!-- Capture (shown when paired) -->
     <div id="captureCard" class="card hidden">
       <button id="captureBtn" class="primary">Capture this page</button>
+      <button id="allSitesBtn" class="ghost mt">Allow on all sites</button>
       <button id="unpairBtn" class="ghost mt">Unpair</button>
-      <div class="hint">Hotkey: <kbd>Ctrl/⌘+Shift+Y</kbd>. Capture pushes once per press.</div>
+      <div class="hint">Hotkey: <kbd>Ctrl/⌘+Y</kbd> (then Enter, ⌘ still held, to ask). Capture pushes once per press.</div>
+      <div id="allSitesHint" class="hint hidden">
+        One browser prompt, then the hotkey captures <strong>any</strong> site — no per-site grants.
+        You can revoke it anytime under the extension's Details → Site access.
+      </div>
     </div>
 
     <div id="msg" class="msg"></div>

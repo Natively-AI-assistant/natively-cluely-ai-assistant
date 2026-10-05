@@ -23,14 +23,15 @@ import { loadNativeModule } from "../audio/nativeModuleLoader"
 const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || "https://api.natively.software").replace(/\/+$/, "")
 const REVIEW_STATE_FILE = "review-state.json"
 
-const PROMPT_FIRST_SESSION_THRESHOLD = 3
-const PROMPT_FIRST_USAGE_MS_THRESHOLD = 30 * 60 * 1000
-const PROMPT_REDISPLAY_SESSION_THRESHOLD = 3
-const PROMPT_REDISPLAY_DELAY_MS = 7 * 24 * 60 * 60 * 1000
-
-// Pure eligibility logic is in ReviewPromptLogic.ts (testable without Electron).
-import { shouldShowPromptLocal } from "./ReviewPromptLogic"
+// Pure eligibility logic is in ReviewPromptLogic.ts (testable without Electron),
+// which also OWNS the thresholds. This file previously redeclared all four as
+// private copies; three were never read, and the fourth silently duplicated the
+// redisplay delay used to stamp next_eligible_at. Import instead, so a change
+// to the policy cannot leave this file writing cooldowns on the old schedule.
+import { shouldShowPromptLocal, REVIEW_PROMPT_CONSTANTS } from "./ReviewPromptLogic"
 export { shouldShowPromptLocal }
+
+const { PROMPT_REDISPLAY_DELAY_MS } = REVIEW_PROMPT_CONSTANTS
 
 export interface ReviewPromptLocalState {
     has_reviewed: boolean

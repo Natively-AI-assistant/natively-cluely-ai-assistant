@@ -1,0 +1,39 @@
+{
+ "corpusTokens": 32000,
+ "questions": 100,
+ "topK": 20,
+ "results": [
+  {
+   "label": "vector only (no rerank)",
+   "top1": 54,
+   "ofCeiling": 58.064516129032256,
+   "p50": 0,
+   "p95": 0,
+   "p99": 0
+  },
+  {
+   "label": "hosted rerank-2.5-lite",
+   "top1": 91,
+   "ofCeiling": 97.84946236559139,
+   "p50": 739,
+   "p95": 1249,
+   "p99": 8317
+  },
+  {
+   "label": "local ms-marco-MiniLM-L-6-v2",
+   "top1": 85,
+   "ofCeiling": 91.39784946236558,
+   "p50": 708,
+   "p95": 754,
+   "p99": 884
+  },
+  {
+   "label": "local bge-reranker-large",
+   "top1": 83,
+   "ofCeiling": 89.24731182795699,
+   "p50": 14458,
+   "p95": 18982,
+   "p99": 20923
+  }
+ ]
+}

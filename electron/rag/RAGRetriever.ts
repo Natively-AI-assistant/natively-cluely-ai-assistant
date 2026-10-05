@@ -1,6 +1,9 @@
 import { VectorStore, ScoredChunk } from './VectorStore';
 import { EmbeddingPipeline } from './EmbeddingPipeline';
 import { formatChunkForContext } from './SemanticChunker';
+// Phase 3 (semantic-retrieval repair, 2026-08-13): minSimilarity resolved per
+// embedding space (legacy 0.25 for every space until telemetry calibrates).
+import { resolveMinSimilarity } from '../llm/semanticAdmissionGate';
 
 /**
  * Query intent types for biasing retrieval strategy
@@ -87,7 +90,7 @@ export class RAGRetriever {
         let candidates = await this.vectorStore.searchSimilar(queryEmbedding, {
             meetingId,
             limit: topK * 2,
-            minSimilarity: 0.25,
+            minSimilarity: resolveMinSimilarity(spaceKey),
             spaceKey
         });
 
@@ -182,7 +185,7 @@ export class RAGRetriever {
         const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
         const chunkResults = await this.vectorStore.searchSimilar(queryEmbedding, {
             limit: topK * 2,
-            minSimilarity: 0.25,
+            minSimilarity: resolveMinSimilarity(spaceKey),
             spaceKey
         });
 

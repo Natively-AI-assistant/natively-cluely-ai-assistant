@@ -33,6 +33,10 @@ const VALID = {
   'gpt-5.2': ['none', 'low', 'medium', 'high', 'xhigh'],
   'gpt-5.4': ['none', 'low', 'medium', 'high', 'xhigh'],
   'gpt-5.5': ['none', 'low', 'medium', 'high', 'xhigh'],
+  // Live-probed 2026-09-22 (the 400 body lists the accepted set verbatim):
+  'gpt-5.6-luna': ['none', 'low', 'medium', 'high', 'xhigh'],
+  'gpt-5.4-mini': ['none', 'low', 'medium', 'high', 'xhigh'],
+  'gpt-5.4-nano': ['none', 'low', 'medium', 'high', 'xhigh'],
   'gpt-5-codex': ['low', 'medium', 'high'],
   'gpt-5.1-codex': ['low', 'medium', 'high'],
   'gpt-5.2-codex': ['low', 'medium', 'high', 'xhigh'],
@@ -56,14 +60,30 @@ describe('getOpenAiReasoningEffort — picks a VALID effort per family', () => {
     });
   }
 
-  test("default model gpt-5.4 uses 'low', not the invalid 'minimal'", () => {
-    assert.equal(getOpenAiReasoningEffort('gpt-5.4'), 'low');
+  // 2026-09-22: ids LIVE-PROBED to accept 'none' take it — the hidden
+  // reasoning pass before the first visible token is the whole cost on a live
+  // answer. Measured TTFT medians, streaming: gpt-5.6-luna low 1178 → none
+  // 798 ms; gpt-5.4-mini 823 → 671; gpt-5.5 864 → 769; gpt-5.4 912 → 855.
+  test("default model gpt-5.4 uses 'none' (probed), never the invalid 'minimal'", () => {
+    assert.equal(getOpenAiReasoningEffort('gpt-5.4'), 'none');
+    assert.notEqual(getOpenAiReasoningEffort('gpt-5.4'), 'minimal');
   });
 
-  test("gpt-5.1 / 5.2 / 5.5 use 'low'", () => {
+  test("probed ids take 'none': gpt-5.6-luna, gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano", () => {
+    for (const m of ['gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano']) {
+      assert.equal(getOpenAiReasoningEffort(m), 'none', m);
+    }
+  });
+
+  test("a probed id's dated snapshot takes 'none' too, but a DIFFERENT id sharing its prefix does not", () => {
+    assert.equal(getOpenAiReasoningEffort('gpt-5.4-2026-03-05'), 'none');
+    assert.equal(getOpenAiReasoningEffort('gpt-5.4-pro'), 'low', 'not in the allow-list → the known-safe floor');
+  });
+
+  test("UNPROBED 5.1+ ids keep 'low' — an unaccepted effort is a hard 400 on the live stream", () => {
     assert.equal(getOpenAiReasoningEffort('gpt-5.1'), 'low');
     assert.equal(getOpenAiReasoningEffort('gpt-5.2'), 'low');
-    assert.equal(getOpenAiReasoningEffort('gpt-5.5'), 'low');
+    assert.equal(getOpenAiReasoningEffort('gpt-5.6-terra'), 'low');
   });
 
   test("original gpt-5 line keeps 'minimal' (the only family that supports it)", () => {
@@ -89,7 +109,7 @@ describe('getOpenAiReasoningEffort — picks a VALID effort per family', () => {
   });
 
   test('is case-insensitive', () => {
-    assert.equal(getOpenAiReasoningEffort('GPT-5.4'), 'low');
+    assert.equal(getOpenAiReasoningEffort('GPT-5.4'), 'none');
     assert.equal(getOpenAiReasoningEffort('O3-MINI'), 'low');
   });
 });

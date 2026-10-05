@@ -1,0 +1,360 @@
+{
+ "blind_id": "S-4191d0ea",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 83138,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 34841,
+  "candidatesTokenCount": 2461,
+  "totalTokenCount": 47005,
+  "cachedContentTokenCount": 24510,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 34841
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24510
+   }
+  ],
+  "thoughtsTokenCount": 9703,
+  "serviceTier": "standard"
+ },
+ "fact_count": 69,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 4,
+  "decision_retention": 8,
+  "speaker_attribution": 4,
+  "numeric_accuracy": 8,
+  "entity_retention": 8,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 8,
+  "structure": 4,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "The cancelled Kafka spike plan is listed as an active action item for Ravi.",
+   "The RabbitMQ upgrade is assigned to Speaker 3, Ravi, and Pam simultaneously in the action items list.",
+   "The notify-gateway outbox task is assigned to Speaker 1 (Ravi) in one bullet, and correctly to Joaquin in another.",
+   "The SQS prototype is assigned to Speaker 2 (Pam) in one bullet, and correctly to Ravi in another."
+  ],
+  "missing_important_information": [
+   "The date of the incident (September 8th).",
+   "The baseline Twilio 429 rate (0.2%).",
+   "The current RabbitMQ cost ($3,800)."
+  ],
+  "hallucinated_information": [
+   "Assigning the notify-gateway outbox task to Speaker 1.",
+   "Assigning the SQS prototype to Speaker 2.",
+   "Assigning the RabbitMQ upgrade to Speaker 3."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C07",
+    "reported": "The proposed alert thresholds are oldest notification message age above 120 seconds for five minutes..."
+   },
+   {
+    "correction_id": "C09",
+    "reported": "Ravi: Ravi will upgrade RabbitMQ from 3.11.9 to 3.13.7..."
+   },
+   {
+    "correction_id": "C11",
+    "reported": "Ravi: Write a two-week spike plan for a Kafka consumer prototype in notif-worker reading from MSK with retry topics. (deadline: Monday)"
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Ravi: Write a two-week spike plan for a Kafka consumer prototype in notif-worker reading from MSK with retry topics. (deadline: Monday)"
+  ],
+  "distractors_included": [
+   "Extreme repetition of action items, decisions, and open questions across multiple unstructured and structured sections.",
+   "Unresolved speaker labels (Speaker 1, Speaker 2, Speaker 3) used alongside resolved names."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "partial"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "missing"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "partial"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "contradicted"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "contradicted"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "contradicted"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "missing"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "partial"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "partial"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a high amount of the transcript's information but suffer from severe structural and factual issues due to extreme repetition. The action items section is duplicated multiple times, leading to massive contradictions where the same tasks are assigned to different people (e.g., the RabbitMQ upgrade is assigned to Pam, Ravi, and 'Speaker 3'). Cancelled tasks, such as the Kafka spike plan, are listed as active action items. Unresolved speaker labels are used interchangeably with real names, causing further confusion. The sheer volume of repeated bullet points across 'structured' and unstructured sections makes the notes highly unreadable and bloated."
+ }
+}

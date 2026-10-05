@@ -100,8 +100,16 @@ export type AttributionInput = Partial<Omit<IntelligenceAttribution, 'trace_id' 
 };
 
 const ATTR_RING_MAX = 200;
-const ring: IntelligenceAttribution[] = [];
-let seq = 0;
+// Ring + seq on globalThis (12 dist bundles carry a copy): the module header
+// says the ring exists "for the verification harness + tests" — a harness
+// importing its own copy read [] while answers recorded into another copy,
+// and per-bundle `seq` produced COLLIDING attr_<n> trace ids in merged logs.
+interface AttrSlot { ring: IntelligenceAttribution[]; seq: number }
+const _attr: AttrSlot = (() => {
+  const g = globalThis as unknown as Record<string, AttrSlot | undefined>;
+  if (!g.__nativelyIntelAttributionV1__) g.__nativelyIntelAttributionV1__ = { ring: [], seq: 0 };
+  return g.__nativelyIntelAttributionV1__;
+})();
 
 const SHORT_LABEL_RE = /^[\w .:_/+-]{0,48}$/;
 const boundedLabel = (v: unknown, fallback = ''): string => {
@@ -122,11 +130,11 @@ const queryHash = (question?: string): string => {
 
 /**
  * Build the full attribution record from a partial input, defaulting every unset field.
- * Pure — no side effects. Use `recordAttribution` to also log + ring it.
+ * Pure — no side effects. Use `recordAttribution` to also log + _attr.ring it.
  */
 export function buildAttribution(input: AttributionInput): IntelligenceAttribution {
   return {
-    trace_id: boundedLabel(input.traceId, `attr_${seq++}`) || `attr_${seq++}`,
+    trace_id: boundedLabel(input.traceId, `attr_${_attr.seq++}`) || `attr_${_attr.seq++}`,
     query_hash: queryHash(input.question),
     answer_type: boundedLabel(input.answer_type, 'unknown'),
     mode: boundedLabel(input.mode, 'manual'),
@@ -178,12 +186,12 @@ export function buildAttribution(input: AttributionInput): IntelligenceAttributi
 }
 
 /**
- * Build + RECORD an attribution: pushes to the bounded ring and logs ONE
+ * Build + RECORD an attribution: pushes to the bounded _attr.ring and logs ONE
  * `[IntelligenceAttribution]` line. Never throws. Returns the record (handy for tests).
  *
  * The log line is gated on the `trace` intelligence flag OR an explicit
  * NATIVELY_INTELLIGENCE_ATTRIBUTION=true env (so it can be turned on without enabling
- * the full trace ring). The RING is always populated (cheap, content-free) so the
+ * the full trace _attr.ring). The RING is always populated (cheap, content-free) so the
  * verify:memory-context harness can read attribution even with logging off.
  */
 export function recordAttribution(input: AttributionInput): IntelligenceAttribution {
@@ -194,9 +202,9 @@ export function recordAttribution(input: AttributionInput): IntelligenceAttribut
     rec = buildAttribution({});
   }
   try {
-    ring.push(rec);
-    if (ring.length > ATTR_RING_MAX) ring.shift();
-  } catch { /* ring never breaks the hot path */ }
+    _attr.ring.push(rec);
+    if (_attr.ring.length > ATTR_RING_MAX) _attr.ring.shift();
+  } catch { /* _attr.ring never breaks the hot path */ }
   try {
     let on = false;
     try {
@@ -236,15 +244,15 @@ export function hindsightModeFor(args: {
 
 /** Recent attribution records (verification harness + tests). */
 export function recentAttributions(n = 50): IntelligenceAttribution[] {
-  return ring.slice(-Math.max(0, n));
+  return _attr.ring.slice(-Math.max(0, n));
 }
 
 /** The most recent attribution record, or null. */
 export function lastAttribution(): IntelligenceAttribution | null {
-  return ring.length ? ring[ring.length - 1] : null;
+  return _attr.ring.length ? _attr.ring[_attr.ring.length - 1] : null;
 }
 
-/** Clear the ring (tests). */
+/** Clear the _attr.ring (tests). */
 export function resetAttributions(): void {
-  ring.length = 0;
+  _attr.ring.length = 0;
 }

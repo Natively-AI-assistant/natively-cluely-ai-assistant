@@ -20,16 +20,40 @@ import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { shouldReviveExhaustedReconnect, DEFAULT_REVIVE_COOLDOWN_MS } from './sttReconnectPolicy.mjs';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
 
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
-// Cap reconnect attempts so a flapping network can't drive an indefinite WS
+// Cap reconnect attempts so a flapping network can't drive a tight WS
 // open-loop against Soniox (storm risk + per-key rate-limit risk). After the
 // cap, emit 'error' so the orchestrator can surface a UI prompt; a
 // user-triggered restart via stop()/start() resets the counter to 0.
+// NOTE: since the resumed-audio revival below, the cap bounds each BURST,
+// not the session: an exhausted-but-active session that keeps receiving
+// audio re-arms the ladder once per DEFAULT_REVIVE_COOLDOWN_MS, so a
+// permanently dead endpoint sees ~11 handshakes per ~3.5 min for the life
+// of the meeting. That is deliberate and matches NativelyProSTT, which
+// retries indefinitely at its 30s ceiling on the same 'streaming STT is
+// meeting-critical' rationale.
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 5000;
+
+// Endpoint tuning — Soniox's own starting point for voice-AI turn-taking
+// (soniox.com/docs/stt/rt/endpoint-detection, "Recommended Configuration"):
+// level 2 + sensitivity 0.3 + a 1500 ms cap. The defaults (0, 0.0, 2000 ms)
+// are tuned for dictation, not for answering a question the moment it ends.
+// Both tuning knobs are v5-only; the model below is stt-rt-v5.
+export const SONIOX_ENDPOINT_TUNING = {
+    endpoint_latency_adjustment_level: 2,
+    endpoint_sensitivity: 0.3,
+    max_endpoint_delay_ms: 1500,
+} as const;
+// Real-time silence after the local VAD's speech end, so the endpointer's
+// 1500 ms cap is 1500 ms of WALL time, not ~5× that at the keepalive cadence:
+// hangover (>= 500) + 1200 = 1700 ms. See realtimeSilenceTail.ts.
+export const SONIOX_SILENCE_TAIL_MS = 1200;
 
 export class SonioxStreamingSTT extends EventEmitter {
     private apiKey: string;
@@ -44,6 +68,11 @@ export class SonioxStreamingSTT extends EventEmitter {
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
     private keepAliveTimer: NodeJS.Timeout | null = null;
+    // Timestamp (ms) when automatic reconnect was exhausted and latched off, or
+    // null when reconnect is healthy. Drives the self-heal-on-resumed-audio path
+    // in write() so a session that gave up during a silent/hidden stretch can
+    // recover when the user returns. See sttReconnectPolicy.mjs.
+    private reconnectExhaustedAt: number | null = null;
     // 250ms debounced restart driven by setSampleRate / setRecognitionLanguage.
     // Previously these methods called `stop(); start();` synchronously, which
     // produced two WebSocket handshakes in flight whenever the methods fired
@@ -55,10 +84,21 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     private buffer: Buffer[] = [];
     private isConnecting = false;
+    private readonly silenceTail = new RealtimeSilenceTail({
+        tailMs: SONIOX_SILENCE_TAIL_MS,
+        format: () => ({ sampleRate: this.sampleRate, channels: this.numChannels }),
+        sink: (pcm) => this.sendAudio(pcm),
+    });
 
     constructor(apiKey: string) {
         super();
         this.apiKey = apiKey;
+    }
+
+    /** Local VAD: the speaker stopped. Keep the endpointer's clock real-time. */
+    public notifySpeechEnded(): void {
+        if (!this.isActive) return;
+        this.silenceTail.start();
     }
 
     // =========================================================================
@@ -85,19 +125,87 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     /** Set recognition language hint using ISO-639-1 code */
     public setRecognitionLanguage(key: string): void {
-        const config = RECOGNITION_LANGUAGES[key];
-        if (config) {
-            this.languageCode = config.iso639;
-            console.log(`[SonioxStreaming] Language hint set to ${this.languageCode}`);
+        const previous = this.languageCode;
 
-            if (this.isActive) {
-                console.log('[SonioxStreaming] Language changed while active. Scheduling debounced restart...');
-                this.scheduleRestart();
-            }
-        } else if (key === 'auto') {
+        // 'auto' MUST be tested before the table lookup. RECOGNITION_LANGUAGES
+        // has a real 'auto' entry whose iso639 is the literal string 'auto', so
+        // the lookup below matched it and pinned `language_hints: ['auto']` —
+        // a language code Soniox does not know. The `else if (key === 'auto')`
+        // this replaces was unreachable dead code (found by
+        // SonioxPinnedLanguageStrict2026_08_24.test.mjs). Harmless-looking
+        // before, actively wrong now that a hint is sent as strict.
+        if (key === 'auto') {
             this.languageCode = undefined;
-            console.log(`[SonioxStreaming] Language hint set to auto`);
+            console.log('[SonioxStreaming] Language hint set to auto');
+        } else {
+            const config = RECOGNITION_LANGUAGES[key];
+            if (!config) {
+                console.warn(`[SonioxStreaming] Unknown language key: ${key} — keeping ${previous ?? 'auto'}`);
+                return;
+            }
+            this.languageCode = config.iso639;
+            console.log(`[SonioxStreaming] Language hint set to ${this.languageCode} (strict)`);
         }
+
+        if (this.languageCode !== previous && this.isActive) {
+            console.log('[SonioxStreaming] Language changed while active. Scheduling debounced restart...');
+            this.scheduleRestart();
+        }
+    }
+
+    /**
+     * The config frame Soniox expects as the first message of a session.
+     *
+     * Extracted from the ws 'open' handler (2026-08-24) so the language
+     * decision is reachable without a live socket — see
+     * electron/audio/__tests__/SonioxPinnedLanguageStrict2026_08_24.test.mjs.
+     *
+     * Language handling, and why it changed:
+     *
+     *   • `enable_language_identification` used to be set UNCONDITIONALLY. That
+     *     is Soniox's auto-detect mode, so a pinned session ran with full
+     *     multilingual detection switched on — the setting looked inert. The
+     *     natively-api relay already scoped this to auto-only; this path did not.
+     *
+     *   • `language_hints_strict` is sent alongside the hint because that is
+     *     Soniox's documented way to restrict recognition
+     *     (https://soniox.com/docs/stt/concepts/language-restrictions).
+     *
+     *     MEASURED 2026-08-24, and it is NOT a guarantee: streaming Spanish and
+     *     German fixtures against stt-rt-v5 while pinning `['en']` returned the
+     *     full Spanish/German transcript, byte-identical with and without the
+     *     strict flag. The flag is accepted (no error, no session kill) and has
+     *     no observable effect on the real-time model. It is kept because it
+     *     costs nothing and is the forward-compatible spelling — NOT because
+     *     the pin is enforced. On stt-rt-v5 a pinned language biases accuracy;
+     *     it does not restrict recognition. The relay's other providers
+     *     (Chirp2 languageCodes, ElevenLabs language_code, Deepgram pinned
+     *     mode) DO restrict.
+     *
+     *     A single hint still covers accents — there is no en-US/en-GB split
+     *     to lose.
+     */
+    private buildConfigFrame(): Record<string, unknown> {
+        const config: Record<string, unknown> = {
+            api_key: this.apiKey,
+            model: 'stt-rt-v5',
+            audio_format: 'pcm_s16le',
+            sample_rate: this.sampleRate,
+            num_channels: this.numChannels,
+            enable_endpoint_detection: true,
+            ...SONIOX_ENDPOINT_TUNING,
+        };
+
+        if (this.languageCode) {
+            config.language_hints = [this.languageCode];
+            config.language_hints_strict = true;
+        } else {
+            // Auto-detect: identify per-token languages so mid-conversation
+            // switches are followed rather than forced into one model.
+            config.enable_language_identification = true;
+        }
+
+        return config;
     }
 
     /**
@@ -157,11 +265,14 @@ export class SonioxStreamingSTT extends EventEmitter {
         this.isActive = true;        // Set immediately so write() buffers audio during WS handshake
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
+        this.reconnectExhaustedAt = null;
         this.connect();
     }
 
     public stop(): void {
         this.shouldReconnect = false;
+        this.silenceTail.cancel();
+        this.reconnectExhaustedAt = null; // state hygiene: no stale exhaustion marker across stop
         this.clearTimers();
 
         if (this.ws) {
@@ -190,6 +301,12 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     public write(chunk: Buffer): void {
         if (!this.isActive) return;
+        this.silenceTail.observe(chunk);
+        this.sendAudio(chunk);
+    }
+
+    private sendAudio(chunk: Buffer): void {
+        if (!this.isActive) return;
 
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.configSent) {
             this.buffer.push(chunk);
@@ -197,6 +314,23 @@ export class SonioxStreamingSTT extends EventEmitter {
 
             if (!this.isConnecting && this.shouldReconnect && !this.reconnectTimer) {
                 console.log('[SonioxStreaming] WS not ready. Lazy connecting on new audio...');
+                this.connect();
+            } else if (shouldReviveExhaustedReconnect({
+                isActive: this.isActive,
+                shouldReconnect: this.shouldReconnect,
+                isConnecting: this.isConnecting,
+                hasSocket: this.ws !== null,
+                exhaustedAt: this.reconnectExhaustedAt,
+                now: Date.now(),
+                cooldownMs: DEFAULT_REVIVE_COOLDOWN_MS,
+            })) {
+                // Reconnect was exhausted during a silent/hidden stretch, but
+                // audio is flowing again — grant one fresh reconnect budget
+                // instead of staying dead for the rest of the meeting.
+                console.warn('[SonioxStreaming] Reviving exhausted reconnect on resumed audio.');
+                this.reconnectAttempts = 0;
+                this.shouldReconnect = true;
+                this.reconnectExhaustedAt = null;
                 this.connect();
             }
             return;
@@ -234,7 +368,19 @@ export class SonioxStreamingSTT extends EventEmitter {
         // TLS+upgrade handshake at 15s. See dnsHelpers.ts.
         this.ws = new WebSocket(SONIOX_WEBSOCKET_URL, streamingStttWsOptions() as any);
 
+        // F-203: identity guard. stop() does not detach listeners and
+        // scheduleRestart()/setSampleRate()/setRecognitionLanguage() do a
+        // synchronous stop()+start(), so the OLD socket's async 'close' would
+        // otherwise run against the NEW session: null out the live `this.ws`
+        // (write() can no longer reach it), clear the new keepalive, and — on
+        // a normal 1000 close — set isActive=false, which silently drops every
+        // subsequent chunk with no 'error' emitted and no banner (total silent
+        // death until a manual Stop/Start). Mirrors NativelyProSTT's
+        // documented `guard(ws === this.ws)` pattern.
+        const ws = this.ws;
+
         this.ws.on('open', () => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             // Guard: stop() may have been called while the WS handshake was in flight.
             // shouldReconnect is set to false by stop() before ws is nulled, so it's a
             // reliable signal that we should abort here without crashing.
@@ -246,22 +392,11 @@ export class SonioxStreamingSTT extends EventEmitter {
             }
 
             this.reconnectAttempts = 0;
+            this.reconnectExhaustedAt = null; // healthy again — clear the exhaustion marker
             console.log('[SonioxStreaming] Connected, sending config...');
 
             // Send initial configuration as first message
-            const config: any = {
-                api_key: this.apiKey,
-                model: 'stt-rt-v5',
-                audio_format: 'pcm_s16le',
-                sample_rate: this.sampleRate,
-                num_channels: this.numChannels,
-                enable_language_identification: true,
-                enable_endpoint_detection: true,
-            };
-
-            if (this.languageCode) {
-                config.language_hints = [this.languageCode];
-            }
+            const config: any = this.buildConfigFrame();
 
             try {
                 // Use ?. (not !) — stop() could theoretically null this.ws between the
@@ -304,6 +439,7 @@ export class SonioxStreamingSTT extends EventEmitter {
 
                 let currentFinalText = '';
                 let nonFinalText = '';
+                let endpointSeen = false;
 
                 for (const token of tokens) {
                     if (!token.text) continue;
@@ -315,6 +451,13 @@ export class SonioxStreamingSTT extends EventEmitter {
 
                     if (token.text === '<end>') {
                         console.log('[SonioxStreaming] Received <end> endpoint detection marker');
+                        // Auto Answer V3 endpoint normalization (additive). NOT
+                        // emitted here: live-verified (2026-08-24) that <end>
+                        // arrives as the LAST token of the SAME message as the
+                        // utterance's final tokens, and an endpoint emitted
+                        // before those finals is wiped by the consumer's
+                        // new-evidence reset. Deferred below the transcript emits.
+                        endpointSeen = true;
                         continue;
                     }
 
@@ -343,15 +486,17 @@ export class SonioxStreamingSTT extends EventEmitter {
                     });
                 }
 
+                // 3. Endpoint AFTER the finals it closes (see the note above).
+                if (endpointSeen) {
+                    try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* never break parsing */ }
+                }
+
                 // Session finished
                 if (msg.finished) {
                     console.log('[SonioxStreaming] Session finished');
                     // We don't stop entirely, just clear WS so it can lazily reconnect on next audio
-                    if (this.ws) {
-                        this.ws.close();
-                        this.ws = null;
-                        this.configSent = false;
-                    }
+                    if (ws !== this.ws) return; // F-203: don't clear a newer session's socket
+                    this.closeFinishedSession();
                 }
             } catch (err) {
                 console.error('[SonioxStreaming] Parse error:', err);
@@ -359,11 +504,13 @@ export class SonioxStreamingSTT extends EventEmitter {
         });
 
         this.ws.on('error', (err: Error) => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             console.error('[SonioxStreaming] WebSocket error:', err.message);
             this.emit('error', err);
         });
 
         this.ws.on('close', (code: number, reason: Buffer) => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             // Null out the ws reference immediately to prevent stale reuse
             this.ws = null;
             this.isConnecting = false;
@@ -390,10 +537,14 @@ export class SonioxStreamingSTT extends EventEmitter {
 
         if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
             console.error(`[SonioxStreaming] Max reconnect attempts (${RECONNECT_MAX_ATTEMPTS}) reached — giving up`);
-            // Latch off the reconnect path so write()'s lazy-connect (line 159)
-            // cannot resurrect the storm on the next audio chunk. start() resets
-            // shouldReconnect=true so a user-triggered restart still works.
+            // Latch off the reconnect path so write()'s lazy-connect cannot
+            // resurrect the storm on the next audio chunk. Record WHEN we gave
+            // up: if genuine audio is still flowing after a cooldown (the user
+            // hid the app during a network blip and has now come back), write()
+            // grants one fresh reconnect budget instead of staying dead for the
+            // rest of the meeting. start() also resets this for a manual restart.
             this.shouldReconnect = false;
+            this.reconnectExhaustedAt = Date.now();
             this.emit('error', new Error('SonioxStreamingSTT: max reconnect attempts exceeded'));
             return;
         }
@@ -429,6 +580,29 @@ export class SonioxStreamingSTT extends EventEmitter {
                 }
             }
         }, KEEPALIVE_INTERVAL_MS);
+    }
+
+    /**
+     * Tear down the socket for a session the server reported as FINISHED. We do
+     * not stop entirely — the next audio chunk lazily reconnects.
+     *
+     * CR-07: this used to be written inline as close() + `this.ws = null`, and
+     * nulling this.ws makes the socket's own 'close' event fail the F-203
+     * identity guard (`ws !== this.ws`), so the close handler returns BEFORE its
+     * clearKeepAlive(). That leaked one 5s interval per finished session for the
+     * life of the process. Clearing it here is the fix; keeping the sequence in
+     * ONE named place is what stops the two teardown paths drifting apart again.
+     *
+     * isConnecting is deliberately not touched: the 'open' handler has already
+     * cleared it by the time a session can finish, so the keep-alive is the only
+     * cleanup that early return actually skips.
+     */
+    private closeFinishedSession(): void {
+        if (!this.ws) return;
+        this.ws.close();
+        this.clearKeepAlive();
+        this.ws = null;
+        this.configSent = false;
     }
 
     private clearKeepAlive(): void {

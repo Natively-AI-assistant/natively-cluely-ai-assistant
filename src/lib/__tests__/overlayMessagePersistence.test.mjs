@@ -5,6 +5,8 @@ import {
   finalizeStreamingByIntentMessages,
   prepareIntelligenceStreamPlaceholderMessages,
   discardStreamingByIntentMessages,
+  intelligenceErrorIntent,
+  settleStreamingOnErrorMessages,
 } from '../overlayMessagePersistence.mjs';
 
 const priorMessages = [
@@ -283,4 +285,36 @@ test('discard removes only the LAST open row of the intent', () => {
 
 test('discard handles a non-array input gracefully', () => {
   assert.deepEqual(discardStreamingByIntentMessages(null, 'what_to_answer'), []);
+});
+
+// intelligence-error used to append its row beside a placeholder that never
+// closed: an errored Follow-up questions left "Thinking..." spinning forever.
+test('settle drops an empty errored placeholder and appends the error', () => {
+  const prev = [...priorMessages, { id: 'p', role: 'system', text: '', intent: 'follow_up_questions', isStreaming: true }];
+  const next = settleStreamingOnErrorMessages(prev, 'follow_up_questions', '', 'boom', () => 'e1');
+  assert.equal(next.some((m) => m.isStreaming), false);
+  assert.deepEqual(next.at(-1), { id: 'e1', role: 'system', text: 'boom' });
+  assert.deepEqual(next.slice(0, priorMessages.length), priorMessages);
+});
+
+test('settle keeps partial streamed text as a finished row', () => {
+  const prev = [{ id: 'p', role: 'system', text: '', intent: 'recap', isStreaming: true }];
+  const next = settleStreamingOnErrorMessages(prev, 'recap', 'half an answer', 'boom', () => 'e1');
+  assert.deepEqual(next[0], { id: 'p', role: 'system', text: 'half an answer', intent: 'recap', isStreaming: false });
+  assert.equal(next.length, 2);
+});
+
+test('settle never touches finalized rows or other intents', () => {
+  const other = { id: 'c', role: 'system', text: '', intent: 'clarify', isStreaming: true };
+  const next = settleStreamingOnErrorMessages([...priorMessages, other], 'recap', '', 'boom', () => 'e1');
+  assert.deepEqual(next.slice(0, -1), [...priorMessages, other]);
+});
+
+test('error modes map to their placeholder intents', () => {
+  assert.equal(intelligenceErrorIntent('what_to_say', null), 'what_to_answer');
+  for (const m of ['recap', 'clarify', 'follow_up_questions', 'code_hint', 'brainstorm']) assert.equal(intelligenceErrorIntent(m, null), m);
+  assert.equal(intelligenceErrorIntent('follow_up', 'shorten'), 'shorten');
+  assert.equal(intelligenceErrorIntent('follow_up', 'chat'), null, 'a follow-up error must not settle a chat stream');
+  assert.equal(intelligenceErrorIntent('follow_up', null), null);
+  assert.equal(intelligenceErrorIntent('manual', 'chat'), null);
 });

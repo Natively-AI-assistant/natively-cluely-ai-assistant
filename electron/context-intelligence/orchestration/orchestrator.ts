@@ -1,0 +1,1376 @@
+// electron/context-intelligence/orchestration/orchestrator.ts
+//
+// The single decision pipeline. ONE implementation per responsibility.
+//
+// This is the object that F2 says does not exist today: nine answer surfaces
+// currently run five independent source-decision sites, and five of the nine
+// construct no source authority at all. Everything below happens exactly once,
+// in one order, and the result is frozen.
+//
+// Retrieval is INJECTED rather than imported. That keeps this module free of the
+// legacy stack, lets the bake-off substitute strategies, and means a surface can
+// adopt the decision layer before the retrieval layer is migrated.
+//
+// See docs/context-intelligence-v3/04_TARGET_ARCHITECTURE.md §2
+
+import type {
+  TurnDecision, AnswerSurface, EvidenceScope, EvidenceItem,
+  RetrievalPlan, ClaimRequirement, SourceType, Answerability, ClaimType,
+} from '../contracts/types';
+import { freezeTurnDecision } from '../contracts/types';
+import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
+import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
+import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
+import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
+import { classifyTurn, isBareFollowUp, stripSttFillers, isProspectiveJobQuestion } from '../question/turn-classifier';
+import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
+import { mergeRewrittenEvidence, type QueryRewriter, type QueryRewriteOutcome } from '../retrieval/llm-query-rewrite';
+
+export interface AnswerRequest {
+  requestId: string;
+  requestSequence: number;
+  surface: AnswerSurface;
+  modeId: string;
+  scope: EvidenceScope;
+  sessionId: string;
+
+  /**
+   * The user's per-mode grounding choice (§6) — one of exactly two values, from
+   * the Answer policy control. Optional: absent means the mode default applies.
+   * This can TIGHTEN grounding (strict) or restore the default; it can never
+   * authorize a source — resolveAnswerPolicy maps it onto GroundingPolicy and
+   * nothing else.
+   */
+  userAnswerPolicy?: AnswerPolicy | null;
+
+  /** Manual input ALWAYS wins over transcript extraction (§12.2). */
+  manualQuestion?: string;
+  transcriptQuestion?: string;
+  /**
+   * Caller-supplied confidence for `transcriptQuestion` (0..1). When present it
+   * replaces the flat 0.7 default, so the decision layer sees the extractor's
+   * ACTUAL certainty — a turn the extractor scored 0.3 (no interrogative shape
+   * at all) is no longer indistinguishable from a clean "?"-terminated
+   * question. Ignored when manualQuestion is set.
+   */
+  questionConfidence?: number;
+  isFollowUp?: boolean;
+  hasScreenContext?: boolean;
+  /** True when the turn has real documents (mode attachments or hydrated
+   *  profile sources) — see ClassificationInput.hasAttachedDocuments. */
+  hasAttachedDocuments?: boolean;
+  /** Attached file names — filename-role routing (glossary/formula). */
+  attachedFileNames?: readonly string[];
+  /** Set by orchestrate() when a port's probeAnchors() said the attached
+   *  material holds this question's terms. Never set by a caller. */
+  corpusAnchored?: boolean;
+  /** Set by orchestrate() from RetrievalPort.probeAnchorSources(). Never by a caller. */
+  anchoredSourceTypes?: readonly SourceType[];
+  /** No mode attachment; the documents are Profile Intelligence ones only. Set by the engine bridge. */
+  profileOnlyDocuments?: boolean;
+  /** How many files are attached to the MODE. Set by the engine bridge; absent = unknown = no scaling. */
+  attachedSourceCount?: number;
+  /**
+   * One bounded fast-model call that restates the question in the vocabulary a
+   * document would use (see retrieval/llm-query-rewrite.ts). Injected by the engine
+   * bridge; absent = the feature is off for this turn. Used ONLY when the first
+   * retrieval leaves a document claim unsupported, and only as a ranking query.
+   */
+  queryRewriter?: QueryRewriter;
+  /** The turn is inside a live meeting with transcript evidence available
+   *  (issue #552, task 7b) — see ClassificationInput.inLiveMeeting. Passed
+   *  straight through to the classifier; never widens `policy` itself. */
+  inLiveMeeting?: boolean;
+  /** The screen-understanding description for this turn, when a screenshot
+   *  was attached. Lends its terms to the retrieval query when the spoken
+   *  question only points at the screen — see screenEnrichedQuery. */
+  screenText?: string;
+
+  /**
+   * Source types the TURN adds to the mode's allowlist because of what is
+   * actually attached (deep-test D10, 2026-08-01). A custom mode is coerced to
+   * the `general` policy, whose allowlist has no CANDIDATE_FILE/JOB_DESCRIPTION
+   * — so a custom mode with a candidate résumé and a JD attached planned []
+   * for every job question and refused with STRICT_NOT_FOUND. The call sites
+   * derive these from the attached files' detected document shapes
+   * (attachmentSourceTypeExtensions); this can only ever ADD types for
+   * documents the mode itself holds — it cannot reach profile pools or another
+   * mode's files, so source isolation is unchanged.
+   */
+  extraAllowedSourceTypes?: SourceType[];
+}
+
+export interface RetrievalPort {
+  retrieve(input: {
+    decision: Readonly<TurnDecision>;
+  }): Promise<{ evidence: EvidenceItem[]; attempts: RetrievalAttemptTrace[] }>;
+  /**
+   * Corpus arbitration (optional): do this port's documents hold the
+   * question's distinctive terms together? Cheap and lexical. Asked only on a
+   * turn decide() sent down the no-retrieval path with documents attached.
+   */
+  probeAnchors?(question: string): boolean;
+  /**
+   * Corpus arbitration, source-aware (optional): the source TYPES whose own
+   * chunks hold the question's distinctive terms together. Lets a turn that
+   * already retrieves reach a document its grammar did not name.
+   */
+  probeAnchorSources?(question: string): SourceType[];
+}
+
+export interface OrchestratorResult {
+  decision: Readonly<TurnDecision>;
+  evidence: EvidenceItem[];
+  answerability: Answerability;
+  trace: AnswerTrace;
+}
+
+/** Manual > transcript. Resolution happens ONCE (§12.2). */
+function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manual' | 'transcript'; confidence: number } {
+  const manual = req.manualQuestion?.trim();
+  // Fillers and stutters are transcriber noise, never content (2026-09-07,
+  // measured in a 1,000-turn live campaign): "arh" became an "ARH number" in
+  // the answer, "arh so due" an "ARIS chart", and filler-laden value lookups
+  // routed FAST because the classifier could not see "what is the <noun>".
+  // Stripped here, once, so the classifier, the retrieval query and the
+  // model all see the same clean question. rawQuestion keeps the original.
+  if (manual) return { resolved: stripSttFillers(manual) || manual, source: 'manual', confidence: 1 };
+  const t = req.transcriptQuestion?.trim() ?? '';
+  if (!t) return { resolved: t, source: 'transcript', confidence: 0 };
+  // Honour the extractor's own confidence when the caller supplied it; fall
+  // back to the historical flat 0.7 when it did not.
+  const c = typeof req.questionConfidence === 'number' && Number.isFinite(req.questionConfidence)
+    ? Math.max(0, Math.min(1, req.questionConfidence))
+    : 0.7;
+  return { resolved: stripSttFillers(t) || t, source: 'transcript', confidence: c };
+}
+
+function buildClaimRequirements(
+  policy: ModePolicy,
+  claimTypes: string[],
+  clauses: Partial<Record<string, string>> = {},
+): ClaimRequirement[] {
+  return claimTypes.map((ct) => {
+    // `claimAuthority()`, not the raw table: T1's widening is resolved per
+    // call, and `authoritativeSources` here is what the retrieval plan and
+    // the admission filter both read.
+    const authority = claimAuthority(ct as keyof typeof CLAIM_AUTHORITY);
+    const isPrivate = authority.authoritative.length > 0;
+    return {
+      claimType: ct as ClaimRequirement['claimType'],
+      authority: isPrivate ? 'PRIVATE_SOURCE_REQUIRED' : 'GENERAL_KNOWLEDGE_ALLOWED',
+      authoritativeSources: authority.authoritative,
+      prohibitedSources: authority.prohibited,
+      // An unsupported personal claim is DISCLOSED, not silently omitted and not
+      // fabricated. Over-refusal is explicitly forbidden (§27.2).
+      fallback: isPrivate
+        ? (policy.capabilityPolicy.unsupportedPersonalClaims === 'REFUSE' ? 'OMIT' : 'DISCLOSE_UNSUPPORTED')
+        : 'GENERALIZE',
+      subject: clauses[ct],
+    };
+  });
+}
+
+/** See the `queries` note in decide(): a bare fragment borrows the attached file names as its retrieval subject. */
+export function bareFragmentQuery(resolved: string, attachedFileNames: readonly string[] | undefined): string | null {
+  if (!attachedFileNames?.length || !isBareFollowUp(resolved)) return null;
+  const words = attachedFileNames
+    .map((n) => String(n ?? '').replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[^a-z0-9]+/gi, ' ').trim())
+    .filter(Boolean)
+    .join(' ');
+  return words ? `${resolved} ${words}`.trim() : null;
+}
+
+// A question that only POINTS at the screen carries none of the screen's
+// terms (2026-09-11, measured in technical-interview with a spec attached and a
+// Slack thread on screen): "answer what he is asking from our spec" retrieved on
+// "answer / asking / spec" and found a résumé chunk; the screen said "what is
+// our instant refund limit and who owns reconciliation escalations", which the
+// spec answers in two lines. When the question is deictic or short, the
+// screen's own text joins the retrieval query — the QUESTION is unchanged.
+const SCREEN_DEIXIS_RE = /\b(?:this|that|these|those|it|here|on (?:my |the )?screen|what (?:he|she|they)(?:'s| is| are)? (?:asking|saying|showing)|what(?:'s| is) (?:he|she|they) (?:asking|saying)|him|her|them)\b/i;
+export const SCREEN_QUERY_MAX_CHARS = 600;
+export function screenEnrichedQuery(query: string, screenText: string | undefined): string {
+  const screen = String(screenText ?? '').replace(/\s+/g, ' ').trim();
+  if (!screen) return query;
+  const q = String(query ?? '').trim();
+  const words = q.split(/\s+/).filter(Boolean).length;
+  if (q && !SCREEN_DEIXIS_RE.test(q) && words > 10) return query;
+  // Prefer the screen's own question-shaped lines; fall back to its head.
+  const sentences = screen.split(/(?<=[.?!])\s+/);
+  const asks = sentences.filter((t) => /\?$/.test(t) || /^(?:what|how|which|who|when|where|why|can|could|do|does|is|are)\b/i.test(t));
+  const lend = (asks.length ? asks.join(' ') : screen).slice(0, SCREEN_QUERY_MAX_CHARS);
+  return q ? `${q} ${lend}`.trim() : lend;
+}
+
+/** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
+/** Evidence capacity floor for a turn with two or more files attached to the mode. */
+export const MULTI_FILE_EVIDENCE = { accepted: 8, tokens: 2400 } as const;
+
+/** Best-evidence score under which a non-FULL first pass counts as low-confidence (see the rewrite trigger). */
+const LOW_CONFIDENCE_TOP_SCORE = 0.3;
+
+export function decide(req: AnswerRequest): Readonly<TurnDecision> {
+  const basePolicy = resolveModePolicy(req.modeId);   // THROWS on unknown id — fails closed
+
+  // The user's Answer policy choice is applied ONCE, here, as an effective
+  // policy — before classification, deliberately: choosing "Only answer from
+  // references" makes a reference-holding mode document-centric, so factual
+  // questions become document claims instead of general-knowledge escapes.
+  // resolveAnswerPolicy can only move between the two exposed grounding values;
+  // it cannot reach OPEN_KNOWLEDGE and it cannot touch allowedSourceTypes.
+  const resolvedGrounding = resolveAnswerPolicy({
+    modeId: req.modeId, userChoice: req.userAnswerPolicy ?? null,
+  });
+  let policy: ModePolicy = resolvedGrounding.source === 'user_choice'
+    ? { ...basePolicy, groundingPolicy: resolvedGrounding.groundingPolicy }
+    : basePolicy;
+
+  // Attachment-derived source types (deep-test D10). Additive and LOW priority:
+  // extras never displace the mode's primary source, they only make the claim →
+  // source intersection non-empty for documents the mode actually holds.
+  const extra = (req.extraAllowedSourceTypes ?? [])
+    .filter((s) => !policy.allowedSourceTypes.includes(s));
+  if (extra.length) {
+    policy = { ...policy, allowedSourceTypes: [...policy.allowedSourceTypes, ...extra] };
+  }
+
+  const q = resolveQuestion(req);
+
+  const cls = classifyTurn({
+    resolvedQuestion: q.resolved,
+    policy,
+    isFollowUp: Boolean(req.isFollowUp),
+    hasScreenContext: req.hasScreenContext,
+    hasAttachedDocuments: req.hasAttachedDocuments,
+    attachedFileNames: req.attachedFileNames,
+    corpusAnchored: req.corpusAnchored === true,
+    anchoredSourceTypes: req.anchoredSourceTypes,
+    profileOnlyDocuments: req.profileOnlyDocuments === true,
+    inLiveMeeting: Boolean(req.inLiveMeeting),
+  });
+
+  const optional = policy.allowedSourceTypes.filter((s) => !cls.requiredSourceTypes.includes(s));
+
+  // MULTI-FILE EVIDENCE CAPACITY (2026-09-19, owner-approved). The accepted-
+  // slice fill round-robins across source types and documents, so with a
+  // résumé, a job description and a handbook attached each gets two of six
+  // slots whatever the question is about, and the chunk that answers — ranked
+  // 7th–9th — is cut. Measured with experiments/retrieval-scale (chunk reaches
+  // the prompt, of 162, 5k/15k/30k/70k): lexical 143/142/141/141 → 144/144/
+  // 143/143, vectors 154/154/151/151 → 157/155/154/154; ZERO effect with one
+  // file, and 10 items / 3000 tokens added only noise. Confined to turns with
+  // two or more mode files because that is the only case with a measured
+  // benefit, and it costs evidence tokens on every grounded turn it applies to.
+  const multiFile = (req.attachedSourceCount ?? 0) >= 2 && cls.shouldRetrieve;
+
+  // A GENERAL question in a LIVE MEETING still reads the meeting (2026-09-24).
+  // "How would you design the retry policy?" needs no private source, so it
+  // took the fast path and retrieved nothing — and the interviewer's own
+  // requirements, set minutes earlier ("retries for up to twenty four hours",
+  // "ordering per merchant"), existed only in speech the prompt no longer
+  // held. Measured in a live mock interview: the answer capped retries at "a
+  // few minutes"; in the injected design round, 2 of 4 constraint-dependent
+  // questions missed a constraint said 26 minutes back that the meeting index
+  // held. Only the MEETING pool is added, and no claim: the turn stays FAST,
+  // so a meeting that never mentioned the subject costs nothing but the
+  // lookup — answerability stays FULL and no absence notice is written — and
+  // the meeting ports' relevance floors keep unrelated talk out.
+  const meetingContextForGeneralTurn = cls.path === 'FAST' && !cls.shouldRetrieve
+    && Boolean(req.inLiveMeeting)
+    && !cls.questionTypes.includes('META_REQUEST')
+    && policy.retrievalPolicy.enabled
+    && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
+  const acceptedBase = multiFile
+    ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
+    : policy.retrievalPolicy.maximumAcceptedEvidence;
+
+  const retrievalPlan: RetrievalPlan = {
+    path: cls.path,
+    shouldRetrieve: cls.shouldRetrieve || meetingContextForGeneralTurn,
+    // When no claim named a source, retrieval used to fan out to EVERY allowed
+    // type — "Reverse a linked list in Python" retrieved six résumé/JD chunks
+    // (deep-run 2, issue 5). An unclaimed retrieval consults document pools
+    // only; identity pools (résumé/JD/profile) are reachable solely through
+    // claims that name them.
+    sourceTypes: meetingContextForGeneralTurn ? ['MEETING_TRANSCRIPT'] : cls.shouldRetrieve
+      ? (cls.requiredSourceTypes.length
+        ? cls.requiredSourceTypes
+        : policy.allowedSourceTypes.filter((s) =>
+          s === 'REFERENCE_FILE' || s === 'PROJECT_FILE' || s === 'CODING_SAMPLE' || s === 'MEETING_TRANSCRIPT'
+          // …unless the résumé and job description are the ONLY documents this
+          // turn has (2026-09-20). "Will they help me move countries and pay for
+          // it?" names no claim, so it planned reference-file pools that were
+          // EMPTY and went out with zero evidence — measured at every size, with
+          // the relocation paragraph sitting in the job description. The
+          // issue-5 concern (a coding question retrieving résumé chunks) does
+          // not arise: a coding turn does not retrieve at all, and this branch
+          // is reached only by a turn that decided to.
+          || (req.profileOnlyDocuments === true && (s === 'RESUME' || s === 'JOB_DESCRIPTION'))))
+      : [],
+    // A bare fragment with no referent ("explain", "why?", "more") retrieves
+    // NOTHING on its own text, so the composer had no material to apply it to
+    // and asked "what should I explain?" (2026-09-07, always-answer). When
+    // files are attached, the attachments are the only subject the fragment
+    // can be about: widen the retrieval query with their names so their
+    // chunks surface, and the follow-up guidance applies the fragment to them.
+    // The resolved question itself is unchanged — only the retrieval query.
+    queries: [screenEnrichedQuery(bareFragmentQuery(q.resolved, req.attachedFileNames) ?? q.resolved, req.screenText)],
+    entities: [],
+    useSemanticSearch: true,
+    useKeywordSearch: true,
+    useHeadingSearch: cls.questionTypes.includes('DOCUMENT_FACT'),
+    useExactEntitySearch: cls.questionTypes.includes('DOCUMENT_FACT'),
+    usePreviousSourceContinuity: cls.questionTypes.includes('FOLLOW_UP'),
+    retrieveAdjacentContext: cls.path === 'VERIFICATION',
+    maximumAttempts: 2,
+    // An exhaustive request ("find every place…") is widened HERE, once: the
+    // ports read these two numbers, the packer reads the cap, and the composer
+    // reads the flag. ×2 candidates so the rerank pool has something to widen
+    // into; ×3 accepted evidence because the measured miss was 8 of ~20 values
+    // with the cap at 6 (2026-09-07). Latency is still bounded: the rerank
+    // budget is unchanged, only its pool grows.
+    maximumCandidates: policy.retrievalPolicy.maximumCandidates * (cls.exhaustive && cls.shouldRetrieve ? 2 : 1),
+    maximumAcceptedEvidence: acceptedBase * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
+    ...(multiFile ? { evidenceTokens: Math.max(policy.contextBudget.evidenceTokens, MULTI_FILE_EVIDENCE.tokens) } : {}),
+    timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
+    ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
+  };
+
+  return freezeTurnDecision({
+    requestId: req.requestId,
+    requestSequence: req.requestSequence,
+    sessionId: req.sessionId,
+    meetingId: req.scope.meetingId,
+
+    modeId: policy.id,
+    modePolicyVersion: policy.version,
+
+    rawQuestion: req.manualQuestion ?? req.transcriptQuestion ?? '',
+    resolvedQuestion: q.resolved,
+    isFollowUp: Boolean(req.isFollowUp) || cls.questionTypes.includes('FOLLOW_UP'),
+
+    questionTypes: cls.questionTypes,
+    claimRequirements: buildClaimRequirements(policy, cls.claimTypes, cls.claimClauses),
+    inferredClaimTypes: cls.inferredClaimTypes ?? [],
+
+    scope: req.scope,
+    authorizedSources: [],            // populated by source authorization at retrieval time
+    requiredSourceTypes: cls.requiredSourceTypes,
+    optionalSourceTypes: optional as SourceType[],
+
+    groundingPolicy: policy.groundingPolicy,
+    generalKnowledgeAllowed: generalKnowledgeAllowed(policy),
+    personalClaimsRequireEvidence: policy.personalClaimsRequireEvidence,
+    documentClaimsRequireEvidence: policy.documentClaimsRequireEvidence,
+    meetingClaimsRequireEvidence: policy.meetingClaimsRequireEvidence,
+    jobClaimsRequireJdEvidence: policy.jobClaimsRequireJdEvidence,
+
+    retrievalPlan,
+    createdAt: 0,   // stamped by the caller; kept deterministic for tests
+  });
+}
+
+const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'has', 'was',
+  'were', 'you', 'your', 'our', 'their', 'about', 'what', 'how', 'why', 'when', 'did', 'does', 'can',
+  'could', 'would', 'should', 'they', 'them', 'been', 'into', 'more', 'than', 'then', 'tell', 'give',
+  'explain', 'describe', 'candidate', 'applicant', 'experience', 'project', 'projects', 'skills',
+
+  // ── Source-scaffolding vocabulary ──────────────────────────────────────────
+  //
+  // Words that describe the ACT of consulting a source are not evidence of its
+  // content, and treating them as salient produced confident answers from
+  // unrelated documents. Measured on I-01, "What does the empty reference file
+  // say about pricing?": the sales battlecard chunk reading "Cluely lacks
+  // per-mode reference files" shares `reference` and `file` with the question and
+  // was therefore accepted as supporting a DOCUMENT_FACT claim about pricing. The
+  // turn reported FULL on three chunks, none of which mentioned pricing.
+  //
+  // Every entry here is a word a user says to point AT a source, never a fact a
+  // source states. Content nouns are deliberately absent — 'pricing', 'outage'
+  // and 'salary' stay salient.
+  'file', 'files', 'document', 'documents', 'documentation', 'reference', 'references',
+  'material', 'materials', 'provided', 'according', 'information', 'detail', 'details',
+  'say', 'says', 'said', 'state', 'states', 'stated', 'mention', 'mentions', 'mentioned',
+  'contain', 'contains', 'note', 'notes', 'text', 'page', 'pages', 'attached', 'upload',
+  'uploaded', 'source', 'sources', 'anything', 'something', 'know', 'knows',
+  // Summary/recap verbs describe the OPERATION requested, not a fact to find.
+  // "Summarise the reference material" carried exactly one salient term after
+  // scaffolding removal — the stem of "summarise" — which no document contains,
+  // so a summary request over five perfectly good evidence items reported NONE
+  // (measured regression J-01, introduced by the scaffolding stoplist itself).
+  // With these removed the subject has NO content terms, which is correct: a
+  // summary names no fact, so any authorized in-scope evidence supports it and
+  // the existing "nothing to match on — do not block" rule carries the turn.
+  'summarise', 'summarize', 'summary', 'summaries', 'overview', 'recap']);
+
+/**
+ * Fold a word to a light stem so inflections match.
+ *
+ * Exact token comparison made "graduate" and "graduated" different terms, so
+ * "What year did the candidate graduate?" found no support in a résumé section
+ * reading "Graduated **2017**" — the correct chunk, correctly retrieved, and the
+ * version filter had already done its job. Measured on G-01.
+ *
+ * Deliberately crude and suffix-only. A real stemmer would also conflate words
+ * this must keep apart, and the whole point of this check is to stop a chunk
+ * about one topic evidencing a claim about another.
+ */
+const stem = (w: string): string => w
+  .replace(/(?:ations|ation|ings|ing|edly|ed|es|s)$/, '')
+  // Drop a trailing silent 'e' AFTER suffix stripping, or the two halves of the
+  // same word still disagree: "graduated" strips to "graduat" while "graduate"
+  // strips to nothing, and the pair that motivated this fix would still miss.
+  .replace(/e$/, '')
+  .replace(/i$/, 'y');
+
+/**
+ * Salient terms of a text: content words, stemmed, scaffolding removed.
+ *
+ * The stoplist is checked against BOTH the surface form and the stem. Checking
+ * only the surface form let inflections slip past — `mentions` is listed but
+ * `mentioning` was not, and after stemming both become `mention`, so the filter
+ * has to run on the stem as well or the list silently has holes.
+ */
+const salientTerms = (text: string): Set<string> => {
+  const out = new Set<string>();
+  for (const raw of String(text).toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/)) {
+    if (raw.length <= 2 || STOPWORDS.has(raw)) continue;
+    const t = raw.length > 4 ? stem(raw) : raw;
+    if (STOPWORDS.has(t)) continue;
+    out.add(t);
+  }
+  return out;
+};
+
+/**
+ * Does this item actually support THIS claim?
+ *
+ * `acceptedFor` answers a different question: whether the SOURCE TYPE is
+ * authoritative for the claim. A resume is authoritative for user skills — but a
+ * resume chunk about WebRTC does not evidence a Kubernetes skill claim.
+ *
+ * Conflating the two made PARTIAL unreachable and let a single chunk satisfy
+ * every user claim at once: "Do you have Kubernetes experience?" plus any resume
+ * chunk returned FULL, i.e. a confident answer with no supporting evidence. That
+ * is §16's "high similarity = complete answer" error wearing different clothes.
+ *
+ * Relevance is approximated by shared salient terms. A paraphrase with no shared
+ * term is scored as unsupported — a FALSE NEGATIVE that discloses a gap, which
+ * is the safe direction. The alternative false positive fabricates.
+ */
+/** Which complete-record category may term-free-support each claim class.
+ *  Absent entries (USER_MOTIVATION, MEETING_*, DOCUMENT_FACT…) get no
+ *  shortcut at all — only term overlap. */
+const INVENTORY_CATEGORY_FOR_CLAIM: Record<string, string> = {
+  USER_SKILL: 'skills',
+  USER_EMPLOYMENT: 'experience',
+  USER_PROJECT: 'projects',
+  USER_EDUCATION: 'education',
+  JOB_REQUIRED_SKILL: 'requirements',
+  JOB_PREFERRED_SKILL: 'nice_to_haves',
+};
+
+/**
+ * Ordered variant of salientTerms — the property extractor needs POSITION
+ * (English noun phrases are head-final), which a Set cannot give it.
+ */
+const salientTermList = (text: string): string[] => {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of String(text).toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/)) {
+    if (raw.length <= 2 || STOPWORDS.has(raw)) continue;
+    const t = raw.length > 4 ? stem(raw) : raw;
+    if (STOPWORDS.has(t) || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+};
+
+/**
+ * The PROPERTY a clause requests — its head noun(s) (deep-test D6, 2026-08-01).
+ *
+ * "What backend framework is explicitly documented?" requests a FRAMEWORK.
+ * Single-shared-term support let any chunk containing "backend" report FULL
+ * while the answer claimed nothing was documented — a confident trace over
+ * unsupporting evidence. English noun phrases are head-final, so after
+ * stripping the locative tail ("…in the dossier") and the trailing
+ * verb phrase ("…is explicitly documented"), the last salient term is the
+ * property, and coordinated siblings ("the RTO and RPO") are alternatives.
+ */
+export function propertyHeadTerms(clause: string): string[] {
+  let q = String(clause).toLowerCase().replace(/[?!.]+\s*$/, '');
+  q = q.replace(/\s*\((?:referring to|follow-up to|rephrasing request)[^)]*\)\s*$/, '');
+  // trailing locatives: "in the dossier", "written in this resume", "from the file"
+  let prev;
+  do {
+    prev = q;
+    q = q.replace(/\s+(?:written|stated|listed|recorded|documented|mentioned)?\s*\b(?:in|from|per|inside|within|on)\s+(?:the|this|that|our|its|my|your)\s+[\w-]+\s*$/, '');
+  } while (q !== prev);
+  // trailing predicate: "is explicitly documented", "are configured", "was used"
+  q = q.replace(/\s+(?:is|are|was|were)\s+(?:\w+ly\s+)?(?:documented|used|configured|listed|stated|mentioned|recorded|defined|specified|required|described)\s*$/, '');
+  // A REFLEXIVE tail is a whole-person request, not a property lookup
+  // (2026-08-02): "tell me about yourself", "introduce yourself", "describe
+  // yourself" ask for the person, and a résumé never contains the literal word
+  // "yourself" — treating it as the requested property graded every correctly
+  // résumé-grounded introduction NONE / DOCUMENT_FACT_NOT_FOUND (live log,
+  // looking-for-work, evidence admitted and used). No property head exists, so
+  // the head check must not block; claim authority still gates what counts.
+  if (/\b(?:your|my|him|her|it|our|them)?sel(?:f|ves)\s*$/.test(q)) return [];
+  const terms = salientTermList(q);
+  if (!terms.length) return [];
+  const heads = [terms[terms.length - 1]];
+  // Coordination at the tail: "the RTO and RPO" — both are requested; evidence
+  // for either is evidence for the property.
+  const m = q.match(/([\w-]+)(?:\s*,\s*|\s+and\s+|\s+or\s+)([\w-]+)\s*$/);
+  if (m) {
+    for (const w of [m[1], m[2]]) {
+      const t = w.length > 4 ? stem(w) : w;
+      if (t.length > 2 && !STOPWORDS.has(t) && !heads.includes(t)) heads.push(t);
+    }
+  }
+  return heads;
+}
+
+/** Weak topical overlap — ANY shared salient term. Enough to say the evidence
+ *  is about the right neighbourhood, never enough to report FULL (D6). */
+function evidenceTopicallyRelated(
+  evidence: { content: string },
+  question: string,
+): boolean {
+  const qTerms = salientTerms(question);
+  if (qTerms.size === 0) return true;
+  const eTerms = salientTerms(evidence.content);
+  for (const t of qTerms) if (eTerms.has(t)) return true;
+  return false;
+}
+
+/** Provenance classes that may prove what was actually SAID in a meeting. */
+const TRANSCRIPT_PROVENANCE = new Set(['LIVE_STT', 'IMPORTED_TRANSCRIPT', 'TEST_TRANSCRIPT']);
+
+export function evidenceSupportsClaim(
+  evidence: { acceptedFor: string[]; content: string; metadata?: Record<string, unknown>; provenance?: string },
+  claimType: string,
+  question: string,
+): boolean {
+  if (!evidence.acceptedFor.includes(claimType)) return false;
+  // PROVENANCE GATE (issue 10 / Pattern D, 2026-08-01): a meeting claim may
+  // only be proven by text that physically came from a transcript. Source-TYPE
+  // authority already blocks reference files (MEETING_* is authoritative for
+  // MEETING_TRANSCRIPT only); this adds defense in depth for any future port
+  // that mints MEETING_TRANSCRIPT from a non-transcript store. GUARDED on the
+  // stamp being present — unstamped legacy evidence is unchanged, so this can
+  // never be an inert filter measured as a pass.
+  if ((claimType === 'MEETING_STATEMENT' || claimType === 'MEETING_DECISION' || claimType === 'MEETING_FACT')
+      && typeof evidence.provenance === 'string'
+      && !TRANSCRIPT_PROVENANCE.has(evidence.provenance)) {
+    return false;
+  }
+  // AUTHORITATIVE ABSENCE: an item its port declares to be the COMPLETE
+  // extracted record of a category (the whole skills inventory, the whole
+  // employment list) supports the MATCHING claim class, term overlap or not —
+  // the correct grounded answer may be that the asked-about thing is NOT in
+  // it, and "Do I have Kubernetes experience?" shares no term with a skills
+  // list that (correctly) lacks Kubernetes. Term matching would report NONE
+  // for exactly the questions where the evidence proves the answer.
+  //
+  // CATEGORY-MATCHED, not merely authority-matched (review finding,
+  // 2026-07-31): acceptedFor covers every claim the SOURCE TYPE is
+  // authoritative for, so a category-blind shortcut let the complete
+  // employment list "support" a certifications question and the JD keyword
+  // list "support" a requirements question — manufacturing confidently-wrong
+  // grounded negatives, the exact failure class this feature exists to remove.
+  // Authority is still enforced above: a JD list can never support USER_*.
+  if (evidence.metadata?.completeInventory === true
+      && evidence.metadata?.inventoryCategory === INVENTORY_CATEGORY_FOR_CLAIM[claimType]) {
+    return true;
+  }
+  // PROPERTY-SPECIFIC support (deep-test D6, 2026-08-01): the requested head
+  // noun must appear in the evidence, not merely ANY shared word. One generic
+  // shared term ("backend") let a chunk about on-call rotations fully support
+  // a framework question — FULL answerability while the model rightly said
+  // nothing was documented, i.e. a telemetry lie in the confident direction.
+  const heads = propertyHeadTerms(question);
+  if (heads.length === 0) return true;         // nothing to match on — do not block
+  const eTerms = salientTerms(evidence.content);
+  const headMatched = heads.some((t) => eTerms.has(t));
+  if (!headMatched) return false;
+
+  // QUALIFIED value heads (deep-run 2, issue 7): "the CSV canary" matched the
+  // security canary — the bare head satisfied every sibling value of the same
+  // kind. For countable/config-like value nouns (canary, limit, price, …) a
+  // qualifier the question states must also appear, in the evidence text or
+  // its source identity ("05_competitor_matrix.csv" satisfies "csv").
+  // Descriptive heads ("framework", "process") keep head-only matching —
+  // their qualifiers ("backend framework") are often absent from a correct
+  // answer chunk ("Frameworks: FastAPI").
+  if (VALUE_HEAD_RE.test(heads[0])) {
+    const quals = propertyQualifierTerms(question);
+    if (quals.length > 0) {
+      const identity = salientTerms(
+        `${(evidence as { documentTitle?: string }).documentTitle ?? ''} ${(evidence as { section?: string }).section ?? ''}`,
+      );
+      const qualMatched = quals.some((t) => eTerms.has(t) || identity.has(t));
+      if (!qualMatched) return false;
+    }
+  }
+  return true;
+}
+
+/** Countable/config-like value nouns where sibling values abound and a bare
+ *  head match is meaningless without its qualifier. Generic vocabulary — not
+ *  fixture-derived. */
+const VALUE_HEAD_RE = /^(canar\w*|limits?|prices?|pricing|costs?|ids?|keys?|tokens?|thresholds?|weights?|counts?|sizes?|rates?|seats?|quotas?|budgets?|versions?|values?|numbers?|totals?|c?gpas?|scores?)$/;
+
+/** Temporal/deictic modifiers are not distinguishing qualifiers. */
+const NON_QUALIFIER = new Set(['current', 'activ', 'latest', 'default', 'exact', 'effectiv', 'today', 'new', 'the']);
+
+/**
+ * The distinguishing modifiers preceding the requested head noun — "CSV" in
+ * "the CSV canary", "business plan" in "the Business plan seat limit".
+ */
+export function propertyQualifierTerms(clause: string): string[] {
+  const heads = propertyHeadTerms(clause);
+  if (!heads.length) return [];
+  let q = String(clause).toLowerCase().replace(/[?!.]+\s*$/, '');
+  q = q.replace(/\s*\((?:referring to|follow-up to|rephrasing request)[^)]*\)\s*$/, '');
+  let prev;
+  do {
+    prev = q;
+    q = q.replace(/\s+(?:written|stated|listed|recorded|documented|mentioned)?\s*\b(?:in|from|per|inside|within|on)\s+(?:the|this|that|our|its|my|your)\s+[\w-]+\s*$/, '');
+  } while (q !== prev);
+  const terms = salientTermList(q);
+  const headIdx = terms.lastIndexOf(heads[0]);
+  if (headIdx <= 0) return [];
+  return terms.slice(Math.max(0, headIdx - 2), headIdx)
+    .filter((t) => !NON_QUALIFIER.has(t) && !heads.includes(t));
+}
+
+/**
+ * Evaluate answerability.
+ *
+ * Deliberately NOT a similarity threshold. Phase 2 proved the failure mode: the
+ * superseded resume scored HIGHEST on similarity for questions it answered
+ * wrongly. Similarity was maximal, correctness was zero. So answerability is
+ * decided by whether required claims have authoritative evidence — not by score.
+ */
+/**
+ * THE EMPLOYER'S DOCUMENT IS NOT EVIDENCE ABOUT THE USER (owner decision, 2026-09-21).
+ *
+ * "Have I ever been on call?" — the résumé says nothing; the corpus rule for
+ * employment questions (also an owner decision) plans the job description, whose
+ * line "hiring-manager CALL" shares the question's head noun; DOCUMENT_FACT is an
+ * ALTERNATIVE route to the same subject, so the turn read FULL on six
+ * job-description chunks. The JD may still be RETRIEVED and shown — the model can
+ * say what the role involves — but it can never SATISFY a claim on a turn whose
+ * own grammar makes a claim about the user. The turn then reads PARTIAL/NONE and
+ * the answer says the résumé does not cover it.
+ *
+ * Only for claims the question MAKES ("have I", "my boss", "did you"). The
+ * classifier also GUESSES a USER_PROJECT claim for any unrecognised factual
+ * question in a job-seeking mode — "How many engineers are in pod 3?" — and
+ * applying this rule to a guess made job-description questions unanswerable (the
+ * first attempt at this, reverted within the hour).
+ */
+export function jobDescriptionCannotSupport(
+  decision: Readonly<TurnDecision>,
+  evidence: { sourceType?: string },
+  claimType: string,
+): boolean {
+  if (evidence.sourceType !== 'JOB_DESCRIPTION' || claimType !== 'DOCUMENT_FACT') return false;
+  // "Who would be my manager?" carries an employment claim by grammar, but it is
+  // about the role being applied for — the job description IS its source.
+  if (isProspectiveJobQuestion(decision.resolvedQuestion)) return false;
+  const guessed = new Set<string>((decision.inferredClaimTypes ?? []).map(String));
+  return decision.claimRequirements.some((c) => String(c.claimType).startsWith('USER_') && !guessed.has(String(c.claimType)));
+}
+
+export function evaluateAnswerability(
+  decision: Readonly<TurnDecision>,
+  evidence: EvidenceItem[],
+): Answerability {
+  // A follow-up whose RESOLVED question is still bare has an unresolved
+  // referent: nothing upstream expanded "Why?" or "Would that scale?" into a
+  // question about something. Its subject cannot be supported by any evidence,
+  // because there is no subject. Answering FULL here is what licensed a
+  // confident, context-free answer to "Why?" over six unrelated evidence items
+  // (measured on E-01/E-02, which ship no conversation state).
+  //
+  // The cap SELF-DISABLES once resolution is wired: a resolver that expands the
+  // follow-up against conversation state produces a non-bare resolvedQuestion,
+  // and this branch never fires. It deliberately does not try to answer from
+  // the raw token — §12 says resolve or clarify, never guess.
+  const referentUnresolved = decision.isFollowUp && isBareFollowUp(decision.resolvedQuestion);
+
+  const required = decision.claimRequirements.filter((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED');
+  if (required.length === 0) {
+    if (referentUnresolved) {
+      // "Would that scale?" keeps a general-knowledge half — the scaling
+      // judgement — so it is PARTIAL, not NONE. "Why?" has nothing but the
+      // referent.
+      return decision.claimRequirements.length ? 'PARTIAL' : 'NONE';
+    }
+    // IMPOSSIBLE-STATE invariant (deep-run 2, issue 6): a turn that produced
+    // NO claims at all, was NOT recognised as a general/coding question, and
+    // holds zero evidence must not report FULL — that exact combination
+    // ("Give one tailored interview question", "How long did the incident
+    // last?") is what licensed confident fabrication with a clean trace.
+    // Genuine general questions carry a GENERAL/CODING/SYSTEM_DESIGN type and
+    // keep FULL.
+    const generalish = decision.questionTypes.some((t) =>
+      t === 'GENERAL_TECHNICAL' || t === 'CODING_TASK' || t === 'SYSTEM_DESIGN' || t === 'META_REQUEST');
+    if (!generalish && decision.claimRequirements.length === 0 && evidence.length === 0
+        && decision.retrievalPlan.path !== 'FAST') {
+      return 'NONE';
+    }
+    return 'FULL';           // general question — nothing to ground
+  }
+  if (referentUnresolved) return 'PARTIAL';
+
+  // Satisfaction is judged per SUBJECT, not per claim requirement.
+  //
+  // A subject is one thing the user asked about — a clause. The classifier often
+  // emits several claim types for a single clause because the MODE authorizes
+  // several source types that could answer it: "Who owns the events table
+  // migration?" in team-meet mode yields both MEETING_STATEMENT and
+  // DOCUMENT_FACT. Those are ALTERNATIVES (either a transcript or a reference
+  // document answers it), not a conjunction.
+  //
+  // Counting them as a conjunction made PARTIAL structurally unavoidable for that
+  // whole class: the transcript supported MEETING_STATEMENT, no reference document
+  // supported DOCUMENT_FACT, and a fully-answered question reported PARTIAL
+  // (measured on H-02 and H-04). Grouping by subject keeps genuine multi-part
+  // questions strict — "tell me about PriceX AND explain how WebRTC works" is two
+  // distinct subjects and still requires both — while letting one clause be
+  // satisfied by any authoritative route to it.
+  // …with ONE refinement (2026-07-31): claims about the USER and claims about
+  // the JOB on the SAME clause are a COMPARISON, not alternatives. "Do I meet
+  // the two-year experience requirement?" emits USER_SKILL (the résumé side)
+  // and JOB_REQUIRED_SKILL (the JD side) from one clause; the JD is PROHIBITED
+  // from evidencing the user claim and vice versa, so neither can substitute
+  // for the other — grouping them together let résumé evidence alone report
+  // FULL with the requirement never retrieved (measured: the 2-year question
+  // planned only JOB_DESCRIPTION and compared nothing). Claims within one
+  // family remain alternatives, which is what H-02/H-04 established.
+  //
+  // The conjunction applies ONLY to claims whose authoritative source the turn
+  // actually PLANS. A claim no planned source can ever satisfy (JOB vocabulary
+  // in team-meet, which authorizes no JD at all) folds back into the base
+  // family as an alternative — otherwise a fully-answered meeting question
+  // that merely contains the word "required" reports structural PARTIAL
+  // forever (review finding, 2026-07-31). Disclosure for genuinely
+  // unreachable sources belongs to the unsupported-in-mode machinery, not to
+  // answerability.
+  const plannedTypes = new Set<string>(decision.retrievalPlan.sourceTypes as readonly string[]);
+  const plannable = (req: ClaimRequirement): boolean =>
+    (req.authoritativeSources ?? []).some((s) => plannedTypes.has(s));
+  const family = (req: ClaimRequirement): string =>
+    plannable(req) && String(req.claimType).startsWith('JOB_') ? 'job' : 'user';
+  const bySubject = new Map<string, typeof required>();
+  for (const req of required) {
+    const subject = `${req.subject ?? decision.resolvedQuestion} ${family(req)}`;
+    if (!bySubject.has(subject)) bySubject.set(subject, []);
+    bySubject.get(subject)!.push(req);
+  }
+
+  let supported = 0;
+  let weaklySupported = 0;
+  for (const [, reqs] of bySubject) {
+    // Term-match against the CLEAN clause, not the grouping key — the family
+    // suffix is a bucket label, and letting it into salientTerms would hand
+    // every user-side group a free "user" term to match on.
+    const ok = reqs.some((req) => evidence.some(
+      (e) => !jobDescriptionCannotSupport(decision, e, req.claimType) && evidenceSupportsClaim(e, req.claimType, req.subject ?? decision.resolvedQuestion),
+    ));
+    if (ok) { supported++; continue; }
+    // Topically-related-but-property-missing evidence (deep-test D6): the right
+    // document neighbourhood was retrieved but the requested value is not
+    // provably in it. That is PARTIAL — never FULL (the old single-shared-term
+    // rule), and not NONE either (the evidence may still contain the answer
+    // under different vocabulary; the composer directs an honest answer).
+    const weak = reqs.some((req) => evidence.some(
+      (e) => e.acceptedFor.includes(req.claimType)
+        && evidenceTopicallyRelated(e, req.subject ?? decision.resolvedQuestion),
+    ));
+    if (weak) weaklySupported++;
+  }
+  if (supported === 0 && weaklySupported === 0) return 'NONE';
+  if (supported < bySubject.size) return 'PARTIAL';
+
+  // Conflict detection (§16.1).
+  //
+  // An earlier version returned CONFLICTING whenever two DIFFERENT documents of
+  // the same source type were accepted. That is not a conflict — it is ordinary
+  // multi-document retrieval, and the live run showed it firing on 8 of 42
+  // questions, which would have told users their references disagreed every time
+  // an answer drew on two files.
+  //
+  // A real conflict is the SAME source appearing at two different versions.
+  // Scope/version filtering should already make that unreachable, so this is an
+  // assertion surface: if it ever fires, the filter has a hole.
+  //
+  // This compares `retrievedVersionId` — the version each chunk actually came
+  // from — NOT `versionId`, which is the source's ACTIVE version. Comparing the
+  // latter made the check dead code: the adapter stamps every admitted item with
+  // the active version, so two items from one source could not differ, and the
+  // "assertion surface" above could never fire no matter how broken the filter
+  // was. The one hole that does exist — an unknown chunk version being assumed
+  // current — is now an opt-in (`assumeCurrentWhenVersionUnknown`), and it is
+  // exactly the configuration in which this check earns its place.
+  //
+  // NOT IMPLEMENTED: content-level contradiction ("v1 says 4 engineers, v2 says
+  // 11") between two CURRENT sources. That needs value extraction and comparison
+  // per claim. Reporting a conflict we cannot actually detect would be worse than
+  // reporting none — §16.1 requires identifying the conflicting VALUES, not
+  // merely asserting one exists. So version conflicts are resolved by the filter
+  // (06_SOURCE_AUTHORITY_SPEC §3.2, newer wins) and CONFLICTING is reserved for a
+  // filter hole. Corpus questions G-01..G-03 are therefore §3.2 cases expecting
+  // FULL from the active revision, not §5 cases expecting CONFLICTING.
+  const versionsBySource = new Map<string, Set<string>>();
+  for (const e of evidence) {
+    if (!versionsBySource.has(e.sourceId)) versionsBySource.set(e.sourceId, new Set());
+    versionsBySource.get(e.sourceId)!.add(e.retrievedVersionId ?? e.versionId);
+  }
+  for (const versions of versionsBySource.values()) if (versions.size > 1) return 'CONFLICTING';
+
+  return 'FULL';
+}
+
+export async function orchestrate(
+  req: AnswerRequest,
+  retrieval?: RetrievalPort,
+): Promise<OrchestratorResult> {
+  // performance.now(), NOT Date.now(). This is a desktop app that sleeps in the
+  // middle of a turn all the time — a lid closed between here and the trace
+  // literal would otherwise report a four-hour retrieval. A monotonic clock
+  // cannot be dragged by a sleep, an NTP step or a timezone change.
+  const clock = () => (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
+  const span = (from: number) => Math.max(0, Math.round(clock() - from));
+  const t0 = clock();
+
+  // Phase spans. Every one of these was a hardcoded 0 from the day the trace
+  // was written (`const t0 = 0` was literally the total), so `latency` looked
+  // like a measurement and was a placeholder — 173 production telemetry rows
+  // reported 0ms for everything before this was noticed. A zero here now means
+  // "measured zero", which is why the two spans that genuinely cannot be timed
+  // from inside this function are documented at the trace literal instead of
+  // being left to look measured.
+  let questionResolutionMs = 0;
+  let classificationMs = 0;
+  let retrievalMs = 0;
+  let evidenceEvaluationMs = 0;
+
+  // ── Conversation continuity (§12.3) ───────────────────────────────────────
+  // Resolve a bare follow-up against this session's state BEFORE deciding.
+  // conversation-state.ts existed with zero callers, so "Why not?" reached the
+  // classifier bare, tripped the isBareFollowUp CLARIFICATION cap, and every
+  // live follow-up became a disclosure instead of an answer. Resolution here
+  // rewrites the question to carry its referent ("Why not? (referring to:
+  // Kubernetes)"), which both retrieves against the right subject and
+  // self-disables the bare-follow-up cap — exactly the design note on that cap.
+  // resolveReference is deliberately conservative: no state or no pronoun →
+  // question passes through untouched, and nothing below this line changes.
+  let effectiveReq = req;
+  let referentWasResolved = false;
+  // Observability snapshot of the resolver's decision + the state it saw
+  // (context-debug logging). Captured BEFORE this turn advances the state.
+  let referentResolution: AnswerTrace['referentResolution'];
+  // The PRE-resolution question. decision.rawQuestion is derived from
+  // effectiveReq, which the rewrite below may have already changed — logging
+  // that as "original" hid every resolver decision from the telemetry.
+  const originalQuestion = (req.manualQuestion ?? req.transcriptQuestion ?? '').trim();
+  let priorDecision: import('../contracts/types').PriorTurnDecision | undefined;
+  const tResolve = clock();
+  try {
+    const { resolveAgainstSession, getConversationState } = require('../question/conversation-state-store');
+    const rawQ = originalQuestion;
+    if (rawQ) {
+      const priorState = getConversationState(req.sessionId);
+      priorDecision = priorState?.previousDecision;
+      // T7: pass this turn's scope so a topic from the PREVIOUS meeting/mode
+      // cannot rewrite this question. `advance()` resets on scope change, but it
+      // runs AFTER this line -- resetting on write cannot protect a read.
+      const ref = resolveAgainstSession(req.sessionId, rawQ, req.scope);
+      referentResolution = {
+        applied: Boolean(ref.usedState && ref.resolved !== rawQ),
+        ...(ref.referent ? { referent: ref.referent } : {}),
+        ...(ref.reason ? { reason: ref.reason } : {}),
+        ...(priorState?.activePerson ? { activePerson: priorState.activePerson } : {}),
+        ...(priorState?.activeTopic ? { activeTopic: priorState.activeTopic } : {}),
+        ...(priorState?.previousQuestion ? { previousQuestion: priorState.previousQuestion } : {}),
+      };
+      if (ref.usedState && ref.resolved !== rawQ) {
+        referentWasResolved = true;
+        effectiveReq = req.manualQuestion
+          ? { ...req, manualQuestion: ref.resolved, isFollowUp: true }
+          : { ...req, transcriptQuestion: ref.resolved, isFollowUp: true };
+      }
+    }
+  } catch { /* continuity must never break a turn */ }
+  questionResolutionMs = span(tResolve);
+
+  // decide() resolves the mode policy AND classifies the turn, so this span
+  // covers both. policyResolutionMs is left at 0 rather than being given half
+  // of a number nobody measured — splitting it means instrumenting decide().
+  const tClassify = clock();
+  let decision = decide(effectiveReq);
+  // What the CLASSIFIER claimed, before corpus arbitration adds to it (used by the
+  // rewrite trigger on live surfaces).
+  const classifierClaims = new Set(decision.claimRequirements.map((c) => String(c.claimType)));
+
+  // ── Corpus arbitration ────────────────────────────────────────────────────
+  // The classifier decides from grammar whether a question is about the
+  // attached material; it cannot see the material. When it says "no retrieval"
+  // and documents ARE attached, the port is asked whether one of its chunks
+  // holds the question's distinctive terms together — and if so the turn is
+  // decided again as a document lookup. Measured 2026-09-19: "What is
+  // ledger.compaction.window_minutes set to?" and "What is step 6 of the
+  // regional failover runbook?" took the no-retrieval path at every file size
+  // with the handbook attached. Lexical and synchronous; a probe that throws
+  // leaves the first decision standing.
+  if (!decision.retrievalPlan.shouldRetrieve && effectiveReq.hasAttachedDocuments && retrieval?.probeAnchors) {
+    try {
+      const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
+      if (probeQ && retrieval.probeAnchors(probeQ)) {
+        const again = decide({ ...effectiveReq, corpusAnchored: true });
+        if (again.retrievalPlan.shouldRetrieve) decision = again;
+      }
+    } catch { /* arbitration must never break a turn */ }
+  }
+
+  // Source-aware arbitration: a turn that DOES retrieve can still be pointed at
+  // the wrong document. Measured 2026-09-19 on the profile path (résumé + job
+  // description, looking-for-work): "How much relocation does the company
+  // cover?", "How often are Settlement Core engineers on call?" and 35 more of
+  // 45 job-description questions planned RESUME + PROFILE_FACT + REFERENCE_FILE
+  // — the job description is planned only when the question happens to say
+  // "role", "position" or "interview" — so the port's planned-type filter
+  // dropped every chunk that could answer them. The port names the source types
+  // whose chunks hold the question's terms; any the plan lacks are offered to
+  // the classifier, which still applies the mode's allowlist.
+  if (decision.retrievalPlan.shouldRetrieve && retrieval?.probeAnchorSources) {
+    try {
+      const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
+      const planned = new Set(decision.retrievalPlan.sourceTypes);
+      const anchoredIn = probeQ ? retrieval.probeAnchorSources(probeQ) : [];
+      const missing = anchoredIn.filter((s) => !planned.has(s));
+      // EMPLOYMENT-PHRASED QUESTIONS ABOUT THE JOB (owner's decision 2026-09-20:
+      // "let the corpus decide"). In a job-search mode "Who would be my manager?",
+      // "Can I work from home?", "How senior do I need to be?" are first person, so
+      // they classify as USER_* claims — and those PROHIBIT the job description as
+      // a source, deliberately, so a JD requirement can never be presented as the
+      // user's own history. The prohibition stays. But when the résumé does NOT
+      // hold the question's terms, it cannot be what the question is about; on a
+      // profile-only turn the job description is then planned as well, as a
+      // DOCUMENT lookup (DOCUMENT_FACT has authority over it; the USER_* claim
+      // still cannot be evidenced by JD text).
+      const allowsJd = decision.requiredSourceTypes.includes('JOB_DESCRIPTION') || decision.optionalSourceTypes.includes('JOB_DESCRIPTION');
+      const onlyUserClaims = decision.claimRequirements.length > 0 && decision.claimRequirements.every((c) => /^USER_/.test(c.claimType));
+      if (effectiveReq.profileOnlyDocuments && allowsJd && onlyUserClaims && !planned.has('JOB_DESCRIPTION')
+          && !anchoredIn.includes('RESUME') && !missing.includes('JOB_DESCRIPTION')) {
+        missing.push('JOB_DESCRIPTION');
+      }
+      if (missing.length) {
+        const again = decide({ ...effectiveReq, anchoredSourceTypes: missing });
+        if (again.retrievalPlan.shouldRetrieve) decision = again;
+      }
+    } catch { /* arbitration must never break a turn */ }
+  }
+  classificationMs = span(tClassify);
+
+  // ── T5: a resolved bare follow-up regains its subject's pool ───────────────
+  //
+  // The unclaimed-retrieval fallback in `decide()` consults DOCUMENT pools only
+  // and deliberately excludes identity pools — "Reverse a linked list in Python"
+  // must not retrieve resumes (deep-run 2, issue 5). That exclusion is right for
+  // its own case and wrong for the one it also catches: a bare follow-up
+  // ("Why?", "What did you monitor after that?") has no claims of its own
+  // BECAUSE its subject lives in the previous turn, and the fallback then denies
+  // it the very pool that turn answered from. Measured:
+  //
+  //   looking-for-work  "Why? (referring to: Kubernetes)"  planned [REFERENCE_FILE]
+  //                     -- resume/profile excluded, though the prior turn used them
+  //   recruiting        same                               CANDIDATE_FILE excluded,
+  //                     the mode's PRIORITY-1 source
+  //
+  // That is a second, independent cause of "follow-ups jump to the wrong
+  // project", distinct from the chunking one: even when the referent resolves
+  // correctly, the plan can exclude the pool that owns the subject.
+  //
+  // Four conditions, and each is load-bearing:
+  //   • `usePreviousSourceContinuity` — the plan already declares this a
+  //     continuity turn. The field existed and had no consumer for this.
+  //   • `referentWasResolved` — the subject genuinely came from state. Without
+  //     it a self-contained question with no claims would inherit pools it never
+  //     asked for, which is exactly the deep-run 2 defect.
+  //   • the plan used the FALLBACK (no claim named a source). A follow-up that
+  //     names its own sources keeps them.
+  //   • intersect with the mode allowlist. Continuity can restore a pool the
+  //     mode authorizes; it can never introduce one it does not.
+  if (isRetrievalFixEnabled('followUpSourceContinuity')
+      && referentWasResolved
+      && decision.retrievalPlan.shouldRetrieve
+      && decision.retrievalPlan.usePreviousSourceContinuity
+      && decision.claimRequirements.every((c) => c.authority !== 'PRIVATE_SOURCE_REQUIRED')) {
+    try {
+      const { getConversationState } = require('../question/conversation-state-store');
+      const prior = getConversationState(req.sessionId)?.previousPlannedSourceTypes ?? [];
+      // `optional` is the mode allowlist minus what the claims required (see
+      // where it is computed in decide()), so the two together ARE the
+      // allowlist — including any extraAllowedSourceTypes decide() folded in.
+      const allowed = new Set<SourceType>([
+        ...decision.requiredSourceTypes,
+        ...decision.optionalSourceTypes,
+      ]);
+      const planned = new Set(decision.retrievalPlan.sourceTypes);
+      const restored = prior.filter((s: SourceType) => allowed.has(s) && !planned.has(s));
+      if (restored.length) {
+        decision = freezeTurnDecision({
+          ...decision,
+          retrievalPlan: {
+            ...decision.retrievalPlan,
+            sourceTypes: [...decision.retrievalPlan.sourceTypes, ...restored],
+          },
+        } as never);
+      }
+    } catch { /* continuity must never break a turn */ }
+  }
+
+  // Precedence follow-up (live turns 18/92, 2026-08-01): "Why did you ignore
+  // the other values?" / "Why are the lower values not current?" ask about the
+  // PREVIOUS turn's source decision, which this turn's own retrieval cannot
+  // reproduce — one live answer confabulated a rationale, the other refused.
+  // Deterministic detection, no LLM: a why/explain shape naming displaced
+  // values or the precedence mechanism itself, gated on a recorded decision
+  // actually existing for this session. The record is attached for the
+  // COMPOSER to render; routing and retrieval are unchanged by it.
+  const PRECEDENCE_WHY_RE = /\b(?:why\b[\s\S]*\b(?:ignor\w+|other|lower|higher|old(?:er)?|previous|earlier|retired|archived|superseded|legacy|outdated|not\s+current)\b|source[-\s]?precedence)\b/i;
+  if (priorDecision && PRECEDENCE_WHY_RE.test(originalQuestion)) {
+    decision = Object.freeze({ ...decision, precedenceHistory: priorDecision });
+  }
+
+  let evidence: EvidenceItem[] = [];
+  let attempts: RetrievalAttemptTrace[] = [];
+
+  if (decision.retrievalPlan.shouldRetrieve && retrieval) {
+    // Timed at the call site, not read from `attempts[].durationMs`: only
+    // legacy-retrieval-port populates that field, so trusting it would report
+    // 0ms for every turn served by any other port.
+    const tRetrieve = clock();
+    try {
+      const r = await retrieval.retrieve({ decision });
+      evidence = r.evidence;
+      attempts = r.attempts;
+      retrievalMs = span(tRetrieve);
+    } catch (e) {
+      retrievalMs = span(tRetrieve);
+      // §22.1: a retrieval dependency failure is RECORDED and the turn
+      // continues with no evidence — it must NOT abort the turn back to a
+      // legacy path that would inject a raw context blob instead. Answerability
+      // then correctly reports NONE rather than a confident ungrounded answer.
+      attempts = [{
+        attempt: 1,
+        strategy: 'retrieval_port',
+        queries: decision.retrievalPlan.queries,
+        candidateCount: 0,
+        admittedAfterScopeFilter: 0,
+        rejectedByScopeFilter: 0,
+        durationMs: 0,
+        failed: e instanceof Error ? e.message : String(e),
+      }];
+    }
+  }
+
+  const tEvaluate = clock();
+  let answerability = evaluateAnswerability(decision, evidence);
+  evidenceEvaluationMs = span(tEvaluate);
+
+  // ── LOW-CONFIDENCE QUERY REWRITE (2026-09-20) ───────────────────────────
+  // The first pass could not support a claim that REQUIRES the user's own
+  // material — the turn is headed for "I couldn't find that in your documents"
+  // (or, measured live, a confidently wrong answer). Before accepting that, ask
+  // a fast model ONCE to restate the question in document vocabulary and
+  // retrieve again. Bounded by the rewriter's own deadline; every failure mode
+  // (timeout, error, empty, no new words, retrieval throwing) leaves the turn
+  // exactly as the first pass left it.
+  //
+  // What the rewrite may NOT do: it replaces `retrievalPlan.queries` only. The
+  // port ranks with that text, but source-type planning, claim authority, scope
+  // and admission all still read `resolvedQuestion` — a model cannot talk its
+  // way into a source the user's question did not authorize. Answerability is
+  // re-evaluated against the ORIGINAL question too.
+  //
+  // TWO triggers, both meaning "the first pass did not find it":
+  //   · answerability NONE — nothing supports the claim;
+  //   · WEAK evidence — the best item scores under LOW_CONFIDENCE_TOP_SCORE.
+  //     Answerability can read PARTIAL off six chunks that each share one
+  //     common word with the question: measured live on the lexical stack,
+  //     "How hard can a single customer hammer the API before throttling?"
+  //     came back PARTIAL with every item at ~0.15, the rewrite stayed out,
+  //     and the turn refused. Offline (mode path, plain text, 644 retrieving
+  //     turns): on the lexical stack every non-NONE miss sits below 0.3 and
+  //     there is not one miss above it (0 of 529); on the vector stack almost
+  //     no turn is below 0.3 at all, so this costs a vector user nothing.
+  //
+  // WHO may trigger it — narrowed after an adversarial review ran 18 ordinary live
+  // interview turns through the first version and the rewrite fired on 8 of them
+  // ("Can I assume the input is sorted?", "How do I handle conflict with a
+  // coworker?"), adding up to 1.5 s and a second retrieval to turns it cannot help:
+  //   · the turn must be a document LOOKUP — a DOCUMENT_FACT or JOB_* claim — not
+  //     merely carry some private claim; a behavioural question about the user has
+  //     one too, and no document vocabulary to be rewritten into;
+  //   · never a coding or system-design turn;
+  //   · "weak evidence" is judged on DOCUMENT evidence only. The transcript port
+  //     normalises its best score to 1.0 and the screen port always scores 1, so
+  //     one unrelated transcript line used to hide a weak document result — in
+  //     exactly the live meetings the trigger was written for.
+  const DOCUMENT_SOURCES: ReadonlySet<string> = new Set(['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT', 'REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE', 'CANDIDATE_FILE']);
+  const documentEvidence = evidence.filter((e) => DOCUMENT_SOURCES.has(e.sourceType));
+  const topScore = documentEvidence.reduce((m, e) => Math.max(m, e.finalScore ?? 0), 0);
+  const weakEvidence = documentEvidence.length > 0 && answerability !== 'FULL' && topScore < LOW_CONFIDENCE_TOP_SCORE;
+  const documentLookup = decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'
+    && (c.claimType === 'DOCUMENT_FACT' || String(c.claimType).startsWith('JOB_')));
+  const codingTurn = decision.questionTypes.some((t) => t === 'CODING_TASK' || t === 'SYSTEM_DESIGN');
+  // On a LIVE surface the question is an interviewer's utterance and +1.5 s is
+  // felt. There the lookup must be one the classifier itself recognised: a claim
+  // added by corpus arbitration alone also covers "Can I assume the input is
+  // sorted?" (first person → employment → document lookup), which the classifier
+  // does not know is a coding clarification. Typed chat keeps the wider trigger —
+  // it is where "Who would be my manager?" is asked, and the user is waiting anyway.
+  const liveSurface = req.surface === 'what-to-answer' || req.surface === 'meeting-overlay';
+  const classifierLookup = [...classifierClaims].some((c) => c === 'DOCUMENT_FACT' || c.startsWith('JOB_'));
+  const answerabilityBefore = answerability;
+  let queryRewrite: AnswerTrace['queryRewrite'];
+  if (req.queryRewriter && retrieval
+      && decision.retrievalPlan.shouldRetrieve
+      && (answerability === 'NONE' || weakEvidence)
+      && documentLookup && !codingTurn && (!liveSurface || classifierLookup)
+      && isRetrievalFixEnabled('lowConfidenceQueryRewrite')) {
+    let outcome: QueryRewriteOutcome;
+    try { outcome = await req.queryRewriter(decision.resolvedQuestion); }
+    catch { outcome = { query: null, reason: 'ERROR', durationMs: 0 }; }
+    let added = 0;
+    if (outcome.query) {
+      const tRewrite = clock();
+      try {
+        const rewritten = freezeTurnDecision({
+          ...decision,
+          retrievalPlan: { ...decision.retrievalPlan, queries: [outcome.query] },
+        } as never);
+        const r2 = await retrieval.retrieve({ decision: rewritten });
+        // CAPPED before it is judged (review finding): the merge used to hand 12
+        // items to answerability on a turn whose cap is 6, so support was computed
+        // over evidence the packer then dropped. Same order the packer uses.
+        const before = new Set(evidence.map((e) => e.evidenceId));
+        const merged = mergeRewrittenEvidence(evidence, r2.evidence, { maxNew: answerabilityBefore === 'NONE' ? 3 : 2 })
+          .sort((a, b) => b.finalScore - a.finalScore || a.evidenceId.localeCompare(b.evidenceId))
+          .slice(0, Math.max(1, decision.retrievalPlan.maximumAcceptedEvidence));
+        added = merged.filter((e) => !before.has(e.evidenceId)).length;
+        evidence = merged;
+        attempts = [...attempts, ...r2.attempts.map((a) => ({ ...a, strategy: `llm_query_rewrite:${a.strategy}` }))];
+        answerability = evaluateAnswerability(decision, evidence);
+      } catch { /* the first pass stands */ }
+      retrievalMs += span(tRewrite);
+    }
+    queryRewrite = {
+      reason: outcome.reason, durationMs: outcome.durationMs, queryChars: outcome.query?.length ?? 0,
+      addedEvidence: added, answerabilityBefore, answerabilityAfter: answerability,
+    };
+    // One content-free line per firing. Four live runs could not say whether the
+    // rewrite had timed out, errored or worked — the trace field is not logged.
+    console.log(`[V3] query rewrite: ${outcome.reason} in ${outcome.durationMs} ms, +${added} evidence, answerability ${answerabilityBefore} -> ${answerability}`);
+  }
+
+  // A question whose required source the MODE forbids is not answerable from
+  // model knowledge — that would answer a meeting question out of thin air. It
+  // is disclosed as an unsupported gap regardless of generalKnowledgeAllowed.
+  const unsupportedInMode = (decision.retrievalPlan.shouldRetrieve === false
+    && decision.retrievalPlan.path === 'GROUNDED'
+    && decision.requiredSourceTypes.length === 0
+    && decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'));
+
+  // An unresolved referent is a CLARIFICATION case, not a knowledge gap:
+  // "Why?" with no antecedent cannot be answered from general knowledge either.
+  // `!referentWasResolved` added 2026-08-01 (Defect D): resolution appends only
+  // three tokens ("(referring to: X)"), so a two-word follow-up stays under the
+  // bare-follow-up word cap even after a SUCCESSFUL resolution — the cap's
+  // "self-disables once resolution is wired" note was false for exactly the
+  // short follow-ups the cap exists for. Success is now tracked explicitly.
+  const referentUnresolved = decision.isFollowUp && !referentWasResolved
+    && isBareFollowUp(decision.resolvedQuestion);
+
+  // Label accuracy (deep-run 2, issue 14): a DOCUMENT-SPECIFIC question whose
+  // evidence came back empty/unsupporting is a document retrieval miss, not a
+  // general-knowledge answer — labelling it GENERAL_KNOWLEDGE hid every
+  // retrieval failure behind the healthy-looking label.
+  const documentSpecificTurn = decision.claimRequirements
+    .some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED');
+  const fallbackUsed =
+    answerability === 'FULL' ? 'NONE'
+      : answerability === 'CONFLICTING' ? 'CONFLICT'
+        : referentUnresolved ? (answerability === 'PARTIAL' ? 'PARTIAL_SUPPORT' : 'CLARIFICATION')
+          : answerability === 'PARTIAL' ? 'PARTIAL_SUPPORT'
+            : unsupportedInMode ? 'STRICT_NOT_FOUND'
+              : documentSpecificTurn && decision.generalKnowledgeAllowed ? 'DOCUMENT_FACT_NOT_FOUND'
+                : decision.generalKnowledgeAllowed ? 'GENERAL_KNOWLEDGE' : 'STRICT_NOT_FOUND';
+
+  const trace: AnswerTrace = {
+    requestId: decision.requestId,
+    requestSequence: decision.requestSequence,
+    scope: decision.scope,
+    surface: req.surface,
+    originalQuestion: originalQuestion || decision.rawQuestion,
+    resolvedQuestion: decision.resolvedQuestion,
+    resolutionConfidence: req.manualQuestion ? 1 : 0.7,
+    modeId: decision.modeId,
+    modePolicyVersion: decision.modePolicyVersion,
+    questionTypes: decision.questionTypes,
+    groundingPolicy: decision.groundingPolicy,
+    authorizedSources: evidence.map((e) => ({
+      sourceType: e.sourceType, sourceId: e.sourceId, versionId: e.versionId, scopeId: e.scopeId,
+    })),
+    plannedSourceTypes: [...decision.retrievalPlan.sourceTypes],
+    prohibitedSources: [],
+    retrievalPath: decision.retrievalPlan.path,
+    retrievalAttempts: attempts,
+    ...(queryRewrite ? { queryRewrite } : {}),
+    acceptedEvidence: evidence.map((e) => ({
+      evidenceId: e.evidenceId, sourceType: e.sourceType, sourceId: e.sourceId,
+      versionId: e.versionId, scopeId: e.scopeId, finalScore: e.finalScore,
+      semanticScore: e.semanticScore, keywordScore: e.keywordScore,
+      answerabilityScore: e.answerabilityScore, contentLength: e.content.length,
+    })),
+    rejectedEvidence: [],
+    answerability,
+    claimPlan: decision.claimRequirements.map((c, i) => ({
+      claimId: `c${i}`, claimType: c.claimType,
+      // Same support definition answerability uses (deep-test D6): the trace
+      // used to carry a SECOND, authority-only notion here, so one object could
+      // say DIRECT_EVIDENCE and NONE about the same claim.
+      support: evidence.some((e) => !jobDescriptionCannotSupport(decision, e, c.claimType) && evidenceSupportsClaim(e, c.claimType, c.subject ?? decision.resolvedQuestion))
+        ? 'DIRECT_EVIDENCE'
+        : c.authority === 'PRIVATE_SOURCE_REQUIRED' ? 'UNSUPPORTED' : 'GENERAL_KNOWLEDGE',
+      evidenceIds: evidence.filter((e) => e.acceptedFor.includes(c.claimType)).map((e) => e.evidenceId),
+      disclosure: 'NONE', action: 'INCLUDE',
+    })),
+    fallbackUsed,
+    promptTokenEstimate: 0,
+    latency: {
+      // Measured.
+      questionResolutionMs, classificationMs, retrievalMs, evidenceEvaluationMs,
+      totalMs: span(t0),
+
+      // NOT measured, and deliberately not guessed. Each of these happens
+      // outside this function, so any number here would be invented:
+      //   normalizationMs / policyResolutionMs — inside decide(), which reports
+      //     one span; see classificationMs above.
+      //   rerankingMs      — inside the retrieval port, which does not report it.
+      //   promptCompositionMs — composePrompt runs in engine-bridge AFTER this
+      //     function returns.
+      //   providerTtfbMs   — the provider has not been called yet.
+      normalizationMs: 0, policyResolutionMs: 0, rerankingMs: 0,
+      promptCompositionMs: 0, providerTtfbMs: 0,
+    },
+    // Empty, and it must STAY empty here. This trace is finalized before the
+    // prompt is composed and long before a provider is called, so there is no
+    // provider to attribute. Reading LLMHelper.lastProviderModel at this point
+    // would return the PREVIOUS turn's model — and with auto-answer running
+    // overlapping turns it would be wrong in a way that looks entirely
+    // plausible. An empty array is honest; a stale model is telemetry that
+    // lies. Provider attribution belongs to whoever observes the completed
+    // provider call, not here.
+    providerAttempts: [],
+    status: 'COMPLETED',
+    errorCodes: [],
+    engine: 'v3',
+    ...(referentResolution ? { referentResolution } : {}),
+  };
+
+  // Phase 10 §4: count the decision-layer signals. Derived from the trace
+
+  // that already exists — no new instrumentation on the answer path, and
+
+  // never throwing, so a metrics defect cannot degrade an answer.
+
+  try {
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
+    require('../observability/rollout-metrics').recordTurnMetrics(trace);
+
+  } catch { /* observability only */ }
+
+  // Advance conversation state so the NEXT turn's bare follow-up can resolve.
+  // Question + evidence identity only; the transport appends the answer
+  // summary after the stream completes (recordAnswerSummary).
+  try {
+    const { advanceConversationState } = require('../question/conversation-state-store');
+
+    // Record this turn's source-precedence outcome (Pattern F). Derived from
+    // NON-debug-gated inputs only — evidence metadata and the port's rejection
+    // records — never from the debug collector, whose inputs are level-gated
+    // and must not influence answers. Only turns that actually retrieved
+    // produce a record; FAST turns preserve the previous one.
+    let turnDecision: import('../contracts/types').PriorTurnDecision | undefined;
+    if (evidence.length > 0 || attempts.some((a) => (a.rejections?.length ?? 0) > 0)) {
+      const statusOf = (m: unknown) => {
+        const s = (m as Record<string, unknown> | undefined)?.documentStatus;
+        return typeof s === 'string' ? s : undefined;
+      };
+      const selected = new Map<string, import('../contracts/types').PriorSourceDecision>();
+      for (const e of evidence) {
+        if (selected.has(e.sourceId)) continue;
+        selected.set(e.sourceId, {
+          sourceId: e.sourceId,
+          ...(e.documentTitle ? { sourceName: e.documentTitle } : {}),
+          ...(statusOf(e.metadata) ? { status: statusOf(e.metadata) } : {}),
+        });
+      }
+      const ignored = new Map<string, import('../contracts/types').PriorSourceDecision>();
+      for (const a of attempts) {
+        for (const r of a.rejections ?? []) {
+          if (selected.has(r.sourceId) || ignored.has(r.sourceId)) continue;
+          ignored.set(r.sourceId, {
+            sourceId: r.sourceId,
+            ...(r.documentTitle ? { sourceName: r.documentTitle } : {}),
+            ...(r.documentStatus ? { status: r.documentStatus } : {}),
+            reason: r.reason,
+          });
+        }
+      }
+      const RETIRED_CLASS = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete']);
+      const selectedRetired = [...selected.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
+      const ignoredRetired = [...ignored.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
+      turnDecision = {
+        question: originalQuestion || decision.resolvedQuestion,
+        selectedSources: [...selected.values()],
+        ignoredSources: [...ignored.values()],
+        ...(ignoredRetired && !selectedRetired
+          ? { precedenceReason: 'RETIRED_SOURCES_RANKED_BELOW_CURRENT' }
+          : selectedRetired
+            ? { precedenceReason: 'HISTORICAL_SOURCE_EXPLICITLY_REQUESTED' }
+            : {}),
+      };
+    }
+
+    advanceConversationState({
+      sessionId: req.sessionId,
+      scope: decision.scope,
+      // The ORIGINAL question, never the referent-rewritten one (deep-test D9):
+      // advancing with "… (referring to: X)" re-ingested X as an entity every
+      // turn, so one wrong referent outranked every fresh entity and the drift
+      // was self-reinforcing.
+      question: originalQuestion || decision.resolvedQuestion,
+      evidenceIds: evidence.map((e) => e.evidenceId),
+      sourceIds: [...new Set(evidence.map((e) => e.sourceId))],
+      decision: turnDecision,
+      // T5: what this turn planned, so a bare follow-up can inherit it.
+      plannedSourceTypes: decision.retrievalPlan.sourceTypes,
+    });
+  } catch { /* continuity must never break a turn */ }
+
+  return { decision, evidence, answerability, trace };
+}

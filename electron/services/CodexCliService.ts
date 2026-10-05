@@ -39,7 +39,101 @@
  *     stream consumer; partial deltas yielded so far are NOT lost.
  */
 
+import fs from 'fs';
+import path from 'path';
+import sharp from 'sharp';
 import { CodexOAuthService } from './CodexOAuthService';
+import { isChatGptUnsupportedCodexModel } from './CodexModelCatalog';
+import { readCodexCliAuth, type CodexCliAuthState } from './CodexCliAuth';
+
+// Extension → MIME for the RAW fallback path only (the normal path re-encodes
+// to JPEG via sharp, so its MIME is fixed). PNG/JPEG/WebP/GIF are the four
+// formats the Responses API accepts in `input_image` items — the same set as
+// the Chat Completions vision endpoint. Default to PNG for unknown extensions;
+// the backend rejects truly unsupported formats with a clear error.
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
+
+// Cap for the raw (sharp-failed) fallback. Matches the LLMHelper cloud-vision
+// providers, which skip rather than ship an oversized raw image.
+const RAW_IMAGE_MAX_BYTES = 500 * 1024;
+
+// Floor for the same fallback. sharp has already failed to decode by the time
+// this applies, so anything this small is a 0-byte or truncated capture rather
+// than a real image. (The smallest valid PNG is ~67 bytes; a JPEG header alone
+// is ~125. 64 is below any real image and above an empty/near-empty file.)
+const RAW_IMAGE_MIN_BYTES = 64;
+
+// The two auth failures that are ACTIONABLE by the user, so callers may show
+// them verbatim instead of a generic "the model failed" message. Exported and
+// matched via isCodexAuthError() rather than re-typed as string literals at
+// each call site — a reword here would otherwise silently stop matching and
+// users would be back to the generic text with no test catching it.
+// Either sign-in works: Natively's own, or the Codex CLI's `codex login`
+// session (read-only — see CodexCliAuth). Name both, since the CLI one is the
+// first thing a Codex CLI user will try (issue #558).
+export const CODEX_NOT_SIGNED_IN_MESSAGE =
+  'Not signed in to ChatGPT. Sign in from Settings → AI Providers → OpenAI Codex, or run `codex login` in your terminal.';
+export const CODEX_SESSION_EXPIRED_MESSAGE =
+  'Codex session expired. Please sign in again from Settings → AI Providers.';
+// Natively never refreshes the CLI's session (that would sign the CLI out), so
+// the fix is on the CLI side: any `codex` command refreshes it.
+export const CODEX_CLI_LOGIN_EXPIRED_MESSAGE =
+  'Your Codex CLI login has expired. Run any `codex` command to refresh it, or sign in with ChatGPT from Settings → AI Providers → OpenAI Codex.';
+
+/** True when `err` is one of the actionable Codex auth failures above. */
+export function isCodexAuthError(err: unknown): boolean {
+  const message = (err as { message?: unknown } | null | undefined)?.message;
+  if (typeof message !== 'string') return false;
+  return message.includes(CODEX_NOT_SIGNED_IN_MESSAGE)
+    || message.includes(CODEX_SESSION_EXPIRED_MESSAGE)
+    || message.includes(CODEX_CLI_LOGIN_EXPIRED_MESSAGE);
+}
+
+/**
+ * Which ChatGPT sign-in Codex requests would use, WITHOUT the token — this is
+ * the shape the renderer and routing predicates see. Natively's own sign-in
+ * wins when both exist: the user chose it inside the app.
+ */
+export interface CodexAuthStatus {
+  signedIn: boolean;
+  source: 'natively' | 'codex-cli' | null;
+  email?: string;
+  expiresAt?: number;
+  /** State of the Codex CLI's `codex login` session, whichever source wins. */
+  cliLogin: CodexCliAuthState['status'];
+}
+
+export function getCodexAuthStatus(readCli: () => CodexCliAuthState = readCodexCliAuth): CodexAuthStatus {
+  const cli = readCli();
+  const natively = CodexOAuthService.getInstance().getStatus();
+  if (natively.signedIn) {
+    return { signedIn: true, source: 'natively', email: natively.email, expiresAt: natively.expiresAt, cliLogin: cli.status };
+  }
+  if (cli.status === 'ok') {
+    return { signedIn: true, source: 'codex-cli', email: cli.email, expiresAt: cli.expiresAt, cliLogin: 'ok' };
+  }
+  if (cli.status === 'expired') {
+    return { signedIn: false, source: null, email: cli.email, expiresAt: cli.expiresAt, cliLogin: 'expired' };
+  }
+  return { signedIn: false, source: null, cliLogin: cli.status };
+}
+
+/** The actionable message for "no usable sign-in". */
+export function codexSignedOutMessage(status: Pick<CodexAuthStatus, 'cliLogin'>): string {
+  return status.cliLogin === 'expired' ? CODEX_CLI_LOGIN_EXPIRED_MESSAGE : CODEX_NOT_SIGNED_IN_MESSAGE;
+}
+
+interface CodexCredential {
+  source: 'natively' | 'codex-cli';
+  accessToken: string;
+  accountId?: string;
+}
 
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
 export type CodexServiceTier = 'default' | 'fast' | 'flex';
@@ -77,6 +171,11 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly Codex
   ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+  // gpt-5.6 (sol/terra/luna) and gpt-6 (astra). Without these, 'gpt-5.6-terra'
+  // longest-matched bare 'gpt-5' and an xhigh pick was silently sent as low
+  // (issue #573). `none` is left out until a live request proves it.
+  ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh']],
+  ['gpt-6',            ['low', 'medium', 'high', 'xhigh']],
   // codex variants — `none` not supported; `xhigh` only on 5.2-codex+.
   ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
@@ -164,18 +263,33 @@ export interface CodexCliRunOptions {
   sessionId?: string;
 }
 
-// Default fast model: gpt-5.3-codex works with both ChatGPT-account and API-key
-// auth. The faster gpt-5.3-codex-spark is API-key-only and 400s on ChatGPT auth.
+// Defaults must work with a ChatGPT sign-in (issue #558: the previous
+// gpt-5.4 / gpt-5.3-codex pair is now rejected — see
+// CHATGPT_UNSUPPORTED_CODEX_MODELS). gpt-5.5 for both: live on 2026-09-11 it had
+// the lowest and steadiest time-to-first-token of the models that work
+// (~1.7-2.0s vs 3-10s for gpt-5.6-terra / gpt-5.6-luna).
 export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
   enabled: false,
   path: 'codex', // deprecated — kept so older settings round-trip without resetting
-  model: 'gpt-5.4',
-  fastModel: 'gpt-5.3-codex',
+  model: 'gpt-5.5',
+  fastModel: 'gpt-5.5',
   timeoutMs: 60_000,
   sandboxMode: 'read-only', // deprecated
   serviceTier: 'default',
   modelReasoningEffort: undefined,
 };
+
+/**
+ * The model to send: `value`, unless it is empty or one the backend rejects for
+ * a ChatGPT account (CHATGPT_UNSUPPORTED_CODEX_MODELS). Earlier builds persisted
+ * such models as defaults, so they are replaced rather than left to fail every
+ * call.
+ */
+export function chatGptCompatibleModel(value: string | undefined, fallback: string): string {
+  const model = (value || '').trim();
+  if (!model || isChatGptUnsupportedCodexModel(model)) return fallback;
+  return model;
+}
 
 // Codex backend endpoint. ChatGPT-subscription OAuth bearer tokens issued by
 // `https://auth.openai.com/oauth/token` are routed to ChatGPT's own backend,
@@ -257,7 +371,7 @@ export class CodexCliService {
     if (config.modelReasoningEffort && (CODEX_MODEL_REASONING_EFFORTS as readonly string[]).includes(config.modelReasoningEffort)) {
       modelReasoningEffort = config.modelReasoningEffort;
     }
-    const modelName = (config.model || DEFAULT_CODEX_CLI_CONFIG.model).trim() || DEFAULT_CODEX_CLI_CONFIG.model;
+    const modelName = chatGptCompatibleModel(config.model, DEFAULT_CODEX_CLI_CONFIG.model);
     modelReasoningEffort = resolveCodexReasoningEffort(modelName, modelReasoningEffort);
     return {
       enabled: !!config.enabled,
@@ -265,7 +379,7 @@ export class CodexCliService {
       // may still display it). New HTTP-direct code does not use it.
       path: (config.path || DEFAULT_CODEX_CLI_CONFIG.path).trim() || DEFAULT_CODEX_CLI_CONFIG.path,
       model: modelName,
-      fastModel: (config.fastModel || DEFAULT_CODEX_CLI_CONFIG.fastModel).trim() || DEFAULT_CODEX_CLI_CONFIG.fastModel,
+      fastModel: chatGptCompatibleModel(config.fastModel, DEFAULT_CODEX_CLI_CONFIG.fastModel),
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_CODEX_CLI_CONFIG.timeoutMs,
       sandboxMode,
       serviceTier,
@@ -297,16 +411,16 @@ export class CodexCliService {
   public static async *stream(_path: string, options: CodexCliRunOptions): AsyncGenerator<string, void, unknown> {
     if (options.signal?.aborted) throw new Error('Codex request aborted before start.');
 
-    const oauth = CodexOAuthService.getInstance();
-    const status = oauth.getStatus();
+    const status = getCodexAuthStatus();
     if (!status.signedIn) {
-      throw new Error('Not signed in to ChatGPT. Please complete Codex OAuth login from Settings → AI Providers.');
+      throw new Error(codexSignedOutMessage(status));
     }
 
     // Build the request body ONCE outside the retry loop — refreshing
-    // tokens doesn't change the prompt.
-    const body = this.buildRequestBody(options);
-    const headers = this.buildHeaders();
+    // tokens doesn't change the prompt. Auth headers are minted per attempt
+    // in fetchDeltas (resolveCredential), so they are not built here.
+    const body = await this.buildRequestBody(options);
+    const headers: Record<string, string> = {};
 
     // Idle-timeout guard: aborts the HTTP connection if no bytes arrive for
     // `timeoutMs` ms. The timer RESETS on every yielded delta, so a long
@@ -365,22 +479,119 @@ export class CodexCliService {
    *  - `prompt_cache_key` is a stable session id so the backend can
    *    cache the prompt prefix (codex.md:428-430)
    */
-  private static buildRequestBody(options: CodexCliRunOptions): Record<string, unknown> {
+  /**
+   * Encode one screenshot as a data URL for an `input_image` item, or return
+   * null to skip it.
+   *
+   * Downscale-then-JPEG mirrors what every other cloud vision provider in
+   * LLMHelper does (resize 1920 inside / quality 85). It is not cosmetic:
+   * a raw Retina PNG is routinely 5-15 MB, which base64 inflates by ~33% into
+   * a single JSON body, and the extra pixels buy nothing above the model's
+   * tile budget. Reads are async so the main process is not blocked on the
+   * read plus the base64 encode.
+   *
+   * If sharp fails (unsupported/corrupt input) we fall back to the raw bytes,
+   * but only under RAW_IMAGE_MAX_BYTES — an uncapped raw send is how a request
+   * silently exceeds the API's image limit and comes back as an opaque error.
+   */
+  private static async encodeImageForRequest(imagePath: string): Promise<string | null> {
+    try {
+      const compressed = await sharp(imagePath)
+        .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      return `data:image/jpeg;base64,${compressed.toString('base64')}`;
+    } catch (compressErr: any) {
+      console.warn(`[CodexCliService] Image compression failed, trying raw: ${imagePath}`, compressErr?.message);
+    }
+
+    try {
+      const raw = await fs.promises.readFile(imagePath);
+      if (raw.length > RAW_IMAGE_MAX_BYTES) {
+        console.warn(`[CodexCliService] Raw image too large to send (${raw.length} bytes), skipping: ${imagePath}`);
+        return null;
+      }
+      // Lower bound too. sharp already failed to decode this file, so a
+      // suspiciously small payload is a 0-byte or truncated capture — exactly
+      // the tmp-file race the catch below exists for. Shipping it would put
+      // `data:image/png;base64,` (or a fragment) on the wire, and the backend
+      // rejects the WHOLE turn with an opaque 400 because every content item
+      // fails together. Skipping degrades to a text answer instead.
+      if (raw.length < RAW_IMAGE_MIN_BYTES) {
+        console.warn(`[CodexCliService] Image is empty or truncated (${raw.length} bytes), skipping: ${imagePath}`);
+        return null;
+      }
+      const mimeType = IMAGE_MIME_BY_EXT[path.extname(imagePath).toLowerCase()] || 'image/png';
+      return `data:${mimeType};base64,${raw.toString('base64')}`;
+    } catch (e: any) {
+      // Non-fatal: skip unreadable images (already validated at the IPC
+      // layer, so this is a belt-and-suspenders guard for race conditions
+      // like tmp-file cleanup between capture and send).
+      console.warn(`[CodexCliService] Failed to read image, skipping: ${imagePath}`, e?.message);
+      return null;
+    }
+  }
+
+  private static async buildRequestBody(options: CodexCliRunOptions): Promise<Record<string, unknown>> {
     const resolvedEffort = resolveCodexReasoningEffort(options.model, options.modelReasoningEffort);
 
-    // Image inputs: Responses API wants `type: "input_image"` items.
-    // We don't yet support image-bearing Codex calls in this rewrite
-    // (LLMHelper.buildCodexCliPrompt only passes text) — the imagePaths
-    // arg is accepted for backward-compat but ignored at the wire level.
-    // Future: encode as data URLs the same way LocalWhisperSTT does.
+    // Build the user message content array. Always starts with the text
+    // prompt; image paths (screenshots) are encoded as data-URL
+    // `input_image` items so the Codex backend can process them with
+    // vision-capable models (gpt-5.4, gpt-5.5-codex, etc.).
+    const contentItems: Array<Record<string, unknown>> = [
+      { type: 'input_text', text: options.prompt },
+    ];
+
+    if (options.imagePaths?.length) {
+      let encodedCount = 0;
+      for (const imagePath of options.imagePaths) {
+        const encoded = await CodexCliService.encodeImageForRequest(imagePath);
+        if (!encoded) continue;
+        encodedCount++;
+        contentItems.push({
+          type: 'input_image',
+          image_url: encoded,
+          // 'auto' lets the backend pick the tile budget. Left explicit
+          // (rather than omitted) so the value is greppable when tuning
+          // vision cost — 'original' is the high-fidelity alternative.
+          detail: 'auto',
+        });
+      }
+
+      // Images were requested and NONE survived encoding. Throwing beats
+      // sending the prompt alone: a text-only turn returns HTTP 200 with a
+      // confident answer that never saw the screenshot ("I don't see an image"
+      // — the very symptom this vision work was written to fix), and the
+      // fallback chain records Codex as HEALTHY.
+      //
+      // HONEST LIMITS of this throw, measured against visionStreamFallback.ts:
+      //   • classifyVisionError() maps this message to 'unknown' → treated as
+      //     TRANSIENT, so the chain retries up to maxAttempts (3) before moving
+      //     on, and then marks Codex unhealthy for transientCooldownMs (30s).
+      //     The retries are cheap (a local re-read, no network) and do recover
+      //     the case where a file reappears, but the unhealthy mark is
+      //     misattributed — the fault is the file's, not the provider's.
+      //   • Failing over does NOT guarantee the screenshot gets seen: the
+      //     sibling cloud providers (LLMHelper.ts ~3505, ~6709) skip unreadable
+      //     images and answer text-only, so a chain with other providers may
+      //     still end up blind, just later.
+      // It is still the better default: for the case that actually matters —
+      // the user explicitly selected the codex-cli model, so the chain has ONE
+      // entry — this turns a confidently-wrong blind answer into a real error.
+      if (encodedCount === 0) {
+        throw new Error(
+          `Codex could not read any of the ${options.imagePaths.length} attached image(s). `
+          + 'They may have been cleaned up, be empty, or exceed the size limit.',
+        );
+      }
+    }
 
     const input: Array<Record<string, unknown>> = [
       {
         type: 'message',
         role: 'user',
-        content: [
-          { type: 'input_text', text: options.prompt },
-        ],
+        content: contentItems,
       },
     ];
 
@@ -425,17 +636,29 @@ export class CodexCliService {
   }
 
   /**
-   * Build the request headers. Pulls the bearer token from CodexOAuthService
-   * and adds the standard identity headers the Codex backend expects
-   * (mirrors open-sse codex.js buildHeaders at codex.md:220-231).
+   * The bearer to send: Natively's own sign-in first (refreshed proactively by
+   * CodexOAuthService), else the Codex CLI's `codex login` session read from
+   * disk. The CLI session is used as-is and never refreshed — see CodexCliAuth.
    */
-  private static async buildHeadersAsync(): Promise<Record<string, string>> {
+  private static async resolveCredential(): Promise<CodexCredential> {
     const oauth = CodexOAuthService.getInstance();
-    const accessToken = await oauth.getAccessToken();
-    if (!accessToken) {
-      throw new Error('Not signed in to ChatGPT. Please complete Codex OAuth login from Settings → AI Providers.');
+    if (oauth.getStatus().signedIn) {
+      const accessToken = await oauth.getAccessToken();
+      if (!accessToken) throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
+      return { source: 'natively', accessToken, accountId: oauth.getCachedTokens()?.accountId };
     }
-    const tokens = oauth.getCachedTokens();
+    const cli = readCodexCliAuth();
+    if (cli.status === 'ok') return { source: 'codex-cli', accessToken: cli.accessToken, accountId: cli.accountId };
+    throw new Error(codexSignedOutMessage({ cliLogin: cli.status }));
+  }
+
+  /**
+   * Build the request headers for a credential and add the standard identity
+   * headers the Codex backend expects (mirrors open-sse codex.js buildHeaders
+   * at codex.md:220-231).
+   */
+  private static headersFor(credential: CodexCredential): Record<string, string> {
+    const { accessToken } = credential;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
@@ -453,31 +676,7 @@ export class CodexCliService {
     };
     // Workspace binding header — improves account scope + cache affinity
     // (codex.md:226-229).
-    if (tokens?.accountId) headers['chatgpt-account-id'] = tokens.accountId;
-    return headers;
-  }
-
-  /**
-   * Sync wrapper for callers that already have a token in hand. Most
-   * callers should use the async builder; this exists so the retry loop
-   * can refresh-and-retry without re-awaiting the same access token
-   * check twice in a row.
-   */
-  private static buildHeaders(): Record<string, string> {
-    const oauth = CodexOAuthService.getInstance();
-    const tokens = oauth.getCachedTokens();
-    if (!tokens || !tokens.accessToken) {
-      throw new Error('Not signed in to ChatGPT. Please complete Codex OAuth login from Settings → AI Providers.');
-    }
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      Authorization: `Bearer ${tokens.accessToken}`,
-      originator: 'codex_cli_rs',
-      // Stable session id (see buildHeadersAsync for the rationale).
-      'session_id': CodexCliService.SESSION_ID,
-    };
-    if (tokens.accountId) headers['chatgpt-account-id'] = tokens.accountId;
+    if (credential.accountId) headers['chatgpt-account-id'] = credential.accountId;
     return headers;
   }
 
@@ -508,7 +707,8 @@ export class CodexCliService {
 
       // Re-mint headers on each attempt so a 401-retry uses the FRESH
       // access token (after the refresh succeeded, not before).
-      const currentHeaders = await this.buildHeadersAsync();
+      const credential = await this.resolveCredential();
+      const currentHeaders = this.headersFor(credential);
       // Merge session-stateful headers (Bearer, account id) with the
       // per-attempt computed ones. Callers may have passed static
       // Content-Type/originator in `headers`; the async builder
@@ -544,6 +744,20 @@ export class CodexCliService {
         continue;
       }
 
+      if (response.status === 401 && credential.source === 'codex-cli') {
+        // Never refresh the CLI's session (that would sign the CLI out). The
+        // CLI may have refreshed it on disk since this request started, so
+        // retry once if the token changed; otherwise the user has to refresh
+        // it from the CLI side. Forced: the cache keys on mtime+size, which a
+        // same-length rotation within the timestamp resolution would not change.
+        const reread = readCodexCliAuth({ force: true });
+        if (!refreshedOnce && reread.status === 'ok' && reread.accessToken !== credential.accessToken) {
+          refreshedOnce = true;
+          continue;
+        }
+        throw new Error(CODEX_CLI_LOGIN_EXPIRED_MESSAGE);
+      }
+
       if (response.status === 401 && !refreshedOnce) {
         // Force a refresh and retry exactly once. Matches open-sse
         // chatCore:844-863.
@@ -551,7 +765,7 @@ export class CodexCliService {
         const oauth = CodexOAuthService.getInstance();
         const refreshed = await oauth.refreshTokens();
         if (!refreshed) {
-          throw new Error('Codex session expired. Please sign in again from Settings → AI Providers.');
+          throw new Error(CODEX_SESSION_EXPIRED_MESSAGE);
         }
         continue;
       }
@@ -981,6 +1195,9 @@ function extractResponsesErrorMessage(text: string): string {
     const json = JSON.parse(text);
     if (json?.error?.message) return String(json.error.message);
     if (typeof json?.message === 'string') return json.message;
+    // The ChatGPT backend's own envelope, e.g. an unentitled model:
+    // {"detail":"The '<model>' model is not supported when using Codex with a ChatGPT account."}
+    if (typeof json?.detail === 'string') return json.detail;
   } catch { /* not JSON */ }
   return text;
 }

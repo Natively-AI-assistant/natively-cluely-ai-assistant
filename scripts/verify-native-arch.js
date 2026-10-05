@@ -5,6 +5,12 @@
  *   - husky pre-commit (catches regressions before merge)
  *   - CI (catches regressions before deploy)
  *
+ * Covers macOS (Mach-O slice, poisoned by Rosetta) AND Windows (PE machine
+ * type, poisoned when a rebuild loses `/p:Platform=x64` and silently emits a
+ * 32-bit DLL). The Windows half was previously skipped outright, so a build
+ * where both better-sqlite3 and keytar were 32-bit passed this guard and only
+ * surfaced at runtime as "is not a valid Win32 application".
+ *
  * Single source of truth for the check lives in
  * `electron/lib/nativeArch.mjs` so the boot-time gate in main.ts uses the
  * same logic and cannot drift. This file is a thin shim so the existing
@@ -40,11 +46,20 @@ const fs = require('fs');
     const lines = result.mismatches.map(
       (m) => `  - ${m.path}: built ${m.actual}, need ${m.expected}`,
     );
+    // Rosetta is a macOS concept; printing it on Windows sends the reader
+    // chasing a cause that cannot exist there. The Windows cause is a rebuild
+    // that lost its x64 target — most often two builds racing on the same
+    // node_modules tree, which makes MSBuild fall back to Win32.
+    const platformHint = process.platform === 'darwin'
+      ? '\nIf your terminal is running under Rosetta, open a fresh arm64 terminal first.'
+      : '\nIf another build (e.g. `npm run dist`) is running, stop it first — concurrent\n' +
+        'rebuilds of the same native module can emit a 32-bit binary.';
+
     throw new Error(
       `Native module architecture mismatch (hardware is ${result.hardware}):\n` +
       lines.join('\n') +
-      `\n\nFix: run \`${result.fix}\` from a native (non-Rosetta) shell.\n` +
-      `If your terminal is running under Rosetta, open a fresh arm64 terminal first.`,
+      `\n\nFix: run \`${result.fix}\`\n` +
+      platformHint,
     );
   }
 })().catch((err) => {

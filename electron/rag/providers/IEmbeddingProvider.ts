@@ -13,6 +13,17 @@ export interface IEmbeddingProvider {
   readonly dimensions: number;
   /** Canonical embedding-space identity: `${name}:${normalizedModel}:${dimensions}`. */
   readonly space: string;
+  /**
+   * Largest input array this provider will send UPSTREAM IN ONE REQUEST.
+   *
+   * Absent means "no transport-imposed ceiling" — the provider forwards whatever
+   * it is given as a single call. Present means embedBatch() will SPLIT a larger
+   * array into several sequential round trips internally, which callers must
+   * know about: a caller that wraps embedBatch() in one deadline is really
+   * wrapping N sequential requests, and its budget has to account for that (or,
+   * better, it sizes its batches to this so N is always 1).
+   */
+  readonly maxBatchSize?: number;
   isAvailable(): Promise<boolean>;
   /**
    * Synchronous, non-blocking, non-triggering check: "would the NEXT embed()

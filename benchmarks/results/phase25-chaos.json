@@ -1,0 +1,71 @@
+[
+ {
+  "status": 429,
+  "retryAfter": "13",
+  "err": "provider_rate_limited",
+  "retryable": true,
+  "ms": 6,
+  "expected": 429,
+  "pass": true
+ },
+ {
+  "upstream": 500,
+  "status": 503,
+  "retryAfter": "5",
+  "err": "rerank_unavailable",
+  "retryable": true,
+  "ms": 2,
+  "expected": 503,
+  "pass": true
+ },
+ {
+  "upstream": 502,
+  "status": 503,
+  "retryAfter": "5",
+  "err": "rerank_unavailable",
+  "retryable": true,
+  "ms": 1,
+  "expected": 503,
+  "pass": true
+ },
+ {
+  "upstream": 503,
+  "status": 503,
+  "retryAfter": "5",
+  "err": "rerank_unavailable",
+  "retryable": true,
+  "ms": 1,
+  "expected": 503,
+  "pass": true
+ },
+ {
+  "upstream": 504,
+  "status": 503,
+  "retryAfter": "5",
+  "err": "rerank_unavailable",
+  "retryable": true,
+  "ms": 2,
+  "expected": 503,
+  "pass": true
+ },
+ {
+  "upstream": 400,
+  "status": 502,
+  "retryAfter": null,
+  "err": "provider_rejected_request",
+  "retryable": false,
+  "ms": 1,
+  "expected": 502,
+  "pass": true
+ },
+ {
+  "upstream": null,
+  "status": 503,
+  "retryAfter": "5",
+  "err": "rerank_unavailable",
+  "retryable": true,
+  "ms": 4002,
+  "expected": 503,
+  "pass": true
+ }
+]

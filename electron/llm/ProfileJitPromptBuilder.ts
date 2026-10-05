@@ -31,6 +31,15 @@ export interface BuildProfileJitPromptInput {
   personaInstructions?: string | null;
   customContextInstructions?: string | null;
   maxAnswerWords?: number;
+  /**
+   * Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.5):
+   * seeder leash. When FALSE (default true), suppress background-recite
+   * directives so a salary / negotiation / unroutable question does NOT
+   * dump the candidate's resume as a self-introduction. Sourced from
+   * TurnPlanner.answerDirectives.seedCandidateBackground (true only for
+   * profile_question / jd_question kinds).
+   */
+  seedCandidateBackground?: boolean;
 }
 
 export interface BuiltProfileJitPrompt {
@@ -172,6 +181,18 @@ export function buildProfileJitPrompt(input: BuildProfileJitPromptInput): BuiltP
     conflictBlock,
     hints,
     optionalStyle,
+    // Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.5):
+    // seeder-leash directive. When TurnPlanner says the question is
+    // general (salary / negotiation / "why hire you" when no profile
+    // match), suppress the background-recite habit so the answer stays
+    // focused on the question, not a candidate bio dump. Defaults to
+    // TRUE (legacy behavior; profile/jd questions still seed background).
+    input.seedCandidateBackground === false ? [
+        '<seeder_leash>',
+        'This turn is NOT a profile or JD question. Do NOT open with a candidate self-introduction or recite resume facts as background.',
+        'Answer the question directly. If the question is unrelated to the candidate (e.g. salary expectations, negotiation, generic Q&A), use only general knowledge and the answer_directives above.',
+        '</seeder_leash>',
+    ].join('\n') : '',
     '<rules>',
     'Answer only from allowed_evidence.',
     'Do not add facts, numbers, employers, projects, schools, salary, location, or personal details unless present above.',

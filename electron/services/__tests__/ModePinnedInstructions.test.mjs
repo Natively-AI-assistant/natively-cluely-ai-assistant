@@ -70,13 +70,26 @@ describe('W2: getActiveModePinnedInstructions', () => {
         assert.match(nego, /180k/);
     });
 
-    test('caps at ~1,200 chars', () => {
+    // Was "caps at ~1,200 chars". The Modes editor's textarea accepts 8,000, so a
+    // 1,200 cap silently discarded most of a carefully written prompt — the more
+    // a user wrote, the less applied (2026-09-20). The cap is now the editor's.
+    test('caps at the editor limit (8,000 chars), and says so when it truncates', () => {
         const mgr = installActiveMode(makeMode({
-            customContext: 'pitch the integration story. '.repeat(200),
+            customContext: 'pitch the integration story. '.repeat(400), // 11,600 chars
         }));
         const pinned = mgr.getActiveModePinnedInstructions('sales_answer');
-        assert.ok(pinned.length <= 1_300, `len=${pinned.length}`);
+        assert.ok(pinned.length <= 8_100, `len=${pinned.length}`);
+        assert.ok(pinned.length > 7_900, `a cap, not a wipe: len=${pinned.length}`);
         assert.match(pinned, /\[truncated\]/);
+    });
+
+    test('a prompt under the editor limit is delivered whole — text past the OLD 1,200 cap included', () => {
+        const mgr = installActiveMode(makeMode({
+            customContext: 'pitch the integration story. '.repeat(100) + 'LATE_RULE_SENTINEL', // ~2,900 chars
+        }));
+        const pinned = mgr.getActiveModePinnedInstructions('sales_answer');
+        assert.match(pinned, /LATE_RULE_SENTINEL/);
+        assert.doesNotMatch(pinned, /\[truncated\]/);
     });
 
     test('custom (user-built) modes surface their name', () => {

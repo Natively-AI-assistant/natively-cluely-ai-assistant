@@ -1,0 +1,842 @@
+{
+ "generated": "2026-09-18T03:30:12.641Z",
+ "runs": 4,
+ "A_minimal_vs_low": [
+  {
+   "effort": "minimal",
+   "ms": 1854,
+   "status": 200,
+   "text": "3",
+   "reasoning_tokens": 234,
+   "completion_tokens": 236
+  },
+  {
+   "effort": "minimal",
+   "ms": 1513,
+   "status": 200,
+   "text": "3",
+   "reasoning_tokens": 115,
+   "completion_tokens": 117
+  },
+  {
+   "effort": "low",
+   "ms": 1505,
+   "status": 200,
+   "text": "3",
+   "reasoning_tokens": 246,
+   "completion_tokens": 248
+  },
+  {
+   "effort": "low",
+   "ms": 2082,
+   "status": 200,
+   "text": "3",
+   "reasoning_tokens": 292,
+   "completion_tokens": 294
+  },
+  {
+   "effort": "high",
+   "ms": 1009,
+   "status": 200,
+   "text": "3",
+   "reasoning_tokens": 60,
+   "completion_tokens": 62
+  },
+  {
+   "effort": "high",
+   "ms": 1278,
+   "status": 200,
+   "text": "3",
+   "reasoning_tokens": 65,
+   "completion_tokens": 67
+  }
+ ],
+ "B_streaming_ttft": [
+  {
+   "effort": "off",
+   "shot": "code_bug",
+   "run": 1,
+   "status": 200,
+   "headers_ms": 262,
+   "ttft_ms": 659,
+   "ttf_reasoning_ms": null,
+   "total_ms": 1305,
+   "chars": 527
+  },
+  {
+   "effort": "off",
+   "shot": "code_bug",
+   "run": 2,
+   "status": 200,
+   "headers_ms": 360,
+   "ttft_ms": 1106,
+   "ttf_reasoning_ms": null,
+   "total_ms": 1659,
+   "chars": 411
+  },
+  {
+   "effort": "off",
+   "shot": "code_bug",
+   "run": 3,
+   "status": 200,
+   "headers_ms": 254,
+   "ttft_ms": 969,
+   "ttf_reasoning_ms": null,
+   "total_ms": 1515,
+   "chars": 486
+  },
+  {
+   "effort": "off",
+   "shot": "code_bug",
+   "run": 4,
+   "status": 200,
+   "headers_ms": 360,
+   "ttft_ms": 989,
+   "ttf_reasoning_ms": null,
+   "total_ms": 1647,
+   "chars": 503
+  },
+  {
+   "effort": "off",
+   "shot": "github_code_small",
+   "run": 1,
+   "status": 200,
+   "headers_ms": 373,
+   "ttft_ms": 789,
+   "ttf_reasoning_ms": null,
+   "total_ms": 1283,
+   "chars": 369
+  },
+  {
+   "effort": "off",
+   "shot": "github_code_small",
+   "run": 2,
+   "status": 200,
+   "headers_ms": 521,
+   "ttft_ms": 1008,
+   "ttf_reasoning_ms": null,
+   "total_ms": 1507,
+   "chars": 344
+  },
+  {
+   "effort": "off",
+   "shot": "github_code_small",
+   "run": 3,
+   "status": 200,
+   "headers_ms": 351,
+   "ttft_ms": 892,
+   "ttf_reasoning_ms": null,
+   "total_ms": 1570,
+   "chars": 458
+  },
+  {
+   "effort": "off",
+   "shot": "github_code_small",
+   "run": 4,
+   "status": 200,
+   "headers_ms": 417,
+   "ttft_ms": 876,
+   "ttf_reasoning_ms": null,
+   "total_ms": 1457,
+   "chars": 539
+  },
+  {
+   "effort": "low",
+   "shot": "code_bug",
+   "run": 1,
+   "status": 200,
+   "headers_ms": 253,
+   "ttft_ms": 4542,
+   "ttf_reasoning_ms": 253,
+   "total_ms": 4860,
+   "chars": 353
+  },
+  {
+   "effort": "low",
+   "shot": "code_bug",
+   "run": 2,
+   "status": 200,
+   "headers_ms": 427,
+   "ttft_ms": 3133,
+   "ttf_reasoning_ms": 427,
+   "total_ms": 3552,
+   "chars": 388
+  },
+  {
+   "effort": "low",
+   "shot": "code_bug",
+   "run": 3,
+   "status": 200,
+   "headers_ms": 265,
+   "ttft_ms": 1721,
+   "ttf_reasoning_ms": 265,
+   "total_ms": 2823,
+   "chars": 895
+  },
+  {
+   "effort": "low",
+   "shot": "code_bug",
+   "run": 4,
+   "status": 200,
+   "headers_ms": 299,
+   "ttft_ms": 5394,
+   "ttf_reasoning_ms": 299,
+   "total_ms": 5828,
+   "chars": 338
+  },
+  {
+   "effort": "low",
+   "shot": "github_code_small",
+   "run": 1,
+   "status": 200,
+   "headers_ms": 491,
+   "ttft_ms": 2430,
+   "ttf_reasoning_ms": 491,
+   "total_ms": 4353,
+   "chars": 1452
+  },
+  {
+   "effort": "low",
+   "shot": "github_code_small",
+   "run": 2,
+   "status": 200,
+   "headers_ms": 509,
+   "ttft_ms": 4165,
+   "ttf_reasoning_ms": 509,
+   "total_ms": 5204,
+   "chars": 847
+  },
+  {
+   "effort": "low",
+   "shot": "github_code_small",
+   "run": 3,
+   "status": 200,
+   "headers_ms": 450,
+   "ttft_ms": 4729,
+   "ttf_reasoning_ms": 450,
+   "total_ms": 6086,
+   "chars": 1205
+  },
+  {
+   "effort": "low",
+   "shot": "github_code_small",
+   "run": 4,
+   "status": 200,
+   "headers_ms": 448,
+   "ttft_ms": 6925,
+   "ttf_reasoning_ms": 449,
+   "total_ms": 8256,
+   "chars": 1362
+  }
+ ],
+ "C_weak_tasks": [
+  {
+   "task": "tiny_code",
+   "effort": "off",
+   "run": 1,
+   "ms": 1095,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 4,
+   "checks": {
+    "repo_path": true,
+    "branch": true,
+    "lines": true,
+    "require": false
+   },
+   "answer": "1. expressjs/express — lib/utils.js\n2. master\n3. 271 lines (222 loc)\n4. require('methods')"
+  },
+  {
+   "task": "tiny_code",
+   "effort": "off",
+   "run": 2,
+   "ms": 867,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 4,
+   "checks": {
+    "repo_path": true,
+    "branch": true,
+    "lines": true,
+    "require": false
+   },
+   "answer": "1. expressjs/express, lib/utils.js\n2. master\n3. 271 lines\n4. url"
+  },
+  {
+   "task": "tiny_code",
+   "effort": "off",
+   "run": 3,
+   "ms": 731,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 4,
+   "checks": {
+    "repo_path": true,
+    "branch": true,
+    "lines": true,
+    "require": false
+   },
+   "answer": "1. expressjs/express, lib/utils.js\n2. master\n3. 271 lines\n4. require('nodestats')"
+  },
+  {
+   "task": "tiny_code",
+   "effort": "off",
+   "run": 4,
+   "ms": 1111,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 4,
+   "checks": {
+    "repo_path": true,
+    "branch": true,
+    "lines": true,
+    "require": false
+   },
+   "answer": "(1) expressjs/express, lib/utils.js\n(2) master\n(3) 271\n(4) 'nodestats'"
+  },
+  {
+   "task": "tiny_code",
+   "effort": "low",
+   "run": 1,
+   "ms": 1488,
+   "reasoning_tokens": 90,
+   "passed": 3,
+   "total": 4,
+   "checks": {
+    "repo_path": true,
+    "branch": true,
+    "lines": true,
+    "require": false
+   },
+   "answer": "1. expressjs/express — lib/utils.js\n2. master\n3. 271 lines (222 loc)\n4. methods"
+  },
+  {
+   "task": "tiny_code",
+   "effort": "low",
+   "run": 2,
+   "ms": 2812,
+   "reasoning_tokens": 331,
+   "passed": 3,
+   "total": 4,
+   "checks": {
+    "repo_path": true,
+    "branch": true,
+    "lines": true,
+    "require": false
+   },
+   "answer": "1. Repository/file path: expressjs/express — lib/utils.js\n2. Branch: master\n3. Lines: 271 lines (222 loc, 5.17 KB)\n4. Module required on line 15: UNKNOWN (module name not legible at this rendering)"
+  },
+  {
+   "task": "tiny_code",
+   "effort": "low",
+   "run": 3,
+   "ms": 1843,
+   "reasoning_tokens": 190,
+   "passed": 3,
+   "total": 4,
+   "checks": {
+    "repo_path": true,
+    "branch": true,
+    "lines": true,
+    "require": false
+   },
+   "answer": "1. Repository: expressjs/express; File path: lib/utils.js\n2. master\n3. 271 lines\n4. methods"
+  },
+  {
+   "task": "tiny_code",
+   "effort": "low",
+   "run": 4,
+   "ms": 15444,
+   "reasoning_tokens": 3859,
+   "passed": 4,
+   "total": 4,
+   "checks": {
+    "repo_path": true,
+    "branch": true,
+    "lines": true,
+    "require": true
+   },
+   "answer": "1. expressjs/express — lib/utils.js\n2. master\n3. 271 lines\n4. node:http"
+  },
+  {
+   "task": "chart_read",
+   "effort": "off",
+   "run": 1,
+   "ms": 1214,
+   "reasoning_tokens": 0,
+   "passed": 4,
+   "total": 4,
+   "checks": {
+    "thursday": true,
+    "lowest_wed": true,
+    "above_100_is_3": true,
+    "weekend_sum": true
+   },
+   "answer": "1. Approximately 155\n2. Wednesday\n3. Four days (Tue, Thu, Sat, and Fri is below 100, so Tue/Thu/Sat = 3 days; adjust: Tue ~118, Thu ~155, Sat ~133 = 3 days)\n4. Approximately 205 (Sat ~133 + Sun ~73)"
+  },
+  {
+   "task": "chart_read",
+   "effort": "off",
+   "run": 2,
+   "ms": 1354,
+   "reasoning_tokens": 0,
+   "passed": 4,
+   "total": 4,
+   "checks": {
+    "thursday": true,
+    "lowest_wed": true,
+    "above_100_is_3": true,
+    "weekend_sum": true
+   },
+   "answer": "1. ~155\n2. Wednesday\n3. 3 (Tuesday, Thursday, Saturday)\n4. ~205 (Sat ~132 + Sun ~73)"
+  },
+  {
+   "task": "chart_read",
+   "effort": "off",
+   "run": 3,
+   "ms": 1457,
+   "reasoning_tokens": 0,
+   "passed": 4,
+   "total": 4,
+   "checks": {
+    "thursday": true,
+    "lowest_wed": true,
+    "above_100_is_3": true,
+    "weekend_sum": true
+   },
+   "answer": "1. Approximately 155\n2. Wednesday\n3. 3 days (Tuesday, Thursday, Saturday)\n4. Approximately 205 (Saturday ≈132 + Sunday ≈73)"
+  },
+  {
+   "task": "chart_read",
+   "effort": "off",
+   "run": 4,
+   "ms": 1137,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 4,
+   "checks": {
+    "thursday": true,
+    "lowest_wed": true,
+    "above_100_is_3": false,
+    "weekend_sum": true
+   },
+   "answer": "1. Approximately 155\n2. Wednesday\n3. Four days (Tuesday, Thursday, Friday and Saturday)\n4. Approximately 205"
+  },
+  {
+   "task": "chart_read",
+   "effort": "low",
+   "run": 1,
+   "ms": 3549,
+   "reasoning_tokens": 799,
+   "passed": 4,
+   "total": 4,
+   "checks": {
+    "thursday": true,
+    "lowest_wed": true,
+    "above_100_is_3": true,
+    "weekend_sum": true
+   },
+   "answer": "1) ~155\n2) Wednesday\n3) 3\n4) ~207"
+  },
+  {
+   "task": "chart_read",
+   "effort": "low",
+   "run": 2,
+   "ms": 2501,
+   "reasoning_tokens": 477,
+   "passed": 4,
+   "total": 4,
+   "checks": {
+    "thursday": true,
+    "lowest_wed": true,
+    "above_100_is_3": true,
+    "weekend_sum": true
+   },
+   "answer": "1. ~155\n2. Wednesday\n3. 3\n4. ~207"
+  },
+  {
+   "task": "chart_read",
+   "effort": "low",
+   "run": 3,
+   "ms": 2884,
+   "reasoning_tokens": 501,
+   "passed": 4,
+   "total": 4,
+   "checks": {
+    "thursday": true,
+    "lowest_wed": true,
+    "above_100_is_3": true,
+    "weekend_sum": true
+   },
+   "answer": "1) ~155\n2) Wednesday\n3) 3\n4) ~206"
+  },
+  {
+   "task": "chart_read",
+   "effort": "low",
+   "run": 4,
+   "ms": 2996,
+   "reasoning_tokens": 625,
+   "passed": 4,
+   "total": 4,
+   "checks": {
+    "thursday": true,
+    "lowest_wed": true,
+    "above_100_is_3": true,
+    "weekend_sum": true
+   },
+   "answer": "1. ~155\n2. Wed\n3. 3\n4. ~207"
+  },
+  {
+   "task": "glyph_counting",
+   "effort": "off",
+   "run": 1,
+   "ms": 1164,
+   "reasoning_tokens": 0,
+   "passed": 6,
+   "total": 6,
+   "checks": {
+    "failed_count": true,
+    "skipped_count": true,
+    "passed_count": true,
+    "failed_named_webkit": true,
+    "failed_named_windows": true,
+    "failed_named_docker": true
+   },
+   "answer": "1. 5\n2. 3\n3. 16\n4. build (windows, node 20); e2e (webkit); unit (shard 3/4); docker (arm64); publish-dry-run"
+  },
+  {
+   "task": "glyph_counting",
+   "effort": "off",
+   "run": 2,
+   "ms": 1089,
+   "reasoning_tokens": 0,
+   "passed": 4,
+   "total": 6,
+   "checks": {
+    "failed_count": false,
+    "skipped_count": true,
+    "passed_count": false,
+    "failed_named_webkit": true,
+    "failed_named_windows": true,
+    "failed_named_docker": true
+   },
+   "answer": "1. 4\n2. 3\n3. 15\n4. build (windows, node 20), unit (shard 3/4), e2e (webkit), docker (arm64), publish-dry-run"
+  },
+  {
+   "task": "glyph_counting",
+   "effort": "off",
+   "run": 3,
+   "ms": 1074,
+   "reasoning_tokens": 0,
+   "passed": 6,
+   "total": 6,
+   "checks": {
+    "failed_count": true,
+    "skipped_count": true,
+    "passed_count": true,
+    "failed_named_webkit": true,
+    "failed_named_windows": true,
+    "failed_named_docker": true
+   },
+   "answer": "1. 5\n2. 3\n3. 16\n4. build (windows, node 20), e2e (webkit), unit (shard 3/4), docker (arm64), publish-dry-run"
+  },
+  {
+   "task": "glyph_counting",
+   "effort": "off",
+   "run": 4,
+   "ms": 1178,
+   "reasoning_tokens": 0,
+   "passed": 4,
+   "total": 6,
+   "checks": {
+    "failed_count": false,
+    "skipped_count": true,
+    "passed_count": false,
+    "failed_named_webkit": true,
+    "failed_named_windows": true,
+    "failed_named_docker": true
+   },
+   "answer": "1. 4\n2. 3\n3. 15\n4. build (windows, node 20), unit (shard 3/4), e2e (webkit), docker (arm64), publish-dry-run"
+  },
+  {
+   "task": "glyph_counting",
+   "effort": "low",
+   "run": 1,
+   "ms": 1542,
+   "reasoning_tokens": 226,
+   "passed": 6,
+   "total": 6,
+   "checks": {
+    "failed_count": true,
+    "skipped_count": true,
+    "passed_count": true,
+    "failed_named_webkit": true,
+    "failed_named_windows": true,
+    "failed_named_docker": true
+   },
+   "answer": "1. 5\n2. 3\n3. 16\n4. build (windows, node 20); e2e (webkit); unit (shard 3/4); docker (arm64); publish-dry-run"
+  },
+  {
+   "task": "glyph_counting",
+   "effort": "low",
+   "run": 2,
+   "ms": 1684,
+   "reasoning_tokens": 206,
+   "passed": 6,
+   "total": 6,
+   "checks": {
+    "failed_count": true,
+    "skipped_count": true,
+    "passed_count": true,
+    "failed_named_webkit": true,
+    "failed_named_windows": true,
+    "failed_named_docker": true
+   },
+   "answer": "1. 5\n2. 3\n3. 16\n4. build (windows, node 20), e2e (webkit), unit (shard 3/4), docker (arm64), publish-dry-run"
+  },
+  {
+   "task": "glyph_counting",
+   "effort": "low",
+   "run": 3,
+   "ms": 1544,
+   "reasoning_tokens": 182,
+   "passed": 6,
+   "total": 6,
+   "checks": {
+    "failed_count": true,
+    "skipped_count": true,
+    "passed_count": true,
+    "failed_named_webkit": true,
+    "failed_named_windows": true,
+    "failed_named_docker": true
+   },
+   "answer": "1. 5\n2. 3\n3. 16\n4. build (windows, node 20); unit (shard 3/4); e2e (webkit); docker (arm64); publish-dry-run"
+  },
+  {
+   "task": "glyph_counting",
+   "effort": "low",
+   "run": 4,
+   "ms": 1526,
+   "reasoning_tokens": 243,
+   "passed": 6,
+   "total": 6,
+   "checks": {
+    "failed_count": true,
+    "skipped_count": true,
+    "passed_count": true,
+    "failed_named_webkit": true,
+    "failed_named_windows": true,
+    "failed_named_docker": true
+   },
+   "answer": "1) 5\n2) 3\n3) 16\n4) build (windows, node 20); e2e (webkit); unit (shard 3/4); docker (arm64); publish-dry-run"
+  },
+  {
+   "task": "dashboard_state",
+   "effort": "off",
+   "run": 1,
+   "ms": 1209,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 3,
+   "checks": {
+    "product": true,
+    "not_signed_in": true,
+    "nav_dashboards": true
+   },
+   "answer": "1. Product: Grafana; Page title: Grafana Play Home\n2. No\n3. Dashboards"
+  },
+  {
+   "task": "dashboard_state",
+   "effort": "off",
+   "run": 2,
+   "ms": 991,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 3,
+   "checks": {
+    "product": true,
+    "not_signed_in": true,
+    "nav_dashboards": true
+   },
+   "answer": "1. Product: Grafana; Page title: Welcome to Grafana Play\n2. No\n3. Dashboards"
+  },
+  {
+   "task": "dashboard_state",
+   "effort": "off",
+   "run": 3,
+   "ms": 1077,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 3,
+   "checks": {
+    "product": true,
+    "not_signed_in": true,
+    "nav_dashboards": true
+   },
+   "answer": "1. Product: Grafana; Page title: Grafana Play Home\n2. No\n3. Dashboards"
+  },
+  {
+   "task": "dashboard_state",
+   "effort": "off",
+   "run": 4,
+   "ms": 1345,
+   "reasoning_tokens": 0,
+   "passed": 3,
+   "total": 3,
+   "checks": {
+    "product": true,
+    "not_signed_in": true,
+    "nav_dashboards": true
+   },
+   "answer": "1. Product: Grafana; Page title: Grafana Play Home\n2. No\n3. Dashboards"
+  },
+  {
+   "task": "dashboard_state",
+   "effort": "low",
+   "run": 1,
+   "ms": 1532,
+   "reasoning_tokens": 62,
+   "passed": 3,
+   "total": 3,
+   "checks": {
+    "product": true,
+    "not_signed_in": true,
+    "nav_dashboards": true
+   },
+   "answer": "1. Product: Grafana; page title: \"Grafana Play Home\" (breadcrumb: Dashboards > Examples > Grafana Play Home).\n2. No — top-right shows a \"Sign in\" button.\n3. Dashboards (highlighted with the orange active bar in the left navigation)."
+  },
+  {
+   "task": "dashboard_state",
+   "effort": "low",
+   "run": 2,
+   "ms": 1462,
+   "reasoning_tokens": 103,
+   "passed": 3,
+   "total": 3,
+   "checks": {
+    "product": true,
+    "not_signed_in": true,
+    "nav_dashboards": true
+   },
+   "answer": "1. Product: Grafana; page title: \"Welcome to Grafana Play\" (breadcrumb: Dashboards > Examples > Grafana Play Home)\n2. No — top-right shows \"Sign in\"\n3. Dashboards"
+  },
+  {
+   "task": "dashboard_state",
+   "effort": "low",
+   "run": 3,
+   "ms": 1479,
+   "reasoning_tokens": 54,
+   "passed": 3,
+   "total": 3,
+   "checks": {
+    "product": true,
+    "not_signed_in": true,
+    "nav_dashboards": true
+   },
+   "answer": "1. Product: Grafana; page title: Grafana Play Home (breadcrumb: Dashboards > Examples > Grafana Play Home).\n2. No — top-right shows a \"Sign in\" button.\n3. Dashboards (left navigation, highlighted)."
+  },
+  {
+   "task": "dashboard_state",
+   "effort": "low",
+   "run": 4,
+   "ms": 1488,
+   "reasoning_tokens": 41,
+   "passed": 3,
+   "total": 3,
+   "checks": {
+    "product": true,
+    "not_signed_in": true,
+    "nav_dashboards": true
+   },
+   "answer": "1. Product: Grafana; page title: Grafana Play Home\n2. No — \"Sign in\" is shown at top right\n3. Dashboards"
+  }
+ ],
+ "summary": {
+  "A": {
+   "minimal": {
+    "median_ms": 1854,
+    "median_reasoning_tokens": 234
+   },
+   "low": {
+    "median_ms": 2082,
+    "median_reasoning_tokens": 292
+   },
+   "high": {
+    "median_ms": 1278,
+    "median_reasoning_tokens": 65
+   }
+  },
+  "B": {
+   "off": {
+    "ttft_p50": 969,
+    "ttft_p90": 1106,
+    "ttft_max": 1106,
+    "total_p50": 1515
+   },
+   "low": {
+    "ttft_p50": 4542,
+    "ttft_p90": 6925,
+    "ttft_max": 6925,
+    "total_p50": 5204
+   }
+  },
+  "C": {
+   "tiny_code/off": {
+    "passed": 12,
+    "total": 16,
+    "clean": "0/4",
+    "median_ms": 1095,
+    "max_ms": 1111
+   },
+   "tiny_code/low": {
+    "passed": 13,
+    "total": 16,
+    "clean": "1/4",
+    "median_ms": 2812,
+    "max_ms": 15444
+   },
+   "chart_read/off": {
+    "passed": 15,
+    "total": 16,
+    "clean": "3/4",
+    "median_ms": 1354,
+    "max_ms": 1457
+   },
+   "chart_read/low": {
+    "passed": 16,
+    "total": 16,
+    "clean": "4/4",
+    "median_ms": 2996,
+    "max_ms": 3549
+   },
+   "glyph_counting/off": {
+    "passed": 20,
+    "total": 24,
+    "clean": "2/4",
+    "median_ms": 1164,
+    "max_ms": 1178
+   },
+   "glyph_counting/low": {
+    "passed": 24,
+    "total": 24,
+    "clean": "4/4",
+    "median_ms": 1544,
+    "max_ms": 1684
+   },
+   "dashboard_state/off": {
+    "passed": 12,
+    "total": 12,
+    "clean": "4/4",
+    "median_ms": 1209,
+    "max_ms": 1345
+   },
+   "dashboard_state/low": {
+    "passed": 12,
+    "total": 12,
+    "clean": "4/4",
+    "median_ms": 1488,
+    "max_ms": 1532
+   }
+  }
+ }
+}

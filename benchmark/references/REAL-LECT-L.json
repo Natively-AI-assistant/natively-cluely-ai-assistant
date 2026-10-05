@@ -1,0 +1,1413 @@
+{
+  "id": "REAL-LECT-L",
+  "category": "lecture",
+  "natively_mode": "lecture",
+  "length_bucket": "long",
+  "speakers": [
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Christine Grady (lecturer) + audience",
+      "role": "lecturer",
+      "org": "NIH Clinical Center Department of Bioethics"
+    }
+  ],
+  "context": "Real 65-minute NIH lecture from the 2016 Introduction to the Principles and Practice of Clinical Research (IPPCR) course, 'Ethical Principles in Clinical Research', given by Christine Grady of the NIH Clinical Center Department of Bioethics; the captions have no diarization, so the lecturer and occasional audience remarks are all labelled S1. She covers the ethical tension in clinical research, its history, major codes (Nuremberg, Helsinki, Belmont, CIOMS, ICH-GCP) and U.S. regulations (Common Rule/45 CFR 46, FDA 21 CFR 50/56), then walks through the department's seven-principle framework and closes with emerging challenges and a short Q&A on monitoring, stopping rules and injury compensation.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "background",
+      "importance": "minor",
+      "statement": "The lecturer is Christine Grady of the Department of Bioethics at the NIH Clinical Center; she states the views are mostly her own, not necessarily the government's, and she has no conflicts of interest.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        5,
+        6
+      ],
+      "notes": null
+    },
+    {
+      "id": "F02",
+      "type": "example",
+      "importance": "important",
+      "statement": "Opening example (published in the New England Journal of Medicine): a double-blind, placebo-controlled randomized trial giving progesterone to people with traumatic brain injury in the emergency room, conducted without informed consent.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        9,
+        10,
+        11,
+        12
+      ],
+      "notes": null
+    },
+    {
+      "id": "F03",
+      "type": "example",
+      "importance": "minor",
+      "statement": "Two other NEJM opening examples: a double-blind randomized trial of antimicrobials in children with (vesicoureteral) reflux, and a trial randomizing pregnant women to two thyroid-screening time points (thyroxine if positive) with the children's cognitive ability/IQ at age 3 as the primary outcome.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        13,
+        14,
+        15,
+        16
+      ],
+      "notes": "lecturer stumbles on the word 'vesicoureteral' (line 13)"
+    },
+    {
+      "id": "F04",
+      "type": "concept",
+      "importance": "important",
+      "statement": "The lecture's guiding question is whether such studies are ethical and how one decides; lack of informed consent (emergency patients, children) does not by itself make a study unethical, and risk versus benefit also matters.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        18,
+        19,
+        21,
+        22
+      ],
+      "notes": "audience suggested informed consent, risk vs benefit, no actual harm"
+    },
+    {
+      "id": "F05",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The goal of clinical research is to generate useful knowledge about human health or illness (ways to prevent, diagnose or treat disease), not to benefit the individuals who participate, although they sometimes do benefit.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        29,
+        30
+      ],
+      "notes": null
+    },
+    {
+      "id": "F06",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "This creates the core ethical tension: research participants are the means to developing useful knowledge and are therefore at risk of exploitation, which much of research ethics aims to address.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        30,
+        31,
+        32
+      ],
+      "notes": null
+    },
+    {
+      "id": "F07",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The ethics of clinical research requires balancing two parts: generating useful knowledge is itself an ethical responsibility that benefits society and future patients, but it must be constrained by protecting and respecting the rights and welfare of participants.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        35,
+        36,
+        37
+      ],
+      "notes": "'bone fits' (line 35) is a caption garble of 'benefits'"
+    },
+    {
+      "id": "F08",
+      "type": "background",
+      "importance": "minor",
+      "statement": "For hundreds of years there were very few rules; physicians experimented out of curiosity (having the resources to do so) and to try to benefit individual patients.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        39,
+        40,
+        41
+      ],
+      "notes": null
+    },
+    {
+      "id": "F09",
+      "type": "background",
+      "importance": "important",
+      "statement": "In a 'utilitarian era' in the United States the emphasis was on benefit to society, and many participants were people now recognized as vulnerable: prisoners, institutionalized and mentally ill people, and children in orphanages, seen as captive or marginal.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        42,
+        43,
+        44,
+        45
+      ],
+      "notes": null
+    },
+    {
+      "id": "F10",
+      "type": "example",
+      "importance": "important",
+      "statement": "Scrutiny in the late 1960s/early 1970s was prompted by studies such as one in which, for 40 years, researchers studied the natural history of a disease for which treatment was available while participants did not receive that treatment.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        46,
+        47,
+        48
+      ],
+      "notes": "the study is not named in the transcript; do not require a name"
+    },
+    {
+      "id": "F11",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "That scrutiny led to congressional hearings, an act, a national commission on biomedical and behavioral research, and the rules and regulations still in use today, which began at that time; before then few rules had much authority.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        49,
+        50,
+        51
+      ],
+      "notes": null
+    },
+    {
+      "id": "F12",
+      "type": "background",
+      "importance": "important",
+      "statement": "The regulations put in place from the 1970s emphasized protecting human subjects from undue risk and exploitation, and respecting their rights through informed consent.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        52,
+        53
+      ],
+      "notes": null
+    },
+    {
+      "id": "F13",
+      "type": "background",
+      "importance": "important",
+      "statement": "In roughly the last 20 years there has been increased recognition that research participation can be beneficial, including to populations: e.g., including children in research avoids 'therapeutic orphans' (children we don't know how to treat), and international research has been seen as beneficial.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        54,
+        55,
+        56,
+        58,
+        59
+      ],
+      "notes": null
+    },
+    {
+      "id": "F14",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "The Nuremberg Code was written as part of the Nuremberg war-crimes trials, is a distinct code of 10 principles, and still influences how research is done worldwide.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        64,
+        65
+      ],
+      "notes": null
+    },
+    {
+      "id": "F15",
+      "type": "entity",
+      "importance": "important",
+      "statement": "The Declaration of Helsinki was written about 15 years after Nuremberg by the World Medical Association; it is described as partly a response to Nuremberg, recognizing that much research is done by physicians with patients, whereas Nuremberg arose from research on prisoners in war.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        66,
+        67,
+        68
+      ],
+      "notes": null
+    },
+    {
+      "id": "F16",
+      "type": "number",
+      "importance": "minor",
+      "statement": "The Declaration of Helsinki is a 'living document' revised multiple times, most recently in 2013, and carries a lot of authority around the world.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        69,
+        71,
+        72
+      ],
+      "notes": "lecturer notes her slide is out of date (C02)"
+    },
+    {
+      "id": "F17",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "The Belmont Report was written by the U.S. national commission; it is a short, clear explanation of the principles underlying clinical research, and the lecturer recommends reading it.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        74,
+        75,
+        76
+      ],
+      "notes": null
+    },
+    {
+      "id": "F18",
+      "type": "entity",
+      "importance": "important",
+      "statement": "CIOMS (Council for International Organizations of Medical Sciences), in collaboration with the World Health Organization, developed international guidelines applying the Declaration of Helsinki's principles to research in the developing world; published versions are from 1993 and 2002, and a revised version was recently posted online for comment.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        76,
+        77,
+        78
+      ],
+      "notes": null
+    },
+    {
+      "id": "F19",
+      "type": "preference",
+      "importance": "minor",
+      "statement": "The lecturer particularly likes the CIOMS document because, beyond stating principles, it gives clear detailed explanations of how each principle was derived and what it means; it is worth reading for international research.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        79,
+        80,
+        81
+      ],
+      "notes": null
+    },
+    {
+      "id": "F20",
+      "type": "entity",
+      "importance": "important",
+      "statement": "ICH-GCP (Good Clinical Practice) came from the regulatory agencies of the United States, European Union and Japan to harmonize rules so research done in one jurisdiction need not start over for approval in another; it has been adopted in many countries and adopts most Declaration of Helsinki principles.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        82,
+        83,
+        85,
+        86
+      ],
+      "notes": null
+    },
+    {
+      "id": "F21",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The Belmont Report sets out three underlying principles for clinical research: respect for persons, beneficence, and justice.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        88
+      ],
+      "notes": null
+    },
+    {
+      "id": "F22",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Belmont applies each principle to an aspect of research: respect for persons to informed consent, beneficence to risk-benefit assessment, and justice to fair selection of subjects.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        89,
+        90,
+        91
+      ],
+      "notes": "line 90 caption drops 'respect for persons' before 'the idea of informed consent'"
+    },
+    {
+      "id": "F23",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The Belmont Report also distinguished clinical research from clinical practice in three ways: goals, methods, and the justification for risk.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        92,
+        93,
+        98,
+        104,
+        109
+      ],
+      "notes": null
+    },
+    {
+      "id": "F24",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Goals differ: clinical research aims to generate useful knowledge, while clinical care aims to benefit the person being cared for; the two goals can come into tension.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        94,
+        95,
+        96,
+        97
+      ],
+      "notes": null
+    },
+    {
+      "id": "F25",
+      "type": "example",
+      "importance": "important",
+      "statement": "Methods differ: double-blind, placebo-controlled and dose-escalation trials are routine in research but foreign to clinical practice; it would be strange for a doctor to treat your sore throat with one of two drugs that neither of you can identify.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        98,
+        99,
+        100,
+        101,
+        102,
+        103
+      ],
+      "notes": "'health escalation' (line 99) is a caption garble of 'dose escalation'"
+    },
+    {
+      "id": "F26",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Justification for risk differs: in practice, risks are justified by potential benefit to the individual, whereas research often asks people to undergo procedures with no corresponding benefit to them (an extra biopsy, blood draw, scan or pharmacokinetics test) purely to answer a question.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        104,
+        105,
+        106,
+        107,
+        108,
+        109
+      ],
+      "notes": "'in reaccept' (line 106) = 'in research'"
+    },
+    {
+      "id": "F27",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "Besides codes and guidelines there are regulations; the key U.S. one is the Common Rule, of which 45 CFR 46 (Title 45 of the Code of Federal Regulations, Part 46) is the Department of Health and Human Services' version, binding on anyone receiving HHS funding.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        111,
+        113,
+        114,
+        115,
+        116,
+        117
+      ],
+      "notes": null
+    },
+    {
+      "id": "F28",
+      "type": "number",
+      "importance": "important",
+      "statement": "It is called the 'Common Rule' because 16 other federal agencies follow the same regulations, housed in different parts of the CFR but with similar content.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        118,
+        119
+      ],
+      "notes": null
+    },
+    {
+      "id": "F29",
+      "type": "entity",
+      "importance": "important",
+      "statement": "The FDA does not follow the Common Rule; its own regulations at 21 CFR Parts 50 and 56 are very similar but have some important differences.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        120,
+        121,
+        122
+      ],
+      "notes": null
+    },
+    {
+      "id": "F30",
+      "type": "requirement",
+      "importance": "minor",
+      "statement": "NIH also has its own policies and requirements, e.g., for inclusion of women, ethnic minorities and children in research.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        124,
+        127
+      ],
+      "notes": null
+    },
+    {
+      "id": "F31",
+      "type": "concept",
+      "importance": "important",
+      "statement": "45 CFR 46 / the Common Rule covers three broad areas: composition and function of institutional review boards (IRBs), criteria IRBs use to decide whether a study is approvable, and requirements for informed consent.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        132,
+        133,
+        134,
+        135,
+        136
+      ],
+      "notes": null
+    },
+    {
+      "id": "F32",
+      "type": "entity",
+      "importance": "important",
+      "statement": "45 CFR 46 has subparts with additional protections for vulnerable groups: Subpart B for fetuses, pregnant women and human in vitro fertilization; Subpart C for prisoners; Subpart D for children.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        137,
+        138,
+        139
+      ],
+      "notes": null
+    },
+    {
+      "id": "F33",
+      "type": "entity",
+      "importance": "minor",
+      "statement": "Within FDA regulations, 21 CFR Part 50 covers informed consent and Part 56 IRB composition and function; FDA also has a Subpart D for research with children, and IND/IDE regulations (Parts 312 and 812) govern testing investigational drugs and devices.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        141,
+        142,
+        143
+      ],
+      "notes": null
+    },
+    {
+      "id": "F34",
+      "type": "background",
+      "importance": "important",
+      "statement": "About 15 years ago the NIH Department of Bioethics concluded that codes and regulations were developed in response to specific historical events, address some issues incompletely and give divergent recommendations, so investigators and reviewers needed a systematic, coherent, universally applicable framework.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        146,
+        147,
+        148,
+        149,
+        150
+      ],
+      "notes": null
+    },
+    {
+      "id": "F35",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The department proposed a seven-principle framework for judging whether research is ethical; the first paper on it was published in 2010 and it also appears in textbooks.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        152,
+        153,
+        154
+      ],
+      "notes": null
+    },
+    {
+      "id": "F36",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The seven principles are: (1) valuable scientific question, (2) valid scientific methodology, (3) fair subject selection, (4) favorable risk-benefit evaluation, (5) independent review, (6) informed consent, and (7) respect for enrolled subjects.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        155
+      ],
+      "notes": null
+    },
+    {
+      "id": "F37",
+      "type": "caveat",
+      "importance": "minor",
+      "statement": "The framework's authors did not invent the principles; the concepts all appear in existing guidelines and codes, and the framework just organizes them more systematically.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        156,
+        157,
+        158
+      ],
+      "notes": null
+    },
+    {
+      "id": "F38",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The principles are sequential: one starts at the top (is this a valuable question?) and works down; informed consent, though important, is not reached until the earlier considerations are satisfied, since there is no reason to seek consent for research that isn't worth doing and well designed.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        159,
+        160,
+        161,
+        282,
+        320,
+        321
+      ],
+      "notes": null
+    },
+    {
+      "id": "F39",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Principle 1, valuable scientific question ('worth doing'): ethical clinical research should answer a question that generates new knowledge or understanding about human health or illness and is socially, clinically or scientifically useful.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        161,
+        162,
+        163
+      ],
+      "notes": null
+    },
+    {
+      "id": "F40",
+      "type": "example",
+      "importance": "important",
+      "statement": "Research ethicist Benjamin Friedman (as captioned) described a 'nightmare' in which a colleague announced he had successfully transplanted an appendix and, asked whether it was ethical, replied that he got the patient's informed consent, illustrating that informed consent doesn't make research without value ethical.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        164,
+        165,
+        166,
+        167,
+        168,
+        169
+      ],
+      "notes": "name spelled 'friedman'/'benji' in captions"
+    },
+    {
+      "id": "F41",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "A valuable question does not require a positive answer: a negative result is still socially valuable; but if you cannot say why the question is worth asking, you should reconsider whether the research is ethical.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        171,
+        172,
+        173,
+        174
+      ],
+      "notes": null
+    },
+    {
+      "id": "F42",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Social value matters because it provides benefit to society, minimizes exploitation (not wasting participants' time), justifies asking participants to accept risk and burden, and is a responsible use of resources.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        175,
+        176,
+        177,
+        178
+      ],
+      "notes": null
+    },
+    {
+      "id": "F43",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Principle 2, valid scientific methodology: research should be designed rigorously to yield valid, reliable, generalizable and interpretable data, so you get an answer you can interpret (not necessarily positive), and the study must be feasible.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        179,
+        180,
+        181,
+        182,
+        185,
+        186
+      ],
+      "notes": "line 180 caption reads 'ethically rigorous manner'"
+    },
+    {
+      "id": "F44",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Although design choices (endpoints, design, procedures, statistical methods, data management) look purely scientific, every scientific choice has ethical implications.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "notes": null
+    },
+    {
+      "id": "F45",
+      "type": "example",
+      "importance": "minor",
+      "statement": "There is controversy over balancing the most rigorous design against not exposing participants to excessive risk, as in last year's debates over the design of Ebola clinical trials.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        192,
+        193,
+        194,
+        195,
+        196
+      ],
+      "notes": null
+    },
+    {
+      "id": "F46",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Feasibility is an ethical requirement: a trial that cannot recruit the participants or obtain the equipment needed to answer its question is an ethical non-starter, because participants would bear risk and burden for nothing.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        197,
+        198,
+        199,
+        200
+      ],
+      "notes": null
+    },
+    {
+      "id": "F47",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Principle 3, fair subject selection: scientific objectives should guide inclusion criteria and subject selection, not people's easy availability, vulnerability or marginality; selection should also fairly distribute harms and benefits.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        201,
+        202,
+        203,
+        204,
+        205,
+        206
+      ],
+      "notes": "'Conclusion criteria' (line 204) = inclusion criteria"
+    },
+    {
+      "id": "F48",
+      "type": "example",
+      "importance": "minor",
+      "statement": "Example: a breast cancer treatment trial scientifically needs people with (perhaps a specific type of) breast cancer, but fair distribution of harms means considering subgroups more susceptible to the intervention's risks (e.g., kidney or liver disease) via eligibility criteria.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        208,
+        209,
+        210,
+        211
+      ],
+      "notes": null
+    },
+    {
+      "id": "F49",
+      "type": "concept",
+      "importance": "important",
+      "statement": "A colleague's approach flips fair subject selection: start by including everyone unless there is justification to exclude them, namely that they can't help answer the scientific question, are at higher risk than others, or are more vulnerable.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        212,
+        213,
+        214,
+        215,
+        216
+      ],
+      "notes": null
+    },
+    {
+      "id": "F50",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Distribution of risks and benefits should keep in mind the pendulum swing between viewing research as a burden requiring protection and viewing it as a benefit that subjects need and want access to.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        218,
+        219,
+        220,
+        221
+      ],
+      "notes": "a separate lecture on vulnerability is planned (line 217)"
+    },
+    {
+      "id": "F51",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Principle 4, favorable risk-benefit evaluation: distinct from whether the study is worth doing, it asks whether risks to participants are minimized and necessary, justified by benefit or potential benefit to them and/or the importance of the knowledge, and whether benefits are enhanced.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        222,
+        223,
+        224,
+        225,
+        229,
+        230
+      ],
+      "notes": null
+    },
+    {
+      "id": "F52",
+      "type": "example",
+      "importance": "minor",
+      "statement": "Example: for a proposal of 10 MRIs over six months, ask whether 10 are necessary, whether 6 or 5 (or spacing them out) would answer the question, and how to minimize the burden.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        226,
+        227,
+        228
+      ],
+      "notes": null
+    },
+    {
+      "id": "F53",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Assessing risk involves probability and magnitude and different types of risk; the regulations name physical, psychological, social and financial risk, and it is unclear whether hazards like walking through a tough neighborhood to the clinic count as research risks.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        232,
+        233,
+        234,
+        235,
+        237,
+        238
+      ],
+      "notes": null
+    },
+    {
+      "id": "F54",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "All research involves some uncertainty about risk; if there were none the research probably wouldn't be done, since research helps identify the risks, their magnitude or comparative risks.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        239,
+        240,
+        241
+      ],
+      "notes": null
+    },
+    {
+      "id": "F55",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Simple ways to minimize risk include reducing the number of procedures, drawing research blood at the same time as clinically required blood draws, and ensuring procedures are done by properly trained people.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        242,
+        243,
+        244,
+        245
+      ],
+      "notes": null
+    },
+    {
+      "id": "F56",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "Limiting risk protects certain groups: regulations for research with children cap risk; minimal-risk research is generally fine, more risk is acceptable when there is prospect of benefit to the children, and greater-than-minimal risk without benefit faces much more stringent rules and sometimes cannot be done.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        246,
+        247,
+        248,
+        249
+      ],
+      "notes": null
+    },
+    {
+      "id": "F57",
+      "type": "caveat",
+      "importance": "minor",
+      "statement": "Defining benefit is also challenging, e.g., whether entering a study offering an intervention for a serious illness with few treatments is by definition a prospect of benefit, and how that differs between phase 3 and phase 1 trials.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        250,
+        251,
+        252
+      ],
+      "notes": null
+    },
+    {
+      "id": "F58",
+      "type": "definition",
+      "importance": "important",
+      "statement": "Direct benefits are the possible therapeutic benefits of the intervention; secondary benefits include other medical care received because of the study, payment, and the psychological benefit of contributing to society.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        253,
+        254,
+        255
+      ],
+      "notes": null
+    },
+    {
+      "id": "F59",
+      "type": "conclusion",
+      "importance": "critical",
+      "statement": "Most guidance recognizes that research offering no prospect of benefit to the individual participant can still be ethically acceptable, as long as participants' rights are adequately protected.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        256,
+        257
+      ],
+      "notes": null
+    },
+    {
+      "id": "F60",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Principle 5, independent review: someone without the investigator's investments judges whether the research is acceptable, to ensure ethical requirements are met, check investigator biases, and assure the public; in the U.S. this is done by IRBs, and most countries have an equivalent ethics review committee.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        258,
+        259,
+        260,
+        261,
+        262
+      ],
+      "notes": null
+    },
+    {
+      "id": "F61",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "IRB approval criteria in the Common Rule and FDA regulations include: risks are minimized; risks are justified by anticipated benefits to subjects or the importance of the knowledge; subjects are selected and treated fairly; and informed consent is adequate.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        263,
+        265,
+        266
+      ],
+      "notes": null
+    },
+    {
+      "id": "F62",
+      "type": "number",
+      "importance": "minor",
+      "statement": "IRBs face huge protocol volumes: a meeting may last four hours covering about 10 protocols, some of which are 300 pages long.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        267,
+        269,
+        270
+      ],
+      "notes": null
+    },
+    {
+      "id": "F63",
+      "type": "pain_point",
+      "importance": "important",
+      "statement": "Evidence shows IRBs tend to be inconsistent, which is a problem for multisite studies (e.g., 100 sites reviewed by 100 IRBs with differing decisions), prompting attention to single IRB review.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        272,
+        273,
+        274,
+        275
+      ],
+      "notes": null
+    },
+    {
+      "id": "F64",
+      "type": "entity",
+      "importance": "important",
+      "statement": "In September 2015, HHS published a Notice of Proposed Rulemaking (NPRM) proposing changes to the Common Rule, including requiring single IRB review for domestic (not international) multicenter studies; there is much concern about whether that will be adequately protective.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        276,
+        277,
+        278,
+        279
+      ],
+      "notes": "proposal only, not enacted (see not_decisions); she says 'this year' though the lecture is at the new year 2016"
+    },
+    {
+      "id": "F65",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Principle 6, informed consent: its goal is to give people offered participation the opportunity to decide whether to participate or continue, and whether participation is compatible with their goals, interests and values.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        279,
+        280,
+        283,
+        284
+      ],
+      "notes": null
+    },
+    {
+      "id": "F66",
+      "type": "entity",
+      "importance": "minor",
+      "statement": "The Nuremberg Code famously states 'the voluntary consent of the human subject is absolutely essential'; CIOMS says investigators must obtain informed consent of the prospective subject or an authorized representative for all biomedical research involving human subjects.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        287,
+        288
+      ],
+      "notes": null
+    },
+    {
+      "id": "F67",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Informed consent can sometimes be waived, e.g., in emergency research such as the opening traumatic brain injury trial, through a regulatorily defined process, since those individuals mostly cannot give consent.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        289,
+        290,
+        291
+      ],
+      "notes": null
+    },
+    {
+      "id": "F68",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Informed consent involves disclosure of information, understanding sufficient to decide, a voluntary choice (not forced or unduly influenced), and authorization.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        291,
+        292,
+        293
+      ],
+      "notes": null
+    },
+    {
+      "id": "F69",
+      "type": "pain_point",
+      "importance": "important",
+      "statement": "Consent forms in the NIH intramural program are often 15-18 pages; choosing what to include without making them too long to absorb is ethically important and difficult, and the IRB reviews the consent plan, how understanding is assessed, and voluntariness.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        298,
+        299,
+        300,
+        301,
+        302
+      ],
+      "notes": "lecturer has done research on informed consent (line 298)"
+    },
+    {
+      "id": "F70",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Principle 7, respect for enrolled subjects: ethical obligations do not end once consent is obtained; they include protecting confidentiality, monitoring welfare, honoring the right to withdraw, providing new information that may affect willingness to participate, informing participants of findings, and planning for the end of the trial (compensation for research-related injury also falls here).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        303,
+        310,
+        311,
+        312,
+        313,
+        315
+      ],
+      "notes": "'a white to withdraw' (line 312) = right to withdraw"
+    },
+    {
+      "id": "F71",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "The lecturer says the seventh principle needs more work: codes, regulations and literature focus on up-front steps (review, risk-benefit, consent) and say little about what happens after a study begins, though some guidance exists (Nuremberg's liberty to withdraw; Helsinki on privacy, confidentiality and physical/mental integrity).",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        304,
+        306,
+        307,
+        308,
+        316,
+        317,
+        318
+      ],
+      "notes": null
+    },
+    {
+      "id": "F72",
+      "type": "conclusion",
+      "importance": "critical",
+      "statement": "The seven principles are meant to be systematic, sequential and universal (applying to all studies everywhere), but how they are manifested varies (e.g., risk by time or geographic location, disclosure method by population), and applying them requires balancing and specification.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        320,
+        321,
+        326,
+        327,
+        328,
+        329,
+        330,
+        332
+      ],
+      "notes": null
+    },
+    {
+      "id": "F73",
+      "type": "example",
+      "importance": "important",
+      "statement": "Balancing example: people worry about randomizing participants to a placebo arm, yet if the question is worth asking and the design rigorous, placebo may be the best way to answer it and the fairest for individuals, since if you already know the drug beats placebo you shouldn't be doing the study.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        335,
+        336,
+        337,
+        338
+      ],
+      "notes": null
+    },
+    {
+      "id": "F74",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Emerging challenges not envisioned when regulations were written include increasingly multisite and multinational research, and learning healthcare systems, quality improvement, comparative and usual-care research that may not fit the clinical-trial paradigm, a subject of large debate.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        342,
+        344,
+        345,
+        347,
+        348
+      ],
+      "notes": null
+    },
+    {
+      "id": "F75",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Research using data, samples and biospecimens is also debated: the NPRM proposes major changes there, and genomic data sharing has drawn attention, with NIH's influential Genomic Data Sharing policy requiring NIH-funded genomic researchers to share data.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        349,
+        350,
+        351,
+        352
+      ],
+      "notes": null
+    },
+    {
+      "id": "F76",
+      "type": "example",
+      "importance": "minor",
+      "statement": "In Q&A, responding to an audience question about monitoring, she explained that intervention studies typically include a thorough history and physical, careful checking of inclusion criteria, and scheduled data points measuring both efficacy and safety (toxicity, side effects).",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        358,
+        359,
+        360,
+        361
+      ],
+      "notes": "audience questions are not captioned"
+    },
+    {
+      "id": "F77",
+      "type": "concept",
+      "importance": "important",
+      "statement": "In Q&A she explained that because research effects are unknown, almost every study has stopping rules both for individuals (removal, dose adjustment or withholding for certain side effects) and for the entire study (changed or stopped if a set number of participants have a given level of side effect).",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        363,
+        364,
+        365,
+        366,
+        367
+      ],
+      "notes": null
+    },
+    {
+      "id": "F78",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "In Q&A she noted that the U.S. has no requirement or system for compensating people injured in research; regulations only require telling participants what will happen if hurt, typically short-term care or transfer with their insurance paying; she calls this contentious and says most people who think about it consider it a mistake.",
+      "owner": "Christine Grady",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        368,
+        369,
+        370,
+        371,
+        372,
+        373
+      ],
+      "notes": null
+    },
+    {
+      "id": "F79",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "The NIH Department of Bioethics offers ethics consults and classes, and holds ethics grand rounds four times a year.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        376
+      ],
+      "notes": null
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "what": "What she lists alongside regulations as sources of guidance (lecturer's self-correction while introducing U.S. regulations)",
+      "initial_value": "codes and regulations",
+      "initial_line": 111,
+      "final_value": "codes and guidelines (in addition to which there are regulations)",
+      "final_line": 111,
+      "explicit": true,
+      "fact_id": "F27"
+    },
+    {
+      "id": "C02",
+      "what": "Most recent revision of the Declaration of Helsinki",
+      "initial_value": "the revision date printed on the slide, which she flags as out of date ('This slide needs to be updated')",
+      "initial_line": 70,
+      "final_value": "most recently revised in 2013",
+      "final_line": 71,
+      "explicit": true,
+      "fact_id": "F16"
+    }
+  ],
+  "not_decisions": [
+    {
+      "statement": "Single IRB review being REQUIRED for domestic multicenter studies is only a proposal in HHS's September 2015 NPRM to change the Common Rule, not an enacted rule.",
+      "lines": [
+        276,
+        278
+      ]
+    },
+    {
+      "statement": "The NPRM's major changes to research using data, samples and biospecimens are proposals whose correctness is still debated, not current regulation.",
+      "lines": [
+        349,
+        350
+      ]
+    },
+    {
+      "statement": "The revised CIOMS guidelines are a draft posted online for comment; the published versions are 1993 and 2002.",
+      "lines": [
+        78
+      ]
+    },
+    {
+      "statement": "A U.S. system for compensating research-related injury is something most people think should exist, but no such requirement or system exists.",
+      "lines": [
+        369,
+        372,
+        373
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "The audience suggestion that informed consent is what makes research ethical",
+      "lines": [
+        21,
+        168,
+        281,
+        282
+      ],
+      "why": "false assumption later corrected: informed consent is necessary but comes after value, design, selection, risk-benefit and review"
+    },
+    {
+      "statement": "The popular image of research participants as 'human guinea pigs'",
+      "lines": [
+        33
+      ],
+      "why": "irrelevant: framing the lecturer raises in order to reconcile it, not her conclusion"
+    },
+    {
+      "statement": "Cartoon of men in trench coats and hats pressuring a sweating man to sign a consent form, which she says is 'not really that funny'",
+      "lines": [
+        293,
+        294
+      ],
+      "why": "irrelevant (slide joke illustrating coercion)"
+    },
+    {
+      "statement": "Show-of-hands polls of the room (who has studied ethics, knows the Common Rule, is an investigator or IRB member, has attended an IRB meeting, has seen intramural consent forms)",
+      "lines": [
+        7,
+        113,
+        125,
+        126,
+        268,
+        298
+      ],
+      "why": "irrelevant (audience interaction)"
+    },
+    {
+      "statement": "Word stumble over 'vesicoureteral' ('vasiculo-- can't say the word-- reflux')",
+      "lines": [
+        13
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Remark that the Helsinki slide needs to be updated",
+      "lines": [
+        70
+      ],
+      "why": "superseded value (slide date replaced by 2013)"
+    },
+    {
+      "statement": "'Clear as mud?' and prompts for questions when nobody initially asked",
+      "lines": [
+        354,
+        356
+      ],
+      "why": "irrelevant (joke / audience prompt)"
+    },
+    {
+      "statement": "'The seven principles that he just described' although the lecturer herself described them",
+      "lines": [
+        343
+      ],
+      "why": "irrelevant: speech/caption slip; there is no other presenter"
+    }
+  ],
+  "open_questions_at_end": [
+    "How to more fully specify the seventh principle (respect for enrolled subjects), which the lecturer says needs more work and has limited guidance.",
+    "Whether mandatory single IRB review for multisite studies (proposed in the NPRM) will be adequately protective and how institutions will arrange it.",
+    "Whether the NPRM's proposals, including changes for research using data and biospecimens, are correct and how they will change research.",
+    "Whether the existing clinical-trial-based regulatory paradigm fits learning healthcare systems, quality improvement, comparative and usual-care research.",
+    "How the U.S. should handle compensation for research-related injury, given there is currently no requirement or system."
+  ],
+  "summary_must_include": [
+    "Core tension: research generates knowledge for society/future patients (not individual benefit), so participants risk exploitation and must be protected (F05, F06, F07)",
+    "History: few rules -> utilitarian era using vulnerable populations -> 1970s scandal-driven protectionist regulations -> recent recognition of benefits of participation (F09, F10, F12, F13)",
+    "Key codes: Nuremberg Code, Declaration of Helsinki, Belmont Report, CIOMS guidelines, ICH-GCP (F14, F15, F17, F18, F20)",
+    "Belmont's three principles (respect for persons, beneficence, justice) and their applications (consent, risk-benefit, subject selection) (F21, F22)",
+    "Research vs. practice differ in goals, methods and justification for risk (F23, F26)",
+    "U.S. regulations: Common Rule / 45 CFR 46 (16 other agencies; IRBs, approval criteria, consent; subparts B/C/D) and separate FDA regs 21 CFR 50/56 (F27, F28, F29, F32)",
+    "The NIH Bioethics seven-principle framework, named in order (F35, F36)",
+    "Principles are applied sequentially; informed consent alone does not make research ethical (appendix-transplant example) (F38, F40)",
+    "Key content of each principle: value, valid/feasible design, fair selection by scientific objectives, minimized and justified risk, independent IRB review, consent elements, ongoing obligations to enrolled subjects (F39, F43, F47, F51, F60, F65, F70)",
+    "Principles are universal but their implementation varies and requires balancing (e.g., placebo arms) (F72, F73)",
+    "IRB inconsistency and the September 2015 NPRM proposal for single IRB review of domestic multisite studies (proposal, not rule) (F63, F64)",
+    "Q&A: stopping rules, and no U.S. system for compensating research injury (F77, F78)"
+  ]
+}

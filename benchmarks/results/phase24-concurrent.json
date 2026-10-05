@@ -1,0 +1,35 @@
+[
+ {
+  "id": "A",
+  "file": "huge.txt",
+  "uploadReturnedAt": 189,
+  "firstProgressAt": 193,
+  "readyAt": 26448,
+  "status": "ready",
+  "chunks": 261,
+  "embedded": 261,
+  "uploadLatencyMs": 26312
+ },
+ {
+  "id": "B",
+  "file": "tiny.txt",
+  "uploadReturnedAt": 150,
+  "firstProgressAt": 153,
+  "readyAt": 3677,
+  "status": "ready",
+  "chunks": 4,
+  "embedded": 4,
+  "uploadLatencyMs": 3561
+ },
+ {
+  "id": "C",
+  "file": "small.txt",
+  "uploadReturnedAt": 151,
+  "firstProgressAt": 153,
+  "readyAt": 4180,
+  "status": "ready",
+  "chunks": 14,
+  "embedded": 14,
+  "uploadLatencyMs": 4051
+ }
+]

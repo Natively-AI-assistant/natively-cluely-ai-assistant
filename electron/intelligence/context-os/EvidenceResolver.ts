@@ -50,6 +50,17 @@ import type {
 import { allowsEvidence, allowsRetrieval } from './types';
 import type { EvidenceItem, EvidencePack, RejectedEvidenceItem } from './evidencePack';
 import { textCanProveProperty } from './requestedProperty';
+// Type-only (erased at runtime). The DI ports below described a structural
+// SUBSET of the pack, but what actually flows through them at runtime is a
+// real KnowledgePack: getPackForFile() returns KnowledgePack | null and the
+// resolver forwards that value straight into queryOkfCards. Declaring the
+// real type makes the ports state the contract they already have — the
+// subset made the real queryOkfCards un-assignable to the port (its `pack`
+// parameter is contravariant, so a narrower declared parameter rejects the
+// wider real one).
+import type { KnowledgePack } from '../../services/knowledge/types';
+import type { OkfRetrieveOptions, ScoredCard } from '../../services/knowledge/OkfRetriever';
+import type { QuestionClassification } from '../../services/knowledge/QuestionClassifier';
 import {
   deriveEvidenceSufficiency,
   MIN_ANSWER_CONFIDENCE,
@@ -62,6 +73,7 @@ import {
   isOkfHybridRetrievalEnabled,
   isRagConfidenceGateEnabled,
   isRagLocalRerankEnabled,
+  isRagSpeculativeRerankEnabled,
 } from '../intelligenceFlags';
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -153,20 +165,7 @@ export interface HybridRetrieverLike {
 }
 
 export interface KnowledgeManagerLike {
-  getPackForFile(fileId: string): {
-    packId: string;
-    packVersion: number;
-    cards: Array<{
-      id: string;
-      title: string;
-      body: string;
-      sourcePages: number[];
-      sourceSections: string[];
-      entities: string[];
-      confidence: 'high' | 'medium' | 'low';
-      approvalStatus?: string;
-    }>;
-  } | null;
+  getPackForFile(fileId: string): KnowledgePack | null;
 }
 
 export interface EvidenceResolverDeps {
@@ -174,13 +173,13 @@ export interface EvidenceResolverDeps {
   getReferenceFiles: (modeId: string) => ReferenceFileLike[];
   hybridRetriever: HybridRetrieverLike;
   knowledgeManager: KnowledgeManagerLike;
-  classifyQuestion: (question: string) => { type: string; isSynthesis: boolean; targetEntities: string[] };
+  classifyQuestion: (question: string) => QuestionClassification;
   queryOkfCards: (
-    pack: { cards: any[]; packVersion: number },
+    pack: KnowledgePack,
     question: string,
-    classification: { type: string; isSynthesis: boolean; targetEntities: string[] },
-    options?: { topN?: number; minScore?: number; fileId?: string },
-  ) => Array<{ card: any; score: number }>;
+    classification: QuestionClassification,
+    options?: OkfRetrieveOptions,
+  ) => ScoredCard[];
 }
 
 // ── Confidence floor for "is this pack good enough to answer from" ─────────
@@ -368,6 +367,16 @@ export class EvidenceResolver {
   ): EvidenceResolutionResult | null {
     const { question, sourceContract, requestedProperty, turnId } = request;
     const classification = this.deps.classifyQuestion(question);
+    const h4StageTrace = process.env.NATIVELY_E2E === '1'
+      && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+    const markH4OkfStage = (stage: string, details: Record<string, unknown> = {}) => {
+      if (h4StageTrace) console.log('[TRACE:H4-OKF]', JSON.stringify({ stage, ...details }));
+    };
+    markH4OkfStage('classification', {
+      questionType: classification.type,
+      targetEntities: classification.targetEntities,
+      softEntities: classification.softEntities,
+    });
 
     const scoredAcrossFiles: Array<{ card: any; score: number; fileId: string }> = [];
     // All card bodies across the active files — used to measure query-term rarity
@@ -381,6 +390,17 @@ export class EvidenceResolver {
       for (const s of scored) scoredAcrossFiles.push({ ...s, fileId: file.id });
     }
     if (scoredAcrossFiles.length === 0) return null;
+    markH4OkfStage('scored_candidates', {
+      count: scoredAcrossFiles.length,
+      top: scoredAcrossFiles.slice()
+        .sort((left, right) => right.score - left.score)
+        .slice(0, 6)
+        .map((entry) => ({
+          score: Number(entry.score.toFixed(3)),
+          section: entry.card.sourceSections?.[0] || '',
+          entities: entry.card.entities || [],
+        })),
+    });
 
     // A synthesis question (main_topic/objectives/…) is satisfied by ALL
     // returned cards in document order — queryOkfCards already encodes that.
@@ -504,7 +524,14 @@ export class EvidenceResolver {
     const { question, turnId, requestedProperty, transcript, followUpReferentHint, relaxed } = request;
 
     let result: Awaited<ReturnType<HybridRetrieverLike['retrieveHybrid']>>;
+    const h4StageTrace = process.env.NATIVELY_E2E === '1'
+      && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+    const h4StartedAt = Date.now();
+    const markH4ResolverStage = (stage: string, details: Record<string, unknown> = {}) => {
+      if (h4StageTrace) console.log('[TRACE:H4-RESOLVER]', JSON.stringify({ stage, atMs: Date.now() - h4StartedAt, ...details }));
+    };
     try {
+      markH4ResolverStage('hybrid_enter', { fileCount: files.length, requestedProperty });
       result = await this.deps.hybridRetriever.retrieveHybrid(mode, files, {
         query: question,
         transcript,
@@ -512,11 +539,24 @@ export class EvidenceResolver {
         // forceDocumentGrounding is true — pass undefined so it self-selects.
         tokenBudget: relaxed ? 5200 : undefined,
         topK: relaxed ? 24 : undefined,
-        allowRerank: isRagLocalRerankEnabled(),
+        // The governed manual-chat path has a fixed first-useful deadline. It
+        // only opts into the optional local reranker when the explicit
+        // speculative rollout gate is on; ragLocalRerank merely permits the
+        // model, while ragSpeculativeRerank permits this live path to await it.
+        allowRerank: isRagLocalRerankEnabled() && isRagSpeculativeRerankEnabled(),
         forceDocumentGrounding: true,
         followUpReferentHint,
       });
-    } catch {
+      markH4ResolverStage('hybrid_exit', {
+        chunkCount: result.chunks?.length ?? 0,
+        usedFallback: result.usedFallback,
+        propertyEvidence: result.chunks?.map((chunk) => ({
+          chunkIndex: chunk.chunkIndex,
+          provesRequestedProperty: textCanProveProperty(chunk.text, requestedProperty),
+        })),
+      });
+    } catch (error: any) {
+      markH4ResolverStage('hybrid_error', { message: error?.message || String(error) });
       return {
         pack: this.emptyPack(request, 'insufficient'),
         strategy: 'insufficient',

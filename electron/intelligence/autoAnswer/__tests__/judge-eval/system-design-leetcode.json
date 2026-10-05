@@ -1,0 +1,843 @@
+[
+ {
+  "text": ">> right?",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "sort of discuss them one by one in case"
+   },
+   {
+    "role": "user",
+    "text": "uh there are any miscommunications or if"
+   },
+   {
+    "role": "user",
+    "text": "you need to discuss further on certain"
+   },
+   {
+    "role": "user",
+    "text": "requirements."
+   },
+   {
+    "role": "user",
+    "text": "So,"
+   },
+   {
+    "role": "user",
+    "text": ">> so I think the first uh requirement"
+   },
+   {
+    "role": "user",
+    "text": "would be that we are able to view a list"
+   },
+   {
+    "role": "user",
+    "text": "of coding problems,"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> of the choice. Yeah, that that's perfect.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "will view like a given problem and we"
+   },
+   {
+    "role": "user",
+    "text": "can code a solution using uh any"
+   },
+   {
+    "role": "user",
+    "text": "language of our choice."
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Yeah."
+   },
+   {
+    "role": "user",
+    "text": "So I can display view a given problem"
+   },
+   {
+    "role": "user",
+    "text": "and code"
+   },
+   {
+    "role": "user",
+    "text": "solution"
+   },
+   {
+    "role": "user",
+    "text": "in any language"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "associated. Yeah, I think for now we can skip those. But one one more requirement that I want you to discuss is that is that are lead code contest that happens bi-weekly and weekly and that is one of the very popular feature of code right which are code contest. So we I would want you to uh also design a live leaderboard for those competitions.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "we can decide if you want to keep all of"
+   },
+   {
+    "role": "user",
+    "text": "them as out of scope or we can put some"
+   },
+   {
+    "role": "user",
+    "text": "of them in our scope. So one could be"
+   },
+   {
+    "role": "user",
+    "text": "that we have some authorizations and uh"
+   },
+   {
+    "role": "user",
+    "text": "profile creations in our lead code. Uh"
+   },
+   {
+    "role": "user",
+    "text": "also if we want to start like a premium"
+   },
+   {
+    "role": "user",
+    "text": "service in the original lead code we"
+   },
+   {
+    "role": "user",
+    "text": "could have some payment gateway also"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "System Design Interview",
+  "expect": "ask"
+ },
+ {
+  "text": ">> feel free to do that? Yeah.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "that user is already pre-logged in and"
+   },
+   {
+    "role": "interviewer",
+    "text": "we don't need to care about the profiles"
+   },
+   {
+    "role": "interviewer",
+    "text": "and the payments and we can skip all"
+   },
+   {
+    "role": "interviewer",
+    "text": "those and just focus on these functional"
+   },
+   {
+    "role": "interviewer",
+    "text": "requirements."
+   },
+   {
+    "role": "user",
+    "text": ">> Sure. Uh so actually uh sometimes I also"
+   },
+   {
+    "role": "user",
+    "text": "think about writing them as out of scope"
+   },
+   {
+    "role": "user",
+    "text": "requirements. Uh but do you want me"
+   }
+  ],
+  "lastAnswered": "I would want you to uh also design a live leaderboard for those competitions.",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Authentication and authorization user profiles you can skip.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "requirements."
+   },
+   {
+    "role": "user",
+    "text": ">> Sure. Uh so actually uh sometimes I also"
+   },
+   {
+    "role": "user",
+    "text": "think about writing them as out of scope"
+   },
+   {
+    "role": "user",
+    "text": "requirements. Uh but do you want me"
+   },
+   {
+    "role": "interviewer",
+    "text": ">> feel free to do that? Yeah."
+   },
+   {
+    "role": "user",
+    "text": ">> Okay. I'll write it as out of scope"
+   },
+   {
+    "role": "user",
+    "text": "requirement so that we are on the same"
+   },
+   {
+    "role": "user",
+    "text": "page."
+   }
+  ],
+  "lastAnswered": "I would want you to uh also design a live leaderboard for those competitions.",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Sure. Yeah. Let's discuss now the nonfunctional requirements.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "that."
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Yeah, I'll skip that. We we don't need"
+   },
+   {
+    "role": "interviewer",
+    "text": "those."
+   },
+   {
+    "role": "user",
+    "text": ">> Okay. Uh I'll just add it as out of"
+   },
+   {
+    "role": "user",
+    "text": "scope. Uh I think this looks okay to me."
+   },
+   {
+    "role": "user",
+    "text": "We can move to non-functional"
+   },
+   {
+    "role": "user",
+    "text": "requirement if uh you if you also feel"
+   },
+   {
+    "role": "user",
+    "text": "this is okay."
+   }
+  ],
+  "lastAnswered": "I would want you to uh also design a live leaderboard for those competitions.",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Okay. So when you say eventual consistency I mean you're trying to say you're saying you'll put more weightage availability over consistency. So when you say consistency, what exactly in the system you are saying is okay to have eventual consistency?",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "can think of is whether we want to uh"
+   },
+   {
+    "role": "user",
+    "text": "have a very available system like it"
+   },
+   {
+    "role": "user",
+    "text": "should be highly available or uh uh is"
+   },
+   {
+    "role": "user",
+    "text": "it okay if the service goes down. So in"
+   },
+   {
+    "role": "user",
+    "text": "my opinion personally uh it's better"
+   },
+   {
+    "role": "user",
+    "text": "that the system is always available uh"
+   },
+   {
+    "role": "user",
+    "text": "we can go for an eventual consistency"
+   },
+   {
+    "role": "user",
+    "text": "model."
+   }
+  ],
+  "lastAnswered": "I would want you to uh also design a live leaderboard for those competitions.",
+  "modeName": "System Design Interview",
+  "expect": "ask"
+ },
+ {
+  "text": "associated with it. Okay, it sounds more like of that you want a low latency platform that you still get the answer quicker maybe less than in a second or 2 second max 5 second you can have a time limit but you want that system is available irrespective of that two users are seeing",
+  "ctx": [
+   {
+    "role": "user",
+    "text": ">> uh to get the instant feedback. So that"
+   },
+   {
+    "role": "user",
+    "text": "is okay but the service should not be"
+   },
+   {
+    "role": "user",
+    "text": "down like uh all the test cases if we do"
+   },
+   {
+    "role": "user",
+    "text": "not get the answer for all the test"
+   },
+   {
+    "role": "user",
+    "text": "cases instantly uh but the service is"
+   },
+   {
+    "role": "user",
+    "text": "available at all times that is more"
+   },
+   {
+    "role": "user",
+    "text": "important than us getting the exact uh"
+   },
+   {
+    "role": "user",
+    "text": "correct answer on all the nodes"
+   }
+  ],
+  "lastAnswered": "So when you say consistency, what exactly in the system you are saying is okay to have eventual consistency?",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> or is it like one user might might see thousand problems on the problem list and one user might see just uh 10 less or maybe 990 problems.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "platform that you still get the answer"
+   },
+   {
+    "role": "interviewer",
+    "text": "quicker maybe less than in a second or 2"
+   },
+   {
+    "role": "interviewer",
+    "text": "second max 5 second you can have a time"
+   },
+   {
+    "role": "interviewer",
+    "text": "limit but you want that system is"
+   },
+   {
+    "role": "interviewer",
+    "text": "available irrespective of that two users"
+   },
+   {
+    "role": "interviewer",
+    "text": "are seeing"
+   },
+   {
+    "role": "user",
+    "text": ">> uh two different submission results for"
+   },
+   {
+    "role": "user",
+    "text": "the same test cases or for the same code"
+   }
+  ],
+  "lastAnswered": "So when you say consistency, what exactly in the system you are saying is okay to have eventual consistency?",
+  "modeName": "System Design Interview",
+  "expect": "ask"
+ },
+ {
+  "text": ">> I mean that could be eventually consistent let's say any new problem as it added some user might be seeing it or some might not be seeing depending on the deployment in the region or it's global it's fine good for me",
+  "ctx": [
+   {
+    "role": "user",
+    "text": ">> Yes. uh so actually it doesn't according"
+   },
+   {
+    "role": "user",
+    "text": "to me uh for lead code it's more"
+   },
+   {
+    "role": "user",
+    "text": "important that uh the like the website"
+   },
+   {
+    "role": "user",
+    "text": "is available at all times but the number"
+   },
+   {
+    "role": "user",
+    "text": "of people or the number of people seeing"
+   },
+   {
+    "role": "user",
+    "text": "the number of submissions or the number"
+   },
+   {
+    "role": "user",
+    "text": "of questions at a given time could vary"
+   },
+   {
+    "role": "user",
+    "text": "by say plus minus 10 for example"
+   }
+  ],
+  "lastAnswered": "or is it like one user might might see thousand problems on the problem list and one user might see just uh 10 less or maybe 990 problems.",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Yeah. So if I'm if I'm getting it correctly you are saying that whenever user or the client of lead code tries to submit their code and when we actually run those against our test cases we have to make sure that each code is isolated and it does not dist disturb the other submissions and it it doesn't affect our current system. Right.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "uh put in some malware while trying to"
+   },
+   {
+    "role": "user",
+    "text": "run code on our terminal on le code"
+   },
+   {
+    "role": "user",
+    "text": ">> uh they could eventually take down the"
+   },
+   {
+    "role": "user",
+    "text": "whole service. So we want to keep that"
+   },
+   {
+    "role": "user",
+    "text": "like some isolation should be there and"
+   },
+   {
+    "role": "user",
+    "text": "there are some security features also"
+   },
+   {
+    "role": "user",
+    "text": "available so that the service does not"
+   },
+   {
+    "role": "user",
+    "text": "go down. Does that make sense?"
+   }
+  ],
+  "lastAnswered": "or is it like one user might might see thousand problems on the problem list and one user might see just uh 10 less or maybe 990 problems.",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Yeah, definitely we want a low latency system and we can discuss later like how much time that we want to cap it.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "keep the point of the notes that we are"
+   },
+   {
+    "role": "interviewer",
+    "text": "making. Don't have to be very verbose."
+   },
+   {
+    "role": "interviewer",
+    "text": "Yeah."
+   },
+   {
+    "role": "user",
+    "text": ">> Sure. And uh obviously the system has to"
+   },
+   {
+    "role": "user",
+    "text": "be low latency. So we can have that also"
+   },
+   {
+    "role": "user",
+    "text": "as a requirement like uh all of the"
+   },
+   {
+    "role": "user",
+    "text": "submission results should be under say 2"
+   },
+   {
+    "role": "user",
+    "text": "seconds or 5 seconds."
+   }
+  ],
+  "lastAnswered": "or is it like one user might might see thousand problems on the problem list and one user might see just uh 10 less or maybe 990 problems.",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Yeah, definitely we want a low latency system and we can discuss later like how much time that we want to cap it. >> I mean we we do see a lot of uh time limit exceeded. So we will deep dive deep later into that part like when we want to hold the like longunning",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "keep the point of the notes that we are"
+   },
+   {
+    "role": "interviewer",
+    "text": "making. Don't have to be very verbose."
+   },
+   {
+    "role": "interviewer",
+    "text": "Yeah."
+   },
+   {
+    "role": "user",
+    "text": ">> Sure. And uh obviously the system has to"
+   },
+   {
+    "role": "user",
+    "text": "be low latency. So we can have that also"
+   },
+   {
+    "role": "user",
+    "text": "as a requirement like uh all of the"
+   },
+   {
+    "role": "user",
+    "text": "submission results should be under say 2"
+   },
+   {
+    "role": "user",
+    "text": "seconds or 5 seconds."
+   }
+  ],
+  "lastAnswered": "or is it like one user might might see thousand problems on the problem list and one user might see just uh 10 less or maybe 990 problems.",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Yeah. I mean overall we would say the monthly active or daily active users could be in million like hundreds of millions but if we're just talking about the lead code contest having uh 100k users or 50k users actively like currently actively giving contest >> is fine but overall the system should be scalable to support millions of users like millions of daily active users or monthly active users",
+  "ctx": [
+   {
+    "role": "user",
+    "text": ">> Yeah, please go ahead."
+   },
+   {
+    "role": "user",
+    "text": ">> Yeah. So because of the bi-weekly and"
+   },
+   {
+    "role": "user",
+    "text": "weekly contests, I think during those"
+   },
+   {
+    "role": "user",
+    "text": "times uh there may be a surge of active"
+   },
+   {
+    "role": "user",
+    "text": "users."
+   },
+   {
+    "role": "user",
+    "text": ">> So maybe um we can assume an order of"
+   },
+   {
+    "role": "user",
+    "text": "users maybe 100,000 or 10,000 depending"
+   },
+   {
+    "role": "user",
+    "text": "on"
+   }
+  ],
+  "lastAnswered": "or is it like one user might might see thousand problems on the problem list and one user might see just uh 10 less or maybe 990 problems.",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> I mean yeah I mean I get it. I get it. So you're trying to say that number of concurrent users would be really really high during contest and other than that period of time we'll have low QPS as compared to the contest duration. Yeah we'll talk about that time like how we can scale up our systems to meet that",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "lot of people passively also use lead"
+   },
+   {
+    "role": "user",
+    "text": "code as in they'll look at a question"
+   },
+   {
+    "role": "user",
+    "text": "maybe come and submit it later on and so"
+   },
+   {
+    "role": "user",
+    "text": "on and there's no time boundation as"
+   },
+   {
+    "role": "user",
+    "text": "such right. Uh but during competitions a"
+   },
+   {
+    "role": "user",
+    "text": "lot of people would actually just be"
+   },
+   {
+    "role": "user",
+    "text": "using or accessing the same set of"
+   },
+   {
+    "role": "user",
+    "text": "problems."
+   }
+  ],
+  "lastAnswered": "or is it like one user might might see thousand problems on the problem list and one user might see just uh 10 less or maybe 990 problems.",
+  "modeName": "System Design Interview",
+  "expect": "silent",
+  "note": "DEFERRAL: \"we'll talk about that time like how we can scale up our systems\" postpones the topic, it does not ask for it now. Naming the future subject must not turn a deferral into an ask."
+ },
+ {
+  "text": ">> No worries. You can just uh write the pointers. Don't need to be very verbose.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "we'll talk about that time like how we"
+   },
+   {
+    "role": "interviewer",
+    "text": "can scale up our systems to meet that"
+   },
+   {
+    "role": "user",
+    "text": "kind of search data. I'm just adding it"
+   },
+   {
+    "role": "user",
+    "text": "as a sub point to our uh earlier scale"
+   },
+   {
+    "role": "user",
+    "text": ">> requirement. So scale to support"
+   },
+   {
+    "role": "user",
+    "text": "petitioners."
+   },
+   {
+    "role": "user",
+    "text": ">> I'm just using auto correct so that the"
+   },
+   {
+    "role": "user",
+    "text": "process is faster."
+   }
+  ],
+  "lastAnswered": "Yeah, we'll talk about that time like how we can scale up our systems to meet that",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "two years and so on. Yeah, I think we can we can skip those kind of discussions. If we have time left by the end of interview, we can we can keep it as an auto scope and also you said that system should be fall tolerant as much as possible. What do you mean by that? I",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": ">> Okay."
+   },
+   {
+    "role": "user",
+    "text": ">> I think the system should be fault"
+   },
+   {
+    "role": "user",
+    "text": "tolerant as much as possible."
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Okay."
+   },
+   {
+    "role": "user",
+    "text": ">> And uh if required we can keep some sort"
+   },
+   {
+    "role": "user",
+    "text": "of uh backups as well of the"
+   },
+   {
+    "role": "user",
+    "text": "submissions. Um we can decide that we"
+   },
+   {
+    "role": "user",
+    "text": "need backups of say up to five years or"
+   }
+  ],
+  "lastAnswered": "Yeah, we'll talk about that time like how we can scale up our systems to meet that",
+  "modeName": "System Design Interview",
+  "expect": "ask"
+ },
+ {
+  "text": ">> I get it. So in a distributed kind of network you want to avoid single point of failures. You want to have multiple nodes and some sort of consistent hashing so that if one node goes down we'll have the other nodes alive taking the traffic.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "down then we will uh like the result"
+   },
+   {
+    "role": "user",
+    "text": "would be that none of the queries are"
+   },
+   {
+    "role": "user",
+    "text": "being returned because all of the"
+   },
+   {
+    "role": "user",
+    "text": "queries were being routed to that"
+   },
+   {
+    "role": "user",
+    "text": "particular server. So we want to have"
+   },
+   {
+    "role": "user",
+    "text": "like a distributed system architecture"
+   },
+   {
+    "role": "user",
+    "text": "so that uh there's no single point of"
+   },
+   {
+    "role": "user",
+    "text": "failure for example. I"
+   }
+  ],
+  "lastAnswered": "you said that system should be fall tolerant as much as possible. What do you mean by that?",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> I get it. So in a distributed kind of network you want to avoid single point of failures. You want to have multiple nodes and some sort of consistent hashing so that if one node goes down we'll have the other nodes alive taking the traffic. >> Yeah. >> Perfect. Cool. We can move forward.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "would be that none of the queries are"
+   },
+   {
+    "role": "user",
+    "text": "being returned because all of the"
+   },
+   {
+    "role": "user",
+    "text": "queries were being routed to that"
+   },
+   {
+    "role": "user",
+    "text": "particular server. So we want to have"
+   },
+   {
+    "role": "user",
+    "text": "like a distributed system architecture"
+   },
+   {
+    "role": "user",
+    "text": "so that uh there's no single point of"
+   },
+   {
+    "role": "user",
+    "text": "failure for example. I"
+   },
+   {
+    "role": "user",
+    "text": ">> Correct."
+   }
+  ],
+  "lastAnswered": "you said that system should be fall tolerant as much as possible. What do you mean by that?",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Okay. So also we can we can safely assume or consider the current D code architecture which has around 4,000 to 5,000 problems overall and not just the DSA ones like considering all of the problems and some a million user.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "The second one could be the user."
+   },
+   {
+    "role": "user",
+    "text": ">> Uh, the third one, I'll just refer to my"
+   },
+   {
+    "role": "user",
+    "text": "functional requirements again, could be"
+   },
+   {
+    "role": "user",
+    "text": "the solution of the problem."
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Mhm."
+   },
+   {
+    "role": "user",
+    "text": ">> And lastly, since we have a live"
+   },
+   {
+    "role": "user",
+    "text": "leaderboard to cater to, we would also"
+   },
+   {
+    "role": "user",
+    "text": "need a leaderboard as our core entity."
+   }
+  ],
+  "lastAnswered": "you said that system should be fall tolerant as much as possible. What do you mean by that?",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Okay. So also we can we can safely assume or consider the current D code architecture which has around 4,000 to 5,000 problems overall and not just the DSA ones like considering all of the problems and some a million user. >> Yeah,",
+  "ctx": [
+   {
+    "role": "user",
+    "text": ">> Uh, the third one, I'll just refer to my"
+   },
+   {
+    "role": "user",
+    "text": "functional requirements again, could be"
+   },
+   {
+    "role": "user",
+    "text": "the solution of the problem."
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Mhm."
+   },
+   {
+    "role": "user",
+    "text": ">> And lastly, since we have a live"
+   },
+   {
+    "role": "user",
+    "text": "leaderboard to cater to, we would also"
+   },
+   {
+    "role": "user",
+    "text": "need a leaderboard as our core entity."
+   },
+   {
+    "role": "user",
+    "text": ">> Okay."
+   }
+  ],
+  "lastAnswered": "you said that system should be fall tolerant as much as possible. What do you mean by that?",
+  "modeName": "System Design Interview",
+  "expect": "silent"
+ }
+]
