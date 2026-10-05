@@ -102,6 +102,15 @@ describe('times the model cites are put onto clock time', () => {
     assert.equal(first(out).timestampMs, T0 + 125_000);
   });
 
+  test('seconds that match no label are still read as seconds, even in the first chunk', () => {
+    // 95 fits the first chunk as 95 ms too; that put a 1:35 citation on 0:00.
+    const out = anchorAtomTimes(atoms({ decisions: [{ text: 'Ship Friday', confidence: 'high', timestampMs: 95 }] }), chunk);
+    assert.equal(first(out).timestampMs, T0 + 95_000);
+    // A whole number of seconds in milliseconds that matches no label stays milliseconds.
+    const ms = anchorAtomTimes(atoms({ decisions: [{ text: 'Ship Friday', confidence: 'high', timestampMs: 200_000 }] }), chunk);
+    assert.equal(first(ms).timestampMs, T0 + 200_000);
+  });
+
   test('clock time from a model that kept the old habit is left as it is', () => {
     const out = anchorAtomTimes(atoms({ decisions: [{ text: 'Ship Friday', confidence: 'high', timestampMs: T0 + 65_000 }] }), chunk);
     assert.equal(first(out).timestampMs, T0 + 65_000);

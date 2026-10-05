@@ -99,7 +99,9 @@ describe('past meetings get their transcript back in search', () => {
     // A lazily-loaded provider (the bundled model): not ready until asked to load.
     rag.embeddingPipeline.ensureProviderLoaded = async () => { loads++; if (loadable) ready = true; return ready; };
     rag.embeddingPipeline.isRunningOnUnpinnedFallback = () => standIn;
-    rag.liveIndexer = { isRunning: () => live };
+    rag.liveIndexer = { isRunning: () => live, start: () => {}, stop: async () => {} };
+    rag._meetingLive = false;
+    rag._meetingActiveProbe = null;
     // Each compiled file is its own bundle with its own DatabaseManager
     // singleton, so the manager reads meetings through the one opened here.
     rag.loadMeetingForIndexing = (id) => dbMgr.getMeetingDetails(id);
@@ -160,15 +162,88 @@ describe('past meetings get their transcript back in search', () => {
     assert.equal(pendingOf('lost'), chunksOf('lost'));
   });
 
-  test('chunks saved while no provider was ready (never queued) are replaced, not doubled', async () => {
-    if (!dbMgr.isAvailable()) return;
-    save('unqueued', spoken(8));
-    db.prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count) VALUES ('unqueued', 0, 'Me', ?, ?, 'stale unembedded chunk', 3)`)
-      .run(T0, T0 + 1000);
+  const strand = (id) => {
+    save(id, spoken(8));
+    db.prepare(`INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count) VALUES (?, 0, 'Me', ?, ?, 'stored, never queued', 3)`)
+      .run(id, T0, T0 + 1000);
+  };
 
+  test('chunks that were stored but never queued are queued as they are, not doubled', async () => {
+    if (!dbMgr.isAvailable()) return;
+    strand('unqueued');
     assert.equal(await quiet(() => rag.backfillMeetingChunks()), 1);
-    assert.equal(count(`SELECT COUNT(*) AS n FROM chunks WHERE meeting_id = 'unqueued' AND cleaned_text = 'stale unembedded chunk'`), 0);
-    assert.equal(pendingOf('unqueued'), chunksOf('unqueued'));
+    assert.equal(chunksOf('unqueued'), 1);
+    assert.equal(pendingOf('unqueued'), 1);
+  });
+
+  // The one-time walk ends at 'done' and never looks above its cursor, so a
+  // meeting stranded later (a quit between saving chunks and queueing them)
+  // needs a check that runs every launch (code review, 2026-10-05).
+  test('a meeting stranded after the walk is done is still picked up', async () => {
+    if (!dbMgr.isAvailable()) return;
+    db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(CURSOR_KEY, 'done');
+    strand('later');
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 1);
+    assert.equal(pendingOf('later'), 1);
+  });
+
+  test('a meeting whose chunks failed is left to the pipeline, not queued again every launch', async () => {
+    if (!dbMgr.isAvailable()) return;
+    db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(CURSOR_KEY, 'done');
+    strand('failed');
+    const chunkId = db.prepare(`SELECT id FROM chunks WHERE meeting_id = 'failed'`).get().id;
+    db.prepare(`INSERT INTO embedding_queue (meeting_id, chunk_id, status) VALUES ('failed', ?, 'failed')`).run(chunkId);
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 0);
+    assert.equal(pendingOf('failed'), 0);
+  });
+
+  test('a meeting that could not be queued does not move the cursor past it', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('lost', spoken(8));
+    const realQueue = rag.embeddingPipeline.queueMeeting.bind(rag.embeddingPipeline);
+    rag.embeddingPipeline.queueMeeting = async () => {};            // the app is quitting: queueing is refused
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 0);
+    assert.ok(chunksOf('lost') > 0, 'the chunks were saved');
+    assert.equal(pendingOf('lost'), 0);
+    assert.equal(cursor(), undefined, 'not counted as done');
+
+    rag.embeddingPipeline.queueMeeting = realQueue;                 // next launch
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 1);
+    assert.equal(pendingOf('lost'), chunksOf('lost'));
+  });
+
+  // Live indexing is skipped when no provider is ready as the meeting starts,
+  // so "is the live indexer running" is not "is a meeting live".
+  test('a meeting whose live indexing was skipped still postpones it', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('lost', spoken(8));
+    ready = false; loadable = true;
+    quiet(() => rag.startLiveIndexing('live-meeting-current'));     // returns early: nothing ready
+    assert.equal(live, false, 'precondition: the indexer is not running');
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 0);
+    assert.equal(loads, 0, 'no model is loaded in the middle of the meeting');
+    assert.equal(chunksOf('lost'), 0);
+
+    await rag.stopLiveIndexing();                                   // the meeting ends
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 1);
+  });
+
+  // The flag above is one boolean that any stopLiveIndexing clears, and the
+  // teardown of one meeting can finish after the next has started. Wired to
+  // the app, the manager asks it instead (code review, 2026-10-05).
+  test("the previous meeting's late teardown does not mark the new meeting as over", async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('lost', spoken(8));
+    let appSaysLive = true;
+    rag._meetingActiveProbe = null;
+    rag.setMeetingActiveProbe(() => appSaysLive);
+    quiet(() => rag.startLiveIndexing('live-meeting-current'));     // meeting B starts
+    await rag.stopLiveIndexing();                                   // meeting A's teardown lands late
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 0, 'B is still running');
+    assert.equal(chunksOf('lost'), 0);
+
+    appSaysLive = false;                                            // B ends
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 1);
   });
 
   test('a meeting whose chunks are already waiting in the queue is not indexed a second time', async () => {
@@ -221,6 +296,84 @@ describe('past meetings get their transcript back in search', () => {
     assert.equal(await quiet(() => rag.backfillMeetingChunks()), 1);
     assert.equal(loads, 1);
     assert.equal(pendingOf('lost'), chunksOf('lost'), 'queued, not left unembedded');
+  });
+
+  // A build before 2026-10-05 stored whatever the provider returned, and a
+  // vector of zeros or with a NaN in it came back from search as a perfect
+  // match. One pass clears them and queues their chunks again.
+  describe('stored vectors that cannot be searched', () => {
+    const HEALTH_KEY = 'vector_health_scan_cursor_v1';
+    const W = 768;
+    const good = Buffer.from(new Float32Array(Array.from({ length: W }, (_, i) => Math.sin(i + 1))).buffer);
+    const zero = Buffer.alloc(W * 4);
+    const nan = Buffer.from(new Float32Array(Array.from({ length: W }, (_, i) => (i === 3 ? NaN : 0.1))).buffer);
+    const addChunk = (meetingId, index, embedding) => Number(db.prepare(
+      `INSERT INTO chunks (meeting_id, chunk_index, speaker, start_timestamp_ms, end_timestamp_ms, cleaned_text, token_count, embedding) VALUES (?, ?, 'Me', ?, ?, 'text', 3, ?)`
+    ).run(meetingId, index, T0, T0 + 1000, embedding).lastInsertRowid);
+    const hasVec = () => { try { db.prepare('SELECT vec_version()').get(); return true; } catch { return false; } };
+    const health = () => db.prepare('SELECT value FROM app_state WHERE key = ?').get(HEALTH_KEY)?.value;
+
+    test('are cleared and queued again; good ones and the rest of the meeting are untouched', async () => {
+      if (!dbMgr.isAvailable()) return;
+      save('m', spoken(8));
+      const ok = addChunk('m', 0, good);
+      const z = addChunk('m', 1, zero);
+      const n = addChunk('m', 2, nan);
+      for (const id of [ok, z, n]) db.prepare(`INSERT INTO embedding_queue (meeting_id, chunk_id, status) VALUES ('m', ?, 'completed')`).run(id);
+      if (hasVec()) {
+        const ins = db.prepare('INSERT INTO vec_chunks_768(chunk_id, embedding) VALUES (?, ?)');
+        ins.run(BigInt(ok), good); ins.run(BigInt(z), zero); ins.run(BigInt(n), nan);
+      }
+      db.prepare(`INSERT INTO chunk_summaries (meeting_id, summary_text, embedding) VALUES ('m', 'a summary', ?)`).run(zero);
+      db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(CURSOR_KEY, 'done');
+
+      await quiet(() => rag.backfillMeetingChunks());
+
+      const embedded = (id) => db.prepare('SELECT embedding IS NOT NULL AS e FROM chunks WHERE id = ?').get(id).e;
+      assert.equal(embedded(ok), 1);
+      assert.equal(embedded(z), 0);
+      assert.equal(embedded(n), 0);
+      const status = (id) => db.prepare(`SELECT status FROM embedding_queue WHERE meeting_id = 'm' AND chunk_id = ?`).get(id)?.status;
+      assert.equal(status(ok), 'completed');
+      assert.equal(status(z), 'pending', 'queued again, despite the old completed row');
+      assert.equal(status(n), 'pending');
+      assert.equal(db.prepare(`SELECT embedding IS NULL AS cleared FROM chunk_summaries WHERE meeting_id = 'm'`).get().cleared, 1);
+      assert.equal(count(`SELECT COUNT(*) AS n FROM embedding_queue WHERE meeting_id = 'm' AND chunk_id IS NULL AND status = 'pending'`), 1, 'the summary is queued again');
+      if (hasVec()) {
+        assert.deepEqual(db.prepare('SELECT chunk_id FROM vec_chunks_768 ORDER BY chunk_id').all().map(r => Number(r.chunk_id)), [ok]);
+      }
+      assert.equal(health(), 'done');
+    });
+
+    test('the pass is not repeated once it has finished', async () => {
+      if (!dbMgr.isAvailable()) return;
+      save('m', spoken(8));
+      db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(CURSOR_KEY, 'done');
+      db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(HEALTH_KEY, 'done');
+      const z = addChunk('m', 1, zero);
+      addChunk('m', 0, good);
+      await quiet(() => rag.backfillMeetingChunks());
+      assert.equal(db.prepare('SELECT embedding IS NOT NULL AS e FROM chunks WHERE id = ?').get(z).e, 1, 'nothing was read');
+    });
+
+    test('a live meeting stops it where it is, and it resumes from there', async () => {
+      if (!dbMgr.isAvailable()) return;
+      save('m', spoken(8));
+      db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(CURSOR_KEY, 'done');
+      const ids = Array.from({ length: 450 }, (_, i) => addChunk('m', i, i === 420 ? zero : good));
+      // The meeting starts after the first page of 200 has been read.
+      const real = rag.vectorStore.clearUnusableStoredEmbeddings.bind(rag.vectorStore);
+      let pages = 0;
+      rag.vectorStore.clearUnusableStoredEmbeddings = (...args) => { const out = real(...args); if (args[0] === 'chunks' && ++pages === 1) rag._meetingLive = true; return out; };
+      await quiet(() => rag.requeueUnusableStoredVectors());
+      assert.equal(health(), String(ids[199]), 'the cursor sits after the page that was read');
+      assert.equal(db.prepare('SELECT embedding IS NOT NULL AS e FROM chunks WHERE id = ?').get(ids[420]).e, 1);
+
+      rag._meetingLive = false;
+      await quiet(() => rag.requeueUnusableStoredVectors());
+      assert.equal(db.prepare('SELECT embedding IS NOT NULL AS e FROM chunks WHERE id = ?').get(ids[420]).e, 0);
+      assert.equal(health(), 'done');
+    });
   });
 
   // Found while testing the above: the bundled local model reports not-ready
