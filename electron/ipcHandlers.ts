@@ -172,6 +172,8 @@ function resolveManualChatBasePrompt(
   return withDiagramContract(CHAT_MODE_PROMPT, diagramTurn, { tier, surface });
 }
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
+import { extractLatestPriorAssistantTurn, isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } from './llm/manualTranscriptContextPolicy';
+import type { ContextItem } from './SessionTracker';
 import { spokenLineAlreadyInTranscript } from './llm/spokenLineAlreadyInTranscript';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
@@ -2950,15 +2952,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         // history as `context` from the second turn on — the deleted renderer
         // pre-flight (`ragQueryLive`) used to be the only live-transcript
         // grounding that surface had. With the old `if (!context)` gate,
-        // `autoContextSnapshot` stayed permanently undefined for every typed
-        // follow-up during a meeting, so the merge a few hundred lines below
-        // (the `context && autoContextSnapshot` sibling of the pre-existing
-        // `!context && autoContextSnapshot` branch) could never fire — the
-        // legacy path (V3's rollback lever) silently lost meeting grounding.
-        // Always capturing here is what makes that merge possible; it is a
-        // cheap in-memory read regardless of whether `context` is set.
+        // `autoContextSnapshot` stayed undefined for typed follow-ups during a
+        // meeting, so the legacy path (V3's rollback lever) lost grounding.
+        // Capture regardless of existing chat history; the policy below decides
+        // whether to merge the transcript or select a same-surface prior answer.
+        // Capturing the window is a cheap in-memory read, not permission to
+        // include it in a standalone question or a regeneration prompt.
         let autoContextSnapshot: string | undefined;
+        let autoContextItems: ContextItem[] = [];
         try {
+          autoContextItems = intelligenceManager.getContext(100);
           const snap = intelligenceManager.getFormattedContext(100);
           if (snap && snap.trim().length > 0) autoContextSnapshot = snap;
         } catch (ctxErr) {
@@ -4164,7 +4167,19 @@ export function initializeIpcHandlers(appState: AppState): void {
           console.log('[IPC] Answer-contract enforced; rolling context excluded', {
             answerType: answerPlan.answerType,
           });
-        } else if (!context && autoContextSnapshot) {
+        } else if (!context && autoContextSnapshot && isRefinementFollowUp(message)
+            && !isTranscriptBoundManualQuestion(message)
+            && (!turnContract || turnContract.memoryReadPolicy.allowPriorAssistantFacts)) {
+          // A refinement needs the answer it is editing, not the full rolling
+          // meeting transcript. ConversationMemoryV2 supplies this when enabled;
+          // this bounded snapshot fallback preserves default-off behavior while
+          // keeping unrelated ME/INTERVIEWER turns isolated.
+          const priorAssistant = extractLatestPriorAssistantTurn(autoContextItems, 'manual_chat');
+          if (priorAssistant) {
+            context = `PRIOR ANSWER IN THIS CONVERSATION (the user wants you to EDIT this exact answer, not produce a new one):\nPrevious answer:\n${priorAssistant}\n\nApply the user's new instruction ("${message}") to THAT answer — keep the same facts, change only what was asked. Do not start over or re-list everything.`;
+            console.log('[IPC] Injected latest prior assistant answer for manual refinement; rolling transcript excluded');
+          }
+        } else if (autoContextSnapshot && shouldAutoAttachManualTranscriptContext(message, answerPlan)) {
           // Document-grounded custom mode (audit 2026-06-27, real-path fix):
           // strip prior ASSISTANT turns from the rolling snapshot before it
           // becomes the prompt context. A previously-emitted answer (e.g.
@@ -4197,29 +4212,25 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           }
           if (snapshotForContext.trim().length > 0) {
-            context = snapshotForContext;
+            // Keep the existing conversation last for follow-up resolution (#552),
+            // but only merge a transcript requested by the manual-chat policy.
+            context = context ? `${snapshotForContext}\n\n${context}` : snapshotForContext;
             console.log(
               `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars${snapshotForContext !== autoContextSnapshot ? ', prior-assistant turns stripped for document-grounded mode' : ''})`,
             );
           }
-        } else if (context && autoContextSnapshot) {
-          // Issue #552 (final review pass, I4): the sibling branch above is
-          // the ONLY place this rolling live-transcript snapshot reaches the
-          // prompt, and it requires an ABSENT `context`. Typed chat sends its
-          // own non-empty `context` (conversation history) from the second
-          // turn on, so on the legacy path (V3 off) that branch never fired
-          // past the first turn — the deleted renderer pre-flight used to be
-          // the only meeting-transcript grounding a typed question had, and
-          // turning V3 off (the intended rollback lever) silently dropped it.
-          // Merge rather than replace: the renderer's own history is still
-          // what a bare follow-up's pronoun resolution needs, so it stays
-          // LAST — same idiom as every other additive block in this handler
-          // (`context = context ? \`${block}\n\n${context}\` : block`), just
-          // with `context` known truthy here so the ternary collapses.
-          context = `${autoContextSnapshot}\n\n${context}`;
-          console.log(
-            `[IPC] Merged 100s live-transcript snapshot alongside existing chat context for gemini-chat-stream (${autoContextSnapshot.length} chars, issue #552)`,
-          );
+        } else if (autoContextSnapshot) {
+          console.log('[IPC] Skipped 100s transcript context for standalone manual chat', {
+            answerType: answerPlan.answerType,
+          });
+          iTrace.noteContext({
+            source: 'live_transcript',
+            trustLevel: 'medium',
+            requested: answerPlan.requiredContextLayers.includes('live_transcript'),
+            retrieved: true,
+            included: false,
+            reason: 'manual_standalone_question',
+          });
         }
         // MANUAL REGRESSION FIX (release 2026-06-08): for ANY profile-required
         // candidate answer type (jd_fit / skill / behavioral / project / experience /
@@ -5669,7 +5680,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                     'The user explicitly asked for an answer. Answer the question directly and concretely. Do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, never presenting it as sourced. A question about the user gets their own first-person words: how they approach it, with no invented employer, project, event, number, or earlier discussion, and no advice about how to answer.',
                     '</answer_instructions>',
                     (manualContextOsGeneration as any)?.retrievedBlockRaw ? `## EVIDENCE\n${String((manualContextOsGeneration as any).retrievedBlockRaw).trim()}` : '',
-                    context || autoContextSnapshot ? `## CONVERSATION\n${String(context || autoContextSnapshot).trim()}` : '',
+                    // Regeneration inherits only the context selected above. A raw
+                    // snapshot fallback would undo manual transcript/surface isolation.
+                    context ? `## CONVERSATION\n${String(context).trim()}` : '',
                     `## QUESTION\n${message}`,
                     'Output ONLY the answer.',
                   ].filter(Boolean).join('\n');
@@ -19293,47 +19306,46 @@ export function initializeIpcHandlers(appState: AppState): void {
       // replaced the one it was asked in. The phone still gets the full answer.
       const myPhoneContextEpoch = intelligenceManager.getContextEpoch();
 
-      // Document-grounded custom mode (audit 2026-06-27): the phone chat path is
-      // a SECOND ungated entry — it captures the rolling snapshot and saves the
-      // answer just like gemini-chat-stream. Mirror the doc-grounded gates here:
-      // strip prior-assistant turns from the snapshot (topic-collapse), and block
-      // an invalid answer from being saved (contamination loop).
-      let phoneDocGrounded = false;
-      // F-502: pin the mode id at t0 as well. phoneDocGrounded is captured here,
-      // BEFORE the awaits, but every mode read inside streamChat resolved the
-      // LIVE ModesManager singleton — so a `modes:set-active` landing mid-request
-      // made retrieval read a DIFFERENT mode's documents than the contract this
-      // turn was planned against. The phone surface is the worse half: unlike
-      // desktop it never registers in _chatStreamsBySender, so modes:set-active
-      // does not abort it either.
-      let phonePinnedModeId: string | null = null;
+      let phoneActiveMode: import('./llm/modeProfiles').ActiveModeInfo | null = null;
       try {
         const { ModesManager } = require('./services/ModesManager');
-        const phoneModeInfo = ModesManager.getInstance().getActiveModeInfo();
-        phoneDocGrounded = phoneModeInfo?.documentGroundedCustomModeActive === true;
-        phonePinnedModeId = phoneModeInfo?.id ?? null;
-      } catch { /* mode unavailable — treat as non-doc-grounded */ }
+        phoneActiveMode = ModesManager.getInstance().getActiveModeInfo();
+      } catch {
+        /* mode prior unavailable; keep phone planning mode-blind */
+      }
+      const phoneDocGrounded = phoneActiveMode?.documentGroundedCustomModeActive === true;
+      // Pin retrieval to the same mode used to plan this phone turn.
+      const phonePinnedModeId = phoneActiveMode?.id ?? null;
 
-      // Doc-grounded strict-isolation (audit #3, 2026-07-05): mirror the
-      // desktop chat's gate (ipcHandlers.ts:1438) — when the active mode is
-      // doc-grounded AND docGroundedStrictIsolation is enabled, the phone-chat
-      // path must NOT inject Hindsight live recall. Today the phone path
-      // never consults Hindsight at all, so this is a no-op defensive check
-      // that pins the behavior for when a future implementation adds Hindsight
-      // here. The skip is the same condition as the desktop path so the
-      // two surfaces stay symmetric on the doc-grounded path.
-      const { isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags');
-      const phoneDocGroundedSkipRecall = phoneDocGrounded
-        && isIntelligenceFlagEnabled('docGroundedStrictIsolation');
+      const phoneAnswerPlan = planAnswer({
+        question: message,
+        source: 'manual_input',
+        speakerPerspective: 'user',
+        activeMode: phoneActiveMode,
+      });
 
       // Capture rolling context BEFORE adding the new user message — same ordering
       // as gemini-chat-stream so Recap / Follow Up / What to Answer see phone turns.
+      // Keep it off standalone phone chat questions for the same isolation reason
+      // as desktop manual chat.
       let context: string | undefined;
       try {
+        const items = intelligenceManager.getContext(100);
         const snap = intelligenceManager.getFormattedContext(100);
-        if (snap && snap.trim().length > 0) {
+        if (snap && snap.trim().length > 0 && isRefinementFollowUp(message)
+            && !isTranscriptBoundManualQuestion(message) && !phoneDocGrounded) {
+          const priorAssistant = extractLatestPriorAssistantTurn(items, 'phone_mirror');
+          if (priorAssistant) {
+            context = `PRIOR ANSWER IN THIS CONVERSATION (the user wants you to EDIT this exact answer, not produce a new one):\nPrevious answer:\n${priorAssistant}\n\nApply the user's new instruction ("${message}") to THAT answer — keep the same facts, change only what was asked. Do not start over or re-list everything.`;
+            console.log('[PhoneMirror] Injected latest prior assistant answer for refinement; rolling transcript excluded');
+          }
+        } else if (snap && snap.trim().length > 0 && shouldAutoAttachManualTranscriptContext(message, phoneAnswerPlan)) {
           context = phoneDocGrounded ? stripPriorAssistantTurns(snap) : snap;
           if (phoneDocGrounded && context.trim().length === 0) context = undefined;
+        } else if (snap && snap.trim().length > 0) {
+          console.log('[PhoneMirror] Skipped 100s transcript context for standalone manual chat', {
+            answerType: phoneAnswerPlan.answerType,
+          });
         }
       } catch (ctxErr) {
         console.warn('[PhoneMirror] Failed to capture pre-turn context:', ctxErr);
@@ -19364,26 +19376,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Without this, the mode-suffix skip-gate (CHAT_MODE_PROMPT is a "universal
         // override") suppresses injection for non-custom regular modes like
         // lecture/team-meet + a sales question over phone (audit #2, 2026-07-05).
-        let phoneRouteOptions: StreamRouteOptions | undefined;
-        let phonePlanForOwnership: any = null;
-        try {
-          const llmMod = require('./llm');
-          if (typeof llmMod.planAnswer === 'function') {
-            const phonePlan = llmMod.planAnswer({
-              question: message,
-              source: 'manual_input',
-              speakerPerspective: 'user',
-              activeMode: (() => { try { return require('./services/ModesManager').ModesManager.getInstance().getActiveModeInfo?.(); } catch { return null; } })(),
-            });
-            phonePlanForOwnership = phonePlan;
-            phoneRouteOptions = {
-              answerType: phonePlan?.answerType || 'unknown_answer',
-              forbiddenContextLayers: phonePlan?.forbiddenContextLayers,
-              // F-502: t0-pinned mode — see phonePinnedModeId above.
-              pinnedModeId: phonePinnedModeId,
-            };
-          }
-        } catch { /* plan unavailable — fall back to no routeOptions (legacy behavior) */ }
+        const phoneRouteOptions: StreamRouteOptions = {
+          answerType: phoneAnswerPlan.answerType,
+          forbiddenContextLayers: phoneAnswerPlan.forbiddenContextLayers,
+          pinnedModeId: phonePinnedModeId,
+        };
+        const phonePlanForOwnership = phoneAnswerPlan;
 
         // SOURCE-OWNERSHIP GATE (2026-07-06): the phone-mirror path mirrors the
         // desktop chat and is a second answer surface. It has no deterministic
@@ -19401,7 +19399,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { resolveSourceOwnership, buildSourceSwitchClarification } = require('./llm/sourceOwnership');
           const { resolveTurnSourceDecision } = require('./llm/turnSourceDecision') as typeof import('./llm/turnSourceDecision');
           const { resolveExplicitSourceRequest: _pResolveSwitch, resolveExplicitSourceRequests: _pResolveSwitches } = require('./intelligence/context-os/explicitSourceSwitch') as typeof import('./intelligence/context-os/explicitSourceSwitch');
-          const _pMode = (() => { try { return require('./services/ModesManager').ModesManager.getInstance().getActiveModeInfo?.(); } catch { return null; } })();
+          const _pMode = phoneActiveMode;
           const _pOrch = llmHelper.getKnowledgeOrchestrator?.();
           const _pHasProfile = Boolean(_pOrch?.activeResume?.structured_data);
           const _pHasJd = Boolean((_pOrch as any)?.activeJD?.structured_data);

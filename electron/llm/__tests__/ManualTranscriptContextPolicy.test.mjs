@@ -1,0 +1,287 @@
+// electron/llm/__tests__/ManualTranscriptContextPolicy.test.mjs
+//
+// Issue #333: manual chat must not silently attach unrelated rolling transcript
+// context to standalone typed questions. Fixtures are synthetic/public issue
+// shapes only.
+
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distRoot = path.resolve(__dirname, '../../../dist-electron/electron');
+
+const { planAnswer } = await import(pathToFileURL(path.join(distRoot, 'llm/AnswerPlanner.js')).href);
+const { SessionTracker } = await import(pathToFileURL(path.join(distRoot, 'SessionTracker.js')).href);
+const { extractLatestPriorAssistantTurn, isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } = await import(
+  pathToFileURL(path.join(distRoot, 'llm/manualTranscriptContextPolicy.js')).href
+);
+
+const plan = (question, activeMode = null) =>
+  planAnswer({ question, source: 'manual_input', speakerPerspective: 'user', activeMode });
+const attaches = (question, activeMode = null) =>
+  shouldAutoAttachManualTranscriptContext(question, plan(question, activeMode));
+
+describe('manual transcript context policy', () => {
+  test('standalone issue-shaped questions do not inherit unrelated transcript context', () => {
+    assert.equal(attaches('what is UI policy?'), false);
+    assert.equal(attaches('how does client state run before UI policy?'), false);
+    assert.equal(attaches('how do I schedule a meeting?'), false);
+    assert.equal(attaches('what is a transcript?'), false);
+    assert.equal(attaches('what is a call stack?'), false);
+    assert.equal(attaches('what is the client state?'), false);
+    assert.equal(attaches('what is IT?'), false);
+    assert.equal(attaches('what should I do if my app crashes?'), false);
+    assert.equal(attaches('what was covered by my insurance?'), false);
+    assert.equal(attaches('what was decided by the Supreme Court?'), false);
+    assert.equal(attaches('what agreements were reached in the treaty?'), false);
+    assert.equal(attaches('what decisions were made in Brown v. Board?'), false);
+    assert.equal(attaches('summarize the last commit'), false);
+    assert.equal(attaches('explain class in JavaScript'), false);
+    assert.equal(attaches('how do I design a meeting scheduler?'), false);
+    assert.equal(attaches('is it safe to use eval?'), false);
+    assert.equal(attaches('what time is it in Tokyo?'), false);
+    assert.equal(attaches('can this API be cached?'), false);
+    assert.equal(attaches('and how do I build a cache?'), false);
+    assert.equal(attaches('what are the next steps to migrate to React 19?'), false);
+    assert.equal(attaches('give me the takeaways from this article'), false);
+    assert.equal(attaches('can you recap the plot of Hamlet?'), false);
+    assert.equal(attaches('what are the action items for the migration?'), false);
+  });
+
+  test('standalone technical explanations do not pull meeting transcript by default', () => {
+    assert.equal(attaches('what is BFS?'), false);
+    assert.equal(attaches('explain BFS'), false);
+    assert.equal(shouldAutoAttachManualTranscriptContext('what is BFS?', {
+      answerType: 'technical_concept_answer',
+      requiredContextLayers: ['live_transcript', 'active_mode', 'screen_context', 'preferred_language'],
+    }), false);
+  });
+
+  test('explicit meeting and lecture questions keep transcript context', () => {
+    assert.equal(attaches('what did we decide about UI policy?'), true);
+    assert.equal(attaches('summarize the meeting'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarize the meeting'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarize it'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarize this'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarize that'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarise the call'), true);
+    assert.equal(attaches('what did they say about client state?'), true);
+    assert.equal(attaches('what was the client asking?'), true);
+    assert.equal(attaches('what decisions were made?'), true);
+    assert.equal(attaches('what was covered?'), true);
+    assert.equal(attaches('what agreements were reached?'), true);
+    assert.equal(attaches('summarize the last five minutes'), true);
+    assert.equal(attaches('write a follow-up email'), true);
+    assert.equal(attaches('make notes'), true);
+    assert.equal(attaches('what are the exam points?'), true);
+    assert.equal(attaches('what did the professor mean by this slide?'), true);
+    assert.equal(attaches('from the transcript, what did Alex say?'), true);
+    assert.equal(attaches('in the meeting, what did we decide?'), true);
+    assert.equal(attaches('recap the call'), true);
+    assert.equal(attaches('give me the takeaways from the meeting'), true);
+    assert.equal(attaches('what are the next steps from our discussion?'), true);
+  });
+
+  test('bare live follow-ups keep transcript context', () => {
+    assert.equal(attaches('why?'), true);
+    assert.equal(attaches('explain'), true);
+    assert.equal(attaches('what should I say?'), true);
+    assert.equal(attaches('what should I do?'), true);
+    assert.equal(attaches('what should I say next?'), true);
+    assert.equal(attaches('what should I do next?'), true);
+    assert.equal(attaches('what about client state?'), true);
+    assert.equal(attaches('and pricing?'), true);
+    assert.equal(attaches('can you explain that?'), true);
+  });
+
+  test('answer-editing refinements do not borrow unrelated transcript context', () => {
+    assert.equal(attaches('make that shorter'), false);
+    assert.equal(attaches('make it more confident'), false);
+    assert.equal(attaches('remove the exaggeration'), false);
+    assert.equal(attaches('shorter please'), false);
+    assert.equal(attaches('give me the final version'), false);
+    assert.equal(isTranscriptBoundManualQuestion('summarize BFS'), false);
+  });
+
+  test('refinements can recover only the latest prior assistant answer', () => {
+    const items = [
+      { role: 'interviewer', text: 'Explain the migration plan.', timestamp: 1 },
+      { role: 'assistant', text: 'First answer\nwith a second line.', timestamp: 2, surface: 'manual_chat' },
+      { role: 'user', text: 'Ask for another version.', timestamp: 3 },
+      { role: 'assistant', text: 'Latest answer\ncontinued here.', timestamp: 4, surface: 'manual_chat' },
+      { role: 'interviewer', text: 'Unrelated live meeting speech.', timestamp: 5 },
+    ];
+    assert.equal(extractLatestPriorAssistantTurn(items, 'manual_chat'), 'Latest answer\ncontinued here.');
+    assert.equal(extractLatestPriorAssistantTurn(items.slice(0, 1), 'manual_chat'), undefined);
+  });
+
+  test('labels inside an answer are preserved while speech and other surfaces stay excluded', () => {
+    const answer = 'Keep this answer\n[NOTE]: preserve this detail\n[GUEST]: a quoted example\n[ASSISTANT (PREVIOUS SUGGESTION)]: another quoted label';
+    const items = [
+      { role: 'assistant', text: answer, timestamp: 1, surface: 'manual_chat' },
+      { role: 'user', text: '[ASSISTANT (PREVIOUS SUGGESTION)]: user speech', timestamp: 2 },
+      { role: 'guest', text: 'unrelated speech\ncontinued speech', timestamp: 3 },
+      { role: 'assistant', text: 'Phone answer', timestamp: 4, surface: 'phone_mirror' },
+      { role: 'assistant', text: 'Unknown-surface answer', timestamp: 5 },
+      { role: 'assistant', text: 'Live suggestion', timestamp: 6, surface: 'what_to_answer' },
+    ];
+    assert.equal(extractLatestPriorAssistantTurn(items, 'manual_chat'), answer);
+    assert.equal(extractLatestPriorAssistantTurn(items, 'phone_mirror'), 'Phone answer');
+    assert.equal(extractLatestPriorAssistantTurn(items, 'screenshot'), undefined);
+  });
+
+  test('SessionTracker preserves the surface and the existing 100-second context window', () => {
+    const originalNow = Date.now;
+    let now = 1_000_000;
+    Date.now = () => now;
+    try {
+      const tracker = new SessionTracker();
+      tracker.addAssistantMessage('An older manual answer that is long enough to be stored.', undefined, 'manual_chat');
+      now += 101_000;
+      tracker.addAssistantMessage('A newer phone answer that is long enough to be stored.', undefined, 'phone_mirror');
+      tracker.addAssistantMessage('A legacy answer that must not be attributed to either surface.');
+      assert.equal(extractLatestPriorAssistantTurn(tracker.getContext(100), 'manual_chat'), undefined);
+      const answer = 'The current manual answer stays complete.\n[NOTE]: Keep the final detail.';
+      tracker.addAssistantMessage(answer, undefined, 'manual_chat');
+      assert.equal(extractLatestPriorAssistantTurn(tracker.getContext(100), 'manual_chat'), answer);
+      assert.equal(extractLatestPriorAssistantTurn(tracker.getContext(100), 'phone_mirror'), 'A newer phone answer that is long enough to be stored.');
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  test('active modes do not turn standalone typed questions into transcript follow-ups', () => {
+    const salesMode = { id: 'm', templateType: 'sales', name: 'Sales', isCustom: false };
+    const meetingMode = { id: 'm', templateType: 'team-meet', name: 'Team Meeting', isCustom: false };
+    const lectureMode = { id: 'm', templateType: 'lecture', name: 'Lecture', isCustom: false };
+    assert.equal(attaches('how do you compare with Cluely?', salesMode), false);
+    assert.equal(attaches('what is UI policy?', meetingMode), false);
+    assert.equal(attaches('how do I schedule a meeting?', meetingMode), false);
+    assert.equal(attaches('what is UI policy?', lectureMode), false);
+    assert.equal(attaches('what did we decide about UI policy?', meetingMode), true);
+    assert.equal(attaches('what did the professor mean by this slide?', lectureMode), true);
+  });
+});
+
+describe('manual transcript context policy wiring', () => {
+  const ipcSrc = readFileSync(path.resolve(__dirname, '../../ipcHandlers.ts'), 'utf8');
+
+  test('desktop manual chat gates autoContextSnapshot through the policy helper', () => {
+    assert.match(
+      ipcSrc,
+      /else if \(autoContextSnapshot && shouldAutoAttachManualTranscriptContext\(message, answerPlan\)\) \{[\s\S]*let snapshotForContext = autoContextSnapshot;[\s\S]*stripPriorAssistantTurns\(autoContextSnapshot\);[\s\S]*context = context \? `\$\{snapshotForContext\}\\n\\n\$\{context\}` : snapshotForContext;/,
+    );
+    assert.match(ipcSrc, /Skipped 100s transcript context for standalone manual chat/);
+    assert.match(
+      ipcSrc,
+      /else if \(!context && autoContextSnapshot && isRefinementFollowUp\(message\)\s*&& !isTranscriptBoundManualQuestion\(message\)\s*&& \(!turnContract \|\| turnContract\.memoryReadPolicy\.allowPriorAssistantFacts\)\)/,
+    );
+    assert.match(ipcSrc, /autoContextItems = intelligenceManager\.getContext\(100\)/);
+    assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(autoContextItems, 'manual_chat'\)/);
+    assert.match(ipcSrc, /Injected latest prior assistant answer for manual refinement; rolling transcript excluded/);
+  });
+
+  test('phone chat uses the same policy before attaching rolling transcript', () => {
+    assert.match(ipcSrc, /let phoneActiveMode: import\('\.\/llm\/modeProfiles'\)\.ActiveModeInfo \| null = null;/);
+    assert.match(ipcSrc, /const phoneAnswerPlan = planAnswer\(/);
+    assert.match(ipcSrc, /activeMode: phoneActiveMode/);
+    assert.match(ipcSrc, /shouldAutoAttachManualTranscriptContext\(message, phoneAnswerPlan\)/);
+    assert.match(ipcSrc, /const _pMode = phoneActiveMode;/);
+    assert.match(ipcSrc, /\[PhoneMirror\] Skipped 100s transcript context for standalone manual chat/);
+    assert.match(
+      ipcSrc,
+      /if \(snap && snap\.trim\(\)\.length > 0 && isRefinementFollowUp\(message\)\s*&& !isTranscriptBoundManualQuestion\(message\) && !phoneDocGrounded\)/,
+    );
+    assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(items, 'phone_mirror'\)/);
+    assert.match(ipcSrc, /\[PhoneMirror\] Injected latest prior assistant answer for refinement; rolling transcript excluded/);
+  });
+});
+
+// Execute the actual attachment branch with synthetic boundaries. This catches
+// loss of #552 conversation history as well as transcript leakage after merging.
+describe('manual transcript integration with existing chat history', () => {
+  const ipc = readFileSync(path.resolve(__dirname, '../../ipcHandlers.ts'), 'utf8');
+  const start = ipc.indexOf('} else if (!context && autoContextSnapshot && isRefinementFollowUp(message)');
+  const end = ipc.indexOf('// MANUAL REGRESSION FIX', start);
+  assert.ok(start > 0 && end > start);
+  const branch = ipc.slice(start, end).replace(/^} else if/, 'if');
+  function route(message, initialContext, documentGrounded = false, priorAnswer = 'Prior answer') {
+    return new Function('message', 'context', 'autoContextSnapshot', 'autoContextItems', 'answerPlan',
+      'isRefinementFollowUp', 'isTranscriptBoundManualQuestion', 'shouldAutoAttachManualTranscriptContext',
+      'extractLatestPriorAssistantTurn', 'manualActiveMode', 'turnContract', 'isDocGroundedAnswerType',
+      'stripPriorAssistantTurns', 'isIntelligenceFlagEnabled', 'console', 'iTrace',
+      branch + '; return context;')(
+        message, initialContext, '[INTERVIEWER]: Meeting fact\n[ASSISTANT (PREVIOUS SUGGESTION)]: Prior answer',
+        [
+          { role: 'assistant', text: priorAnswer, timestamp: 1, surface: 'manual_chat' },
+          { role: 'assistant', text: 'Other surface answer', timestamp: 2, surface: 'phone_mirror' },
+          { role: 'interviewer', text: 'Meeting fact', timestamp: 3 },
+        ], plan(message),
+        (text) => text === 'make that shorter', isTranscriptBoundManualQuestion,
+        shouldAutoAttachManualTranscriptContext, extractLatestPriorAssistantTurn,
+        { documentGroundedCustomModeActive: documentGrounded }, null, () => documentGrounded,
+        (snapshot) => snapshot.split('\n').filter(line => !line.startsWith('[ASSISTANT')).join('\n'),
+        () => false, { log() {} }, { noteContext() {} });
+  }
+  // Exercise the actual assistant-voice regeneration payload as well: a
+  // secondary call must not fall back to a snapshot the attachment gate rejected.
+  const regenStart = ipc.indexOf('const regenPrompt = [', ipc.indexOf('// ALWAYS ANSWER (2026-09-07)'));
+  const regenEnd = ipc.indexOf("].filter(Boolean).join('\\n');", regenStart);
+  assert.ok(regenStart > 0 && regenEnd > regenStart);
+  const regenExpression = ipc.slice(regenStart + 'const regenPrompt = '.length, regenEnd + "].filter(Boolean).join('\\n')".length)
+    .replaceAll('(manualContextOsGeneration as any)', 'manualContextOsGeneration');
+  function regenerate(selectedContext) {
+    return new Function('context', 'autoContextSnapshot', 'message', 'manualContextOsGeneration',
+      'return ' + regenExpression)(selectedContext,
+        '[INTERVIEWER]: PRIVATE RAW MEETING\n[ASSISTANT (PREVIOUS SUGGESTION)]: Other surface answer',
+        'Typed question', { retrievedBlockRaw: 'Approved retrieved evidence' });
+  }
+  test('regeneration keeps the question and retrieved evidence without rejected meeting context', () => {
+    const output = regenerate(route('what is BFS?', undefined));
+    assert.match(output, /Typed question/);
+    assert.match(output, /Approved retrieved evidence/);
+    assert.doesNotMatch(output, /PRIVATE RAW MEETING|Other surface answer|## CONVERSATION/);
+  });
+  test('regeneration without an eligible prior answer does not borrow another surface', () => {
+    assert.doesNotMatch(regenerate(route('make that shorter', undefined, false, '')),
+      /PRIVATE RAW MEETING|Other surface answer|## CONVERSATION/);
+  });
+  test('regeneration preserves allowed conversation history and labeled refinements', () => {
+    assert.match(regenerate(route('what is BFS?', 'Chat history')), /Chat history/);
+    const answer = 'Here is the answer.\n[NOTE]: Keep this detail.';
+    const output = regenerate(route('make that shorter', undefined, false, answer));
+    assert.ok(output.includes(answer));
+    assert.doesNotMatch(output, /PRIVATE RAW MEETING|Other surface answer|Meeting fact/);
+  });
+  test('regeneration retains selected meeting context and its document-grounded stripping', () => {
+    assert.match(regenerate(route('summarize the meeting', undefined)), /Meeting fact/);
+    const stripped = regenerate(route('summarize the meeting', 'Chat history', true));
+    assert.match(stripped, /Meeting fact/);
+    assert.doesNotMatch(stripped, /ASSISTANT \(PREVIOUS SUGGESTION\)|PRIVATE RAW MEETING/);
+  });
+  test('standalone questions preserve chat history without adding live speech', () => {
+    assert.equal(route('what is BFS?', 'Chat history'), 'Chat history');
+    assert.equal(route('what is BFS?', undefined), undefined);
+  });
+  test('explicit meeting questions prepend relevant transcript and preserve chat history', () => {
+    assert.equal(route('summarize the meeting', 'Chat history'),
+      '[INTERVIEWER]: Meeting fact\n[ASSISTANT (PREVIOUS SUGGESTION)]: Prior answer\n\nChat history');
+  });
+  test('document grounding strips prior assistant turns before merging', () => {
+    assert.equal(route('summarize the meeting', 'Chat history', true), '[INTERVIEWER]: Meeting fact\n\nChat history');
+  });
+  test('refinement without chat history recovers the prior answer alone', () => {
+    const output = route('make that shorter', undefined);
+    assert.match(output, /Prior answer/);
+    assert.doesNotMatch(output, /Meeting fact/);
+    assert.doesNotMatch(output, /Other surface answer/);
+    assert.equal(route('make that shorter', 'Chat history'), 'Chat history');
+  });
+  test('refinement passes the entire labeled answer through the actual attachment branch', () => {
+    const answer = 'Here is the answer.\n[NOTE]: A detail to preserve.\nLast line.';
+    assert.ok(route('make that shorter', undefined, false, answer).includes(answer));
+  });
+});
