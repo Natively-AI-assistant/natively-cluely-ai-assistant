@@ -20,6 +20,13 @@ export class GoogleSTT extends EventEmitter {
     private isStreaming = false;
     private isActive = false;
     private isFatalError = false;
+    // Sticky across start(), unlike isFatalError: a credential/auth-resolution
+    // failure cannot self-heal when the next meeting re-start()s with the SAME
+    // (missing/invalid) credentials — it would just fail again and re-emit a
+    // rejection every meeting, drifting toward main.ts's 5-in-60s crash-loop
+    // guard. So once auth is known-broken we skip opening the stream entirely
+    // until setCredentials() supplies a new key (which clears this).
+    private isAuthFatal = false;
     // Set once a code-3 rejection has been answered by dropping to the `default`
     // model. Bounds the downgrade to a SINGLE retry: a second INVALID_ARGUMENT,
     // or one that arrives while we are already on `default`, is genuinely
@@ -42,6 +49,23 @@ export class GoogleSTT extends EventEmitter {
     //   7  = PERMISSION_DENIED (API not enabled / wrong project / no IAM)
     //   16 = UNAUTHENTICATED (bad/expired credentials)
     private static readonly PERMANENT_GRPC_CODES = new Set([3, 7, 16]);
+
+    // Credential/auth-resolution failures that google-auth-library throws
+    // BEFORE any RPC, so they carry no gRPC status code and PERMANENT_GRPC_CODES
+    // never matches them. Every one means the client cannot authenticate at all
+    // (no key file, unreadable/invalid key, unresolvable project) — retrying the
+    // stream with the same unchanged credentials can only fail identically, so
+    // these are permanent for the session. Scoped to codeless errors: a real
+    // gRPC status is always classified by its numeric code, never by message.
+    private static readonly AUTH_RESOLUTION_FAILURE_RE =
+        /could not load the default credentials|GOOGLE_APPLICATION_CREDENTIALS|could not refresh access token|invalid_grant|unable to (?:detect|determine) a project|error:0|DECODER routines|no key or keyFile/i;
+
+    /** True for a credential/auth-resolution failure (no gRPC code). Pure; unit-tested. */
+    private static isAuthResolutionFailure(err: unknown, grpcCode: unknown): boolean {
+        if (typeof grpcCode === 'number') return false; // real gRPC status → classified by code
+        const msg = (err as { message?: unknown } | null)?.message;
+        return typeof msg === 'string' && GoogleSTT.AUTH_RESOLUTION_FAILURE_RE.test(msg);
+    }
 
     // Google STT v1 does not accept the common `zh-*` BCP-47 tags — its
     // supported-languages table lists Mandarin only as `cmn-Hans-CN` (and
@@ -95,6 +119,9 @@ export class GoogleSTT extends EventEmitter {
         this.client = new SpeechClient({
             keyFilename: keyFilePath
         });
+        // New credentials — the prior auth-fatal verdict no longer holds; let the
+        // next start() attempt a stream again.
+        this.isAuthFatal = false;
     }
 
     public setSampleRate(rate: number): void {
@@ -184,9 +211,20 @@ export class GoogleSTT extends EventEmitter {
     public start(): void {
         if (this.isActive) return;
         this.isActive = true;
-        this.isFatalError = false;
+        // isAuthFatal is sticky: a known-broken credential stays broken across a
+        // re-start() (only setCredentials() clears it), so don't reopen a stream
+        // that can only fail auth again and emit another unhandled rejection.
+        this.isFatalError = this.isAuthFatal;
         this.modelDowngraded = false;
         this.writeCount = 0;
+
+        if (this.isAuthFatal) {
+            console.warn(
+                `[GoogleSTT/${this.label}] Credentials previously failed to resolve — STT stays ` +
+                `disabled until setCredentials() provides a new key. Not opening a stream.`
+            );
+            return;
+        }
 
         this.openDumpStream();
 
@@ -479,16 +517,35 @@ export class GoogleSTT extends EventEmitter {
 
                 console.error(`[GoogleSTT/${this.label}] Stream error:`, err);
 
-                if (typeof grpcCode === 'number' && GoogleSTT.PERMANENT_GRPC_CODES.has(grpcCode)) {
+                // An auth/credential-resolution failure carries NO gRPC status
+                // code (it is thrown by google-auth-library before any RPC is
+                // issued — e.g. "Could not load the default credentials" when
+                // GOOGLE_APPLICATION_CREDENTIALS is unset and ADC is absent).
+                // PERMANENT_GRPC_CODES only matches numeric codes, so these
+                // slipped through as "retryable": write() reopened the stream on
+                // every audio chunk, each reopen failed auth the same way, and
+                // the repeated rejections tripped main.ts's 5-in-60s
+                // unhandled-rejection crash-loop guard — taking the whole app
+                // down. Retrying with the same missing credentials can never
+                // succeed, so treat it as permanent exactly like codes 7/16.
+                const isPermanent =
+                    (typeof grpcCode === 'number' && GoogleSTT.PERMANENT_GRPC_CODES.has(grpcCode)) ||
+                    GoogleSTT.isAuthResolutionFailure(err, grpcCode);
+
+                if (isPermanent) {
                     // Permanent failure — stop the write()-driven reconnect loop. Without this
                     // guard, a misconfigured Google project (e.g. Speech API not enabled →
                     // PERMISSION_DENIED) loops forever at ~1 reconnect/sec for the whole
                     // session. See issue #171.
+                    const isAuth = GoogleSTT.isAuthResolutionFailure(err, grpcCode);
                     console.error(
-                        `[GoogleSTT/${this.label}] Permanent gRPC error (code ${grpcCode}) — ` +
-                        `disabling STT for this session. No further retries.`
+                        `[GoogleSTT/${this.label}] Permanent error (${typeof grpcCode === 'number' ? `gRPC code ${grpcCode}` : 'credentials/auth could not resolve'}) — ` +
+                        `disabling STT ${isAuth ? 'until new credentials are set' : 'for this session'}. No further retries.`
                     );
                     this.isFatalError = true;
+                    // An auth failure also survives the next start() (see isAuthFatal):
+                    // re-running with the same credentials can only fail identically.
+                    if (isAuth) this.isAuthFatal = true;
                     if (this.proactiveRestartTimer) {
                         clearTimeout(this.proactiveRestartTimer);
                         this.proactiveRestartTimer = null;
