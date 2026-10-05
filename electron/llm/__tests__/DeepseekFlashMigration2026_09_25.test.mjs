@@ -72,14 +72,17 @@ describe('the DeepSeek model ids', () => {
 });
 
 describe('capabilities: the new id behaves exactly like the one it replaces', () => {
-  test('cloud tier, same budgets, still text-only as Natively routes it', () => {
+  test('cloud tier, same budgets, and both read images', () => {
     // `name` echoes the id back, so it is the one field that must differ.
     const { name, ...now } = getModelCapabilities('deepseek-flash', false);
     const { name: _old, ...before } = getModelCapabilities('deepseek-v4-flash', false);
     assert.equal(name, 'deepseek-flash');
     assert.deepEqual(now, before);
     assert.equal(now.tier, 'cloud');
-    assert.equal(now.supportsImages, false);
+    // true since 2026-10-01: DeepSeek Flash read a test image sent directly, and
+    // streamWithDeepseek now attaches images. It was false while the direct
+    // adapter dropped them.
+    assert.equal(now.supportsImages, true);
   });
 });
 

@@ -100,6 +100,9 @@ function portWith(calls, n = 24) {
     tokenBudget: MODE_POLICIES.general.contextBudget.evidenceTokens,
     userId: 'u',
     rerankSurface: 'manual',
+    // Placeholder content stands for large files: exercise the retriever seam,
+    // not the whole-small-corpus path (SmallReferenceCorpusReadWhole2026_09_30).
+    wholeSmallCorpus: false,
   });
 }
 

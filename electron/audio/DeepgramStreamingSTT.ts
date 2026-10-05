@@ -8,8 +8,10 @@
  */
 
 import { EventEmitter } from 'events';
+import { getSttContextTerms } from './sttContextTerms';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
+import { isEnglishOnlySttModel, resolveSttModel } from './sttModelCatalog';
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
@@ -58,9 +60,23 @@ export class DeepgramStreamingSTT extends EventEmitter {
         sink: (pcm) => this.sendAudio(pcm),
     });
 
-    constructor(apiKey: string) {
+    /** The Deepgram model (sttModelCatalog.ts). Every catalogued model runs on
+     *  this same v1 live endpoint with the options below. */
+    private readonly model: string;
+
+    constructor(apiKey: string, model?: string) {
         super();
         this.apiKey = apiKey;
+        this.model = resolveSttModel('deepgram', model);
+    }
+
+    /** What the connect options carry: an English-only model (Nova-3 Medical,
+     *  Nova-2 Meeting) is always sent English, since Deepgram rejects `multi`
+     *  or another language for it. Settings narrows the Language picker to
+     *  English for these models too; this covers a language stored earlier. */
+    private connectLanguage(): string {
+        if (isEnglishOnlySttModel('deepgram', this.model) && !this.languageCode.startsWith('en')) return 'en';
+        return this.languageCode;
     }
 
     /** Local VAD: the speaker stopped. Keep the endpointer's clock real-time. */
@@ -180,6 +196,12 @@ export class DeepgramStreamingSTT extends EventEmitter {
         }
     }
 
+    private hintTerms(): Record<string, string[]> {
+        const terms = getSttContextTerms();
+        if (!terms.length) return {};
+        return this.model.startsWith('nova-3') ? { keyterm: terms } : this.model.startsWith('nova-2') ? { keywords: terms } : {};
+    }
+
     private connect(): void {
         if (this.isConnecting) return;
         this.isConnecting = true;
@@ -192,8 +214,8 @@ export class DeepgramStreamingSTT extends EventEmitter {
             const deepgram = createClient(this.apiKey);
 
             this.live = deepgram.listen.live({
-                model: 'nova-3',
-                language: this.languageCode,
+                model: this.model,
+                language: this.connectLanguage(),
                 smart_format: true,
                 // smart_format HOLDS a streaming final when the utterance ends
                 // in what looks like an incomplete entity (a number, a date),
@@ -212,6 +234,10 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 vad_events: true,
                 // Opt-in: ask Deepgram to tag each word with a speaker index.
                 ...(this.diarize ? { diarize: true } : {}),
+                // The user's name (sttContextTerms.ts). Nova-3 takes keyterm and
+                // rejects keywords; Nova-2 takes keywords. The SDK repeats an array
+                // as one query parameter per term, as both expect.
+                ...this.hintTerms(),
             });
 
             // F-203: identity guard. restartStream() does a synchronous

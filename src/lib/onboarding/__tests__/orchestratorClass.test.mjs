@@ -9,7 +9,7 @@
 //   - the RAF drain loop (evaluateAndDispatch)
 //   - markDismissed() → dismissedThisSession session-guard
 //   - the interaction of that guard with a still-true reEligibility predicate
-//     (permissions while macTCCBlocked === true)
+//     (permissions while permissionsNeedAttention === true)
 //
 // To avoid drift, this test loads the REAL TypeScript class rather than a
 // hand-copied twin: Node imports orchestrator.ts directly under
@@ -142,7 +142,7 @@ before(async () => {
 
 // Bring an orchestrator to the exact point where `permissions` is the only
 // eligible, actively-shown toaster: homepage mounted long enough, foreground,
-// no meeting, macTCCBlocked=true, permsShown=false. `extensionConnected: true`
+// no meeting, permissionsNeedAttention=true, permsShown=false. `extensionConnected: true`
 // keeps the downstream browser_extension stage from competing for the slot so
 // the dismiss/re-raise assertions can check for a clean empty slot. Returns the
 // instance with activeToasterId === 'permissions'.
@@ -151,7 +151,7 @@ before(async () => {
 // that hydrates whatever the prior session persisted (e.g. completed
 // permissions) rather than a first-ever cold install. The in-memory
 // dismissedThisSession guard is still fresh (it is never persisted).
-function raisePermissions({ preservePersistedState = false } = {}) {
+function raisePermissions({ preservePersistedState = false, permsShown = false, permissionsNeedAttention = true } = {}) {
   if (!preservePersistedState) localStorage.clear();
   timerQueue = [];
   mockNow = 0;
@@ -165,7 +165,7 @@ function raisePermissions({ preservePersistedState = false } = {}) {
   orch.emit({ type: 'foreground:change', isForeground: true });
   orch.emit({
     type: 'user-state:change',
-    patch: { permsShown: false, macTCCBlocked: true, extensionConnected: true },
+    patch: { permsShown, permissionsNeedAttention, extensionConnected: true },
   });
   mockNow += 3_000; // > requiresHomepageDuration (2 s)
 
@@ -175,7 +175,7 @@ function raisePermissions({ preservePersistedState = false } = {}) {
 
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
-test('drain loop raises the permissions toaster when macTCCBlocked', () => {
+test('drain loop raises the permissions toaster when a permission needs attention', () => {
   const orch = raisePermissions();
   assert.equal(
     orch.getSnapshot().activeToasterId,
@@ -184,7 +184,7 @@ test('drain loop raises the permissions toaster when macTCCBlocked', () => {
   );
 });
 
-test('markDismissed keeps the toaster dismissed for the rest of the session even with macTCCBlocked=true', () => {
+test('markDismissed keeps the toaster dismissed for the rest of the session even with permissionsNeedAttention=true', () => {
   const orch = raisePermissions();
   assert.equal(orch.getSnapshot().activeToasterId, 'permissions');
 
@@ -196,7 +196,7 @@ test('markDismissed keeps the toaster dismissed for the rest of the session even
     'dismiss must clear the active slot',
   );
 
-  // Now the RAF drain loop runs again. macTCCBlocked is STILL true (permsShown
+  // Now the RAF drain loop runs again. permissionsNeedAttention is STILL true (permsShown
   // was never set), so reEligibility(permissions) is true — pre-fix this
   // re-raised the toaster on the very next frame, making the X do nothing.
   // The dismissedThisSession guard must suppress it. (The single slot may be
@@ -227,8 +227,8 @@ test('a fresh session (new orchestrator) DOES re-raise permissions after a prior
 
   // Session 2: a brand-new instance that HYDRATES the prior session's persisted
   // state (completed permissions from the session-1 dismiss). Its
-  // dismissedThisSession set is empty (never persisted), and macTCCBlocked is
-  // still true — permissions has onceEver:false + reEligibility(macTCCBlocked),
+  // dismissedThisSession set is empty (never persisted), and permissionsNeedAttention is
+  // still true — permissions has onceEver:false + reEligibility(permissionsNeedAttention),
   // so persisted completion does not suppress it. The toaster must come back.
   const second = raisePermissions({ preservePersistedState: true });
   assert.equal(
@@ -236,6 +236,148 @@ test('a fresh session (new orchestrator) DOES re-raise permissions after a prior
     'permissions',
     'a fresh session must re-raise the permissions toaster (session guard is not persisted)',
   );
+});
+
+// Returning users (2026-09-25 rule): once the card has been seen, it stays
+// quiet on every later launch unless a required permission needs attention.
+test('a returning user with every permission fine does NOT see the card', () => {
+  const orch = raisePermissions({ permsShown: true, permissionsNeedAttention: false });
+  assert.notEqual(
+    orch.getSnapshot().activeToasterId,
+    'permissions',
+    'permissions must stay quiet after it has been seen and nothing needs attention',
+  );
+});
+
+test('a returning user whose permission broke DOES see the card again', () => {
+  const orch = raisePermissions({ permsShown: true, permissionsNeedAttention: true });
+  assert.equal(
+    orch.getSnapshot().activeToasterId,
+    'permissions',
+    'a broken required permission must bring the card back',
+  );
+});
+
+// The real returning-user sequence across launches, with persisted state:
+// launch 1 shows and dismisses the card; launch 2 has nothing wrong, so the
+// stage auto-skips (and that skip is persisted); launch 3 finds a permission
+// broken. The card must come back on launch 3.
+test('a permission that breaks after a quiet launch brings the card back', () => {
+  const first = raisePermissions({ permsShown: false, permissionsNeedAttention: false });
+  assert.equal(first.getSnapshot().activeToasterId, 'permissions', 'launch 1 shows the card');
+  first.markDismissed('permissions');
+
+  const quiet = raisePermissions({ preservePersistedState: true, permsShown: true, permissionsNeedAttention: false });
+  assert.notEqual(quiet.getSnapshot().activeToasterId, 'permissions', 'launch 2 is quiet');
+
+  const broken = raisePermissions({ preservePersistedState: true, permsShown: true, permissionsNeedAttention: true });
+  assert.equal(broken.getSnapshot().activeToasterId, 'permissions', 'launch 3 must show the card again');
+});
+
+// Same sequence for a long-time user whose OTHER stages are all finished, so
+// nothing else keeps the drain loop scheduling. Launch 2 auto-skips the stage
+// and persists that skip; launch 3's broken permission must still be picked
+// up by the scheduler rather than waiting for an unrelated stage's timer.
+test('a broken permission brings the card back even when no other stage is pending', () => {
+  const permsOnly = STAGES.filter((s) => s.id === 'permissions');
+  const launch = ({ fresh, permsShown, permissionsNeedAttention }) => {
+    if (fresh) localStorage.clear();
+    timerQueue = [];
+    mockNow = 0;
+    const orch = new OnboardingOrchestrator();
+    orch.start(permsOnly);
+    orch.emit({ type: 'launcher:mounted' });
+    orch.emit({ type: 'foreground:change', isForeground: true });
+    orch.emit({ type: 'user-state:change', patch: { permsShown, permissionsNeedAttention } });
+    mockNow += 3_000;
+    flushOneFrame();
+    return orch;
+  };
+
+  const first = launch({ fresh: true, permsShown: false, permissionsNeedAttention: false });
+  assert.equal(first.getSnapshot().activeToasterId, 'permissions', 'launch 1 shows the card');
+  first.markDismissed('permissions');
+
+  const quiet = launch({ fresh: false, permsShown: true, permissionsNeedAttention: false });
+  assert.equal(quiet.getSnapshot().activeToasterId, null, 'launch 2 is quiet');
+
+  const broken = launch({ fresh: false, permsShown: true, permissionsNeedAttention: true });
+  assert.equal(broken.getSnapshot().activeToasterId, 'permissions', 'launch 3 must show the card again');
+});
+
+// App.tsx starts the orchestrator after an async import and pushes the
+// permission result after an async IPC call, so the push can land FIRST.
+test('a broken permission pushed before start() still brings the card back', () => {
+  const permsOnly = STAGES.filter((s) => s.id === 'permissions');
+  const launch = ({ fresh, permsShown, permissionsNeedAttention }) => {
+    if (fresh) localStorage.clear();
+    timerQueue = [];
+    mockNow = 0;
+    const orch = new OnboardingOrchestrator();
+    orch.setUserState({ permsShown, permissionsNeedAttention }); // before start()
+    orch.start(permsOnly);
+    orch.emit({ type: 'launcher:mounted' });
+    orch.emit({ type: 'foreground:change', isForeground: true });
+    mockNow += 3_000;
+    flushOneFrame();
+    return orch;
+  };
+
+  const first = launch({ fresh: true, permsShown: false, permissionsNeedAttention: false });
+  assert.equal(first.getSnapshot().activeToasterId, 'permissions', 'launch 1 shows the card');
+  first.markDismissed('permissions');
+  const quiet = launch({ fresh: false, permsShown: true, permissionsNeedAttention: false });
+  assert.equal(quiet.getSnapshot().activeToasterId, null, 'launch 2 is quiet');
+  const broken = launch({ fresh: false, permsShown: true, permissionsNeedAttention: true });
+  assert.equal(broken.getSnapshot().activeToasterId, 'permissions', 'launch 3 must show the card again');
+});
+
+// The un-skip is for the permissions card only. trial_promo also declares a
+// reEligibility rule; a skipped trial promo must not be re-armed just because
+// a key or trial flag flips mid-session. Under the toaster policy a card's
+// skip no longer persists (the card ledger owns its waits), so the guarantee
+// is "not again this launch".
+test('a skipped trial promo is not re-armed this launch when its reEligibility flips', async () => {
+  const { emptyLedger } = await loadModule(join(__dirname, '..', '..', 'cards', 'cardPolicy.mjs'));
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+  const trial = { ...STAGES.find((s) => s.id === 'trial_promo'), requiresStages: undefined };
+  const orch = new OnboardingOrchestrator();
+  orch.start([trial]);
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+  orch.setUserState({ cardLedger: emptyLedger(Date.now()) });
+  mockNow += 10_000;
+  for (let i = 0; i < 5; i++) flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, 'trial_promo', 'precondition: the promo shows');
+  orch.markSkipped('trial_promo');
+  orch.setUserState({ hasNativelyKey: true });
+  orch.setUserState({ hasNativelyKey: false });
+  mockNow += 120_000;
+  for (let i = 0; i < 5; i++) flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, null, 'trial_promo must not come back this launch');
+});
+
+// A persisted queue from an older build must follow the current catalog:
+// stages added since (the ad stages) have to reach existing users, and
+// stages removed since must not linger.
+test('start() rebuilds a stale persisted queue from the catalog', () => {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+  const first = new OnboardingOrchestrator();
+  first.start(STAGES);
+  const key = 'natively_onboarding_state_v1';
+  const saved = JSON.parse(localStorage.getItem(key));
+  saved.queue = ['permissions', 'legacy_stage_from_an_old_build'];
+  localStorage.setItem(key, JSON.stringify(saved));
+
+  const next = new OnboardingOrchestrator();
+  next.start(STAGES);
+
+  const catalogOrder = [...STAGES].sort((a, b) => a.order - b.order).map((s) => s.id);
+  assert.deepEqual(next.getSnapshot().queue, catalogOrder);
 });
 
 test('dismissing permissions does NOT wedge other toaster stages', () => {
@@ -250,18 +392,25 @@ test('dismissing permissions does NOT wedge other toaster stages', () => {
     type: 'user-state:change',
     patch: {
       permsShown: true,
-      macTCCBlocked: false,
+      permissionsNeedAttention: false,
       extensionSupported: true,
       extensionConnected: false,
       isV2_8_OrNewer: true,
+      // browser_extension is a card stage: it needs the card ledger loaded.
+      cardLedger: { version: 1, firstLaunchAt: Date.now() - 2 * 86_400_000, launchCount: 1, lastPromoShownAt: null, imported: {}, cards: {} },
     },
   });
-  mockNow += 6_000; // > browser_extension requiresHomepageDuration (5 s)
+  // > browser_extension requiresHomepageDuration (5 s) AND the 60 s spacing
+  // after the previous card closed (toaster policy §3.2, CARD_SPACING_MS).
+  mockNow += 61_000;
+  flushOneFrame();
   flushOneFrame();
 
+  // The next onboarding card for a user with no keys is the free-trial promo
+  // (toaster policy §3.3: permissions → trial promo → extension).
   assert.equal(
     orch.getSnapshot().activeToasterId,
-    'browser_extension',
+    'trial_promo',
     'the next stage must still be reachable — the session guard is per-stage, not global',
   );
 });
@@ -340,7 +489,7 @@ test('LEAK GUARD: an event re-arms the deadline scheduler after it went idle', (
   orch.emit({ type: 'foreground:change', isForeground: true });
   orch.emit({
     type: 'user-state:change',
-    patch: { permsShown: false, macTCCBlocked: true, extensionConnected: true },
+    patch: { permsShown: false, permissionsNeedAttention: true, extensionConnected: true },
   });
   mockNow += 3_000;
 
@@ -412,4 +561,42 @@ test('deadline scheduler re-evaluates completed cooldown stages in an otherwise 
     'permissions',
     'the elapsed-cooldown stage must dispatch without waiting for an unrelated event',
   );
+});
+
+// App.tsx learns permsShown from localStorage at once, but the permission check
+// is an IPC call that can take seconds on macOS (the Screen Recording probe
+// races a 5 s deadline). The card fires 2 s after the launcher mounts, so
+// permsShown has to arrive before the check does, and the check's answer on
+// its own must still be able to bring the card back (2026-10-01).
+function launchWithSlowCheck() {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+  const orch = new OnboardingOrchestrator();
+  orch.start(STAGES);
+  // What App.tsx knows without waiting: the card has been seen before.
+  orch.setUserState({ permsShown: true, extensionConnected: true });
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+  mockNow += 3_000; // past the 2 s trigger, the check still out
+  flushOneFrame();
+  return orch;
+}
+
+test('a slow permission check does not open the card for a returning user', () => {
+  const orch = launchWithSlowCheck();
+  assert.notEqual(orch.getSnapshot().activeToasterId, 'permissions', 'nothing is known to be wrong yet');
+
+  orch.setUserState({ permissionsNeedAttention: false }); // the check lands: all granted
+  flushOneFrame();
+  assert.notEqual(orch.getSnapshot().activeToasterId, 'permissions');
+});
+
+test('a slow permission check that finds a broken permission still opens the card', () => {
+  const orch = launchWithSlowCheck();
+  assert.notEqual(orch.getSnapshot().activeToasterId, 'permissions');
+
+  orch.setUserState({ permissionsNeedAttention: true }); // the check lands: something is missing
+  flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, 'permissions');
 });

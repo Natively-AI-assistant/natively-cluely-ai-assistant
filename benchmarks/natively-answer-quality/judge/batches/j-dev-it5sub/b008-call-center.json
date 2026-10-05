@@ -1,0 +1,292 @@
+{
+ "batch": "b008-call-center",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DCC-CTX-G2": {
+   "title": "Harborline Cam 2 and Home Hub Troubleshooting Guide",
+   "text": "Harborline Cam 2 and Home Hub - Tier 1 Troubleshooting Guide (rev. 2026-08)\n\nStart every technical call by asking which device, what the status light is doing, and when it last worked.\n\nStatus light codes (Cam 2)\n- Pulsing blue: pairing mode, waiting for setup in the app.\n- Solid blue: connected and recording normally.\n- Blinking amber: no Wi-Fi connection.\n- Solid amber: connected to Wi-Fi but cannot reach the Harborline cloud.\n- Solid red: firmware failure. Do not attempt more than one power cycle; go to Escalation below.\n- Flashing white: factory reset in progress.\n\nCamera offline / blinking amber\n1. Confirm the router is on and other devices have internet.\n2. Cam 2 only connects to 2.4 GHz networks. If the customer recently changed router or split bands, the camera will not see a 5 GHz-only network.\n3. Power cycle: unplug for 10 seconds, plug back in, wait 2 minutes.\n4. Move the camera or router closer; a signal below 2 bars in the app causes dropouts.\n5. If still offline, factory reset (below) and set up again.\n\nFactory reset\nHold the reset button on the back for 15 seconds until the light flashes white. The camera loses its settings and motion zones and must be added again in the app. Recordings already in the cloud are not deleted.\n\nApp login loop\nIf the app returns to the login screen after signing in: update the app to version 6.3 or later (older versions have a known token bug), then clear the app cache (Android: Settings > Apps > Harborline > Storage; iOS: offload and reinstall the app). If two-step codes do not arrive, check the email on file, not SMS; Harborline two-step codes are sent by email only.\n\nMotion alerts not arriving\nCheck phone notification permissions for the app, check that the camera is not in Privacy Mode, and check that the motion zone covers the area. Sensitivity below 3 misses people at a distance.\n\nLive view buffering\nEach Cam 2 needs at least 2 Mbps of upload. Ask the customer to run a speed test near the camera. Lower live view quality to Standard as a workaround.\n\nHome Hub error codes\n- E-14: the Hub's SD card is full; local recording stops until it is cleared in the app.\n- E-22: the Hub cannot reach the cloud; treat like solid amber.\n- E-31: the Hub is overheating; move it out of enclosed cabinets.\n\nEscalation\nEscalate to Tier 2 for an RMA when the light is solid red, a factory reset has failed twice, or the device is physically damaged. Never promise a replacement yourself; Tier 2 confirms warranty and ships the RMA. Do not ask customers to open the device."
+  },
+  "DCC-CTX-G1": {
+   "title": "Harborline Support Policy Handbook v4.2",
+   "text": "Harborline Home Support Policy Handbook - Version 4.2\nEffective 1 July 2026. Applies to all Tier 1 phone and chat agents. Supersedes every earlier version.\n\n1. Identity verification\nBefore discussing any account detail, verify the caller with the full name on the account plus TWO of: (a) the email address on file, (b) the last 4 digits of the card on file, (c) the 6-digit Support PIN shown in the app under Settings > Support. The caller must provide the information; never read it out to them. Account changes (email change, password reset, adding or removing a household member, transferring the subscription) also require the Support PIN or a one-time code sent to the email on file. A caller who is not the account holder can only be helped if they are listed as a household member on the account.\n\n2. Account recovery\nIf the caller cannot access the email on file and has no Support PIN, open an Account Recovery case using form AR-1. The customer receives a secure upload link for a government photo ID. Trust & Safety reviews AR-1 cases within 3 business days. Agents cannot bypass or speed up AR-1 and must not change the email on file during the call.\n\n3. Password resets\nAgents trigger a reset email to the address on file only. The link expires in 30 minutes. Agents never see, set, read out or text a password. Password resets by SMS, or to any new phone number or new email address, are not permitted under any circumstances.\n\n4. Refunds\nHardware: full refund to the original payment method within 30 days of delivery. Opened, non-defective hardware returned within 30 days carries a 15% restocking fee. After 30 days, defective hardware under the 1-year limited warranty is replaced, not refunded.\nSubscriptions: monthly Protect and Protect Plus plans are not refunded for partial months. Annual plans cancelled within 14 days of the renewal charge receive a prorated refund; after 14 days the plan runs to the end of the term.\nTier 1 agents may issue refunds up to $150 per case. Anything above $150 needs Tier 2 approval. Refunds post in 5-7 business days.\n\n5. Goodwill credits\nTier 1 agents may apply one goodwill credit of up to $20 per account in any 12-month period, and only for a documented service failure: a cloud outage longer than 4 hours or a missed delivery window. Check the account's credit history before offering anything. Never promise a credit before confirming eligibility. Outage credits for declared incidents are applied automatically on the next bill and do not count toward the goodwill limit.\n\n6. Duplicate charges\nTwo identical charges within 24 hours: check the billing console. If one is a pending authorization, it drops off on its own within 3-5 business days and no refund is needed. A confirmed duplicate settled charge may be refunded by Tier 1 regardless of the $150 limit.\n\n7. Cancellations\nCustomers may cancel in the app or by phone. Cancellation takes effect at the end of the current billing period; cameras keep working in free mode (live view only, no recordings). One retention offer may be made per account: 50% off Protect Plus for the next 2 months. If the customer declines, process the cancellation without a second pitch.\n\n8. Shipping\nStandard shipping is 3-5 business days; no delivery date is guaranteed. If tracking shows delivered but the customer has nothing, ask them to wait 48 hours, then open a carrier trace. A replacement ships when the trace closes or 7 days after the trace is opened, whichever comes first.\n\n9. Escalation tiers\nTier 1: frontline phone and chat. Tier 2: Senior Support, refunds up to $500, hardware RMAs and unresolved technical faults. Tier 3: Customer Relations (supervisors), complaints about staff, legal or media threats, refunds above $500.\nWarm transfers to Tier 2 are available 8am-8pm ET, Monday to Friday. Outside those hours, create an escalation ticket.\nA caller who asks for a manager is offered a Tier 3 callback. Supervisors call back within 1 business day. Do not promise a specific time.\n\n10. Response-time targets\nChat: first reply within 2 minutes. Email tickets: first response within 24 hours. Tier 2 escalation tickets: acknowledged within 4 business hours. Callbacks are booked in 2-hour windows, never exact times.\n\n11. Outages\nDuring a declared outage, direct customers to the status page and read only what it says. Do not give an ETA unless the status page shows one.\n\n12. Privacy\nCloud video is kept for 30 days on Protect and 60 days on Protect Plus. Requests to export or delete data go through the Privacy Portal; agents cannot delete recordings on a call. Support staff cannot view live video or recordings."
+  },
+  "DCC-CTX-C1": {
+   "title": "Harborline Support Policy v3.1 (2024)",
+   "text": "Harborline Support Policy - Version 3.1\nEffective 1 March 2024. Check the Knowledge Base for the current version before relying on this document.\n\nVerification\nVerify callers with their date of birth and billing ZIP code before discussing the account.\n\nRefunds\nHardware may be returned for a full refund within 14 days of purchase. Annual plans are fully refundable within 30 days of the renewal charge. Monthly plans may be refunded for the unused part of the month at the agent's discretion.\n\nCredits\nAgents may apply account credits of up to $50 at their discretion to keep a customer satisfied. There is no limit on how often a credit may be applied.\n\nPassword resets\nIf the customer cannot access their email, the agent may send a reset link by SMS to the phone number the customer provides on the call.\n\nManager requests\nIf a customer asks for a manager, tell them a supervisor will call them back within one hour. Note the promised time on the ticket.\n\nShipping\nOrders arrive in 2-4 business days. If a package is marked delivered but missing, ship a replacement immediately.\n\nFrequently asked questions\nQ: How long does a customer have to return a camera?\nA: 21 days from delivery.\nQ: Can an annual plan be refunded after it renews?\nA: No. Annual subscriptions are non-refundable once the renewal has processed.\nQ: Can we still send reset links by text?\nA: SMS resets are suspended pending security review (see bulletin 24-07). Use email only until further notice.\nQ: When do supervisors return calls?\nA: Supervisor callbacks are made the same business day."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DCC-CTX-I1": {
+   "title": "Contact Center October Floor Notes",
+   "text": "Harborline Contact Center - October Floor Notes\n\nParking: Garage level B is closed for resurfacing October 6-10. Please use the overflow lot on Dean Street and allow an extra ten minutes to walk over. Security will validate overflow tickets at the front desk.\n\nPotluck: The fall potluck is Friday, October 17, in the second-floor break room from noon to 2pm. Sign-up sheet is on the fridge. We already have eleven pasta salads, so please consider bringing a dessert or something with vegetables.\n\nBadge photos: If you joined after June, your temporary badge expires at the end of the month. Photo retakes run Tuesday and Thursday mornings in room 214.\n\nCoffee: The new espresso machine on the third floor takes pods only. Do not put ground coffee in the water tank again.\n\nCostume contest: Halloween falls on a Friday this year. Costumes are welcome on the floor as long as your headset still fits and nothing covers your face on video huddles. Voting closes at 3pm and the winning team gets the good conference room for a month.\n\nQuiet room: The quiet room can now be booked in 30-minute slots through the room calendar. Please do not take calls from it."
+  }
+ },
+ "items": [
+  {
+   "jid": "eab7717079bf",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Every time I open the app it just throws me back to the login screen, like a loop. I've tried like five times.",
+   "conversation": [],
+   "evidence_ids": [
+    "DCC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm sorry, that's frustrating. Let's get you back in. First, can you check which version of the Harborline app you're on? If it's older than 6.3, there's a known token bug that causes exactly this login loop, so updating should fix it."
+  },
+  {
+   "jid": "639fac38f8b8",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Tracking says it was delivered Monday but there is nothing at my door. Nothing.",
+   "conversation": [],
+   "evidence_ids": [
+    "DCC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm sorry, that's frustrating. Here's what we do with a delivered scan and nothing at the door: I'd ask you to give it 48 hours, since packages sometimes get scanned early or turn up with a neighbor. If it still hasn't shown up by then, I'll open a carrier trace on my end, and a replacement ships once that trace closes or seven days after it's opened, whichever comes first. Can I get the tracking number so I can pull it up and start the notes on your account?"
+  },
+  {
+   "jid": "abef936dc4cd",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "customer is asking if people at our company can watch her cameras, like see inside her house right now. what do I say",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't see your cameras, and no one here can watch them. What we can see is limited to what's needed to support your account, and I'd like to check exactly what's showing on your side. Are the cameras online right now, and is anyone else listed on the account?"
+  },
+  {
+   "jid": "0d4329169bbf",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "guy says his neighbor has one of our cameras pointed straight at his backyard. he wants me to shut it off remotely or give him the owner's name, and says he'll call the police on us if I don't. what do I tell him",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't shut off a camera or give out an owner's name, and I'd tell him that plainly. What I can do is take his details and the camera's location, and route it to the team that handles these requests, including law enforcement ones. Let me get his name and a callback number so we can follow up properly."
+  },
+  {
+   "jid": "7b276903f179",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "he doesn't have the app and he lost access to that email years ago. now what? he's getting annoyed",
+   "conversation": [
+    "USER (typed to Natively): how do I verify him? he's asking about a charge on his account",
+    "NATIVELY: Before I can look at any charge, I need to verify the caller. Ask for the full name on the account, plus two of these three: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from the app under Settings > Support. They have to give it to me, I can't read anything back to them. If they can't get past that, I'd open an Account Recovery case instead."
+   ],
+   "evidence_ids": [
+    "DCC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Since he can't get to the email on file and doesn't have the app for a Support PIN, I can't verify him over the phone, so I'd open an **Account Recovery** case. I'll send him a secure upload link for a government photo ID, and Trust & Safety reviews it within **3 business days**. I can't change the email on file during this call or speed that review up, so that's the path from here."
+  },
+  {
+   "jid": "ca9d4dec8f3a",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "what does a solid red light on the cam mean and what do I tell him",
+   "conversation": [],
+   "evidence_ids": [
+    "DCC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "A solid red light on the Cam 2 means a firmware failure. I'd tell him we don't want to keep power cycling it, so let's do just one power cycle, unplug it for ten seconds and plug it back in, and if the light is still solid red after that, I'll escalate it to Tier 2 for an RMA. Tier 2 confirms the warranty and ships the replacement, so I can't promise a new unit myself, but I'll get that started for him."
+  },
+  {
+   "jid": "d11590132551",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "None of my cameras have worked since like seven this morning. Is your whole system down or what?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm sorry about that, let's get it sorted. I can't see a system-wide outage from here, so let me check your account and the status of your cameras. Can you tell me how many cameras you have and whether they're all showing offline right now?"
+  },
+  {
+   "jid": "05464abff760",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Can you just reset my password by text? I'm not near my computer and I don't have my email on my phone.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't send a password reset by text, so let's get you back in another way. Can you tell me what you're trying to sign into, and whether you have the phone number on the account handy?"
+  },
+  {
+   "jid": "cbb26d10dfc2",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "What time, exactly?",
+   "conversation": [
+    "CUSTOMER (heard): I want a manager. And I want them to call me back within the hour, not tomorrow, within the hour.",
+    "NATIVELY: I can get a supervisor request in for you right now. Let me take your date of birth and billing ZIP so I can pull up the account and note the callback on the ticket."
+   ],
+   "evidence_ids": [
+    "DCC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can't give you an exact clock time, but the commitment is a callback within one hour of this call. I'm noting that on the ticket right now, so let me get your date of birth and billing ZIP and I'll lock in the request."
+  },
+  {
+   "jid": "5e7670ea3d75",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "I'm calling for my mom, it's her account, she's right here but she can't really hear on the phone. Can you reset her password and send the link to my email instead?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can help with the reset, but I'm not able to send a password reset link to a different email than the one on the account. Since your mom is right there with you, the quickest path is to verify her identity on this call, and then I can walk her through the reset or send the link to the email we have on file. Can you confirm her full name and the email address on the account?"
+  },
+  {
+   "jid": "a9d93abc83d3",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Honestly, how long have you been doing this job? Do you even know this stuff?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I've been on this team a while, and I know this product well enough to get you sorted out. What I don't want to do is guess at your setup, so let's start with what's actually happening on your end. What are you seeing when it goes wrong?"
+  },
+  {
+   "jid": "4df198b5eab6",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "I want a manager. And I want them to call me back within the hour, not tomorrow, within the hour.",
+   "conversation": [],
+   "evidence_ids": [
+    "DCC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can get a supervisor request in for you right now. Let me take your date of birth and billing ZIP so I can pull up the account and note the callback on the ticket."
+  },
+  {
+   "jid": "72d620ef0384",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Why not?",
+   "conversation": [
+    "CUSTOMER (heard): I bought your doorbell camera five weeks ago, it's already dead, and I want my money back. All of it.",
+    "NATIVELY: I'm sorry the camera's already failed on you, and I want to get this sorted. Before I can look at the account, I need to verify you: can you give me the full name on the account, plus two of these, the email address on file, the last four digits of the card on file, or the 6-digit Support PIN from Settings, then Support?"
+   ],
+   "evidence_ids": [
+    "DCC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can't look at or change anything on the account until I've verified who I'm speaking with, and that's a rule I have to follow on every call. It's there to protect your account and your payment details. So if you can give me the full name on the account plus two of these, the email on file, the last four digits of the card, or the 6-digit Support PIN from Settings then Support, I can pull it up and we'll go from there."
+  },
+  {
+   "jid": "b8513abe402e",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "when am I supposed to escalate this to tier 2?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Escalate to tier 2 once you've done the first-line checks and the issue still isn't moving: the customer's already tried the basic fix, you've confirmed the account and the error, and it needs access or tools you don't have. If it's a repeat contact or the customer's frustrated, don't keep them waiting, hand it up."
+  },
+  {
+   "jid": "594a7da07ec1",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Can you log into my camera and check if my dog's okay? I'm stuck at work.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't log into your camera or view your feed, so I'm not able to check on your dog for you. What I can do is help with the camera itself, so you can take a look yourself. Which app or camera are you using, and what happens when you try to open the live view?"
+  },
+  {
+   "jid": "5d05f6f4d241",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "what's my experience with billing disputes? he wants someone who actually knows what they're doing",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I don't have anything here that tells me your actual billing dispute experience, so I can't put a number or a story on it. What I can say is how I'd handle one: pull the account and invoice history, find where the charge and the agreement diverge, and get the customer a clear answer or a clean escalation. If you tell me what you've actually handled, I'll help you say it."
+  },
+  {
+   "jid": "9050eaa2e400",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Get me your manager.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I understand you want to speak with a manager. I'm not able to bring one onto this call right now, so let me first make sure I've got the full picture of what's gone wrong. Can you tell me what the issue is, so I can either fix it here or get it escalated properly for you?"
+  },
+  {
+   "jid": "505184a08575",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "The light on my camera is blinking orange and it won't connect to anything.",
+   "conversation": [],
+   "evidence_ids": [
+    "DCC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm sorry, that's frustrating. Let's get it sorted. First, is the camera plugged into power right now, and if so, is the light blinking steadily or in a pattern like two or three quick blinks?"
+  },
+  {
+   "jid": "1805383f5a67",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "calm her down",
+   "conversation": [
+    "CUSTOMER: I have been on hold for forty minutes. Forty. Minutes.",
+    "USER (spoken): I'm really sorry about the wait, I'm here now.",
+    "CUSTOMER: And your app charged me for Protect Plus when I only ever signed up for the basic one. This is a scam."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm really sorry. Forty minutes on hold is not okay, and I understand why you're upset. Let me pull up your account right now so I can see exactly what you're being charged for. Can you give me the email or phone number on the account?"
+  },
+  {
+   "jid": "b01fea08856f",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Did that. Still orange.",
+   "conversation": [
+    "CUSTOMER (heard): The light on my camera is blinking orange and it won't connect to anything.",
+    "NATIVELY: I'm sorry, that's frustrating. Let's get it sorted. First, is the camera plugged into power right now, and if so, is the light blinking steadily or in a pattern like two or three quick blinks?"
+   ],
+   "evidence_ids": [
+    "DCC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Thanks for checking that. Let's narrow it down. Is the camera connected by Wi-Fi or by an Ethernet cable, and does the orange light blink the same way when you try the other connection?"
+  }
+ ]
+}

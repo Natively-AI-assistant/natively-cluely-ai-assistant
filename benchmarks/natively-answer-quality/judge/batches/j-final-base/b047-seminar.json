@@ -1,0 +1,289 @@
+{
+ "batch": "b047-seminar",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "SEMINAR-CTX-G3": {
+   "title": "Thesis chapter: pollinator visitation in restored grassland fragments (ecology)",
+   "text": "CHAPTER 4. POLLINATOR VISITATION IN RESTORED CALCAREOUS GRASSLAND FRAGMENTS\nSofia Ekwueme-Lindqvist, PhD thesis, University of Northhaven, 2025\n\n4.1 RESEARCH QUESTIONS\nRQ1: Does fragment area predict pollinator species richness?\nRQ2: Does distance to the nearest source grassland predict visitation rate?\nRQ3: Does time since restoration predict visitation rate once area and distance are accounted for?\nWe expected richness to rise with area and visitation to fall with distance. For restoration age we had no prior expectation, so RQ3 is exploratory.\n\n4.2 METHODS\nStudy system. We surveyed 24 restored fragments in the Vellmark Hills. Fragment area ranged from 0.4 to 11.2 ha, and fragments had been restored between 3 and 19 years before the study. Source grasslands were remnant, never-ploughed sites larger than 40 ha.\nSampling. Each fragment was surveyed four times per season (May, June, July, August) in 2022 and 2023, between 10:00 and 16:00, in dry conditions above 14 degrees C. At each visit, observers ran eight timed 10-minute watches at 1 square metre patches of flowering plants. Three observers collected the data. Bees were netted under permit and identified to species from voucher specimens. Hoverflies and butterflies were identified from photographs and field keys; 9% of hoverfly visits could only be assigned to genus. Moths were not sampled.\nAnalysis. Species richness was modelled with a Poisson generalised linear mixed model (GLMM) and visitation rate (visits per hour of watch) with a negative binomial GLMM. Both had fragment as a random intercept and year as a fixed effect. Predictors were log10 area, distance to the nearest source grassland (m), restoration age (years) and floral cover (percentage points). Spatial autocorrelation in residuals was checked with Moran's I.\n\n4.3 RESULTS\nWe recorded 14,207 visits by 71 species: 38 bees, 21 hoverflies and 12 butterflies. The Chao2 estimator put true richness at 83 species (SE 6). The smallest fragments (under 1 ha, n = 5) held 9 to 17 species; the largest (over 8 ha, n = 4) held 31 to 44.\n\nTable 4.1. GLMM results\nResponse | Predictor | Estimate | 95% CI | p\nSpecies richness | log10 area | rate ratio 1.36 per tenfold increase | 1.12 to 1.65 | 0.002\nVisitation rate | distance to source | rate ratio 0.92 per 100 m | 0.87 to 0.97 | 0.003\nVisitation rate | restoration age | rate ratio 1.01 per year | 0.98 to 1.04 | 0.48\nVisitation rate | floral cover | rate ratio 1.06 per percentage point | 1.04 to 1.08 | <0.001\nMoran's I on residuals: p = 0.41. Area and floral cover were moderately correlated (r = 0.44).\n\n4.4 DISCUSSION\nRQ1 was supported, in line with a species-area relationship. RQ2 was supported: at 0.92 per 100 m, a fragment 500 m from a source grassland is expected to receive roughly a third fewer visits than one adjacent to it. This fits the limited foraging ranges reported in the literature for small solitary bees, although we did not measure foraging range here. For RQ3 we found no evidence of an effect of restoration age. This may reflect variation in seed mix and management between sites, which we did not quantify. Floral cover was the strongest single predictor of visitation.\n\n4.5 THREATS TO VALIDITY\n- Only two seasons were sampled. 2022 was a drought summer (July rainfall was 38% of the 30-year mean) and floral cover was lower that year.\n- Fragments were chosen by landowner access, not at random.\n- Three observers took part. Calibration walks reduced but did not remove differences between them, and observer identity was not included in the models.\n- Visits are not pollination: no pollen-load data were collected.\n- Nocturnal pollinators were not sampled.\n- Land use in the surrounding matrix was not controlled.\n- All results are correlational."
+  },
+  "SEMINAR-CTX-G1": {
+   "title": "Slide deck: weekly SMS reminders and household water filter upkeep (public health cluster trial)",
+   "text": "SLIDE 1. Title\nWeekly Text Reminders and Household Water Filter Upkeep: A Cluster-Randomised Trial in Harrowmere District\nDr. Ilse Brandvold, Harrowmere Institute of Community Health\nDepartmental seminar, 14 March 2025\nTrial registry ID: HCT-2024-0117\n\nSLIDE 2. Background\n- Ceramic household water filters were handed out to 6,400 households in Harrowmere District in 2022.\n- A 2023 survey found that 38% of filters had a cracked or bypassed element by 12 months.\n- Diarrhoeal illness in children under 5 is still the district's leading reason for clinic visits in that age group.\n- Question: can cheap reminders keep filters working after the handout?\n\nSLIDE 3. Hypotheses (pre-registered)\n- H1: Weekly SMS reminders lower 7-day diarrhoea prevalence in children under 5.\n- H2: Reminders raise the share of households with a functioning filter at follow-up.\n- H1 is the primary outcome. Everything else is secondary.\n\nSLIDE 4. Design\n- Cluster-randomised: 60 villages, 30 per arm.\n- 1,812 households enrolled between June and August 2024 (about 30 per village).\n- Randomisation at village level, stratified by distance to the nearest clinic (5 km or less, or more than 5 km).\n- Sample size: assumed intracluster correlation of 0.05; 80% power to detect a fall in prevalence from 16% (pilot estimate) to 10%.\n- Follow-up survey at 26 weeks; the last surveys finished in February 2025.\n- Enumerators for the diarrhoea survey did not know each village's arm. Households could not be blinded.\n\nSLIDE 5. Intervention and control\n- Reminder arm: one SMS every Tuesday at 17:00 for 26 weeks, in the local language, Karvi.\n- Each message said three things: clean the ceramic element, look for cracks, keep filtered water in a covered container.\n- Control arm: the original handout only, no messages.\n- Cost: USD 0.011 per SMS, so about USD 0.29 per household over 26 weeks. One-off platform set-up: USD 1,150.\n\nSLIDE 6. Measures and analysis\n- Primary: caregiver-reported diarrhoea in the past 7 days in children under 5 (three or more loose stools in 24 hours).\n- Secondary: functioning filter, defined as an observed flow of at least 1.0 litre per hour; filtered-water turbidity below 5 NTU.\n- Follow-up completed in 1,764 of 1,812 households (48 lost, 2.6%).\n- Children under 5 measured: 902 in reminder villages, 874 in control villages.\n- Analysis: intention to treat, generalised estimating equations with village as the cluster.\n\nSLIDE 7. Results\nOutcome | Reminder | Control | Estimate (95% CI)\n7-day diarrhoea, children under 5 | 11.4% | 15.8% | risk ratio 0.72 (0.55 to 0.95)\nFunctioning filter (flow at least 1.0 L/h) | 64.2% | 47.9% | difference 16.3 points (9.8 to 22.7)\nFiltered water below 5 NTU | 81.0% | 70.3% | difference 10.7 points (3.4 to 18.0)\nAll estimates account for clustering by village.\n\nSLIDE 8. Subgroups (exploratory)\n- Villages more than 5 km from a clinic: risk ratio 0.61 (0.42 to 0.89).\n- Villages 5 km or less from a clinic: risk ratio 0.83 (0.58 to 1.19).\n- Interaction: p = 0.21. This was not a pre-registered confirmatory comparison.\n\nSLIDE 9. Delivery\n- The SMS gateway logged 91% of messages as delivered.\n- We could not verify that messages were read.\n- Control households were not contacted about their filters during the trial.\n\nSLIDE 10. Limitations\n- Diarrhoea is caregiver-reported, so it may be affected by recall and social desirability. No stool samples were collected.\n- One follow-up window only: 26 weeks.\n- Contamination between neighbouring villages was not checked.\n- Every household had the same ceramic filter model, so results may not carry over to other filters.\n- No cost-effectiveness analysis was done in this trial.\n\nSLIDE 11. Conclusions and next steps\n- Weekly SMS reminders were associated with a 28% lower relative risk of diarrhoea and better filter function at 26 weeks.\n- Next trial (planned for 2026): weekly versus fortnightly messages.\n- Not yet studied: durability beyond 26 weeks, other filter types, cost per case averted.\n\nSLIDE 12. Funding\nHarrowmere Regional Health Fund, grant RHF-22-408. The funder had no role in the analysis."
+  },
+  "SEMINAR-CTX-G2": {
+   "title": "Paper excerpt: TidalLog compaction scheduling for embedded key-value stores (computer systems)",
+   "text": "TidalLog: Load-Aware Compaction Scheduling for Embedded Key-Value Stores on Flash Storage\nMarek Oyelaran and Thi Han Vuong, Corvane Polytechnic\nWorkshop on Storage for Small Devices, 2025\n\nABSTRACT\nEmbedded key-value stores built on log-structured merge (LSM) trees suffer from write amplification and unpredictable read tail latency when compaction runs on fixed thresholds regardless of foreground load. We present TidalLog, a compaction scheduler that estimates a \"tide\" signal, the ratio of the recent foreground write rate to the device's smoothed sustainable write rate, and defers or advances compaction accordingly. On a quad-core ARM board with eMMC storage, TidalLog cuts write amplification by 34% on a write-heavy workload and p99 read latency by 21% on a balanced workload relative to a fixed-threshold baseline, at a cost of 4.1 MB of extra memory.\n\n1. RELATED WORK\nFixed-ratio leveled compaction, which we call StaticLevel (size ratio 10), is the default in many embedded stores. LazyTier uses tiered compaction to lower write amplification but leaves more overlapping files, which raises read cost. BurstGuard rate-limits compaction when the foreground request queue grows past a length threshold; it does not consider device capacity and was evaluated only on read-heavy traces. Workload-predictive schedulers exist for server-class SSDs. We do not evaluate them because they need more memory than our target devices have.\n\n2. METHOD\nEvery 5-second window, TidalLog computes w, the bytes written by the foreground in that window, and divides by S, an exponentially weighted moving average (alpha = 0.2) of the device throughput measured during compaction bursts. The smoothed ratio is the tide T. When T is above 0.7 (high tide), compaction of level 2 and deeper is deferred, for at most 3 consecutive windows (15 seconds). When T is below 0.3 (low tide), compaction is advanced: the level with the highest overlap score is compacted opportunistically. Level 0 is exempt: it compacts once it holds 8 files, and writes stall at 12 files. The implementation is about 2,900 lines of C++17 on top of MicroLSM, our in-house open-source store. The thresholds 0.7 and 0.3 were chosen by grid search (0.5 to 0.9 and 0.1 to 0.4) on workload W-B only.\n\n3. EXPERIMENTAL SETUP\nHardware: quad-core ARM Cortex-A53 at 1.4 GHz, 2 GB RAM, 32 GB eMMC 5.1. Workloads: W-A write-heavy (80% writes), W-B balanced (50% writes), W-C read-heavy (5% writes). Each workload issues 64 million operations with 16-byte keys and 240-byte values under a Zipfian key distribution (theta = 0.9). Each configuration was run 5 times and we report means. We compare StaticLevel, LazyTier, BurstGuard and TidalLog.\n\n4. RESULTS\nTable 1. Main results (means of 5 runs)\nSystem | Write amplification (W-A) | p99 read latency, ms (W-B) | Throughput, kops/s (W-A)\nStaticLevel | 14.2 | 9.8 | 18.4\nLazyTier | 9.7 | 14.6 | 21.9\nBurstGuard | 12.5 | 8.9 | 19.1\nTidalLog | 9.4 | 7.7 | 22.6\n\nRun-to-run standard deviation was at most 0.4 for write amplification and 0.6 ms for p99 latency. On W-C, p99 read latency was within 3% across all four systems. Over the W-A run, StaticLevel performed 1.92 million block erases and TidalLog 1.27 million. Sensitivity to the smoothing factor: alpha = 0.1 gave write amplification 9.9, alpha = 0.2 gave 9.4, alpha = 0.4 gave 9.6. Crash consistency: we injected 200 power losses during W-B; every run recovered with no acknowledged write lost.\n\n5. LIMITATIONS\nWe used one board and one storage type (eMMC); we did not evaluate NVMe or SD cards. Workloads are synthetic with fixed value sizes. The tide thresholds were tuned on W-B and not re-tuned per workload. Five runs per configuration is a small sample and we report no formal significance tests. We did not study multi-tenant setups or wear beyond 64 million operations. Deferral of up to 15 seconds can let compaction debt build up under sustained bursts.\n\n6. CONCLUSION\nTidalLog is a low-overhead scheduler that lowers write amplification and tail latency on flash-backed embedded stores without changing the on-disk format. Future work includes per-level thresholds and multi-device setups."
+  },
+  "SEMINAR-CTX-I1": {
+   "title": "Slide deck: tone sandhi in Ostrelle compound nouns (linguistics)",
+   "text": "SLIDE 1. Tone Sandhi in Ostrelle Compound Nouns\nDr. Prakash Venkatesan-Holm, Department of Linguistics, Lower Ridgeway University\nReading group talk, 5 November 2024\n\nSLIDE 2. The phenomenon\n- Ostrelle is a small tonal language variety with three lexical tones: high (H), mid (M) and low (L).\n- In two-noun compounds the tone of the first noun changes when the second noun begins with a high tone.\n- Earlier descriptions treated this as a fixed rule. We ask whether it depends on how frequent the compound is.\n\nSLIDE 3. Data\n- Elicited recordings from native speakers in the river villages, 2023.\n- 214 compound nouns, each read three times in a carrier sentence.\n- Pitch measured at five points along the first syllable.\n\nSLIDE 4. Findings\n- L + H compounds: the first tone rises to M in 83% of tokens.\n- M + H compounds: the first tone rises to H in 61% of tokens.\n- H + H compounds: no change in 97% of tokens.\n- More frequent compounds showed the change more often, but the effect was small.\n\nSLIDE 5. Analysis note\n- Frequency comes from a written corpus of local radio scripts, 1.4 million words.\n- Change rates are reported per compound type, not per speaker.\n\nSLIDE 6. Open questions\n- Does the pattern hold in spontaneous speech?\n- Do younger speakers apply the rule less often?\n- How should we treat borrowed compounds?"
+  },
+  "SEMINAR-CTX-C1": {
+   "title": "Slide deck: flywheel assist for municipal bus depots (transport engineering)",
+   "text": "SLIDE 1. Flywheel Assist for Municipal Bus Depots: Trial Results\nLorcan Adeyemi-Fisk, Tarnbrook Transit Authority\nDepot managers briefing, October 2024\n\nSLIDE 2. Context\n- Tarnbrook Transit runs 120 diesel buses from two depots, Millgate and Eastfield.\n- We ran a 6-month trial (February to July 2024) of a flywheel regenerative-braking assist on Route family 14.\n- 48 buses at Millgate depot were fitted.\n\nSLIDE 3. Method\n- Baseline period: November 2023 to January 2024, before fitting.\n- Fuel logged per shift by on-board telematics, compared with the same buses' baseline.\n- Buses with telematics faults were excluded from the analysis.\n\nSLIDE 4. Headline\n- Fuel use down 31% on fitted buses.\n- Brake pad replacements per bus per year fell from 3.1 to 2.4.\n\nSLIDE 5. Results table\nMetric | Baseline | Trial\nBuses in analysis | 42 | 42\nFuel use, L per 100 km | 41.2 | 32.6\nChange in fuel use | - | -20.9%\nTrial dates | - | 1 February to 30 September 2024\np-value (paired by bus) | - | 0.09\nBrake pad replacements per bus per year | 3.1 | 2.4\n\nSLIDE 6. Cost\n- Capital cost of fitting the buses, installation included: USD 1.86 million.\n- Annual fuel and maintenance saving: USD 0.31 million.\n- Payback: under 3 years.\n\nSLIDE 7. Conclusion\n- The retrofit cut fuel use by roughly a quarter, with statistically significant results, and pays back within three years.\n- Recommendation: roll out to all 120 buses.\n\nSLIDE 8. Caveats\n- One depot only.\n- The baseline covers winter months only."
+  },
+  "FSEM-CTX-G2": {
+   "title": "Seminar slides - review wait time and escaped defects",
+   "text": "Seminar slides - Does waiting for review let more bugs escape? Evidence from Quillon Labs\nSoftware Engineering Research Seminar\n\nSlide 1 - Question\nIs a longer wait for the first code review associated with more defects escaping to production?\n\nSlide 2 - Setting and data\n- Quillon Labs (fictional mid-sized software company), 14 repositories.\n- 3,812 merged pull requests, January to December 2023.\n- Time to first review (TTFR): hours from PR opened to first reviewer comment or approval.\n- Escaped defect: a bug ticket linked to the PR within 60 days of release.\n\nSlide 3 - Descriptives\n- Median TTFR: 5.6 hours.\n- 11% of PRs waited more than 24 hours for first review.\n\nSlide 4 - Raw comparison\n- TTFR under 4 hours: escaped-defect rate 3.1%.\n- TTFR over 24 hours: escaped-defect rate 6.8%.\n\nSlide 5 - Adjusted model\nLogistic regression adjusting for PR size (lines changed), author tenure and repository.\n- TTFR over 24 h vs under 4 h: odds ratio 1.42 (95% CI 1.08 to 1.87).\n- PR size over 400 lines vs under 100 lines: odds ratio 2.3.\n- PR size is the strongest single predictor.\n\nSlide 6 - Why might delay matter?\n- Reviews that start after 24 hours leave fewer comments (median 2 comments vs 4 for reviews within 4 hours).\n- Our reading: context loss and rubber-stamping of stale PRs. This is a hypothesis; review quality was not measured directly.\n\nSlide 7 - How good is the defect linkage?\n- Linking a bug ticket to a PR depends on engineers tagging it.\n- Audit of 200 tickets: 22% of bug tickets had no PR link.\n- If unlinked bugs are spread evenly across PRs, the odds ratio is unaffected; if they cluster in slow-review PRs, we underestimate the effect.\n\nSlide 8 - Limitations\n- Observational: teams with slow reviews may differ in other ways.\n- One company.\n- No measure of reviewer experience or seniority.\n- Every PR in the data had at least one reviewer; the number of reviewers per PR was not recorded.\n- Developer satisfaction and cost were not measured.\n\nSlide 9 - Conclusion\nLong waits for first review are associated with more escaped defects even after adjusting for PR size, but PR size matters more.\n\nSlide 10 - Next step\nA pilot of a 4-hour first-review target in two repositories has been proposed to engineering leadership. It has not yet run."
+  }
+ },
+ "items": [
+  {
+   "jid": "9afd7165b7a8",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "That doesn't sound right to me.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "What part doesn't line up for you? If you tell me which piece, I can walk through exactly where it comes from."
+  },
+  {
+   "jid": "d957fb6c7c00",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Which of the threats to validity could most plausibly change the distance result? Stick to what the thesis actually says.",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The one that most plausibly moves the distance result is the sampling design: fragments were chosen by landowner access, not at random, so distance to source grassland wasn't randomised across sites. Land use in the surrounding matrix also wasn't controlled, which could confound the distance effect. The thesis lists both under threats to validity, and the distance estimate itself is 0.92 per 100 m, CI 0.87 to 0.97."
+  },
+  {
+   "jid": "680f1023987b",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "And how many passed that in the control villages?",
+   "conversation": [
+    "USER (spoken): On the outcomes, there were three in total.",
+    "EXAMINER: Right, I saw the slide.",
+    "EXAMINER (heard): What flow rate did a filter need to count as working?",
+    "NATIVELY: A filter counted as working if the observed flow was at least **1.0 litre per hour**. That's the definition on slide 6, and slide 7 reports it the same way, flow at least 1.0 L/h."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "In the control villages, **47.9%** of filters were functioning at follow-up, against 64.2% in the reminder villages. That's a difference of 16.3 percentage points, with a 95% confidence interval of 9.8 to 22.7, and it's on slide 7."
+  },
+  {
+   "jid": "463b26e8cea9",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So what's the plan?",
+   "conversation": [
+    "EXAMINER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "EXAMINER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'll get the vendor on a call today to find out exactly what changed and whether they can version the API so this doesn't happen again. Then I'll re-baseline the schedule with the two-week slip built in and come back to you with what that does to the original date, so we're deciding on real numbers instead of guessing."
+  },
+  {
+   "jid": "282a3ef23242",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How long will this take?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a fixed timeline for this yet. It depends on how much ground we need to cover, so let me confirm the scope and get back to you with a realistic estimate."
+  },
+  {
+   "jid": "48876664d19d",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Summarise the limitations section in three short bullets.",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The limitations come down to three things. First, the evaluation is narrow: one board and one storage type, eMMC only, with no NVMe or SD cards, and synthetic workloads with fixed value sizes. Second, the tuning and statistics are thin: the tide thresholds were tuned on W-B and not re-tuned per workload, and five runs per configuration is a small sample with no formal significance tests. Third, the scope is limited: no multi-tenant setups, no wear beyond 64 million operations, and deferral of up to 15 seconds can let compaction debt build up under sustained bursts."
+  },
+  {
+   "jid": "8e8a3a6aeca5",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "What does the thesis say about distance and visitation?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The thesis treats distance as a predictor of visitation rate, not of richness. RQ2 asks whether distance to the nearest source grassland predicts visitation rate, and the expectation was that visitation would fall with distance. The model backs that up: a rate ratio of 0.92 per 100 m, with a 95% CI of 0.87 to 0.97 and p = 0.003. In the discussion, that means a fragment 500 m from a source grassland is expected to receive roughly a third fewer visits than one adjacent to it, which the chapter says fits the limited foraging ranges reported for small solitary bees, though foraging range itself wasn't measured. Distance was entered in the models in metres alongside log10 area, restoration age and floral cover."
+  },
+  {
+   "jid": "3fa51bc197ce",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Compare your approach with a plain fixed weekly quiz schedule.",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The deck doesn't actually propose a quiz schedule, so I can't compare it to one directly. What it does is test whether the tone change in two-noun compounds depends on how frequent the compound is, rather than treating it as a fixed rule. A fixed weekly quiz would just re-check the rule on a set schedule, whereas this design ties the measurement to frequency: 214 compounds read three times, with change rates reported per compound type, and frequency drawn from a 1.4 million word corpus. So the difference is that a fixed schedule tests retention over time, while this tests whether frequency predicts the change."
+  },
+  {
+   "jid": "8d9960abdad1",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Who paid for the retrofit trial?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The deck doesn't say who funded the trial. What it does give is the cost side: fitting the 48 buses came to USD 1.86 million including installation, with an annual saving of USD 0.31 million and payback under three years. If you need the funding source, I'd have to confirm that separately."
+  },
+  {
+   "jid": "a6836e44d373",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "What should I say to them?",
+   "conversation": [
+    "EXAMINER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "EXAMINER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The integration slipped about two weeks because the vendor changed their API without telling us, and the original date was already tight. I'd acknowledge that plainly, then ask what the new date looks like and what we can pull forward to protect the launch. I wouldn't commit to a new timeline on this call until I've checked it."
+  },
+  {
+   "jid": "355971f3a926",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So what was the main result?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the specifics of the result in front of me, so I don't want to give you a number I can't stand behind. What I can tell you is what I'd point to: the headline finding, the size of the effect, and whether it held up under the checks we ran. Let me pull the exact figures and walk you through them."
+  },
+  {
+   "jid": "d9438f27c2b2",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What foraging distances did you measure for the bee species?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "We didn't measure foraging distances directly. What we measured was distance from each fragment to the nearest source grassland, and visitation rate fell at a rate ratio of 0.92 per 100 m, so a fragment 500 m out gets roughly a third fewer visits than one right next to a source. That pattern is consistent with the short foraging ranges reported for small solitary bees, but the ranges themselves come from the literature, not from our data."
+  },
+  {
+   "jid": "d6754f2725eb",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Can you give me an example?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a specific example from the material in front of me, so let me give you one from how this works in general. Take a case where the same input can be handled two ways: one path is the straightforward one, the other adds a check before it commits. The difference shows up in what happens when the input is off, and that's usually where the interesting behavior lives. If you tell me which part you want an example of, I can point to the exact spot in the slides."
+  },
+  {
+   "jid": "36425ebd5dd7",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Why should I trust your defect counts at all? Half the bugs in any company never get linked to a PR.",
+   "conversation": [],
+   "evidence_ids": [
+    "FSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's a fair challenge, and it's exactly why slide 7 is in the deck. We audited 200 bug tickets and found 22% had no PR link, so the linkage is genuinely incomplete. The key question is whether those unlinked bugs are spread evenly across PRs or clustered in the slow-review ones. If they're even, the odds ratio of 1.42 holds. If they cluster in slow reviews, we're underestimating the effect, not overstating it. So the direction of the bias runs against our finding, not for it."
+  },
+  {
+   "jid": "bd372206a375",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Who should own this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ownership depends on what the thing is, so let me answer the general shape of it. The owner should be whoever is accountable for the outcome, not whoever happens to do the work. In practice that means one named person who can make the call, not a team or a committee, with the people doing the work reporting into that decision.\n\nIf you tell me what \"this\" refers to, I can be more specific about who that should be."
+  },
+  {
+   "jid": "ff0b648d4d68",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So basically you were checking whether a nudge on the phone keeps people looking after their filters?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the idea, yes. The question I was testing is whether a prompt on the phone actually changes whether people keep up with their filters, rather than just reminding them once and having it fade."
+  },
+  {
+   "jid": "b45570ddf053",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What do you think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I think the direction is sound, and the part I'd want to dig into is what it changes in practice. Before I commit to a view, I'd want to see the tradeoffs spelled out, what it costs us, and what we'd stop doing to make room for it. That's usually where the real answer is."
+  },
+  {
+   "jid": "dd354867eb04",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How much did write amplification drop?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Write amplification dropped by **34%** on the write-heavy workload, W-A, relative to the fixed-threshold baseline. In the main results table that's TidalLog at 9.4 versus StaticLevel at 14.2."
+  },
+  {
+   "jid": "5d75627b93c3",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "You say the reminders cut diarrhoea risk by twenty eight percent. Two things. How was diarrhoea actually measured, and how much of that drop could just be people reporting differently because they knew they were getting texts?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The 28 percent figure comes from caregiver-reported diarrhoea episodes, so it's based on what households told us, not on lab confirmation. That's exactly why the reporting-bias question is fair: because the intervention wasn't blinded, caregivers who got the texts knew they were in the treatment group, and that could inflate how many episodes they reported. We can't fully separate that from a real effect with this design, so I'd treat 28 percent as an upper bound rather than a clean causal estimate."
+  },
+  {
+   "jid": "6f92b8bee81a",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What was the exact p-value on your main comparison?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The exact p-value isn't in my notes for this talk. What the deck reports is the change rates per compound type: L + H rises to M in 83% of tokens, M + H rises to H in 61%, and H + H shows no change in 97%. It also notes that more frequent compounds showed the change more often, but that the effect was small. I can pull the exact p-value from the analysis and send it to you."
+  }
+ ]
+}

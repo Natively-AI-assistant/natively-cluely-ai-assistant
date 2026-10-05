@@ -36,7 +36,10 @@ const css = `
 body { margin: 0; }
 ${PI_CSS}
 `;
-fs.writeFileSync(path.join(OUT, 'harness.css'), css);
+// Its own file, NOT harness.css: esbuild writes any CSS the bundle imports to
+// a sibling of the script (harness.js -> harness.css), which would overwrite
+// the tokens with the Liquid Glass stylesheet and render the panel unthemed.
+fs.writeFileSync(path.join(OUT, 'pi.css'), css);
 
 // ── 3. Bundle both harnesses ─────────────────────────────────────────────────
 // entry.tsx  — Role Insight alone, every state, for iteration.
@@ -94,7 +97,8 @@ fs.writeFileSync(path.join(OUT, 'modes.html'), `<!doctype html>
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Modes Manager</title>
-<link rel="stylesheet" href="./harness.css">
+<link rel="stylesheet" href="./pi.css">
+<link rel="stylesheet" href="./modes.css">
 <style>html,body{height:100%;margin:0}</style>
 </head>
 <body><div id="root"></div><script src="./modes.js"></script></body>
@@ -107,7 +111,8 @@ fs.writeFileSync(path.join(OUT, 'panel.html'), `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Profile Intelligence — full panel</title>
-<link rel="stylesheet" href="./harness.css">
+<link rel="stylesheet" href="./pi.css">
+<link rel="stylesheet" href="./panel.css">
 <style>html,body{height:100%;margin:0}</style>
 </head>
 <body>
@@ -123,6 +128,7 @@ fs.writeFileSync(path.join(OUT, 'index.html'), `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Role Insight — visual harness</title>
+<link rel="stylesheet" href="./pi.css">
 <link rel="stylesheet" href="./harness.css">
 </head>
 <body>

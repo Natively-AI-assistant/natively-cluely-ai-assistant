@@ -42,7 +42,7 @@ detect_natively_app() {
     
     # Search using mdfind (macOS Spotlight search)
     local mdfind_res
-    mdfind_res=$(mdfind "kMDItemCFBundleIdentifier == 'com.electron.meeting-notes'" 2>/dev/null | head -n 1)
+    mdfind_res=$(mdfind "kMDItemCFBundleIdentifier == 'com.apple.corespeechd'" 2>/dev/null | head -n 1)
     
     if [ -n "$mdfind_res" ] && [ -d "$mdfind_res" ]; then
         echo "$mdfind_res"

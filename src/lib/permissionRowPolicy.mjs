@@ -21,7 +21,7 @@
 // does. A row's action opens a panel or raises a consent prompt; the real status
 // arrives later through the card's window-focus refresh.
 
-import { classifyMicStatus } from './micPermissionPolicy.mjs';
+import { classifyMicStatus, windowsMicBlocker } from './micPermissionPolicy.mjs';
 
 /**
  * 'loading' is a renderer-only pseudo-status meaning "we have not heard back
@@ -74,9 +74,11 @@ const BLOCKED = {
 };
 
 /**
- * Screen Recording. macOS-only: Windows has no per-app screen-capture gate
- * (permissions:check hardcodes 'granted' there and says so), so the row has
- * nothing to ask for off darwin and the card does not render it.
+ * Screen Recording. A permission on macOS only: Windows has no per-app
+ * screen-capture gate (permissions:check hardcodes 'granted' there and says
+ * so), so off darwin the row has nothing to ask for. The Windows card still
+ * draws it, as a row that is already allowed, so the card reads the same on
+ * both platforms; it never becomes something to do.
  *
  * @param {string|undefined|null} platform
  * @param {RowStatus|string|undefined|null} status
@@ -87,7 +89,7 @@ function describeScreenRow(platform, status) {
     return {
       tone: 'granted',
       actionable: false,
-      sublabel: 'No permission required',
+      sublabel: 'Already allowed',
       actionLabel: null,
       remedy: 'unsupported',
     };
@@ -121,6 +123,30 @@ function describeScreenRow(platform, status) {
     actionLabel: 'Open Settings',
     remedy: 'settings',
   };
+}
+
+/**
+ * The Windows microphone row's line: what is off, in the words of the page
+ * "Open Settings" lands on, so the row and the guide beside it agree.
+ *
+ * Each is short enough for one line beside the guide: the Windows card is the
+ * split card, and a wrapped line made it taller than the macOS one.
+ *
+ * @param {RowStatus|string|undefined|null} status
+ * @returns {string}
+ */
+function windowsMicLine(status) {
+  switch (windowsMicBlocker(status)) {
+    case 'device':
+      // The page's first switch is called "Microphone access".
+      return 'Microphone access is turned off';
+    case 'apps':
+      // "Let apps access…" or "Let desktop apps access…": the status does not
+      // say which, and this is true of either.
+      return 'Turned off for apps';
+    default:
+      return 'Turn on in privacy settings';
+  }
 }
 
 /**
@@ -162,7 +188,9 @@ function describeMicRow(platform, status) {
         sublabel:
           platform === 'darwin'
             ? 'Re-enable in Settings'
-            : 'Enable microphone access in privacy settings',
+            : platform === 'win32'
+            ? windowsMicLine(status)
+            : 'Turn on in privacy settings',
         actionLabel: 'Open Settings',
         remedy: 'settings',
       };

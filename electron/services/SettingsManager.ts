@@ -3,6 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 export interface AppSettings {
+    /** The Calendar account name whose full-name mentions in saved notes were carried
+     *  to the first name (calendarNameMigration); set once per name. */
+    calendarFirstNameMigratedFor?: string;
     // Only boot-critical or non-encrypted settings should live here.
     // In the future, other non-secret data like 'language' or 'theme'
     // can be moved here from CredentialsManager to allow early boot access.
@@ -37,6 +40,11 @@ export interface AppSettings {
     // produced only by the What-to-Answer hotkey, exactly as before. The
     // trigger itself lives in AppState.scheduleAutoAnswer().
     autoAnswerEnabled?: boolean;
+    // Meeting detection (2026-09-27): Natively reads which meeting the user is in
+    // (the Companion extension's meeting tabs, later the meeting apps' windows and
+    // microphone use) to link a session to its calendar event exactly and to
+    // offer to start one. Local only. Unset = on.
+    meetingDetectionEnabled?: boolean;
     // Direct Assist is the opt-in, single-provider answer path. It deliberately
     // bypasses meeting retrieval and the legacy answer-orchestration pipeline.
     // Keep the persisted default OFF during rollout; the operator kill switch
@@ -53,7 +61,6 @@ export interface AppSettings {
     codexCliEnabled?: boolean;
     codexCliPath?: string;
     codexCliModel?: string;
-    codexCliFastModel?: string;
     codexCliTimeoutMs?: number;
     codexCliSandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     codexCliServiceTier?: 'default' | 'fast' | 'flex';
@@ -244,6 +251,13 @@ export interface AppSettings {
     seenProfileOnboarding?: boolean;
     seenModesOnboarding?: boolean;
     permsShown?: boolean;
+    // The trialStartedAt of the free trial whose profile data the expiry wipe
+    // already removed, so the wipe runs once per trial however many windows or
+    // launches notice the expiry (ipcHandlers.ts settleExpiredTrial).
+    trialExpiryWipedFor?: string;
+    // The trial campaign (src/lib/trialCampaign.mjs) this install has already been
+    // through. Written only after every reset step persisted, so a failed one retries.
+    trialCampaignReset?: string;
     // Live SessionMemory rollout controls (release 2026-06-07c). Env vars take
     // precedence; these let the rollout be driven from settings without a redeploy.
     enableLiveSessionMemory?: boolean;

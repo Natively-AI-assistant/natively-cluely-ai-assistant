@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
-    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
+    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
     User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
@@ -9,13 +9,16 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
 import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { useLensTracking } from '../ui-components/LiquidGlassButton';
+import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
+import { Presence } from './settings/SettingsRow';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
+import { useConfirmDialog } from './ui/ConfirmDialog';
 
 const openExternal = (url: string) => {
     if ((window as any).electronAPI?.openExternal) {
-        (window as any).electronAPI.openExternal(url);
+        (window as any).electronAPI.openExternal(url, { surface: 'profile_intelligence' });
     } else {
         window.open(url, '_blank', 'noopener,noreferrer');
     }
@@ -97,8 +100,6 @@ const PI_CSS = `
         --pi-accent-icon: var(--periwinkle-400);
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--periwinkle-400);
-        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-300) 30%, transparent);
         --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
         --pi-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
         /* Expo-out. Almost all of the distance is covered in the first third,
@@ -205,8 +206,6 @@ const PI_CSS = `
         --pi-accent-icon: var(--periwinkle-700);
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--periwinkle-700);
-        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
         --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
         --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
         /*
@@ -879,18 +878,23 @@ const PI_CSS = `
     /*
       The trial pill keeps its own body, and needs its own hover tint: the
       neutral rule above is (0,3,0) and .pi-cta--trial is (0,1,0), so without
-      this the purple would cross-fade to grey under the pointer. The tint gains
-      saturation and a little luminance while HOLDING its hue (262), so it reads
-      as the same colour lit better rather than as a different colour.
+      this the blue would cross-fade to grey under the pointer. The tint gains
+      a little luminance while HOLDING its hue, so it reads as the same colour
+      lit better rather than as a different colour.
+
+      2026-09: violet (#8455ef / #9468ff) moved to the toggle blue's hue with the
+      app accent, by owner request. Each value keeps the violet's OKLCH
+      lightness, hue 268.5, chroma x0.873, then goes a hair darker so white text
+      holds the violet's contrast: body 4.68:1 (was 4.64), hover 3.71 (was 3.70).
     */
     .pi-cta--trial {
-        --pi-cta-bg: #8455ef;
-        --pi-cta-hover: #9468ff;
+        --pi-cta-bg: #496ae6;
+        --pi-cta-hover: #5a7cf7;
         color: #fff;
-        --pi-cta-rim: rgba(240,235,255,0.24);
-        --pi-cta-lens-tint: rgba(240,235,255,0.06);
-        --pi-cta-lens-rim: rgba(245,240,255,0.30);
-        --pi-cta-lens-rim-soft: rgba(245,240,255,0.13);
+        --pi-cta-rim: rgba(232,238,255,0.24);
+        --pi-cta-lens-tint: rgba(232,238,255,0.06);
+        --pi-cta-lens-rim: rgba(238,243,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(238,243,255,0.13);
         /* A mid-dark body, so unlike either neutral pill it takes the measured
            symmetric rim — and it keeps it in both themes, because the body is
            its own colour rather than the theme's. */
@@ -899,10 +903,70 @@ const PI_CSS = `
             rgba(255,255,255,0.090) 0%, rgba(255,255,255,0) 11%,
             rgba(255,255,255,0) 89%, rgba(255,255,255,0.090) 100%);
         --pi-cta-cap-opacity: 0.5;
-        --pi-cta-shadow: 0 1px 2px rgba(124,58,237,0.26), 0 4px 10px rgba(124,58,237,0.20);
-        --pi-cta-shadow-hover: 0 2px 4px rgba(124,58,237,0.28), 0 8px 18px rgba(124,58,237,0.30);
+        --pi-cta-shadow: 0 1px 2px rgba(61,92,234,0.26), 0 4px 10px rgba(61,92,234,0.20);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(61,92,234,0.28), 0 8px 18px rgba(61,92,234,0.30);
     }
     .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
+    /*
+      The trial "Upgrade" button is now the shared LiquidGlassButton
+      (src/ui-components, variant="action" + .lg-sm .lg-wide) rather than this
+      pill, so the .pi-cta--trial rules above no longer paint anything live.
+      This sizes it to the box it replaced (36px tall, full width, 13px label)
+      and feeds .lg-action the same blue in both themes: white on #496ae6 is
+      4.68:1. (0,3,0) so it beats .lg-button.lg-sm's own 30px.
+    */
+    .lg-button.lg-sm.pi-upgrade-lg {
+        width: 100%;
+        --lg-pill-h: 36px;
+        --lg-label-size: 13px;
+        --legacy-action-bg: #496ae6;
+        --legacy-action-hover: #5a7cf7;
+        --legacy-action-fg: #ffffff;
+    }
+    /*
+      The panel's primary actions (Open Identity, Analyse Role, Research Now,
+      Generate Letter, and Role Insight's out-of-date Re-analyse) are the
+      onboarding's "Start using Natively" glass: variant="lavender" + .lg-sm
+      .lg-wide, fed the same per-theme colours. The values are a COPY of
+      WELCOME_BUTTON_TOKENS (src/components/onboarding/welcomeButtonTokens.ts),
+      written out here because this stylesheet is read as plain text by the
+      CSS checks and the Role Insight harness, and because Role Insight's
+      buttons live in the premium tree with no theme prop to pick a token set
+      by. Change one, change the other.
+
+      Dark is the toggle blue at full strength with a white label; light is a
+      pale tint of the same hue with a deep label (white on it runs ~1.3:1).
+
+      The box is the tinted pill these replaced: 32px tall, 20px side padding
+      plus the 1px border it had. The glow is the onboarding's, brought in for
+      a pill two thirds the height: at 14px/30px it reached past the bottom
+      edge of the notice card the Re-analyse button sits in.
+    */
+    .lg-button.lg-sm.pi-action-lg {
+        --lg-pill-h: 32px;
+        padding: 0 21px;
+        --lg-lav-bg: #6688F5;
+        --lg-lav-hover: #7594F7;
+        --lg-lav-fg: #FFFFFF;
+        --lg-lav-rim: rgba(255,255,255,0.30);
+        --lg-lav-glow: rgba(102,136,245,0.55);
+        box-shadow:
+            inset 0 -1px 0 var(--lg-lav-under, rgba(90,43,176,0.14)),
+            0 1px 2px var(--lg-lav-drop, rgba(78,46,150,0.10)),
+            0 9px 20px -9px var(--lg-lav-glow);
+    }
+    .pi-root[data-theme='light'] .lg-button.lg-sm.pi-action-lg {
+        --lg-lav-bg: rgba(102,136,245,0.28);
+        --lg-lav-hover: rgba(102,136,245,0.40);
+        --lg-lav-fg: #2A44A6;
+        --lg-lav-rim: rgba(255,255,255,0.78);
+        --lg-rim-2: rgba(102,136,245,0.32);
+        --lg-rim-3: rgba(102,136,245,0.14);
+        --lg-lens-rim-soft: rgba(102,136,245,0.28);
+        --lg-lav-glow: rgba(102,136,245,0.42);
+        --lg-lav-under: rgba(40,70,180,0.14);
+        --lg-lav-drop: rgba(40,60,150,0.10);
+    }
 
     /*
       prefers-contrast: more — the whole premise of this material is a rim so
@@ -1733,6 +1797,10 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
     onClose?: () => void;
 }) {
     const theme = useResolvedTheme();
+    // Funnel: someone without Pro opened Profile Intelligence and met this gate.
+    useEffect(() => {
+        (window as any).electronAPI?.funnelTrack?.('paywall_hit', { feature: 'profile_intelligence' })?.catch?.(() => {});
+    }, []);
 
     return (
         <div className="pi-pro-gate" data-theme={theme} style={{
@@ -1930,6 +1998,8 @@ export function ProfileIntelligenceSettings({
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
+    // In-window confirms only: see ConfirmDialog.tsx for why never confirm().
+    const { confirm: askConfirm, dialog: confirmDialog } = useConfirmDialog();
     // Safe as a panel-level call ONLY because this panel renders exactly one
     // switch. Add a second and it must move into a per-switch component.
     const piToggleInit = useToggleInit();
@@ -2047,6 +2117,9 @@ export function ProfileIntelligenceSettings({
     // Tavily
     const [tavilyApiKey, setTavilyApiKey] = useState('');
     const [hasStoredTavilyKey, setHasStoredTavilyKey] = useState(false);
+    // The stored-key check has answered: from here a change is the user's (a
+    // save, a remove) and the badge animates; the answer itself does not.
+    const [tavilyChecked, setTavilyChecked] = useState(false);
     const [tavilySaving, setTavilySaving] = useState(false);
     const [tavilyError, setTavilyError] = useState('');
 
@@ -2146,7 +2219,7 @@ export function ProfileIntelligenceSettings({
         }).catch(() => {});
         window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
             if (creds?.hasTavilyKey) setHasStoredTavilyKey(true);
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => setTavilyChecked(true));
     }, []);
 
     // Finalize an ADOPTED ingest. Only runs for uploads this mount inherited —
@@ -2276,7 +2349,7 @@ export function ProfileIntelligenceSettings({
     }, [profileData?.aotStatus?.companyResearch]);
 
     const handleRemoveTavilyKey = async () => {
-        if (!confirm('Remove your Tavily API key?')) return;
+        if (!(await askConfirm({ title: 'Remove your Tavily API key?' }))) return;
         try {
             const res = await window.electronAPI?.setTavilyApiKey?.('');
             if (res?.success) { setHasStoredTavilyKey(false); setTavilyApiKey(''); }
@@ -2511,7 +2584,7 @@ export function ProfileIntelligenceSettings({
                                 // no profile while the resume was in fact saved and live.
                                 // The button is disabled mid-ingest rather than lying.
                                 if (profileUploading) return;
-                                if (!confirm('Delete your resume and its extracted data?')) return;
+                                if (!(await askConfirm({ title: 'Delete your resume and its extracted data?', confirmLabel: 'Delete' }))) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
                                     setProfileStatus({ hasProfile: false, profileMode: false });
@@ -2675,7 +2748,9 @@ export function ProfileIntelligenceSettings({
                 </div>
             )}
             {jdError && (
-                <div style={{ fontSize: 11, color: 'var(--pi-danger)', padding: '6px 10px', borderRadius: 6, background: 'var(--pi-danger-bg)' }}>
+                // The 10px keeps the scope note below from sitting 3px under this box.
+                // It arrives the way this panel's list items do (.pi-list-item).
+                <div className="pi-list-item" style={{ fontSize: 11, color: 'var(--pi-danger)', padding: '6px 10px', borderRadius: 6, background: 'var(--pi-danger-bg)', marginBottom: 10 }}>
                     {jdError}
                 </div>
             )}
@@ -2999,11 +3074,11 @@ export function ProfileIntelligenceSettings({
         <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <h3 className="pi-section-label" style={{ margin: 0 }}>Tavily Search API</h3>
-                {hasStoredTavilyKey && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', padding: '2px 7px', borderRadius: 4, background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.20)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <Check size={9} strokeWidth={2.5} /> Connected
-                    </span>
-                )}
+                {/* The kit's green tag, as Settings › Intelligence says "Connected", and
+                    the same badge motion: it pops in on a save and leaves on a remove. */}
+                <Presence kind="badge" id={hasStoredTavilyKey ? 'connected' : null} ready={tavilyChecked}>
+                    <LiquidGlassBadge variant="green" icon={<Check size={10} strokeWidth={2.5} />}>Connected</LiquidGlassBadge>
+                </Presence>
             </div>
             <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '0 0 16px', lineHeight: 1.6 }}>
                 Powers live web search for company research. If not provided, LLM general knowledge is used (may be outdated).
@@ -3144,13 +3219,13 @@ export function ProfileIntelligenceSettings({
                                 Hiring strategy, interview focus, salary signals and culture for <strong style={{ color: 'var(--pi-primary)' }}>{companyName}</strong>.
                             </div>
                         </div>
-                        <button
-                            className="pi-pill-btn pi-press"
-                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
                             onClick={() => doCompanyResearch(false)}
                         >
                             Research Now
-                        </button>
+                        </LiquidGlassButton>
                     </div>
                 )}
                 {(companyResearching || aotResearching) && companyName && (
@@ -3630,13 +3705,13 @@ export function ProfileIntelligenceSettings({
                                 Generate a personalised cover letter from your resume and this job description.
                             </div>
                         </div>
-                        <button
-                            className="pi-pill-btn pi-press"
-                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
                             onClick={() => doGenerate(false)}
                         >
                             Generate Letter
-                        </button>
+                        </LiquidGlassButton>
                     </div>
                 )}
 
@@ -3723,10 +3798,11 @@ export function ProfileIntelligenceSettings({
     };
 
     // ── CTA class ─────────────────────────────────────────────────────────────
+    // The trial state renders LiquidGlassButton instead (see the CTA footer),
+    // so this pill is only ever Manage Pro or Unlock Pro.
     const ctaClass = [
         'pi-cta',
-        isTrialActive && !isPremium  ? 'pi-cta--trial'   : '',
-        !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
+        !isPremium ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
 
     // ── Non-pro users see the gate (wait for license verification) ────────────
@@ -3754,6 +3830,7 @@ export function ProfileIntelligenceSettings({
             } as React.CSSProperties}
         >
             <style>{PI_CSS}</style>
+            {confirmDialog}
 
             {/* ── Sidebar ── */}
             <div style={{
@@ -3803,6 +3880,18 @@ export function ProfileIntelligenceSettings({
 
                 {/* CTA footer */}
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
+                    {isTrialActive && !isPremium ? (
+                        /* During a free trial: the shared Liquid Glass button
+                           (src/ui-components), label only. Colour and size come
+                           from .pi-upgrade-lg in the style block above. */
+                        <LiquidGlassButton
+                            variant="action"
+                            className="lg-sm lg-wide pi-upgrade-lg"
+                            onClick={() => openPlans()}
+                        >
+                            Upgrade
+                        </LiquidGlassButton>
+                    ) : (
                     <button
                         ref={ctaLens.ref}
                         onClick={() => openPlans()}
@@ -3815,20 +3904,19 @@ export function ProfileIntelligenceSettings({
                         {/* Painted above the flat fill and the rim, below the
                             content. Both pseudos are the material's already. */}
                         <span className="pi-cta-lens" aria-hidden="true" />
-                        {!isPremium && !isTrialActive
+                        {!isPremium
                             ? <span className="pi-cta-shimmer" aria-hidden="true" />
                             : null}
                         <span className="pi-cta-label">
-                            {isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}
+                            {isPremium ? 'Manage Pro' : 'Unlock Pro'}
                         </span>
                         <div className="pi-cta-ring">
                             {isPremium
                                 ? <CheckCircle size={13} strokeWidth={2.5} />
-                                : isTrialActive
-                                    ? <Sparkles size={13} strokeWidth={2.5} />
-                                    : <ArrowUpRight size={13} strokeWidth={2.5} />}
+                                : <ArrowUpRight size={13} strokeWidth={2.5} />}
                         </div>
                     </button>
+                    )}
                 </div>
             </div>
 

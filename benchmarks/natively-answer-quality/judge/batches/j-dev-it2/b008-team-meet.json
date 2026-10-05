@@ -1,0 +1,311 @@
+{
+ "batch": "b008-team-meet",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DTEAM-CTX-I1": {
+   "title": "Office move FAQ",
+   "text": "Office Move FAQ - Harbor Street, 3rd floor\nFrom: Workplace team\n\nWhen is the move?\nThe move weekend is 12-13 December. Packing crates arrive on Tuesday 8 December. Please have your desk packed by 5pm on Friday 11 December.\n\nWhere are we going?\nThird floor of the Harbor Street building, same address, different lift. The kitchen is on the east side and there are two new phone booths by the stairwell.\n\nDo I keep my desk?\nNo. The third floor uses bookable desks. Book through the Deskly app up to 14 days ahead. Team neighbourhoods are marked by colour; Product and Engineering are in the green zone.\n\nWhat about monitors and docks?\nIT will move monitors and docks for you. Label cables with the stickers in your crate. Personal items are your responsibility.\n\nParking?\nParking permits carry over. Bike storage moves to the basement cage; request a new fob from reception.\n\nWho do I contact?\nWorkplace team at the front desk, or the #office-move channel."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DTEAM-CTX-G1": {
+   "title": "Orchard Mobile weekly product sync notes, 17 Sep 2026",
+   "text": "Orchard Mobile - Weekly Product Sync\nDate: Thursday 17 September 2026, 10:00-10:45\nNotes by: Lena Okafor (engineering lead)\nAttendees: Hiro Tanaka (product manager), Lena Okafor, Priya Nand (backend), Marcus Oyelaran (mobile), Dana Whitfield (design), Tomas Reyes (QA)\nAbsent: Rafael Duarte (Platform team) - sent a written update\n\n1. Release 2.4 dates (confirmed)\n- Code freeze: Friday 9 October\n- Beta to pilot customers: Wednesday 14 October\n- General availability (GA): Wednesday 28 October\nNo change to dates this week. Hiro will re-check the dates at the 1 October sync.\n\n2. Decisions\nD1. CSV export of timesheets is OUT of scope for 2.4 and moves to 2.5. Reason: the Ledger API v5 bulk endpoint will not be ready before code freeze, and building export on v4 would mean doing the work twice. Proposed by Hiro, agreed by all attendees. Hiro will tell Brennan Foods that export lands in 2.5.\nD2. SMS vendor for shift reminders: we go with Kestrel Messaging, not Brightwire. Kestrel quoted $0.0071 per message against Brightwire's $0.0094, and Kestrel already supports Canadian carrier registration. Hiro to get the Kestrel contract signed by Thu 1 Oct.\nD3. Offline clock-in ships behind the feature flag offline_clockin_v1, default off, enabled for 10% of beta users only. Full rollout is a GA decision, not a beta decision.\nD4. Dark mode is deferred to 2.6. Dana keeps the design-token work going, but no screens get dark variants in 2.4.\n\n3. Not decided (parked)\n- Crash-free sessions target for GA. Tomas proposed 99.5%, Lena wants 99.7%. Parked until we have two weeks of beta data; revisit at the 22 October sync.\n- Push notifications for timesheet approvals. Marcus thinks it is a half-day job, Priya thinks it needs a backend queue. No decision; not in 2.4 unless someone brings a sized proposal.\n- Release notes owner: unassigned. Hiro asked for a volunteer and nobody took it.\n\n4. Status (short)\n- Ledger v5 migration for pay-period endpoints: about 70% done (Priya).\n- Offline clock-in: happy path works; conflict resolution (two devices clocking the same shift) not started (Marcus).\n- Shift reminder screens: designs approved; copy still in review (Dana).\n- QA: regression suite for Android 12-15 and iOS 17-19 being updated. Tomas is at 60% capacity because he is shared with the Web team until 5 October.\n\n5. Action items\n- Priya Nand: finish Ledger v5 migration for pay-period endpoints by Tue 29 Sep.\n- Marcus Oyelaran: offline clock-in conflict resolution PR by Fri 2 Oct.\n- Dana Whitfield: final shift-reminder copy and empty states by Wed 23 Sep.\n- Tomas Reyes: updated regression suite ready by Mon 12 Oct.\n- Hiro Tanaka: Kestrel contract signed by Thu 1 Oct; tell Brennan Foods about export moving to 2.5 by Fri 18 Sep.\n- Lena Okafor: raise the Ledger API v5 bulk endpoint date with Rafael Duarte (Platform) by Fri 18 Sep.\n\n6. Written update from Platform (Rafael Duarte)\nLedger API v5 bulk endpoints are targeted for Friday 2 October. Rafael described this date as \"likely but not committed\" and asked that nobody quote it to customers.\n\nNext sync: Thursday 24 September, 10:00."
+  },
+  "DTEAM-CTX-G2": {
+   "title": "Orchard Mobile 2.4 release plan and roadmap v1.3",
+   "text": "Orchard Mobile 2.4 - Release Plan and Roadmap\nVersion 1.3 - owner Hiro Tanaka (PM) - last updated Friday 18 September 2026\nChange log: v1.3 moves CSV export to 2.5 and records the Kestrel Messaging choice (both from the 17 September sync).\n\nGoal\nRelease 2.4 makes Orchard usable for hourly teams who do not sit at a desk: shift reminders by SMS, clock-in that works without signal, and a clear pay-period summary.\n\nIn scope for 2.4\n1. Shift reminders by SMS (Kestrel Messaging), opt-in per worker.\n2. Offline clock-in behind feature flag offline_clockin_v1.\n3. Pay-period summary screen (needs Ledger API v5).\n4. Accessibility fixes to WCAG 2.2 AA on 14 screens.\n\nOut of scope for 2.4\n- CSV export of timesheets (moved to 2.5)\n- Dark mode (2.6)\n- Manager approval flow redesign (2.6)\n- Apple Watch app (not planned)\n\nMilestones\n- Tue 29 Sep: pay-period endpoints migrated to Ledger v5 (Priya Nand)\n- Fri 2 Oct: Platform ships Ledger API v5 bulk endpoints (external; owner Rafael Duarte)\n- Mon 5 Oct: go/no-go on the Ledger fallback (Hiro Tanaka and Lena Okafor)\n- Fri 9 Oct: code freeze\n- Wed 14 Oct: beta to 400 pilot users across three customers: Brennan Foods (Ohio), Tidewater Clinics (Halifax, Canada), Marlow Transit (Oregon)\n- Wed 28 Oct: GA, phased release over 7 days on both stores\n- Wed 11 Nov: 2.5 planning kickoff\n\nDependencies\n- Ledger API v5 bulk endpoints (Platform team). Needed by the pay-period summary.\n- Kestrel Messaging contract (Procurement). Monthly SMS spend above $5,000 needs Finance sign-off; the current estimate is 1.2 million messages a month, about $8,500.\n- Kestrel carrier registration for Canadian numbers takes up to 10 business days after the contract is signed. It is required before any Tidewater Clinics worker can receive SMS reminders.\n- App store review: keep 3 business days of buffer before GA.\n\nRisks and mitigations\nR1. Ledger API v5 bulk endpoints slip past 2 October. Impact: the pay-period summary screen cannot load totals for pay periods longer than 14 days. Mitigation: fall back to the v4 read endpoints for 2.4 and show a \"totals updating\" state. The call is made at the 5 October go/no-go. If we fall back, the pay-period summary ships read-only.\nR2. SMS deliverability in Canada if carrier registration is late. Mitigation: sign the contract by 1 October; reminders for Tidewater default to email until registration completes.\nR3. QA capacity. Tomas Reyes is shared with the Web team until 5 October. Mitigation: a QA contractor for 2 weeks starting 5 October (budget approved by Lena Okafor).\nR4. Offline clock-in data conflicts. Mitigation: the flag stays at 10% of beta users; full rollout only after conflict resolution passes regression.\n\nRoles\n- Accountable: Hiro Tanaka\n- Engineering lead: Lena Okafor\n- Backend: Priya Nand. Mobile: Marcus Oyelaran. Design: Dana Whitfield. QA: Tomas Reyes.\n\nSuccess measures for beta\n- Reminder opt-in: at least 40% of pilot workers\n- Clock-in failures: under 0.5% of attempts\n- Crash-free sessions: target to be agreed (see the 17 September sync)\n\nCommunication\nHiro owns all customer-facing communication about dates and scope. Engineers do not give dates to pilot customers directly."
+  },
+  "DTEAM-CTX-C1": {
+   "title": "Orchard 2.4 leadership check-in notes (draft), 24 Sep 2026",
+   "text": "Orchard 2.4 - leadership check-in\nThursday 24 September 2026, 16:00-16:30\nNotes by Colin Mercer (VP Product) - DRAFT, not reviewed by attendees\nPresent: Colin Mercer, Hiro Tanaka, Lena Okafor\n\nContext\nQuick check-in on 2.4 after Brennan Foods escalated on Monday. Hiro walked through the plan. These are my rough notes, typed fast, so corrections welcome.\n\nDates\nGA is now Wednesday 4 November to give QA more room. Code freeze moves to Friday 16 October so the team can absorb the extra scope below. Beta date unchanged. Pilot customers were already told GA is 28 October; Hiro to decide whether we update them now or after beta.\n\nScope\nCSV export is back in for 2.4 - Brennan Foods asked for it again on Monday and it is their top request. Lena to confirm whether it fits before freeze. If it does not fit we will talk again.\n\nSMS vendor\nGoing with Brightwire for reminders since procurement flagged something on the Kestrel paperwork. Hiro to follow up with procurement and confirm this week.\n\nOffline clock-in\nPriya owns offline clock-in end to end now, including conflict resolution.\n\nQuality\nCrash-free target: 99.5% agreed.\n\nOther\nColin asked whether the Apple Watch app could be a stretch goal. No answer yet. Lena raised QA capacity again; Tomas is still shared with Web and the contractor has not started. Colin said the later GA date should cover that, but nobody checked it against the store review buffer.\n\nAction items\n- Hiro: tell pilot customers about the new GA date (or not - see above)\n- Lena: confirm the export estimate by Monday\n- Hiro: confirm SMS vendor with procurement\n- Everyone: code freeze stays Friday 9 October, no exceptions\n\nNext check-in: two weeks."
+  }
+ },
+ "items": [
+  {
+   "jid": "d48292cbae94",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Anything blocking you?",
+   "conversation": [],
+   "evidence_ids": [
+    "DTEAM-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Nothing's blocking me right now. I've got the move details sorted, packing crates arrive Tuesday the 8th and desks need to be packed by 5pm Friday the 11th, so I'm on track for that. If anything comes up I'll flag it in the #office-move channel."
+  },
+  {
+   "jid": "2388525afc23",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Okay, back to it. How do we split regression testing between Tomas and the new contractor so nothing falls through the cracks?",
+   "conversation": [
+    "COLLEAGUE: Did anyone catch the match on Saturday? That last-minute goal was unreal.",
+    "USER (spoken): I missed it, I was at my kid's recital.",
+    "COLLEAGUE: Oh nice. Also the coffee machine on four is broken again, facilities said Monday."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd split it by area rather than by test count, so each of them owns a clear slice end to end. Tomas takes the core flows he already knows, the contractor takes the newer or peripheral areas, and we agree on who signs off before anything ships. I'll write up the split and confirm it with both of them."
+  },
+  {
+   "jid": "d438a7f9dd9e",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "summarize what we've decided so far in this meeting",
+   "conversation": [
+    "COLLEAGUE: Okay, on the reminder copy. Dana, can you have final strings to Marcus by Thursday?",
+    "COLLEAGUE: Thursday works, end of day.",
+    "COLLEAGUE: Second thing, the onboarding animation. I say we cut it, it's costing us two days.",
+    "USER (spoken): Agreed, cut it. We can bring it back in 2.5.",
+    "COLLEAGUE: Great. And Priya, you'll pair with Marcus on the offline sync bug tomorrow morning?",
+    "COLLEAGUE: Yep, 9:30 tomorrow, I'll send the invite.",
+    "COLLEAGUE: Last one. We're not moving the beta date. October 14th stays."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Here's where we landed. Dana gets final reminder strings to Marcus by Thursday, end of day. We're cutting the onboarding animation, and we can bring it back in 2.5. Priya pairs with Marcus on the offline sync bug at 9:30 tomorrow morning, and Priya sends the invite. And the beta date stays October 14th."
+  },
+  {
+   "jid": "8d631ff72884",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Hiro keeps saying we're \"mostly on track\" for the Oct 28 date. what should I push back with?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "\"Mostly on track\" is doing a lot of work there. I'd ask which items are actually done versus in progress, what's still open, and what would have to slip for the 28th to move. Then get the specific blockers and owners named, so we're tracking the same list instead of a feeling."
+  },
+  {
+   "jid": "cc070d13afd3",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "we're 10 min from the end. draft my closing: recap what we decided, list open items with owners and dates, and propose when we meet next. I didn't take notes, just go off what you heard",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have notes from this session to recap from, so I'd rather not put words in the room's mouth. Here's how I'd close it out: I'll run back the decisions and open items as I heard them, and if I miss anything, jump in and correct me before we wrap. Then I'll confirm owners and dates on each open item, and propose a time for next time.\n\nIf you want, give me the decisions and open items as you remember them and I'll shape them into a clean closing you can read out."
+  },
+  {
+   "jid": "f67f2cb4f344",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "You did a payments migration at your last company, right? Roughly how long did that take you? It'd help us size this one.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I don't want to give you a number I can't stand behind, so let me pull the actual timeline from that migration and send it over. What I can say is that the sizing there came down to how many systems touched the payment flow and how much had to run in parallel. If you tell me the scope here, I can map it against that."
+  },
+  {
+   "jid": "1fa1bc88ad57",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Didn't we agree last week that export was out of scope for this release?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have that agreement in front of me, so I can't confirm what was decided last week. What I can say is where export stands now, and if it was parked, I'd rather we settle it here than assume. Can you remind me what the scope call was?"
+  },
+  {
+   "jid": "1bb1a24daf76",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Wait, didn't we put Priya on offline clock-in last week? I just want to make sure we're not doubling up.",
+   "conversation": [
+    "COLLEAGUE: Quick round. Marcus, offline clock-in?",
+    "COLLEAGUE: Conflict resolution PR is about half done, I'm still aiming for Friday.",
+    "COLLEAGUE: Okay, thanks. Priya, Ledger migration?",
+    "COLLEAGUE: Pay-period endpoints are basically done, just cleanup."
+   ],
+   "evidence_ids": [
+    "DTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have anything showing Priya was moved onto offline clock-in. What I have is Priya on the Ledger v5 migration for pay-period endpoints, and Marcus on offline clock-in conflict resolution. So it looks like we're not doubling up, but let me confirm the assignment before we close the round."
+  },
+  {
+   "jid": "c2a6caa32363",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "how do I raise that I'm blocked on design review without throwing Dana under the bus?",
+   "conversation": [
+    "COLLEAGUE: Before we start, who's in for the team lunch Friday? Thai or tacos?",
+    "COLLEAGUE: Tacos, obviously.",
+    "COLLEAGUE: Okay, tacos it is. I'll book for twelve people at noon."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd frame it around the work, not the person: \"I'm blocked on the design review, so I can't move forward until that's signed off.\" Then name what you need and by when, and offer to help unblock it. If someone asks who owns it, say the review is still open rather than pointing at Dana."
+  },
+  {
+   "jid": "c4b8cf31356d",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "What's the biggest risk to hitting the beta date, in your view?",
+   "conversation": [],
+   "evidence_ids": [
+    "DTEAM-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have a beta date or a risk list in front of me, so I can't point to a specific blocker. What I'd watch is anything that's still unowned or unestimated, since that's usually what slips a date. Can you share the current plan so I can flag the real risk?"
+  },
+  {
+   "jid": "bb0056454a9f",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Platform still hasn't sent us the API contract. Do we start building against a guess or just wait?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd hold off on building against a guess. If the contract shifts, we'd be reworking whatever we've built, and that's usually more expensive than the wait. Let's set a deadline with Platform, and if it slips, we agree on a thin stub we can throw away."
+  },
+  {
+   "jid": "3a5e913367c5",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Honestly I think we should just cut offline mode entirely. It's been nothing but pain, the conflict stuff keeps growing, nobody on the pilot asked for it, and we'd get two weeks back. Can we just agree to kill it today?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I get the appeal, and two weeks back is real. But I don't think we should decide this today. The pilot didn't ask for offline mode, sure, but the conflict work is already in, and killing it now means throwing that away and telling anyone who built on it that it's gone. Can we put a number on what it actually costs us to keep, and what we'd lose if a customer does need it? If the answer is clearly not worth it, I'll agree to cut it, just not blind."
+  },
+  {
+   "jid": "14d88723fef4",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Whose call is it?",
+   "conversation": [
+    "COLLEAGUE (heard): Didn't we agree last week that export was out of scope for this release?",
+    "NATIVELY: I don't have that agreement in front of me, so I can't confirm what was decided last week. What I can say is where export stands now, and if it was parked, I'd rather we settle it here than assume. Can you remind me what the scope call was?",
+    "COLLEAGUE (heard): Did we or not?",
+    "NATIVELY: I can't confirm it either way, because I don't have last week's agreement in front of me. If you have the scope call, tell me what it said and we'll settle it now."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the part I can't answer from memory, and I don't want to guess at it. If it's a scope call, it sits with whoever owns scope on this release, so let's name that owner now and confirm it. If you have last week's note, read it out and we'll settle it in this room."
+  },
+  {
+   "jid": "f65af3c9c6e4",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Android crash status?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a confirmed status on the Android crash yet. I'll check the current crash reports and get back to you with what I find, and flag it right away if it's still reproducing."
+  },
+  {
+   "jid": "2d23f3e742be",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "they want me to take the Ledger migration AND keep all my sprint commitments. what do I push back with, what do I offer instead, and how do I say it without sounding like I'm dodging?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can take the Ledger migration, but not on top of everything I'm already committed to. So the ask is a trade, not a no: tell me which of my current sprint items can move, or give me a second pair of hands for the migration. If neither is possible, I'd want the sprint scope formally reduced and the deadline reset, because something has to give. I'd rather flag that now than quietly miss both."
+  },
+  {
+   "jid": "8303d2ec4e7d",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "how do I ask Marcus for an actual date without putting him on the spot in front of everyone",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Catch him one on one, right after the meeting or in a side chat, and keep it light: \"Hey, I want to grab time with you on this, what does your week look like?\" That way it's a normal ask, not a public one, and he can say no without an audience."
+  },
+  {
+   "jid": "d072903abb2d",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "turn that into action items with owners and dates",
+   "conversation": [
+    "COLLEAGUE: Okay, on the reminder copy. Dana, can you have final strings to Marcus by Thursday?",
+    "COLLEAGUE: Thursday works, end of day.",
+    "COLLEAGUE: Second thing, the onboarding animation. I say we cut it, it's costing us two days.",
+    "USER (spoken): Agreed, cut it. We can bring it back in 2.5.",
+    "COLLEAGUE: Great. And Priya, you'll pair with Marcus on the offline sync bug tomorrow morning?",
+    "COLLEAGUE: Yep, 9:30 tomorrow, I'll send the invite.",
+    "COLLEAGUE: Last one. We're not moving the beta date. October 14th stays.",
+    "USER (typed to Natively): summarize what we've decided so far in this meeting",
+    "NATIVELY: Here's where we landed. Dana gets final reminder strings to Marcus by Thursday, end of day. We're cutting the onboarding animation, and we can bring it back in 2.5. Priya pairs with Marcus on the offline sync bug at 9:30 tomorrow morning, and Priya sends the invite. And the beta date stays October 14th."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Here's what we've decided. Dana gets final reminder strings to Marcus by Thursday, end of day. We're cutting the onboarding animation, and we can bring it back in 2.5. Priya pairs with Marcus on the offline sync bug at 9:30 tomorrow morning, and Priya sends the invite. And the beta date stays October 14th."
+  },
+  {
+   "jid": "1d41432b5b91",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Sorry, I dropped off for a few minutes. Did we decide anything about the tablet layout?",
+   "conversation": [
+    "COLLEAGUE: Next thing, the tablet layout. Where's that at?",
+    "COLLEAGUE: Split view still breaks on the smaller tablets. I'd need another week at least.",
+    "USER (spoken): Then I'd say we drop the tablet layout from the beta and ship phones only.",
+    "COLLEAGUE: Yeah, agreed. Tablet layout comes out of the beta, we revisit for GA.",
+    "COLLEAGUE: And Tomas, you start regression on Tuesday the 13th instead of Monday, since the build lands late.",
+    "COLLEAGUE: Works for me. Tuesday the 13th."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, we decided to drop the tablet layout from the beta and ship phones only. The split view still breaks on the smaller tablets, so it comes out of the beta and we revisit it for GA."
+  },
+  {
+   "jid": "f82174aa7327",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "What's the fallback, and when do we have to pull the trigger on it?",
+   "conversation": [
+    "COLLEAGUE (heard): If Platform slips the Ledger bulk endpoints, what actually breaks for us?",
+    "NATIVELY: If Platform slips the bulk endpoints, the pay-period summary screen can't load totals for pay periods longer than 14 days. The mitigation is to fall back to the v4 read endpoints for 2.4 and show a \"totals updating\" state, and that call gets made at the 5 October go/no-go. If we do fall back, the pay-period summary ships read-only."
+   ],
+   "evidence_ids": [
+    "DTEAM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The fallback is the v4 read endpoints for 2.4, with a \"totals updating\" state on the pay-period summary. The trigger point is the **5 October go/no-go**, owned by Hiro Tanaka and Lena Okafor. If we pull it, the pay-period summary ships read-only."
+  },
+  {
+   "jid": "d39ce0703471",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Colin's notes say GA moved to November 4th, so we've got a bit more breathing room now, right?",
+   "conversation": [],
+   "evidence_ids": [
+    "DTEAM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Colin's notes do say GA moved to November 4th, so there's more room before launch. But the same notes flag that nobody checked the later date against the store review buffer, and the pilot customers were already told October 28th, so I wouldn't treat it as settled breathing room yet."
+  }
+ ]
+}

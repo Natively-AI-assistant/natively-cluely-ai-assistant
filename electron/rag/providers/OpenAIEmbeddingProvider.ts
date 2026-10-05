@@ -57,15 +57,26 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
       status: res.status,
       provider: this.name,
       permanentAuthFailure: res.status === 401 || res.status === 403,
+      quotaExhausted: res.status === 429 && isOpenAiQuotaExhaustedBody(body),
     });
   }
+
+  /**
+   * Why the last isAvailable() returned false, or null after a success.
+   * isAvailable() keeps its boolean contract (other callers rely on it not
+   * throwing for a 429); the startup resolver reads this to tell an account
+   * that is out of credits from an ordinary rate limit.
+   */
+  public lastProbeError: (Error & { status?: number; quotaExhausted?: boolean }) | null = null;
 
   async isAvailable(): Promise<boolean> {
     // Fast check — just validate the key format and do a single test embed
     try {
       await this.embed('test');
+      this.lastProbeError = null;
       return true;
     } catch (error: any) {
+      this.lastProbeError = error ?? null;
       if (error?.permanentAuthFailure) throw error;
       // Say why — see probeError.ts.
       console.warn(`[OpenAIEmbeddingProvider] availability probe failed: ${describeProbeError(error)}`);
@@ -137,3 +148,24 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
     return out;
   }
 }
+
+/**
+ * OpenAI answers 429 for two different things. A rate limit clears in seconds
+ * and is worth retrying; an account with no credits (`insufficient_quota`)
+ * answers the same way every time until the user adds credits. Matched on the
+ * error code/type first; the message text is a fallback for gateways that
+ * rewrite the body.
+ */
+export function isOpenAiQuotaExhaustedBody(body: string): boolean {
+  const text = String(body || '');
+  if (!text) return false;
+  try {
+    const err = JSON.parse(text)?.error;
+    if (err && (err.code === 'insufficient_quota' || err.type === 'insufficient_quota')) return true;
+    if (err && typeof err.message === 'string' && QUOTA_EXHAUSTED_MESSAGE_RE.test(err.message)) return true;
+    return false;
+  } catch {
+    return QUOTA_EXHAUSTED_MESSAGE_RE.test(text);
+  }
+}
+const QUOTA_EXHAUSTED_MESSAGE_RE = /insufficient_quota|no credits remaining|exceeded your current quota/i;

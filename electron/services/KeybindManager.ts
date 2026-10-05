@@ -43,6 +43,11 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'chat:answer', label: 'Answer / Record', accelerator: 'CommandOrControl+5', isGlobal: true, defaultAccelerator: 'CommandOrControl+5' },
     { id: 'chat:codeHint', label: 'Get Code Hint', accelerator: 'CommandOrControl+6', isGlobal: true, defaultAccelerator: 'CommandOrControl+6' },
     { id: 'chat:brainstorm', label: 'Brainstorm Approaches', accelerator: 'CommandOrControl+7', isGlobal: true, defaultAccelerator: 'CommandOrControl+7' },
+    // Accepts the overlay's suggestion card (DynamicActionBar). Global like the
+    // rest of this family: the overlay never takes keyboard focus during a
+    // meeting (a no-activate panel), so an in-page key (the old Tab) never
+    // reached it while Zoom or Meet had focus.
+    { id: 'chat:acceptSuggestion', label: 'Use Suggestion', accelerator: 'CommandOrControl+8', isGlobal: true, defaultAccelerator: 'CommandOrControl+8' },
     // Scroll shortcuts are global so they work in stealth mode without the user
     // having to click the Natively window first (regression fix for issue #233).
     // Each press kicks an inertial scroll loop in the renderer: a single tap

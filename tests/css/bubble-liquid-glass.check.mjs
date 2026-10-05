@@ -84,7 +84,16 @@ const HEIGHT = 420;
 // underside -30 — and each of those fails here.
 const MIN_TOP_RIM = { dark: 25, light: 10 };
 const MIN_BOUNCE_RIM = 25;             // dark, bottom face
-const MIN_UNDERSIDE = 12;              // light, bottom face darker than the body
+// 10, not 12: without the capture's ringing the face reads 11.2 darker than the
+// body, at 1x and at 2x. The ringing described above came from Electron itself:
+// up to 43.7.0, capturePage() on an offscreen window returned the 1x render
+// resampled to the display's scale factor, and on a 2x display the resampled
+// edge row read 16.3 darker. 43.7.1 fixed that (electron/electron#53818), so the
+// capture is now the real render and a flat bubble reads 0 here, not -9.
+// Measured 2026-10-04 on 43.1.0 and 43.7.7: default offscreen capture 16.3 ->
+// 11.2; with offscreen.deviceScaleFactor = 2 pinned, 11.2 on both. The CSS and
+// the on-screen look did not change.
+const MIN_UNDERSIDE = 10;              // light, bottom face darker than the body
 const MAX_UNDERSIDE = 22;
 const MIN_SIDE_SHADE = 10;
 const MAX_SIDE_SHADE = { dark: 30, light: 60 };
@@ -118,7 +127,8 @@ function mustRead(path) {
 }
 
 // The periwinkle scale, the toggle palette (--bubble-user-bg points at
-// --toggle-on) and the bubble pair, from every top-level block whose
+// --toggle-on), the bubble pair and --hotword-color (the gist chip's tint),
+// from every top-level block whose
 // selector is exactly `selector`, in source order so a later block wins as it
 // does in the cascade. Only custom-property declarations are taken.
 function tokensFrom(css, selector) {
@@ -133,7 +143,7 @@ function tokensFrom(css, selector) {
             else if (css[i] === '}') depth--;
         }
         const body = css.slice(open + 1, i - 1).replace(/\/\*[\s\S]*?\*\//g, '');
-        for (const m of body.matchAll(/(--(?:periwinkle|toggle|bubble-user)-[\w-]+)\s*:\s*([^;]+);/g)) {
+        for (const m of body.matchAll(/(--(?:periwinkle|toggle|bubble-user|hotword)-[\w-]+)\s*:\s*([^;]+);/g)) {
             out.push(`${m[1]}: ${m[2].trim()};`);
         }
         at = i;
@@ -191,8 +201,8 @@ const page = (css, rootTokens, lightTokens, chipCss) => `<!doctype html><html da
   .row { width:500px; margin:0 0 28px auto; display:flex; flex-direction:column; align-items:flex-end; }
   .row.wide { width:auto; }
   .chip-row { margin: 0 0 12px; }
-  :root { --hotword-color: #C4B5FD; --overlay-text-secondary: rgba(255, 255, 255, 0.9); }
-  [data-theme='light'] { --hotword-color: #6D5AC7; --overlay-text-secondary: rgba(110, 110, 115, 0.95); }
+  :root { --overlay-text-secondary: rgba(255, 255, 255, 0.9); }
+  [data-theme='light'] { --overlay-text-secondary: rgba(110, 110, 115, 0.95); }
 ${chipCss}
 ${css}
 </style></head><body><div class="stage">

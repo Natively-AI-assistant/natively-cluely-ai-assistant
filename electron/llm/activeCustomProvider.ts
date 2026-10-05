@@ -87,3 +87,115 @@ export function readActiveModelId(): string {
     return '';
   }
 }
+
+/**
+ * Each vendor's fixed vision model, as the live helper would send it (see
+ * LLMHelper.getFixedVisionModels). Empty when the helper is not up: the
+ * registry then keeps its own label, and no request can be made anyway.
+ */
+export function readFixedVisionModels(): { openai?: string; claude?: string } {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return {};
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getFixedVisionModels !== 'function') return {};
+    return helper.getFixedVisionModels() || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The live selection — provider and model — or null when the helper is not up
+ * or cannot name one (an id with no adapter). Callers treat null as "no
+ * selection known", never as a refusal.
+ */
+export function readActiveSelection(): { provider: string; model: string } | null {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return null;
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getDirectAssistSelection !== 'function') return null;
+    const sel = helper.getDirectAssistSelection();
+    return sel && typeof sel.provider === 'string' ? { provider: sel.provider, model: String(sel.model ?? '') } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The cURL provider currently selected, or null. Same rule as readActiveCustomProvider. */
+export function readActiveCurlProvider(): ActiveCustomProvider | null {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return null;
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getActiveCurlProvider !== 'function') return null;
+    return helper.getActiveCurlProvider() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The selected Ollama's vision model and URL as last resolved, or null. Read
+ * synchronously by the registry; call resolveOllamaRecordTarget() first.
+ */
+export function readOllamaRecordTarget(): { model: string; url: string } | null {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return null;
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getOllamaRecordTarget !== 'function') return null;
+    const target = helper.getOllamaRecordTarget();
+    return target && typeof target.model === 'string' && target.model ? { model: target.model, url: String(target.url ?? '') } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ask the live helper to resolve it (bounded and cached there). Never throws. */
+export async function resolveOllamaRecordTarget(): Promise<void> {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return;
+    const helper = g.__nativelyGetLLMHelper();
+    if (helper && typeof helper.resolveOllamaRecordTarget === 'function') await helper.resolveOllamaRecordTarget();
+  } catch {
+    /* no local record this turn */
+  }
+}
+
+
+/**
+ * Is Ollama the selected provider? Asked separately from readActiveSelection
+ * because that one has no answer while Ollama is selected with no model named
+ * yet (startup, or nothing installed), and "no selection known" must not be
+ * read as "not local".
+ */
+export function readUsingOllama(): boolean {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return false;
+    const helper = g.__nativelyGetLLMHelper();
+    return !!helper && typeof helper.isUsingOllama === 'function' && helper.isUsingOllama() === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Does the turn being assembled stay on this device (2026-10-01)? True only
+ * when the live helper says its SELECTED provider is a local one — Ollama on
+ * this machine or network, or a custom / cURL endpoint whose request goes to a
+ * private host. False when there is no helper to ask, and false on any error:
+ * the caller is deciding whether text read off a kept-on-device screenshot may
+ * be put in a prompt, and "nobody can say" must not mean yes.
+ */
+export function readSelectionStaysOnDevice(): boolean {
+  try {
+    const getHelper = (globalThis as Record<string, unknown>).__nativelyGetLLMHelper as (() => any) | undefined;
+    return getHelper?.()?.selectionStaysOnDevice?.() === true;
+  } catch {
+    return false;
+  }
+}

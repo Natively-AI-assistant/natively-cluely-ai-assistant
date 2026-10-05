@@ -13,10 +13,16 @@
 // Dependency-free on purpose (no imports) so it can be pulled into prompts.ts,
 // AnswerPlanner.ts, AnswerValidator.ts, and tests without any cycle risk.
 
-/** The six required section titles, WITHOUT the markdown prefix. */
+/**
+ * The six required section titles, WITHOUT the markdown prefix.
+ *
+ * 2026-09-29: the second section was "Technique / Data Structure / Algorithm
+ * Used" and is now just "Technique". The validator still accepts the old
+ * heading (stored answers, custom-mode instructions that quote it).
+ */
 export const CODING_SECTIONS = [
   'Approach',
-  'Technique / Data Structure / Algorithm Used',
+  'Technique',
   'Code',
   'Dry Run',
   'Complexity',
@@ -37,7 +43,7 @@ export const CODING_CONTRACT = `CODING / DSA RESPONSE CONTRACT — output these 
 ## Approach
 - Short, interview-speakable explanation of the idea. Optimized approach clearly; brute force only if useful.
 
-## Technique / Data Structure / Algorithm Used
+## Technique
 - Name the core DSA concept/data structure/algorithm (e.g. two pointers, sliding window, hash map, stack, queue, binary search, DP, BFS/DFS, heap, trie, union-find, recursion, backtracking).
 
 ## Code
@@ -59,7 +65,56 @@ Every heading is mandatory and must appear verbatim (with the \`## \` prefix). E
  * A compact one-line variant of the contract for tiny-model prompts where token
  * budget is tight but the SAME heading contract must hold.
  */
-export const CODING_CONTRACT_TINY = `Coding/DSA answers MUST use these EXACT markdown headings, in order, nothing before the first: "## Approach", "## Technique / Data Structure / Algorithm Used", "## Code" (one fenced block tagged with the language you actually wrote — Java is \`\`\`java, never \`\`\`python), "## Dry Run", "## Complexity" (Time + Space, each "O(...) because ..."), "## Interviewer Follow-up Points". Never start with code. A missing/renamed heading is a failure.`;
+export const CODING_CONTRACT_TINY = `Coding/DSA answers MUST use these EXACT markdown headings, in order, nothing before the first: "## Approach", "## Technique", "## Code" (one fenced block tagged with the language you actually wrote — Java is \`\`\`java, never \`\`\`python), "## Dry Run", "## Complexity" (Time + Space, each "O(...) because ..."), "## Interviewer Follow-up Points". Never start with code. A missing/renamed heading is a failure.`;
+
+/**
+ * WHAT a coding turn asked for (2026-09-29). The six-section contract above
+ * answered every coding turn the same way, so "write the code for odd even"
+ * came back as Approach / Technique / Code / Dry Run / Complexity / Follow-up
+ * Points. The shape is decided in code from the question (codingShape.ts) and
+ * selects one of the contracts below; the six sections stay reachable as
+ * `full`, for an explicit ask.
+ *
+ * Bounded on purpose: the shape is part of the composed system prompt, so it
+ * is part of the prompt-registry and provider prompt-cache keys.
+ */
+export const CODING_SHAPES = [
+  'code', 'solve', 'approach', 'brute_force', 'optimize',
+  'complexity', 'dry_run', 'explain', 'debug', 'walkthrough', 'full',
+] as const;
+export type CodingShape = (typeof CODING_SHAPES)[number];
+
+const FENCE_RULE = 'ONE fenced block tagged with the language you actually wrote';
+
+/**
+ * Code and its explanation must agree (2026-09-30, measured on the dev set: a
+ * debug answer blamed `enumerate` for a bug that was really `left` moving
+ * backwards on "abba"; an explanation said punctuation was skipped by code that
+ * did not skip it; a summation was wrong while the per-step count was right).
+ * Appended to every shape that writes or changes code.
+ */
+export const CODE_SELF_CHECK = 'Before answering, run the code by hand on each example in the question (or one small input plus an edge case): the output must match, and every claim you make about it (what it skips, handles or returns, its complexity) must be something the code actually does.';
+
+/** The contract for each shape except `full`, which is CODING_CONTRACT itself. */
+export const CODING_SHAPE_CONTRACTS: Readonly<Record<Exclude<CodingShape, 'full'>, string>> = {
+  code: `The user asked for code. Lead with it: ${FENCE_RULE}. After the block, at most two short sentences on how it works, then one line with the time and space complexity in Big-O notation. No headings, no dry run, no follow-up points, no second version. ${CODE_SELF_CHECK}`,
+  solve: `The user asked for a solution to a problem. Use exactly these three headings, in this order, each alone on its line: "## Approach", "## Code", "## Complexity".
+Under Approach: two to four sentences with the key idea, naming the technique or data structure in the first sentence (hash map, two pointers, sliding window, DP, BFS...).
+Under Code: ${FENCE_RULE}.
+Under Complexity: time and space, each O(...) with a short reason taken from the code you wrote.
+Add "## Dry Run" between Code and Complexity only when the user asked for one or the logic is genuinely hard to follow (DP state transitions, pointer or window movement, recursion); then trace one short example. No other sections. ${CODE_SELF_CHECK}`,
+  approach: `The user asked how to approach the problem (the idea, the algorithm, or the data structure), not for an implementation. Answer that directly in a few sentences: what you would use, why it fits, and the resulting time and space complexity in one line. No code block unless the user asked for code. No headings.`,
+  brute_force: `The user asked for the brute-force approach only. In two to four sentences say what it does and why it is correct, give its time and space complexity, and say in one sentence why it is slow. Do not present the optimized solution, and no code block unless the user asked for code. No headings.`,
+  optimize: `The user asked to improve the current solution (in the conversation, the question, or on screen). Say what changes and why it is faster in one to three sentences, give the improved code as ${FENCE_RULE} when there is code to improve, then one line comparing the old and new time and space complexity. No dry run, no follow-up points, no headings. ${CODE_SELF_CHECK}`,
+  complexity: `The user asked only for the complexity. Give the time and the space complexity, each as O(...) with a one-line reason tied to the code or solution in context (in the question, on screen, or earlier in the conversation); if none is given, use the standard optimal solution to the problem named. Nothing else: no code, no approach, no headings.`,
+  dry_run: `The user asked for a dry run. Trace the code or solution in context step by step on the input they gave (or one small representative input if they gave none): the key variables at each step, then the final output. Nothing else: do not re-output the code, and no approach, complexity, or headings.`,
+  explain: `The user asked what a piece of code does. Say its purpose in one sentence, then walk through the key steps in order and any line that is not obvious, then give its time and space complexity in one line. Do not rewrite the code, and no headings.`,
+  debug: `The user asked what is wrong with the code. First find a concrete input (theirs, or the smallest one that breaks it) and trace it to the line where the state goes wrong; name that bug and show it on that input in one or two sentences. If the code is actually correct, say so. Then give the corrected code as ${FENCE_RULE} (the changed function only), then say in one sentence why the fix works. No headings, no full dry run, no follow-up points. ${CODE_SELF_CHECK}`,
+  walkthrough: `The user asked for a walkthrough they can say to the interviewer. Explain the solution in the order you would say it: the key idea, then the steps (a short numbered list is fine), the edge cases that matter, and the time and space complexity. Show code only when it is not already on screen or in the conversation and a snippet is essential. No headings.`,
+};
+
+/** Shapes whose answer is expected to contain a code block. */
+export const CODE_PRODUCING_SHAPES: ReadonlySet<CodingShape> = new Set<CodingShape>(['code', 'solve', 'debug', 'full']);
 
 /**
  * Contract for GENERAL IMPLEMENTATION tasks (React components, scripts, utilities,
@@ -118,14 +173,14 @@ export const CODING_TEMPLATE_CONFORMANCE_TINY = `TEMPLATE CONFORMANCE (outranks 
 /**
  * Optional verification-spec instruction. Appended to the coding prompt ONLY
  * when code-execution verification is enabled. Asks the model to emit a hidden
- * machine-readable test block AFTER the six sections so Natively can run the
+ * machine-readable test block AFTER the answer so Natively can run the
  * code against test cases in the background. The block is stripped before the
  * answer is shown (see stripVerificationSpec) — the user never sees it.
  *
  * `input` is the ARGUMENT LIST for the entry function (a one-arg function still
  * uses a one-element array), and `expected` is the value it should return.
  */
-export const CODING_VERIFICATION_INSTRUCTION = `After the six sections, output a hidden test block EXACTLY in this form (it is removed before display, so the user never sees it — keep it strictly valid JSON):
+export const CODING_VERIFICATION_INSTRUCTION = `After your answer, output a hidden test block EXACTLY in this form (it is removed before display, so the user never sees it — keep it strictly valid JSON):
 
 <verification_spec>
 {"entry":"<the function or method name in your Code, e.g. twoSum>","language":"<python|javascript|java|cpp|...>","cases":[{"input":[<arg1>,<arg2>],"expected":<return value>}]}

@@ -87,3 +87,68 @@ export function micSettingsUri(platform) {
       return null;
   }
 }
+
+/**
+ * What Windows itself calls the microphone privacy page, and the switches a
+ * desktop app such as Natively needs on it, in the page's own order.
+ *
+ * Three switches, not two. "Let desktop apps access your microphone" is the one
+ * that covers Natively, but on the page it sits inside the "Let apps access
+ * your microphone" group, and Microsoft's own steps for a desktop app are to
+ * check all three, in this order. A guide that pictured only the first and the
+ * last left the middle one out.
+ *
+ * Windows 10 words all three differently and has no "& security" in the path.
+ * The names are Microsoft's own, from "Turn on app permissions for your
+ * microphone in Windows" (support.microsoft.com).
+ *
+ * `platformVersion` is `navigator.userAgentData`'s high-entropy value: Windows
+ * 11 reports a major of 13 or more, Windows 10 reports 1 to 10. Anything
+ * unreadable is drawn as Windows 11, the current release.
+ *
+ * @param {string|number|undefined|null} platformVersion
+ * @returns {{ release: '10'|'11', path: string[], switches: string[] }}
+ */
+export function windowsMicPage(platformVersion) {
+  const major = Number.parseInt(String(platformVersion ?? ''), 10);
+  if (Number.isFinite(major) && major >= 1 && major < 13) {
+    return {
+      release: '10',
+      path: ['Settings', 'Privacy', 'Microphone'],
+      switches: [
+        'Microphone access for this device',
+        'Allow apps to access your microphone',
+        'Allow desktop apps to access your microphone',
+      ],
+    };
+  }
+  return {
+    release: '11',
+    path: ['Settings', 'Privacy & security', 'Microphone'],
+    switches: [
+      'Microphone access',
+      'Let apps access your microphone',
+      'Let desktop apps access your microphone',
+    ],
+  };
+}
+
+/**
+ * Which part of the Windows microphone page a non-granted status points at, so
+ * the onboarding row can say what is off in the page's own words.
+ *
+ * Electron reads Windows's DeviceAccessStatus (see classifyMicStatus):
+ *  - 'restricted' is DeniedBySystem: the device-wide switch at the top of the
+ *    page is off (or held off by policy). -> 'device'
+ *  - 'denied' is DeniedByUser: one of the two app-level switches is off. The
+ *    status cannot tell which. -> 'apps'
+ *  - anything else says nothing about a particular switch. -> null
+ *
+ * @param {MicStatus|string|undefined|null} status
+ * @returns {'device'|'apps'|null}
+ */
+export function windowsMicBlocker(status) {
+  if (status === 'restricted') return 'device';
+  if (status === 'denied') return 'apps';
+  return null;
+}

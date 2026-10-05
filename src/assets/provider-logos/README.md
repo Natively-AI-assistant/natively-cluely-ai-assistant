@@ -94,6 +94,21 @@ If Fluxion ever publishes a simplified icon-sized mark, prefer it over the
 monogram. No licence statement accompanies any of these assets, so the mark is
 used purely nominatively, as stated at the top of this file.
 
+### AgentRouter
+
+Not in any icon set either. `agentrouter.png` is AgentRouter's own site icon,
+`https://agentrouter.org/logo.png` (180×180, the `<link rel="icon">` of their
+home page; `/api/status` reports no separate logo). The artwork is a
+pink-and-blue gradient disc with a four-point star. Its transparent margin was
+trimmed and the disc rescaled to fill a 256×256 canvas with a 4 px inset, so it
+sits at the same visual size as the other raster marks.
+
+Full-colour, so it is NOT in `WHITE_ON_TRANSPARENT_MARKS`. The tile wash
+(`#F868B8`) is the dominant saturated pixel of the disc's pink half. Checked at
+the tile's true 16 px on both themes: a simple disc stays recognisable where
+Fluxion's galaxy did not. No licence statement accompanies it, so it is used
+nominatively, as stated at the top of this file.
+
 ### Jina
 
 Added for the hosted Jina reranker in Settings → Reranker, which is the only way

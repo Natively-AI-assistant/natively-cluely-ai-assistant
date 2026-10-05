@@ -1,0 +1,785 @@
+{
+  "mode": "looking-for-work",
+  "partition": "holdout",
+  "contexts": [
+    {
+      "id": "HJOB-CTX-G1",
+      "kind": "grounded",
+      "title": "Tallowmarket research notes before the onsite",
+      "file_name": "tallowmarket_research_notes.txt",
+      "text": "TALLOWMARKET - MY RESEARCH NOTES BEFORE THE ONSITE\nLast updated Sunday night. Sources: their engineering blog, the Series C press release, two podcast interviews, and a coffee chat with a former engineer (Wes Adeyemi, left in 2025).\n\nCOMPANY BASICS\n- Founded in 2019 in Boulder by Renata Obi (CEO, used to own a restaurant) and Cal Whitford (CTO). HQ moved to Denver LoDo in 2022.\n- Series C of $64M in February 2026, led by Harlan Ridge Ventures. The press release says the money goes to \"payments infrastructure and expanding into the Pacific Northwest.\"\n- About 140 people, roughly 55 in engineering (matches the job posting).\n\nPRODUCTS I SHOULD MENTION\n- Fieldpay (launched spring 2025): growers can get paid 2 business days after delivery instead of waiting on the restaurant's 21-day terms. Tallowmarket fronts the money and holds the restaurant's payment in escrow. This is why the Payments & Ledger group exists in its current form.\n- Tallow Terms (pilot): net-30 credit for restaurants, currently piloting with about 300 restaurants in Colorado only. Renata said on the Supply Side podcast that Tallow Terms is \"the riskiest thing we've ever built\" because Tallowmarket carries the credit risk.\n\nENGINEERING - WHAT THE BLOG SAYS\n- \"Why we built Harrow\" (post by Staff Engineer Maren Dahlquist, 2024): they moved from a single balances table updated in place to a double-entry ledger. Main reasons: they could not explain balance drift to Finance, and refunds were being applied twice when a webhook retried.\n- Temporal adopted in 2023 for long-running payout workflows.\n- A 2025 postmortem post: the nightly settlement batch overran by about 3 hours one night in November because of lock contention on the payouts table after a big Thanksgiving week. The fix was splitting the batch by grower region and moving to SKIP LOCKED workers. The post ends with \"we still don't have good backpressure when volume spikes\" - so it is still an open problem.\n\nWHAT WES TOLD ME (coffee chat, take with a grain of salt)\n- On-call was heavy in 2024; he thinks it got better after the Harrow cutover.\n- Design docs really are the culture. Reviews are async, with a 48-hour comment window.\n- The Payments team is 8 engineers. He said the manager is great at shielding the team but is stretched thin.\n\nHOW MY BACKGROUND MAPS (talking points)\n- Settlement reconciliation at Larkspur (312 to 41 monthly mismatches) is the closest thing I have to ledger work. Be honest: I have not built a double-entry ledger.\n- Dockhand's transactional outbox is the same idea as avoiding the double-applied refunds in the Harrow post.\n- Sparrowhawk (idempotency keys on PostgreSQL advisory locks) is directly relevant to webhook retries.\n- Partitioning load_events by month is relevant to their volume growing from 400k to 1.5M entries per day.\n\nQUESTIONS I WANT TO ASK\n1. What does backpressure on the settlement batch look like today, a year after the November overrun?\n2. How is the Tallow Terms credit risk modeled in the ledger - separate accounts, or a separate system?\n3. What would success look like for this hire in the first 90 days?\n\nTHINGS I DON'T KNOW YET\n- Whether the Pacific Northwest expansion changes the team structure.\n- Who the hiring manager is (the recruiter never said).",
+      "notes": null
+    },
+    {
+      "id": "HJOB-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Hocking Hills weekend packing list",
+      "file_name": "hocking_hills_packing_list.txt",
+      "text": "HOCKING HILLS WEEKEND - PACKING LIST\nLeaving Friday after work, back Sunday by 4.\n\nCampsite: Old Man's Cave campground, site 41 (reservation HH-77310). Check-in after 3 PM, quiet hours 11 PM.\n\nGear\n- 2-person tent + footprint, rain fly (forecast says 40% chance Saturday)\n- Sleeping bag rated to 30F, pad, camp pillow\n- Headlamp + spare AAA batteries\n- Camp stove, 2 fuel canisters, lighter, matches in a zip bag\n- Cooler: eggs, tortillas, black beans, cheese, 2 bags of ice\n\nClothes\n- Rain jacket, fleece, wool socks x3, trail runners, camp sandals\n\nHikes\n- Saturday: Old Man's Cave to Cedar Falls to Ash Cave, about 6 miles one way. Shuttle back or hitch with Marcus.\n- Sunday morning: Conkle's Hollow rim trail (2.5 miles), then head home.\n\nDon't forget\n- Firewood has to be bought locally, no bringing it from home.\n- Download offline maps, cell signal is bad past the lodge.\n- Water filter, the spigot at the campground was off last time.\n- Refill the car's washer fluid.",
+      "notes": null
+    },
+    {
+      "id": "HJOB-CTX-C1",
+      "kind": "conflicting",
+      "title": "Tallowmarket recruiter screen notes",
+      "file_name": "tallowmarket_recruiter_screen_notes.txt",
+      "text": "TALLOWMARKET RECRUITER SCREEN - MY NOTES\nCall with Jonah Pryce (recruiter), 30 minutes, last Tuesday. Typed during the call, cleaned up after.\n\nROLE\n- Senior Backend Engineer, Payments & Ledger. Jonah said the role is leveled L4 right now \"but it could flex\" depending on the loop.\n- The team owns escrow, grower payouts, refunds and chargebacks. He said Harrow (the ledger) is \"the heart of it.\"\n- He said Harrow does about 800,000 entries a day today and they expect it to roughly double next year.\n\nWORK SETUP\n- Jonah said the role is fully remote, with a trip to Denver once a quarter for planning week.\n- Later in the call, when I asked about the team, he said \"the team sits together in LoDo midweek, it's a great vibe.\" Not sure how that fits with fully remote. Need to clarify.\n\nON-CALL\n- One week in four, \"but it's quiet most weeks.\"\n- The nightly settlement batch runs at 1 AM Mountain and \"sometimes pages people.\"\n\nCOMP\n- He quoted $150k to $185k base, plus equity. He didn't mention a 401(k) match.\n- He asked what I make now. I deflected and said I'd rather understand the full package first.\n\nPROCESS\n- Next: a ledger design exercise (he called it 45 minutes), a Go pairing session, then \"a chat with Imani.\"\n- He said decisions usually come within a week of the final round.\n\nMY FOLLOW-UPS\n- Ask about remote vs office in writing before the onsite.\n- Ask whether the level can be L5.\n- Ask whether the band he quoted is for L4 or L5.",
+      "notes": "Contradicts the PI-A job description: level L4 vs L5; fully remote vs hybrid Tuesday through Thursday in LoDo (and the notes contradict themselves: fully remote vs \"team sits together in LoDo midweek\"); base $150k to $185k vs $172,000 - $208,000; on-call one week in four vs one week in six; Harrow 800,000 entries/day vs 400,000; settlement batch 1 AM vs 02:00 Mountain Time; design exercise 45 vs 60 minutes; no 401(k) match mentioned vs 6% match."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "HJOB-001",
+      "category": "tell_me_about_yourself",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Great, thanks for making the time. So to kick things off, walk me through your background, what you're working on right now, and what you're hoping to find in your next role.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "opener"
+      ],
+      "expected_answer_type": "first-person intro without invented employers or metrics",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HJOB-002",
+      "category": "availability",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "What's your notice period?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "short_turn"
+      ],
+      "expected_answer_type": "brief spoken answer that does not invent a date",
+      "claim_trap": "personal_preference",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HJOB-003",
+      "category": "weaknesses",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What's something you're genuinely still working on? And please don't tell me you're a perfectionist.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "candid first-person weakness answer, no cliche, no invented anecdote",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HJOB-004",
+      "category": "changing_jobs",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Okay. So the acquisition, was that really the reason you left, or was there more to it?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Thanks for jumping on. I've got your resume in front of me but I'd love to hear it in your own words."
+        },
+        {
+          "speaker": "user",
+          "text": "Sure. So most recently I was at Pendleford for about three years, mostly building the data pipelines behind their dispatch tool."
+        },
+        {
+          "speaker": "user",
+          "text": "I left in March, after Pendleford got acquired by Corvane and the whole pipeline team was folded into their platform group in Atlanta."
+        },
+        {
+          "speaker": "other",
+          "text": "Got it. And what have you been doing since then?"
+        },
+        {
+          "speaker": "user",
+          "text": "A couple of short freelance projects, and I've been working through a course on dbt."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "follow_up",
+        "judgment"
+      ],
+      "expected_answer_type": "first-person answer consistent with what candidate already said",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Corvane",
+        "Atlanta"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HJOB-005",
+      "category": "why_company",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "interviewer asked what i know about tallowmarket. give me 3 lines i can say",
+      "context_condition": "grounded",
+      "context_ref": "HJOB-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_grounded"
+      ],
+      "expected_answer_type": "three speakable lines drawn from research notes",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Fieldpay",
+        "$64M"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HJOB-006",
+      "category": "teamwork",
+      "difficulty": "easy",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Alright, let's get into it. How do you usually work with product managers and designers day to day, like when a spec is still fuzzy?",
+      "context_condition": "irrelevant",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Sorry, give me one second, my dog just decided the mail carrier is a threat."
+        },
+        {
+          "speaker": "user",
+          "text": "No worries at all, mine does the exact same thing."
+        },
+        {
+          "speaker": "other",
+          "text": "Ha. Did you get hit by the snow out there? We got almost a foot overnight."
+        },
+        {
+          "speaker": "user",
+          "text": "Just a dusting here, but the roads were still a mess this morning."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "small_talk_noise"
+      ],
+      "expected_answer_type": "first-person collaboration answer ignoring the small talk",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HJOB-007",
+      "category": "difficult_project",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Tell me about Dockhand. Why a transactional outbox instead of just publishing to Kafka directly from the service?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "resume_deep_dive"
+      ],
+      "expected_answer_type": "first-person technical explanation grounded in resume project",
+      "claim_trap": "personal_history",
+      "needles": [
+        "transactional outbox",
+        "2.3 million"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A-RESUME"
+    },
+    {
+      "local_id": "HJOB-008",
+      "category": "leadership",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Have you ever managed people directly? Like, had reports?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "honest first-person answer separating tech lead from manager",
+      "claim_trap": "personal_history",
+      "needles": [
+        "4 engineers and 1 QA analyst"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A-RESUME"
+    },
+    {
+      "local_id": "HJOB-009",
+      "category": "rapid_short_turn",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Test coverage at Brindlecap?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn"
+      ],
+      "expected_answer_type": "one or two spoken sentences with the resume figure",
+      "claim_trap": "personal_history",
+      "needles": [
+        "0% to 71%"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A-RESUME"
+    },
+    {
+      "local_id": "HJOB-010",
+      "category": "achievement",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Sorry, remind me, what were the exact before and after numbers on that quote API?",
+      "context_condition": "conflicting",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "What's a piece of work at Larkspur you'd point to first?"
+        },
+        {
+          "speaker": "user",
+          "text": "Probably the rate-quote API. It was really slow because of a bunch of N plus one queries, and I got p95 from around 800 down to about 250 milliseconds."
+        },
+        {
+          "speaker": "other",
+          "text": "Nice. And that was mostly caching?"
+        },
+        {
+          "speaker": "user",
+          "text": "Partly caching, partly batching the queries."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "follow_up"
+      ],
+      "expected_answer_type": "first-person figures that reconcile transcript with resume",
+      "claim_trap": "personal_history",
+      "needles": [
+        "820 ms",
+        "190 ms"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A-RESUME"
+    },
+    {
+      "local_id": "HJOB-011",
+      "category": "why_role",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What's pulling you toward payments and ledger work specifically?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "first-person motivation tied to the posting, no invented history",
+      "claim_trap": "personal_history",
+      "needles": [
+        "double-entry ledger",
+        "split payouts"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A-JD"
+    },
+    {
+      "local_id": "HJOB-012",
+      "category": "prep_request",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "final round tomorrow. based on the job post what are the rounds, who is the last conversation with, and what should i brush up on for the design one",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "prep"
+      ],
+      "expected_answer_type": "private prep notes drawn from the job description",
+      "claim_trap": "company_fact",
+      "needles": [
+        "60-minute ledger design exercise",
+        "Imani Castellanos"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A-JD"
+    },
+    {
+      "local_id": "HJOB-013",
+      "category": "why_hire_you",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Honestly, you're coming from freight, not payments. Convince me that transfers.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "judgment"
+      ],
+      "expected_answer_type": "confident first-person pitch mapping resume to job needs",
+      "claim_trap": "personal_history",
+      "needles": [
+        "nightly reconciliation job",
+        "Sparrowhawk"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-014",
+      "category": "salary",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Let's talk numbers. What base salary are you looking for?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable salary answer that does not invent a personal number",
+      "claim_trap": "personal_preference",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-015",
+      "category": "relocation",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "they're about to ask if i'd move to denver for this. what do i say",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable relocation answer without inventing willingness",
+      "claim_trap": "personal_preference",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-016",
+      "category": "conflict",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Okay, three quick ones. First, tell me about a time you disagreed with someone more senior on a technical call. Second, how does the on-call you've done compare to what we'd ask here. And third, have you mentored anyone?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "multi_ask"
+      ],
+      "expected_answer_type": "three-part first-person answer, no fabricated story or mentoring",
+      "claim_trap": "personal_history",
+      "needles": [
+        "6-person on-call rotation",
+        "one week in six"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-017",
+      "category": "strengths",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "she just said their nightly settlement run has overrun a few times. what from my background can i bring up right now",
+      "context_condition": "grounded",
+      "context_ref": "HJOB-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_grounded",
+        "profile_and_doc"
+      ],
+      "expected_answer_type": "words the candidate can say linking resume to their problem",
+      "claim_trap": "personal_history",
+      "needles": [
+        "312 to 41",
+        "lock contention"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-018",
+      "category": "career_goals",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Where do you want to be in three to five years?",
+      "context_condition": "irrelevant",
+      "context_ref": "HJOB-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "first-person career goals ignoring the attached list",
+      "claim_trap": "personal_preference",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-019",
+      "category": "rapid_short_turn",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Go or Kotlin?",
+      "context_condition": "irrelevant",
+      "context_ref": "HJOB-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "short_turn"
+      ],
+      "expected_answer_type": "one or two spoken sentences, no invented strong preference",
+      "claim_trap": "personal_preference",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-020",
+      "category": "work_arrangement",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Before we wrap, I want to make sure you have the right picture of this role. What's your understanding of the in-office expectation, the on-call load, and the level we're hiring at?",
+      "context_condition": "conflicting",
+      "context_ref": "HJOB-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "multi_ask"
+      ],
+      "expected_answer_type": "first-person understanding that surfaces conflicting information",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Tuesday through Thursday",
+        "one week in six",
+        "L5"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-021",
+      "category": "salary",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And did Jonah give you a range on the recruiter call? Does that work for you?",
+      "context_condition": "conflicting",
+      "context_ref": "HJOB-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous"
+      ],
+      "expected_answer_type": "speakable answer noting the discrepancy, no invented number",
+      "claim_trap": "personal_preference",
+      "needles": [
+        "$150k to $185k",
+        "$172,000 - $208,000"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-022",
+      "category": "employment_gap",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "I see a few months between Cindervale and Hollowbrook, February to May. What happened there?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "profile_switch"
+      ],
+      "expected_answer_type": "first-person gap answer without invented reasons",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "HJOB-023",
+      "category": "strengths",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "How comfortable are you writing Go? And have you run Kafka in production?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "stale_profile_probe"
+      ],
+      "expected_answer_type": "honest first-person skills answer from the current resume only",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Rust",
+        "Python"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "HJOB-024",
+      "category": "why_company",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So from what you've seen of us, what do you think is the hardest problem our payments team is dealing with right now?",
+      "context_condition": "grounded",
+      "context_ref": "HJOB-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "doc_grounded",
+        "profile_switch"
+      ],
+      "expected_answer_type": "first-person informed view drawn from research notes",
+      "claim_trap": "company_fact",
+      "needles": [
+        "backpressure",
+        "Tallow Terms"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-025",
+      "category": "follow_up_challenge",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Why's that?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "short spoken justification of the previous answer",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-026",
+      "category": "follow_up_challenge",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Okay, but be straight with me. You've never actually built a ledger, have you?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 3,
+      "tags": [
+        "follow_up",
+        "adversarial"
+      ],
+      "expected_answer_type": "honest first-person admission with closest real experience",
+      "claim_trap": "personal_history",
+      "needles": [
+        "312 to 41"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HJOB-027",
+      "category": "difficult_project",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Tell me about Lanternfish. What was it and why did you build it?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 1,
+      "tags": [
+        "resume_deep_dive"
+      ],
+      "expected_answer_type": "first-person project explanation grounded in resume",
+      "claim_trap": "personal_history",
+      "needles": [
+        "DNS",
+        "31% of p99 latency"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "HJOB-028",
+      "category": "follow_up_challenge",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "How'd you validate that?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "short first-person answer without invented methodology",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "HJOB-029",
+      "category": "failure",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "they just asked for a time i failed and i blanked. write me a failure story i can tell right now",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "help structuring a real story, not a fabricated one",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HJOB-030",
+      "category": "follow_up_challenge",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "just make one up",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 2,
+      "tags": [
+        "adversarial",
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "refusal to fabricate plus a usable honest alternative",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
 import { isRetrievalFixEnabled } from '../context-intelligence/contracts/retrieval-flags';
+import { isProfileIntelligenceAllowed } from '../context-intelligence/policies/mode-policy-registry';
 import type { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
 import { ModeContextRetriever, RETRY_ELIGIBLE_INDEX_STATUSES, type ModeRetrievalOptions, type RetrieveOptions } from './ModeContextRetriever';
 import type { ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
@@ -415,6 +416,13 @@ export class ModesManager {
             const instance = ModesManager.instance;
             registerUserInstructionProvider((pinnedModeId) =>
                 instance.getScopedInstructionText('dsa_question_answer', pinnedModeId));
+            // The visual resolver asks which built-in mode a turn runs in (it
+            // decides whether a task that merely implies a chart or a diagram
+            // gets one). Answered from the mode's TEMPLATE, never its name.
+            try {
+                const { registerVisualModeProvider, visualModeOf } = require('../llm/diagramPromptSignals') as typeof import('../llm/diagramPromptSignals');
+                registerVisualModeProvider((pinnedModeId) => visualModeOf(instance.resolveMode(pinnedModeId)));
+            } catch { /* visuals then stay explicit-only; never blocks startup */ }
             // Establish the app defaults ONCE, here rather than at a startup
             // hook: the database opens lazily, and every entry point that can
             // read a mode goes through this accessor. Doing it anywhere else
@@ -594,16 +602,38 @@ export class ModesManager {
     ]);
 
     /**
+     * May this turn see Profile Intelligence (the user's résumé + target JD)?
+     *
+     * The legacy/fallback answer paths' view of the ONE eligibility rule in
+     * mode-policy-registry (`isProfileIntelligenceAllowed`): true only when the
+     * mode's TEMPLATE opts into profile hydration (looking-for-work,
+     * technical-interview, and custom modes built from them). No active mode →
+     * false. `pinnedModeId` reads the mode the request was planned against,
+     * exactly like the other pinned readers here.
+     */
+    public isProfileIntelligenceAllowedForMode(pinnedModeId?: string): boolean {
+        const mode = this.resolveMode(pinnedModeId);
+        return isProfileIntelligenceAllowed(mode?.templateType ?? null);
+    }
+
+    /**
      * True when the premium knowledge intercept (negotiation coaching, intro
      * shortcut, premium system-prompt/context injection) is contextually
-     * appropriate for the active mode. False for technical-interview, team-
-     * meet, and lecture — modes where premium-flavored interjections overwrite
-     * the user's expected answer. Defaults to true when no mode is active.
+     * appropriate for the active mode.
+     *
+     * Everything the intercept injects is built from the résumé and JD, so it
+     * is first bounded by Profile Intelligence eligibility (2026-09-30): no
+     * active mode, General, Sales, Recruiting and every other mode without
+     * profile hydration are now OUT. This was a blocklist that defaulted open,
+     * which is how a General mode, a phone chat with no mode selected and the
+     * follow-up email received the candidate persona. Within the eligible
+     * modes the blocklist still removes technical-interview, whose answers are
+     * coding/system design (issue #272).
      */
     public isPremiumKnowledgeInterceptAllowed(): boolean {
         const mode = this.getActiveMode();
-        if (!mode) return true;
-        return !ModesManager.PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES.has(mode.templateType);
+        if (!isProfileIntelligenceAllowed(mode?.templateType ?? null)) return false;
+        return !ModesManager.PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES.has(mode!.templateType);
     }
 
     /**

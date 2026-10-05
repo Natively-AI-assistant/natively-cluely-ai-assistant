@@ -3,6 +3,8 @@ import Groq from "groq-sdk"
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import fs from "fs"
+import os from "os"
+import path from "path"
 import { createHash, randomUUID } from "crypto"
 import sharp from "sharp"
 import { ModelVersionManager, ModelFamily, TextModelFamily } from './services/ModelVersionManager'
@@ -20,12 +22,18 @@ import {
   TINY_ASSIST_PROMPT, TINY_BRAINSTORM_PROMPT, TINY_CLARIFY_PROMPT, TINY_CODE_HINT_PROMPT,
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
-import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
+import { gatewaySeatReadsImages, readsImages, resolveVision, resolveVisionAuto, type VisionFacts, type VisionModelState, type VisionVerdict } from "./llm/visionResolver"
+import { forgetBreakersOfOtherSelections, orderVisionCandidates } from "./llm/visionOrdering"
+import { hasOnDeviceScreenText, ON_DEVICE_SCREEN_REFUSED_MESSAGE } from "./context-intelligence/question/on-device-screen"
+import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionOverride, storedVisionTest, visionWireModel } from "./llm/visionCapabilityStore"
+import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
+import { parseOpenRouterVision } from "./llm/providerVisionData"
+import { trimUserContentToFit, userContentRoomChars } from "./llm/localContextTrim"
+import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
   runStreamingVisionFallback,
-  orderVisionByHealth,
   DEFAULT_VISION_FALLBACK_CONFIG,
   type VisionStreamProvider,
   type VisionHealthEntry,
@@ -44,6 +52,7 @@ import {
   resolveOllamaVision,
   customProviderSupportsVision,
   customProviderIsLocal,
+  isLegacyRemoteOllamaVisionName,
 } from "./llm/visionCapability"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, isProviderFamilyDisabled, ProviderDisabledError, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
 // Outbound-scope vocabulary shared with Context Intelligence V3. ONE mapping of
@@ -61,6 +70,7 @@ import type { ActiveModeDocumentGroundingInfo } from "./services/ModesManager"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { applyCurlVariables, getByPath, injectImageIntoMessages, flattenStructuredJsonAnswer, blockedInfrastructureHost } from './utils/curlUtils';
 import { getImageOptimizer } from './services/screen/ImageOptimizer';
+import { isPhoneImagePath, visionImageEdge } from './utils/phoneImage';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { TRIAL_SENTINEL_KEY } from './config/constants';
@@ -143,8 +153,17 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // ladder: if this id goes, Groq hosts nothing that accepts an image, and the
 // vision chain is meant to fall through to another provider.
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
-import { GROQ_VISION_MODEL } from './llm/groqModels'
+import { GROQ_VISION_MODEL, isRetiredModelId as isRetiredGroqModelId } from './llm/groqModels'
 import { DEEPSEEK_DEFAULT_MODEL, deepseekWireModel, isDeepseekModelId } from './llm/deepseekModels'
+import {
+  AGENTROUTER_JUDGE_MODEL,
+  agentRouterError,
+  agentRouterProtocolFor,
+  agentRouterWireModel,
+  isAgentRouterClaudeWireModel,
+  isAgentRouterModelId,
+} from './llm/agentRouter'
+import { createAgentRouterClients } from './llm/agentRouterClients'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
 import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
 import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
@@ -156,6 +175,14 @@ const GROQ_VISION_MAX_IMAGES = 5
 // trusted. The probe itself can take 5s per request against a hung daemon.
 const OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS = 1500
 const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
+// "Keep screenshots on this device" waits for this answer before it can answer
+// at all, so it gets longer than the cloud chain's 1.5 s (the old check allowed
+// 10 s). A daemon slower than this still fills the cache for the next turn.
+const OLLAMA_LOCAL_VISION_PROBE_BUDGET_MS = 5_000
+// How long a screenshot turn waits for the on-the-spot image test (see
+// testSelectedVisionNow). The background test has 45 s; a person waiting for
+// an answer does not. A test that is not done by then counts as "not known".
+const VISION_INLINE_TEST_BUDGET_MS = 10_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 // Auto Answer judge on the OpenAI rung — chosen by MEASUREMENT, not by size.
@@ -182,8 +209,43 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 // lever is prompt size: JUDGE_PROMPT_RULES alone is 7420 chars of the ~12.2k
 // total, so trimming the boilerplate would buy more than any timeout tuning.
 const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
+/** OpenRouter's judge model: the small tier Natively's decision route also runs. */
+export const OPENROUTER_JUDGE_MODEL = 'openrouter/google/gemini-3.1-flash-lite'
+/** The judge's LAST model rung (the gateway, else Natively) may use most of the controller's 2.5 s. */
+const LAST_JUDGE_RUNG_TIMEOUT_MS = 2300
+/**
+ * First-token budgets for the Gemini TEXT cascade, per rung.
+ *
+ * The cascade used one flat 2.5 s (DEFAULT_TEXT_FALLBACK_CONFIG) for every rung.
+ * Measured 2026-09-26, streaming, on a live-sized answer prompt (13k-char system
+ * instruction + 4k-char transcript), at the thinking level each model is sent:
+ *   gemini-3.1-flash-lite (minimal)  1.0-1.5 s
+ *   gemini-3.8-flash (low; it 400s on minimal) 1.9-2.4 s — the app's DEFAULT
+ *   gemini-3.1-pro (low)              5.1-5.7 s
+ * So the default model missed 2.5 s often enough that a live Auto Answer took
+ * 13 s: Flash timed out twice, Pro (which can NEVER answer in 2.5 s) twice,
+ * then the turn fell through to the Natively key — and a Gemini-only user got
+ * no answer at all. Budgets are ~2× the measured first token.
+ */
+export const GEMINI_TEXT_TTFT_MS = Object.freeze({ flashLite: 2_500, flash: 5_000, pro: 10_000 })
 // Ceiling for a fast call made with no caller signal (the preferFast callers).
 const FAST_MODEL_DEFAULT_TIMEOUT_MS = 8000
+// Codex's measured first token is 1.7-2.0 s (gpt-5.5; see DEFAULT_CODEX_CLI_CONFIG),
+// before a single token of reply. A fast rung with a smaller budget cannot be
+// met on Codex — the judge rung (1.8 s) and the query rewrite (1.5 s) would
+// spend their whole budget and then fall through anyway — so a Codex
+// Background Model skips them and they run their own ladders at once.
+const CODEX_FAST_MIN_BUDGET_MS = 3000
+// 'natively' is an Auto candidate only (its server fast tier). It is never a
+// Background Model: resolveFastModelFamily() does not return it, so the picker
+// cannot offer it and callFastModel never sees it.
+type FastModelFamily = 'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude' | 'codex' | 'natively'
+  | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | 'agentrouter'
+// Background Model families on an endpoint the user supplies — the same set
+// activeModelIsUserEndpoint() names for an Active Model.
+const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'ninerouter', 'agentrouter'])
+/** Per-call overrides for streamWithAgentRouter (the fast-model seam's small cap and temperature 0). */
+type AgentRouterCallOptions = { maxTokens?: number; temperature?: number }
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
 const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
 // DEEPSEEK_MODEL keeps main's centralised id, NOT the "deepseek-v4-flash"
@@ -191,6 +253,64 @@ const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
 // is what DeepSeek serves today (llm/deepseekModels.ts). Taking the literal
 // would silently revert main's fix.
 const DEEPSEEK_MODEL = DEEPSEEK_DEFAULT_MODEL
+// Fast Response Mode on Auto (2026-09-26): the candidates it can answer on,
+// so no particular provider is required. Every id is the one this file already
+// runs as that vendor's quick call; 'codex-cli' resolves to the Codex default
+// and 'natively' is the server's fast tier. The ORDER is only the cold start:
+// once this user's own samples exist, autoFastRanking re-sorts by them. Shipped
+// order, fastest first: Groq sub-second; DeepSeek Flash 0.55s and Gemini
+// Flash-Lite ~1.1s first token (live, 2026-09-26); Natively's fast tier is
+// Flash-Lite behind a server hop; GPT-5.5 p50 1.4s (judge eval above); Codex
+// 1.7-2.0s; Claude Haiku unmeasured, so last.
+const AUTO_FAST_TIERS: ReadonlyArray<{ family: FastModelFamily; model: string }> = [
+  { family: 'groq', model: GROQ_MODEL },
+  { family: 'deepseek', model: DEEPSEEK_MODEL },
+  { family: 'gemini', model: GEMINI_FLASH_LITE_MODEL },
+  { family: 'natively', model: 'natively' },
+  { family: 'openai', model: OPENAI_JUDGE_MODEL },
+  { family: 'codex', model: 'codex-cli' },
+  { family: 'claude', model: CLAUDE_JUDGE_MODEL },
+]
+// How long Auto's ranked order is frozen, so the order does not churn with every
+// sample. One turn's own reads are held together by its FastTurn record instead
+// (textTurn): a freeze can expire mid-turn, a record cannot.
+const AUTO_FAST_ORDER_TTL_MS = 30_000
+// A fast pick that failed before its first token steps aside this long, so the
+// following turns go to (and are timed for) whoever answers instead.
+const FAST_PICK_COOLDOWN_MS = 90_000
+// Share of the pick's route budget it gets to say its first word. A pick that
+// stalls past it is abandoned INSIDE the turn and the fallback answers; the
+// outer deadline would instead abort the whole turn, which looks like a user
+// cancel and teaches nothing. Healthy fast models answer far inside it.
+const FAST_PICK_FIRST_TOKEN_SHARE = 0.5
+/** A fast pick that stalled or ended silent — a failure to fall back from, never a cancel. */
+class FastPickFailure extends Error {
+  constructor(public readonly kind: 'stall' | 'empty', message: string) {
+    super(message);
+    this.name = 'FastPickFailure';
+  }
+}
+type FastPick = { modelId: string; family: FastModelFamily; auto: boolean }
+/**
+ * One answer's Fast Response decision, keyed by the answer's abort signal (see
+ * LLMHelper.textTurn). The caller reads its deadline, latency key and profile
+ * identity BEFORE the answer is dispatched, and those reads and the dispatch
+ * must name the same model: re-resolving at each read let a 30s order refresh
+ * or another turn's failure in between hand the answer to a different model
+ * than the one it was timed and filed for.
+ */
+interface FastTurn {
+  /** Whose helper resolves the pick — a view never resolves one itself. */
+  owner: LLMHelper
+  /** Resolved once, at the first read or at dispatch, whichever comes first. */
+  pick?: FastPick | null
+  /** The first dispatch on this signal has claimed the record; later ones pick fresh. */
+  dispatched?: boolean
+  /** Who answered: the pick, the pick failed and the fallback rescued the turn, or no pick applied. */
+  answered?: 'pick' | 'rescued' | 'active'
+  /** The dispatch saw no image — a screenshot a privacy setting dropped makes a text turn. */
+  textOnly?: boolean
+}
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 // DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
 // (reasoning_effort `high`), and in streaming the reasoning arrives in
@@ -240,7 +360,12 @@ const NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 // Requested ceiling; see createNvidiaNimCompletion for why it is a request and
 // not a guarantee (NVIDIA exposes no per-model output budget to look up).
 const NVIDIA_NIM_MAX_OUTPUT_TOKENS = 8192
-const DEEPSEEK_MAX_OUTPUT_TOKENS = 8192
+// DeepSeek's own ceiling, MEASURED 2026-09-30: api.deepseek.com answers a
+// larger max_tokens with 400 "the valid range of max_tokens is [1, 393216]"
+// (the pricing page's "MAXIMUM: 384K"). It was 8192 — V3-era, uncommented —
+// which cut a long coding answer off at exactly 8,192 tokens. What is sent is
+// this capped by the app's shared ceiling (getDeepseekMaxOutput).
+const DEEPSEEK_MAX_OUTPUT_TOKENS = 393216
 // LiteLLM fronts arbitrary upstream models with widely varying output ceilings.
 // Resolution order per request: (1) user manual override from Settings,
 // (2) per-model budget auto-discovered from the proxy's /model/info
@@ -262,6 +387,11 @@ const NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS = 64000
 const NINEROUTER_MAX_TOKENS_MIN = 256
 const NINEROUTER_MAX_TOKENS_MAX = 1048576
 const NINEROUTER_MODELS_TTL_MS = 5 * 60_000
+// OpenRouter's "which models read images" catalogue (2026-10-01): fresh for a
+// day; after a failed fetch, no retry for 10 minutes however often the user
+// switches models.
+const OPENROUTER_VISION_TTL_MS = 24 * 60 * 60 * 1000
+const OPENROUTER_VISION_RETRY_MS = 10 * 60 * 1000
 // Mirrors NINEROUTER_THINKING_LEVELS in src/utils/modelUtils.ts. electron/
 // never imports from src/, so the list is restated; the settings dropdown
 // and this validator have to agree or a picked level is silently dropped.
@@ -492,7 +622,26 @@ export interface StreamOutcome {
   /** True when the turn stopped early and the text is INCOMPLETE. */
   truncated: boolean;
   /** Which guard ended it — telemetry and log wording only. */
-  reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
+  reason?: 'provider_failed_after_first_token' | 'output_cap_reached' | 'output_repetition';
+  /** The hidden calculation block the model wrote before its answer, if any
+   *  (see llm/calcScratch.ts). Never shown; populated when the stream ends. */
+  calcScratch?: string;
+}
+
+/**
+ * The diagram contract on a system prompt that is about to be replaced, ready
+ * to append to its replacement ('' when there is none).
+ *
+ * The knowledge intercept swaps the whole system prompt for the persona's. A
+ * turn that had been told to draw ("draw a timeline of my career", asked from
+ * the phone) then kept its <active_design> block in the context and lost the
+ * contract that says what to do with it. Plain text match on the contract's
+ * own tags: this file must not import the shared .mjs modules statically.
+ */
+export function carriedDiagramContract(replaced: string | null | undefined): string {
+  if (typeof replaced !== 'string') return '';
+  const block = /<diagram_contract>[\s\S]*?<\/diagram_contract>/.exec(replaced);
+  return block ? `\n\n${block[0]}` : '';
 }
 
 export class LLMHelper {
@@ -530,6 +679,11 @@ export class LLMHelper {
   // one is ever non-null at a time — see setFluxionConfig.
   private _fluxionOpenAIClient: OpenAI | null = null
   private _fluxionAnthropicClient: Anthropic | null = null
+  // AgentRouter also speaks both protocols, but chooses PER MODEL rather than
+  // per key (agentRouterProtocolFor), so both clients exist whenever a key does
+  // — see setAgentRouterApiKey. Both carry the client-identity header.
+  private _agentrouterOpenAIClient: OpenAI | null = null
+  private _agentrouterAnthropicClient: Anthropic | null = null
   // LiteLLM proxy is OpenAI-compatible (AI gateway fronting 100+ providers).
   // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
   // credentials/scope/telemetry stay provider-specific.
@@ -562,6 +716,13 @@ export class LLMHelper {
   private set fluxionOpenAIClient(v: OpenAI | null) { this._fluxionOpenAIClient = v }
   private get fluxionAnthropicClient(): Anthropic | null { return this.isProviderDisabled('fluxion') ? null : this._fluxionAnthropicClient }
   private set fluxionAnthropicClient(v: Anthropic | null) { this._fluxionAnthropicClient = v }
+  // The disabled-provider guard for AgentRouter, for the reason the Fluxion
+  // pair above gives: no gateway has a PROVIDER_LABEL_FAMILY entry, so these
+  // getters returning null are what stop a switched-off AgentRouter being called.
+  private get agentrouterOpenAIClient(): OpenAI | null { return this.isProviderDisabled('agentrouter') ? null : this._agentrouterOpenAIClient }
+  private set agentrouterOpenAIClient(v: OpenAI | null) { this._agentrouterOpenAIClient = v }
+  private get agentrouterAnthropicClient(): Anthropic | null { return this.isProviderDisabled('agentrouter') ? null : this._agentrouterAnthropicClient }
+  private set agentrouterAnthropicClient(v: Anthropic | null) { this._agentrouterAnthropicClient = v }
   private get litellmClient(): OpenAI | null { return this.isProviderDisabled('litellm') ? null : this._litellmClient }
   private set litellmClient(v: OpenAI | null) { this._litellmClient = v }
   // This getter IS the disabled-provider guard for 9Router, for the reason the
@@ -610,10 +771,20 @@ export class LLMHelper {
   private deepseekApiKey: string | null = null
   private nvidiaNimApiKey: string | null = null
   private openrouterApiKey: string | null = null
+  // OpenRouter vision catalogue refresh (2026-10-01): single flight, and a short
+  // backoff after a failure so model switching never hammers the endpoint.
+  private openrouterVisionFetch: Promise<void> | null = null
+  private openrouterVisionLastFailureAt = 0
+  // The one-time image test (2026-10-01). Off until enableVisionProbing():
+  // ProcessingHelper turns it on at startup, so a test or benchmark that builds
+  // an LLMHelper never sends a probe by accident.
+  private visionProbingEnabled = false
+  private visionProbe: VisionProbe | null = null
   private fluxionApiKey: string | null = null
   /** Which wire protocol this key's Fluxion group speaks. Default matches the
    *  GPT/Grok/Gemini/DeepSeek/GLM/Kimi groups; Claude groups need 'anthropic'. */
   private fluxionProtocol: 'openai' | 'anthropic' = 'openai'
+  private agentrouterApiKey: string | null = null
   private litellmApiKey: string | null = null
   private litellmBaseURL: string = "http://localhost:4000/v1"
   // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
@@ -665,6 +836,10 @@ export class LLMHelper {
   // the last one found nothing vision-capable or ran out of budget. Without it a
   // user with Ollama selected and no vision model re-paid the probe per screenshot.
   private ollamaVisionNegativeUntil = 0;
+  /** Test seam for VISION_INLINE_TEST_BUDGET_MS. */
+  private visionInlineTestBudgetMs?: number;
+  /** The screen-record request in flight, if any; an Ollama answer cancels it (see runVisionRequest('ollama')). */
+  private ollamaRecordAbort?: AbortController | null;
   private ollamaStartedByApp: boolean = false;
   private geminiModel: string = GEMINI_FLASH_MODEL
   private customProvider: CustomProvider | null = null;
@@ -726,6 +901,8 @@ export class LLMHelper {
   //   - ttftEma: exponentially-weighted moving avg of time-to-first-token (alpha 0.2),
   //     used to reorder healthy providers fastest-first.
   private visionHealth: Map<string, VisionHealthEntry> = new Map();
+  /** Which selection each leading screenshot rung last ran for (see buildVisionChain). */
+  private visionLeadSelection?: Map<string, string>;
 
   // ─── Streaming TEXT fallback: per-provider health + TTFT tracking ────────
   // Twin of visionHealth for the text TTFT race (runStreamingTextFallback).
@@ -752,10 +929,21 @@ export class LLMHelper {
   private answerLatency: Map<string, { maxMs: number; ewmaMs: number; count: number }> = new Map();
 
   /**
-   * Stable identity for the endpoint currently selected, or null when the route
-   * is not a user endpoint (nothing else adapts, so nothing else is measured).
+   * Stable identity for the endpoint that will answer the next text turn, or
+   * null when that is not a user endpoint (nothing else adapts, so nothing else
+   * is measured). With Fast Response Mode on a Background Model that is the
+   * pick, not the Active Model: filing a Gemini pick's sub-second first tokens
+   * under a selected LiteLLM proxy would narrow the proxy's budget until it
+   * guillotined its own answers once fast mode was off.
    */
   private answerLatencyKey(): string | null {
+    const pick = this.fastPickForTextTurn();
+    if (pick) return FAST_PICK_USER_ENDPOINT_FAMILIES.has(pick.family) ? `model:${pick.modelId}` : null;
+    return this.activeAnswerLatencyKey();
+  }
+
+  /** answerLatencyKey() for the Active Model — what its own rung measures against. */
+  private activeAnswerLatencyKey(): string | null {
     if (this.customProvider) {
       const c: any = this.customProvider;
       return `custom:${c.id}:${c.baseUrl || c.model || ''}`;
@@ -764,7 +952,7 @@ export class LLMHelper {
       const c: any = this.activeCurlProvider;
       return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
     }
-    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId)) {
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId)) {
       return `model:${this.currentModelId}`;
     }
     return null;
@@ -779,6 +967,9 @@ export class LLMHelper {
    */
   public recordAnswerFirstToken(ms: number): void {
     if (!Number.isFinite(ms) || ms < 0) return;
+    // A rescued answer's first token includes the failed pick's wait, so it
+    // measures neither the pick nor the model that rescued it.
+    if (this._fastTurn?.answered === 'rescued') return;
     const key = this.answerLatencyKey();
     if (!key) return;
     const prev = this.answerLatency.get(key);
@@ -840,6 +1031,10 @@ export class LLMHelper {
     key: object | undefined | null,
     repairMessage: string,
     signal?: AbortSignal,
+    // A repair that has measured its need for more of the answer's prompt (the
+    // claim pass: llm/claimVerifier.ts, CLAIM_VERIFIER_MATERIAL_MAX_CHARS) may
+    // raise the cap for its own call. It can only raise it.
+    opts?: { maxInheritedChars?: number },
   ): Parameters<LLMHelper['streamChat']> | null {
     if (!key || typeof key !== 'object') return null;
     const args = this.answerCallByTurn.get(key);
@@ -849,9 +1044,26 @@ export class LLMHelper {
     // half — never the repair instruction, which is the only part that says what
     // to do.
     const original = String(args[0] ?? '');
-    const cap = LLMHelper.REPLAYED_ANSWER_PROMPT_MAX_CHARS;
+    const cap = Math.max(LLMHelper.REPLAYED_ANSWER_PROMPT_MAX_CHARS, Number(opts?.maxInheritedChars) || 0);
+    // The design this turn is about sits at the END of the answer prompt, so a
+    // plain head-cut dropped exactly the artifact the repair has to keep. It is
+    // carried across the cut, whole (a block the cut would split is moved, not
+    // left as half a block and a copy).
+    let head = original.slice(0, cap);
+    let keptDesign = '';
+    if (original.length > cap) {
+      const from = Math.max(0, cap - 16000);
+      const block = /<active_design\b[\s\S]*?<\/active_design>/.exec(original.slice(from));
+      if (block) {
+        const startsAt = from + block.index;
+        if (startsAt + block[0].length > cap) {
+          if (startsAt < cap) head = original.slice(0, startsAt);
+          keptDesign = `\n\n${block[0]}`;
+        }
+      }
+    }
     const inherited = original.length > cap
-      ? `${original.slice(0, cap)}\n\n[...answer context truncated for the repair pass...]`
+      ? `${head}\n\n[...answer context truncated for the repair pass...]${keptDesign}`
       : original;
     const message = `${inherited}\n\n---\n${repairMessage}`;
     const replayed = [...args] as Parameters<LLMHelper['streamChat']>;
@@ -912,9 +1124,12 @@ export class LLMHelper {
     return Array.isArray(args?.[1]) && (args![1] as string[]).length > 0;
   }
 
-  /** What we have measured from the selected endpoint; null when unmeasured. */
+  /** What we have measured from the endpoint that will answer; null when unmeasured. */
   public observedAnswerLatency(): { maxMs: number; count: number } | null {
-    const key = this.answerLatencyKey();
+    return this.observedLatencyFor(this.answerLatencyKey());
+  }
+
+  private observedLatencyFor(key: string | null): { maxMs: number; count: number } | null {
     if (!key) return null;
     const e = this.answerLatency.get(key);
     return e ? { maxMs: e.maxMs, count: e.count } : null;
@@ -983,6 +1198,12 @@ export class LLMHelper {
     // V3 renders prior-turn continuity as a labelled prose section rather than
     // as evidence; it is CONVERSATION_STATE data, i.e. transcript scope.
     if (/^# Conversation so far$/m.test(message)) scopes.push('transcript');
+    // The system design on the table is prior assistant output about the
+    // conversation — the same CONVERSATION_STATE class (diagramPromptSignals.ts).
+    if (/<active_design\b/.test(message)) scopes.push('transcript');
+    // What was said in the meeting, handed to a drawing of the conversation
+    // (withMeetingSpeechForDiagramTurn): the transcript itself.
+    if (/<conversation_so_far>/.test(message)) scopes.push('transcript');
     return [...new Set(scopes)];
   }
 
@@ -1018,6 +1239,14 @@ export class LLMHelper {
       scrubbed = scrubbed
         .replace(/<transcript\b[\s\S]*?<\/transcript>\s*/gi, '')
         .replace(/<recent_transcript\b[\s\S]*?<\/recent_transcript>\s*/gi, '')
+        // Defence in depth: the resolver already withholds the design when the
+        // transcript scope is denied; a block that reached here anyway goes too.
+        .replace(/<active_design\b[\s\S]*?<\/active_design>\s*/gi, '')
+        // The same for what was said in the meeting. It is built only where
+        // the transcript may go (activeDesignShareable), which includes "the
+        // model is on this device" — and a local model that turns out to be
+        // unreachable hands the turn to a provider with the block still in it.
+        .replace(/<conversation_so_far>[\s\S]*?<\/conversation_so_far>\s*/gi, '')
         // V3's prior-turn continuity section (CONVERSATION_STATE data). Runs to
         // the next top-level section or tag, both of which the composer emits
         // after a blank line.
@@ -1144,6 +1373,7 @@ export class LLMHelper {
     // rather than failing. The client getter is the primary guard; this is the
     // backstop for any path that reaches the provider without passing it.
     ninerouter: 'ninerouter',
+    agentrouter: 'agentrouter',
     antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
@@ -1188,17 +1418,40 @@ export class LLMHelper {
   private async resolveOutboundVisionDecision(
     imagePaths: string[] | undefined,
     screenshotsScopeAllowed: boolean,
-  ): Promise<{ decision: import('./llm/visionPolicy').VisionDecision; localAvailable: boolean }> {
+  ): Promise<{ decision: import('./llm/visionPolicy').VisionDecision; localAvailable: boolean; localTarget: 'ollama' | 'custom' | null }> {
     const decision = resolveVisionPolicy({
       hasImages: Boolean(imagePaths?.length),
       mode: readScreenUnderstandingMode(),
       screenshotsScopeAllowed,
       visionProviderAvailable: this.anyVisionProviderAvailable(),
     });
-    const localAvailable = decision.action === 'local_only'
-      ? (this.useOllama && await this.ensureOllamaModelSelected(true))
-      : false;
-    return { decision, localAvailable };
+    if (decision.action !== 'local_only') return { decision, localAvailable: false, localTarget: null };
+    // The SELECTED custom endpoint, when it is on this machine or the local
+    // network and reads images (2026-10-01). Only Ollama counted here, so an
+    // LM Studio or llama.cpp user in "Keep screenshots on this device" mode was
+    // told no local vision model exists and pointed at Ollama — while the
+    // screen pre-pass (VisionProviderRegistry) already used that same endpoint
+    // as a local one. A custom selection and Ollama are mutually exclusive.
+    //
+    // `localAvailable` keeps meaning "Ollama can take it": the three
+    // non-streaming callers dispatch to callOllama on it and know nothing of a
+    // custom endpoint. Only the live streaming site reads `localTarget`.
+    if (this.localCustomVisionProvider()) return { decision, localAvailable: false, localTarget: 'custom' };
+    const ollama = this.useOllama && await this.ensureOllamaModelSelected(true);
+    return { decision, localAvailable: ollama, localTarget: ollama ? 'ollama' : null };
+  }
+
+  /**
+   * The selected custom provider, when a screenshot that must stay on this
+   * device may go to it: its host is loopback or private (never assumed), its
+   * template can carry an image, and it is not switched off.
+   */
+  private localCustomVisionProvider(): CustomProvider | null {
+    const provider = this.customProvider;
+    if (!provider) return null;
+    if (!customProviderIsLocal(provider) || !customProviderSupportsVision(provider)) return null;
+    if (this.isProviderDisabled('custom') || this.isProviderDisabled(provider.id)) return null;
+    return provider;
   }
 
   /** Live, fail-OPEN: a credential-store failure must not start refusing turns
@@ -1288,7 +1541,35 @@ export class LLMHelper {
     if (family && this.isProviderDisabled(family)) {
       throw new ProviderDisabledError(provider);
     }
+    // Text read off a screenshot that was KEPT ON THIS DEVICE (2026-10-01).
+    // The prompt builders already leave it out unless the selected provider
+    // is local; this is the backstop for every way a payload can still reach
+    // a cloud provider after that — a cloud spare behind a local endpoint, a
+    // Background Model pick, a selection changed mid-turn. Fails closed.
+    if (hasOnDeviceScreenText(text) && !this.outboundLabelIsOnDevice(provider)) {
+      throw new VisionPolicyError(provider, ON_DEVICE_SCREEN_REFUSED_MESSAGE);
+    }
     assertProviderDataScopes(provider, this.scopesForPayload(text, imagePaths, extraScopes), this.getProviderScopePolicy());
+  }
+
+  /** Is this outbound label a provider on this device? Only a custom or cURL endpoint can be; every named provider is hosted. */
+  private outboundLabelIsOnDevice(provider: string): boolean {
+    if (provider === 'custom_provider') return customProviderIsLocal(this.customProvider);
+    if (provider === 'custom_curl') return customProviderIsLocal(this.activeCurlProvider);
+    return false;
+  }
+
+  /**
+   * Does a turn answered by the SELECTED provider stay on this device? Ollama
+   * on this machine or network, or a custom / cURL endpoint whose request goes
+   * to a private host. Same precedence as getDirectAssistSelection: a custom
+   * provider IS the selection even when the Ollama flag is still set.
+   */
+  public selectionStaysOnDevice(): boolean {
+    if (this.customProvider) return customProviderIsLocal(this.customProvider);
+    if (this.activeCurlProvider) return customProviderIsLocal(this.activeCurlProvider);
+    if (this.useOllama) return customProviderIsLocal({ curlCommand: this.ollamaUrl });
+    return false;
   }
 
   private getDeniedOutboundScopes(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
@@ -1407,8 +1688,10 @@ export class LLMHelper {
     // "API key expired" cache.create failures). Also clear the vision circuit
     // breaker for Gemini so a freshly-entered key is retried immediately.
     this.geminiPromptCache.clear();
-    this.visionHealth.delete('gemini_flash');
-    this.visionHealth.delete('gemini_pro');
+    // Every Gemini rung, the selected-model one included: since 2026-10-01 a
+    // selection whose breaker is open does not lead, so a rung left out here
+    // would keep a fresh key's selection off the front for the cooldown.
+    for (const id of ['gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'gemini_selected']) this.visionHealth.delete(id);
     this.textHealth.delete('gemini_flash'); // text race uses gemini_flash — retry fresh key immediately
     if (!trimmed) {
       this.apiKey = null;
@@ -1452,6 +1735,7 @@ export class LLMHelper {
   public setOpenaiApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
     this.visionHealth.delete('openai'); // fresh key → retry immediately, skip auth cooldown
+    this.visionHealth.delete('openai_selected');
     this.textHealth.delete('openai');
     if (!trimmed) {
       this.openaiApiKey = null;
@@ -1467,6 +1751,7 @@ export class LLMHelper {
   public setClaudeApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
     this.visionHealth.delete('claude'); // fresh key → retry immediately, skip auth cooldown
+    this.visionHealth.delete('claude_selected');
     this.textHealth.delete('claude');
     if (!trimmed) {
       this.claudeApiKey = null;
@@ -1481,6 +1766,7 @@ export class LLMHelper {
 
   public setDeepseekApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
+    this.visionHealth.delete('deepseek'); // fresh key → its selection leads again at once
     if (!trimmed) {
       this.deepseekApiKey = null;
       this.deepseekClient = null;
@@ -1576,6 +1862,30 @@ export class LLMHelper {
   }
 
   /**
+   * Configure AgentRouter. One key, BOTH clients: the protocol is a property of
+   * the MODEL here (agentRouterProtocolFor — Claude and DeepSeek on
+   * /v1/messages, the rest on /v1/chat/completions), so unlike setFluxionConfig there is no protocol
+   * argument and nothing for the user to choose. Both clients carry the
+   * client-identity header; see AGENTROUTER_CLIENT_HEADERS for what it is and
+   * whose decision it was.
+   */
+  public setAgentRouterApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    this.agentrouterApiKey = trimmed || null;
+    const clients = trimmed ? createAgentRouterClients(trimmed) : null;
+    this.agentrouterOpenAIClient = clients?.openai ?? null;
+    this.agentrouterAnthropicClient = clients?.anthropic ?? null;
+    this.textHealth.delete('agentrouter');
+    this.visionHealth.delete('agentrouter');
+    console.log(`[LLMHelper] AgentRouter API Key ${trimmed ? 'updated' : 'cleared'}.`);
+  }
+
+  /** True when AgentRouter is configured and not switched off (both clients are built together). */
+  private hasAgentRouterCredential(): boolean {
+    return !!(this.agentrouterOpenAIClient && this.agentrouterAnthropicClient);
+  }
+
+  /**
    * Configure the LiteLLM proxy. baseURL is required (the proxy location);
    * apiKey is the optional virtual/master key (`sk-...`). A keyless local
    * proxy is supported by sending no Authorization header — represented here
@@ -1587,6 +1897,7 @@ export class LLMHelper {
    */
   public setLitellmConfig(apiKey: string, baseURL: string, maxTokens?: number) {
     const trimmedURL = (baseURL || '').trim();
+    this.visionHealth.delete('litellm'); // new config → its selection leads again at once
     if (!trimmedURL) {
       this.litellmApiKey = null;
       this.litellmClient = null;
@@ -1643,8 +1954,12 @@ export class LLMHelper {
         const data: any = await resp.json();
         const fresh = new Map<string, number>();
         const freshInput = new Map<string, number>();
+        const freshVision = new Map<string, boolean>();
         for (const entry of (data?.data || [])) {
           const name = entry?.model_name;
+          // Only `true` is trustworthy: absence and `false` also mean the admin
+          // never set it (LiteLLM docs, model_info.supports_vision).
+          if (name && entry?.model_info?.supports_vision === true) freshVision.set(name, true);
           const budget = Number(entry?.model_info?.max_output_tokens ?? entry?.model_info?.max_tokens);
           if (name && Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
           // INPUT ceiling, which this fetch used to discard.
@@ -1670,6 +1985,7 @@ export class LLMHelper {
         }
         this.litellmModelBudgets = fresh;
         this.litellmModelInputCaps = freshInput;
+        getVisionCapabilityStore().replaceProviderAnswers('litellm', normalizeVisionBaseURL(issuedForBaseURL), freshVision);
         console.log(`[LLMHelper] LiteLLM /model/info: cached budgets for ${fresh.size} model(s) `
           + `(${freshInput.size} with an input ceiling)`);
       } catch {
@@ -1711,6 +2027,7 @@ export class LLMHelper {
    */
   public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number, thinking?: string | null) {
     const trimmedURL = (baseURL || '').trim();
+    this.visionHealth.delete('ninerouter'); // new config → its selection leads again at once
     if (!trimmedURL) {
       this.ninerouterApiKey = null;
       this.ninerouterClient = null;
@@ -1868,8 +2185,7 @@ export class LLMHelper {
    */
   private ninerouterModelSupportsVision(modelId: string): boolean {
     if (!this.isNinerouterModel(modelId)) return false;
-    if (this.ninerouterVisionModels.size === 0) return true; // unknown, not "no"
-    return this.ninerouterVisionModels.has(this.ninerouterWireModel(modelId));
+    return gatewaySeatReadsImages('ninerouter', modelId, this.visionFacts({ provider: 'ninerouter', model: modelId }));
   }
 
   /**
@@ -1935,6 +2251,7 @@ export class LLMHelper {
 
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
+    this.visionHealth.delete('natively'); // fresh key → its selection leads again at once
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
   }
 
@@ -1974,6 +2291,11 @@ export class LLMHelper {
     return !!this.nativelyKey;
   }
 
+  /** Exposes the version manager for lifecycle control (stealth scheduler stop/resume). */
+  public getModelVersionManager(): ModelVersionManager {
+    return this.modelVersionManager;
+  }
+
   /**
    * Initialize the self-improving model version manager.
    * Should be called after all API keys are configured.
@@ -2006,7 +2328,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl' | 'ollama',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2026,10 +2348,14 @@ export class LLMHelper {
           timeoutMs: opts?.timeoutMs,
           signal: opts?.signal,
         });
+      // The model is named explicitly (2026-10-01). With none, both adapters
+      // fall back to the SELECTED model of that vendor — so the pre-pass sent
+      // the screenshot to a text-only gpt-3.5-turbo whenever one was selected,
+      // while the registry labelled the rung `gpt-4o`.
       case 'openai':
-        return this.generateWithOpenai(userPrompt, systemPrompt, [imagePath]);
+        return this.generateWithOpenai(userPrompt, systemPrompt, [imagePath], this.getFixedVisionModels().openai);
       case 'claude':
-        return this.generateWithClaude(userPrompt, systemPrompt, [imagePath]);
+        return this.generateWithClaude(userPrompt, systemPrompt, [imagePath], this.getFixedVisionModels().claude);
       case 'groq_scout':
         return this.generateWithGroqMultimodal(userPrompt, [imagePath], systemPrompt);
       // OpenAI-compatible gateways. Registered here so ScreenUnderstandingService
@@ -2045,6 +2371,45 @@ export class LLMHelper {
         return this.generateWithFluxion(userPrompt, systemPrompt, [imagePath]);
       case 'ninerouter':
         return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
+      case 'agentrouter':
+        return this.generateWithAgentRouter(userPrompt, systemPrompt, [imagePath], undefined, opts?.signal);
+      // The two selected-only rungs (2026-10-01) reuse the streaming adapters
+      // and collect the answer: no second request shape to keep in step, and
+      // both adapters keep their own privacy gates (assertOutboundScopes).
+      case 'deepseek': {
+        let text = '';
+        for await (const piece of this.streamWithDeepseek(userPrompt, systemPrompt, this.currentModelId, opts?.signal, [imagePath])) text += piece;
+        return text;
+      }
+      // The after-the-answer screen record, written locally (2026-10-01, Evin's
+      // rule). Through streamWithOllama with the resolved vision model — strict,
+      // so a failure throws instead of becoming "Error: Failed to stream…" text
+      // that would be stored as the screen's contents.
+      case 'ollama': {
+        const target = this.getOllamaRecordTarget() ?? await this.resolveOllamaRecordTarget();
+        if (!target) throw new Error('No local model that reads images is available for the screen record');
+        const record = new AbortController();
+        const onOuterAbort = () => record.abort();
+        if (opts?.signal?.aborted) record.abort();
+        opts?.signal?.addEventListener('abort', onOuterAbort, { once: true });
+        this.cancelOllamaRecordFor(undefined);
+        this.ollamaRecordAbort = record;
+        try {
+          let text = '';
+          for await (const piece of this.streamWithOllama(userPrompt, undefined, systemPrompt, [imagePath], record.signal, target.model, true)) text += piece;
+          if (record.signal.aborted) throw new Error('The screen record was cancelled');
+          return text;
+        } finally {
+          opts?.signal?.removeEventListener('abort', onOuterAbort);
+          if (this.ollamaRecordAbort === record) this.ollamaRecordAbort = null;
+        }
+      }
+      case 'curl': {
+        if (!this.activeCurlProvider) throw new Error('No cURL provider selected');
+        let text = '';
+        for await (const piece of this.streamWithDirectCurl(this.activeCurlProvider, userPrompt, systemPrompt, [imagePath], opts?.signal)) text += piece;
+        return text;
+      }
       case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
@@ -2085,11 +2450,30 @@ export class LLMHelper {
   }
 
   /**
+   * Each vendor's FIXED vision model, as the screen pre-pass uses it: the
+   * version manager's current tier 1, else the built-in model. The pre-pass
+   * does not use the selected model (Evin, 2026-10-01: it runs before the
+   * answer inside a 6 s budget, and the selected model reads the screenshot in
+   * the answer itself).
+   */
+  public getFixedVisionModels(): { openai: string; claude: string } {
+    let tiers: Array<{ family: ModelFamily; tier1: string }> = [];
+    try { tiers = this.modelVersionManager.getAllVisionTiers(); } catch { /* not ready: the built-ins */ }
+    const tier1 = (family: ModelFamily) => tiers.find(t => t.family === family)?.tier1;
+    return { openai: tier1(ModelFamily.OPENAI) || OPENAI_MODEL, claude: tier1(ModelFamily.CLAUDE) || CLAUDE_MODEL };
+  }
+
+  /**
    * Read-only accessor for the active custom provider — used by VisionProviderRegistry
    * to decide whether the provider is configured and whether multimodal is enabled.
    */
   public getActiveCustomProvider(): CustomProvider | null {
     return this.customProvider;
+  }
+
+  /** The cURL provider currently selected, for the same registry (2026-10-01). */
+  public getActiveCurlProvider(): CurlProvider | null {
+    return this.activeCurlProvider;
   }
 
   /**
@@ -2121,7 +2505,7 @@ export class LLMHelper {
 
   public setGroqFastTextMode(enabled: boolean) {
     this.groqFastTextMode = enabled;
-    console.log(`[LLMHelper] Groq Fast Text Mode: ${enabled}`);
+    console.log(`[LLMHelper] Fast Mode: ${enabled}`);
   }
 
   public getGroqFastTextMode(): boolean {
@@ -2164,6 +2548,11 @@ export class LLMHelper {
     // request goes to api.openai.com on the user's own key and answers
     // perfectly, which is what makes it so hard to see.
     if (this.isNinerouterModel(modelId)) return false;
+    // Fourth gateway, Fluxion's shape exactly: `agentrouter/gpt-6-astra` is
+    // the vendor's own id behind a prefix. startsWith("gpt-") cannot see it
+    // today, but includes("openai") would claim any id that ever carries the
+    // word, so exclude it here like the others rather than rely on luck.
+    if (this.isAgentRouterModel(modelId)) return false;
     return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
   }
 
@@ -2172,6 +2561,8 @@ export class LLMHelper {
     // prefix is gone, so the prefix is the ONLY thing separating a Fluxion
     // Claude request from one billed to the user's Anthropic key.
     if (this.isFluxionModel(modelId)) return false;
+    // Same for AgentRouter, which resells claude-opus-5 and claude-opus-4-8.
+    if (this.isAgentRouterModel(modelId)) return false;
     return modelId.startsWith("claude-");
   }
 
@@ -2240,6 +2631,29 @@ export class LLMHelper {
   }
 
   /**
+   * MUST be tested before every vendor predicate, for Fluxion's reason: an
+   * AgentRouter id is the vendor's own (`agentrouter/claude-opus-5`,
+   * `agentrouter/deepseek-v4-flash`), so dropping the prefix bills the user's
+   * real Anthropic/OpenAI/DeepSeek key and answers perfectly. The wire strip is
+   * agentRouterWireModel() — one segment, like Fluxion.
+   */
+  private isAgentRouterModel(modelId: string): boolean { return isAgentRouterModelId(modelId); }
+
+  /**
+   * Does the selected AgentRouter model read images? From the capability table
+   * (the prefix is a routing prefix there). All four live models do — measured
+   * 2026-09-30 with a test screenshot through AgentRouter: claude-opus-5,
+   * claude-opus-4-8, deepseek-v4-flash (an AgentRouter-scoped entry, since
+   * DIRECT DeepSeek stays text-only) and gpt-6-astra (the gpt-6 family entry).
+   * Before those entries existed, a screenshot on the default DeepSeek model
+   * failed outright for an AgentRouter-only user. Gates the vision seat and the
+   * primary path; a future text-only model is still kept away from screenshots.
+   */
+  private agentRouterModelSupportsVision(modelId: string): boolean {
+    return gatewaySeatReadsImages('agentrouter', modelId, this.visionFacts({ provider: 'agentrouter', model: modelId }));
+  }
+
+  /**
    * NVIDIA NIM output ceiling.
    *
    * Unlike LiteLLM (whose /model/info exposes a per-model budget, see
@@ -2283,8 +2697,14 @@ export class LLMHelper {
     }
   }
 
+  /**
+   * The output cap sent to DeepSeek: its real ceiling (393,216) held to the
+   * app's shared one, MAX_OUTPUT_TOKENS (65,536) — Evin's choice 2026-09-30:
+   * room for any realistic answer, including the long code answers the old
+   * 8,192 truncated, without letting a model stuck in a loop stream for minutes.
+   */
   private getDeepseekMaxOutput(_modelId: string): number {
-    return DEEPSEEK_MAX_OUTPUT_TOKENS;
+    return Math.min(DEEPSEEK_MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS);
   }
 
   /**
@@ -2295,12 +2715,20 @@ export class LLMHelper {
    */
   private getClaudeMaxOutput(modelId: string): number {
     const id = modelId.toLowerCase();
-    if (id.startsWith("claude-3-5-") || id.startsWith("claude-3-7-") || id.startsWith("claude-3-haiku")) return 8192;
+    let cap: number;
+    if (id.startsWith("claude-3-5-") || id.startsWith("claude-3-7-") || id.startsWith("claude-3-haiku")) cap = 8192;
     // Opus 4.0 / 4.1 cap at 32K; Opus 4.5 and later (4.5/4.6/4.7/4.8) cap at 128K.
-    if (id.startsWith("claude-opus-4-0") || id.startsWith("claude-opus-4-1")) return 32000;
-    if (id.startsWith("claude-opus-4-")) return 128000;
-    if (id.startsWith("claude-sonnet-4-") || id.startsWith("claude-haiku-4-5") || id.startsWith("claude-mythos")) return 64000;
-    return 8192;
+    else if (id.startsWith("claude-opus-4-0") || id.startsWith("claude-opus-4-1")) cap = 32000;
+    // The Claude 5 families (Opus 5 / 5.5, Sonnet 5 / 5.5, Fable 5 / 5.1,
+    // Mythos 5 / 5.1) all allow 128K (Claude API model reference). They had no
+    // entry, so every one fell to the 8192 default below — 16x under.
+    else if (/^claude-(?:opus|sonnet|fable|mythos)-5/.test(id)) cap = 128000;
+    else if (id.startsWith("claude-opus-4-")) cap = 128000;
+    else if (id.startsWith("claude-sonnet-4-") || id.startsWith("claude-haiku-4-5") || id.startsWith("claude-mythos")) cap = 64000;
+    else cap = 8192;
+    // Held to the app's shared ceiling, as getDeepseekMaxOutput is. Every
+    // caller of this streams, which the Anthropic SDK requires for a cap this size.
+    return Math.min(cap, MAX_OUTPUT_TOKENS);
   }
 
   /**
@@ -2491,6 +2919,17 @@ export class LLMHelper {
       if (this.useOllama && this.ollamaModel && this.ollamaModel !== nextOllamaModel) {
         this.releaseOllamaPin(this.ollamaModel);
       }
+      // A DIFFERENT Ollama model was picked: forget which installed model reads
+      // images, so it is worked out again for the new selection (the resolver
+      // prefers the selected model when that one reads images). Without this,
+      // picking a vision model after a text model left the previously resolved
+      // model answering every screenshot — in the screenshot chain, and since
+      // 2026-10-01 in "Keep screenshots on this device" and the screen record
+      // too. Re-selecting the same model keeps what was learned.
+      if (!this.useOllama || this.ollamaModel !== nextOllamaModel) {
+        this.ollamaVisionModel = null;
+        this.ollamaVisionNegativeUntil = 0;
+      }
       this.useOllama = true;
       this.ollamaModel = nextOllamaModel;
       this.customProvider = null;
@@ -2525,6 +2964,10 @@ export class LLMHelper {
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
 
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
+    // Keep OpenRouter's "which models read images" answers current (2026-10-01).
+    if (this.isOpenRouterModel(targetModelId)) void this.refreshOpenRouterVisionData();
+    // …and, when nothing says whether this model reads images, test it once.
+    this.maybeProbeSelectedVision();
   }
 
   /**
@@ -2564,9 +3007,12 @@ export class LLMHelper {
    * duplicates the whole request for no latency win.
    */
   public hasEngineLevelRetry(): boolean {
+    // A Background Model answer is not wrapped in the engine (the fast block
+    // runs before every rung), so a stalled one needs the caller's regeneration.
+    if (this.fastPickForTextTurn()) return false;
     if (this.useOllama || this.isUsingCodexCli()) return false;
     if (this.activeCurlProvider) return false;      // branch 2b: blocking, terminal
-    return this.isUsingUserEndpoint();
+    return this.activeModelIsUserEndpoint();
   }
 
   private buildTextSpareRungs(
@@ -2580,6 +3026,9 @@ export class LLMHelper {
     // cloud spare offered at all, so the failure mode is "no spare" rather
     // than "a spare that throws on every turn".
     if (this.isLocalOnlyMode) return spares;
+    // …and none for a turn carrying text from a kept-on-device screenshot:
+    // every spare is a cloud provider, and the boundary would refuse each one.
+    if (hasOnDeviceScreenText(userContent)) return spares;
     const skip = new Set(excludeIds);
     let prio = 1;
     if (!skip.has('natively') && this.hasNatively()) {
@@ -2596,7 +3045,13 @@ export class LLMHelper {
       });
     }
     if (!skip.has('groq') && this.groqClient) {
-      const groqSystem = this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+      // The caller's prompt, like the two rungs above (2026-09-29). This rung
+      // used to send the legacy GROQ_SYSTEM_PROMPT — a job-interview persona
+      // ("Yeah, so I've used that in a few projects…") — whatever the mode,
+      // discarding the turn's V3/v2 prompt, so a failover changed who was
+      // speaking and invited invented experience. finalSystemPrompt already
+      // carries the language instruction.
+      const groqSystem = finalSystemPrompt;
       spares.push({
         id: 'groq', name: 'Groq', isLocal: false, priority: prio++,
         open: (sig) => this.streamWithGroq(userContent, GROQ_MODEL, groqSystem, sig),
@@ -2619,7 +3074,9 @@ export class LLMHelper {
    * latency statistic for one provider is the recurring mistake in this area.
    */
   private hedgeDelayForBudget(budgetMs: number): number {
-    const observed = this.observedAnswerLatency();
+    // The Active Model's own measurement: this runs inside its rung, which is
+    // reached only when no Background Model answered the turn.
+    const observed = this.observedLatencyFor(this.activeAnswerLatencyKey());
     const floor = Math.round(budgetMs * 0.5);
     const ceil = Math.round(budgetMs * 0.85);
     if (!observed || observed.count <= 0) return Math.round(budgetMs * 0.6);
@@ -2662,9 +3119,11 @@ export class LLMHelper {
     // Dynamic, like every other liveDeadlines use in this file — a static
     // import here closes a module cycle.
     const { totalHardTimeoutMs } = await import('./llm/liveDeadlines');
+    // The Active Model's rung, so its own endpoint class and measurement — the
+    // public predicates follow a Background Model pick, which did not answer.
     const budgetMs = totalHardTimeoutMs({
-      isUserEndpoint: this.isUsingUserEndpoint(),
-      observedUserEndpointLatency: this.observedAnswerLatency(),
+      isUserEndpoint: this.activeModelIsUserEndpoint(),
+      observedUserEndpointLatency: this.observedLatencyFor(this.activeAnswerLatencyKey()),
     });
     const spares = this.buildTextSpareRungs(opts.userContent, opts.finalSystemPrompt, opts.thinkingBudget, [opts.id, ...(opts.excludeSpareIds ?? [])]);
 
@@ -2813,8 +3272,13 @@ export class LLMHelper {
     return [systemPrompt, userContent].filter(Boolean).join('\n\n');
   }
 
-  private getSelectedCodexCliModel(fastMode: boolean): string {
-    if (fastMode) return this.codexCliConfig.fastModel;
+  // Fast Response Mode has no Codex setting of its own any more (2026-09-26).
+  // The Background Model is where the user picks what that mode answers with —
+  // including a Codex model other than the Codex default, which is what the
+  // Codex card's old "Fast Mode Model" was for (codexModelForFastPick). Auto's
+  // Codex candidate and the fallback ladder's Codex rung run the Codex default,
+  // so the `fastMode` flag the callers still pass no longer changes the model.
+  private getSelectedCodexCliModel(): string {
     if (this.currentModelId.startsWith("codex-cli:")) {
       // A selection persisted from an earlier build's presets (gpt-5.4,
       // gpt-5.3-codex, spark) is rejected for a ChatGPT account on every turn;
@@ -2822,6 +3286,14 @@ export class LLMHelper {
       return chatGptCompatibleModel(this.currentModelId.slice("codex-cli:".length), this.codexCliConfig.model);
     }
     return this.codexCliConfig.model;
+  }
+
+  /** The Codex model a Background Model pick names: the bare `codex-cli` entry
+      is the Codex default, and a ChatGPT-rejected id falls back to it as above. */
+  private codexModelForFastPick(modelId: string): string {
+    return modelId.startsWith("codex-cli:")
+      ? chatGptCompatibleModel(modelId.slice("codex-cli:".length), this.codexCliConfig.model)
+      : this.codexCliConfig.model;
   }
 
   private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): Promise<string> {
@@ -2841,7 +3313,7 @@ export class LLMHelper {
     // The disabled-provider term is redundant with isCodexAvailable() above and
     // stays for uniformity; the vision + scope terms are new coverage.
     this.assertOutboundScopes('codex', userContent, imagePaths);
-    const model = this.getSelectedCodexCliModel(fastMode);
+    const model = this.getSelectedCodexCliModel();
     // System prompt is sent separately as `body.instructions` (the
     // Responses-API field the Codex backend uses for system content),
     // NOT concatenated into the user prompt. Concatenation diverges
@@ -2876,7 +3348,7 @@ export class LLMHelper {
     // first next() rather than at call time — still strictly before any byte
     // reaches CodexCliService.stream, which is the property that matters.
     this.assertOutboundScopes('codex', userContent, imagePaths);
-    const model = modelOverride || this.getSelectedCodexCliModel(fastMode);
+    const model = modelOverride || this.getSelectedCodexCliModel();
     // See note in generateWithCodexCli — system prompt is sent
     // separately as `body.instructions`, not concatenated.
     yield* CodexCliService.stream(this.codexCliConfig.path, {
@@ -2951,11 +3423,10 @@ export class LLMHelper {
     const cap = Math.floor(maxContextTokens * 0.8);
     const totalFor = (s: string) => caps.promptBudgetTokens + reserved + estimateTokens(s);
     if (totalFor(text) <= cap) return text;
-    const lines = text.split('\n');
-    while (lines.length > 1 && totalFor(lines.join('\n')) > cap) {
-      lines.shift();
-    }
-    return lines.join('\n');
+    // Oldest lines first, as before; the design on the table is kept whole or
+    // left out whole (see localContextTrim). `totalFor(s) <= cap`, solved for
+    // the length of s at four characters to a token.
+    return trimUserContentToFit(text, Math.max(0, Math.floor(cap - caps.promptBudgetTokens - reserved) * 4));
   }
 
   // Trim a transcript array to fit within the active model's prompt budget.
@@ -2975,6 +3446,7 @@ export class LLMHelper {
   }
 
   private async callOllama(prompt: string, imagePath?: string | string[], systemPrompt?: string): Promise<string> {
+    this.cancelOllamaRecordFor(undefined);
     try {
       let images: string[] | undefined;
       const imagePaths = Array.isArray(imagePath) ? imagePath : imagePath ? [imagePath] : [];
@@ -2990,19 +3462,22 @@ export class LLMHelper {
         }
         if (encoded.length > 0) images = encoded;
       }
+      // An image goes to the model that reads images (2026-10-01): the one the
+      // local-vision check resolved, which is the selected model whenever that
+      // one reads images itself. A text turn is unchanged, and so is a daemon
+      // on another machine (localVisionOverride: the selected model answers).
+      const ollamaModel = (images && this.localVisionOverride(imagePaths)) || this.ollamaModel;
 
       const sys = systemPrompt ? this.resolveLocalSystemPrompt(systemPrompt) : TINY_SYSTEM_PROMPT;
       // Per-request hard guard: trim userContent (never sys) until total fits the model's max ctx.
       let userContent = prompt;
-      const maxCtx = getModelCapabilities(this.ollamaModel, true).maxContextTokens;
+      const maxCtx = getModelCapabilities(ollamaModel, true).maxContextTokens;
       let total = estimateTokens(sys) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
-        console.warn('[Ollama] context overflow', { model: this.ollamaModel, total, max: maxCtx });
-        const lines = userContent.split('\n');
-        while (lines.length > 1 && (estimateTokens(sys) + estimateTokens(lines.join('\n')) + 2000) > maxCtx) {
-          lines.shift();
-        }
-        userContent = lines.join('\n');
+        console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
+        // Oldest lines first, as before — but never half of the design on the
+        // table (see localContextTrim).
+        userContent = trimUserContentToFit(userContent, userContentRoomChars(maxCtx, sys));
       }
       const userMessage: any = { role: 'user', content: userContent };
       if (images) userMessage.images = images;
@@ -3011,10 +3486,10 @@ export class LLMHelper {
         userMessage,
       ];
 
-      console.log(`[LLMHelper] Ollama call → model=${this.ollamaModel} sysLen=${sys.length} userLen=${userContent.length} images=${images?.length ?? 0}`);
+      console.log(`[LLMHelper] Ollama call → model=${ollamaModel} sysLen=${sys.length} userLen=${userContent.length} images=${images?.length ?? 0}`);
 
       const ollamaBody: any = {
-        model: this.ollamaModel,
+        model: ollamaModel,
         messages,
         stream: false,
         // Keep the model resident between turns (see ollamaKeepAlive / streamWithOllama).
@@ -3024,7 +3499,7 @@ export class LLMHelper {
           top_p: 0.9,
         }
       };
-      if (this.isThinkingModel(this.ollamaModel)) ollamaBody.think = false;
+      if (this.isThinkingModel(ollamaModel)) ollamaBody.think = false;
       const response = await fetch(`${this.ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3091,7 +3566,7 @@ export class LLMHelper {
    * possible silently reassigned the user's runtime model selection. A
    * Settings poll doing that a few times a second is not a hypothetical.
    */
-  private async probeOllama(needsVision: boolean): Promise<{ ok: boolean; model?: string }> {
+  private async probeOllama(needsVision: boolean): Promise<{ ok: boolean; model?: string; visionModel?: string }> {
     // No exemption for the local provider: the user switched it off in the same
     // Settings panel as the cloud ones. A scope-denied turn then degrades to a
     // scrubbed cloud payload or a clean error instead of a local answer the
@@ -3106,8 +3581,44 @@ export class LLMHelper {
       const model = (this.ollamaModel && availableModels.includes(this.ollamaModel))
         ? this.ollamaModel
         : availableModels[0];
-      const capabilities = getModelCapabilities(model, true);
-      if (needsVision && !capabilities.supportsImages) return { ok: false, model };
+      // Is the daemon on this machine or the local network? OLLAMA_URL can point
+      // anywhere; "local" is earned from the host, as for a custom or cURL endpoint.
+      const daemonIsLocal = customProviderIsLocal({ curlCommand: this.ollamaUrl });
+      if (needsVision && daemonIsLocal) {
+        // ANY installed model that reads images, per /api/show (2026-10-01).
+        // This used to ask whether the SELECTED model's NAME looked like a
+        // vision model, so a user on a text model with llava installed — and a
+        // vision model whose name is on no list — was told no local vision
+        // exists. The resolver is the one the cloud chain already uses; the
+        // sites that dispatch on this answer send to the model it names
+        // (localVisionOverride), never to `model`.
+        const visionModel = await this.resolveLocalVisionModel();
+        if (!visionModel) return { ok: false, model };
+        // Fail CLOSED, as the text branch below does: the daemon must confirm
+        // the model right now. The resolver falls back to the model's NAME
+        // when /api/show fails, and it remembers its answer — neither a guess
+        // nor a memory may admit a screenshot or light the Privacy panel's
+        // "on-device" indicator.
+        const confirmed = await fetch(`${this.ollamaUrl}/api/show`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: visionModel }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        // Gone since it was resolved (uninstalled): forget it so the next
+        // check looks again instead of refusing until the app restarts.
+        if (!confirmed.ok && this.ollamaVisionModel === visionModel) this.ollamaVisionModel = null;
+        return { ok: confirmed.ok, model, ...(confirmed.ok ? { visionModel } : {}) };
+      }
+      // A daemon on ANOTHER machine gets exactly what it had before 2026-10-01
+      // and nothing new (Evin's decision): the SELECTED model, judged by its
+      // name, then confirmed below. Widening this to "any model installed
+      // there" would send a keep-on-device screenshot to a remote host in a
+      // state that used to be refused.
+      // The user's own answer for that selected model (Settings, phase 4)
+      // comes first, as everywhere: Off refuses it, On admits it. It is still
+      // the selected model only.
+      if (needsVision && !(this.userVisionOverride('ollama', model) ?? isLegacyRemoteOllamaVisionName(model))) return { ok: false, model };
       const response = await fetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3120,6 +3631,60 @@ export class LLMHelper {
       console.warn('[ScopeFallback] Ollama availability check failed:', message);
       return { ok: false };
     }
+  }
+
+  /**
+   * The installed Ollama model that will read a screenshot that must stay on
+   * this machine, or null. Only when Ollama is the selected provider: a daemon
+   * the user did not choose is never probed. Cached after the first answer.
+   */
+  private async resolveLocalVisionModel(): Promise<string | null> {
+    if (!this.useOllama || this.isProviderDisabled('ollama')) return null;
+    return this.resolveOllamaVisionModelForChain(OLLAMA_LOCAL_VISION_PROBE_BUDGET_MS);
+  }
+
+  /**
+   * The Ollama model that can write the after-the-answer screen record, with
+   * the daemon's URL (the registry decides "local" from its host). Resolves
+   * through the same bounded, cached probe; null when Ollama is not the
+   * selected provider or no installed model reads images.
+   */
+  public async resolveOllamaRecordTarget(): Promise<{ model: string; url: string } | null> {
+    const model = await this.resolveLocalVisionModel();
+    return model ? { model, url: this.ollamaUrl } : null;
+  }
+
+  /** What the last resolve found, without touching the daemon (the registry is synchronous). */
+  public getOllamaRecordTarget(): { model: string; url: string } | null {
+    if (!this.useOllama || this.isProviderDisabled('ollama') || !this.ollamaVisionModel) return null;
+    return { model: this.ollamaVisionModel, url: this.ollamaUrl };
+  }
+
+  /**
+   * A screen record still being written must not hold up an ANSWER: one local
+   * daemon serves both, and a record can take tens of seconds. Any Ollama
+   * request other than the record itself cancels it; the screen is then
+   * recorded as "not transcribed", which is what it was before records existed.
+   */
+  private cancelOllamaRecordFor(signal: AbortSignal | undefined): void {
+    const record = this.ollamaRecordAbort;
+    if (!record || signal === record.signal) return;
+    this.ollamaRecordAbort = null;
+    record.abort();
+  }
+
+  /**
+   * The model a LOCAL dispatch carrying images must name: the one the check
+   * above found. Undefined for a text turn (the selected model answers) and
+   * when nothing was resolved (the caller keeps today's behaviour).
+   */
+  private localVisionOverride(imagePaths?: readonly string[] | string): string | undefined {
+    const carriesImages = Array.isArray(imagePaths) ? imagePaths.length > 0 : Boolean(imagePaths);
+    if (!carriesImages) return undefined;
+    // A daemon on another machine was admitted on the SELECTED model (see
+    // probeOllama), so that is the model that answers there.
+    if (!customProviderIsLocal({ curlCommand: this.ollamaUrl })) return undefined;
+    return this.ollamaVisionModel ?? undefined;
   }
 
   /**
@@ -3547,8 +4112,10 @@ ${IMAGE_TRUST_TRAILER}`;
       // preset size (1024px @ q78). This is the path every built-in vision
       // adapter (OpenAI, Claude, Gemini, Groq, Antigravity, Fluxion …) uses; the
       // switch used to reach only the Custom/cURL paths.
+      // Photos/screenshots sent from the phone go at 2048px: small print in a
+      // phone photo needs it (see visionImageEdge).
       const shrink = this.imageProfileFor('balanced', 0) === 'fast';
-      const edge = shrink ? 1024 : 1536;
+      const edge = visionImageEdge({ shrink, phoneImage: isPhoneImagePath(path) });
       const processedBuffer = await sharp(imageBuffer)
         .resize({
           width: edge,
@@ -3800,6 +4367,25 @@ ANSWER DIRECTLY:`;
 
     try {
       return ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  // Profile Intelligence eligibility (2026-09-30) for the knowledge intercept.
+  // The intercept is the premium path that injects the résumé/JD (persona,
+  // <candidate_profile>, dossier, pivots, intro). It used to run whenever
+  // knowledge mode was on, so every legacy caller that reaches streamChat or
+  // chatWithGemini — phone chat, LLMHelper.chat(), the AnswerLLM fallback, the
+  // V3-error fallthrough of manual chat, the follow-up email — put PI into
+  // modes that never opted in, or into a turn with no mode at all. This reads
+  // the ONE rule (mode-policy-registry `isProfileIntelligenceAllowed`, via
+  // ModesManager for the pinned/active mode's template). Fails CLOSED: if the
+  // mode cannot be read, the profile stays out.
+  private isProfileIntelligenceAllowedForTurn(pinnedModeId?: string | null): boolean {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      return ModesManager.getInstance().isProfileIntelligenceAllowedForMode(pinnedModeId ?? undefined) === true;
     } catch (_err) {
       return false;
     }
@@ -4111,7 +4697,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // same as the manual streaming path at ~5448 and the WTA engine). The
       // broad flag silently dropped resume/knowledge injection for every
       // template-seeded mode on this non-streaming path (follow-up-email flow).
-      if (this.knowledgeOrchestrator?.isKnowledgeMode() && _chatGroundingInfo?.strictDocumentGroundedActive !== true) {
+      // PI gate (2026-09-30): the intercept injects the résumé/JD, so it runs
+      // only in a mode that opts into Profile Intelligence. The follow-up email
+      // reaches here with no route options and used to get the candidate
+      // persona in any mode (and with no mode selected).
+      if (this.knowledgeOrchestrator?.isKnowledgeMode() && _chatGroundingInfo?.strictDocumentGroundedActive !== true
+        && this.isProfileIntelligenceAllowedForTurn(routeOptions?.pinnedModeId)) {
         try {
           // Feed only to the depth scorer — NOT feedInterviewerUtterance, which also routes to the
           // negotiation tracker and would misclassify the user's typed question as a recruiter utterance.
@@ -4172,7 +4763,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             // The persona block carries the voice instruction and stays dominant
             // by recency. Keep both LLMHelper override sites identical.
             if (knowledgeResult.systemPromptInjection) {
+              // The diagram contract the caller put on the prompt being replaced
+              // is carried over (see carriedDiagramContract): the turn block that
+              // goes with it is still in the context. Appended on its own line:
+              // the assignment below is matched literally by a source test.
+              const carriedContract = carriedDiagramContract(systemPromptOverride);
               systemPromptOverride = `${CORE_IDENTITY}\n${EXECUTION_CONTRACT}\n\n${knowledgeResult.systemPromptInjection}`;
+              if (carriedContract) systemPromptOverride += carriedContract;
             }
             // Inject knowledge context
             if (knowledgeResult.contextBlock) {
@@ -4239,7 +4836,7 @@ try {
             // shared resolver (.audit/coding-template-audit-2026-08-18.md).
             ...(() => {
               try {
-                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const { resolveCodingPromptSignals, isDeicticAsk, screenPromotedCodingSignals } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
                 const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
                 // Attached-screenshot promotion (2026-08-19 channel audit): a
                 // message with an image whose text only points at it ("solve
@@ -4250,10 +4847,23 @@ try {
                 if (!resolved.codingTask
                     && (imagePaths?.length ?? 0) > 0
                     && (!message?.trim() || isDeicticAsk(message))) {
-                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                  // The screenshot grounds the problem; the words decide the shape.
+                  return screenPromotedCodingSignals(message);
                 }
                 return resolved;
               } catch { return { codingTask: false }; }
+            })(),
+            // Universal diagram contract, same principle (2026-10-01): a caller
+            // that passed no system prompt still gets the diagram shape for a
+            // design question. This transport has no session, so it never
+            // sees a design on the table — fresh design asks only.
+            diagram: (() => {
+              try {
+                const { selfComposedDiagramSignals } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                // A caller with a session has already decided, design on the table included.
+                if (routeOptions && routeOptions.diagramSignals !== undefined) return routeOptions.diagramSignals as ReturnType<typeof selfComposedDiagramSignals>;
+                return selfComposedDiagramSignals(message, routeOptions?.answerType, (imagePaths?.length ?? 0) > 0);
+              } catch { return null; }
             })(),
           }) ?? systemPromptOverride;
     }
@@ -4442,7 +5052,7 @@ let isMultimodal = !!(imagePaths?.length);
       };
       const cloudImagePaths = deniedOutboundScopes.includes('screenshots') ? undefined : imagePaths;
       const cloudIsMultimodal = Boolean(cloudImagePaths?.length);
-      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots') || Boolean(imagePaths?.length));
       if (deniedOutboundScopes.length > 0) {
         for (const scope of deniedOutboundScopes) {
           this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
@@ -4462,34 +5072,58 @@ let isMultimodal = !!(imagePaths?.length);
         return text;
       }
 
+      // FAST RESPONSE MODE ON THE BACKGROUND MODEL — non-streaming twin of the
+      // block in _streamChatInner; see there for the gate.
+      let fastPickFailed = false;
+      if (!isMultimodal && !this.useOllama) {
+        const fastCtl = new AbortController();
+        const fastPick = this.openFastModelStream(cloudUserContent, systemPromptOverride, finalGeminiPrompt, fastCtl.signal, skipSystemPrompt);
+        if (fastPick) {
+          console.log(`[LLMHelper] ⚡️ Fast Response Mode: answering on ${fastPick.auto ? 'the Auto fast tier' : 'the Background Model'} (${fastPick.modelId})`);
+          let failure: unknown;
+          try {
+            let text = '';
+            for await (const chunk of this.guardFastPick(fastPick, fastCtl)) text += chunk;
+            if (text.trim()) return text;
+            console.warn('[LLMHelper] Background Model fast answer was empty, falling back');
+          } catch (e: any) {
+            failure = e;
+            console.warn('[LLMHelper] Background Model fast answer failed, falling back:', e?.message);
+          }
+          this.noteFastPickFailure(fastPick, failure);
+          fastPickFailed = true;
+        }
+      }
+
       // GROQ FAST TEXT OVERRIDE (Text-Only) — gated on picked model so Gemini/Claude/OpenAI
       // selections aren't silently routed to Groq. See streamChat() for matching gate.
       // !this.isCodexCliModel(this.currentModelId) prevents fast-mode from
-      // overriding an EXPLICITLY-PICKED codex-cli:<model> (which would otherwise
-      // call getSelectedCodexCliModel(true) → fastModel → 0 tokens → fallback).
+      // overriding an EXPLICITLY-PICKED codex-cli:<model> (which used to call
+      // getSelectedCodexCliModel(true) → fastModel → 0 tokens → fallback).
       // Fixes issue #315.
-      const fastModeAppliesNS = this.groqFastTextMode && !isMultimodal && (
+      // Fallback only, as in _streamChatInner.
+      const fastModeAppliesNS = fastPickFailed && this.groqFastTextMode && !isMultimodal && (
         this.isCodexAvailable() ||
         this.isGroqModel(this.currentModelId) ||
         this.currentModelId === 'natively'
-      ) && !this.isCodexCliModel(this.currentModelId);
+      ) && !this.isCodexCliModel(this.currentModelId) && !this.activeIsSelfHosted();
       if (fastModeAppliesNS && this.isCodexAvailable()) {
-        console.log(`[LLMHelper] ⚡️ Fast Text Mode Active. Routing to Codex CLI...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback: routing to Codex CLI...`);
         try {
           return await this.generateWithCodexCli(cloudUserContent, openaiSystemPrompt, true);
         } catch (e: any) {
-          console.warn("[LLMHelper] Codex CLI Fast Text failed, falling back to standard fast routing:", e.message);
+          console.warn("[LLMHelper] Fast Mode fallback on Codex CLI failed, trying the next:", e.message);
         }
       }
 
       if (fastModeAppliesNS && this.groqClient && !this._groqLocalDisabled) {
-        console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active. Routing to Groq...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback: routing to Groq...`);
         try {
           // intentional: Fast Text Mode always uses baseline GROQ_MODEL for speed — do not thread currentModelId
           // CACHE: pass system separately so Groq prefix-cache hits across turns.
           return await this.generateWithGroq(cloudUserContent, GROQ_MODEL, skipSystemPrompt ? undefined : finalGroqPrompt);
         } catch (e: any) {
-          console.warn("[LLMHelper] Groq Fast Text failed, falling back to standard routing:", e.message);
+          console.warn("[LLMHelper] Fast Mode fallback on Groq failed, falling back to standard routing:", e.message);
           if (typeof e?.message === 'string' && /401|invalid[_\s-]api[_\s-]key/i.test(e.message)) {
             this._groqLocalDisabled = true;
             console.warn("[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session.");
@@ -4588,6 +5222,15 @@ let isMultimodal = !!(imagePaths?.length);
       // above reachable through isClaudeModel — see isFluxionModel.
       if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
         return await this.generateWithFluxion(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
+      // Same position and reason as Fluxion: above the Groq branch and every
+      // vendor branch that could otherwise see the bare id. Images only to a
+      // model that reads them — DeepSeek and gpt-6-astra answer as text.
+      if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential()) {
+        const sendImages = cloudIsMultimodal && this.agentRouterModelSupportsVision(this.currentModelId);
+        // Model family, not protocol — see agentRouterDefaultSystemPrompt.
+        const arSystem = isAgentRouterClaudeWireModel(agentRouterWireModel(this.currentModelId)) ? claudeSystemPrompt : openaiSystemPrompt;
+        return await this.generateWithAgentRouter(cloudUserContent, arSystem, sendImages ? cloudImagePaths : undefined);
       }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
         if (cloudIsMultimodal && cloudImagePaths) {
@@ -4789,10 +5432,12 @@ let isMultimodal = !!(imagePaths?.length);
    * the first time a branch changed, and invisibly - which is how the gateway
    * egress bug got in.
    */
-  private resolveFastModelFamily(modelId: string):
-    'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude'
-    | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | null {
+  private resolveFastModelFamily(modelId: string): Exclude<FastModelFamily, 'natively'> | null {
     if (!modelId) return null;
+    // Codex (2026-09-26): the Background Model is where a Codex fast model is
+    // picked now, and it may differ from the Codex default — the role the
+    // Codex card's old "Fast Mode Model" had. No other predicate claims these ids.
+    if (this.isCodexCliModel(modelId)) return 'codex';
     // Gateways are OpenAI-SHAPED but are NOT OpenAI. isOpenAiModel() self-excludes
     // Groq and Fluxion but not these, and its final clause is `includes('openai')`
     // - so `openrouter/openai/gpt-5.6-terra` (a stock picker preset) would be
@@ -4805,6 +5450,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isNvidiaNimModel(modelId)) return 'nvidia_nim';
     if (this.isNinerouterModel(modelId)) return 'ninerouter';
     if (this.isFluxionModel(modelId)) return 'fluxion';
+    if (this.isAgentRouterModel(modelId)) return 'agentrouter';
     if (this.isOpenAiModel(modelId)) return 'openai';
     if (this.isGroqModel(modelId)) return 'groq';
     if (this.isGeminiModel(modelId)) return 'gemini';
@@ -4823,6 +5469,416 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Fast Response Mode's answer on the Background Model — or, on Auto, on
+   * autoFastPick()'s fastest candidate — or null when neither can run right
+   * now, in which case the Active Model answers. The original Codex → Groq →
+   * Natively ladder runs only after a pick FAILED.
+   *
+   * Same family resolver as callFastModel, so the Settings picker, the judge
+   * and this path agree on what is dispatchable. Each streamer takes the pick
+   * as an explicit model id: this.currentModelId is never swapped, because Auto
+   * Answer and manual chat run concurrently on this helper. System prompts
+   * mirror each family's own answer rung below; `baseSystemPrompt` is the
+   * universal one the calling path already built, which Gemini and Codex take.
+   * The streamers keep their local-only and outbound-scope refusals, which fire
+   * on the first next().
+   */
+  private openFastModelStream(
+    userContent: string,
+    systemPromptOverride: string | undefined,
+    baseSystemPrompt: string | undefined,
+    abortSignal?: AbortSignal,
+    skipSystemPrompt = false,
+    turn?: FastTurn | null,
+  ): { modelId: string; family: FastModelFamily; auto: boolean; stream: AsyncGenerator<string, void, unknown> } | null {
+    // The Background Model is a cloud provider. A turn carrying text from a
+    // kept-on-device screenshot is answered by the Active Model, which is the
+    // local one that turn was assembled for.
+    if (hasOnDeviceScreenText(userContent)) return null;
+    const pick = turn ? this.fastPickAtDispatch(turn) : this.fastPickForTextTurn();
+    if (!pick) {
+      if (this.groqFastTextMode && this.fastModelId) {
+        console.log(`[LLMHelper] Fast Response Mode: Background Model not usable now (${this.fastModelId}) - the Active Model answers`);
+      }
+      return null;
+    }
+    const { modelId, family, auto } = pick;
+    const system = (base: string) => (skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || base));
+    const openaiShaped = system(OPENAI_SYSTEM_PROMPT);
+    let stream: AsyncGenerator<string, void, unknown>;
+    switch (family) {
+      case 'openai': stream = this.streamWithOpenai(userContent, openaiShaped, modelId, abortSignal); break;
+      case 'claude': stream = this.streamWithClaude(userContent, system(CLAUDE_SYSTEM_PROMPT), modelId, abortSignal); break;
+      case 'deepseek': stream = this.streamWithDeepseek(userContent, openaiShaped, modelId, abortSignal); break;
+      // strictModel: the user named this model, so a retired id must fail over
+      // to the ladder rather than be silently swapped for another Groq one.
+      case 'groq': stream = this.streamWithGroq(userContent, modelId, system(GROQ_SYSTEM_PROMPT), abortSignal, true); break;
+      case 'gemini': stream = this.streamWithGeminiModel(userContent, modelId, undefined, skipSystemPrompt ? undefined : baseSystemPrompt, abortSignal); break;
+      case 'codex': stream = this.streamWithCodexCli(userContent, skipSystemPrompt ? undefined : baseSystemPrompt, true, undefined, abortSignal, this.codexModelForFastPick(modelId)); break;
+      // fast_mode rides on groqFastTextMode, which is on whenever this runs.
+      case 'natively': stream = this.streamWithNatively(userContent, skipSystemPrompt ? undefined : baseSystemPrompt, undefined, abortSignal); break;
+      case 'openrouter': stream = this.streamWithOpenRouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'litellm': stream = this.streamWithLiteLLM(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'nvidia_nim': stream = this.streamWithNvidiaNim(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'ninerouter': stream = this.streamWithNinerouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'fluxion': stream = this.streamWithFluxion(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'agentrouter': stream = this.streamWithAgentRouter(userContent, system(this.agentRouterDefaultSystemPrompt(modelId)), undefined, abortSignal, modelId); break;
+    }
+    return { modelId, family, auto, stream };
+  }
+
+  /** Is this Background Model family's client set up right now? */
+  private fastFamilyReady(family: FastModelFamily): boolean {
+    // A provider switched off in Settings never answers, picked or automatic.
+    if (this.isProviderDisabled(family)) return false;
+    switch (family) {
+      case 'openai': return !!this.openaiClient;
+      case 'claude': return !!this.claudeClient;
+      case 'deepseek': return !!this.deepseekClient;
+      case 'groq': return !!this.groqClient && !this._groqLocalDisabled;
+      case 'gemini': return !!this.client;
+      case 'codex': return this.isCodexAvailable();
+      case 'natively': return this.hasNatively();
+      case 'openrouter': return !!this.openrouterClient;
+      case 'litellm': return !!this.litellmClient;
+      case 'nvidia_nim': return !!this.nvidiaNimClient;
+      case 'ninerouter': return !!this.ninerouterClient;
+      case 'fluxion': return this.hasFluxionCredential();
+      case 'agentrouter': return this.hasAgentRouterCredential();
+    }
+  }
+
+  /**
+   * The Background Model Fast Response Mode will answer the next TEXT turn on,
+   * or null: exactly the gate _streamChatInner / chatWithGemini apply before
+   * openFastModelStream — fast mode on, not local-only, not a local Ollama
+   * Active Model, not an Antigravity one (that branch answers above the fast
+   * block), and a pick whose client is set up.
+   *
+   * The live deadline, the latency map and the performance profile are chosen
+   * BEFORE dispatch, from whoever will answer. Reading the Active Model there
+   * gave a gateway pick the shipped-provider deadline and filed the pick's
+   * first-token times under the Active Model's endpoint. Image turns never take
+   * the fast path (the vision chain answers them), so callers that know the
+   * turn has images must not ask this.
+   *
+   * On a textTurn() view this is the turn's PINNED pick — the one its dispatch
+   * will use — and null once the turn was answered by someone else (no pick
+   * applied, or the pick failed and the fallback rescued it).
+   */
+  private fastPickForTextTurn(): FastPick | null {
+    const turn = this._fastTurn;
+    if (!turn) return this.resolveFastPick();
+    if (turn.answered === 'active' || turn.answered === 'rescued') return null;
+    if (turn.pick === undefined) turn.pick = turn.owner.resolveFastPick();
+    return turn.pick;
+  }
+
+  /** The turn record a textTurn() view reads; never set on the helper itself. */
+  private _fastTurn?: FastTurn;
+  private _fastTurns?: WeakMap<AbortSignal, FastTurn>;
+
+  /**
+   * This helper, seen from ONE answer: every route read (the deadline's
+   * isUsingOllama / isUsingCodexCli / isUsingNativelyServerCascade /
+   * isUsingUserEndpoint / observedAnswerLatency, performanceIdentity,
+   * answeredIdentity, recordAnswerFirstToken, hasEngineLevelRetry) names the
+   * model the answer is dispatched to, because the first read pins it and the
+   * dispatch — _streamChatInner with the SAME signal — uses the pin. Callers
+   * pass the exact signal they hand streamChat. A read-only view: it
+   * resolves nothing itself (turn.owner does) and writes no helper state.
+   */
+  public textTurn(signal: AbortSignal | undefined | null): LLMHelper {
+    if (!(signal instanceof AbortSignal)) return this;
+    const view: LLMHelper = Object.create(this);
+    view._fastTurn = this.fastTurnFor(signal);
+    return view;
+  }
+
+  private fastTurnFor(signal: AbortSignal): FastTurn {
+    const turns = (this._fastTurns ??= new WeakMap());
+    let turn = turns.get(signal);
+    if (!turn) {
+      turn = { owner: this };
+      turns.set(signal, turn);
+    }
+    return turn;
+  }
+
+  /**
+   * The record the dispatch on this signal answers from, claimed by the FIRST
+   * dispatch only; null for no signal or a later dispatch on the same one,
+   * which resolves fresh and must not overwrite who answered the turn.
+   */
+  private claimFastTurn(signal: AbortSignal | undefined): FastTurn | null {
+    if (!signal) return null;
+    const turn = this.fastTurnFor(signal);
+    if (turn.dispatched) return null;
+    turn.dispatched = true;
+    return turn;
+  }
+
+  /**
+   * The pinned pick, at dispatch. Held through a cooldown another turn started
+   * after the pin: this answer's deadline and profile identity were set for it,
+   * and guardFastPick hands the fallback the rest of the budget if it really is
+   * down. What it may not do is answer after the user switched it off, unticked
+   * it or turned the mode off.
+   */
+  private fastPickAtDispatch(turn: FastTurn): FastPick | null {
+    if (turn.pick === undefined) turn.pick = this.resolveFastPick();
+    const pick = turn.pick;
+    if (!pick || !this.fastPickGatesOpen()) return null;
+    return this.fastFamilyReady(pick.family) && this.fastModelAllowed(pick.modelId, pick.family) ? pick : null;
+  }
+
+  /** Fast mode can take a text turn at all: on, not local-only, not a local Ollama or an Antigravity Active Model. */
+  private fastPickGatesOpen(): boolean {
+    if (!this.groqFastTextMode || this.isLocalOnlyMode || this.useOllama) return false;
+    return !!(this.customProvider || this.activeCurlProvider) || !this.isAntigravityModel(this.currentModelId);
+  }
+
+  /**
+   * performanceIdentity() for the model that ANSWERED this turn, with the
+   * turn's real image state, or null when no one model did: the pick failed and
+   * the fallback rescued it. The pick's failure is already on file
+   * (noteFastPickFailure), and the rescue's first token includes the pick's
+   * wait, so it measures neither. Off a textTurn() view this is
+   * performanceIdentity(hasImages).
+   */
+  public answeredIdentity(hasImages: boolean = false): { identity: ReturnType<LLMHelper['performanceIdentity']>; hasImages: boolean } | null {
+    const turn = this._fastTurn;
+    if (turn?.answered === 'rescued') return null;
+    const images = hasImages && !turn?.textOnly;
+    return { identity: this.performanceIdentity(images), hasImages: images };
+  }
+
+  /** fastPickForTextTurn() resolved now, from settings and measurements. */
+  private resolveFastPick(): FastPick | null {
+    if (!this.fastPickGatesOpen()) return null;
+    const modelId = this.fastModelId;
+    if (!modelId) return this.autoFastPick();
+    // The pick IS the Active Model: its own rung answers, with the failover the
+    // fast path does not have.
+    if (modelId === this.currentModelId) return null;
+    const family = this.resolveFastModelFamily(modelId);
+    if (!family || !this.fastCandidateUsable(modelId, family)) return null;
+    return { modelId, family, auto: false };
+  }
+
+  /**
+   * Fast Response Mode on Auto (no Background Model picked): the model to answer
+   * a text turn on, or null.
+   *  - null for an explicit Codex Active Model (issue #315: never overridden);
+   *  - null when the Active Model is the user's own endpoint (activeIsSelfHosted):
+   *    someone running LiteLLM or 9Router for privacy did not ask for their turns
+   *    to go to another vendor. An explicit Background Model pick still applies;
+   *  - otherwise the FASTEST connected candidate by this user's own measurements
+   *    (autoFastOrder), skipping one in cooldown after a failure;
+   *  - null when that candidate IS the Active Model: its own rung, with failover,
+   *    answers exactly as it would with fast mode off.
+   */
+  private autoFastPick(): { modelId: string; family: FastModelFamily; auto: boolean } | null {
+    if (this.isCodexCliModel(this.currentModelId) || this.activeIsSelfHosted()) return null;
+    // Readiness is checked lazily, best first — most turns stop at the first
+    // candidate, so the Codex sign-in file is read only when Codex is reached.
+    const best = this.autoFastOrder().find((c) => this.fastCandidateUsable(c.modelId, c.family));
+    if (!best || best.modelId === this.currentModelId) return null;
+    return { modelId: best.modelId, family: best.family, auto: true };
+  }
+
+  /** Can this pick or Auto candidate answer now: provider set up and switched
+      on, model still ticked in its card, and not cooling down after a failure. */
+  private fastCandidateUsable(modelId: string, family: FastModelFamily): boolean {
+    return this.fastFamilyReady(family) && this.fastModelAllowed(modelId, family) && !this.inFastPickCooldown(modelId);
+  }
+
+  /**
+   * The provider card's model list, applied to Fast Response: an un-ticked model
+   * answers nothing, picked or automatic, exactly as the Background Model picker
+   * then labels it "(not supported)". MIRRORS isModelAllowed()
+   * (src/utils/modelUtils.ts) and modelAvailable() (ipcHandlers.ts): empty means
+   * all, except for the opt-in gateways, where empty means none; the bare
+   * `codex-cli` entry is checked as the Codex default it runs. Natively has no
+   * model list. callFastModel (the Auto Answer judge) does not read it.
+   */
+  private fastModelAllowed(modelId: string, family: FastModelFamily): boolean {
+    if (family === 'natively') return true;
+    const listFamily = family === 'codex' ? 'codex-cli' : family;
+    const id = modelId === 'codex-cli' ? `codex-cli:${this.codexCliConfig.model}` : modelId;
+    let list: string[];
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      list = CredentialsManager.getInstance().getCloudEnabledModels?.(listFamily) || [];
+    } catch {
+      return true;
+    }
+    const optIn = listFamily === 'litellm' || listFamily === 'openrouter' || listFamily === 'ninerouter';
+    return optIn ? list.includes(id) : (list.length === 0 || list.includes(id));
+  }
+
+  /** The Active Model is an endpoint the user runs or points at themselves. */
+  private activeIsSelfHosted(): boolean {
+    return !!(this.customProvider || this.activeCurlProvider)
+      || this.isLiteLLMModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId);
+  }
+
+  /**
+   * Auto's connected candidates, best first. Shipped order until this user's
+   * own samples say otherwise (autoFastRanking has the rules); frozen for
+   * AUTO_FAST_ORDER_TTL_MS. Any failure to read the evidence falls back to the
+   * shipped order — the ranking can refine Auto, never break it.
+   */
+  private autoFastOrder(): Array<{ modelId: string; family: FastModelFamily }> {
+    // EVERY tier is ranked, connected or not; readiness is checked at pick time
+    // (autoFastPick), so it never has to be computed to hit this cache.
+    const candidates = AUTO_FAST_TIERS.map((t) => ({
+      family: t.family,
+      // A Groq Active Model is the user's own Groq choice: the old ladder
+      // answered on it, and it stands for Groq here too.
+      modelId: t.family === 'groq' && this.isGroqModel(this.currentModelId) ? this.currentModelId : t.model,
+    }));
+    const key = candidates.map((c) => c.modelId).join('|');
+    const now = Date.now();
+    const cached = this._autoFastOrder;
+    if (cached && cached.key === key && now - cached.at < AUTO_FAST_ORDER_TTL_MS) return cached.order;
+    let order = candidates;
+    try {
+      const { getProviderPerformanceStore } = require('./llm/performance/ProviderPerformanceStore');
+      const { getRuntimeSignals } = require('./llm/performance/runtimeSignals');
+      const { isStale } = require('./llm/performance/types');
+      const { autoFastEvidence, orderAutoFastCandidates } = require('./llm/performance/autoFastRanking');
+      const store = getProviderPerformanceStore();
+      const network = getRuntimeSignals().network().id;
+      // THIS model on THIS network only. store.lookup() falls back to "any model
+      // of this provider", and every non-Codex cloud model shares the provider id
+      // 'gemini', so an unmeasured candidate would borrow another model's speed.
+      // getExact also keeps failure-only rows, which lookup() hides.
+      const exact = (providerId: string, modelId: string) => {
+        const profile = store.getExact(providerId, modelId, network);
+        return profile && !isStale(profile) ? profile : null;
+      };
+      // Filed under performanceIdentity()'s keys: 'codex-cli' for Codex (bare
+      // and prefixed ids both occur), the coarse 'gemini' for every other cloud
+      // model, Natively included.
+      order = orderAutoFastCandidates(candidates.map((c) => ({
+        ...c,
+        evidence: autoFastEvidence(c.family === 'codex'
+          ? [exact('codex-cli', 'codex-cli'), exact('codex-cli', `codex-cli:${this.codexCliConfig.model}`)]
+          : [exact('gemini', c.modelId)]),
+      }))).map(({ modelId, family }: { modelId: string; family: FastModelFamily }) => ({ modelId, family }));
+    } catch (e: any) {
+      console.warn('[LLMHelper] Fast Response Auto: measurements unreadable, using the shipped order:', e?.message);
+    }
+    this._autoFastOrder = { key, at: now, order };
+    return order;
+  }
+  private _autoFastOrder?: { key: string; at: number; order: Array<{ modelId: string; family: FastModelFamily }> };
+
+  private _fastPickCooldownUntil?: Map<string, number>;
+  private inFastPickCooldown(modelId: string): boolean {
+    const until = this._fastPickCooldownUntil?.get(modelId);
+    return until !== undefined && Date.now() < until;
+  }
+  /** Never called for a user's cancel — only a real failure before any token. */
+  private noteFastPickFailure(pick: { modelId: string; family: FastModelFamily }, error?: unknown): void {
+    (this._fastPickCooldownUntil ??= new Map()).set(pick.modelId, Date.now() + FAST_PICK_COOLDOWN_MS);
+    console.warn(`[LLMHelper] Fast Response Mode: ${pick.modelId} failed - stepping aside for ${FAST_PICK_COOLDOWN_MS / 1000}s`);
+    // The turn is then answered by the fallback, and the caller files that as
+    // a SUCCESS under the pick: its identity was fixed when the turn started.
+    // Record the failure itself, or Auto's "unreliable goes last" could never
+    // learn from a real one. An unclassifiable failure before any token still
+    // counts as one, so it is filed as a server error, never as 'unknown'.
+    try {
+      const { isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags');
+      if (!isIntelligenceFlagEnabled('providerPerformanceProfile')) return;
+      const { recordStreamObservation, classifyStreamError } = require('./llm/performance/recorder');
+      // A stall is filed as a timeout (no errorClass); anything else as its class.
+      const stalled = (error as any)?.name === 'FastPickFailure' && (error as any).kind === 'stall';
+      const cls = stalled ? null : classifyStreamError(error);
+      const errorClass = stalled ? undefined
+        : cls === 'rate_limit' || cls === 'client_error' || cls === 'connection_failure' ? cls : 'server_error';
+      recordStreamObservation(
+        { ttftMs: null, totalMs: 0, interChunkGapsMs: [], chunkCount: 0, outputChars: 0, reason: stalled ? 'first_useful_timeout' : 'error',
+          error: stalled ? undefined : error, firstUsefulBudgetMs: 0, interTokenStallMs: 0, speculative: false, stream: (async function* () { /* none */ })() },
+        { providerId: this.fastPickProviderId(pick.family), modelId: pick.modelId, route: this.fastPickRoute(pick.family),
+          inputTokens: 0, outputTokens: 0, hasImages: false, startedAt: Date.now(), coldStart: false, userCancelled: false, errorClass },
+      );
+    } catch { /* bookkeeping never breaks the fallback */ }
+  }
+
+  /** performanceIdentity()'s provider id for a fast pick — getCurrentProvider()'s coarse vocabulary. */
+  private fastPickProviderId(family: FastModelFamily): string {
+    return family === 'codex' ? 'codex-cli' : 'gemini';
+  }
+
+  private fastPickRoute(family: FastModelFamily): 'local' | 'server_cascade' | 'user_endpoint' | 'default_provider' {
+    if (family === 'codex') return 'local';
+    if (family === 'natively') return 'server_cascade';
+    return FAST_PICK_USER_ENDPOINT_FAMILIES.has(family) ? 'user_endpoint' : 'default_provider';
+  }
+
+  /**
+   * FAST_PICK_FIRST_TOKEN_SHARE of the pick's own route budget — the same
+   * budget the caller's outer deadline is built from (answerLatencyKey() and
+   * the route predicates follow the pick), so the guard always fires first and
+   * leaves the fallback the rest. A gateway's budget adapts to its measured
+   * first tokens; the guard adapts with it.
+   */
+  private fastPickFirstTokenBudgetMs(pick: { modelId: string; family: FastModelFamily }): number {
+    const route = this.fastPickRoute(pick.family);
+    const { totalHardTimeoutMs } = require('./llm/liveDeadlines');
+    const full: number = totalHardTimeoutMs({
+      isLocal: route === 'local', viaServerCascade: route === 'server_cascade', isUserEndpoint: route === 'user_endpoint',
+      observedUserEndpointLatency: route === 'user_endpoint' ? this.observedLatencyFor(`model:${pick.modelId}`) : null,
+    });
+    return Math.round(full * FAST_PICK_FIRST_TOKEN_SHARE);
+  }
+
+  /**
+   * The fast pick's stream, held to its own first-word budget. A pick that
+   * stalls past it, or ends without a word, throws FastPickFailure, so the
+   * caller's catch treats it like any failure before the first token: cool
+   * down, record, fall back — all inside the turn. `ctl` is the pick's own
+   * controller (the stream was opened on a signal linked to the turn's), so
+   * abandoning it never aborts the turn.
+   */
+  private async *guardFastPick(
+    pick: { modelId: string; family: FastModelFamily; stream: AsyncGenerator<string, void, unknown> },
+    ctl: AbortController,
+  ): AsyncGenerator<string, void, unknown> {
+    const budgetMs = this.fastPickFirstTokenBudgetMs(pick);
+    const it = pick.stream[Symbol.asyncIterator]();
+    let spoke = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stalled = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new FastPickFailure('stall', `no first word within ${budgetMs}ms`)), budgetMs);
+    });
+    stalled.catch(() => { /* raced below; never unhandled */ });
+    try {
+      while (true) {
+        const next = spoke ? await it.next() : await Promise.race([it.next(), stalled]);
+        if (next.done) break;
+        if (!spoke && typeof next.value === 'string' && next.value.trim()) {
+          spoke = true;
+          clearTimeout(timer);
+        }
+        yield next.value;
+      }
+    } catch (e: any) {
+      if (e?.name === 'FastPickFailure') {
+        ctl.abort();
+        // Not awaited: a generator still parked in next() would hold it.
+        it.return?.(undefined)?.catch?.(() => { /* already closing */ });
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!spoke) throw new FastPickFailure('empty', 'the fast answer was empty');
+  }
+
+  /**
    * One non-streaming call on the user's chosen FAST model.
    *
    * Returns null for every "not available" case — unset, no client, family
@@ -4832,11 +5888,32 @@ let isMultimodal = !!(imagePaths?.length);
    * that distinction because its deadline and supersede must propagate rather
    * than quietly spend a ladder call.
    */
+  /**
+   * The model the Auto Answer judge runs on when the user's only LLM keys are
+   * gateway keys (see generateJudgeVerdict). Null when the selected model is not
+   * on a gateway, or the gateway's client is not configured.
+   */
+  private judgeGatewayModel(): string | null {
+    const family = this.resolveFastModelFamily(this.currentModelId);
+    if (family === 'openrouter') return this.openrouterClient ? OPENROUTER_JUDGE_MODEL : null;
+    if (family === 'fluxion') return (this.fluxionOpenAIClient || this.fluxionAnthropicClient) ? this.currentModelId : null;
+    // NOT the selected model: see AGENTROUTER_JUDGE_MODEL. The judge runs on
+    // every candidate utterance, and on a rationed Claude/GPT pick that would
+    // spend the user's daily AgentRouter allowance on classification.
+    if (family === 'agentrouter') return this.hasAgentRouterCredential() ? AGENTROUTER_JUDGE_MODEL : null;
+    if (family === 'ninerouter') return this.ninerouterClient ? this.currentModelId : null;
+    if (family === 'nvidia_nim') return this.nvidiaNimClient ? this.currentModelId : null;
+    if (family === 'litellm') return this.litellmClient ? this.currentModelId : null;
+    return null;
+  }
+
   private async callFastModel(
     message: string,
-    opts: { signal?: AbortSignal; timeoutMs?: number; json?: boolean } = {},
+    opts: { signal?: AbortSignal; timeoutMs?: number; json?: boolean; modelId?: string } = {},
   ): Promise<string | null> {
-    const modelId = this.fastModelId;
+    // `modelId` dispatches a specific model through the same seam (the judge's
+    // gateway rung); the default is the user's Fast Response pick.
+    const modelId = opts.modelId ?? this.fastModelId;
     if (!modelId) return null;
     if (this.isLocalOnlyMode) return null;
 
@@ -4873,6 +5950,36 @@ let isMultimodal = !!(imagePaths?.length);
     };
 
     try {
+      // Codex speaks the Responses API through its own streaming transport, which
+      // keeps its local-only, scope and vision boundaries; drain it. It cannot be
+      // forced to JSON, so a fenced reply is unwrapped by finish() like any other.
+      if (family === 'codex') {
+        if (!this.isCodexAvailable()) return notDispatchable();
+        if (budget !== undefined && budget < CODEX_FAST_MIN_BUDGET_MS) {
+          console.log(`[LLMHelper] fast-model skipped (${modelId}): a ${budget}ms rung is shorter than Codex's first token - falling through to the ladder`);
+          return null;
+        }
+        let text = '';
+        for await (const chunk of this.streamWithCodexCli(message, undefined, true, undefined, timer, this.codexModelForFastPick(modelId))) text += chunk;
+        return finish(text);
+      }
+
+      // AgentRouter drains its own STREAMING adapter instead of joining the
+      // generic gateway map below, for three measured reasons that map cannot
+      // honour: Claude ids go to /v1/messages, whose NON-streaming reply is
+      // text/plain (the Anthropic SDK then returns a string and this read an
+      // empty answer); the OpenAI-format stream carries `data: null` events;
+      // and DeepSeek needs thinking disabled or its reasoning eats the 256-token
+      // cap. The adapter returns quietly on abort, so the budget is checked
+      // afterwards — a timed-out call must not hand back a partial verdict.
+      if (family === 'agentrouter') {
+        if (!this.hasAgentRouterCredential()) return notDispatchable();
+        let text = '';
+        for await (const piece of this.streamWithAgentRouter(message, undefined, undefined, timer, modelId, { maxTokens: 256, temperature: 0 })) text += piece;
+        if (timer?.aborted) throw Object.assign(new Error(`AgentRouter fast call aborted (${modelId})`), { name: 'AbortError' });
+        return finish(text);
+      }
+
       // The gateways are OpenAI-SHAPED but each has its OWN wire-id rule, and
       // getting it wrong 404s: Fluxion strips to a bare id, OpenRouter keeps the
       // vendor segment underneath. Never a generic strip.
@@ -4961,7 +6068,9 @@ let isMultimodal = !!(imagePaths?.length);
         this.assertOutboundScopes('claude', message);
         await this.rateLimiters.claude?.acquire();
         const res: any = await this.claudeClient.messages.create({
-          model: modelId, max_tokens: 256, temperature: 0,
+          model: modelId, max_tokens: 256,
+          // Not on models that reject sampling params — see claudeAcceptsSamplingParams.
+          ...(claudeAcceptsSamplingParams(modelId) ? { temperature: 0 } : {}),
           messages: [{ role: 'user', content: message }],
         }, { signal: timer });
         return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
@@ -5134,7 +6243,7 @@ let isMultimodal = !!(imagePaths?.length);
           // tiers lost 3-7 of 19 real asks (see OPENAI_JUDGE_MODEL).
           model: CLAUDE_MODEL,
           max_tokens: 256,
-          temperature: 0,
+          ...(claudeAcceptsSamplingParams(CLAUDE_MODEL) ? { temperature: 0 } : {}),
           messages: userOnly,
         }, { signal });
         const text = (res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join('');
@@ -5148,22 +6257,45 @@ let isMultimodal = !!(imagePaths?.length);
     // verdict to gemini-3.8-flash, which is slower AND cannot take thinkingLevel
     // 'minimal' (it 400s and falls back to 'low', paying thinking overhead every
     // consult). `purpose:'decision'` pins gemini-3.1-flash-lite server-side.
+    // Last model rung unless a gateway rung follows: then it may use most of
+    // the controller's 2.5 s, as the gateway rung does. Measured 2026-09-27,
+    // 80 live decision calls: 5% took over 1.8 s, most of them 1.87-1.97 s,
+    // and 1 in 80 over 2.4 s. At 1.8 s each of those aborted, nothing beneath
+    // could finish in the ~0.7 s left, and the engine fell back to the
+    // heuristic verdict: 8 judge timeouts in ~110 consults across two runs.
+    const judgeGateway = this.judgeGatewayModel();
     if (this.nativelyKey) {
       try {
         const text = await this.generateWithNatively(message, undefined, undefined, {
-          purpose: 'decision', timeoutMs: FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS, signal,
+          purpose: 'decision', timeoutMs: judgeGateway ? FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS : LAST_JUDGE_RUNG_TIMEOUT_MS, signal,
         });
         if (text) return text;
       } catch { if (aborted()) throw abortError(); }
     }
     if (aborted()) throw abortError();
 
+    // Gateway-only users. OpenRouter, Fluxion, 9Router, NVIDIA NIM and LiteLLM
+    // had no rung above AND none in the structured ladder below, so the judge
+    // threw "No reasoning model available" on every candidate and Auto Answer
+    // fell back to firing only when the transcript ended in '?' — "Tell me about
+    // yourself." never fired (2026-09-27). OpenRouter gets the same small tier
+    // Natively's decision route runs (flash-lite); the others have no known
+    // small tier, so the model the user chose to answer with judges. No JSON
+    // mode: measured on flash-lite, it moved the verdict itself (natively-api
+    // decisionGenerationConfig); the parser finds the object in plain text.
+    if (judgeGateway) {
+      const viaGateway = await this.callFastModel(message, { signal, json: false, timeoutMs: LAST_JUDGE_RUNG_TIMEOUT_MS, modelId: judgeGateway });
+      if (viaGateway) return viaGateway;
+    }
+    if (aborted()) throw abortError();
+
     // Nothing small is configured (Codex CLI / Ollama / custom): the structured
     // ladder still answers, bounded by the controller's deadline.
     // NOT preferFast: rung 0 already tried the fast model with the caller's signal.
-    // Re-entering here would bill it a second time, milliseconds after it failed,
-    // on a request that carries no signal and so cannot be cancelled.
-    return this.generateContentStructured(message);
+    // Re-entering here would bill it a second time, milliseconds after it failed.
+    // The signal goes with it: a superseded judge stops the ladder's rotations
+    // and backoffs instead of walking them for a verdict nobody will read.
+    return this.generateContentStructured(message, { signal });
   }
 
   public async generateContentStructured(
@@ -5182,8 +6314,18 @@ let isMultimodal = !!(imagePaths?.length);
     // fallback carries `purpose:'extraction'` so the server runs its own
     // flash-lite→3.7-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
     // loop below gives the 3-cycle retry-then-fail behavior.
-    opts?: { preferFast?: boolean },
+    //
+    // `opts.signal` makes the ladder cancellable (the Auto Answer judge passes
+    // its controller's). Only the Natively rung and the preferFast pick take it
+    // mid-call; the others finish their in-flight request, then the ladder stops
+    // instead of trying the next rung or rotation. An aborted call never resolves.
+    opts?: { preferFast?: boolean; signal?: AbortSignal },
   ): Promise<string> {
+    const signal = opts?.signal;
+    const aborted = () => signal?.aborted === true;
+    const abortError = () => Object.assign(new Error('structured generation aborted: superseded or cancelled'), { name: 'AbortError' });
+    if (aborted()) throw abortError();
+
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
     // A breaker may skip a rung only if another rung exists to fall to. Evaluated
@@ -5203,9 +6345,10 @@ let isMultimodal = !!(imagePaths?.length);
     // opts` — "retained for API compatibility" — so the flag promised something
     // it never delivered. The ladder below is unchanged and remains the fallback.
     if (opts?.preferFast) {
-      const pickedFast = await this.callFastModel(message, { json: true });
+      const pickedFast = await this.callFastModel(message, { signal, json: true });
       if (pickedFast) return pickedFast;
     }
+    if (aborted()) throw abortError();
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
@@ -5331,7 +6474,7 @@ let isMultimodal = !!(imagePaths?.length);
         // it runs its dedicated flash-lite→3.7-flash-only loop (3 cycles then
         // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
         // ignore the unknown field and route via their normal flash-first chain.
-        execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
+        execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction', signal })
       });
     }
 
@@ -5348,13 +6491,16 @@ let isMultimodal = !!(imagePaths?.length);
     const lastFailureByProvider = new Map<string, string>();
     const permanentlyDeadProviders = new Set<string>();
     for (let rotation = 0; rotation < MAX_ROTATIONS; rotation++) {
+      if (aborted()) throw abortError();
       if (rotation > 0) {
         const backoffMs = 1000 * rotation;
         console.log(`[LLMHelper] 🔄 Structured generation rotation ${rotation + 1}/${MAX_ROTATIONS} after ${backoffMs}ms backoff...`);
         await this.delay(backoffMs);
+        if (aborted()) throw abortError();
       }
 
       for (const provider of providers) {
+        if (aborted()) throw abortError();
         const permanentFailureKey = permanentFailureKeyFor(provider.name);
         if (permanentlyDeadProviders.has(permanentFailureKey)) {
           continue;
@@ -5362,6 +6508,7 @@ let isMultimodal = !!(imagePaths?.length);
         try {
           console.log(`[LLMHelper] 🧠 Structured generation: trying ${provider.name}...`);
           const result = await provider.execute();
+          if (aborted()) throw abortError();
           if (result && result.trim().length > 0) {
             console.log(`[LLMHelper] ✅ Structured generation succeeded with ${provider.name}`);
             return result;
@@ -5369,6 +6516,7 @@ let isMultimodal = !!(imagePaths?.length);
           console.warn(`[LLMHelper] ⚠️ ${provider.name} returned empty response`);
           lastFailureByProvider.set(provider.name, 'empty response');
         } catch (error: any) {
+          if (aborted()) throw abortError();
           const reason = (error?.message ?? String(error)).toString().slice(0, 240);
           console.warn(`[LLMHelper] ⚠️ Structured generation: ${provider.name} failed: ${reason}`);
           lastFailureByProvider.set(provider.name, reason);
@@ -5540,8 +6688,10 @@ let isMultimodal = !!(imagePaths?.length);
 
     const body: any = { messages: [{ role: 'user', content: userMessage }] };
 
-    // Signal fast mode so the server routes to Groq Llama 3.3 (text-only, key-rotated).
-    // Only sent for text-only requests — server ignores it when images are present.
+    // Signal fast mode so the server uses its fast tier. Sent with screenshots
+    // too, and that is fine: the tier is Gemini Flash-Lite, which reads the
+    // images, and MiniMax only when minimaxTierEligible() allows images
+    // (natively-api server.js, routeChat / routeChatStream).
     if (this.groqFastTextMode) body.fast_mode = true;
 
     // EXTRACTION hint: opt-in signal that this is a structured document extraction
@@ -5551,6 +6701,16 @@ let isMultimodal = !!(imagePaths?.length);
     // their normal flash-first chain. Never combined with fast_mode (opposite intents).
     if (opts?.purpose === 'extraction') {
       body.purpose = 'extraction';
+      delete body.fast_mode;
+    }
+    // DECISION hint: an Auto Answer yes/no verdict. The server pins it to
+    // gemini-3.1-flash-lite and skips the DeepSeek-default primary. Until
+    // 2026-09-26 the caller passed it and this function dropped it, so every
+    // Natively judge went to deepseek-flash (1.3-2.2 s, measured) and overran
+    // its 1.8 s rung — live, the verdict timed out and only a trailing '?'
+    // still fired the answer.
+    if (opts?.purpose === 'decision') {
+      body.purpose = 'decision';
       delete body.fast_mode;
     }
 
@@ -5925,6 +7085,42 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Fetch OpenRouter's catalogue and save which models read images (its
+   * input_modalities). Background only: called when an OpenRouter model is
+   * selected, never on the answer path. Fresh for a day; a failure keeps the
+   * previous answers, is not counted as fresh, and is not retried for 10 min.
+   * Nothing is fetched in local-only mode or with OpenRouter switched off.
+   */
+  public async refreshOpenRouterVisionData(fetchImpl: typeof fetch = fetch): Promise<void> {
+    if (this.isLocalOnlyMode || this.isProviderDisabled('openrouter')) return;
+    const store = getVisionCapabilityStore();
+    const now = Date.now();
+    // (A fetchedAt in the future — a clock that was set back — is not fresh.)
+    const age = now - (store.fetchedAt('openrouter', '') ?? 0);
+    if (age >= 0 && age < OPENROUTER_VISION_TTL_MS) return;
+    if (now - this.openrouterVisionLastFailureAt < OPENROUTER_VISION_RETRY_MS) return;
+    if (this.openrouterVisionFetch) return this.openrouterVisionFetch;
+    this.openrouterVisionFetch = (async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (this.openrouterApiKey) headers.Authorization = `Bearer ${this.openrouterApiKey}`;
+        const resp = await fetchImpl('https://openrouter.ai/api/v1/models', { headers, signal: AbortSignal.timeout(15_000) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const answers = parseOpenRouterVision(await resp.json());
+        if (answers.size === 0) throw new Error('empty catalogue');
+        store.replaceProviderAnswers('openrouter', '', answers);
+        console.log(`[LLMHelper] OpenRouter vision catalogue: ${answers.size} model(s), ${[...answers.values()].filter(Boolean).length} read images`);
+      } catch (err: any) {
+        this.openrouterVisionLastFailureAt = Date.now();
+        console.warn('[LLMHelper] OpenRouter vision catalogue refresh failed (answers unchanged):', err?.message || err);
+      } finally {
+        this.openrouterVisionFetch = null;
+      }
+    })();
+    return this.openrouterVisionFetch;
+  }
+
+  /**
    * OpenRouter reports mid-stream failures INSIDE a 200 OK body, as
    * `{ error: { code, message }, choices: [{ delta: {}, finish_reason: "error" }] }`
    * (api_reference/streaming). A stream that dies after the headers would
@@ -6181,6 +7377,215 @@ let isMultimodal = !!(imagePaths?.length);
     finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
 
+  /**
+   * In-band failure inside an already-200 AgentRouter stream. The openai SDK
+   * already throws on a chunk carrying `error`; `finish_reason: "error"` is the
+   * shape it lets through, and a relay that loses its upstream mid-answer is
+   * exactly where that comes from. Explained like every other AgentRouter error.
+   */
+  private assertNoAgentRouterStreamError(chunk: any, model: string): void {
+    if (chunk?.error) throw agentRouterError(Object.assign(new Error(String(chunk.error.message || 'gateway failed mid-stream')), { error: chunk.error }), model);
+    if (chunk?.choices?.[0]?.finish_reason === 'error') {
+      throw new Error(`AgentRouter (${model}) ended the stream with finish_reason=error`);
+    }
+  }
+
+  /**
+   * Chat Completions parameters for an AgentRouter model, taken from the NATIVE
+   * streamer for the same family so an AgentRouter answer is generated exactly
+   * the way the direct provider's would be, and the two cannot drift apart:
+   *
+   *   deepseek-*  = streamWithDeepseek: temperature 0.2, seed 7, max_tokens
+   *                 getDeepseekMaxOutput (8192), thinking disabled.
+   *   gpt-* / o*  = streamWithOpenai: max_completion_tokens getOpenAiMaxOutput,
+   *                 openaiReasoningParam; NO temperature or seed — reasoning
+   *                 models 400 on non-default sampling (OpenAiNoSamplingParams).
+   *   anything else (a future glm-*, say): the interactive temperature only,
+   *                 and the gateway's own output default.
+   *
+   * The first version sent NONE of these, so AgentRouter DeepSeek ran at the
+   * gateway's default temperature with its default output cap while direct
+   * DeepSeek ran at 0.2 / seed 7 / 8192 — same prompt, different generation.
+   * `opts` is the fast-model seam's override (a small cap, temperature 0).
+   */
+  private agentRouterOpenAIParams(model: string, opts?: AgentRouterCallOptions): Record<string, unknown> {
+    if (isDeepseekModelId(model)) {
+      return {
+        temperature: opts?.temperature ?? INTERACTIVE_TEMPERATURE,
+        seed: INTERACTIVE_SEED,
+        max_tokens: opts?.maxTokens ?? this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING,
+      };
+    }
+    if (/^(?:gpt-|o\d)/i.test(model)) {
+      return {
+        // The fast seam's 256 is too small for a reasoning model's hidden
+        // tokens; native callFastModel gives OpenAI 512 for the same reason.
+        max_completion_tokens: opts?.maxTokens ? Math.max(opts.maxTokens, 512) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
+        ...openaiReasoningParam(model),
+      };
+    }
+    return {
+      temperature: opts?.temperature ?? INTERACTIVE_TEMPERATURE,
+      ...(opts?.maxTokens ? { max_tokens: opts.maxTokens } : {}),
+    };
+  }
+
+  /**
+   * Anthropic Messages parameters. For a Claude model = what
+   * streamWithClaude sends: getClaudeMaxOutput, temperature 0.2 where the model
+   * accepts one (claudeAcceptsSamplingParams), thinking
+   * explicitly disabled (native's "made explicit" choice, for first-token time).
+   * The system prompt stays a plain string, not cache blocks — see
+   * buildFluxionAnthropicRequest for why a relay cannot use them.
+   */
+  private agentRouterAnthropicParams(model: string, opts?: AgentRouterCallOptions): Record<string, unknown> {
+    // DeepSeek rides this route too (see agentRouterProtocolFor), and takes
+    // streamWithDeepseek's values, not Claude's: getDeepseekMaxOutput, 0.2,
+    // thinking off. NO seed — the Anthropic API has none, and direct
+    // DeepSeek's seed did not make its replies repeatable anyway (measured).
+    // Temperature only where the model takes it: DeepSeek does (measured on
+    // this route), and so do Claude models up to 4.6 — Opus 4.7+ and the
+    // Claude 5 families 400 on it, which is exactly what AgentRouter's
+    // claude-opus-5 and claude-opus-4-8 are.
+    const deepseek = isDeepseekModelId(model);
+    const temperature = opts?.temperature ?? INTERACTIVE_TEMPERATURE;
+    return {
+      max_tokens: opts?.maxTokens ?? (deepseek ? this.getDeepseekMaxOutput(model) : this.getClaudeMaxOutput(model)),
+      ...((deepseek || claudeAcceptsSamplingParams(model)) ? { temperature } : {}),
+      thinking: { type: 'disabled' as const },
+    };
+  }
+
+  /**
+   * The system prompt an AgentRouter turn falls back to when the caller did not
+   * compose one: the native family's own. Claude models get CLAUDE_SYSTEM_PROMPT
+   * exactly as the direct Claude rung does; everything else the OpenAI-shaped
+   * one, as direct DeepSeek and OpenAI do.
+   */
+  private agentRouterDefaultSystemPrompt(modelId: string): string {
+    // Keyed on the model FAMILY, never the protocol: DeepSeek travels the
+    // Anthropic route but is DeepSeek, and direct DeepSeek uses the OpenAI one.
+    return isAgentRouterClaudeWireModel(agentRouterWireModel(modelId)) ? CLAUDE_SYSTEM_PROMPT : OPENAI_SYSTEM_PROMPT;
+  }
+
+  /**
+   * AgentRouter, blocking. DRAINS THE STREAMING ADAPTER rather than calling a
+   * non-streaming endpoint: a non-streaming /v1/messages reply comes back as
+   * `text/plain` (measured), which the Anthropic SDK does not parse, so
+   * `.content` was undefined and the "answer" was an empty string with no
+   * error. Streaming is the one path measured to work on both protocols, and
+   * sharing it keeps every quirk (null chunks, DeepSeek thinking, error
+   * mapping) in one place.
+   *
+   * No withRetry: it retries anything whose message contains "503", and here a
+   * 503 means "no channel for this model", which a retry cannot fix and which
+   * the gateway's terms would read as hammering. The SDK's own single retry
+   * (createAgentRouterClients) covers a dropped connection.
+   */
+  private async generateWithAgentRouter(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, signal?: AbortSignal): Promise<string> {
+    const model = agentRouterWireModel(modelId || this.currentModelId);
+    const timeoutMs = 120000;
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    let text = '';
+    for await (const piece of this.streamWithAgentRouter(userMessage, systemPrompt, imagePaths, combined, modelId)) text += piece;
+    // The stream returns quietly on abort, which is right for a live answer and
+    // wrong here: a blocking caller would take the partial text as complete.
+    if (combined.aborted) {
+      if (signal?.aborted) throw Object.assign(new Error(`AgentRouter (${model}) aborted`), { name: 'AbortError' });
+      throw new Error(`AgentRouter (${model}) timed out after ${timeoutMs}ms`);
+    }
+    return stripLeadingReasoningBlock(text);
+  }
+
+  /**
+   * AgentRouter, streaming. The protocol is chosen per MODEL
+   * (agentRouterProtocolFor): Claude and DeepSeek on the Anthropic Messages
+   * API, everything else on Chat Completions — DeepSeek there because the Chat
+   * Completions route ignored its thinking-off switch (measured; the function's
+   * comment has the numbers). Every failure goes through agentRouterError(), so a user reads
+   * "today's Claude allowance is used up" rather than a bare 402.
+   */
+  private async * streamWithAgentRouter(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+    abortSignal?: AbortSignal,
+    modelId?: string,
+    opts?: AgentRouterCallOptions,
+  ): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    this.assertOutboundScopes('agentrouter', userMessage, imagePaths);
+    await this.rateLimiters.agentrouter.acquire();
+    const model = agentRouterWireModel(modelId || this.currentModelId);
+    if (abortSignal?.aborted) return;
+
+    if (agentRouterProtocolFor(model) === 'anthropic') {
+      const client = this.agentrouterAnthropicClient;
+      if (!client) throw new Error('AgentRouter client not initialized');
+      const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
+      // System as a plain STRING, no cache_control blocks — the reason
+      // buildFluxionAnthropicRequest gives: a relay pools upstream accounts per
+      // request, so prompt caching cannot be relied on to engage.
+      const request: any = {
+        model,
+        ...this.agentRouterAnthropicParams(model, opts),
+        ...(systemPrompt ? { system: systemPrompt } : {}),
+        messages: [{ role: 'user' as const, content }],
+      };
+      const stream = client.messages.stream(request);
+      const onAbort = () => { try { stream.abort(); } catch {} };
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
+      try {
+        for await (const event of stream) {
+          if (abortSignal?.aborted) return;
+          if (event.type === 'content_block_delta' && (event as any).delta?.type === 'text_delta') {
+            yield (event as any).delta.text;
+          }
+        }
+      } catch (e: any) {
+        if (abortSignal?.aborted) return;
+        throw agentRouterError(e, model);
+      } finally {
+        abortSignal?.removeEventListener('abort', onAbort);
+      }
+      return;
+    }
+
+    const client = this.agentrouterOpenAIClient;
+    if (!client) throw new Error('AgentRouter client not initialized');
+    const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
+    let stream: any;
+    try {
+      stream = await client.chat.completions.create(
+        { model, messages, stream: true, ...this.agentRouterOpenAIParams(model, opts) } as any,
+        { signal: abortSignal },
+      );
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw agentRouterError(e, model);
+    }
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        // AgentRouter sends literal `data: null` events (two per DeepSeek
+        // answer, measured), which the SDK yields as null. Skip them BEFORE
+        // anything reads a field, or the answer dies with a TypeError halfway.
+        if (!chunk) continue;
+        this.assertNoAgentRouterStreamError(chunk, model);
+        const piece = chunk.choices?.[0]?.delta?.content;
+        if (piece) yield piece;
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw agentRouterError(e, model);
+    } finally {
+      if (abortSignal?.aborted && typeof stream?.abort === 'function') stream.abort();
+      if (abortSignal?.aborted && typeof stream?.controller?.abort === 'function') stream.controller.abort();
+    }
+  }
+
   // The handler for cURL requests
   public async chatWithCurl(userMessage: string, systemPrompt?: string, imagePath?: string): Promise<string> {
     if (!this.activeCurlProvider) throw new Error("No cURL provider active");
@@ -6362,7 +7767,10 @@ let isMultimodal = !!(imagePaths?.length);
     const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{ role: "user" as const, content }],
@@ -7181,7 +8589,7 @@ let isMultimodal = !!(imagePaths?.length);
     const contextScopes = context ? ['transcript' as ProviderDataScope, ...this.inferContextScopes(context)] : [];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
-      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots') || Boolean(imagePaths?.length));
       for (const scope of deniedOutboundScopes) {
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
@@ -7513,9 +8921,55 @@ let isMultimodal = !!(imagePaths?.length);
     req: { userContent: string; message: string; context?: string; imagePaths: string[]; systemPrompt: string },
     abortSignal?: AbortSignal,
   ): AsyncGenerator<string, void, unknown> {
+    const ordered = await this.buildVisionChain(req);
+
+    // Delegate the first-token-commit + retry + circuit-breaker state machine.
+    // hedgeEnabled:false — the Gemini cascade is strict serial (flash-lite →
+    // flash → pro), so no provider sets hedgeWith and nothing is raced.
+    yield* runStreamingVisionFallback(
+      ordered,
+      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
+      this.visionHealth,
+      {
+        log: (m) => console.log(m),
+        warn: (m) => console.warn(m),
+        // Mirrors the non-streaming vision path's 404 handling (see the
+        // onModelError call in generateWithVisionFallback). Without this the
+        // LIVE vision path — the one users actually hit — could never tell the
+        // version manager its pinned model had been retired, so a decommissioned
+        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
+        onModelGone: (_id, name) => {
+          this.modelVersionManager.onModelError(name).catch(() => { });
+        },
+        // A real screenshot refused as image-unsupported contradicts whatever
+        // said this model reads images: test it again now (2026-10-01).
+        onNoVision: (id) => {
+          const selected = (() => { try { return this.getDirectAssistSelection().provider; } catch { return null; } })();
+          // `<provider>_selected` is the rung that ran the selected model itself.
+          if (id === selected || id === `${selected}_selected`) this.maybeProbeSelectedVision({ force: true });
+        },
+      },
+      abortSignal,
+    );
+  }
+
+  /**
+   * The rungs for one screenshot turn, in the order they will be tried
+   * (2026-10-01: split out of streamVisionWithFallback so the order can be
+   * recorded and compared; phase 5a changes who leads). Throws the "No
+   * vision-capable provider configured…" errors when nothing can read it.
+   */
+  private async buildVisionChain(
+    req: { userContent: string; message: string; context?: string; imagePaths: string[]; systemPrompt: string },
+    /** True on the one rebuild after a passed on-the-spot test: never test twice. */
+    retested = false,
+  ): Promise<VisionStreamProvider[]> {
     const { userContent, message, context, imagePaths, systemPrompt } = req;
 
     // ── Resolve per-family model tiers (tier1→tier2→tier3 across attempts) ──
+    // Still unknown (a test that hit a transient failure)? Try again in the
+    // background; a no-op when the answer is known or the retry is backing off.
+    this.maybeProbeSelectedVision();
     const tiers = this.modelVersionManager.getAllVisionTiers();
     const tierModel = (family: ModelFamily, attempt: number): string | undefined => {
       const entry = tiers.find(t => t.family === family);
@@ -7538,15 +8992,51 @@ let isMultimodal = !!(imagePaths?.length);
     const cloud: VisionStreamProvider[] = [];
     const localOnly = this.isLocalOnlyMode;
     let prio = 0;
+    // Direct DeepSeek (2026-10-01): is it the model the user selected, and does
+    // the resolver say that model reads images? The name list for Flash
+    // (measured), or a passed one-time test. Never on unknown: deepseek-v4-pro
+    // answers HTTP 200 without seeing the image, so an unverified DeepSeek
+    // model would be a blind answer.
+    const deepseekSelected = !this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isDeepseekModel(this.currentModelId);
+    const deepseekReads = deepseekSelected && readsImages(this.visionVerdict({ provider: 'deepseek', model: this.currentModelId }), false);
+    // The user's own DIRECT model (2026-10-01): it reads its own screenshot when
+    // the resolver says it reads images — the name list, provider data or a
+    // passed one-time test. Unknown and "no" get no rung of their own: the
+    // vendor's fixed vision model below answers, so nothing is sent blind.
+    // Custom, cURL and Ollama selections win in getDirectAssistSelection, so a
+    // leftover cloud model id never leads their turn.
+    const sel = (() => { try { return this.getDirectAssistSelection(); } catch { return null; } })();
+    const selReads = sel ? readsImages(this.visionVerdict(sel), false) : false;
+    const selectedDirect = (provider: DirectAssistProvider): string | null =>
+      sel && selReads && sel.provider === provider ? sel.model : null;
+    const selectedOpenai = selectedDirect('openai');
+    const selectedClaude = selectedDirect('claude');
+    // `models/gemini-…` is the same model as `gemini-…`.
+    const selectedGemini = selectedDirect('gemini')?.replace(/^models\//, '') ?? null;
+    const selectedGroq = selectedDirect('groq');
+    const fixedGemini = { lite: GEMINI_FLASH_LITE_MODEL, flash: tierModel(ModelFamily.GEMINI_FLASH, 1) || GEMINI_FLASH_MODEL, pro: tierModel(ModelFamily.GEMINI_PRO, 1) || GEMINI_PRO_MODEL };
+    const groqVisionModel = selectedGroq && !isRetiredGroqModelId(selectedGroq) ? selectedGroq : GROQ_VISION_MODEL;
 
     if (!localOnly) {
       if (this.openaiClient) {
         cloud.push({ id: 'openai', name: 'OpenAI', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig, att) => this.streamWithOpenaiMultimodal(userContent, imagePaths, systemPrompt, tierModel(ModelFamily.OPENAI, att), sig) });
+        // …and a rung for the selected model itself, to lead the turn (see
+        // `front`), unless it IS the fixed vision model — then that rung leads.
+        // The reasoning-model budget: a selected o-series or GPT-6 model takes
+        // seconds to its first token where the fixed model takes one.
+        if (selectedOpenai && selectedOpenai !== tierModel(ModelFamily.OPENAI, 1)) {
+          cloud.push({ id: 'openai_selected', name: `OpenAI (${selectedOpenai})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithOpenaiMultimodal(userContent, imagePaths, systemPrompt, selectedOpenai, sig) });
+        }
       }
       if (this.claudeClient) {
         cloud.push({ id: 'claude', name: 'Claude', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig, att) => this.streamWithClaudeMultimodal(userContent, imagePaths, systemPrompt, tierModel(ModelFamily.CLAUDE, att), sig) });
+        if (selectedClaude && selectedClaude !== tierModel(ModelFamily.CLAUDE, 1)) {
+          cloud.push({ id: 'claude_selected', name: `Claude (${selectedClaude})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithClaudeMultimodal(userContent, imagePaths, systemPrompt, selectedClaude, sig) });
+        }
       }
       if (this.client) {
         // Strict serial Gemini cascade (flash-lite → flash → pro), no hedge.
@@ -7558,10 +9048,20 @@ let isMultimodal = !!(imagePaths?.length);
           open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_FLASH, att) || GEMINI_FLASH_MODEL, imagePaths, systemPrompt, sig) });
         cloud.push({ id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_PRO, att) || GEMINI_PRO_MODEL, imagePaths, systemPrompt, sig) });
+        // A selected Gemini model that is none of the three above.
+        if (selectedGemini && !Object.values(fixedGemini).includes(selectedGemini)) {
+          cloud.push({ id: 'gemini_selected', name: `Gemini (${selectedGemini})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithGeminiModel(userContent, selectedGemini, imagePaths, systemPrompt, sig) });
+        }
       }
       if (this.groqClient) {
-        cloud.push({ id: 'groq', name: `Groq (${GROQ_VISION_MODEL})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
-          open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig) });
+        // The selected Groq model when it reads images, else Groq's vision model.
+        // Never a RETIRED selection (qwen3.6 on free and developer tiers): this
+        // adapter calls Groq directly, without the successor substitution the
+        // text path has, so the retired id 404'd and the one Groq rung was
+        // demoted for a day.
+        cloud.push({ id: 'groq', name: `Groq (${groqVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
+          open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig, groqVisionModel) });
       }
       if (this.hasNatively()) {
         cloud.push({ id: 'natively', name: 'Natively API', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
@@ -7581,11 +9081,15 @@ let isMultimodal = !!(imagePaths?.length);
       // theirs takes images, so it must not be auto-recruited as a fallback for
       // someone else's turn — but when it is the model they picked, it has to be
       // tried, and the upstream's own error is the honest answer.
-      if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
+      // A model TESTED as text-only (or catalogued so) is not seated (2026-10-01);
+      // an untested one seats as before. Same rule for the next three gateways.
+      if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient
+        && gatewaySeatReadsImages('litellm', this.currentModelId, this.visionFacts({ provider: 'litellm', model: this.currentModelId }))) {
         cloud.push({ id: 'litellm', name: `LiteLLM (${this.currentModelId.replace('litellm/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithLiteLLM(userContent, systemPrompt, imagePaths, sig) });
       }
-      if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
+      if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient
+        && gatewaySeatReadsImages('nvidia_nim', this.currentModelId, this.visionFacts({ provider: 'nvidia_nim', model: this.currentModelId }))) {
         cloud.push({ id: 'nvidia_nim', name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithNvidiaNim(userContent, systemPrompt, imagePaths, sig) });
       }
@@ -7601,7 +9105,17 @@ let isMultimodal = !!(imagePaths?.length);
       // Same rule as the two gateways above: only recruited when it is the model
       // the user actually picked. OpenRouter fronts hundreds of upstreams and we
       // cannot know whether someone else's turn should be routed through it.
-      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+      // …and, since 2026-10-01, only when OpenRouter's own catalogue does not
+      // list the model as text-only: OpenRouter refuses those images (404 "No
+      // endpoints found that support image input", which the chain then took for
+      // a retired model and demoted for a day). No catalogue yet: seated, as before.
+      const openrouterSeatReads = this.isOpenRouterModel(this.currentModelId) && this.openrouterClient
+        ? gatewaySeatReadsImages('openrouter', this.currentModelId, this.visionFacts({ provider: 'openrouter', model: this.currentModelId }))
+        : null;
+      // Skipping the seat on the catalogue's "no": recheck it isn't stale (see
+      // directSelectionSupportsImages; a no-op while fresh).
+      if (openrouterSeatReads === false) void this.refreshOpenRouterVisionData();
+      if (openrouterSeatReads) {
         cloud.push({ id: 'openrouter', name: `OpenRouter (${this.openrouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithOpenRouter(userContent, systemPrompt, imagePaths, sig) });
       }
@@ -7609,9 +9123,28 @@ let isMultimodal = !!(imagePaths?.length);
       // picked. It matters more here than for the others — Fluxion's ids are the
       // real vendors' own, so a Fluxion rung seated for someone else's turn would
       // look entirely plausible in the logs while billing the wrong account.
-      if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
+      if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()
+        && gatewaySeatReadsImages('fluxion', this.currentModelId, this.visionFacts({ provider: 'fluxion', model: this.currentModelId }))) {
         cloud.push({ id: 'fluxion', name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithFluxion(userContent, systemPrompt, imagePaths, sig) });
+      }
+      // Fluxion's rule — only the model the user picked — plus 9Router's
+      // per-model gate (agentRouterModelSupportsVision): a model that cannot
+      // read images is not seated, so a screenshot turn goes to a provider that
+      // can see it instead of spending an attempt on one that cannot.
+      if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential() && this.agentRouterModelSupportsVision(this.currentModelId)) {
+        cloud.push({ id: 'agentrouter', name: `AgentRouter (${agentRouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithAgentRouter(userContent, systemPrompt, imagePaths, sig) });
+      }
+      // The same rule as the gateways: a rung only for the model the user
+      // picked. The session's 402 flag is honoured, as the text cascade does.
+      if (deepseekReads && this.deepseekClient && !this.deepseekPermanentlyDead) {
+        // Captured now: the resolver approved THIS model. Read at open time, a
+        // switch to Pro before a late attempt would send the image to a model
+        // that cannot read it.
+        const deepseekModel = this.currentModelId;
+        cloud.push({ id: 'deepseek', name: `DeepSeek (${deepseekWireModel(deepseekModel)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithDeepseek(userContent, systemPrompt, deepseekModel, sig, imagePaths) });
       }
       // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
       // other Codex call site uses. It additionally covers the disabled-provider
@@ -7641,6 +9174,38 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'antigravity', name: `Antigravity (${antigravityVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithAntigravity(userContent, systemPrompt, imagePaths, sig, `antigravity:${antigravityVisionModel}`) });
       }
+      // "Reads images: Off" (Settings, phase 4) is about the MODEL, whichever
+      // rung would send to it. The selection's own rungs and the gateway seats
+      // above already asked the resolver; these are the rungs with a fixed
+      // model, which never did. Off for Gemini Flash means the Flash fallback
+      // does not get a Claude user's screenshot either.
+      const fixedRungModel: Record<string, readonly [DirectAssistProvider, string | null | undefined]> = {
+        openai: ['openai', tierModel(ModelFamily.OPENAI, 1)],
+        claude: ['claude', tierModel(ModelFamily.CLAUDE, 1)],
+        gemini_flash_lite: ['gemini', fixedGemini.lite],
+        gemini_flash: ['gemini', fixedGemini.flash],
+        gemini_pro: ['gemini', fixedGemini.pro],
+        groq: ['groq', groqVisionModel],
+        natively: ['natively', 'natively'],
+        'codex-cli': ['codex-cli', this.getSelectedCodexCliModel()],
+        antigravity: ['antigravity', antigravityVisionModel ? `antigravity:${antigravityVisionModel}` : null],
+      };
+      for (let i = cloud.length - 1; i >= 0; i--) {
+        const fixed = fixedRungModel[cloud[i].id];
+        if (fixed?.[1] && this.userVisionOverride(fixed[0], fixed[1]) === false) cloud.splice(i, 1);
+      }
+    }
+
+    // A cloud model id LEFT OVER from before a local selection is not the
+    // selection (2026-10-01): setModel keeps currentModelId when Ollama or a
+    // custom provider is picked, and the gateway seats above read it raw. So the
+    // last gateway model the user had picked was seated — sometimes alone — for
+    // a turn they had pointed at a local provider, against the rule written on
+    // every one of those seats ("only when it is the model the user picked").
+    const localSelection = this.useOllama || !!this.customProvider || !!this.activeCurlProvider;
+    if (localSelection) {
+      const SELECTED_ONLY = new Set(['litellm', 'nvidia_nim', 'ninerouter', 'openrouter', 'fluxion', 'agentrouter']);
+      for (let i = cloud.length - 1; i >= 0; i--) if (SELECTED_ONLY.has(cloud[i].id)) cloud.splice(i, 1);
     }
 
     // Local providers (always available, including in local-only mode).
@@ -7664,8 +9229,11 @@ let isMultimodal = !!(imagePaths?.length);
     // The wait is bounded (resolveOllamaVisionModelForChain): it runs before ANY
     // provider is seated, cloud included, and an unbounded probe against a hung
     // daemon cost 5s on every screenshot.
-    let ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
-    if (this.useOllama && !ollamaVisionModel) {
+    // Not when Ollama is switched off in Settings: selected-but-disabled must
+    // not receive the screenshot (streamWithOllama has no such check).
+    const ollamaUsable = this.useOllama && !this.isProviderDisabled('ollama');
+    let ollamaVisionModel = ollamaUsable ? this.ollamaVisionModel : null;
+    if (ollamaUsable && !ollamaVisionModel) {
       try {
         ollamaVisionModel = await this.resolveOllamaVisionModelForChain();
       } catch (err: any) {
@@ -7681,11 +9249,12 @@ let isMultimodal = !!(imagePaths?.length);
     // Honor an explicit local selection first, then health/speed-sorted cloud,
     // then any remaining local providers as a final fallback.
     const nowMs = Date.now();
-    let ordered: VisionStreamProvider[];
-    if (localOnly) {
-      ordered = orderVisionByHealth(local, this.visionHealth, nowMs);
-    } else {
-      const front: VisionStreamProvider[] = [];
+    // `front` is the selection's own rung(s). The ordering rule itself lives in
+    // visionOrdering.ts (2026-10-01), shared with the screen-reading path from
+    // phase 5b: the selection leads unless its breaker is open, then cloud by
+    // health, then local. Local-only mode ignores `front` and uses local rungs.
+    const front: VisionStreamProvider[] = [];
+    if (!localOnly) {
       if (this.useOllama) { const o = local.find(p => p.id === 'ollama'); if (o) front.push(o); }
       if (this.customProvider) { const c = local.find(p => p.id === 'custom'); if (c) front.push(c); }
       if (this.isCodexCliModel(this.currentModelId)) { const cdx = cloud.find(p => p.id === 'codex-cli'); if (cdx) front.push(cdx); }
@@ -7704,12 +9273,76 @@ let isMultimodal = !!(imagePaths?.length);
       // inverted: the other vendor silently wins the turn the user assigned to
       // the gateway.
       if (this.isFluxionModel(this.currentModelId)) { const f = cloud.find(p => p.id === 'fluxion'); if (f) front.push(f); }
-      const backLocal = local.filter(p => !front.includes(p));
-      const backCloud = cloud.filter(p => !front.includes(p));
-      ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
+      // Same inversion, same fix: without this a SELECTED AgentRouter Claude
+      // model lost its own screenshot turn to whichever vendor key sorted first.
+      if (this.isAgentRouterModel(this.currentModelId)) { const ar = cloud.find(p => p.id === 'agentrouter'); if (ar) front.push(ar); }
+      // The selected DeepSeek model leads its own turn, like the gateways above.
+      if (deepseekSelected) { const ds = cloud.find(p => p.id === 'deepseek'); if (ds) front.push(ds); }
+      // A selected DIRECT model leads its own turn too (2026-10-01). Before
+      // this, OpenAI (priority 0) answered a Claude, Gemini, Groq or Natively
+      // user's screenshot whenever an OpenAI key was present: the vendor the
+      // user did NOT choose won the turn. `lead` is a no-op when the rung is
+      // not seated (no key, provider switched off).
+      const lead = (id: string) => { const p = cloud.find(c => c.id === id); if (p && !front.includes(p)) front.push(p); };
+      const seated = (id: string) => cloud.some(c => c.id === id);
+      if (selectedOpenai) lead(seated('openai_selected') ? 'openai_selected' : 'openai');
+      if (selectedClaude) lead(seated('claude_selected') ? 'claude_selected' : 'claude');
+      if (selectedGemini) lead(seated('gemini_selected') ? 'gemini_selected'
+        : selectedGemini === fixedGemini.lite ? 'gemini_flash_lite'
+        : selectedGemini === fixedGemini.pro ? 'gemini_pro' : 'gemini_flash');
+      if (selectedGroq) lead('groq');
+      if (sel?.provider === 'natively') lead('natively');
+      if (sel?.provider === 'antigravity') lead('antigravity');
+      // …and with a local selection only its own rung leads: a stale Codex id
+      // must not be front-loaded behind it either.
+      if (localSelection) for (let i = front.length - 1; i >= 0; i--) if (front[i].id !== 'ollama' && front[i].id !== 'custom') front.splice(i, 1);
+    }
+    // A breaker opened by a DIFFERENT selection says nothing about this one.
+    // A leading rung's id is the same for every model it can carry
+    // (`openai_selected`, `openrouter`, `groq`, …), so a retired or text-only
+    // model's demotion — up to a day — would outlive the user picking another
+    // model, and their new selection would not lead. A rung that last led for
+    // another selection starts clean; one that never led keeps its breaker (the
+    // fixed `openai` rung failing as a fallback is about the key, not the pick).
+    // (A custom provider keeps its id when its command is edited, so the
+    // command is part of what "this selection" means.)
+    const selectionKey = sel ? `${sel.provider}|${sel.model}|${this.customProvider?.curlCommand ?? ''}` : '';
+    forgetBreakersOfOtherSelections((this.visionLeadSelection ??= new Map()), this.visionHealth, front.map(p => p.id), selectionKey);
+    const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
+
+    // A LEADING selection is retried less than a fallback (2026-10-01). The
+    // engine retries a transient failure up to three times per rung; with the
+    // selection first that put a slow or unreachable selected provider between
+    // the user and every fallback (measured: Natively unreachable, three 4 s
+    // connect timeouts, ~16 s before another provider answered).
+    //   • a `<vendor>_selected` rung: ONE attempt — its retry is the vendor's
+    //     fixed vision model, which follows on the same key;
+    //   • any other leading selection: TWO.
+    // Only when something healthy sits behind it: a rung that is the user's
+    // only chance keeps the full attempts. A selection that is not leading
+    // (breaker open, or local-only mode dropped it) is not touched.
+    const isCooling = (p: VisionStreamProvider) => (this.visionHealth.get(p.id)?.openUntil ?? 0) > nowMs;
+    const leading = front.filter(p => ordered.includes(p) && (p.isLocal || !isCooling(p)));
+    if (leading.length > 0 && ordered.some(p => !leading.includes(p) && !isCooling(p))) {
+      for (const p of leading) p.maxAttempts = p.id.endsWith('_selected') ? 1 : 2;
     }
 
     if (ordered.length === 0) {
+      // Nothing can read this screenshot. If that is only because the selected
+      // model has never been tested, test it now: a pass is saved, the resolver
+      // then says yes, and ONE rebuild seats its rung. Anything else — a fail,
+      // a slow test, a private mode — falls through to the messages below, and
+      // the screenshot is not sent.
+      if (!retested && await this.testSelectedVisionNow()) return this.buildVisionChain(req, true);
+      // Local-only mode seats local providers only, so the cloud advice below
+      // (add an OpenAI/Claude/Gemini/Groq key) would send the user to providers
+      // this mode refuses to use (2026-10-01).
+      if (localOnly) {
+        // Worded as "not found", not "not installed": the chain is also empty
+        // when Ollama isn't the selected provider or its daemon didn't answer
+        // the probe in time, and those users already have the model.
+        throw new Error('No vision-capable provider configured. Local-only mode is on and no local model that reads images was found — select an Ollama vision model (for example qwen2.5vl, llama3.2-vision or gemma3), check that Ollama is running, or turn off local-only mode.');
+      }
       // Name the gateway when that is what the user actually configured. The
       // flat "add an OpenAI/Claude/Gemini/Groq key" text was the only thing a
       // LiteLLM-only user ever saw for a screen question, and it pointed them at
@@ -7718,33 +9351,45 @@ let isMultimodal = !!(imagePaths?.length);
         : this.isNvidiaNimModel(this.currentModelId) ? 'NVIDIA NIM endpoint'
         : this.isOpenRouterModel(this.currentModelId) ? 'OpenRouter gateway'
         : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
+        : this.isAgentRouterModel(this.currentModelId) ? 'AgentRouter gateway'
         : null;
-      throw new Error(gateway
-        ? `No vision-capable provider configured. The selected ${gateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
+      // …unless that id is left over from before a local selection (see
+      // `localSelection` above): then no gateway is "the selected" one.
+      const selectedGateway = localSelection ? null : gateway;
+      // The selected model is switched to "Reads images: Off" in Settings and
+      // nothing else can read the screenshot: say so, before any message that
+      // would blame the model or the provider (phase 4).
+      if (sel && this.visionVerdict(sel).source === 'override' && this.visionVerdict(sel).reads === 'no') {
+        throw new Error(`No vision-capable provider configured. "Reads images" is switched off for the selected model (${visionWireModel(sel.provider, sel.model)}) in Settings › AI Providers. Switch it back to Auto or On, or add another vision provider in Settings.`);
+      }
+      // OpenRouter's own catalogue said this model is text-only, so "check the
+      // proxy is reachable" would be the wrong advice (2026-10-01).
+      if (!localSelection && this.isOpenRouterModel(this.currentModelId) && storedVisionAnswer('openrouter', this.currentModelId) === false) {
+        throw new Error(`No vision-capable provider configured. The selected OpenRouter model (${this.openrouterWireModel(this.currentModelId)}) can't read screenshots — OpenRouter lists it as text-only. Pick an OpenRouter model that can, or add another vision provider in Settings.`);
+      }
+      // A selected DeepSeek model that does not read images (Pro), and nothing
+      // else configured: name the model and the one that can (2026-10-01).
+      if (deepseekSelected && !deepseekReads) {
+        throw new Error(`No vision-capable provider configured. The selected DeepSeek model (${deepseekWireModel(this.currentModelId)}) can't read screenshots — DeepSeek Flash can. Pick DeepSeek Flash, or add another vision provider in Settings.`);
+      }
+      // A gateway model the one-time image test found text-only: say that. The
+      // generic text below ("check the proxy is reachable") is the wrong advice
+      // for a model that answered the test and could not read the image.
+      if (selectedGateway && sel && storedVisionTest(sel.provider, sel.model, this.visionStoreBaseURL(sel.provider))?.reads === false) {
+        throw new Error(`No vision-capable provider configured. The selected ${selectedGateway} model can't read screenshots — Natively tested it with an image and it could not read it. Pick a model that can, or add another vision provider in Settings.`);
+      }
+      // AgentRouter is a hosted service with a fixed catalogue, so "check the
+      // proxy is reachable" is the wrong advice there: the only way to land
+      // here is a selected model that does not read images.
+      if (!localSelection && this.isAgentRouterModel(this.currentModelId)) {
+        throw new Error(`No vision-capable provider configured. The selected AgentRouter model (${agentRouterWireModel(this.currentModelId)}) can't read screenshots — pick an AgentRouter model that can, or add another vision provider in Settings.`);
+      }
+      throw new Error(selectedGateway
+        ? `No vision-capable provider configured. The selected ${selectedGateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
         : 'No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings.');
     }
 
-    // Delegate the first-token-commit + retry + circuit-breaker state machine.
-    // hedgeEnabled:false — the Gemini cascade is strict serial (flash-lite →
-    // flash → pro), so no provider sets hedgeWith and nothing is raced.
-    yield* runStreamingVisionFallback(
-      ordered,
-      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
-      this.visionHealth,
-      {
-        log: (m) => console.log(m),
-        warn: (m) => console.warn(m),
-        // Mirrors the non-streaming vision path's 404 handling (see the
-        // onModelError call in generateWithVisionFallback). Without this the
-        // LIVE vision path — the one users actually hit — could never tell the
-        // version manager its pinned model had been retired, so a decommissioned
-        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
-        onModelGone: (_id, name) => {
-          this.modelVersionManager.onModelError(name).catch(() => { });
-        },
-      },
-      abortSignal,
-    );
+    return ordered;
   }
 
   /**
@@ -7819,6 +9464,7 @@ let isMultimodal = !!(imagePaths?.length);
   ): AsyncGenerator<string, void, unknown> {
     const { StreamingDashReducer } = await import('./llm/postProcessor');
     const { StreamingReasoningFilter } = await import('./llm/reasoningTagFilter');
+    const { StreamingCalcFilter, verifyCalcScratch } = await import('./llm/calcScratch');
     // Per-stream reasoning-tag filter. Runs BEFORE the dash reducer so a think
     // block can never enter the reducer's fenced-code state machine (a ``` inside
     // the model's reasoning would otherwise leave it convinced the rest of the
@@ -7827,6 +9473,24 @@ let isMultimodal = !!(imagePaths?.length);
     // on ANY provider cannot re-arm the 2026-09-03 leak the way the 2026-08-23
     // Groq llama→qwen3.6 swap did. See reasoningTagFilter.ts.
     const reasoningFilter = new StreamingReasoningFilter();
+    // The hidden [[CALC]] working the composer asks for on arithmetic turns
+    // (llm/calcScratch.ts). Runs after the reasoning filter, before the dash
+    // reducer, at this one point every provider passes through, so no surface
+    // shows or stores it. Leading-only; any other answer passes untouched.
+    const calcFilter = new StreamingCalcFilter();
+    const visibleOf = (text: string): string => (text ? calcFilter.feed(text) : '');
+    const flushFilters = (): string => {
+      const tail = calcFilter.feed(reasoningFilter.finish()) + calcFilter.finish();
+      if (calcFilter.scratch !== null) {
+        outcome.calcScratch = calcFilter.scratch;
+        try {
+          const v = verifyCalcScratch(calcFilter.scratch);
+          console.log(`[CalcScratch] ${v.checked} step(s) checked, ${v.mismatches} mismatch(es)`);
+          if (v.mismatches > 0) for (const l of v.lines.filter((x) => x.ok === false)) console.warn(`[CalcScratch] mismatch: ${l.line} (computes ${l.computed})`);
+        } catch { /* observe-only */ }
+      }
+      return tail;
+    };
     // Per-stream stateful reducer: tracks fenced-code (```) state ACROSS chunks
     // so a code block streamed over many chunks is never dash-mangled (the old
     // stateless reducer turned `nums[i] - 1` into `nums[i], 1`). It also skips
@@ -7864,6 +9528,9 @@ let isMultimodal = !!(imagePaths?.length);
     const outputCeiling = testOutputCharCeiling()
       ?? (profile === 'long_form' ? MAX_SUMMARY_OUTPUT_CHARS : MAX_STREAM_OUTPUT_CHARS);
     let emittedChars = 0;
+    // A stuck answer ends on its repetition, long before the length cap (2026-10-04).
+    const { RepetitionGuard } = await import('./llm/repetitionGuard');
+    const repetition = new RepetitionGuard();
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
       // Strip the internal truncation marker before anything downstream sees
@@ -7873,13 +9540,13 @@ let isMultimodal = !!(imagePaths?.length);
         outcome.reason = 'provider_failed_after_first_token';
         // Release anything the reasoning filter is still holding. A provider
         // that dies mid-think-block would otherwise end the turn blank.
-        const held = reasoningFilter.finish();
+        const held = flushFilters();
         if (held) yield dashReducer.reduce(held);
         return;
       }
       // May be empty (the filter is holding a partial tag) — never yield an
       // empty chunk, or trackCommit's non-empty predicate sees needless churn.
-      const visible = reasoningFilter.feed(chunk);
+      const visible = visibleOf(reasoningFilter.feed(chunk));
       if (visible) yield dashReducer.reduce(visible);
       // Count what the USER actually receives against the runaway cap. Charging
       // suppressed reasoning to the ceiling would end long answers early on a
@@ -7896,10 +9563,16 @@ let isMultimodal = !!(imagePaths?.length);
         );
         return;
       }
+      if (repetition.feed(visible)) {
+        outcome.truncated = true;
+        outcome.reason = 'output_repetition';
+        console.warn(`[LLMHelper] Stream is repeating itself (${emittedChars} chars) — ending the turn.`);
+        return;
+      }
     }
     // Normal completion. Flush a block the model opened and never closed —
     // showing its reasoning beats showing an empty answer.
-    const tail = reasoningFilter.finish();
+    const tail = flushFilters();
     if (tail) yield dashReducer.reduce(tail);
   }
 
@@ -7978,9 +9651,16 @@ let isMultimodal = !!(imagePaths?.length);
       import('./llm/streamFaultInjection'),
     ]);
     const ceiling = testOutputCharCeiling() ?? MAX_STREAM_OUTPUT_CHARS;
+    const { RepetitionGuard } = await import('./llm/repetitionGuard');
+    const repetition = new RepetitionGuard();
     for await (const chunk of inner) {
       yield chunk;
       state.chars += typeof chunk === 'string' ? chunk.length : 0;
+      if (typeof chunk === 'string' && repetition.feed(chunk)) {
+        console.warn(`[LLMHelper] ${label} is repeating itself (${state.chars} chars) — ending the turn.`);
+        state.truncated = true;
+        return;
+      }
       if (state.chars > ceiling) {
         console.warn(
           `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${ceiling}) — ending the turn. The model is not converging.`,
@@ -8111,7 +9791,7 @@ let isMultimodal = !!(imagePaths?.length);
             // shared resolver (.audit/coding-template-audit-2026-08-18.md).
             ...(() => {
               try {
-                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const { resolveCodingPromptSignals, isDeicticAsk, screenPromotedCodingSignals } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
                 const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
                 // Attached-screenshot promotion (2026-08-19 channel audit): a
                 // message with an image whose text only points at it ("solve
@@ -8122,10 +9802,23 @@ let isMultimodal = !!(imagePaths?.length);
                 if (!resolved.codingTask
                     && (imagePaths?.length ?? 0) > 0
                     && (!message?.trim() || isDeicticAsk(message))) {
-                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                  // The screenshot grounds the problem; the words decide the shape.
+                  return screenPromotedCodingSignals(message);
                 }
                 return resolved;
               } catch { return { codingTask: false }; }
+            })(),
+            // Universal diagram contract, same principle (2026-10-01): a caller
+            // that passed no system prompt still gets the diagram shape for a
+            // design question. This transport has no session, so it never
+            // sees a design on the table — fresh design asks only.
+            diagram: (() => {
+              try {
+                const { selfComposedDiagramSignals } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                // A caller with a session has already decided, design on the table included.
+                if (routeOptions && routeOptions.diagramSignals !== undefined) return routeOptions.diagramSignals as ReturnType<typeof selfComposedDiagramSignals>;
+                return selfComposedDiagramSignals(message, routeOptions?.answerType, (imagePaths?.length ?? 0) > 0);
+              } catch { return null; }
             })(),
           }) ?? systemPromptOverride;
         }
@@ -8153,18 +9846,14 @@ let isMultimodal = !!(imagePaths?.length);
 
     // ============================================================
     // KNOWLEDGE MODE INTERCEPT (Streaming)
-    // Skip when fast-text mode (`groqFastTextMode`) is active. The rationale
-    // is broader than latency: skipping the knowledge intercept also DROPS
-    // the orchestrator's `feedForDepthScoring` call (the depth score
-    // doesn't reach the answer), the `isIntroQuestion` shortcut (identity
-    // recall), the persona `systemPromptInjection` override, and the live
-    // negotiation-coaching short-circuit. The trade is intentional — fast
-    // mode trades these for sub-second TTFT — but the comment previously
-    // stated only the latency rationale and hid the rest (audit #4).
-    // `documentGroundedCustomModeActive` already exempts the doc-grounded
-    // case from this gate (so a document-grounded answer can never lose
-    // retrieval to fast mode), even though fast mode is otherwise allowed
-    // with any other active mode.
+    // Runs in Fast Response Mode too (2026-09-26). It used to be skipped there,
+    // which DROPPED the orchestrator's `feedForDepthScoring` call, the
+    // `isIntroQuestion` identity recall, the persona `systemPromptInjection`
+    // and the live negotiation-coaching short-circuit (audit #4) — acceptable
+    // while fast mode meant a Groq few, not once any user can switch it on.
+    // Its output lands in `systemPromptOverride` and `context`, which the fast
+    // path reads like every other rung, so a fast answer carries the profile.
+    // The non-streaming path never skipped it.
     // ============================================================
     const documentGroundedCustomModeActive = (() => {
       try {
@@ -8196,10 +9885,12 @@ let isMultimodal = !!(imagePaths?.length);
         retrievalRequired: true,
       });
     }
+    // PI gate (2026-09-30): last, so the mode lookup is paid only when the
+    // intercept would otherwise run. See isProfileIntelligenceAllowedForTurn.
     const shouldRunKnowledge = !ignoreKnowledgeMode &&
       !documentGroundedCustomModeActive &&
-      !this.groqFastTextMode &&
-      this.knowledgeOrchestrator?.isKnowledgeMode();
+      this.knowledgeOrchestrator?.isKnowledgeMode() &&
+      this.isProfileIntelligenceAllowedForTurn(routeOptions?.pinnedModeId);
 
     // D1/R1: a resume-forbidden answer type (coding/technical/sales/lecture,
     // spec §8.3) gets NO profile. We still run the depth scorer (kept
@@ -8311,7 +10002,12 @@ let isMultimodal = !!(imagePaths?.length);
             // NUMBERS DISCIPLINE / anti-fabrication rules survive the override
             // of HARD_SYSTEM_PROMPT; the persona injection stays dominant by
             // recency. Identical to the non-streaming override site above.
+            // The turn's diagram contract is carried across the replacement
+            // (see carriedDiagramContract), on its own line: the assignment
+            // below is matched literally by a source test.
+            const carriedContract = carriedDiagramContract(systemPromptOverride);
             systemPromptOverride = `${CORE_IDENTITY}\n${EXECUTION_CONTRACT}\n\n${knowledgeResult.systemPromptInjection}`;
+            if (carriedContract) systemPromptOverride += carriedContract;
           }
           // Inject knowledge context
           if (knowledgeResult.contextBlock) {
@@ -8775,7 +10471,7 @@ let isMultimodal = !!(imagePaths?.length);
     ];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
-      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots') || Boolean(imagePaths?.length));
       for (const scope of deniedOutboundScopes) {
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
@@ -8785,7 +10481,7 @@ let isMultimodal = !!(imagePaths?.length);
       }
       if (ollamaAvailable) {
         const ollamaScopePrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
-        yield* this.streamWithOllama(message, context, ollamaScopePrompt, imagePaths, abortSignal);
+        yield* this.streamWithOllama(message, context, ollamaScopePrompt, imagePaths, abortSignal, this.localVisionOverride(imagePaths));
         return;
       }
       if (deniedOutboundScopes.includes('transcript')) context = undefined;
@@ -8807,7 +10503,7 @@ let isMultimodal = !!(imagePaths?.length);
     // assertOutboundScopes makes it true by construction; this block exists so
     // the user gets one clear sentence instead of a cascade of provider errors.
     {
-      const { decision: visionDecision, localAvailable: localVisionAvailable } =
+      const { decision: visionDecision, localAvailable: localVisionAvailable, localTarget: localVisionTarget } =
         await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
       if (visionDecision.action === 'block') {
         console.warn(`[VisionPolicy] blocked: ${visionDecision.reason}`);
@@ -8815,10 +10511,38 @@ let isMultimodal = !!(imagePaths?.length);
         return;
       }
       if (visionDecision.action === 'local_only') {
+        if (localVisionTarget === 'custom') {
+          // The selected local endpoint answers, and ONLY it: this is not the
+          // vision chain, so a failure is shown as a failure and nothing falls
+          // through to a cloud rung. streamWithCustom runs its own last-boundary
+          // check (assertOutboundImagesAllowed), which admits a local host.
+          console.warn(`[VisionPolicy] routing screenshot to the selected local endpoint: ${visionDecision.reason}`);
+          const endpointPrompt = this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT);
+          let emitted = false;
+          try {
+            for await (const piece of this.streamWithCustom(message, context, imagePaths, endpointPrompt, abortSignal)) {
+              emitted = true;
+              yield piece;
+            }
+          } catch (e: any) {
+            if (abortSignal?.aborted) return;
+            const refusal = this.describePrivacyRefusal(e);
+            if (refusal) { yield refusal; return; }
+            if (emitted) {
+              console.warn(`[LLMHelper] Local endpoint failed AFTER first token — ending stream: ${e?.message || e}`);
+              yield LLMHelper.TRUNCATION_SENTINEL;
+              return;
+            }
+            yield typeof e?.status === 'number'
+              ? `Error: Custom Provider returned HTTP ${e.status}`
+              : `Error: the local custom provider could not answer (${String(e?.message || 'unknown error').slice(0, 120)}).`;
+          }
+          return;
+        }
         if (localVisionAvailable) {
           console.warn(`[VisionPolicy] routing screenshot to local vision: ${visionDecision.reason}`);
           const localVisionPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
-          yield* this.streamWithOllama(message, context, localVisionPrompt, imagePaths, abortSignal);
+          yield* this.streamWithOllama(message, context, localVisionPrompt, imagePaths, abortSignal, this.localVisionOverride(imagePaths));
           return;
         }
         if (visionDecision.whenLocalUnavailable === 'block') {
@@ -9341,6 +11065,12 @@ let isMultimodal = !!(imagePaths?.length);
     // which would dead-end when the selected model (e.g. `natively`) failed and
     // only Gemini remained. The text-only routing below is unchanged.
     if (isMultimodal && imagePaths && imagePaths.length > 0) {
+      // The vision chain answers, never a Fast Response pick. Say so on the
+      // turn record: the caller's textTurn() view pinned the pick for its
+      // pre-dispatch reads, and would otherwise file this answer's first token
+      // under a gateway pick's latency key.
+      const visionTurn = this.claimFastTurn(abortSignal);
+      if (visionTurn) visionTurn.answered = 'active';
       let visionYielded = false;
       try {
         for await (const chunk of this.streamVisionWithFallback(
@@ -9355,7 +11085,17 @@ let isMultimodal = !!(imagePaths?.length);
         // chain commits to a provider it yields tokens and won't throw here.
         console.error('[LLMHelper] Vision fallback chain exhausted:', visionErr?.message || visionErr);
         if (!visionYielded && !abortSignal?.aborted) {
-          yield "I couldn't read the screen just now — all vision models are unavailable. Check your API keys (OpenAI, Claude, Gemini, or Groq) in Settings, or try again in a moment.";
+          // Two different situations. "No vision-capable provider configured" =
+          // nothing could even be TRIED, and the chain's message says exactly
+          // why (it names the gateway and the selected model). Showing the
+          // generic "check your OpenAI/Claude/Gemini/Groq keys" there sent an
+          // AgentRouter-only user to four providers they never set up, for a
+          // model choice they could fix in one click. Otherwise providers were
+          // tried and failed, and the generic advice is the right one.
+          const reason = String(visionErr?.message || '');
+          yield /^No vision-capable provider configured\./.test(reason)
+            ? `I can't read screenshots with the current setup. ${reason.replace(/^No vision-capable provider configured\.\s*/, '')}`
+            : "I couldn't read the screen just now — all vision models are unavailable. Check your API keys (OpenAI, Claude, Gemini, or Groq) in Settings, or try again in a moment.";
         }
       }
       return;
@@ -9374,28 +11114,75 @@ let isMultimodal = !!(imagePaths?.length);
     // before falling through — see trackCommit.
     const commit = { emitted: false };
 
-    const fastModeApplies = this.groqFastTextMode && !isMultimodal && (
+    // FAST RESPONSE MODE ON THE BACKGROUND MODEL (2026-09-26). Settings →
+    // Background Model is where the user picks what this mode answers with. On
+    // Auto (no pick) it is the fastest connected candidate by this user's own
+    // measurements (autoFastPick); the ladder below is only the fallback. A pick applies whatever
+    // the Active Model is — that is what "instead of your selected model" means —
+    // except a local Ollama model: moving that turn to a cloud model is the
+    // privacy regression the Ollama rung's comment below rules out. Antigravity
+    // returned above and images took the vision chain, so neither reaches here.
+    // The pick runs on its own controller, linked to the turn's: guardFastPick
+    // can abandon a stalled pick without aborting the turn.
+    // The caller already timed this answer and chose its profile identity
+    // through textTurn(abortSignal); the turn record makes this dispatch use the
+    // same pick, and tells the caller's recorder who actually answered.
+    const fastTurn = this.claimFastTurn(abortSignal);
+    if (fastTurn) fastTurn.textOnly = !isMultimodal;
+    const fastCtl = new AbortController();
+    const fastPick = !isMultimodal && !this.useOllama
+      ? this.openFastModelStream(userContent, systemPromptOverride, finalSystemPrompt,
+        abortSignal ? AbortSignal.any([abortSignal, fastCtl.signal]) : fastCtl.signal, false, fastTurn)
+      : null;
+    if (fastTurn && !fastPick) fastTurn.answered = 'active';
+    let fastPickFailed = false;
+    if (fastPick) {
+      console.log(`[LLMHelper] ⚡️ Fast Response Mode (Streaming): answering on ${fastPick.auto ? 'the Auto fast tier' : 'the Background Model'} (${fastPick.modelId})`);
+      try {
+        yield* this.trackCommit(this.guardFastPick(fastPick, fastCtl), commit);
+        if (fastTurn) fastTurn.answered = 'pick';
+        return;
+      } catch (e: any) {
+        // A cancelled turn must not start a second provider.
+        if (abortSignal?.aborted) return;
+        if (commit.emitted) {
+          console.warn("[LLMHelper] Background Model fast answer failed AFTER first token — ending stream rather than appending a second answer:", e?.message);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
+        if (fastTurn) fastTurn.answered = 'rescued';
+        this.noteFastPickFailure(fastPick, e);
+        fastPickFailed = true;
+        console.warn("[LLMHelper] Background Model fast answer failed, falling back:", e?.message);
+      }
+    }
+
+    // The original Codex → Groq → Natively ladder. Auto now ranks those three
+    // with every other candidate (autoFastPick), so this runs only as the
+    // FALLBACK after a fast pick failed — never ahead of a ranking that chose
+    // otherwise, and never for the user's own endpoint (activeIsSelfHosted).
+    const fastModeApplies = fastPickFailed && this.groqFastTextMode && !isMultimodal && (
       this.isCodexAvailable() ||
       this.isGroqModel(this.currentModelId) ||
       this.currentModelId === 'natively'
-    ) && !this.isCodexCliModel(this.currentModelId);
+    ) && !this.isCodexCliModel(this.currentModelId) && !this.activeIsSelfHosted();
     if (fastModeApplies) {
       if (this.isCodexAvailable()) {
-        console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback (Streaming): routing to Codex CLI...`);
         try {
           yield* this.trackCommit(this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
           if (commit.emitted) {
-            console.warn("[LLMHelper] Codex CLI Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            console.warn("[LLMHelper] Fast Mode fallback on Codex CLI failed AFTER first token — ending stream rather than appending a second answer:", e.message);
             yield LLMHelper.TRUNCATION_SENTINEL;
             return;
           }
-          console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
+          console.warn("[LLMHelper] Fast Mode fallback on Codex CLI failed, falling back:", e.message);
         }
       }
       if (this.groqClient && !this._groqLocalDisabled) {
-        console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to local Groq...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback (Streaming): routing to Groq...`);
         try {
           const groqSystem = systemPromptOverride || GROQ_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
@@ -9414,17 +11201,17 @@ let isMultimodal = !!(imagePaths?.length);
             console.warn("[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session. Re-enable by saving a new key in Settings.");
           }
           if (commit.emitted) {
-            console.warn("[LLMHelper] Groq Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            console.warn("[LLMHelper] Fast Mode fallback on Groq failed AFTER first token — ending stream rather than appending a second answer:", e.message);
             yield LLMHelper.TRUNCATION_SENTINEL;
             return;
           }
-          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
+          console.warn("[LLMHelper] Fast Mode fallback on Groq failed, falling back:", e.message);
         }
         // Local Groq failed — fall through to Natively if available
       }
       if (this.hasNatively()) {
         // streamWithNatively → generateWithNatively → sends fast_mode:true → server Groq pool
-        console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to Natively server Groq pool...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback (Streaming): routing to the Natively server's fast tier...`);
         try {
           yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal), commit);
           return;
@@ -9566,8 +11353,9 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
-    // DeepSeek (text-only). When images are present, fall through so the
-    // vision-first chain (Gemini/Claude/OpenAI/Natively) handles them instead.
+    // DeepSeek, TEXT turns. An image turn never gets here: the unified vision
+    // chain above took it (and since 2026-10-01 seats a selected DeepSeek Flash
+    // there). The guard stays so this branch can never send an image itself.
     if (this.isDeepseekModel(this.currentModelId) && this.deepseekClient && !(isMultimodal && imagePaths)) {
       const deepseekSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalDeepseekSystem = this.injectLanguageInstruction(deepseekSystem);
@@ -9620,6 +11408,26 @@ let isMultimodal = !!(imagePaths?.length);
         open: (sig) => this.streamWithFluxion(userContent, fxSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: fxSystem, thinkingBudget, abortSignal,
         hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
+      return;
+    }
+
+    // THE PRIMARY ANSWER PATH for AgentRouter — the branch whose absence was
+    // Fluxion's worst defect (see above): without it every vendor predicate
+    // correctly refuses an `agentrouter/` id and the turn falls through to the
+    // Gemini cascade on the user's own key. Failover for the same reason as
+    // Fluxion, sharpened: a rationed Claude/GPT pool answers 402 once the day's
+    // batch is gone, which is an expected outcome here, not an exceptional one.
+    if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential()) {
+      const arSystem = this.injectLanguageInstruction(systemPromptOverride || this.agentRouterDefaultSystemPrompt(this.currentModelId));
+      const arSendsImages = Boolean(isMultimodal && imagePaths?.length)
+        && this.agentRouterModelSupportsVision(this.currentModelId);
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'agentrouter',
+        name: `AgentRouter (${agentRouterWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithAgentRouter(userContent, arSystem, arSendsImages ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: arSystem, thinkingBudget, abortSignal,
+        hasImages: arSendsImages,
       });
       return;
     }
@@ -10691,8 +12499,14 @@ let isMultimodal = !!(imagePaths?.length);
     const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      temperature: INTERACTIVE_TEMPERATURE, // Claude has no seed param; low temp is the determinism lever
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Claude has no seed param; low temp is the determinism lever — on the
+      // models that still take it. Opus 4.7+ and the Claude 5 families 400 on
+      // any temperature (claudeAcceptsSamplingParams), so it is left off there.
+      ...(claudeAcceptsSamplingParams(model) ? { temperature: INTERACTIVE_TEMPERATURE } : {}),
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{ role: "user" as const, content: userMessage }],
@@ -10716,12 +12530,15 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
-   * Stream response from DeepSeek (OpenAI-compatible). Text-only by design.
+   * Stream response from DeepSeek (OpenAI-compatible). Carries images when the
+   * caller passes them (2026-10-01); the callers decide which model may get one.
    */
-  private async * streamWithDeepseek(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithDeepseek(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal, imagePaths?: string[]): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.deepseekClient) throw new Error("DeepSeek client not initialized");
-    this.assertOutboundScopes('deepseek', userMessage);
+    // The image paths go to the scope guard too (2026-10-01): it used to be
+    // handed the text alone, because this adapter never carried an image.
+    this.assertOutboundScopes('deepseek', userMessage, imagePaths);
 
     await this.rateLimiters.deepseek.acquire();
 
@@ -10729,7 +12546,15 @@ let isMultimodal = !!(imagePaths?.length);
 
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
-    messages.push({ role: "user", content: userMessage });
+    // Images as OpenAI `image_url` parts, the format DeepSeek Flash read live
+    // (2026-10-01). This adapter attaches them for whichever model it is given:
+    // WHO may be sent one is decided above it (the vision resolver), because
+    // deepseek-v4-pro answers HTTP 200 without seeing the image.
+    if (imagePaths?.length) {
+      messages.push({ role: "user", content: [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)] });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
 
     if (abortSignal?.aborted) return;
     let stream;
@@ -11010,7 +12835,10 @@ let isMultimodal = !!(imagePaths?.length);
     const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; image bytes + user text stay in `messages`.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{
@@ -11225,12 +13053,13 @@ let isMultimodal = !!(imagePaths?.length);
     if (!this.client) throw new Error("Gemini client not initialized");
 
     // Full ladder, cheapest → most capable. priority encodes the ladder order.
+    // Each rung carries its OWN first-token budget (GEMINI_TEXT_TTFT_MS).
     const ladder: TextStreamProvider[] = [
-      { id: 'gemini_flash_lite', name: 'Gemini Flash-Lite', isLocal: false, priority: 0,
+      { id: 'gemini_flash_lite', name: 'Gemini Flash-Lite', isLocal: false, priority: 0, ttftTimeoutMs: GEMINI_TEXT_TTFT_MS.flashLite,
         open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_FLASH_LITE_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
-      { id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: 1,
+      { id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: 1, ttftTimeoutMs: GEMINI_TEXT_TTFT_MS.flash,
         open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_FLASH_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
-      { id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: 2,
+      { id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: 2, ttftTimeoutMs: GEMINI_TEXT_TTFT_MS.pro,
         open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_PRO_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
     ];
 
@@ -11259,6 +13088,7 @@ let isMultimodal = !!(imagePaths?.length);
     // When a screenshot is attached and the primary model is text-only, the
     // caller passes the resolved vision-capable model here so the image is
     // actually understood instead of silently dropped.
+    this.cancelOllamaRecordFor(abortSignal);
     const ollamaModel = modelOverride || this.ollamaModel;
     let userContent = context ? `CONTEXT:\n${context}\n\nUSER:\n${message}` : message;
     // Per-request hard guard: trim userContent (never systemPrompt) until total fits the model's max ctx.
@@ -11267,11 +13097,7 @@ let isMultimodal = !!(imagePaths?.length);
       const total = estimateTokens(systemPrompt) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
         console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
-        const lines = userContent.split('\n');
-        while (lines.length > 1 && (estimateTokens(systemPrompt) + estimateTokens(lines.join('\n')) + 2000) > maxCtx) {
-          lines.shift();
-        }
-        userContent = lines.join('\n');
+        userContent = trimUserContentToFit(userContent, userContentRoomChars(maxCtx, systemPrompt));
       }
     }
 
@@ -11925,9 +13751,15 @@ let isMultimodal = !!(imagePaths?.length);
    * ("Let me come back to that in just a moment."). Mirrors isUsingOllama().
    */
   public isUsingCodexCli(): boolean {
-    return this.isCodexAvailable() && (
-      this.isCodexCliModel(this.currentModelId) || this.groqFastTextMode === true
-    );
+    // With Fast Response answering a text turn on a Background Model or an Auto
+    // candidate, the turn is a Codex turn only when that pick IS Codex. A
+    // screenshot turn with a non-Codex pick moves from the 30s local budget to
+    // the 20s vision budget every non-Codex user has — measured vision tail 11.6s.
+    const pick = this.fastPickForTextTurn();
+    if (pick) return pick.family === 'codex';
+    // No pick: the Codex fast ladder no longer runs ahead of the Active Model
+    // (it is only a fallback), so fast mode alone no longer makes a turn Codex's.
+    return this.isCodexAvailable() && this.isCodexCliModel(this.currentModelId);
   }
 
   /**
@@ -11940,8 +13772,15 @@ let isMultimodal = !!(imagePaths?.length);
    * next provider is the thing that actually RESCUES a slow turn — the client
    * can only give up. Callers use this to pick the deadline; see
    * firstUsefulDeadlineMs(). Mirrors isUsingOllama()/isUsingCodexCli().
+   *
+   * False while Fast Response Mode answers text on a Background Model: the pick
+   * answers, not the cascade. Callers read this once for text AND screenshot
+   * turns, and a screenshot never takes the fast path — but the only screenshot
+   * budget that changes is 13s → 20s (the plain vision budget), never shorter.
    */
   public isUsingNativelyServerCascade(): boolean {
+    const pick = this.fastPickForTextTurn();
+    if (pick) return pick.family === 'natively';
     return this.currentModelId === 'natively';
   }
 
@@ -11964,8 +13803,20 @@ let isMultimodal = !!(imagePaths?.length);
    * Callers use this to pick the deadline; see totalHardTimeoutMs() and
    * firstUsefulDeadlineMs(). Mirrors isUsingOllama()/isUsingCodexCli()/
    * isUsingNativelyServerCascade().
+   *
+   * With Fast Response Mode on a Background Model, a text turn is answered by
+   * the pick, so this follows the pick; the Active Model's own rung asks
+   * activeModelIsUserEndpoint(). On a screenshot turn the vision budget sits
+   * above this one in the route table, so following the pick cannot shorten it.
+   * isUsingCodexCli() and isUsingNativelyServerCascade() follow the pick too.
    */
   public isUsingUserEndpoint(): boolean {
+    const pick = this.fastPickForTextTurn();
+    if (pick) return FAST_PICK_USER_ENDPOINT_FAMILIES.has(pick.family);
+    return this.activeModelIsUserEndpoint();
+  }
+
+  private activeModelIsUserEndpoint(): boolean {
     if (this.customProvider || this.activeCurlProvider) return true;
     // OpenRouter joins this class for the reason liveDeadlines.ts already names
     // at its budget comment: an OpenRouter model can be QUEUEING behind the
@@ -11975,7 +13826,10 @@ let isMultimodal = !!(imagePaths?.length);
     // machine or their tunnel, and its whole purpose is to fail over between
     // upstreams AFTER accepting the request, so its first token can be waiting
     // on a cold provider two hops away.
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId);
+    // AgentRouter joins for the reason Fluxion does: a reseller that picks its
+    // upstream channel after accepting the request, whose Claude/GPT pool can
+    // be cold or exhausted, so it takes the user-endpoint budget.
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId);
   }
 
   /**
@@ -12074,18 +13928,25 @@ let isMultimodal = !!(imagePaths?.length);
     // `mistralai/mistral-nemo` was profiled under `gemini-3.8-flash`, so every
     // sample landed on a model that was never called. The model lives on the
     // provider record; fall back to its id, then to the selected id.
+    //
+    // Same failure one level up: with Fast Response Mode on a Background Model a
+    // TEXT turn is answered by the pick, so its samples are filed under the pick.
+    // A screenshot turn never takes the fast path, so it keeps the Active Model.
+    const pick = hasImages ? null : this.fastPickForTextTurn();
     const custom: any = this.customProvider ?? this.activeCurlProvider;
-    const modelId = (custom
+    const modelId = pick ? pick.modelId : (custom
       ? (custom.model || custom.id || this.currentModelId)
       : this.currentModelId) || 'unknown';
-    const providerId = (() => {
-      try { return this.getCurrentProvider(); } catch { return 'unknown'; }
-    })();
+    const providerId = pick
+      ? this.fastPickProviderId(pick.family)
+      : (() => { try { return this.getCurrentProvider(); } catch { return 'unknown'; } })();
     const route = (() => {
+      if (pick) return this.fastPickRoute(pick.family);
       if (this.isUsingOllama() || this.isUsingCodexCli()) return 'local' as const;
-      if (hasImages && !this.isUsingNativelyServerCascade()) return 'vision' as const;
-      if (this.isUsingNativelyServerCascade()) return 'server_cascade' as const;
-      if (this.isUsingUserEndpoint()) return 'user_endpoint' as const;
+      const nativelyCascade = this.currentModelId === 'natively';
+      if (hasImages && !nativelyCascade) return 'vision' as const;
+      if (nativelyCascade) return 'server_cascade' as const;
+      if (this.activeModelIsUserEndpoint()) return 'user_endpoint' as const;
       return 'default_provider' as const;
     })();
     return { providerId, modelId, route, isOllama: this.isUsingOllama() };
@@ -12177,6 +14038,9 @@ let isMultimodal = !!(imagePaths?.length);
    */
   private async probeOllamaVision(modelId: string): Promise<boolean> {
     if (!modelId) return false;
+    // The user's own answer in Settings beats /api/show and the name list.
+    const forced = this.userVisionOverride('ollama', modelId);
+    if (forced !== undefined) return forced;
     const cached = this.ollamaVisionCache.get(modelId);
     if (cached !== undefined) return cached;
 
@@ -12208,14 +14072,14 @@ let isMultimodal = !!(imagePaths?.length);
    * with any concurrent caller), so a slow-but-alive daemon still populates
    * ollamaVisionModel for the next screenshot.
    */
-  private async resolveOllamaVisionModelForChain(): Promise<string | null> {
+  private async resolveOllamaVisionModelForChain(budgetMs: number = OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS): Promise<string | null> {
     if (!this.useOllama) return null;
     if (this.ollamaVisionModel) return this.ollamaVisionModel;
     if (Date.now() < this.ollamaVisionNegativeUntil) return null;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS);
+      timer = setTimeout(() => resolve(null), budgetMs);
     });
     const model = await Promise.race([this.refreshOllamaVisionModel(), timedOut]);
     clearTimeout(timer);
@@ -12372,6 +14236,43 @@ let isMultimodal = !!(imagePaths?.length);
    * legacy getCurrentProvider(), this identifies every supported provider and
    * never labels OpenAI/Claude/Groq selections as Gemini.
    */
+  /**
+   * Which provider answers a cloud model id, and under which model name. Null
+   * when no adapter claims it. One classifier for the live selection
+   * (getDirectAssistSelection) and for any id the Settings pane asks about
+   * (visionSelectionForId), so the two cannot name a model differently.
+   */
+  private classifyCloudModel(selected: string): { provider: DirectAssistProvider; model: string } | null {
+    // Gateway IDs can contain a nested vendor/model name (for example,
+    // litellm/openai/gpt-4o). Classify those explicit prefixes before the
+    // generic vendor predicates or the request escapes through the wrong
+    // credential/client boundary.
+    if (selected === 'natively') return { provider: 'natively', model: selected };
+    if (this.isAntigravityModel(selected)) return { provider: 'antigravity', model: selected };
+    if (this.isCodexCliModel(selected)) return { provider: 'codex-cli', model: this.codexModelForFastPick(selected) };
+    if (this.isNvidiaNimModel(selected)) return { provider: 'nvidia_nim', model: selected };
+    if (this.isOpenRouterModel(selected)) return { provider: 'openrouter', model: selected };
+    // Fluxion's ids are the real vendors' own, so EVERY predicate below would
+    // claim one if the prefix check did not come first — claude-*, gpt-*,
+    // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
+    if (this.isFluxionModel(selected)) return { provider: 'fluxion', model: selected };
+    // Fluxion's rule again: claude-*, gpt-* and deepseek-v* are all live
+    // AgentRouter ids, so every vendor predicate below would claim one.
+    if (this.isAgentRouterModel(selected)) return { provider: 'agentrouter', model: selected };
+    if (this.isLiteLLMModel(selected)) return { provider: 'litellm', model: selected };
+    // Same rule, same reason as Fluxion above: 9Router's ids carry a real
+    // vendor segment (`ninerouter/openai/gpt-5`,
+    // `ninerouter/gemini/gemini-3.6-flash`), so every predicate below would
+    // claim one if this did not come first.
+    if (this.isNinerouterModel(selected)) return { provider: 'ninerouter', model: selected };
+    if (this.isGroqModel(selected)) return { provider: 'groq', model: selected };
+    if (this.isOpenAiModel(selected)) return { provider: 'openai', model: selected };
+    if (this.isClaudeModel(selected)) return { provider: 'claude', model: selected };
+    if (this.isDeepseekModel(selected)) return { provider: 'deepseek', model: selected };
+    if (this.isGeminiModel(selected)) return { provider: 'gemini', model: selected };
+    return null;
+  }
+
   public getDirectAssistSelection(): DirectAssistSelection {
     let provider: DirectAssistProvider;
     let model: string;
@@ -12386,35 +14287,10 @@ let isMultimodal = !!(imagePaths?.length);
       provider = 'ollama';
       model = this.ollamaModel;
     } else {
-      const selected = this.currentModelId;
-      model = selected;
-      // Gateway IDs can contain a nested vendor/model name (for example,
-      // litellm/openai/gpt-4o). Classify those explicit prefixes before the
-      // generic vendor predicates or the request escapes through the wrong
-      // credential/client boundary.
-      if (selected === 'natively') provider = 'natively';
-      else if (this.isAntigravityModel(selected)) provider = 'antigravity';
-      else if (this.isCodexCliModel(selected)) {
-        provider = 'codex-cli';
-        model = this.getSelectedCodexCliModel(false);
-      } else if (this.isNvidiaNimModel(selected)) provider = 'nvidia_nim';
-      else if (this.isOpenRouterModel(selected)) provider = 'openrouter';
-      // Fluxion's ids are the real vendors' own, so EVERY predicate below would
-      // claim one if the prefix check did not come first — claude-*, gpt-*,
-      // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
-      else if (this.isFluxionModel(selected)) provider = 'fluxion';
-      else if (this.isLiteLLMModel(selected)) provider = 'litellm';
-      // Same rule, same reason as Fluxion above: 9Router's ids carry a real
-      // vendor segment (`ninerouter/openai/gpt-5`,
-      // `ninerouter/gemini/gemini-3.6-flash`), so every predicate below would
-      // claim one if this did not come first.
-      else if (this.isNinerouterModel(selected)) provider = 'ninerouter';
-      else if (this.isGroqModel(selected)) provider = 'groq';
-      else if (this.isOpenAiModel(selected)) provider = 'openai';
-      else if (this.isClaudeModel(selected)) provider = 'claude';
-      else if (this.isDeepseekModel(selected)) provider = 'deepseek';
-      else if (this.isGeminiModel(selected)) provider = 'gemini';
-      else throw new DirectAssistError('MODEL_UNAVAILABLE', 'The selected model has no Direct Assist adapter.');
+      const cloud = this.classifyCloudModel(this.currentModelId);
+      if (!cloud) throw new DirectAssistError('MODEL_UNAVAILABLE', 'The selected model has no Direct Assist adapter.');
+      provider = cloud.provider;
+      model = cloud.model;
     }
 
     if (!model || !model.trim()) {
@@ -12550,6 +14426,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim': return !!this.nvidiaNimClient;
       case 'openrouter': return !!this.openrouterClient;
       case 'fluxion': return this.hasFluxionCredential();
+      case 'agentrouter': return this.hasAgentRouterCredential();
       case 'litellm': return !!this.litellmClient;
       case 'ninerouter': return !!this.ninerouterClient;
       case 'ollama': return this.useOllama;
@@ -12576,6 +14453,7 @@ let isMultimodal = !!(imagePaths?.length);
       this.litellmClient ||
       this.ninerouterClient ||
       this.hasFluxionCredential() ||
+      this.hasAgentRouterCredential() ||
       this.hasNatively() ||
       this.customProvider ||
       this.activeCurlProvider ||
@@ -12631,27 +14509,289 @@ let isMultimodal = !!(imagePaths?.length);
     return provider ? Object.freeze({ ...provider }) : null;
   }
 
+  /**
+   * The facts only this process holds, for the vision resolver: Ollama's
+   * /api/show results, 9Router's catalogue, the active custom/cURL provider,
+   * and what provider catalogues published (visionCapabilityStore).
+   */
+  private visionFacts(
+    selection: { provider: DirectAssistProvider; model: string },
+    custom: CustomProvider | null = this.customProvider,
+    curl: CurlProvider | null = this.activeCurlProvider,
+  ): VisionFacts {
+    return {
+      ollamaReportsVision: (m) => this.ollamaVisionCache.get(m),
+      ninerouterVisionModels: selection.provider === 'ninerouter' ? [...this.ninerouterVisionModels] : undefined,
+      customProvider: selection.provider === 'curl' ? curl : custom,
+      providerReportsVision: (provider, routed) => storedVisionAnswer(provider, routed, this.visionStoreBaseURL(provider)),
+      testedVision: (provider, routed) => storedVisionTest(provider, routed, this.visionStoreBaseURL(provider))?.reads,
+      overriddenVision: (provider, routed) => this.userVisionOverride(provider, routed),
+    };
+  }
+
+  /** The user's Auto / On / Off answer for a model (Settings › AI Providers): true, false, or undefined on Auto. */
+  private userVisionOverride(provider: string, routedModel: string): boolean | undefined {
+    return storedVisionOverride(provider, routedModel, this.visionStoreBaseURL(provider));
+  }
+
+  // ── "Reads images: Auto / On / Off" for Settings (phase 4) ────────────────
+
+  private visionCapabilityListener: (() => void) | null = null;
+  /** main: told whenever an answer changed (a setting, a finished test), to refresh open windows. */
+  public onVisionCapabilityChanged(listener: (() => void) | null): void { this.visionCapabilityListener = listener; }
+  private visionCapabilityChanged(): void {
+    try { this.visionCapabilityListener?.(); } catch { /* a listener never breaks a turn */ }
+  }
+
+  /**
+   * The provider and model a PICKER id names: `ollama-<tag>`, `natively`,
+   * `antigravity:<id>`, `codex-cli[:<model>]`, a gateway's routed id, or a
+   * vendor's bare id. Null for anything else — a custom or cURL provider has
+   * its own "Screenshot / Vision Support" control and is not asked here.
+   */
+  private visionSelectionForId(id: string): { provider: DirectAssistProvider; model: string } | null {
+    const picked = String(id ?? '').trim();
+    if (!picked) return null;
+    if (picked.startsWith('ollama-')) {
+      const tag = picked.slice('ollama-'.length);
+      return tag ? { provider: 'ollama', model: tag } : null;
+    }
+    return this.classifyCloudModel(picked);
+  }
+
+  /** Can the one-time image test ask this model right now? */
+  private visionTestAllowed(selection: { provider: DirectAssistProvider; model: string }): boolean {
+    if (!this.visionProbingEnabled || this.isLocalOnlyMode) return false;
+    if (!LLMHelper.VISION_TESTABLE.has(selection.provider)) return false;
+    if (!this.directProviderHasCredential(selection.provider) || this.isProviderDisabled(selection.provider)) return false;
+    try {
+      this.assertOutboundImagesAllowed(selection.provider, true);
+      return !this.getDeniedOutboundScopes(VISION_PROBE_QUESTION, ['probe.png'], []).includes('screenshots');
+    } catch { return false; }
+  }
+
+  private describeVisionSelection(selection: { provider: DirectAssistProvider; model: string }): VisionModelState {
+    const facts = this.visionFacts(selection);
+    const inForce = resolveVision(selection, facts);
+    const auto = resolveVisionAuto(selection, facts);
+    const forced = this.userVisionOverride(selection.provider, selection.model);
+    const tested = storedVisionTest(selection.provider, selection.model, this.visionStoreBaseURL(selection.provider));
+    return {
+      setting: forced === undefined ? 'auto' : forced ? 'on' : 'off',
+      reads: inForce.reads,
+      source: inForce.source,
+      auto: { reads: auto.reads, source: auto.source, ...(auto.source === 'test' && tested ? { testedAt: tested.at } : {}) },
+      provider: selection.provider,
+      checking: this.visionProbe?.isRunning(selection) ?? false,
+      testable: this.visionTestAllowed(selection),
+    };
+  }
+
+  /** What Settings shows for each picker id; null for an id that has no row control (custom, cURL, unknown). */
+  public describeVisionModels(ids: readonly string[]): Record<string, VisionModelState | null> {
+    const out: Record<string, VisionModelState | null> = {};
+    for (const id of Array.isArray(ids) ? ids.slice(0, 2000) : []) {
+      if (typeof id !== 'string') continue;
+      const selection = this.visionSelectionForId(id);
+      out[id] = selection ? this.describeVisionSelection(selection) : null;
+    }
+    return out;
+  }
+
+  /** Save the user's answer for one picker id. Null when the id has no row control. */
+  public setVisionSetting(id: string, setting: 'auto' | 'on' | 'off'): VisionModelState | null {
+    const selection = this.visionSelectionForId(id);
+    if (!selection || !['auto', 'on', 'off'].includes(setting)) return null;
+    getVisionCapabilityStore().setOverride(
+      selection.provider, this.visionStoreBaseURL(selection.provider), visionWireModel(selection.provider, selection.model),
+      setting === 'auto' ? null : setting === 'on',
+    );
+    if (selection.provider === 'ollama') {
+      // The remembered "which installed model reads images" was chosen under
+      // the old answer: look again on the next screenshot.
+      this.ollamaVisionModel = null;
+      this.ollamaVisionNegativeUntil = 0;
+    }
+    // Back on Auto with nothing known: the selected model is tested as it
+    // would have been when it was picked.
+    if (setting === 'auto') this.maybeProbeSelectedVision();
+    this.visionCapabilityChanged();
+    return this.describeVisionSelection(selection);
+  }
+
+  /**
+   * "Test again" (Settings): forget the saved result and ask the model now.
+   * The way out of a wrong "can't read images" that does not need the user to
+   * know better than the test. Nothing is sent when the test may not run
+   * (local-only mode, screenshots kept on this device, no key, provider off)
+   * or when the user has answered for this model themselves.
+   */
+  public async retestVision(id: string): Promise<VisionModelState | null> {
+    const selection = this.visionSelectionForId(id);
+    if (!selection) return null;
+    let inconclusive = false;
+    if (this.userVisionOverride(selection.provider, selection.model) === undefined && this.visionTestAllowed(selection)) {
+      const run = this.getVisionProbe().ensure(selection, { force: true }).catch(() => 'unknown' as const);
+      this.visionCapabilityChanged();   // "Checking…"
+      const outcome = await run;
+      // An inconclusive re-test must not leave the OLD answer standing as if it
+      // had been confirmed: the model is "not known" until a test settles it.
+      if (outcome === 'unknown') {
+        inconclusive = true;
+        getVisionCapabilityStore().forgetTest(selection.provider, this.visionStoreBaseURL(selection.provider), visionWireModel(selection.provider, selection.model));
+      }
+      this.visionCapabilityChanged();
+    }
+    // The row says so: a test that could not finish (no credit, rate limit,
+    // provider down) otherwise looks like a button that did nothing.
+    return { ...this.describeVisionSelection(selection), ...(inconclusive ? { inconclusive: true } : {}) };
+  }
+
+  /** Providers the one-time test can ask. The rest are decided by their route, their own table, or /api/show. */
+  private static readonly VISION_TESTABLE: ReadonlySet<string> = new Set(
+    ['openai', 'claude', 'gemini', 'deepseek', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'litellm', 'ninerouter'],
+  );
+
+  public enableVisionProbing(): void { this.visionProbingEnabled = true; }
+
+  /** The address a self-hosted provider's answers are saved under; '' for hosted services. */
+  private visionStoreBaseURL(provider: string): string {
+    if (provider === 'litellm') return normalizeVisionBaseURL(this.litellmBaseURL);
+    if (provider === 'ninerouter') return normalizeVisionBaseURL(this.ninerouterBaseURL);
+    return '';
+  }
+
+  private getVisionProbe(): VisionProbe {
+    if (this.visionProbe) return this.visionProbe;
+    const wire = (s: { provider: string; model: string }) => s.model.startsWith(`${s.provider}/`) ? s.model.slice(s.provider.length + 1) : s.model;
+    this.visionProbe = new VisionProbe({
+      // Through Direct Assist's own boundary: its provider, private-vision and
+      // screenshots-scope gates all run, then the exact adapter for this
+      // provider and model. Below the layers that write usage, latency, vision
+      // health or model discovery, so a test leaves no trace in any of them.
+      ask: (selection, imagePath, signal) => this.streamDirectAssistFrozen(
+        {
+          requestId: `vision-probe-${randomUUID()}`,
+          selection: { provider: selection.provider, model: selection.model },
+          systemPrompt: VISION_PROBE_SYSTEM, userPrompt: VISION_PROBE_QUESTION, imagePaths: [imagePath],
+        },
+        null, null, signal, undefined, { visionProbe: true },
+      ),
+      // os.tmpdir() with a unique name, removed when the stream ends: Windows
+      // keeps a file locked while an adapter is still reading it.
+      writeImage: (png) => {
+        const file = path.join(os.tmpdir(), `natively-vision-test-${randomUUID()}.png`);
+        fs.writeFileSync(file, png);
+        return file;
+      },
+      removeImage: (file) => { fs.rmSync(file, { force: true }); },
+      recorded: (s) => getVisionCapabilityStore().tested(s.provider, this.visionStoreBaseURL(s.provider), wire(s)),
+      record: (s, reads) => {
+        getVisionCapabilityStore().recordTest(s.provider, this.visionStoreBaseURL(s.provider), wire(s), reads);
+        this.visionCapabilityChanged();
+      },
+      keyOf: (s) => `${s.provider}|${this.visionStoreBaseURL(s.provider)}|${wire(s)}`,
+      log: (m) => console.log(m),
+    });
+    return this.visionProbe;
+  }
+
+  /**
+   * Test the selected model once, in the background, when nothing yet says
+   * whether it reads images (or its saved test is over 30 days old — the probe
+   * decides freshness). Never awaited: the answer path does not wait on it.
+   */
+  private maybeProbeSelectedVision(opts: { force?: boolean } = {}): void {
+    if (!this.visionProbingEnabled) return;
+    let selection: DirectAssistSelection;
+    try { selection = this.getDirectAssistSelection(); } catch { return; }
+    if (!LLMHelper.VISION_TESTABLE.has(selection.provider)) return;
+    if (!this.directProviderHasCredential(selection.provider) || this.isProviderDisabled(selection.provider)) return;
+    const verdict = this.visionVerdict(selection);
+    // The user answered for this model (On or Off): nothing to find out, and
+    // Off also means "send it no image", the test image included.
+    if (verdict.source === 'override') return;
+    if (!opts.force && verdict.reads !== 'unknown' && verdict.source !== 'test') return;
+    // Nothing is sent when screenshots may not leave this device; the boundary
+    // would refuse anyway, and there is no point drawing an image first.
+    try {
+      this.assertOutboundImagesAllowed(selection.provider, true);
+      if (this.getDeniedOutboundScopes(VISION_PROBE_QUESTION, ['probe.png'], []).includes('screenshots')) return;
+    } catch { return; }
+    void this.getVisionProbe().ensure(selection, opts).catch(() => { /* a probe never surfaces an error */ });
+  }
+
+  /**
+   * The on-the-spot test (2026-10-01): a screenshot arrived, nothing configured
+   * can read it, and nothing yet says whether the SELECTED model reads images.
+   * Instead of refusing, ask the model the one-time test question now and send
+   * the screenshot only if it passes.
+   *
+   * True only for a pass. False at once — no test image is sent — when testing
+   * is off, in local-only mode, when screenshots may not leave this device,
+   * for a provider that cannot be tested, or when an answer already exists
+   * (a saved "no" is not asked again). The test goes through the same boundary
+   * as the background one (VisionProbe → streamDirectAssistFrozen), joins a
+   * test already in flight, and a test slower than its budget is "not known":
+   * a timeout is never recorded as "no".
+   */
+  private async testSelectedVisionNow(): Promise<boolean> {
+    if (!this.visionProbingEnabled || this.isLocalOnlyMode) return false;
+    let selection: DirectAssistSelection;
+    try { selection = this.getDirectAssistSelection(); } catch { return false; }
+    if (!LLMHelper.VISION_TESTABLE.has(selection.provider)) return false;
+    if (!this.directProviderHasCredential(selection.provider) || this.isProviderDisabled(selection.provider)) return false;
+    if (this.visionVerdict(selection).reads !== 'unknown') return false;
+    try {
+      this.assertOutboundImagesAllowed(selection.provider, true);
+      if (this.getDeniedOutboundScopes(VISION_PROBE_QUESTION, ['probe.png'], []).includes('screenshots')) return false;
+    } catch { return false; }
+    console.log(`[VisionProbe] nothing configured can read this screenshot — testing ${selection.provider} ${selection.model} now`);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const budget = this.visionInlineTestBudgetMs ?? VISION_INLINE_TEST_BUDGET_MS;
+    const timedOut = new Promise<'unknown'>((resolve) => { timer = setTimeout(() => resolve('unknown'), budget); });
+    try {
+      const outcome = await Promise.race([
+        this.getVisionProbe().ensure(selection).catch(() => 'unknown' as const),
+        timedOut,
+      ]);
+      return outcome === 'yes';
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** The vision resolver's answer for a selection. See electron/llm/visionResolver.ts. */
+  private visionVerdict(
+    selection: { provider: DirectAssistProvider; model: string },
+    custom: CustomProvider | null = this.customProvider,
+    curl: CurlProvider | null = this.activeCurlProvider,
+  ): VisionVerdict {
+    return resolveVision(selection, this.visionFacts(selection, custom, curl));
+  }
+
   private directSelectionSupportsImages(
     selection: DirectAssistSelection,
     custom: CustomProvider | null,
     curl: CurlProvider | null,
   ): boolean {
     switch (selection.provider) {
-      case 'natively':
-      case 'codex-cli':
-      case 'antigravity':
-        return true;
-      case 'custom':
-        return customProviderSupportsVision(custom);
-      case 'curl':
-        return customProviderSupportsVision(curl);
-      case 'ollama':
-        return this.ollamaVisionCache.get(selection.model)
-          ?? getModelCapabilities(selection.model, true).supportsImages;
+      // OpenRouter publishes which models read images and refuses an image to
+      // the rest (2026-10-01). With its catalogue saying "no", Direct Assist
+      // gives its own clear refusal instead of forwarding into OpenRouter's 404;
+      // with no catalogue yet it forwards, as every gateway below does.
+      case 'openrouter': {
+        const reads = readsImages(this.visionVerdict(selection, custom, curl), true);
+        // Refusing on the catalogue's "no": make sure it isn't a stale one (a
+        // no-op while the data is fresh). The refresh otherwise only runs on
+        // setModel, and a model can stay selected for days.
+        if (!reads) void this.refreshOpenRouterVisionData();
+        return reads;
+      }
       case 'litellm':
       case 'nvidia_nim':
-      case 'openrouter':
       case 'fluxion':
+      case 'agentrouter':
       // 9Router belongs with them rather than with its own vision seat's
       // per-model gate, and the difference is deliberate. The vision CHAIN
       // chooses whether to recruit 9Router for a screenshot turn at all, so
@@ -12666,11 +14806,26 @@ let isMultimodal = !!(imagePaths?.length);
         // app's static capability table. Preserve the image and exact model;
         // an unsupported upstream returns a normal provider error, never a
         // fallback or a text-only retry.
-        return true;
-      case 'deepseek':
-        return false;
+        //
+        //
+        // Since 2026-10-01 that holds for a model nothing is KNOWN about. One
+        // that its catalogue or a one-time test marks text-only is refused here
+        // with Direct Assist's own clear message — a refusal, not a dropped
+        // image. For 9Router that matters most: it returns HTTP 200 for an
+        // image sent to a text-only model, so forwarding a known "no" was the
+        // blind answer, not the honest error the paragraph above hoped for.
+        //
+        // One rule with the screenshot seats (gatewaySeatReadsImages): unknown
+        // forwards for these gateways EXCEPT AgentRouter, which needs evidence —
+        // its deepseek-v4-pro answers HTTP 200 without seeing the image, and the
+        // chat path and the pre-pass already refused what this forwarded.
+        return gatewaySeatReadsImages(selection.provider as Parameters<typeof gatewaySeatReadsImages>[0], selection.model, this.visionFacts(selection, custom, curl));
       default:
-        return getModelCapabilities(selection.model, false).supportsImages;
+        // Everything else asks the resolver (2026-10-01). Unknown stays "no"
+        // for a direct selection, exactly as the name table answered: Direct
+        // Assist has no other rung, and an image a model cannot read is
+        // answered blind.
+        return readsImages(this.visionVerdict(selection, custom, curl), false);
     }
   }
 
@@ -12680,6 +14835,11 @@ let isMultimodal = !!(imagePaths?.length);
     curl: CurlProvider | null,
     abortSignal?: AbortSignal,
     rung?: DirectAssistRung,
+    // The one-time vision test (2026-10-01) asks through this exact boundary,
+    // so a passed test means a real screenshot takes the same path. It skips
+    // ONE check — "does this model read images", which is the question the test
+    // exists to answer. Every privacy and provider gate below still applies.
+    opts?: { visionProbe?: boolean },
   ): AsyncGenerator<string, void, unknown> {
     if (abortSignal?.aborted) return;
 
@@ -12718,7 +14878,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isProviderDisabled(disabledFamily)) {
       throw new ProviderDisabledError(provider);
     }
-    if (!this.directSelectionSupportsImages({ provider, model }, custom, curl)) {
+    if (!opts?.visionProbe && !this.directSelectionSupportsImages({ provider, model }, custom, curl)) {
       // Cleared BEFORE the throw below so a text-only turn on a text-only model
       // still answers instead of failing on an image the user did not attach.
       carriedImagePaths = [];
@@ -12752,6 +14912,17 @@ let isMultimodal = !!(imagePaths?.length);
       || (provider === 'curl' && customProviderIsLocal(curl));
     if (this.isLocalOnlyMode && !directProviderIsLocal) {
       throw new DirectAssistError('PROVIDER_ERROR', 'Cloud providers are disabled in local-only mode.');
+    }
+    // Text read off a screenshot that was kept on this device (an earlier
+    // turn's description, carried in the history): only a provider on this
+    // device may have it. Checked here because some Direct adapters pass an
+    // empty text to assertOutboundScopes. `ollama` is the daemon the user
+    // configured, and one on another machine is not this device.
+    const directOnDevice = provider === 'ollama'
+      ? customProviderIsLocal({ curlCommand: this.ollamaUrl })
+      : directProviderIsLocal;
+    if (!directOnDevice && (hasOnDeviceScreenText(request.userPrompt) || hasOnDeviceScreenText(request.systemPrompt))) {
+      throw new DirectAssistError('SCREENSHOT_BLOCKED_BY_PRIVACY', ON_DEVICE_SCREEN_REFUSED_MESSAGE);
     }
     // This is the shared last boundary for every Direct image dispatch. The
     // provider-specific streamers are intentionally not trusted to remember
@@ -12913,7 +15084,7 @@ let isMultimodal = !!(imagePaths?.length);
         }
         return;
       case 'deepseek':
-        yield* this.streamWithDeepseek(directUserPrompt, request.systemPrompt, model, abortSignal);
+        yield* this.streamWithDeepseek(directUserPrompt, request.systemPrompt, model, abortSignal, imagePaths);
         return;
       case 'nvidia_nim':
         yield* this.streamWithNvidiaNim(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
@@ -12929,6 +15100,12 @@ let isMultimodal = !!(imagePaths?.length);
         // capability id, because its ids are bare — the opposite of OpenRouter,
         // which needs one strip for the wire and two for capabilities.
         yield* this.streamWithFluxion(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'agentrouter':
+        // `model` is still prefixed; streamWithAgentRouter strips the one
+        // `agentrouter/` segment (bare ids, Fluxion's shape) and picks the
+        // protocol from what is left.
+        yield* this.streamWithAgentRouter(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
       case 'litellm':
         yield* this.streamWithLiteLLM(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
@@ -13005,13 +15182,24 @@ let isMultimodal = !!(imagePaths?.length);
     // of being concatenated onto TINY_SYSTEM_PROMPT — which would stack two
     // competing cores. Never throws; falls through to legacy on any error.
     try {
-      const { getV2PromptDescriptor, buildSystemPromptV2 } = require('./llm/promptSystemV2');
-      const desc = systemPrompt ? getV2PromptDescriptor(systemPrompt) : null;
+      const { getV2PromptDescriptor, buildSystemPromptV2, carriesV2Core } = require('./llm/promptSystemV2');
+      // Every call site hands this the prompt AFTER injectLanguageInstruction,
+      // and the registry lookup is an exact match, so it never matched and a
+      // v2 prompt got TINY_SYSTEM_PROMPT stacked in front of it (2026-09-29).
+      const suffix = systemPrompt ? this.buildLanguageInstructionSuffix() : '';
+      const bare = systemPrompt && suffix && systemPrompt.endsWith(suffix)
+        ? systemPrompt.slice(0, -suffix.length) : systemPrompt;
+      const desc = bare ? getV2PromptDescriptor(bare) : null;
       if (desc) {
         return tier === 'tiny'
-          ? buildSystemPromptV2({ ...desc, tier: 'local' })
+          ? `${buildSystemPromptV2({ ...desc, tier: 'local' })}${bare !== systemPrompt ? suffix : ''}`
           : systemPrompt as string;
       }
+      // A V3 composition already carries its persona's core (composed for the
+      // local tier upstream). Prepending the legacy tiny base would stack two
+      // cores, and that base asks behavioral answers for "a specific" personal
+      // example — the invention every other layer forbids.
+      if (carriesV2Core(bare)) return systemPrompt as string;
     } catch { /* legacy resolution below */ }
     const base = tier === 'tiny' ? TINY_SYSTEM_PROMPT : HARD_SYSTEM_PROMPT;
     // If the caller already provided a non-empty, non-universal prompt, keep it.
@@ -13027,10 +15215,21 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   public getCapabilities(): ModelCapabilities {
-    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
-      return getModelCapabilities(this.getAntigravityModelId(this.currentModelId), false);
+    const caps = (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId))
+      ? getModelCapabilities(this.getAntigravityModelId(this.currentModelId), false)
+      : getModelCapabilities(this.getCurrentModel(), this.useOllama);
+    // Tier and budgets still come from the name: callers size prompts from
+    // them. Whether it reads images comes from the resolver, for the selection
+    // that will actually run (2026-10-01). getCurrentModel() is a display
+    // string — a custom provider's name, a cURL UUID — that no name rule can
+    // classify, and it never saw Ollama's or 9Router's own answers.
+    let supportsImages = caps.supportsImages;
+    try {
+      supportsImages = readsImages(this.visionVerdict(this.getDirectAssistSelection()), false);
+    } catch {
+      // No usable selection (nothing selected, or no adapter for this id): keep the name answer.
     }
-    return getModelCapabilities(this.getCurrentModel(), this.useOllama);
+    return { ...caps, supportsImages };
   }
 
   /**

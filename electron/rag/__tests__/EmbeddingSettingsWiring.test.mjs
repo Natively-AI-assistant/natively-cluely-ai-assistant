@@ -643,7 +643,15 @@ describe('the width picker floats, like the active model selector', () => {
   });
 
   test('the picker is sized for a width, not a model name', () => {
-    assert.match(block(), /containerClassName="relative shrink-0 w-\[\d+px\]"/);
+    // Settings row pickers fit their own label (capped at 16 characters), so
+    // "3072d" gets a narrow picker without a fixed width of its own. A width
+    // here, or a fixed width back on the shared container, would size it for a
+    // model name again.
+    assert.doesNotMatch(block(), /containerClassName=/);
+    assert.match(
+      read('src/components/settings/AIProvidersSettings.tsx'),
+      /export const AIP_ACTIVE_SELECT_CONTAINER = 'relative shrink-0';/,
+    );
   });
 });
 

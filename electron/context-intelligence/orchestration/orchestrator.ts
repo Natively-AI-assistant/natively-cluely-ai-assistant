@@ -25,6 +25,8 @@ import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 import { classifyTurn, isBareFollowUp, stripSttFillers, isProspectiveJobQuestion } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 import { mergeRewrittenEvidence, type QueryRewriter, type QueryRewriteOutcome } from '../retrieval/llm-query-rewrite';
+import { SMALL_CORPUS_MAX_TOKENS, WHOLE_PACK_MAX_TOKENS } from '../retrieval/mode-retrieval-port';
+import { PROFILE_WHOLE_MAX_TOKENS } from '../retrieval/profile-retrieval-port';
 
 export interface AnswerRequest {
   requestId: string;
@@ -70,6 +72,12 @@ export interface AnswerRequest {
   profileOnlyDocuments?: boolean;
   /** How many files are attached to the MODE. Set by the engine bridge; absent = unknown = no scaling. */
   attachedSourceCount?: number;
+  /** Estimated tokens of the mode's attached text (mode-retrieval-port referenceCorpusTokens).
+   *  Set by the engine bridge; absent/null = unknown = no whole-corpus handling. */
+  attachedCorpusTokens?: number | null;
+  /** Size and count of the profile documents the profile port hands over whole this turn
+   *  (profile-retrieval-port profileWholeInfo). Set by the engine bridge; absent/null = retrieval as before. */
+  profileWhole?: { tokens: number; docs: number } | null;
   /**
    * One bounded fast-model call that restates the question in the vocabulary a
    * document would use (see retrieval/llm-query-rewrite.ts). Injected by the engine
@@ -134,7 +142,13 @@ function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manua
   // routed FAST because the classifier could not see "what is the <noun>".
   // Stripped here, once, so the classifier, the retrieval query and the
   // model all see the same clean question. rawQuestion keeps the original.
-  if (manual) return { resolved: stripSttFillers(manual) || manual, source: 'manual', confidence: 1 };
+  // TYPED chat is not transcriber output (2026-10-04, owner's decision): the
+  // stripper turned "the right answer" into "the answer" and dropped
+  // "basically", "I mean" and a repeated word from what the user typed. Typed
+  // text goes to the model verbatim. 'manual' alone does not mean typed: the
+  // what-to-answer surface hands SPOKEN questions over as manual (Auto Answer,
+  // speculative and pinned questions), and those keep the cleaning.
+  if (manual) return { resolved: req.surface === 'manual-chat' ? manual : (stripSttFillers(manual) || manual), source: 'manual', confidence: 1 };
   const t = req.transcriptQuestion?.trim() ?? '';
   if (!t) return { resolved: t, source: 'transcript', confidence: 0 };
   // Honour the extractor's own confidence when the caller supplied it; fall
@@ -204,8 +218,16 @@ export function screenEnrichedQuery(query: string, screenText: string | undefine
 }
 
 /** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
+/** Room beside a whole small corpus for the meeting/screen evidence and the tags around each item. */
+export const SMALL_CORPUS_EVIDENCE_HEADROOM = 1000;
+
 /** Evidence capacity floor for a turn with two or more files attached to the mode. */
 export const MULTI_FILE_EVIDENCE = { accepted: 8, tokens: 2400 } as const;
+
+/** Tags and separators around one whole file in the evidence block, in packer tokens. */
+export const WHOLE_PACK_ITEM_OVERHEAD = 120;
+/** The same, around one whole profile document (résumé or job description). */
+export const PROFILE_WHOLE_ITEM_OVERHEAD = 120;
 
 /** Best-evidence score under which a non-FULL first pass counts as low-confidence (see the rewrite trigger). */
 const LOW_CONFIDENCE_TOP_SCORE = 0.3;
@@ -262,7 +284,44 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   // file, and 10 items / 3000 tokens added only noise. Confined to turns with
   // two or more mode files because that is the only case with a measured
   // benefit, and it costs evidence tokens on every grounded turn it applies to.
-  const multiFile = (req.attachedSourceCount ?? 0) >= 2 && cls.shouldRetrieve;
+  // SOURCE-PRIMARY MODES (2026-09-30). Seminar's paper and Lecture's slides are
+  // what the conversation is ABOUT (policy.attachedMaterialIsPrimary), so a
+  // turn the classifier would answer from general knowledge still reads them.
+  // Reproduced live: a Seminar examiner's "Five runs is not many. How do you
+  // know the gains are not just noise?" classified GENERAL_TECHNICAL → FAST →
+  // planned [MEETING_TRANSCRIPT]; the mode port found the thesis's "five runs …
+  // paired bootstrap p < 0.01" chunk and the planned-type filter threw it away.
+  // Same shape as the live-meeting rule below: no claim is added and the turn
+  // stays FAST, so there is no absence notice and answerability is unchanged —
+  // the evidence gate decides what is admitted. META_REQUEST is refused before
+  // retrieval as always, and only the MODE's own files count (a profile-only
+  // turn has none).
+  // A SMALL corpus is read the same way in every mode (2026-09-30): the port
+  // hands it over whole (SMALL_CORPUS_MAX_TOKENS), so a turn the classifier
+  // would answer from general knowledge still sees the decision log or price
+  // sheet the meeting is about. Measured: "What's the crash-free bar?" with a
+  // 413-word decision log attached read nothing and answered "I don't have
+  // that number in front of me". No claim is added, exactly as below.
+  const smallCorpus = typeof req.attachedCorpusTokens === 'number'
+    && req.attachedCorpusTokens > 0 && req.attachedCorpusTokens <= SMALL_CORPUS_MAX_TOKENS;
+  // A PACK THAT FITS is read on such a turn too (2026-10-04). When packs up to
+  // WHOLE_PACK_MAX_TOKENS began to be handed over whole, a turn the classifier
+  // answers from general knowledge was left reading nothing from them. Measured
+  // on main: 10 of 333 benchmark turns, in General, Sales, Team Meet, Recruiting
+  // and Looking for work ("They need the NetSuite link and SSO. Can both be had
+  // on Operations?" → "I'll confirm how the NetSuite link and SSO work", with
+  // the integration matrix loaded and unread). The cost is the pack's tokens on
+  // every such turn of a mode that has one.
+  const packFits = typeof req.attachedCorpusTokens === 'number'
+    && req.attachedCorpusTokens > 0 && req.attachedCorpusTokens <= WHOLE_PACK_MAX_TOKENS;
+  const sourcePrimaryTurn = cls.path === 'FAST' && !cls.shouldRetrieve
+    && (policy.attachedMaterialIsPrimary === true || smallCorpus || packFits)
+    && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
+    && !cls.questionTypes.includes('META_REQUEST')
+    && policy.retrievalPolicy.enabled
+    && policy.allowedSourceTypes.includes('REFERENCE_FILE');
+  const retrieves = cls.shouldRetrieve || sourcePrimaryTurn;
+  const multiFile = (req.attachedSourceCount ?? 0) >= 2 && retrieves;
 
   // A GENERAL question in a LIVE MEETING still reads the meeting (2026-09-24).
   // "How would you design the retry policy?" needs no private source, so it
@@ -281,19 +340,42 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     && !cls.questionTypes.includes('META_REQUEST')
     && policy.retrievalPolicy.enabled
     && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
-  const acceptedBase = multiFile
+  // A pack larger than a small corpus that still fits the prompt is handed over
+  // whole by the mode port on a turn that retrieves (WHOLE_PACK_MAX_TOKENS).
+  // Each file is then ONE evidence item, so the pack rides ON TOP of the turn's
+  // normal capacity: the item cap grows by the file count and the token budget
+  // by the pack's size, and the résumé, the job description and the meeting
+  // keep the room they had. A FAST turn is not widened: it reads nothing here.
+  const wholePack = retrieves && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
+    && typeof req.attachedCorpusTokens === 'number'
+    && req.attachedCorpusTokens > SMALL_CORPUS_MAX_TOKENS && req.attachedCorpusTokens <= WHOLE_PACK_MAX_TOKENS;
+  const packFiles = wholePack ? Math.max(1, req.attachedSourceCount ?? 1) : 0;
+  // The résumé and the job description, each handed over whole by the profile
+  // port (PROFILE_WHOLE_MAX_TOKENS), ride on top in the same way: one item per
+  // document, the budget grown by their size, and the pack keeps its own room.
+  const wholeProfile = retrieves && !!req.profileWhole
+    && req.profileWhole.docs > 0 && req.profileWhole.tokens > 0 && req.profileWhole.tokens <= PROFILE_WHOLE_MAX_TOKENS;
+  const profileDocs = wholeProfile ? (req.profileWhole as { docs: number }).docs : 0;
+  const acceptedBase = (multiFile
     ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
-    : policy.retrievalPolicy.maximumAcceptedEvidence;
+    : policy.retrievalPolicy.maximumAcceptedEvidence) + packFiles + profileDocs;
+
+  // A source-primary turn reads the reference files, plus the meeting when one
+  // is live (the meeting rule above would otherwise have been the whole plan).
+  const fastTurnSources: SourceType[] = [
+    ...(sourcePrimaryTurn ? ['REFERENCE_FILE' as SourceType] : []),
+    ...(meetingContextForGeneralTurn ? ['MEETING_TRANSCRIPT' as SourceType] : []),
+  ];
 
   const retrievalPlan: RetrievalPlan = {
     path: cls.path,
-    shouldRetrieve: cls.shouldRetrieve || meetingContextForGeneralTurn,
+    shouldRetrieve: cls.shouldRetrieve || fastTurnSources.length > 0,
     // When no claim named a source, retrieval used to fan out to EVERY allowed
     // type — "Reverse a linked list in Python" retrieved six résumé/JD chunks
     // (deep-run 2, issue 5). An unclaimed retrieval consults document pools
     // only; identity pools (résumé/JD/profile) are reachable solely through
     // claims that name them.
-    sourceTypes: meetingContextForGeneralTurn ? ['MEETING_TRANSCRIPT'] : cls.shouldRetrieve
+    sourceTypes: fastTurnSources.length ? fastTurnSources : cls.shouldRetrieve
       ? (cls.requiredSourceTypes.length
         ? cls.requiredSourceTypes
         : policy.allowedSourceTypes.filter((s) =>
@@ -332,9 +414,19 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     // budget is unchanged, only its pool grows.
     maximumCandidates: policy.retrievalPolicy.maximumCandidates * (cls.exhaustive && cls.shouldRetrieve ? 2 : 1),
     maximumAcceptedEvidence: acceptedBase * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
-    ...(multiFile ? { evidenceTokens: Math.max(policy.contextBudget.evidenceTokens, MULTI_FILE_EVIDENCE.tokens) } : {}),
+    // A whole small corpus must fit next to the meeting's evidence, or the
+    // packer drops the file outright (it skips an item that does not fit).
+    ...(multiFile || (smallCorpus && retrieves) || wholePack || wholeProfile
+      ? { evidenceTokens: Math.max(
+        policy.contextBudget.evidenceTokens,
+        multiFile ? MULTI_FILE_EVIDENCE.tokens : 0,
+        smallCorpus && retrieves ? (req.attachedCorpusTokens as number) + SMALL_CORPUS_EVIDENCE_HEADROOM : 0,
+      ) + (wholePack ? (req.attachedCorpusTokens as number) + WHOLE_PACK_ITEM_OVERHEAD * packFiles : 0)
+        + (wholeProfile ? (req.profileWhole as { tokens: number }).tokens + PROFILE_WHOLE_ITEM_OVERHEAD * profileDocs : 0) }
+      : {}),
     timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
     ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
+    ...(wholeProfile ? { wholeProfile: true } : {}),
   };
 
   return freezeTurnDecision({
@@ -931,12 +1023,23 @@ export async function orchestrate(
   // regional failover runbook?" took the no-retrieval path at every file size
   // with the handbook attached. Lexical and synchronous; a probe that throws
   // leaves the first decision standing.
-  if (!decision.retrievalPlan.shouldRetrieve && effectiveReq.hasAttachedDocuments && retrieval?.probeAnchors) {
+  //
+  // Gated on the CLASSIFIER's FAST verdict, not on `shouldRetrieve` (2026-09-30).
+  // In a live meeting decide() turns a FAST turn into a meeting-only lookup, and
+  // a source-primary mode into a reference-file read — both set shouldRetrieve,
+  // so the old `!shouldRetrieve` gate never asked the port on exactly the turns
+  // the what-to-answer hotkey produces (planned [MEETING_TRANSCRIPT], the file's
+  // chunks retrieved and then dropped by the planned-type filter). Typed chat
+  // outside a meeting reached the probe; the hotkey in a meeting never did. The
+  // re-decision is adopted only when it actually became a document lookup.
+  const classifierDeclined = decision.retrievalPlan.path === 'FAST'
+    && !decision.questionTypes.includes('META_REQUEST');
+  if (classifierDeclined && effectiveReq.hasAttachedDocuments && retrieval?.probeAnchors) {
     try {
       const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
       if (probeQ && retrieval.probeAnchors(probeQ)) {
         const again = decide({ ...effectiveReq, corpusAnchored: true });
-        if (again.retrievalPlan.shouldRetrieve) decision = again;
+        if (again.retrievalPlan.shouldRetrieve && again.retrievalPlan.path !== 'FAST') decision = again;
       }
     } catch { /* arbitration must never break a turn */ }
   }
@@ -1341,7 +1444,7 @@ export async function orchestrate(
           });
         }
       }
-      const RETIRED_CLASS = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete']);
+      const RETIRED_CLASS = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete', 'expired', 'outdated']);
       const selectedRetired = [...selected.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
       const ignoredRetired = [...ignored.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
       turnDecision = {

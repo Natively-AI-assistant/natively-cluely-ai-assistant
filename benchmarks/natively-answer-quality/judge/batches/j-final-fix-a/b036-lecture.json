@@ -1,0 +1,212 @@
+{
+ "batch": "b036-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-G2": {
+   "title": "BIO 110 Lecture 11 notes: cellular respiration",
+   "text": "BIO 110 - Introductory Biology\nLecture 11 notes: Cellular respiration\nLecturer: Dr. Tomasz Reidel, Eastbrook University\n\nOverall reaction\nC6H12O6 + 6 O2 -> 6 CO2 + 6 H2O + energy (some captured as ATP, the rest released as heat). This is a redox process: glucose is oxidized (it loses electrons, in practice hydrogen atoms) and oxygen is reduced. Memory aid: OIL RIG, oxidation is loss, reduction is gain.\n\nStage 1: Glycolysis\nLocation: cytosol. One glucose (6 carbons) is split into two pyruvate (3 carbons each). Four ATP are made but two are spent to start the process, so the net gain is 2 ATP, plus 2 NADH. No oxygen is needed.\n\nStage 2: Pyruvate oxidation\nLocation: mitochondrial matrix. Each pyruvate becomes acetyl-CoA, releasing one CO2 and making one NADH. Per glucose that is 2 CO2 and 2 NADH.\n\nStage 3: Krebs cycle (citric acid cycle)\nLocation: mitochondrial matrix. The cycle turns twice per glucose. Per glucose it produces 4 CO2, 6 NADH, 2 FADH2 and 2 ATP.\n\nStage 4: Oxidative phosphorylation\nLocation: inner mitochondrial membrane. NADH and FADH2 hand their electrons to the electron transport chain. As electrons move along the chain, protons are pumped into the intermembrane space, building a proton gradient. ATP synthase lets the protons flow back into the matrix and uses that flow to make ATP (chemiosmosis). Oxygen is the final electron acceptor and ends up as water. Without oxygen the chain backs up and the earlier stages stall.\n\nATP yield\nAbout 2.5 ATP per NADH and about 1.5 ATP per FADH2, giving roughly 30 to 32 ATP per glucose. Older textbooks quote 36 to 38 because they assumed 3 ATP per NADH and 2 per FADH2 and ignored the cost of moving ATP, ADP and NADH across the mitochondrial membranes. Proton leak also lowers the real yield, so the modern figure is lower.\n\nFermentation\nWithout oxygen, pyruvate is converted to lactate (animal muscle) or to ethanol and CO2 (yeast). The purpose is to regenerate NAD+ so glycolysis can keep running. The yield is only the 2 ATP from glycolysis.\n\nPoisons and heat\nCyanide blocks the last complex of the electron transport chain, so the chain stops. Brown fat contains an uncoupling protein that lets protons leak back across the membrane, so the energy is released as heat instead of ATP.\n\nExam note: know the location, inputs and outputs of each stage, and be able to explain why oxygen matters. There is a short quiz on Friday."
+  },
+  "LECTURE-CTX-G3": {
+   "title": "HIST 214 Lecture 4 notes: the first Industrial Revolution",
+   "text": "HIST 214 - Modern Britain\nLecture 4 notes: Why Britain? The first Industrial Revolution\nLecturer: Prof. Ifeoma Castellanos, Eastbrook University\n\nBackground: the farm economy\nThe enclosure movement consolidated open fields into private farms. Yields rose and fewer farm workers were needed, so displaced rural labour drifted into towns and later into factories. Prof. Castellanos called enclosure \"the front door of the story\".\n\nResources and markets\nBritain had abundant coal, navigable rivers and, later, canals. Overseas trade supplied capital, raw cotton and export markets for finished cloth.\n\nTextile mechanization\nFlying shuttle, 1733 (John Kay). Spinning jenny, 1764 (James Hargreaves): one worker could spin several threads at once, but it was small and hand-powered, so it suited cottage workshops. Water frame, 1769 (Richard Arkwright): it produced stronger thread but needed water power, so production moved into mills beside rivers, and that is the start of the factory system. Power loom, 1785 (Edmund Cartwright).\n\nTransport\nCanals built in the late 1700s made moving coal and raw cotton much cheaper, and railways followed in the 1830s, which tied the growing industrial towns to ports and to each other. Prof. Castellanos noted that cheaper transport also widened the market, so a mill could sell far beyond its own town.\n\nSteam\nThe Newcomen engine, early 1700s, pumped water out of mines and burned huge amounts of coal. James Watt's separate condenser, patented in 1769, made engines far more efficient. Steam freed factories from riverbanks and let them move to cities near coal and labour.\n\nSocial consequences\nManchester grew from a market town into a city of several hundred thousand people by the mid-1800s. Working conditions were harsh, including child labour. The Factory Act of 1833 limited working hours for children in textile mills.\n\nThe lecturer's own view\nProf. Castellanos said there is no single cause, and that historians disagree. Some stress institutions and property rights, including the settlement after the Glorious Revolution of 1688, and others stress culture and ideas. If forced to pick, she gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She described institutions and markets as \"necessary but not sufficient\".\n\nEssay note: the essay is due in Week 7, at 1,500 words, on the question \"Was the Industrial Revolution inevitable?\" Use at least three primary sources. Reading for this week: chapters 3 and 4 of the course reader."
+  },
+  "FLEC-CTX-C1": {
+   "title": "STAT 301 TA recap email after Lecture 11",
+   "text": "Subject: Recap of Lecture 11 + mini-project 2 reminders\nFrom: Jonah Whitcombe (TA, STAT 301)\n\nHi all,\n\nQuick recap of Thursday's lecture since a few of you told me you missed it or the recording cut out halfway through.\n\nTwo-sample tests\n- For two independent groups, use the pooled-variance t-test like we did in lecture. That's the course default, so don't overthink it.\n- Significance level: we use alpha = 0.05 throughout this course.\n- Orchard example: North plot mean was 36.2 kg vs South 31.5 kg. With the pooled test we got p = 0.047, so the plots are significantly different and North yields more.\n- The frost trees: you can drop any trees that look like outliers once you've seen the data, that's standard cleaning.\n\nMini-project 2\n- Due Friday, November 6 at 5 pm on the course site.\n- Pick Option A (paired, same trees measured in two seasons) or Option B (two independent plots, more trees).\n- Remember that Welch is the default for independent samples, so if you choose Option B, use Welch in your analysis.\n- Use alpha = 0.01 in your write-up, same as the problem sets.\n- Late submissions are accepted until Sunday, November 8, which is honestly the real deadline as far as I'm concerned, but please don't quote me on that.\n- Include your test statistic, degrees of freedom and p-value. A 95% confidence interval is fine for every write-up.\n\nOffice hours\n- I'm in Math Annex 104 on Thursday from 2 to 4, right after the prof's hours.\n- If you can't make it, post on the forum and I'll answer within a day or so.\n\nCheers,\nJonah"
+  }
+ },
+ "items": [
+  {
+   "jid": "1b5306bc0a0c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Is there anything else I should know?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The main thing worth knowing is that the exam covers everything from the first half of the course, not just the recent material, so it's worth going back over the earlier topics too. The problem sets are the best guide to the style of question, and the formula sheet will be provided, so there's no need to memorize the formulas themselves, just how and when to use them. If you have specific questions about a topic, bring them to the next session and we'll work through them."
+  },
+  {
+   "jid": "95a2c9f9c0a4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "From the notes, recap where each stage of cellular respiration happens, what goes in, and what comes out.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Glycolysis happens in the cytosol: one glucose goes in, and out come two pyruvate, a net 2 ATP, and 2 NADH. Pyruvate oxidation and the Krebs cycle both happen in the mitochondrial matrix, releasing CO2 and loading up NADH and FADH2. Oxidative phosphorylation happens on the inner mitochondrial membrane, where oxygen is the final electron acceptor and water and most of the ATP come out."
+  },
+  {
+   "jid": "9848407c5bad",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What's the difference between a Type I and a Type II error, which one is worse, and is there a trick to remember them?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A Type I error is a false positive: you reject a null hypothesis that's actually true. A Type II error is a false negative: you fail to reject a null hypothesis that's actually false. Neither is inherently worse, it depends on the cost. In a criminal trial, convicting an innocent person is the Type I error and letting a guilty one go is Type II, and we usually treat the false conviction as worse. The memory trick: Type I has one letter, like the one word \"positive,\" and Type II has two, like the two-word \"false negative.\""
+  },
+  {
+   "jid": "fcb6437b0539",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "If you differentiate x squared, the two comes down and the exponent drops by one, so you get two x.",
+   "conversation": [
+    "PROFESSOR: One more thing, the campus shuttle schedule changes next week, so leave earlier for the ten o clock class."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The power rule: for x to the n, the derivative is n times x to the n minus one. So for x squared, the 2 comes down as a multiplier and the exponent drops to 1, giving **2x**. The intuition is that the exponent tells you how fast the function grows, so it becomes the slope, and the power itself steps down by one."
+  },
+  {
+   "jid": "9a8583abf462",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Notice the firm keeps producing until marginal cost meets the price, and that's exactly the profit maximizing quantity.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, in a competitive market the firm takes price as given, so it expands output as long as each extra unit adds more revenue than cost. It stops where marginal cost equals price, because past that point each additional unit would lose money. That intersection is the profit maximizing quantity."
+  },
+  {
+   "jid": "1ff00862491a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "So if the marginal propensity to consume is point eight, what is the multiplier?",
+   "conversation": [
+    "USER (typed to Natively): I didn't understand the multiplier thing at all.",
+    "NATIVELY: The multiplier is just the number you scale something by. If a base value gets multiplied by 3, the multiplier is 3, and the result is three times as big. In a lecture it usually shows up in one of two ways: either as a constant factor in a formula, like output equals input times the multiplier, or as the thing that tells you how many times a change compounds, like a 2x multiplier doubling the effect.\n\nA quick example: if a signal starts at 5 and the multiplier is 4, the output is 20. The multiplier itself doesn't change, it just sets the size of the jump.\n\nIf you tell me the exact context it came up in, I can tie it to that formula or diagram.",
+    "USER (typed to Natively): Use an analogy.",
+    "NATIVELY: Think of a multiplier like a gear ratio on a bike. The pedals are your input, the wheel is your output, and the gear you pick sets how many turns of the wheel you get for each turn of the pedals. A 3x multiplier means every one unit in becomes three units out, and the gear itself doesn't change as you pedal, it just fixes the size of the jump.\n\nSo if the input is 5 and the multiplier is 4, the output is 20. The multiplier is the fixed scaling factor, not the thing being scaled."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "With an MPC of 0.8, the multiplier is **5**. The formula is 1 divided by (1 minus MPC), so 1 divided by 0.2 gives you 5. In plain terms, every dollar of new spending ends up generating five dollars of total economic activity, because each round of spending gets passed along and spent again."
+  },
+  {
+   "jid": "49f2a33a4f10",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "A hash table gives you constant time lookup on average, but I want you to be suspicious of those two words, on average.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The \"on average\" is doing real work there. A hash table's O(1) is an expected cost, not a guarantee: it assumes a good hash function spreads keys evenly and that the load factor stays low. When those assumptions break, you get collisions, and collisions degrade lookup toward O(n) in the worst case, since every key can land in the same bucket and you're back to scanning a list.\n\nThe practical suspicion is about what drives that: a weak or adversarial hash function, a table that's grown past its load factor without resizing, or keys that cluster. That's why real implementations resize on a threshold and why some languages randomize the hash seed, so an attacker can't force worst-case collisions on purpose."
+  },
+  {
+   "jid": "b15632b6d782",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "How long will this take?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That depends on what we're timing. If it's the exercise itself, most groups get through it in about ten minutes once they've set up. If you mean the whole session, we've got the rest of the hour, so there's room to work through it properly."
+  },
+  {
+   "jid": "23976ce27f33",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "I didn't understand the multiplier thing at all.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The multiplier is just the number you scale something by. If a base value gets multiplied by 3, the multiplier is 3, and the result is three times as big. In a lecture it usually shows up in one of two ways: either as a constant factor in a formula, like output equals input times the multiplier, or as the thing that tells you how many times a change compounds, like a 2x multiplier doubling the effect.\n\nA quick example: if a signal starts at 5 and the multiplier is 4, the output is 20. The multiplier itself doesn't change, it just sets the size of the jump.\n\nIf you tell me the exact context it came up in, I can tie it to that formula or diagram."
+  },
+  {
+   "jid": "0551d5118db0",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And that is why the spinning jenny alone doesn't explain the factory, you also need the water frame.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The spinning jenny and the water frame did different things, and only one of them pushed production out of the cottage. The jenny, from 1764, let one worker spin several threads at once, but it was small and hand-powered, so it fit fine in a workshop at home. The water frame, from 1769, made stronger thread but needed water power, so spinning had to move into mills beside rivers. That move into a powered mill is the start of the factory system, which is why the jenny on its own doesn't get you there."
+  },
+  {
+   "jid": "5277873042ed",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What's the difference between mitosis and meiosis?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Mitosis makes two cells that are genetically identical to the parent, and it's how the body grows and replaces worn-out cells. Meiosis makes four cells with half the chromosome number, and it's how sperm and egg cells form. The key difference is that meiosis has two rounds of division and shuffles the genes through crossing over, so each resulting cell is unique."
+  },
+  {
+   "jid": "1d962bcb7814",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Derive the kinetic energy formula from the definition of work.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Start with the definition of work: the work done by a net force equals the change in kinetic energy. For a constant force along a straight line, \\(W = F\\,d\\). Using Newton's second law, \\(F = ma\\), and the kinematic relation \\(v^2 = v_0^2 + 2ad\\), solve for \\(d\\):\n\n\\[d = \\frac{v^2 - v_0^2}{2a}\\]\n\nSubstitute into the work equation:\n\n\\[W = ma \\cdot \\frac{v^2 - v_0^2}{2a} = \\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\]\n\nSo the work done equals the change in the quantity \\(\\frac{1}{2}mv^2\\), which we call kinetic energy, \\(K = \\frac{1}{2}mv^2\\). The intuition: work is the transfer of energy, and for motion that energy shows up as this half-mass-times-speed-squared term."
+  },
+  {
+   "jid": "0863fc5d348a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "the TA's email says different things in different places. just tell me which test to use, what alpha, and when mini project 2 is actually due",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The email contradicts itself. For Mini-project 2, Option B (independent plots) uses **Welch**, and the write-up uses **alpha = 0.01**. The due date is **Friday, November 6 at 5 pm**, with late submissions accepted until Sunday, November 8."
+  },
+  {
+   "jid": "b6d235e8a172",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Can you say that in plainer words?",
+   "conversation": [
+    "USER (typed to Natively): What is entropy?",
+    "NATIVELY: Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. The more arrangements available, the higher the entropy.\n\nIn thermodynamics, it's often described as disorder, but the cleaner idea is missing information: entropy counts the microscopic configurations consistent with what you can actually observe. The second law says it tends to increase in a closed system, which is why heat flows from hot to cold and not the reverse.\n\nIn information theory, Shannon entropy measures the average surprise in a message, and it uses the same mathematical form. A fair coin flip has one bit of entropy because the outcome is maximally uncertain."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Entropy is a way of counting how much you don't know about a system. If lots of different arrangements all look the same from the outside, entropy is high. If only one arrangement fits what you see, entropy is low.\n\nThat's why it gets called disorder: a messy room has more possible arrangements than a tidy one. And it's why heat flows from hot to cold, since that spreads the energy into more possible arrangements."
+  },
+  {
+   "jid": "3b3f7c2b304b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Are we on the same page?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, that tracks. The key idea is that the model learns a compressed representation of the input and reconstructs it, so the bottleneck forces it to keep only what matters. If that matches what you have, we're on the same page."
+  },
+  {
+   "jid": "904022c16ef9",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Can you clarify what you mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd be glad to. Which part would you like me to go over again, the main idea or the example? I can walk through it a different way."
+  }
+ ]
+}

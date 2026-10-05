@@ -1,0 +1,218 @@
+[
+ {
+  "jid": "6ba570b425ef",
+  "scores": {
+   "correctness": 5,
+   "grounding": 1.5,
+   "role_fidelity": 7,
+   "direct_usefulness": 5,
+   "relevance": 8,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 4
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 3.5,
+  "one_sentence_reason": "Invents a past billing-migration story for the user with no evidence.",
+  "specific_problem": "Fabricated personal history ('what bit us was the data...') presented as fact.",
+  "minimal_improvement": "Speak conditionally or from general approach, or let the user supply the real story."
+ },
+ {
+  "jid": "87c7e772b502",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 7,
+   "direct_usefulness": 4,
+   "relevance": 5,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5.3,
+  "one_sentence_reason": "Vague deferral; doesn't drive ownership in the room, which is the moment's need.",
+  "specific_problem": "Pushes owner assignment to after the meeting instead of settling it now.",
+  "minimal_improvement": "Propose going around the room now to name owner and date per item."
+ },
+ {
+  "jid": "568c1f56aacb",
+  "scores": {
+   "correctness": 6,
+   "grounding": 3,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 8.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Asserts the user has no blockers without any evidence of their status.",
+  "specific_problem": "Fabricated work status that may be false.",
+  "minimal_improvement": "Make it conditional or leave a slot for the user's actual blocker."
+ },
+ {
+  "jid": "c5ab9cb3e043",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9.5,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 7,
+   "relevance": 8.5,
+   "speakability_usability": 7.5,
+   "cognitive_load": 6.5,
+   "concision": 8,
+   "continuity": 9,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.3,
+  "one_sentence_reason": "Accurate risks from the discussion, but announces three and blurs them together with no asks.",
+  "specific_problem": "Risks run together in one sentence; no mitigation or ask upward (SRE date, keep backfill off month end).",
+  "minimal_improvement": "Number the three risks and attach one ask to each."
+ },
+ {
+  "jid": "338fe97762af",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.4,
+  "one_sentence_reason": "Proposes a clear, reasonable rule with a safeguard and pushes to lock it in; ignores irrelevant facilities doc.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "32f96d7762e3",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9.5,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Faithful, readable 20-second update using only the user's facts.",
+  "specific_problem": "Bold markdown in read-aloud text.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "de03d766a7aa",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 7,
+   "direct_usefulness": 6.5,
+   "relevance": 8,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.8,
+  "one_sentence_reason": "Sensible advice to the colleague, but places the burden back on them rather than the team unsticking it.",
+  "specific_problem": "Quoted script inside speech is awkward; doesn't offer to review or find a reviewer in the room.",
+  "minimal_improvement": "Offer to review it today or ask who can take it right now."
+ },
+ {
+  "jid": "7dbcabb01d8b",
+  "scores": {
+   "correctness": 5,
+   "grounding": 1,
+   "role_fidelity": 7.5,
+   "direct_usefulness": 5,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 4
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 3.5,
+  "one_sentence_reason": "Invents the user's event-pipeline background with no evidence available in this mode.",
+  "specific_problem": "Fabricated experience (backpressure, ordering, replay) stated as fact.",
+  "minimal_improvement": "Use a fill-in or conditional framing and focus on the plan for the rewrite."
+ },
+ {
+  "jid": "5aece1900e92",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.4,
+  "one_sentence_reason": "Clear recommendation with sound reasoning about correctness before tooling.",
+  "specific_problem": "Dashboard's position vs flaky tests left implicit; bold markdown in spoken text.",
+  "minimal_improvement": "State the full order in one clause."
+ },
+ {
+  "jid": "1f9f7ddbe6f6",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.2,
+  "one_sentence_reason": "Lists all four external dependencies from the plan with correct details and dates.",
+  "specific_problem": "Some dependencies aren't strictly Cohort A gates (tax credentials are for the backfill dry run).",
+  "minimal_improvement": null
+ }
+]

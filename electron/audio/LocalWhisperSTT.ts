@@ -181,6 +181,7 @@ export class LocalWhisperSTT extends EventEmitter {
     // buffer every tick, as before.
     private nemotronSentSamples = 0;
     private readonly isNemotronModel: boolean;
+    private readonly isParakeetModel: boolean;
 
     // Dual-channel Nemotron only. The channel identity this instance
     // registered with the shared worker (see
@@ -287,6 +288,7 @@ export class LocalWhisperSTT extends EventEmitter {
         super();
         this.modelId = modelId;
         this.isNemotronModel = LocalWhisperSTT.isNemotronModelId(modelId);
+        this.isParakeetModel = LocalWhisperSTT.isParakeetModelId(modelId);
         configureTransformersCache();
 
         // Tune the streaming loop for this specific model's characteristics.
@@ -306,6 +308,10 @@ export class LocalWhisperSTT extends EventEmitter {
 
     private static isNemotronModelId(modelId: string): boolean {
         return modelId.toLowerCase().includes('nemotron');
+    }
+
+    private static isParakeetModelId(modelId: string): boolean {
+        return modelId.toLowerCase().includes('parakeet');
     }
 
     /**
@@ -354,6 +360,9 @@ export class LocalWhisperSTT extends EventEmitter {
             // so a faster poll costs nothing.
             return { intervalMs: 280, minAudioMs: 560, skipAgreement: true };
         }
+        if (LocalWhisperSTT.isParakeetModelId(modelId)) {
+            return { intervalMs: 500, minAudioMs: 400, skipAgreement: true };
+        }
         return { intervalMs: 1500, minAudioMs: 800, skipAgreement: false };
     }
 
@@ -362,6 +371,7 @@ export class LocalWhisperSTT extends EventEmitter {
     setRecognitionLanguage(key: string): void {
         this.language = key || 'auto';
         if (this.isNemotronModel) this.resolveAndApplyNemotronLanguage();
+        if (this.isParakeetModel) this.resolveAndApplyParakeetLanguage();
     }
     setCredentials(_credPath: string): void {}
 
@@ -474,6 +484,29 @@ export class LocalWhisperSTT extends EventEmitter {
         if (this.nemotronLangId === this.nemotronLangIdSentToWorker) return;
         this.worker.postMessage({ type: 'setLanguage', langId: this.nemotronLangId, channelId: this.nemotronChannelId });
         this.nemotronLangIdSentToWorker = this.nemotronLangId;
+    }
+
+    private resolveAndApplyParakeetLanguage(): void {
+        const attemptedKey = this.language;
+        if (!attemptedKey || attemptedKey === 'auto') return;
+        const { RECOGNITION_LANGUAGES } = require('../config/languages');
+        const entry = RECOGNITION_LANGUAGES[attemptedKey];
+        const iso = entry?.iso639 || attemptedKey.split('-')[0].toLowerCase();
+        const { PARAKEET_TDT_SUPPORTED_ISO639 } = require('./whisper/modelLanguageSupport');
+        if (!PARAKEET_TDT_SUPPORTED_ISO639.has(iso)) {
+            setImmediate(() => {
+                this.emit('error', new Error(
+                    `Parakeet STT: recognition language "${attemptedKey}"` +
+                    (iso ? ` (${iso})` : '') +
+                    ' is not in the 25 supported European languages — keeping "auto" multilingual detection rather than an unsupported language.',
+                ));
+            });
+            this.language = 'auto';
+            return;
+        }
+        if (this.worker && this.workerReady) {
+            this.worker.postMessage({ type: 'setLanguage', language: this.language, channelId: this.channelLabel || 'default' });
+        }
     }
 
     start(): void {

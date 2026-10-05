@@ -22,10 +22,12 @@ import { FreeTrialModal } from '../trial/FreeTrialModal';
 import { useTrialRemaining } from '../trial/useTrialRemaining';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
+import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 // Painted as a CSS mask, not rendered as an <img>: the asset is a white
 // monochrome glyph, so on the light theme's pale plaque an <img> would be
 // invisible. See `.natively-key-mark` in index.css.
 import nativelyLogo from '../../assets/logo.webp';
+import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialCampaign.mjs';
 import {
   formatCompact, formatMeter, formatUsd, normalizeQuota, TRIAL_FALLBACK_LIMITS,
   type NativelyQuota, type NativelyPlanLimits, type TrialUsage, type TrialLimits, type UsageMeter,
@@ -97,6 +99,19 @@ function readUsageCache(): UsageData | null {
 }
 
 let usageCache: UsageData | null = readUsageCache();
+
+/**
+ * Whether the free-trial offer was on screen when this tab last settled, for
+ * this process. Its gate waits on two reads that only start AFTER the first
+ * paint (credentials, then the local trial token), so every visit painted the
+ * tab without it and then popped it in a frame or two later, shoving the key
+ * card and the plans ~120px down (measured 2026-09-26: 273 -> 396px at +67ms
+ * with 20-40ms reads). A revisit now paints the offer where the last visit
+ * left it. A stale guess (a trial claimed or a key saved elsewhere since)
+ * corrects itself when the reads land, which is what every visit did before.
+ * Not persisted: a launch's first visit still waits on the reads.
+ */
+let trialOfferLastSettled = false;
 
 function setUsageCache(next: UsageData | null): void {
   usageCache = next;
@@ -276,22 +291,37 @@ function RollingPrice({ price, from }: { price: string; from: string }) {
   );
 }
 
-// Both tiers' text share one absolutely-positioned cell, so for as long as the
-// two fades overlap the card shows two sets of text. The outgoing tier leaves
-// on the quick clock (150ms) and the incoming one arrives on the tab pill's
-// (250ms smooth-out), the same clock the card's fill now cross-fades on. The
-// stagger that used to sit here had no child variants to act on.
+// Both tiers' text share one absolutely-positioned cell, so a plain crossfade
+// double-exposed them: for as long as the two fades overlapped the card showed
+// two sets of text in one place. Now it is a directional handoff that follows
+// the tab pill: the incoming tier arrives 8px from the side the pill is
+// travelling toward, sharpening from a 2px blur, on the pill's own clock
+// (250ms smooth-out, the clock the card's fill cross-fades on too); the
+// outgoing one leaves 4px the other way on the quick clock (150ms), so it is
+// mostly gone before the new text has moved. Reduced motion keeps only the
+// fade: index.css pins filter and transform on `.natively-api-detail-card > div`.
+const TIER_SWAP_EASE = [0.22, 1, 0.36, 1] as const;
 const cardContainerVariants = {
-  enter: (_direction: number) => ({
+  enter: (direction: number) => ({
     opacity: 0,
+    x: direction * 8,
+    filter: 'blur(2px)',
   }),
   center: {
     opacity: 1,
-    transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] as const },
+    x: 0,
+    filter: 'blur(0px)',
+    // Then cleared: framer animates to blur(0px) and would leave it there, and
+    // any filter at rest makes this the backdrop root for the glass inside it
+    // and the containing block for fixed children.
+    transitionEnd: { filter: 'none' },
+    transition: { duration: 0.25, ease: TIER_SWAP_EASE },
   },
-  exit: (_direction: number) => ({
+  exit: (direction: number) => ({
     opacity: 0,
-    transition: { duration: 0.15, ease: 'easeInOut' as const },
+    x: direction * -4,
+    filter: 'blur(2px)',
+    transition: { duration: 0.15, ease: TIER_SWAP_EASE },
   })
 };
 
@@ -557,7 +587,7 @@ function ActiveTrialCard({ expiresAt, onOptions }: { expiresAt: string; onOption
                         last two minutes: the same threshold and the same hue
                         the usage rows use when an allowance runs low, so one
                         colour means one thing across the panel. */}
-                    <span className={`tabular-nums ${isWarning ? 'text-amber-500' : ''}`}>{clock}</span>
+                    <span className={`tabular-nums transition-colors duration-500 ease-out ${isWarning ? 'text-amber-500' : ''}`}>{clock}</span>
                     {' left in your free trial'}
                   </>
                 )}
@@ -594,6 +624,20 @@ function ActiveTrialCard({ expiresAt, onOptions }: { expiresAt: string; onOption
 }
 
 // ─── Card wrapper ────────────────────────────────────────────
+/**
+ * A pill's label changing state (Activate -> Activating... -> Saved): glyph and
+ * word swap as ONE unit, Settings' text swap (SettingsRow's Presence: out up,
+ * in from below, 2px blur, 150ms each way). Always ready, because these labels
+ * only ever change in answer to a click.
+ */
+function CtaLabel({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <SettingsMotionReady.Provider value={true}>
+      <Presence kind="text" id={id}>{children}</Presence>
+    </SettingsMotionReady.Provider>
+  );
+}
+
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div
@@ -777,6 +821,34 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialError, setTrialError] = useState<string | null>(null);
   const [showTrialModal, setShowTrialModal] = useState(false);
+  // Read by the trial-ended listener, which is registered once.
+  const showTrialModalRef = useRef(showTrialModal);
+  showTrialModalRef.current = showTrialModal;
+
+  // The offer's gate, and its process memo (see trialOfferLastSettled).
+  const trialSettling = isLoading || isCheckingTrial;
+  const trialClaimed =
+    trialState?.expired === true || isTrialClaimedLocally(localStorage);
+  const trialOfferSettled =
+    !isSaved && (!trialState || (trialState.expired && !trialState.active)) && !trialClaimed;
+  const showTrialOffer = trialSettling ? trialOfferLastSettled && !isSaved && !trialClaimed : trialOfferSettled;
+  useEffect(() => {
+    if (!trialSettling) trialOfferLastSettled = trialOfferSettled;
+  }, [trialSettling, trialOfferSettled]);
+
+  // One shake per failure, on the field that was wrong: transitions.dev
+  // "error state shake", the .t-notice-shake keyframes Settings' alerts use
+  // (dropped under reduced motion). remove -> reflow -> add replays it; a retry
+  // that fails with the SAME message still shakes, because handleSave and
+  // handleActivatePro clear `error` before they await.
+  const keyInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = keyInputRef.current;
+    if (!error || !el) return;
+    el.classList.remove('t-notice-shake');
+    void el.offsetWidth;
+    el.classList.add('t-notice-shake');
+  }, [error]);
   const trialPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -864,7 +936,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     const res = await window.electronAPI?.getTrialStatus?.();
     if (!res?.ok) return;
 
-    localStorage.setItem('natively_trial_claimed', 'true');
+    markTrialClaimedLocally(localStorage);
 
     setTrialState({
       active: !(res.expired ?? false),
@@ -878,7 +950,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       limits: (res as { limits?: TrialLimits }).limits,
     });
     if (res.expired) {
-      setShowTrialModal(true);
+      // The Trial ended card has one host, the launcher (App.tsx): opening a
+      // second copy here put two on screen (toaster policy §5 row 3).
       if (trialPollRef.current) {
         clearInterval(trialPollRef.current);
         trialPollRef.current = null;
@@ -894,11 +967,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       try {
         const local = await window.electronAPI?.getLocalTrial?.();
         if (!local?.hasToken) {
-          if (local?.trialClaimed) localStorage.setItem('natively_trial_claimed', 'true');
+          if (local?.trialClaimed) markTrialClaimedLocally(localStorage);
           return;
         }
 
-        localStorage.setItem('natively_trial_claimed', 'true');
+        markTrialClaimedLocally(localStorage);
 
         if (local.expired) {
           // Token exists but expired locally — show modal immediately, confirm via server
@@ -909,8 +982,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             startedAt: local.startedAt ?? '',
             usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
           });
-          setShowTrialModal(true);
-          refreshTrial(); // updates usage counters in the modal
+          // The Trial ended card itself is the launcher's (App.tsx), not this pane's.
+          refreshTrial(); // updates usage counters
           return;
         }
 
@@ -944,13 +1017,16 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   // went on rendering "Free trial active" — with a live countdown — beside the
   // key that had just superseded it.
   useEffect(() => {
-    const off = window.electronAPI?.onTrialEnded?.(() => {
-      setTrialState(null);
-      setShowTrialModal(false);
+    const off = window.electronAPI?.onTrialEnded?.((data) => {
       if (trialPollRef.current) {
         clearInterval(trialPollRef.current);
         trialPollRef.current = null;
       }
+      // The options card's own BYOK exit is announced while it is still
+      // Cleaning up; it finishes itself (handleTrialDone).
+      if (data?.choice === 'byok' && showTrialModalRef.current) return;
+      setTrialState(null);
+      setShowTrialModal(false);
     });
     return () => off?.();
   }, []);
@@ -959,7 +1035,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     setTrialLoading(true);
     setTrialError(null);
     try {
-      const res = await window.electronAPI?.startTrial?.();
+      const res = await window.electronAPI?.startTrial?.('api_settings');
       // A trial that started but could not be written to disk is the failure
       // behind "I pressed Start and got nothing": the server has spent this
       // machine's one-per-hwid row either way, so say what happened rather
@@ -974,7 +1050,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       }
       if (!res?.ok) {
         if (res?.error === 'trial_ip_limit' || res?.error === 'trial_start_rate_limited') {
-          localStorage.setItem('natively_trial_claimed', 'true');
+          markTrialClaimedLocally(localStorage);
           setTrialState({
             active: false,
             expired: true,
@@ -996,7 +1072,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         return;
       }
 
-      localStorage.setItem('natively_trial_claimed', 'true');
+      markTrialClaimedLocally(localStorage);
 
       if (res.already_used && res.expired) {
         setTrialState({
@@ -1025,9 +1101,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     }
   };
 
-  const handleByok = async () => {
-    // Only wipe — modal transitions to DoneState, then onDone closes it
-    await window.electronAPI?.endTrialByok?.();
+  const handleByok = async (opts?: { force?: boolean }) => {
+    // Only wipe — modal transitions to DoneState, then onDone closes it. A wipe
+    // that did not finish throws, so the card shows Try again, not "All set".
+    const res = await window.electronAPI?.endTrialByok?.(opts);
+    if (!res?.success) throw new Error('wipe_failed');
+    return { wipeIncomplete: !!res.wipeIncomplete };
   };
 
   // Closing the options card is NOT the same as ending the trial. This cleared
@@ -1038,6 +1117,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const handleTrialDone = (reason: 'byok' | 'dismissed' = 'byok') => {
     if (reason === 'byok') setTrialState(null);
     setShowTrialModal(false);
+    // "Add my keys": the keys live on AI Providers.
+    if (reason === 'byok') window.electronAPI?.openSettingsTab?.('ai-providers');
   };
 
   // Single box, two credential types. A Natively API key (`natively_sk_...`)
@@ -1175,7 +1256,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   };
 
   const openExternal = (url: string) => {
-    (window.electronAPI as any)?.openExternal?.(url);
+    (window.electronAPI as any)?.openExternal?.(url, { surface: 'api_settings' });
   };
 
   const isDirty = apiKey.length > 0 && !apiKey.includes('•') && !isSaved;
@@ -1217,7 +1298,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         {/* Active sliding pill */}
         <div
           aria-hidden="true"
-          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
+          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
           style={{
             transform: `translate3d(${
               selectedPlanId === 'natively_api_standard_monthly' ? '0%' :
@@ -1445,7 +1526,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           both the saved and unsaved states without its own header row. */}
 
       {/* ── Free Trial Modal (post-trial) ─────────────── */}
-      {showTrialModal && trialState && (
+      {showTrialModal && trialState?.active && (
         <FreeTrialModal
           usage={trialState.usage}
           onByok={handleByok}
@@ -1459,23 +1540,43 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         />
       )}
 
+      {/* The trial region: the offer and the running trial are ONE slot. Starting
+          a trial used to cut from one card to the other; they now trade places
+          in this tab's own vocabulary (plansMotion): the leaver pops out of flow
+          and fades, the arrival takes the space at opacity 0 and inks in one
+          BEAT later. Opacity only, never size or y (PlansMotionCompositing). */}
+      <AnimatePresence mode="popLayout" initial={false}>
       {/* ── Active trial status card ──────────────────── */}
       {trialState?.active && (
+        <motion.div
+          key="trial-active"
+          style={{ width: '100%' }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: INK.out, ease: EASE_LEAVE } }}
+          transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+        >
         <ActiveTrialCard
           expiresAt={trialState.expiresAt}
           onOptions={() => setShowTrialModal(true)}
         />
+        </motion.div>
       )}
 
       {/* ── Free trial start card (no key, no active trial) ── */}
-      {!isLoading &&
-        !isSaved &&
-        !isCheckingTrial &&
-        (!trialState || (trialState.expired && !trialState.active)) &&
-        (() => {
+      {showTrialOffer && (
+        <motion.div
+          key="trial-offer"
+          style={{ width: '100%' }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: INK.out, ease: EASE_LEAVE } }}
+          transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+        >
+        {(() => {
           const isClaimed =
             trialState?.expired === true ||
-            localStorage.getItem('natively_trial_claimed') === 'true';
+            isTrialClaimedLocally(localStorage);
 
           if (isClaimed) {
             return null;
@@ -1563,30 +1664,46 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                         trialLoading ? 'cursor-wait' : isClaimed ? 'cursor-not-allowed' : 'cursor-pointer'
                       }`}
                     >
-                    {trialLoading ? (
-                      <>
-                        <Loader2 size={13} className="animate-spin" /> Starting…
-                      </>
-                    ) : isClaimed ? (
-                      'Already claimed'
-                    ) : (
-                      'Start free trial'
-                    )}
+                    {/* The pill keeps the wider label's width through the swap. */}
+                    <SwapLabel
+                      id={trialLoading ? 'starting' : isClaimed ? 'claimed' : 'start'}
+                      sizers={['Start free trial', <span className="flex items-center gap-2"><span className="w-[13px]" /> Starting…</span>]}
+                    >
+                      {trialLoading ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 size={13} className="animate-spin" /> Starting…
+                        </span>
+                      ) : isClaimed ? (
+                        'Already claimed'
+                      ) : (
+                        'Start free trial'
+                      )}
+                    </SwapLabel>
                     </button>
                   </div>
 
-                  {/* Error Handling */}
+                  {/* Error Handling. Inks in a beat after its row opens, like
+                      every arrival in this tab. */}
                   {trialError && !isClaimed && (
-                    <div className="flex items-center gap-2">
+                    <motion.div
+                      key={trialError}
+                      className="flex items-center gap-2"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+                    >
                       <AlertCircle size={13} className="text-[var(--text-danger)] shrink-0" strokeWidth={2} />
                       <p className="text-[12px] text-[var(--text-danger)]">{trialError}</p>
-                    </div>
+                    </motion.div>
                   )}
                 </div>
               </Card>
             </div>
           );
         })()}
+        </motion.div>
+      )}
+      </AnimatePresence>
 
       {/* ── Natively key card — one box for either credential type ────── */}
       <div>
@@ -1662,24 +1779,40 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               spellCheck={false}
               autoComplete="off"
               data-invalid={error ? 'true' : 'false'}
+              ref={keyInputRef}
               className="natively-key-input w-full px-3.5 h-11 text-[13px] font-mono text-text-primary
                             placeholder:text-text-tertiary placeholder:font-sans"
             />
 
-            {/* Error */}
+            {/* Error. The row takes its space at once (the plans below FLIP
+                down) and its ink follows a BEAT later, like every arrival in
+                this tab; keyed on the message so a different one re-inks. */}
             {error && (
-              <div className="flex items-center gap-2 text-[12px] text-[var(--text-danger)]">
+              <motion.div
+                key={error}
+                className="flex items-center gap-2 text-[12px] text-[var(--text-danger)]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+              >
                 <AlertCircle size={13} className="shrink-0" />
                 {error}
-              </div>
+              </motion.div>
             )}
 
             {/* Not an error: the key is saved, Pro is still being activated. */}
             {!error && proNotice && (
-              <div className="flex items-start gap-2 text-[12px] text-[var(--text-secondary)]" role="status">
+              <motion.div
+                key={proNotice}
+                className="flex items-start gap-2 text-[12px] text-[var(--text-secondary)]"
+                role="status"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+              >
                 <AlertCircle size={13} className="shrink-0 mt-[2px]" />
                 {proNotice}
-              </div>
+              </motion.div>
             )}
 
             {/* Save / Activate button. The disabled state used to be a
@@ -1706,6 +1839,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                       : 'cursor-pointer'
               }`}
             >
+              <CtaLabel id={isSaving ? 'saving' : justSaved ? 'saved' : justActivatedPro ? 'pro' : 'activate'}>
               {isSaving ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 size={13} className="animate-spin" />
@@ -1724,6 +1858,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               ) : (
                 'Activate'
               )}
+              </CtaLabel>
             </button>
           </div>
         </Card>
@@ -1942,9 +2077,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 }
             }
           >
+            {/* hoverFill off, as on How it works below: the header answers the
+                pointer by brightening its chevron, not by filling the row. */}
             <AccordionSection
               title="Change plan"
               className="bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
+              hoverFill={false}
             >
               {PlansCard}
             </AccordionSection>

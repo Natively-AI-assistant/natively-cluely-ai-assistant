@@ -151,6 +151,21 @@ describe('EmbeddingPipeline.requeueMeetingForReindex — real method, scope + id
     const row = db.prepare("SELECT status FROM embedding_queue WHERE meeting_id='m1' AND chunk_id = ?").get(chunkId);
     assert.equal(row.status, 'pending', 'completed row replaced with a fresh pending row');
     const total = db.prepare("SELECT COUNT(*) c FROM embedding_queue WHERE meeting_id='m1'").get().c;
-    assert.equal(total, 2, 'one chunk + one summary, no duplicate');
+    // 2026-10-04: this meeting has no saved summary, so there is no summary to
+    // queue. The row used to be inserted unconditionally, found nothing, and
+    // was marked completed (see EmbeddingPipeline.enqueueSummaryRowIfNeeded).
+    assert.equal(total, 1, 'one chunk, no summary row for a meeting without a summary, no duplicate');
+  });
+
+  test('requeue queues the summary when the meeting has one', async () => {
+    const blob = Buffer.alloc(768 * 4);
+    db.prepare("INSERT INTO meetings (id, embedding_provider, embedding_dimensions, embedding_space) VALUES ('m1','gemini',768,?)").run(SPACE_V1);
+    db.prepare("INSERT INTO chunks (meeting_id, cleaned_text, embedding) VALUES ('m1','c0', ?)").run(blob);
+    db.prepare("INSERT INTO chunk_summaries (meeting_id, summary_text, embedding) VALUES ('m1','sum', ?)").run(blob);
+
+    await pipeline.requeueMeetingForReindex('m1');
+
+    const summaryRows = db.prepare("SELECT status FROM embedding_queue WHERE meeting_id='m1' AND chunk_id IS NULL").all();
+    assert.deepEqual(summaryRows.map(r => r.status), ['pending'], 'the cleared summary is queued once');
   });
 });

@@ -1,0 +1,286 @@
+{
+  "mode": "seminar",
+  "partition": "supp-behavior",
+  "contexts": [
+    {
+      "id": "SBSEM-CTX-C1",
+      "kind": "conflicting",
+      "title": "Pilot crossover study: bright light and amber lenses for night-shift nurses",
+      "file_name": "night_shift_light_pilot_paper.txt",
+      "text": "Timed bright light and amber lenses to shorten sleep onset after night shifts: a pilot crossover study in hospital nurses\nR. Achebe-Lindqvist, M. Tannenbaum, S. Oduro | Department of Occupational Health, Harwick University Hospital\n\nABSTRACT\nNight-shift nurses often struggle to fall asleep after a shift. We tested a combined intervention: bright light early in the shift and amber-tinted lenses on the commute home. In a crossover study of 148 nurses followed for 12 weeks, the intervention reduced sleep onset latency by 23 minutes compared with usual practice, measured by wrist actigraphy. No serious adverse events occurred. Timed light and lenses are a cheap, feasible way to improve daytime sleep after night work.\n\n1. INTRODUCTION\nNurses on night rotas sleep during the day against their circadian rhythm, and daytime sleep is typically shorter and slower to start. Bright light late in the night and on the morning commute suppresses melatonin just before the sleep period. Our intervention tries to move light exposure earlier in the shift and block short-wavelength light afterwards.\n\n2. METHODS\nParticipants. We enrolled 148 nurses working at least three night shifts per week on six inpatient units. Seven withdrew before the second period (four moved to a day rota, three gave no reason), so 141 were included in the analysis.\nDesign. Each nurse completed a 4-week intervention period and a 4-week usual-practice period in random order, separated by a 2-week washout. Outcomes were collected at week 10, after the second period ended; the protocol had planned a final assessment at week 12, but a unit rota change moved it earlier.\nIntervention. Ceiling light panels delivering 2,500 lux at eye level during the first 4 hours of the shift, and amber lenses worn from the end of the shift until bedtime.\nOutcomes. The primary outcome was sleep onset latency from sleep diaries completed each morning. Wrist actigraphy was worn by a subsample of 40 nurses as a secondary check.\nAnalysis. Mixed-effects model with period and sequence as fixed effects and nurse as a random effect.\n\n3. RESULTS\nDiary sleep onset latency averaged 19 minutes in intervention periods versus 51 minutes in usual-practice periods (mean difference 32 minutes, 95% CI 18 to 46). In the actigraphy subsample the difference was 11 minutes (95% CI -2 to 24). Lenses were worn on 78% of eligible shifts. Four nurses reported headaches during light periods; none stopped participating.\n\n4. DISCUSSION\nThe diary-based effect is large but self-reported. The actigraphy subsample showed a smaller difference whose interval includes zero, which may reflect limited power or reporting bias in diaries. Participants could not be blinded to the light panels. All six units were in one hospital, so results may not generalize.\n\n5. CONCLUSION\nA cheap, low-effort intervention shortened self-reported sleep onset after night shifts. A larger trial with objective sleep measurement is warranted.",
+      "notes": "Contradictions: abstract says 148 nurses (implying all analyzed) but methods analyzed 141 after 7 withdrawals; abstract says followed for 12 weeks but outcomes were collected at week 10 (4 + 2 + 4 weeks); abstract says a 23-minute reduction but results report a 32-minute mean difference (diaries); abstract says measured by wrist actigraphy but the primary outcome was sleep diaries and actigraphy was only a 40-nurse subsample showing 11 minutes with a CI crossing zero."
+    },
+    {
+      "id": "SBSEM-CTX-C2",
+      "kind": "conflicting",
+      "title": "Native forb mixes and bee visits on green roofs",
+      "file_name": "green_roof_bee_visits_paper.txt",
+      "text": "Native forb mixes increase bee visits on extensive green roofs: one summer across a mid-sized city\nL. Vasquez-Obi and T. Brannagh | Urban Ecology Lab, Cold Spring Polytechnic\n\nSUMMARY\nWe compared bee visitation on green roofs planted with a native sedum-and-forb mix against conventional sedum-only roofs. Across 18 roofs surveyed from June to August, visits were 41% higher on native-mix roofs. Native mixes are a low-cost upgrade for cities already funding green roofs.\n\nSTUDY SITES\nSedum-only roofs were chosen as the comparison because they make up most roofs built under the city's retrofit incentive program since 2019. We recruited 18 roofs (9 native-mix, 9 sedum-only) matched on height and area. Two sedum-only roofs were dropped after building managers withdrew access in the first week, leaving 16 roofs in all analyses.\n\nSURVEYS\nEach roof was surveyed on 12 dates between May 20 and July 29. On each date an observer did three 15-minute watches on a fixed 4 m2 plot, recording every bee that landed on a flower. Bees were identified to group: honeybees, bumblebees, and solitary bees. Surveys ran only between 10:00 and 15:00 on days above 17 C with wind below 20 km/h.\n\nRESULTS\nTotal visits per watch were 14% higher on native-mix roofs (rate ratio 1.14, 95% CI 0.97 to 1.34). The difference was driven by solitary bees, whose visits were 41% higher on native-mix roofs (rate ratio 1.41, 95% CI 1.12 to 1.77). Honeybee visits did not differ between roof types. Bumblebees were too rare to analyze (fewer than 30 records in total).\n\nLIMITATIONS\nOne summer, one city. Roofs were not randomly assigned to planting type. Observers knew which roof type they were on. We counted visits, not pollination success, and we did not measure anything about colonies or nests.\n\nCONCLUSION\nNative mixes may help solitary bees on urban roofs. Whether overall visitation rises meaningfully needs multi-year data.",
+      "notes": "Contradictions: summary says 18 roofs but 2 were dropped and 16 were analyzed; summary says surveys ran June to August but the survey dates were May 20 to July 29; summary says overall visits were 41% higher but total visits were only 14% higher with a CI crossing 1, and 41% applies to solitary bees only; summary conclusion (native mixes as an upgrade) is stronger than the paper conclusion (needs multi-year data)."
+    },
+    {
+      "id": "SBSEM-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Seminar series room and AV notes",
+      "file_name": "seminar_series_room_av_notes.txt",
+      "text": "GRADUATE SEMINAR SERIES - ROOM AND AV NOTES (Autumn term)\n\nRoom: Hollins 214. Seats 40; the back row has no power outlets.\nProjector: HDMI only. USB-C adapters are in the drawer under the lectern; please return them.\nMicrophone: lapel mic for the speaker, one handheld for questions. Batteries are in the blue box. Pass the handheld to anyone asking a question so the remote audience can hear.\nRemote audience: the room camera starts automatically when the lectern PC is switched on. Recordings are kept for 30 days.\nTiming: 35 minutes of talk, 15 minutes of questions, hard stop at 4:50 because the room is booked afterwards.\nSnacks: the department covers coffee and one plate of pastries. Take-out boxes go in the green bin.\nSpeakers: send slides to Maren by noon on the day of the talk, as PDF if you use unusual fonts.\nIf the fire alarm goes off, exit via the east stairwell, not the lift.",
+      "notes": null
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SBSEM-001",
+      "category": "methodology",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Your abstract says a hundred and forty-eight nurses. Is that how many you actually analyzed?",
+      "context_condition": "conflicting",
+      "context_ref": "SBSEM-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "abstract_body_mismatch",
+        "sample_size"
+      ],
+      "expected_answer_type": "presenter's answer reconciling abstract and methods",
+      "claim_trap": "research_claim",
+      "needles": [
+        "141",
+        "Seven withdrew"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-002",
+      "category": "results",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "So what's the headline effect on sleep onset, in minutes, and at what point in the study was that measured?",
+      "context_condition": "conflicting",
+      "context_ref": "SBSEM-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "abstract_body_mismatch",
+        "time_point",
+        "ambiguous"
+      ],
+      "expected_answer_type": "presenter's answer that resolves the effect and timing mismatch",
+      "claim_trap": "research_claim",
+      "needles": [
+        "23 minutes",
+        "32 minutes",
+        "week 10"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-003",
+      "category": "presenter_defense",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Two things. You measured sleep onset with wrist actigraphy, right, so how did you handle nights when people just took the watch off? And second, given that, how confident are you really in the size of the effect?",
+      "context_condition": "conflicting",
+      "context_ref": "SBSEM-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "abstract_body_mismatch",
+        "measurement",
+        "false_premise",
+        "adversarial",
+        "multi_part"
+      ],
+      "expected_answer_type": "presenter's defense that corrects the premise from the methods",
+      "claim_trap": "research_claim",
+      "needles": [
+        "sleep diaries",
+        "subsample of 40",
+        "11 minutes"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-004",
+      "category": "supported_direct",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What light level did the panels actually put out, and for how long each shift?",
+      "context_condition": "grounded",
+      "context_ref": "SBSEM-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "supported"
+      ],
+      "expected_answer_type": "presenter's short factual answer from the methods",
+      "claim_trap": "none",
+      "needles": [
+        "2,500 lux",
+        "first 4 hours"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-005",
+      "category": "partial_unsupported",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Did it work as well for the older nurses? Say, over fifty?",
+      "context_condition": "grounded",
+      "context_ref": "SBSEM-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "not_in_material",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "presenter's honest answer that the analysis does not cover this",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-006",
+      "category": "why_method",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Why compare against sedum-only roofs specifically? Why not bare roofs?",
+      "context_condition": "grounded",
+      "context_ref": "SBSEM-CTX-C2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "supported"
+      ],
+      "expected_answer_type": "presenter's rationale drawn from the study-sites section",
+      "claim_trap": "none",
+      "needles": [
+        "retrofit incentive program"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-007",
+      "category": "hallucination_bait",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And the extra foraging, did that help the honeybee colonies nearby? Like hive weight, overwinter survival, that kind of thing?",
+      "context_condition": "grounded",
+      "context_ref": "SBSEM-CTX-C2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "not_in_material",
+        "hallucination_bait",
+        "adversarial"
+      ],
+      "expected_answer_type": "presenter's answer stating the limit of the data",
+      "claim_trap": "research_claim",
+      "needles": [
+        "did not measure anything about colonies"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-008",
+      "category": "explanation",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Just so everyone's on the same page, what's the difference between a pilot study and a full trial?",
+      "context_condition": "irrelevant",
+      "context_ref": "SBSEM-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "irrelevant_doc"
+      ],
+      "expected_answer_type": "plain spoken explanation from general knowledge",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-009",
+      "category": "results",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Your summary says visits were forty-one percent higher on the native roofs. That's the main finding, yes?",
+      "context_condition": "conflicting",
+      "context_ref": "SBSEM-CTX-C2",
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "abstract_body_mismatch"
+      ],
+      "expected_answer_type": "presenter's answer that corrects the headline figure",
+      "claim_trap": "research_claim",
+      "needles": [
+        "14% higher",
+        "solitary bees"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBSEM-010",
+      "category": "follow_up",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "So which number's right?",
+      "context_condition": "conflicting",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "doc_conflicting",
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "presenter's short, direct resolution of the two figures",
+      "claim_trap": "research_claim",
+      "needles": [
+        "rate ratio 1.14",
+        "rate ratio 1.41"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

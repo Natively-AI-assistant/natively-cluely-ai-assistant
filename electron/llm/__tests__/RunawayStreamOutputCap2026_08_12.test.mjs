@@ -56,12 +56,14 @@ describe('the runaway cap is sized off measured answers', () => {
     );
   });
 
-  test('it is below the observed runaway', () => {
-    // The whole point: this exact capture must be caught.
-    assert.ok(
-      MAX_STREAM_OUTPUT_CHARS < RUNAWAY_CHARS,
-      `cap ${MAX_STREAM_OUTPUT_CHARS} would NOT have caught the observed ${RUNAWAY_CHARS}-char runaway`,
-    );
+  test('it still bounds a runaway, and a loop is stopped by its repetition first', () => {
+    // 2026-10-04: the cap went 16000 → 48000 (a legitimate 900-line list was cut
+    // mid-line). A looping answer is now ended by repetitionGuard.ts after a few
+    // repeats (RepetitionLoopStop2026_10_04.test.mjs); the cap stays a bound —
+    // within ~2x the observed ${RUNAWAY_CHARS}-char runaway — for a runaway that
+    // never repeats exactly.
+    assert.ok(MAX_STREAM_OUTPUT_CHARS <= RUNAWAY_CHARS * 2.2, `cap ${MAX_STREAM_OUTPUT_CHARS} is no longer a bound`);
+    assert.match(src, /new RepetitionGuard\(\)/, 'the stream path runs the repetition guard');
   });
 
   test('it leaves room for a long six-section coding answer', () => {

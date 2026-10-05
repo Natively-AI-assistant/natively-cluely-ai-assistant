@@ -127,7 +127,7 @@ function helper() {
     onModelError: async () => {},
   };
   h.isCodexAvailable = () => false;
-  h.codexCliConfig = { path: '/nonexistent/codex', model: 'm', fastModel: 'fm', timeoutMs: 1000 };
+  h.codexCliConfig = { path: '/nonexistent/codex', model: 'm', timeoutMs: 1000 };
   h.customProvider = null;
   h.activeCurlProvider = null;
 
@@ -579,6 +579,9 @@ describe('DEFECT 4 — the availability probe no longer reassigns the user model
     h.ollamaUrl = 'http://127.0.0.1:11434';
     h.ollamaModel = selected;
     h.getOllamaModels = async () => models;
+    // The vision check asks the resolver since 2026-10-01 (any installed model
+    // that reads images, not the selected model's name); it keeps a cache.
+    h.ollamaVisionCache = new Map();
     return h;
   };
   beforeEach(() => { globalThis.fetch = async () => ({ ok: true }); });

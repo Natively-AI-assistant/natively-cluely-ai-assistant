@@ -1,0 +1,277 @@
+{
+ "batch": "b014-recruiting",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FREC-CTX-G2": {
+   "title": "Loop debrief: Tobias Wren-Adeyemi",
+   "text": "LOOP DEBRIEF - Tobias Wren-Adeyemi\nReq QH-0417, Staff Data Engineer, Claims Analytics\nCompiled by the recruiting coordinator for the hiring manager, September 26.\n\nBackground (from resume)\n- Meridell Insurance, Senior Data Engineer, 2019 - present. Led the migration of a 1.2B-row claims warehouse from on-prem Teradata to Snowflake. Built a dbt project of about 400 models. Introduced row-level data quality checks that cut downstream report corrections by roughly half.\n- Parbrook Clinics, Data Engineer, 2016 - 2019. Built scheduling and billing extracts for 14 clinic locations.\n- BS Statistics, Lindqvist College.\n\nStated at recruiter screen\n- Current base $212,000; asking $235,000 base.\n- Notice period: 4 weeks.\n- Located in Denver, CO.\n- Reason for leaving Meridell: his team moved under a new VP after a reorg, and the roadmap shifted toward vendor tooling.\n- Authorized to work in the US, no sponsorship needed.\n\nScores (1 to 4 scale)\nSQL and data modeling (Kavya Moreno): 3/4. Strong window functions and a clean star schema. Missed a slowly changing dimension edge case until prompted.\nPipeline design (Idris Halloway): 2/4. Good orchestration instincts, but did not account for late-arriving claims until the last five minutes; the proposal as drawn would have double-counted adjusted claims. Interviewer note: \"Would need to see this area improve for Staff.\"\nStakeholder panel (claims operations and actuarial): 4/4. Excellent at translating technical tradeoffs; the actuarial lead called him \"the best explainer we have seen this year.\"\nValues and collaboration (Renata Solberg): 3/4. Collaborative and generous with credit; somewhat vague when asked about disagreeing with leadership.\n\nOpen items\n- Manager scope: resume says \"led a team of 4,\" but his Meridell reference said he had no direct reports and led through influence.\n- References: one completed (Meridell peer, positive). Second reference, his former Parbrook manager, has not yet been contacted.\n- Competing offer: he mentioned one but did not name the company or the amount.\n\nCoordinator note\nSplit loop. Two interviewers lean hire, one leans no hire (pipeline design). Renata to decide between moving to offer and scheduling an additional pipeline design session. If an extra session is scheduled, Idris has offered to run it with a different prompt focused on claim adjustments and reprocessing, so the candidate is not simply repeating the same exercise. The candidate has said he is available for a follow-up session any weekday morning next week."
+  },
+  "RECRUITING-CTX-G1": {
+   "title": "Candidate resume and open role packet (Teverbaugh, Senior Engineering Manager)",
+   "text": "CANDIDATE RESUME AND OPEN ROLE PACKET\n\nPART 1 - CANDIDATE RESUME\nMarisol Teverbaugh\nCalder Falls, OR\n\nSummary\nEngineering leader with eleven years in backend and platform engineering. Currently manages a platform team of seven engineers at Ostrander Labs.\n\nExperience\nOstrander Labs - Engineering Manager, Platform (Dec 2022 to present)\n- Manage seven direct reports; run weekly one-on-ones and quarterly planning.\n- Built the company's first on-call rotation and incident review process; production incidents down 41 percent over two years.\n- Hired four engineers, two of whom have since been promoted to senior.\n- Worked with finance on cloud cost reviews; monthly infrastructure spend down 22 percent.\n\nTallowick Payments - Tech Lead, Ledger Team (Sep 2021 to Nov 2022, 14 months)\n- Led five engineers rebuilding the ledger reconciliation service in Go, Kafka and PostgreSQL.\n- Daily batch reconciliation failures fell from 38 percent to 9 percent.\n- Role ended when a reorganization closed the ledger product line.\n\nCareer break (Mar 2021 to Aug 2021)\n- Full-time family caregiving.\n\nCorvane Logistics Tech - Software Engineer, then Senior Software Engineer (Nov 2017 to Feb 2021)\n- Promoted to Senior in January 2019.\n- Led the migration of the route-dispatch service from a monolith into four services with a team of four engineers; p95 dispatch latency fell from 900 ms to 310 ms.\n- Ran the on-call rotation for the dispatch services for two years.\n\nBrindlemoor Software - Software Engineer (Jun 2015 to Oct 2017)\n- Built customer-facing reporting features in Kotlin and PostgreSQL.\n\nEducation\nBSc Computer Science, Ferncliff University, 2015\n\nSkills\nGo, Kotlin, PostgreSQL, Kafka, Kubernetes, incident management, hiring, budget planning\n\nApplication form answers\nCurrent base salary: 148,000 USD\nTarget base salary: 165,000 to 175,000 USD\nNotice period: six weeks\nEarliest start: mid-November 2026\nReason for leaving current role, in her words: \"Looking for a larger platform scope.\"\n\nPART 2 - OPEN ROLE\nSenior Engineering Manager, Platform - Quillfeather Systems\nLocation: Calder Falls, OR, hybrid with two office days per week\nBase salary band: 160,000 to 185,000 USD plus annual bonus\nReports to: Halvard Ketterly, VP Engineering\n\nThe team\nThe Platform group has nine engineers and two contractors. It owns the internal deploy pipeline, the message bus, and the on-call tooling used by every product team. Two engineering roles on the team are currently open.\n\nResponsibilities\n- Lead and grow the Platform group, including hiring for the two open roles.\n- Own the platform on-call rotation and post-incident reviews.\n- Partner with finance on infrastructure budget.\n- Set the quarterly roadmap with product engineering leads.\n\nRequirements\n- 8 or more years of software engineering experience.\n- 3 or more years managing engineers.\n- Hands-on background in distributed systems built on a message bus.\n- Track record of hiring and developing engineers.\nNice to have: cloud cost management experience.\n\nHiring process\nRecruiter screen (30 minutes), hiring manager conversation, technical deep dive with two staff engineers, panel interview, reference checks. The team hopes to have the role filled within eight weeks of the offer."
+  },
+  "FREC-CTX-G1": {
+   "title": "Quillfen Health recruiter brief: Staff Data Engineer, Claims Analytics",
+   "text": "QUILLFEN HEALTH - RECRUITER BRIEF\nReq QH-0417: Staff Data Engineer, Claims Analytics\nOwner: Talent Acquisition. Version 3, updated September 8.\n\nCompany snapshot\nQuillfen Health sells claims analytics and payment-integrity software to regional health plans. About 640 employees, headquartered in Minneapolis. Profitable since last year; no funding round is planned. Data Platform is a 30-person organization under Director of Data Platform Renata Solberg.\n\nThe team\nClaims Analytics Engineering is 5 data engineers and 2 analytics engineers. The Staff hire reports directly to Renata Solberg and acts as technical lead for the claims warehouse. Stack: Snowflake, dbt, Airflow, Python, some Scala Spark jobs that are being retired, and Terraform on AWS. Data volume is roughly 1.8 billion claim lines, growing about 20% a year.\n\nLevel and compensation\nLevel: Staff (IC6). Base salary band: $205,000 to $238,000. Target annual bonus: 10% of base, paid in February based on company and individual performance. Equity: RSUs with a 4-year vest; amounts are discussed only at offer stage. Recruiters should not quote an equity number.\n\nLocation\nRemote within the United States, but only in these states: WA, OR, CA, CO, TX, NY, MA, IL. We are not hiring in other states for this req because of payroll registration. Candidates in other states would need to move to one of the listed states before the start date. Two onsite weeks per year in Minneapolis (planning weeks in January and July); travel is paid.\n\nWork authorization\nThis req cannot provide any visa sponsorship, including transfers. Candidates must be authorized to work in the US without sponsorship now and in the future.\n\nOn-call\nBusiness-hours on-call only, one week in six. No overnight paging; failed overnight loads are handled the next morning.\n\nInterview process\n1. Recruiter screen (30 min)\n2. Hiring manager screen with Renata (45 min)\n3. Loop, split across two days:\n   - SQL and data modeling, live (75 min)\n   - Pipeline design (60 min)\n   - Stakeholder panel with claims operations and actuarial (45 min)\n   - Values and collaboration (30 min)\nHiring decision within one week of the final loop session.\n\nStart date\nStart within 6 weeks of offer acceptance. Exceptions need Renata's written approval.\n\nCompliance\nAll hires complete a background check before start and HIPAA training within 30 days of start. Access to PHI is granted only after training is complete.\n\nTime off and perks\nFlexible PTO with a 15-day minimum that managers are expected to enforce. Medical, dental and vision coverage. Learning stipend of $2,000 per year. Home-office setup stipend of $750 in the first month.\n\nWhat success looks like in year one\n- Own the claims warehouse data model and cut the nightly build from about 7 hours to under 3.\n- Replace the legacy Spark jobs with dbt models.\n- Establish data contracts with the ingestion team for late-arriving claims and adjustments.\n\nMust-haves\nDeep SQL and dimensional modeling, production experience with Snowflake or a comparable warehouse, handling late-arriving and restated data, and the ability to explain tradeoffs to non-engineers.\n\nNice to have\nHealthcare claims experience (837 and 835 formats), actuarial partnerships, dbt at scale."
+  }
+ },
+ "items": [
+  {
+   "jid": "09fa42fb4b47",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "How do I check team fit without just hiring people who are like me?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The trap is hiring for sameness and calling it fit. So I'd define fit as the specific gaps on the team, not personality overlap, and score every candidate against the same few criteria. Then I'd deliberately keep at least one person in the loop who thinks differently from me, and weigh their read heavily."
+  },
+  {
+   "jid": "b118c28ef918",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Renata's asking why he left Parbrook Clinics. What did he tell us?",
+   "conversation": [],
+   "evidence_ids": [
+    "FREC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The debrief doesn't record a Parbrook reason. The only stated reason for leaving is about Meridell: his team moved under a new VP after a reorg and the roadmap shifted toward vendor tooling. So ask him directly: \"What prompted you to leave Parbrook in 2019, and what did you want next that Parbrook couldn't offer?\""
+  },
+  {
+   "jid": "fbed17d5b65c",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "I mean, I was involved in most of the decisions, pretty much.",
+   "conversation": [
+    "CANDIDATE (heard): So I mostly worked on, um, product stuff. Across the board, really.",
+    "NATIVELY: That's broad, so let's narrow it. Ask: \"Pick one product you owned end to end. What was the problem, what did you decide, and what changed as a result?\" Then push on their specific role versus the team's.",
+    "CANDIDATE (heard): It was a good team. We shipped a lot of things and, you know, people were happy.",
+    "NATIVELY: They've answered twice at team level, so make it personal: \"That's the team's story. What did you personally decide on that product that you'd defend if someone pushed back?\" Then stay quiet and let them name one decision, one tradeoff, and what it changed."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the third team-level answer, so name the pattern and pin them to one instance: \"Involved is the word I keep hearing. Give me one decision where you were the one who chose, and tell me what you'd have done differently if you'd chosen wrong.\" Then stay quiet and let them fill the silence."
+  },
+  {
+   "jid": "bee51c1efd88",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "So at Corvane I basically rebuilt the routing service, and that's what got me promoted to senior.",
+   "conversation": [
+    "USER (spoken): Walk me through your time at Corvane.",
+    "CANDIDATE: Sure. I joined as an engineer around late 2017 and stayed until early 2021.",
+    "USER (spoken): And what did you own there?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a strong headline, but there's no detail behind it yet. Ask: \"What was wrong with the routing service before, and what did you actually change?\" Then follow with \"How did you know it worked?\" to get a metric or outcome."
+  },
+  {
+   "jid": "af8c6a8d5783",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Yes, I know Tallowick was short. Fourteen months, and I'd say I did what I went in to do.",
+   "conversation": [],
+   "evidence_ids": [
+    "RECRUITING-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's a clean close on the tenure question, so don't re-litigate it. The gap to probe is scope: she led five engineers at Tallowick and now manages seven, but this role runs nine engineers plus two contractors and owns the deploy pipeline, message bus, and on-call tooling. Ask: \"You went from leading five engineers to managing seven. This group is nine engineers plus two contractors, and it owns the deploy pipeline and the message bus across every product team. What's the largest team and the broadest surface you've actually owned, and how would you scale your approach to this one?\""
+  },
+  {
+   "jid": "bd92d031283c",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "It's all on the resume, honestly. I don't really want to repeat everything.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair enough. Then let's make it concrete: \"That's fine, I won't walk through the whole thing. Pick one project you're proudest of and tell me what you personally owned, what the hard part was, and how it turned out.\""
+  },
+  {
+   "jid": "af056bd06cdc",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "I kept the resume short on purpose, so a lot of what I did isn't on there.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's fair, and it's a common choice. What I'd like to do is go deeper on a couple of things the resume only hints at, so I can get the full picture. Pick the accomplishment you're proudest of and walk me through it in detail, including what you personally owned and what the outcome was."
+  },
+  {
+   "jid": "cf6e1b0de1b6",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "What's the parental leave policy? My partner and I are expecting in the spring, so that matters a lot for me.",
+   "conversation": [],
+   "evidence_ids": [
+    "FREC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The brief doesn't cover parental leave, so don't guess at it. Say: \"That's not something I have in front of me, and I don't want to give you a number I'm not sure of. I'll get the exact parental leave policy from HR and send it to you today, along with the rest of the benefits details.\" Then actually confirm it before your next call with them, since this is a real deciding factor for them."
+  },
+  {
+   "jid": "852911852165",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "How would you handle this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a broad one, so I'd want to pin down which situation they mean before answering. The natural probe: \"Happy to walk through it, but which piece do you want me to focus on, the approach itself or how I'd handle a specific case?\" Then let them narrow it, and answer that."
+  },
+  {
+   "jid": "d31299c93f12",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Well, twelve if you count contractors, and some of them are dotted-line.",
+   "conversation": [
+    "CANDIDATE (heard): At Ostrander I manage about twelve engineers, so it is a pretty big org.",
+    "NATIVELY: That's a discrepancy worth probing: the résumé says seven direct reports at Ostrander Labs, not twelve. Ask: \"You mentioned twelve engineers. Can you walk me through how the team is structured, and where the seven direct reports sit within that?\""
+   ],
+   "evidence_ids": [
+    "RECRUITING-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's a clean answer, but it doesn't tell you whether the seven direct reports are the core team or a subset. Ask: \"So of the twelve, how many report to you directly versus through a lead, and who owns their performance reviews and one-on-ones?\""
+  },
+  {
+   "jid": "b7a6d62a36d4",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Honestly, that's below what I was hoping for.",
+   "conversation": [
+    "CANDIDATE (heard): What's the salary range for this role?",
+    "NATIVELY: I don't have a confirmed range for this role yet, so I don't want to give you a number I can't stand behind. Let me check with the hiring team on the band and get back to you with the actual range.",
+    "CANDIDATE (heard): Is that base or total comp?",
+    "NATIVELY: I'll confirm both the base and the total comp figure when I get the band, so you'll see the split rather than one number."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's fair, and I'd rather get you a real number than a placeholder. I'm checking with the hiring team on the band now, and I'll come back with the base and total comp split. If it lands short of what you need, tell me the number you're working toward and I'll see what's possible."
+  },
+  {
+   "jid": "dc0d5bf02f13",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "So I mostly worked on, um, product stuff. Across the board, really.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's broad, so let's narrow it. Ask: \"Pick one product you owned end to end. What was the problem, what did you decide, and what changed as a result?\" Then push on their specific role versus the team's."
+  },
+  {
+   "jid": "cc4f044e74f4",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Red flag or fine?",
+   "conversation": [
+    "USER (spoken): Tell me about the last big launch you ran.",
+    "CANDIDATE: It went perfectly. Zero issues, everyone loved it.",
+    "USER (typed to Natively): What would you do differently?",
+    "NATIVELY: The candidate's answer is all outcome and no detail, so press for the specifics behind \"perfectly.\" Ask: \"Walk me through one thing that went wrong or nearly did, and what you did about it.\" If they still can't name a single snag, that's a signal they either weren't close to the execution or aren't reflecting honestly."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "One vague answer isn't a red flag yet, but the pattern matters more than the single reply. Ask: \"Tell me about a time something you owned broke or slipped. What did you do first?\" If they still can't name a specific failure or their own part in it, that's a real signal."
+  },
+  {
+   "jid": "f4036e0eede7",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "I like working with people who don't need a lot of process. Meetings drive me up the wall, honestly. I'd rather get the work done and check in when there's something real to talk about. At my last place we had standups, planning, retro, and a weekly sync, and I basically stopped going to half of them.",
+   "conversation": [
+    "USER (spoken): By the way, the office is getting a new coffee machine next month.",
+    "CANDIDATE: Oh nice, that's good to know."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a fair signal to test, because the risk is real: someone who skips process can also skip the coordination that keeps a team unblocked. Ask: \"When you dropped those meetings, how did you make sure the people depending on your work still had what they needed?\" Then listen for whether they replaced the meetings with something deliberate or just stopped showing up."
+  },
+  {
+   "jid": "2c9d4d76a9ea",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "What should I say?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd ask them to walk me through one decision they owned end to end, then push on the tradeoffs they weighed and what they'd do differently. What I'm listening for is whether they can separate their own contribution from the team's, and whether they name a real cost or mistake rather than a tidy success story. If the answer stays general, ask for the specific moment they had to choose."
+  },
+  {
+   "jid": "77cd4f1caa64",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Can you clarify what you mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ask: \"Sure, take me back to the specific example you just gave and walk me through what you actually did, step by step.\""
+  },
+  {
+   "jid": "ac71a1bcc53b",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "I'm not technical. How do I tell whether she actually knows Kubernetes or is just name-dropping it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ask her to walk you through one real incident: what broke, how she found it, and what she changed. Then ask what she'd check first if a pod kept restarting. Someone who's actually run Kubernetes answers in specifics and admits what they had to look up. Someone name-dropping stays vague and circles back to the buzzwords."
+  },
+  {
+   "jid": "4deff0ee17b6",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "What am I missing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The question is too open to answer directly, so the useful move is to name what you'd want covered before you decide. Ask the candidate: \"Walk me through the last decision you owned end to end, what you weighed, and what you'd do differently.\" Then probe for the one thing most answers skip: what they personally did versus what the team did."
+  },
+  {
+   "jid": "b1ee5d1285e1",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "A friend forwarded it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a thin answer, so get the source before you go further. Ask: \"Got it, so this came to you secondhand. Who originally wrote it, and do you know what they were responding to?\" Then have them walk you through the actual content in their own words rather than the summary they were handed."
+  },
+  {
+   "jid": "b4cf2605a984",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "What should I say to them?",
+   "conversation": [
+    "CANDIDATE: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "CANDIDATE: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ask them what the new date actually depends on: \"When you say two weeks, is that the vendor's fix, or our rework after it lands?\" Then pin the next checkpoint: \"What's the earliest you'll know if that holds?\" That separates a real estimate from a guess before you commit to anything downstream."
+  }
+ ]
+}

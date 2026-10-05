@@ -207,6 +207,51 @@ export function appendTurn(
     .slice(-MAX_HISTORY_TURNS);
 }
 
+/** The screen text as a turn stores it: trimmed, capped, marked when cut. */
+function capScreen(screen: unknown): string {
+  const raw = String(screen ?? '').trim();
+  return raw.length > MAX_TURN_SCREEN_CHARS ? raw.slice(0, MAX_TURN_SCREEN_CHARS) + SCREEN_TRUNCATION_MARKER : raw;
+}
+
+/**
+ * Fill in the screen text of a turn that is ALREADY recorded (2026-10-01).
+ *
+ * The live writer records the answer the moment it exists and attaches the
+ * screen's text when its transcription arrives, which for a local model can be
+ * tens of seconds later. Which turn:
+ *   • a writer that HAS the turn it recorded passes it as `opts.turn`: that
+ *     turn or none. When it is no longer in the ring (evicted, or the session
+ *     was cleared while a 45-second local record was still being written) the
+ *     text is dropped — a waiting turn with the same answer is then a
+ *     DIFFERENT turn, and filling it would also stop that turn's own text from
+ *     ever attaching. `null` means the writer's turn was never recorded.
+ *   • a writer WITHOUT the turn (`opts.turn` undefined): the newest turn with
+ *     that answer that is still WAITING, i.e. whose screen is
+ *     `opts.placeholder` (what the writer recorded in its place).
+ * Matching on the answer alone put a first turn's screen on a later turn that
+ * happened to give the same answer and never had a screenshot.
+ */
+export function withTurnScreen(
+  turns: readonly HistoryTurn[], a: string, screen: string,
+  opts: { turn?: HistoryTurn | null; placeholder?: string } = {},
+): HistoryTurn[] | null {
+  const answer = String(a ?? '').slice(0, MAX_TURN_ANSWER_CHARS);
+  const shot = capScreen(screen);
+  if (!shot) return null;
+  let at = opts.turn ? turns.indexOf(opts.turn) : -1;
+  if (opts.turn === undefined) {
+    if (!answer.trim()) return null;
+    const waiting = opts.placeholder === undefined ? undefined : capScreen(opts.placeholder);
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].a === answer && (waiting === undefined || (turns[i].screen ?? '') === waiting)) { at = i; break; }
+    }
+  }
+  if (at < 0) return null;
+  const next = [...turns];
+  next[at] = { ...next[at], screen: shot };
+  return next;
+}
+
 const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'has', 'was',
   'were', 'you', 'your', 'our', 'their', 'about', 'what', 'how', 'why', 'when', 'did', 'does',
   'can', 'could', 'would', 'should', 'they', 'them', 'been', 'into', 'more', 'than', 'then']);

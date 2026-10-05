@@ -418,6 +418,10 @@ export class CropperWindowHelper {
         this.isWaitingForSelection = false;
     }
 
+    public getCropperWindow(): BrowserWindow | null {
+        return this.cropperWindow
+    }
+
     /**
      * Updates the content protection state.
      * When enabled, the cropper UI becomes invisible to screen sharing/recording.

@@ -54,6 +54,9 @@ const api = (): Api | undefined => (typeof window !== 'undefined' ? (window as a
 const MEMORY_BUDGET_BYTES = 64 * 1024 * 1024;
 const store = new Map<string, GenieSnapshot>();
 let warmed: Promise<void> | null = null;
+// Bumped by releaseGenieSnapshots: a warm-up or capture that started before
+// it must not put its picture back.
+let generation = 0;
 
 const bytesOf = (snap: GenieSnapshot) => snap.bitmap.width * snap.bitmap.height * 4;
 
@@ -116,9 +119,11 @@ function remember(key: string, snap: GenieSnapshot): void {
  */
 export function warmGenieSnapshots(): Promise<void> {
   if (warmed) return warmed;
+  const gen = generation;
   warmed = new Promise<void>(resolve => {
     const run = async () => {
       const a = api();
+      if (gen !== generation) { resolve(); return; }
       try {
         const env = `|${environment()}`;
         // Listed oldest first (electron/genieSnapshots.ts).
@@ -132,13 +137,14 @@ export function warmGenieSnapshots(): Promise<void> {
           keys.unshift(listed[i]);
         }
         for (const key of keys) {
+          if (gen !== generation) break;
           if (store.has(key)) continue;
           const png = await a?.genieSnapshotLoad?.(key);
           const size = /\|(\d+)x(\d+)\|/.exec(key);
           if (!png || !size) continue;
           const snap = await toSnapshot(png, Number(size[1]), Number(size[2]));
           // A capture taken meanwhile is newer: it stays.
-          if (snap && !store.has(key)) remember(key, snap);
+          if (snap && gen === generation && !store.has(key)) remember(key, snap);
         }
       } catch { /* the cards fall back to the live-copy genie */ }
       resolve();
@@ -147,6 +153,19 @@ export function warmGenieSnapshots(): Promise<void> {
     if (ric) ric(() => { void run(); }, { timeout: 2000 }); else setTimeout(() => { void run(); }, 300);
   });
   return warmed;
+}
+
+/**
+ * Drop every decoded picture: the genie is off (Settings → Advanced, or the OS
+ * asks for reduced motion) and would never draw one. They stay on disk, and a
+ * later warmGenieSnapshots decodes them again. Not closed here: a card that
+ * started its genie before the switch may still be drawing one, so they are
+ * left to the garbage collector.
+ */
+export function releaseGenieSnapshots(): void {
+  generation++;
+  store.clear();
+  warmed = null;
 }
 
 /** The kept picture for a key, if there is one and it is decoded. */
@@ -226,6 +245,7 @@ function isUncovered(card: HTMLElement): boolean {
 export async function captureGenieSnapshot(card: HTMLElement, key: string | null): Promise<GenieSnapshot | null> {
   const capture = api()?.genieSnapshotCapture;
   if (!capture || document.visibilityState !== 'visible') return null;
+  const gen = generation;
   const r = card.getBoundingClientRect();
   if (r.width < 8 || r.height < 8) return null;
   let shot: Awaited<ReturnType<typeof capture>>;
@@ -234,6 +254,8 @@ export async function captureGenieSnapshot(card: HTMLElement, key: string | null
   const snap = await toSnapshot(shot.png, r.width, r.height);
   if (!snap) return null;
   if (!key) return { ...snap, transient: true };
+  // Released meanwhile: this close can still use it, but it is not kept.
+  if (gen !== generation) return { ...snap, transient: true };
   remember(key, snap);
   void api()?.genieSnapshotSave?.(key, shot.png)?.catch?.(() => {});
   return snap;

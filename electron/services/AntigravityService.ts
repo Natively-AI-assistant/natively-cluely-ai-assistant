@@ -12,6 +12,7 @@ import * as crypto from 'crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { shell } from 'electron';
 import type { CredentialsManager } from './CredentialsManager';
+import { describeOAuthError, renderOAuthCallbackPage } from './oauth/callbackPage';
 
 export const ANTIGRAVITY_CLIENT_ID =
   '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com';
@@ -420,8 +421,16 @@ function startCallbackServer(expectedState: string): CallbackServer {
       response.end('Invalid callback state');
       return;
     }
-    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    response.end('<!doctype html><title>Natively</title><p>You can close this tab and return to Natively.</p>');
+    const oauthError = url.searchParams.get('error');
+    const page = renderOAuthCallbackPage(
+      'antigravity',
+      oauthError || !url.searchParams.get('code')
+        ? { kind: 'error', reason: describeOAuthError(oauthError, url.searchParams.get('error_description')) }
+        : { kind: 'returned' },
+      process.platform,
+    );
+    response.writeHead(200, page.headers);
+    response.end(page.body);
     if (settled) return;
     settled = true;
     resolveCallback({

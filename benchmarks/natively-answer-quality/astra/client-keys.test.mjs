@@ -1,0 +1,205 @@
+// The judge client with two AgentRouter keys: a key that reports its quota spent hands over to the other one, and
+// new calls stop only when both have said so. Offline: a copy of client.mjs in a temp directory (so the real
+// probe-result.json and the real env file are never read), made-up keys, and a stubbed fetch.
+//   node --test astra/client-keys.test.mjs
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const KEY_A = 'made-up-key-AAAA-1111';
+const KEY_B = 'made-up-key-BBBB-2222';
+const QUOTA_403 = { status: 403, body: { error: { message: 'user quota is not enough (request id: x)', code: 'insufficient_user_quota' } } };
+const POOL_402 = { status: 402, body: { error: { message: 'Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool.' } } };
+const OK_200 = { status: 200, body: { id: 'r1', model: 'gpt-6-astra', choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], usage: { total_tokens: 3 } } };
+
+// The line queue3.mjs watches for to stop starting new steps, taken from its source so the two cannot drift.
+const queueSource = fs.readFileSync(path.join(HERE, 'queue3.mjs'), 'utf8');
+const stopLiteral = queueSource.match(/if \(\/(.+?)\/\.test\(s\)\) rationed = true/);
+assert.ok(stopLiteral, 'queue3.mjs still stops on a regex over the step output');
+const QUEUE_STOP = new RegExp(stopLiteral[1]);
+
+let seq = 0;
+/** A fresh client (its own module state) over the given keys, probe record and per-key answers. */
+async function client({ keys = { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY_1: KEY_B }, probeKeyVar = 'AGENTROUTER_API_KEY', answer, diskFloorMb = null, diskWaitMs = 0 }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aq-client-keys-'));
+  fs.copyFileSync(path.join(HERE, 'client.mjs'), path.join(dir, 'client.mjs'));
+  fs.writeFileSync(path.join(dir, 'probe-result.json'), JSON.stringify({ ok: true, model_listed: true, requested_model: 'gpt-6-astra', key_var: probeKeyVar, unsupported_params: [], token_param: 'max_tokens' }));
+  const envFile = path.join(dir, 'env');
+  fs.writeFileSync(envFile, Object.entries(keys).map(([k, v]) => `${k}=${v}`).join('\n') + '\nOTHER=1\n');
+  process.env.NATIVELY_ENV_FILE = envFile;
+  if (diskFloorMb != null) { process.env.AQ_DISK_FLOOR_MB = String(diskFloorMb); process.env.AQ_DISK_WAIT_MS = String(diskWaitMs); }
+  const calls = [];
+  const lines = [];
+  const realFetch = globalThis.fetch; const realError = console.error;
+  globalThis.fetch = async (url, init) => {
+    const which = init.headers.Authorization === `Bearer ${KEY_A}` ? 'A' : init.headers.Authorization === `Bearer ${KEY_B}` ? 'B' : '?';
+    calls.push(which);
+    const a = await answer(which, calls.length);
+    return { status: a.status, text: async () => (typeof a.body === 'string' ? a.body : JSON.stringify(a.body)), headers: { get: () => null } };
+  };
+  console.error = (...x) => { lines.push(x.join(' ')); };
+  const m = await import(`${pathToFileURL(path.join(dir, 'client.mjs')).href}?case=${++seq}`);
+  const restore = () => { globalThis.fetch = realFetch; console.error = realError; delete process.env.NATIVELY_ENV_FILE; delete process.env.AQ_DISK_FLOOR_MB; delete process.env.AQ_DISK_WAIT_MS; fs.rmSync(dir, { recursive: true, force: true }); };
+  return { m, calls, lines, restore };
+}
+const MSG = [{ role: 'user', content: 'x' }];
+
+test('a key out of account quota hands the same call to the second key', async () => {
+  const c = await client({ answer: (k) => (k === 'A' ? QUOTA_403 : OK_200) });
+  try {
+    const r = await c.m.chat(MSG);
+    assert.equal(r.ok, true);
+    assert.equal(r.key_var, 'AGENTROUTER_API_KEY_1');
+    assert.equal(r.attempts, 1, 'the hand-over is not counted as a retry');
+    assert.deepEqual(c.calls, ['A', 'B']);
+    assert.equal(c.m.RATIONED, null);
+    assert.equal(c.m.activeKeyVar(), 'AGENTROUTER_API_KEY_1');
+    const again = await c.m.chat(MSG);
+    assert.equal(again.ok, true);
+    assert.deepEqual(c.calls, ['A', 'B', 'B'], 'later calls go straight to the key that answers');
+    assert.equal(c.lines.length, 1);
+    assert.match(c.lines[0], /AGENTROUTER_API_KEY is out of quota — continuing on AGENTROUTER_API_KEY_1/);
+    assert.equal(QUEUE_STOP.test(c.lines[0]), false, 'a hand-over must not stop the queue');
+  } finally { c.restore(); }
+});
+
+test('both keys spent: new calls stop, and the queue sees its stop line', async () => {
+  const c = await client({ answer: (k) => (k === 'A' ? QUOTA_403 : POOL_402) });
+  try {
+    const r = await c.m.chat(MSG);
+    assert.equal(r.ok, false);
+    assert.deepEqual(c.calls, ['A', 'B']);
+    assert.ok(c.m.RATIONED);
+    assert.ok(c.lines.some((l) => QUEUE_STOP.test(l)), 'the last line matches what queue3.mjs stops on');
+    const after = await c.m.chat(MSG);
+    assert.equal(after.rationed, true);
+    assert.equal(c.calls.length, 2, 'no request is sent once both keys are spent');
+  } finally { c.restore(); }
+});
+
+test('starts on the key the probe answered on, and falls back to the first key from there', async () => {
+  const c = await client({ probeKeyVar: 'AGENTROUTER_API_KEY_1', answer: (k) => (k === 'B' ? POOL_402 : OK_200) });
+  try {
+    assert.equal(c.m.activeKeyVar(), 'AGENTROUTER_API_KEY_1');
+    const r = await c.m.chat(MSG);
+    assert.equal(r.ok, true);
+    assert.equal(r.key_var, 'AGENTROUTER_API_KEY');
+    assert.deepEqual(c.calls, ['B', 'A']);
+  } finally { c.restore(); }
+  const d = await client({ probeKeyVar: 'AGENTROUTER_API_KEY_1', answer: (k) => (k === 'B' ? POOL_402 : QUOTA_403) });
+  try {
+    const r = await d.m.chat(MSG);
+    assert.equal(r.ok, false);
+    assert.deepEqual(d.calls, ['B', 'A']);
+    assert.match(d.m.RATIONED, /account quota exhausted/);
+    assert.ok(d.lines.some((l) => QUEUE_STOP.test(l)));
+  } finally { d.restore(); }
+});
+
+test('eight calls in flight while the first key dies all land on the second', async () => {
+  const c = await client({ answer: async (k) => { await new Promise((r) => setTimeout(r, k === 'A' ? 20 : 5)); return k === 'A' ? QUOTA_403 : OK_200; } });
+  try {
+    const out = await Promise.all(Array.from({ length: 8 }, () => c.m.chat(MSG)));
+    assert.equal(out.filter((r) => r.ok && r.key_var === 'AGENTROUTER_API_KEY_1').length, 8);
+    assert.equal(c.m.RATIONED, null);
+    assert.equal(c.calls.filter((k) => k === 'A').length, 8);
+    assert.equal(c.calls.filter((k) => k === 'B').length, 8);
+    assert.equal(c.lines.length, 1, 'the hand-over is announced once');
+  } finally { c.restore(); }
+});
+
+test('neither key can leave the module in an error text or a log line', async () => {
+  const c = await client({ answer: () => ({ status: 400, body: `rejected ${KEY_A} and ${KEY_B}; Authorization: Bearer ${KEY_B}` }) });
+  try {
+    const r = await c.m.chat(MSG);
+    assert.equal(r.ok, false);
+    assert.equal(r.error.includes(KEY_A) || r.error.includes(KEY_B), false);
+    assert.equal(c.m.scrub(`x ${KEY_A} y ${KEY_B}`).includes('made-up-key'), false);
+    assert.equal(JSON.stringify(c.m.keyVars()).includes('made-up-key'), false);
+  } finally { c.restore(); }
+  const d = await client({ answer: (k) => (k === 'A' ? QUOTA_403 : POOL_402) });
+  try {
+    await d.m.chat(MSG);
+    assert.equal(d.lines.some((l) => l.includes(KEY_A) || l.includes(KEY_B)), false);
+  } finally { d.restore(); }
+});
+
+test('one key in the env file: as before, the first refusal stops new calls', async () => {
+  const c = await client({ keys: { AGENTROUTER_API_KEY: KEY_A }, answer: () => QUOTA_403 });
+  try {
+    assert.deepEqual(c.m.keyVars(), ['AGENTROUTER_API_KEY']);
+    const r = await c.m.chat(MSG);
+    assert.equal(r.ok, false);
+    assert.deepEqual(c.calls, ['A']);
+    assert.match(c.m.RATIONED, /account quota exhausted/);
+  } finally { c.restore(); }
+  // The same value under both names is one key, not two.
+  const d = await client({ keys: { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY_1: KEY_A }, answer: () => POOL_402 });
+  try {
+    assert.deepEqual(d.m.keyVars(), ['AGENTROUTER_API_KEY']);
+    await d.m.chat(MSG);
+    assert.deepEqual(d.calls, ['A']);
+    assert.match(d.m.RATIONED, /402 ration exhausted/);
+  } finally { d.restore(); }
+});
+
+test('less free disk than the floor: no request is sent, and the queue sees its stop line', async () => {
+  // A floor no volume can meet stands in for a full disk.
+  const c = await client({ diskFloorMb: 1e15, answer: () => OK_200 });
+  try {
+    assert.ok(c.m.freeDiskMb() > 0);
+    const r = await c.m.chat(MSG);
+    assert.equal(r.ok, false);
+    assert.equal(r.rationed, true);
+    assert.equal(r.status, null, 'not reported as a 402');
+    assert.equal(c.calls.length, 0, 'a judgment that could not be saved is not asked for');
+    assert.match(c.m.RATIONED, /^disk nearly full \(\d+ MB free\)/);
+    assert.equal(c.lines.length, 1);
+    assert.ok(QUEUE_STOP.test(c.lines[0]));
+    await c.m.chat(MSG);
+    assert.equal(c.lines.length, 1, 'said once');
+  } finally { c.restore(); }
+  // A dip is waited out first: the call is held (a line the queue does not stop on), and given up only after the wait.
+  const h = await client({ diskFloorMb: 1e15, diskWaitMs: 60, answer: () => OK_200 });
+  try {
+    const t0 = Date.now();
+    const r = await h.m.chat(MSG);
+    assert.equal(r.rationed, true);
+    assert.ok(Date.now() - t0 >= 60, 'held for the wait');
+    assert.equal(h.calls.length, 0);
+    assert.match(h.lines[0], /disk low \(\d+ MB free\) — holding judge calls/);
+    assert.equal(QUEUE_STOP.test(h.lines[0]), false, 'holding is not stopping');
+    assert.ok(QUEUE_STOP.test(h.lines[1]));
+  } finally { c.restore(); }
+  // With the default floor and room on the disk, calls go through as before.
+  const d = await client({ answer: () => OK_200 });
+  try {
+    assert.equal(d.m.DISK_FLOOR_MB, 300);
+    if (d.m.freeDiskMb() >= 300) assert.equal((await d.m.chat(MSG)).ok, true);
+  } finally { d.restore(); }
+});
+
+// Which judge: the identity is read once at import, so each case is its own process over the real module.
+test('the Opus judge is a separate series: its own cache key and its own files, and astra stays the default', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const ident = (judge) => {
+    const env = { ...process.env }; delete env.AQ_JUDGE; if (judge) env.AQ_JUDGE = judge;
+    const r = spawnSync(process.execPath, ['-e', `import(${JSON.stringify(pathToFileURL(path.join(HERE, 'client.mjs')).href)}).then((m) => console.log(JSON.stringify({ judge: m.JUDGE, model: m.JUDGE_MODEL, key: m.JUDGE_KEY, suffix: m.JUDGED_SUFFIX, cli: m.VIA_CLI })))`], { env, encoding: 'utf8' });
+    return { status: r.status, out: r.stdout.trim() ? JSON.parse(r.stdout) : null, err: r.stderr };
+  };
+  const astra = ident(null); const opus = ident('opus'); const other = ident('sonnet'); const fable = ident('fable');
+  assert.deepEqual(astra.out, { judge: 'astra', model: 'gpt-6-astra', key: 'gpt-6-astra', suffix: '.judged.jsonl', cli: false });
+  assert.deepEqual(other.out, astra.out, 'an unknown AQ_JUDGE value does not select another judge');
+  assert.equal(opus.out.model, 'claude-opus-5-5');
+  assert.equal(opus.out.cli, true);
+  assert.notEqual(opus.out.key, astra.out.key);
+  assert.notEqual(opus.out.suffix, astra.out.suffix);
+  assert.notEqual(opus.out.suffix, '.judged-fable.jsonl');
+  assert.match(opus.out.key, /^claude-opus-5-5\/effort-medium$/, 'the effort is part of the cache key');
+  assert.equal(fable.status, 2, 'the withdrawn Fable judge still refuses to run');
+  assert.match(fable.err, /withdrawn/);
+});

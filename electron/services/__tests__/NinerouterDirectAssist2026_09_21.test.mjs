@@ -50,6 +50,9 @@ function makeHelper({ model = MODEL, configured = true, alsoOpenAI = false } = {
   h.activeCurlProvider = null;
   h.isLocalOnlyMode = false;
   h.ollamaVisionCache = new Map();
+  // An unfetched catalogue, as on a real instance before discovery runs. The
+  // gateway cases read it since 2026-10-01 (a catalogued "no" is refused).
+  h.ninerouterVisionModels = new Set();
   h.isProviderDisabled = () => false;
   if (configured) h._ninerouterClient = {};
   if (alsoOpenAI) h._openaiClient = {};

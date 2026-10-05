@@ -1147,7 +1147,7 @@ impl StealthKeyboardTap {
         let (ready_tx, ready_rx) = mpsc::channel::<bool>();
         let state = self.state.clone();
         let handle = thread::Builder::new()
-            .name("natively-keyboard-hook".into())
+            .name("input-hook".into())
             .spawn(move || hook_worker(state, session_id, ready_tx))
             .map_err(|e| {
                 self.state.active.store(false, Ordering::Release);

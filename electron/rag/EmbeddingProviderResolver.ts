@@ -435,6 +435,18 @@ export class EmbeddingProviderResolver {
         }
         throw error;
       }
+      // Out of credits is not a blip (2026-10-04): the account answers the same
+      // 429 on every attempt, so the two immediate retries only delayed startup
+      // by ~1.2s and tripled the log. Asked once.
+      //
+      // Still 'transient', not 'permanent': a provider the user PINNED is
+      // re-probed in the background only on a transient outcome (see
+      // resolveWithDemotion), and that is how the session gets its embedding
+      // space back, without a restart, once credits are added.
+      if ((provider as { lastProbeError?: { quotaExhausted?: boolean } | null }).lastProbeError?.quotaExhausted) {
+        console.warn(`[EmbeddingProviderResolver] ${provider.name} account is out of credits — not retrying at startup.`);
+        return 'transient';
+      }
       if (i < attempts) {
         console.log(`[EmbeddingProviderResolver] ${provider.name} probe ${i}/${attempts} failed — retrying (avoids spurious space-thrash demotion)...`);
         await new Promise(r => setTimeout(r, EmbeddingProviderResolver.CLOUD_PROBE_BACKOFF_MS * i));

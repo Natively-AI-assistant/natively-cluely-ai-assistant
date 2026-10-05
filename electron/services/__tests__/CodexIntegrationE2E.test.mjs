@@ -222,9 +222,16 @@ test('B.2: source-level — usingLocalLlm in ipcHandlers includes isUsingCodexCl
     path.resolve(__dirname, '../../../electron/ipcHandlers.ts'),
     'utf8',
   );
+  // Read through the answer's own view since 2026-09-26 (LLMHelper.textTurn),
+  // so the Codex check names the model this answer is dispatched to.
   assert.match(
     ipcSrc,
-    /usingLocalLlm\s*=\s*llmHelper\.isUsingOllama\(\)\s*\|\|\s*llmHelper\.isUsingCodexCli\(\)/s,
-    'usingLocalLlm must include llmHelper.isUsingCodexCli() (30s deadline fix)',
+    /usingLocalLlm\s*=\s*answerLlm\.isUsingOllama\(\)\s*\|\|\s*answerLlm\.isUsingCodexCli\(\)/s,
+    'usingLocalLlm must include isUsingCodexCli() (30s deadline fix)',
+  );
+  assert.match(
+    ipcSrc,
+    /const answerLlm = llmHelper\.textTurn\?\.\(myController\?\.signal\) \?\? llmHelper;/,
+    'the view must be keyed by the manual answer call\'s own signal',
   );
 });

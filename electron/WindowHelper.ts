@@ -20,6 +20,7 @@ import {
 } from './utils/launcherResizeAnimation';
 import { attachNoActivate, isNoActivateManaged, restoreFocusableOffTaskbar } from './utils/windowsFocusPolicy';
 import { setVisibleOnAllWorkspacesKeepingDock } from './utils/macDockPolicy';
+import { clearStaleHover } from './utils/overlayAuxHover';
 import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 import { DEV_SERVER_URL } from './devServerUrl';
@@ -160,8 +161,10 @@ export class WindowHelper {
   // streamed by the renderer as the width spring runs so the toggle window
   // rides the panel's top-right corner frame-by-frame (the pre-aux-window
   // behavior, where a MotionValue did the riding inside one window). Default
-  // = collapsed panel right edge inside the fixed window: (732 + 600) / 2.
-  private togglePanelRight = 666;
+  // = collapsed panel right edge inside the fixed window: (732 + 604) / 2
+  // (defaultCollapsedPanelWidth in src/lib/overlayCustomSize.mjs). Only used
+  // until the renderer's first stream.
+  private togglePanelRight = 668;
   // The panel's LIVE left edge, streamed alongside the right one. Together
   // they are the panel's true extent inside the window — which the window's
   // own width stops describing while a resize drag renders inside a wider
@@ -2199,8 +2202,16 @@ export class WindowHelper {
     if (want) this.positionOverlayAuxWindows();
     const apply = (win: BrowserWindow | null, show: boolean) => {
       if (!win || win.isDestroyed()) return;
-      if (show && !win.isVisible()) win.showInactive();
-      else if (!show && win.isVisible()) win.hide();
+      if (show) {
+        if (!win.isVisible()) win.showInactive();
+        return;
+      }
+      if (win.isVisible()) win.hide();
+      // Stop is clicked with the cursor on it, then the pill is hidden from
+      // under the cursor: without this the next meeting opens with Stop still
+      // drawn hovered (red). Unconditional — a welded pill may already have
+      // been ordered out by its parent. See clearStaleHover.
+      clearStaleHover(win);
     };
     apply(this.pillWindow, want);
     apply(this.toggleWindow, want && this.toggleHasContent);
@@ -2258,8 +2269,9 @@ export class WindowHelper {
     this.syncOverlayAuxVisibility();
   }
 
-  // Aux windows → overlay renderer: user actions (toggle-width, end-meeting,
-  // toggle-expand).
+  // Aux windows → overlay renderer: user actions (toggle-width, toggle-expand)
+  // and the meeting-ended notice. Stop itself is handled in main — see
+  // routeOverlayUiAction.
   public forwardOverlayUiAction(action: unknown): void {
     const overlay = this.overlayWindow;
     if (overlay && !overlay.isDestroyed()) {

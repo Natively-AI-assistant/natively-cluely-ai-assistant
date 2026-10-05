@@ -1,0 +1,146 @@
+{
+ "batch": "b002-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HGEN-CTX-C1": {
+   "title": "Family lake trip planning notes",
+   "text": "Lake trip planning - shared notes (Okafor family)\n\nDates: we fly out Friday 16 October and come back Sunday 25 October. Cabin is Pine Hollow, unit 4, at Lake Averill.\n\nFlights\nOutbound is flight NW 318 which departs 9:40 am from Terminal 2. We should be at the airport two hours before. Return is Sunday 25 October at 4:05 pm.\n\nCabin\nTotal for the cabin is $2,400 for the whole stay. We paid the $600 deposit on 3 August, so the balance of $1,800 is due by October 1. Check-in is Friday 16 October from 3 pm, so we can drive straight there from the airport. Checkout is 10 am on the last day. The cabin sleeps six.\n\nWho is coming\nMom, Dad, Chidi, Ada, Uncle Femi and Grace. Six people, so we need one mid-size car.\n\nCar\nMid-size SUV booked with the rental desk at the airport, pick-up Friday afternoon. Grace is the second driver.\n\nLogistics and packing (added later by Chidi)\nBecause of our 7:15 am flight on the Friday, we need to leave the house by 4:45 am. Dad will do the drive and leave the car in long-term parking. The cabin owner emailed to say the remaining $1,600 is due by October 9, not the first, and that it can be paid by bank transfer. Also note check-in is Saturday, so we might need a hotel near the airport on Friday night, or we just drive slowly and have a long lunch. Ada says her friend Lina may come too, which would make seven of us.\n\nPacking: warm layers, rain jackets, board games, the good coffee, swimsuits for the hot tub.\n\nTo do\n- Pay cabin balance (Mom)\n- Confirm car seat not needed (Ada)\n- Book hotel for Friday night? (depends on check-in)\n- Print boarding passes the night before"
+  },
+  "HGEN-CTX-I1": {
+   "title": "Sourdough starter notes",
+   "text": "Sourdough starter notes (from Grandma Ruth's recipe card, typed up)\n\nFeed the starter once a day if it lives on the counter, once a week if it lives in the fridge. Equal weights of flour and water, about 50 grams each, and keep roughly 50 grams of the old starter. Rye flour makes it lively; plain white flour makes it milder.\n\nIt is ready to use when it has doubled within six to eight hours and a spoonful floats in water. If it smells like nail polish remover it is hungry, not dead. Pour off any grey liquid on top and feed it.\n\nFor a basic loaf: 100 grams active starter, 375 grams water, 500 grams bread flour, 10 grams salt. Mix everything but the salt, rest an hour, add salt, then do four sets of stretch and folds thirty minutes apart. Let it rise until it has grown by about half, shape it, and put it in the fridge overnight. Bake in a covered pot at 250 C for 20 minutes, then uncovered at 230 C for about 25 more.\n\nRuth's note in the margin: do not open the oven to peek, and do not cut it warm, no matter who is asking."
+  },
+  "HGEN-CTX-G1": {
+   "title": "Community garden plot holder handbook",
+   "text": "Maple Street Community Garden - Plot Holder Handbook\n\nWelcome to Maple Street Community Garden. This handbook covers what every plot holder agrees to when they accept a plot. Please keep it somewhere you can find it; most questions we get during the season are answered here.\n\nFees\nThe annual plot fee is $45 for a standard 10 x 12 foot bed. Households that qualify for the city's utility assistance program pay a reduced fee of $20. Fees are due before you receive the shed code. Fees are not refunded after June 1, but if you give up your plot before then we refund half.\n\nGetting started\nNew plot holders must attend one orientation. This season there are two: Saturday, May 16 at 10 am and Wednesday, May 20 at 6:30 pm, both at the tool shed by the north gate. Orientation takes about 45 minutes and covers the water system, compost bins, and the shed.\n\nYour plot must be cleared of weeds and planted within 21 days of the date you are assigned it. If a plot is still bare after 21 days, the garden coordinator will send one reminder email. If nothing has changed seven days after the reminder, the plot is offered to the next household on the waiting list. We do this because the waiting list is currently 38 households long.\n\nWorkdays\nEvery plot holder contributes six hours of shared work per season. The easiest way is to come to our monthly workdays, held on the first Saturday of each month from 9 am to noon. Hours can also be earned by turning the compost, mowing the paths, or helping at the fall harvest swap. Log your hours on the clipboard inside the shed door. Plot holders who have logged fewer than three hours by August 1 will get a friendly check-in; we would rather help you find hours than lose you.\n\nWatering\nWater only before 9 am or after 6 pm. Midday watering wastes water and scorches leaves, and the city meter reads us as a single household. Hoses must be coiled back on their reels after use. Please do not leave sprinklers running unattended.\n\nBeing away\nIf you will be away for more than a week during the growing season, arrange a plot buddy to water and harvest for you, and let the coordinator know who it is. Absences longer than three weeks require written notice to the coordinator in advance, so we do not mistake your plot for an abandoned one. You can find a plot buddy through the garden group chat or ask the coordinator to match you with someone.\n\nGrowing rules\nNo synthetic pesticides or herbicides anywhere in the garden. Plants may not grow taller than six feet or shade a neighboring plot. Invasive plants such as mint must be grown in a container sunk into the bed. Diseased plant material goes in the black bin by the gate, never in the compost.\n\nThe shed\nThe shed code changes on the first of every month and is sent by text to all paid plot holders. Tools are shared; please clean them and hang them back where you found them. Personal tools can be stored in the labeled cubbies but the garden is not responsible for them.\n\nContact\nGarden coordinator: Dana Whitfield, coordinator@maplestreetgarden.org. Dana checks email on weekday evenings. For anything urgent at the garden, such as a burst pipe, call the city parks line posted on the shed door."
+  }
+ },
+ "items": [
+  {
+   "jid": "a27979faf83b",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Affect or effect?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "**Affect** is usually the verb, meaning to influence something. **Effect** is usually the noun, meaning the result. So a change can affect you, and it has an effect on you. The exceptions are rare: affect as a noun means a visible emotion, and effect as a verb means to bring something about."
+  },
+  {
+   "jid": "860f1dcb9eb0",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay settle this for us, is a hot dog a sandwich or not?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Structurally, yes. A hot dog is a filling between two pieces of bread, which is the same definition that makes a sub a sandwich. The reason it feels wrong is cultural, not logical. We just don't call it one."
+  },
+  {
+   "jid": "f1655a59de29",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Come on, you told me last month you'd help me move on the 14th. You're not backing out now, right?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm not backing out. Let me check where things stand for the 14th and confirm the details with you, then I'll lock it in."
+  },
+  {
+   "jid": "6f1c3687aed6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "So what time do we actually have to leave the house on the Friday? I need to set an alarm.",
+   "conversation": [],
+   "evidence_ids": [
+    "HGEN-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes say leave the house by **4:45 am** on the Friday, since the flight's at 7:15. But there's a conflict in there: the flight section says outbound is NW 318 at 9:40 am, while the later note says a 7:15 am flight. Worth confirming which one before you set the alarm."
+  },
+  {
+   "jid": "8c5745133bea",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Honestly what's the actual difference between a latte and a flat white? I just order whatever.",
+   "conversation": [],
+   "evidence_ids": [
+    "HGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A flat white is basically a smaller, stronger latte. Both are espresso with steamed milk, but a flat white uses less milk and a thinner layer of foam, so the coffee tastes more forward. A latte has more milk and a thicker foam top, so it's milder and creamier. If you want the espresso to come through, go flat white."
+  },
+  {
+   "jid": "384b07802048",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What if I'm away for two weeks in June?",
+   "conversation": [
+    "USER (typed to Natively): I just got assigned a plot at the community garden. What do I actually have to do in the first month so I don't lose it?",
+    "NATIVELY: The main deadline is the 21-day rule: your plot has to be cleared of weeds and planted within 21 days of the day it was assigned, or the coordinator sends one reminder and then offers it to the next household. You also need to attend one orientation, and the fee is due before you get the shed code."
+   ],
+   "evidence_ids": [
+    "HGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two weeks is fine, but it's over a week, so you need a plot buddy to water and harvest for you, and you tell the coordinator who it is. Written notice only kicks in past three weeks, so June doesn't need that."
+  },
+  {
+   "jid": "ec24b744093e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "So what are we locked in for on Saturday, is it definitely seven thirty? I don't want to tell everyone the wrong time.",
+   "conversation": [
+    "USER (spoken): I called Bellini's this morning, they had a table Saturday.",
+    "OTHER PERSON: Oh nice, what time?",
+    "USER (spoken): Seven. For six. Under my name.",
+    "OTHER PERSON: Wait, is Jess bringing her brother? Because then it's seven of us.",
+    "USER (spoken): Oh, yeah, I think I texted them to change it to eight people at seven thirty, but I never heard back.",
+    "OTHER PERSON: Okay, I'm telling Marco and the others tonight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, I'm not sure it's locked in. I called Bellini's and got a table for six at seven, then texted to change it to eight at seven thirty, but I never heard back. So tell Marco seven thirty, but I'll call them to confirm before Saturday."
+  },
+  {
+   "jid": "0361333818cc",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Is it just me or is this week absolutely dragging?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It's not just you, this one's felt long. I keep checking the day and it's barely moved. How's yours going, busy or just slow?"
+  },
+  {
+   "jid": "540887fc476f",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Great, and before I book that in, can I just confirm your date of birth and which dental insurance you're with?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd rather not give out my date of birth over the phone, but I'm happy to confirm it on a secure form or in writing. On the dental insurance, let me check the details and get back to you with the provider and policy number."
+  },
+  {
+   "jid": "908ad5979cff",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "My landlord says he's keeping my whole security deposit because of one scuff on the living room wall and a loose cabinet hinge. I lived there three years. What should I say back to him, is he even allowed to do that, and should I be getting anything in writing before I reply?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "He can't keep the whole deposit for normal wear and tear, and after three years a scuff and a loose hinge usually count as that. Ask him for an itemized list of the deductions in writing, with receipts, before you reply. Then say you're disputing it and want the rest returned."
+  }
+ ]
+}

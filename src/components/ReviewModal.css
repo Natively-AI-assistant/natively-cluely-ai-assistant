@@ -117,7 +117,6 @@
 .review-close:hover:not(:disabled) { color: var(--rv-strong); }
 .review-close.is-over-art:hover:not(:disabled) { color: rgba(11, 16, 32, 0.92); }
 .review-close:active:not(:disabled) { transform: scale(0.92); }
-.review-close:focus-visible { outline: 1px solid var(--rv-gold); outline-offset: 2px; }
 .review-close:disabled { opacity: 0.3; cursor: default; }
 
 /* ── The two-pane grid ─────────────────────────────────────────────────── */
@@ -231,7 +230,6 @@
 .review-star[data-filled] { color: var(--rv-gold); }
 .review-star[data-filled] svg { fill: currentColor; }
 .review-star:hover:not(:disabled) { background: var(--rv-gold-soft); }
-.review-star:focus-visible { outline: 1px solid var(--rv-gold); outline-offset: -2px; }
 .review-star:disabled { cursor: default; }
 
 /* The live verdict next to the stars. Fixed width so a longer word never
@@ -376,8 +374,6 @@
 }
 .review-cta:disabled,
 .review-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
-.review-cta:focus-visible,
-.review-ghost:focus-visible { outline: 1px solid var(--rv-gold); outline-offset: 2px; }
 
 .review-quiet-row { display: flex; gap: 22px; }
 .review-quiet {

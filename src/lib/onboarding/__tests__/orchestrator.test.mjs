@@ -18,7 +18,7 @@ const DEFAULT_USER_STATE = {
   extensionConnected: false,
   extensionSupported: true,
   permsShown: false,
-  macTCCBlocked: false,
+  permissionsNeedAttention: false,
   seenProfileOnboarding: false,
   seenModesOnboarding: false,
   activeModeSet: false,
@@ -65,9 +65,9 @@ test('queue sequencing: after permissions done + no TCC re-block, browser_extens
   const ctx = makeCtx({
     completed: { permissions: 1 },
     homepageMountedFor: 6_000,
-    // macTCCBlocked=false so permissions won't re-fire
+    // permissionsNeedAttention=false so permissions won't re-fire
   });
-  // permissions has onceEver:false + reEligibility only on macTCCBlocked,
+  // permissions has onceEver:false + reEligibility only on permissionsNeedAttention,
   // so it CAN re-fire in theory but we set userState such that it doesn't.
   assert.equal(shouldShowToaster(stageById['browser_extension'], ctx), true);
   assert.equal(shouldShowToaster(stageById['profile_intelligence'], ctx), false);

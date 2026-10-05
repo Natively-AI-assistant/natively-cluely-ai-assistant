@@ -1,0 +1,440 @@
+[
+ {
+  "jid": "42e9df55bf3b",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Correctly says there was no younger comparison group and reports the 900/1800 ms findings in natural presenter speech.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "3096399e9fa4",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.8,
+  "one_sentence_reason": "Honestly states the data cannot say where the trips went, matching slide 11, and explains the cordon-camera limit.",
+  "specific_problem": "Does not note that 14% (before-after) and 7.2% (vs Aldmere) are different bases and not directly comparable.",
+  "minimal_improvement": "Add a clause that the two numbers use different comparisons."
+ },
+ {
+  "jid": "df1045a7b795",
+  "scores": {
+   "correctness": 6,
+   "grounding": 8,
+   "role_fidelity": 5,
+   "direct_usefulness": 3,
+   "relevance": 4,
+   "speakability_usability": 3,
+   "cognitive_load": 7,
+   "concision": 6,
+   "continuity": 10,
+   "mode_fit": 4
+  },
+  "hard_flags": [
+   "context_source_exposure"
+  ],
+  "code_central": false,
+  "overall_estimate": 3,
+  "one_sentence_reason": "Says aloud that it has no background details in front of it; vague non-answer to a simple background question.",
+  "specific_problem": "Robotic meta line to the room; \"came to this work through the project itself\" says nothing.",
+  "minimal_improvement": "Give a short, honest framing without meta text, or offer the user a fill-in template privately."
+ },
+ {
+  "jid": "026ebb0239d4",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 8,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 7,
+   "cognitive_load": 7,
+   "concision": 7,
+   "continuity": 5,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.3,
+  "one_sentence_reason": "Correctly rebuts fatigue via Latin-square counterbalancing and re-prompt data, but ignores that the user just said the order was fixed.",
+  "specific_problem": "Flatly contradicts the user's earlier on-record statement without a correction; \"the summary does flag\" is awkward in speech.",
+  "minimal_improvement": "Open with \"Let me correct what I said: the order was counterbalanced with a Latin square.\""
+ },
+ {
+  "jid": "860ccd9acce7",
+  "scores": {
+   "correctness": 1,
+   "grounding": 1,
+   "role_fidelity": 6,
+   "direct_usefulness": 1,
+   "relevance": 3,
+   "speakability_usability": 6,
+   "cognitive_load": 7,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 2
+  },
+  "hard_flags": [
+   "major_factual_error",
+   "retrieval_failure",
+   "unsupported_research_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 1,
+  "one_sentence_reason": "Invents a crop-failure result; the actual finding is that the inoculant raised drought yield by about 11%.",
+  "specific_problem": "Claims the crop \"fails outright\"; nothing like this is in the thesis.",
+  "minimal_improvement": "State that under drought the inoculant gave about 11% more grain than untreated plots."
+ },
+ {
+  "jid": "fe99312e85a6",
+  "scores": {
+   "correctness": 9,
+   "grounding": 8,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.6,
+  "one_sentence_reason": "Two clear sentences giving the within-subjects rationale consistent with the summary (individual variation, fewer participants).",
+  "specific_problem": "Says \"baseline performance\" rather than the study's stated reason that tolerance for delay varies widely; \"far more power\" slightly overstated.",
+  "minimal_improvement": "Name the specific reason: delay tolerance varies widely between individuals."
+ },
+ {
+  "jid": "662a6bbb3cef",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 9,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Grounded explanation via re-prompts (19% vs 4%) and interview interpretation; honestly notes no direct mechanism.",
+  "specific_problem": "Opens with \"The summary doesn't give a mechanism\", meta phrasing to the examiner.",
+  "minimal_improvement": "Drop the reference to \"the summary\" and lead with the re-prompt/interview evidence."
+ },
+ {
+  "jid": "6aa7ceab2e30",
+  "scores": {
+   "correctness": 3,
+   "grounding": 2,
+   "role_fidelity": 7,
+   "direct_usefulness": 4,
+   "relevance": 5,
+   "speakability_usability": 6,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 4
+  },
+  "hard_flags": [
+   "unsupported_research_claim",
+   "unsafe_commitment"
+  ],
+  "code_central": false,
+  "overall_estimate": 3,
+  "one_sentence_reason": "Accepts an unverified replication and asserts it was run the same way, with no material supporting any second cohort.",
+  "specific_problem": "Invents that a second cohort exists and matched the first; promises to send figures that may not exist.",
+  "minimal_improvement": "Neither confirm nor describe a replication; say the presented data is one cohort of 62 and offer to follow up."
+ },
+ {
+  "jid": "14188e065485",
+  "scores": {
+   "correctness": 1,
+   "grounding": 1,
+   "role_fidelity": 7,
+   "direct_usefulness": 2,
+   "relevance": 5,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 2
+  },
+  "hard_flags": [
+   "major_factual_error",
+   "retrieval_failure",
+   "unsupported_research_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 1.5,
+  "one_sentence_reason": "Accepts the false 20% premise; the thesis reports 11.4% average (7.9%, 10.6%, 15.8% by season).",
+  "specific_problem": "Confirms \"twenty percent is the average\" and invents that the largest gain was in \"the driest season\".",
+  "minimal_improvement": "Correct the figure to 11.4% and give the three season values."
+ },
+ {
+  "jid": "59f2e32a4ff2",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Gives the study's ~900 ms target with support and a scope caveat.",
+  "specific_problem": "Calls 900 ms a \"floor\" when it is a ceiling to stay under; bold markup in speech.",
+  "minimal_improvement": "Say it is an upper bound to design under."
+ },
+ {
+  "jid": "f9cf82006b9c",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.3,
+  "one_sentence_reason": "Accurate means and p-values with the key takeaway that the decline came at 1800 ms.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "f424e10ff395",
+  "scores": {
+   "correctness": 5,
+   "grounding": 5,
+   "role_fidelity": 6,
+   "direct_usefulness": 2,
+   "relevance": 3,
+   "speakability_usability": 6,
+   "cognitive_load": 6,
+   "concision": 5,
+   "continuity": 10,
+   "mode_fit": 3
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 3,
+  "one_sentence_reason": "Generic boilerplate limitations with no material; says nothing specific or verifiable.",
+  "specific_problem": "Vague claims about cost, complexity and edge cases are not grounded in anything and useless to the examiner.",
+  "minimal_improvement": "Give a brief honest framing or ask which aspect they mean rather than filler."
+ },
+ {
+  "jid": "721592d6d5b7",
+  "scores": {
+   "correctness": 6,
+   "grounding": 8,
+   "role_fidelity": 7,
+   "direct_usefulness": 3,
+   "relevance": 4,
+   "speakability_usability": 6,
+   "cognitive_load": 7,
+   "concision": 5,
+   "continuity": 10,
+   "mode_fit": 4
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "Avoids inventing history (and no résumé leak) but the opener is hollow and signals no competence.",
+  "specific_problem": "Contains no concrete content and opens with meta \"I'll keep this short\"; gives the user nothing to fill in.",
+  "minimal_improvement": "Provide a 20-second template with placeholders for past projects the user can fill."
+ },
+ {
+  "jid": "a763b6fd331f",
+  "scores": {
+   "correctness": 2,
+   "grounding": 2,
+   "role_fidelity": 8,
+   "direct_usefulness": 3,
+   "relevance": 6,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 3
+  },
+  "hard_flags": [
+   "unsupported_research_claim",
+   "retrieval_failure"
+  ],
+  "code_central": false,
+  "overall_estimate": 2.5,
+  "one_sentence_reason": "Asserts phosphorus as primary mechanism and weaker effect on heavy soils; thesis says mechanism was not measured and economics not assessed.",
+  "specific_problem": "Invents mechanism ranking and a soil prediction; misses that cost/return and mechanism were explicitly not studied.",
+  "minimal_improvement": "Say economics were not assessed, mechanism (water and P) is inferred not measured, and transfer to clay soils is untested."
+ },
+ {
+  "jid": "705e1b5059a1",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.9,
+  "one_sentence_reason": "Concedes the scope limits from 4.6 and defends with cross-season consistency and the drought-only pattern.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "96a8d0835f7a",
+  "scores": {
+   "correctness": 5,
+   "grounding": 5,
+   "role_fidelity": 9,
+   "direct_usefulness": 6,
+   "relevance": 8,
+   "speakability_usability": 7,
+   "cognitive_load": 6,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [
+   "unsupported_research_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Correctly notes the bus lane touches 3 of 31 routes, but cites irrelevant robustness checks and invents that the lane does not explain the eastern effect.",
+  "specific_problem": "Dropped timetable routes and December exclusion do not address the bus lane; no evidence the Harbour Road routes are outside the eastern estates.",
+  "minimal_improvement": "Rely on the 3-of-31 routes point and concede no check excluding those routes was reported."
+ },
+ {
+  "jid": "34ef73d894c0",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Answers all three parts accurately: 7.2%, CI 4.1-10.3, concentrated in eastern estates with northern CI crossing zero.",
+  "specific_problem": "Bold markup in a spoken answer.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "8057f4520e25",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.2,
+  "one_sentence_reason": "Correct charge, hours, start date and exemptions without inventing a currency.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "fa01813e81d5",
+  "scores": {
+   "correctness": 8,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 7,
+   "relevance": 8,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Accurate, fits the length limit, but omits the most important limitation for the main result.",
+  "specific_problem": "Picks air quality over the Harbour Road bus-lane confound, which directly threatens the headline estimate.",
+  "minimal_improvement": "Swap air quality for the bus-lane confound on 3 routes."
+ },
+ {
+  "jid": "31e6b86545ef",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Accurate 2.1%, p = 0.27, and interaction p = 0.018 explanation.",
+  "specific_problem": "Citing section numbers 4.4 and 4.7 to the examiner is padding.",
+  "minimal_improvement": "Drop the section references."
+ }
+]

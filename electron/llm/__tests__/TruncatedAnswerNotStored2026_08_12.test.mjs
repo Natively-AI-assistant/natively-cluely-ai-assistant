@@ -71,10 +71,21 @@ describe('a stream that stops early reports itself truncated', () => {
 
   test('the runaway cap is visible to the caller', async () => {
     const { outcome } = await drive(async function* () {
-      for (let i = 0; i < 200; i++) yield 'x'.repeat(200);
+      // 52,000 chars: past the live cap (48,000 since 2026-10-04).
+      for (let i = 0; i < 260; i++) yield 'x'.repeat(200);
     });
     assert.equal(outcome.truncated, true);
     assert.equal(outcome.reason, 'output_cap_reached');
+  });
+
+  test('a looping answer is stopped and reported as repetition (2026-10-04)', async () => {
+    const { outcome, text } = await drive(async function* () {
+      for (let i = 0; i < 40; i++) yield `Point ${i}: the rollout for region ${i * 7 % 13} needs sign-off from team ${i % 5}.\n`;
+      for (let i = 0; i < 400; i++) yield 'The answer is that the policy covers travel within the quarter, as stated. ';
+    });
+    assert.equal(outcome.truncated, true);
+    assert.equal(outcome.reason, 'output_repetition');
+    assert.ok(text.length < 8000, `stopped at ${text.length} chars, long after the loop began`);
   });
 });
 
@@ -166,10 +177,17 @@ describe('manual chat refuses to store a truncated answer', () => {
   });
 
   test('the two answer-side emitters outside that region carry their own guard', () => {
-    for (const call of ['addAssistantMessage', 'publishAssistantMessage']) {
-      const re = new RegExp(`if \\(!v3Truncated\\) [^;\\n]*${call}`);
-      assert.match(ipcSrc, re, `${call} must be individually gated on !v3Truncated`);
-    }
+    const re = /if \(!v3Truncated\) [^;\n]*addAssistantMessage/;
+    assert.match(ipcSrc, re, 'addAssistantMessage must be individually gated on !v3Truncated');
+    // The phone mirror (2026-09-27): the answer now streams to the phone as it
+    // is written, so the end of the turn is what must not pass a truncated
+    // answer off as complete. A truncated one ends as an error (its words stay
+    // on the phone, marked as stopped); only a complete one ends as done.
+    assert.match(
+      ipcSrc,
+      /if \(v3Truncated\) PhoneMirrorService\.getInstance\(\)\.publishError\([^;\n]*\);\s*else PhoneMirrorService\.getInstance\(\)\.publishDone\(/,
+      'the phone gets done only for a complete answer',
+    );
   });
 
   test('USER-side sinks are NOT gated — the question survives a truncated answer', () => {
@@ -254,12 +272,13 @@ describe('the WTA path is protected too, not just manual chat', () => {
   test('the truncation sink is caller-owned, not instance state', () => {
     // WhatToAnswerLLM is a long-lived singleton and turns can overlap, so a
     // `this.lastOutcome` field would race between concurrent answers.
-    assert.match(wtaSrc, /truncationSink\?:\s*\{\s*truncated:\s*boolean\s*\}/);
+    // `reason` rides along since 2026-10-04 (the overlay says why it was cut off).
+    assert.match(wtaSrc, /truncationSink\?:\s*\{\s*truncated:\s*boolean(;\s*reason\?:\s*string)?\s*\}/);
     assert.doesNotMatch(wtaSrc, /this\.(lastOutcome|lastTruncated)\b/);
   });
 
   test('the engine passes a sink and gates the session write on it', () => {
-    assert.match(engineSrc, /const wtaTruncation = \{ truncated: false \}/);
+    assert.match(engineSrc, /const wtaTruncation(: \{ truncated: boolean; reason\?: string \})? = \{ truncated: false \}/);
     assert.match(engineSrc, /generateStream\([\s\S]{0,600}?wtaTruncation\)/);
     const guard = engineSrc.indexOf('if (wtaTruncation.truncated) {');
     assert.ok(guard > 0, 'the engine must gate its write policy on truncation');

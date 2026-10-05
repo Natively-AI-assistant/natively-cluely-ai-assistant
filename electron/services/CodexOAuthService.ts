@@ -54,6 +54,7 @@ import * as http from 'http';
 import * as crypto from 'crypto';
 import * as os from 'os';
 import { app, shell } from 'electron';
+import { describeOAuthError, renderOAuthCallbackPage } from './oauth/callbackPage';
 
 // We import CredentialsManager lazily inside getters/setters so a missing
 // or uninitialised instance doesn't crash the module (test harness can
@@ -253,21 +254,14 @@ function startCallbackServer(): { portReady: Promise<number>; waitForCallback: P
       const error = url.searchParams.get('error') || undefined;
       const errorDescription = url.searchParams.get('error_description') || undefined;
 
-      // Friendly landing page (open-sse renders similar — codex.md:5998-6002).
-      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Natively × ChatGPT</title>
-<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0a0a0a;color:#fafafa;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:0 24px}
-.card{max-width:480px;background:#161616;border:1px solid #262626;border-radius:12px;padding:32px;text-align:center}
-h1{font-size:18px;margin:0 0 8px;font-weight:600}
-p{color:#a3a3a3;margin:0;font-size:14px;line-height:1.5}
-.ok{color:#10b981}.err{color:#ef4444}</style></head><body>
-<div class="card">${
-        error
-          ? `<h1 class="err">Sign-in failed</h1><p>${(errorDescription || error).replace(/[<>]/g, '')}</p>`
-          : '<h1 class="ok">Signed in!</h1><p>You can close this tab and return to Natively.</p>'
-      }</div>
-</body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(html);
+      // The exchange runs after this response, so success reads "returned", not "connected".
+      const page = renderOAuthCallbackPage(
+        'codex',
+        error || !code ? { kind: 'error', reason: describeOAuthError(error, errorDescription) } : { kind: 'returned' },
+        process.platform,
+      );
+      res.writeHead(200, page.headers);
+      res.end(page.body);
 
       const result: CallbackResult = { code, state, error, errorDescription };
       if (resolveCallback) resolveCallback(result);

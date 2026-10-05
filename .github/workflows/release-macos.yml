@@ -145,6 +145,10 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # GH token for electron-builder publish (artifacts attach to the release on tag builds).
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Calendar sync's Google Desktop-client secret, baked in by build:electron
+          # (scripts/lib/calendar-client-secret.cjs). The signed config's beforePack
+          # fails the release if it is missing.
+          GOOGLE_CALENDAR_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_CLIENT_SECRET }}
         # Explicit stages (NOT `npm run dist:signed`): the dist:signed chain re-runs
         # `npm run build` (rimraf dist dist-electron) which can race electron-builder's
         # native rebuild and ENOENT on dist-electron at package time. Building the stages
@@ -168,8 +172,11 @@ jobs:
       - name: Verify signature + notarization (both arches + DMGs)
         run: |
           set -euo pipefail
-          APPS=$(find release -maxdepth 2 -name 'Natively.app' -path '*mac*')
-          if [ -z "$APPS" ]; then echo "No Natively.app found in release/"; exit 1; fi
+          # The on-disk app identity is disguised at build time (productName,
+          # sourced from scripts/disguise-name.cjs) — the .app is NOT "Natively.app".
+          APP_NAME=$(node -p "require('./scripts/disguise-name.cjs').darwin")
+          APPS=$(find release -maxdepth 2 -name "${APP_NAME}.app" -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No ${APP_NAME}.app found in release/"; exit 1; fi
           for APP in $APPS; do
             echo "::group::Verifying app: $APP"
             codesign -dv --verbose=4 "$APP" 2>&1 | sed -n '1,20p'
@@ -183,7 +190,7 @@ jobs:
             # — exactly the "never opens again" failure mode we shipped to
             # production in the past. Treat as a hard release gate.
             if xattr -l "$APP" 2>/dev/null | grep -q 'com.apple.quarantine'; then
-              echo "::error::Natively.app carries com.apple.quarantine — would refuse to launch on a fresh macOS profile. Re-run electron-builder to clean the build artifact."
+              echo "::error::${APP_NAME}.app carries com.apple.quarantine — would refuse to launch on a fresh macOS profile. Re-run electron-builder to clean the build artifact."
               exit 1
             fi
             echo "::endgroup::"
@@ -210,8 +217,9 @@ jobs:
       - name: Verify packaged local fallback assets (per-arch)
         run: |
           set -euo pipefail
-          APPS=$(find release -maxdepth 2 -name 'Natively.app' -path '*mac*')
-          if [ -z "$APPS" ]; then echo "No Natively.app found in release/"; exit 1; fi
+          APP_NAME=$(node -p "require('./scripts/disguise-name.cjs').darwin")
+          APPS=$(find release -maxdepth 2 -name "${APP_NAME}.app" -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No ${APP_NAME}.app found in release/"; exit 1; fi
           for APP in $APPS; do
             echo "::group::Verify packaged local assets: $APP"
             node scripts/verify-packaged-local-assets.mjs --app "$APP"
@@ -226,10 +234,11 @@ jobs:
       - name: Packaged no-Ollama no-keys smoke (arm64)
         run: |
           set -euo pipefail
-          APPS=$(find release -maxdepth 2 -name 'Natively.app' -path '*mac*')
-          if [ -z "$APPS" ]; then echo "No Natively.app found in release/"; exit 1; fi
+          APP_NAME=$(node -p "require('./scripts/disguise-name.cjs').darwin")
+          APPS=$(find release -maxdepth 2 -name "${APP_NAME}.app" -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No ${APP_NAME}.app found in release/"; exit 1; fi
           APP=$(echo "$APPS" | tr ' ' '\n' | grep arm64 | head -n1)
-          if [ -z "$APP" ]; then echo "No arm64 Natively.app found"; exit 1; fi
+          if [ -z "$APP" ]; then echo "No arm64 ${APP_NAME}.app found"; exit 1; fi
           echo "::group::Smoke: $APP"
           node scripts/smoke-packaged-local-fallback.mjs --app "$APP" --no-ollama --no-keys
           echo "::endgroup::"

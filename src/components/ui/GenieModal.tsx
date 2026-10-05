@@ -3,9 +3,14 @@
 // A popup card that opens and closes with the macOS genie: the same pour out
 // of, and back into, a slot at the window's bottom edge (straight below the
 // card: the bottom centre, for a centred one) that the browser-extension and
-// permissions cards use. Settings, the Modes and Profile Intelligence manager,
-// the other launcher popups and the notices in the bottom-right corner all go
-// through here, so every card in the app moves the same way.
+// permissions cards use. Settings, the Modes and Profile Intelligence manager
+// and the other launcher popups all go through here, so every card in the app
+// moves the same way.
+//
+// The notices in the bottom-right corner go through here too, for the presence
+// and the frozen content, but they do not pour: they slide in from the
+// window's right edge and back out through it (genieMotion.mjs SLIDE), the way
+// the search-index notice beside them does.
 //
 // The animation itself is useGenieCard's. This adds what those two toasters
 // never needed:
@@ -27,7 +32,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'reac
 import { motion, type MotionStyle } from 'framer-motion';
 import { useGenieCard, type GenieCard, type GenieSnapshotSource } from '../onboarding/useGenieCard';
 import {
-  warmGenieSnapshots, getGenieSnapshot, captureGenieSnapshot, isSettled, isScrolled, showsTransientState, viewOf, snapshotKey as keyFor,
+  warmGenieSnapshots, releaseGenieSnapshots, getGenieSnapshot, captureGenieSnapshot, isSettled, isScrolled, showsTransientState, viewOf, snapshotKey as keyFor,
   type GenieSnapshot,
 } from '../onboarding/genieSnapshots';
 import { presenceInitial, presenceReducer, presenceEventFor } from '../onboarding/geniePresence.mjs';
@@ -99,7 +104,8 @@ export interface GenieModalProps {
   modal?: boolean;
   /**
    * Where the card sits in the window (default: centred). The genie pours
-   * into a slot at the window's bottom edge, straight below the card.
+   * into a slot at the window's bottom edge, straight below the card. A card
+   * in the bottom-right corner slides in from the right edge instead.
    */
   placement?: 'center' | 'bottom-right';
   zIndex?: number;
@@ -159,8 +165,6 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   const lastShotRef = useRef<{ key: string; snap: GenieSnapshot } | null>(null);
   const changedSinceShotRef = useRef(true);
 
-  useEffect(() => { void warmGenieSnapshots(); }, []);
-
   const keyOf = useCallback((view: string): string | null => {
     const wrap = genieRef.current?.wrapRef.current;
     if (!wrap) return null;
@@ -194,9 +198,19 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   const genie = useGenieCard(presence.mounted, label, {
     snapshots,
     onOpened: () => { landedRef.current = true; onOpened?.(); },
+    motion: placement === 'bottom-right' ? 'slide' : undefined,
   });
   genieRef.current = genie;
   const { shown, closing, closeThen, scrim, wrapRef, bandsRef, shadowRef } = genie;
+
+  // No genie (off in Settings → Advanced, or the OS asks for reduced motion):
+  // no picture is drawn, so none is decoded ahead of time or taken while the
+  // card is open, and the ones already decoded are let go.
+  const pictureless = genie.reduced;
+  useEffect(() => {
+    if (pictureless) { lastShotRef.current = null; releaseGenieSnapshots(); }
+    else void warmGenieSnapshots();
+  }, [pictureless]);
 
   const closeInstantlyRef = useRef(closeInstantly);
   closeInstantlyRef.current = closeInstantly;
@@ -224,7 +238,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   // switched. That picture is what the next open pours out. The first one
   // after an open also records which view the card opens into.
   useEffect(() => {
-    if (!open || !shown || !keepPictures) return;
+    if (!open || !shown || !keepPictures || pictureless) return;
     const card = genieRef.current?.cardRef.current;
     if (!card) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -251,7 +265,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
       recorded = true;
       changedSinceShotRef.current = false;
       const snap = await captureGenieSnapshot(card, key);
-      if (snap) lastShotRef.current = { key, snap };
+      if (snap && !stopped) lastShotRef.current = { key, snap };
     };
     const changed = () => { changedSinceShotRef.current = true; schedule(SNAPSHOT_QUIET_MS); };
     // A hover that recolours a row inline (the Modes manager's do) is not a
@@ -275,7 +289,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
       card.removeEventListener('scroll', changed, true);
       card.removeEventListener('input', changed, true);
     };
-  }, [open, shown, cardKey, keyOf, keepPictures]);
+  }, [open, shown, cardKey, keyOf, keepPictures, pictureless]);
 
   // What the card shows while it drains away: the last thing it showed open.
   const frozen = useRef(children);

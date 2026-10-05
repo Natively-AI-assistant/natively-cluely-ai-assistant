@@ -69,6 +69,14 @@ export type IntelligenceFlagKey =
   | 'chatHistoryMultiTurn'
   | 'lectureIntelligenceV2'        // Phase 14
   | 'diagramIntelligence'          // Phase 15
+  // System-design diagram artifacts (2026-10-01). ONE switch for both halves:
+  // the diagram contract in the answer prompt AND the Mermaid renderer. Off =
+  // ordinary answers, and a ```mermaid block shows as a plain code block (its
+  // source stays readable and copyable). Deliberately NOT `diagramIntelligence`:
+  // that flag gates the deterministic lecture extractor behind `diagram:generate`,
+  // whose only UI caller was removed 2026-09-25 — reusing it would have shipped
+  // this feature silently off.
+  | 'systemDesignDiagrams'
   | 'hindsightMemory'              // Phase 16 — long-term memory provider on at all
   | 'hindsightLiveRecall'          // Phase 16 — last to enable (live recall in answers)
   | 'hindsightPostMeetingRetain'   // Phase 16 — async retain after meetings/lectures
@@ -533,6 +541,9 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // either direction) is never read — this flag now only listens to the env kill-switch and
   // its default. Set NATIVELY_FOLLOWUP_DRAFT_V2=0 to force the deterministic fallback draft
   // in an emergency without a release; that is the ONLY remaining way to turn this off.
+  // Since 2026-09-26 no draft is written with the notes: the user clicks Generate
+  // (MeetingPersistence.regenerateFollowUpDraft), and this flag decides whether that
+  // click, and a notes Regenerate on a meeting that already has a draft, uses the LLM.
   followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', settingIgnored: true, default: true },
   speakerLabelsV1: { env: 'NATIVELY_SPEAKER_LABELS_V1', setting: 'speakerLabelsV1Enabled', default: true },
   // Constrained LLM polish of the Summary (note-content-only, "no new tokens" gated). ON by
@@ -553,6 +564,10 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   chatHistoryMultiTurn: { env: 'NATIVELY_CHAT_HISTORY_MULTI_TURN', setting: 'chatHistoryMultiTurnEnabled', default: true },
   lectureIntelligenceV2: { env: 'NATIVELY_LECTURE_INTELLIGENCE_V2', setting: 'lectureIntelligenceV2Enabled', default: false },
   diagramIntelligence: { env: 'NATIVELY_DIAGRAM_INTELLIGENCE', setting: 'diagramIntelligenceEnabled', default: false },
+  // DEFAULT ON, a plain literal (never isInternalDevTestContext — dev/test must
+  // exercise what ships). Kill switch: NATIVELY_SYSTEM_DESIGN_DIAGRAMS=0 or
+  // Settings > Intelligence > "Diagrams and charts".
+  systemDesignDiagrams: { env: 'NATIVELY_SYSTEM_DESIGN_DIAGRAMS', setting: 'systemDesignDiagramsEnabled', default: true },
   hindsightMemory: { env: 'NATIVELY_HINDSIGHT_MEMORY', setting: 'hindsightMemoryEnabled', default: false },
   hindsightLiveRecall: { env: 'NATIVELY_HINDSIGHT_LIVE_RECALL', setting: 'hindsightLiveRecallEnabled', default: false },
   hindsightPostMeetingRetain: { env: 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN', setting: 'hindsightPostMeetingRetainEnabled', default: false },

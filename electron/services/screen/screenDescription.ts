@@ -1,4 +1,5 @@
 import type { ScreenUnderstandingResult } from './ScreenUnderstandingService';
+import { markOnDeviceScreenText } from '../../context-intelligence/question/on-device-screen';
 
 /**
  * The screenshot a user attached, rendered as text so it survives its own turn.
@@ -40,6 +41,19 @@ export const SCREEN_NOT_TRANSCRIBED =
   + 'its contents are NOT available here. Say that it cannot be read back rather '
   + 'than denying a screenshot was sent, and never guess what it showed.]';
 
+/**
+ * While a turn's screen is STILL BEING READ (2026-10-01). The turn is recorded
+ * the moment its answer exists; the screen's text follows, and a local model
+ * can take 45 seconds over it. A follow-up asked inside that window used to be
+ * told the screenshot "could not be transcribed" — a verdict, before anything
+ * had failed. It is replaced by the text when it arrives, or by
+ * SCREEN_NOT_TRANSCRIBED when the read really fails.
+ */
+export const SCREEN_BEING_READ =
+  '[a screenshot was attached on this turn and is still being read — its '
+  + 'contents are not available yet. Say that it is still being read rather '
+  + 'than denying a screenshot was sent, and never guess what it showed.]';
+
 /** Section labels, exported so tests and the truncation notice can name them. */
 export const SCREEN_DESCRIPTION_SECTIONS = Object.freeze({
   errors: 'Errors on screen',
@@ -74,11 +88,15 @@ export function composeScreenDescription(
   const code = joinNonEmpty(result.codeBlocks ?? []);
   const tables = joinNonEmpty((result.tables ?? []).map((table) => table?.markdown));
 
-  return [
+  const text = [
     section(SCREEN_DESCRIPTION_SECTIONS.errors, errors),
     section(SCREEN_DESCRIPTION_SECTIONS.summary, result.visibleSummary ?? ''),
     section(SCREEN_DESCRIPTION_SECTIONS.text, result.extractedText ?? ''),
     section(SCREEN_DESCRIPTION_SECTIONS.code, code),
     section(SCREEN_DESCRIPTION_SECTIONS.tables, tables),
   ].filter(Boolean).join('\n\n');
+  // Made while screenshots were being kept on this device: the text says so
+  // itself, wherever it is stored next (the conversation ring, the description
+  // cache, Direct Assist's history). See on-device-screen.ts.
+  return result.keptOnDevice ? markOnDeviceScreenText(text) : text;
 }

@@ -143,4 +143,29 @@ describe('Nemotron language selection fail-closed behaviour (Task 12)', () => {
     assert.equal(errored, false, 'BUG REGRESSION: a non-Nemotron model must never run the Nemotron fail-closed language path.');
     assert.equal(lws['nemotronLangId'], 0, 'field stays at its unused default — resolveAndApplyNemotronLanguage() must never run for a non-Nemotron model');
   });
+
+  test('Parakeet accepts supported languages and auto without error', async () => {
+    lws = new LocalWhisperSTT('istupakov/parakeet-tdt-0.6b-v3-onnx');
+    let errored = false;
+    lws.on('error', () => { errored = true; });
+    lws.setRecognitionLanguage('french');
+    await sleep(50);
+    assert.equal(errored, false);
+    assert.equal(lws['language'], 'french');
+    lws.setRecognitionLanguage('auto');
+    await sleep(50);
+    assert.equal(errored, false);
+    assert.equal(lws['language'], 'auto');
+  });
+
+  test('Parakeet setting unsupported language emits deferred error and falls back to auto', async () => {
+    lws = new LocalWhisperSTT('istupakov/parakeet-tdt-0.6b-v3-onnx');
+    let capturedError = null;
+    lws.on('error', (err) => { capturedError = err; });
+    lws.setRecognitionLanguage('japanese');
+    await sleep(50);
+    assert.ok(capturedError, 'must emit error when unsupported language is requested');
+    assert.match(capturedError.message, /Parakeet STT: recognition language "japanese"/);
+    assert.equal(lws['language'], 'auto', 'must revert language to auto');
+  });
 });

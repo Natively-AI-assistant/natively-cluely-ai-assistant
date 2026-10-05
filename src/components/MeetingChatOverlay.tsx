@@ -19,6 +19,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
 
 registerPrismLanguages();
 
@@ -99,7 +100,7 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
     </motion.div>
 );
 
-const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content }) => {
+const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean; isLatest?: boolean }> = ({ content, isStreaming, isLatest }) => {
     // Teleprompter gist: answers can end with a [[GIST]] line. The marker line
     // is still split off so it never shows as text, but this chat does not
     // render it — no gist chip here, and no copy button, by owner request.
@@ -115,7 +116,17 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
             <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
                 {/* Markdown Content with tight line height and spacing */}
                 <div className="markdown-content">
+                    {/* A ```mermaid block is drawn by the shared diagram card; everything
+                        else goes through this chat's own Markdown renderer, unchanged. */}
+                    <DiagramAwareMarkdown
+                      text={gistBody}
+                      streaming={Boolean(isStreaming)}
+                      // Only the answer just given may be repaired by itself (one model
+                      // call); an older answer in the thread keeps its "Try to fix" button.
+                      allowAutoRepair={Boolean(isLatest)}
+                      renderMarkdown={(chunk, key) => (
                     <ReactMarkdown
+                        key={key}
                         remarkPlugins={[remarkGfm, remarkMath]}
                         rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false, errorColor: '#cc0000' }]]}
                         components={{
@@ -171,8 +182,10 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                             },
                         }}
                     >
-                        {gistBody}
+                        {chunk}
                     </ReactMarkdown>
+                      )}
+                    />
                 </div>
             </div>
         </motion.div>
@@ -602,7 +615,7 @@ ${contextString}`;
                             {messages.map((msg) => (
                                 msg.role === 'user'
                                     ? <UserMessage key={msg.id} content={msg.content} />
-                                    : <AssistantMessage key={msg.id} content={msg.content} isStreaming={msg.isStreaming} />
+                                    : <AssistantMessage key={msg.id} content={msg.content} isStreaming={msg.isStreaming} isLatest={msg.id === messages[messages.length - 1]?.id} />
                             ))}
 
                             {chatState === 'waiting_for_llm' && <TypingIndicator />}

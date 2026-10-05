@@ -18,13 +18,13 @@ node scripts/verify-native-arch.js
 # 2. react-doctor staged-file scan. Non-fatal: prints findings to stderr
 #    but does not block the commit.
 if [ -x "./node_modules/.bin/react-doctor" ]; then
-  ./node_modules/.bin/react-doctor --staged --fail-on warning || true
+  ./node_modules/.bin/react-doctor --staged --blocking warning || true
 elif command -v react-doctor >/dev/null 2>&1; then
   react-doctor --staged --fail-on warning || true
 elif command -v pnpm >/dev/null 2>&1; then
-  pnpm dlx react-doctor@latest --staged --fail-on warning || true
+  pnpm dlx react-doctor@latest --staged --blocking warning || true
 elif command -v npx >/dev/null 2>&1; then
-  npx --yes react-doctor@latest --staged --fail-on warning || true
+  npx --yes react-doctor@latest --staged --blocking warning || true
 fi
 
 # 3. code-review-graph — non-fatal context for the reviewer.

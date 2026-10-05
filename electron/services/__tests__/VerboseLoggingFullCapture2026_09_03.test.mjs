@@ -1,7 +1,7 @@
 /**
  * VerboseLoggingFullCapture2026_09_03.test.mjs
  *
- * Settings > General > Advanced > "Verbose debug logging". ON means FULL
+ * Settings > General > Advanced > "Debug logging". ON means FULL
  * capture: the four trace producers open and user content stays readable.
  * Credentials are scrubbed either way. Covers:
  *   - the globalThis anchor (a module-local flag was invisible across

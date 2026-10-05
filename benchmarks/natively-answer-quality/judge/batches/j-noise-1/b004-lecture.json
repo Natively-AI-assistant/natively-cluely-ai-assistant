@@ -1,0 +1,122 @@
+{
+ "batch": "b004-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DLEC-CTX-I1": {
+   "title": "Rennick Library group study room policy",
+   "text": "Rennick Library - Group Study Room Policy (Fall Term)\n\nGroup study rooms on floors 2 and 3 of Rennick Library can be reserved by current students through the library booking portal. Each room holds between four and eight people and has a wall-mounted display and a whiteboard.\n\nBooking rules\n- Reservations open seven days in advance at 8:00 am.\n- Each student may hold up to two hours of bookings per day and six hours per week.\n- A room is released to the waitlist if nobody from the group checks in at the front desk within 15 minutes of the start time.\n- Rooms 3B and 3C are quiet rooms: whiteboard work only, no calls or video meetings.\n\nDuring exam weeks\n- The daily limit drops to 90 minutes so more groups get a turn.\n- Overnight booking between midnight and 7:00 am is available only on floor 2.\n\nCare of rooms\n- Wipe the whiteboard and take your rubbish with you when you leave.\n- Food is not allowed; covered drinks are fine.\n- Report broken displays or dried-out markers at the front desk or through the portal's \"Report a problem\" link.\n\nRepeated no-shows (three in one term) suspend booking privileges for two weeks. Questions: ask at the Rennick front desk or contact the circulation team through the library website."
+  },
+  "DLEC-CTX-G1": {
+   "title": "ECON 214 Week 6 slides - Price elasticity of demand",
+   "text": "ECON 214 - Intermediate Microeconomics\nWeek 6 Lecture Slides: Price Elasticity of Demand\nProf. Adaeze Okonkwo-Hale | Harlow State University | Section 002\n\nSlide 1 - Learning goals\n- Compute own-price elasticity of demand using the course's midpoint convention\n- Classify demand as elastic, inelastic, or unit elastic\n- Connect elasticity to what happens to total revenue when price changes\n\nSlide 2 - Definition\nOwn-price elasticity of demand measures how responsive quantity demanded is to a change in the good's own price:\nE = (% change in quantity demanded) / (% change in price)\nBecause demand slopes down, the raw ratio is negative.\n\nSlide 3 - ECON 214 convention (read this carefully)\nIn this course we ALWAYS use the midpoint (arc) formula unless a question explicitly says \"point elasticity\":\n% change in Q = (Q2 - Q1) / ((Q1 + Q2) / 2)\n% change in P = (P2 - P1) / ((P1 + P2) / 2)\nWe report own-price elasticity as an absolute value, rounded to two decimals. So you write 1.22, not -1.22.\nMany textbooks (including the optional Marchetti text) divide by the starting values instead. That gives a different number for the same data, and it gives a different number depending on whether the price goes up or down. The midpoint version gives the same answer in both directions, which is why we use it.\n\nSlide 4 - Classification (using the absolute value |E|)\n- |E| > 1: elastic\n- |E| < 1: inelastic\n- |E| = 1 exactly: unit elastic\nNote: 1.00 after rounding counts as unit elastic on problem sets and exams.\n\nSlide 5 - Worked example: the Quad coffee cart\nThe coffee cart outside Benning Hall raises the price of a small drip coffee from $3.00 to $3.60. Daily sales fall from 500 cups to 400 cups.\nStep 1: % change in Q = (400 - 500) / 450 = -0.2222, i.e. -22.2%\nStep 2: % change in P = (3.60 - 3.00) / 3.30 = 0.1818, i.e. 18.2%\nStep 3: E = -22.2% / 18.2% = -1.22\nStep 4: report |E| = 1.22, so demand is elastic over this range.\nCheck: with the starting-value method you would get -20% / 20% = -1.00 and call it unit elastic. Same data, different classification. This is exactly why we fix one convention.\n\nSlide 6 - Elasticity and total revenue\nTotal revenue TR = P x Q.\nBefore: $3.00 x 500 = $1,500 per day. After: $3.60 x 400 = $1,440 per day.\nRule: when demand is elastic, a price increase lowers total revenue; when demand is inelastic, a price increase raises total revenue; at unit elasticity total revenue does not change.\nThe coffee cart is consistent with the rule: elastic demand, price went up, revenue fell by $60 a day.\n\nSlide 7 - What makes demand more elastic?\n- Close substitutes are available (the dining hall sells drip coffee for $2.25)\n- The good is a larger share of the budget\n- A longer time horizon to adjust\n- A narrowly defined market (\"drip coffee at this cart\" versus \"caffeine\")\n\nSlide 8 - Exam notes\n- Midterm 2 covers Weeks 5 to 8. Elasticity questions on Midterm 2 must use the midpoint formula; answers that use starting values get at most half credit.\n- Show all four steps from Slide 5.\n- The elasticity formula sheet is NOT provided on Midterm 2. Memorize the formulas.\n\nSlide 9 - Preview of Week 7\nCross-price elasticity: the sign matters there (positive means substitutes, negative means complements), so we do NOT take absolute values for cross-price elasticity."
+  },
+  "DLEC-CTX-G2": {
+   "title": "CS 261 Lecture 11 notes - Binary heaps and build-heap",
+   "text": "CS 261 - Data Structures\nLecture 11 Notes: Binary Heaps and Build-Heap\nProf. Tomasz Reinholt-Vega | Carrow Institute of Technology\n\n1. What a binary heap is\nA binary heap is a complete binary tree stored in an array that satisfies the heap-order property. In CS 261 we use MIN-heaps by default: every node's key is less than or equal to the keys of its children, so the smallest key sits at the root.\n\n2. CS 261 array convention (differs from the 0-indexed code you will see online)\nWe store the heap 1-indexed. Index 0 is left empty (we write it as _).\n- parent(i) = floor(i / 2)\n- left(i) = 2i\n- right(i) = 2i + 1\nIf you see parent(i) = floor((i - 1) / 2) and left(i) = 2i + 1 online, that is the 0-indexed layout. Both are correct for their own layout, but on CS 261 quizzes you must use the 1-indexed formulas.\n\n3. Height convention\nIn CS 261 the height of a tree counts NODES on the longest root-to-leaf path, so a single node has height 1 and an empty tree has height 0. (Most textbooks count edges, so for them a single node has height 0.) With our convention a heap with n keys has height floor(log2 n) + 1. Example: n = 7 gives height 3.\n\n4. Sift-down (heapify at index i)\nCompare the key at i with its children. If the smaller child is smaller than the key at i, swap with that smaller child and repeat from the child's index. Stop when the key is no larger than both children or when i has no children. Cost: O(height).\n\n5. Build-heap (bottom-up)\nCall sift-down on i = floor(n / 2), floor(n / 2) - 1, ..., 1. Leaves (indices greater than floor(n / 2)) are already heaps, so we skip them.\nTotal cost is O(n), not O(n log n). Most nodes live near the bottom and can only sift down a short distance; the sum of heights over all nodes is bounded by a linear function of n.\n\n6. Worked example (show the array after every sift-down call; this is required on quizzes)\nInput, n = 7: [_, 9, 4, 7, 1, 8, 2, 6]\nStart at i = floor(7 / 2) = 3.\n- sift-down(3): 7 vs children 2 (i=6) and 6 (i=7). Swap with 2. Array: [_, 9, 4, 2, 1, 8, 7, 6]\n- sift-down(2): 4 vs children 1 (i=4) and 8 (i=5). Swap with 1. Index 4 has no children. Array: [_, 9, 1, 2, 4, 8, 7, 6]\n- sift-down(1): 9 vs children 1 (i=2) and 2 (i=3). Swap with 1. Continue at i=2: 9 vs children 4 (i=4) and 8 (i=5). Swap with 4. Index 4 has no children. Array: [_, 1, 4, 2, 9, 8, 7, 6]\nResult: [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps total.\n\n7. Other operations\n- peek-min: O(1), it is A[1].\n- insert: put the key at A[n + 1], then sift-up. O(log n).\n- extract-min: move A[n] to A[1], shrink the heap, sift-down(1). O(log n).\n- Finding the MAXIMUM in a min-heap is not cheap: the max is somewhere among the leaves, so it takes O(n) in general.\n\n8. Logistics\nQuiz 4 (next Thursday) covers heaps: sift-down traces, build-heap traces, and the index formulas above. Traces must use the 1-indexed layout. Priority queues and heapsort are on Quiz 5, not Quiz 4.\nOffice hours this week move to Wednesday 3-5 pm in Lowry 118 because of the department colloquium."
+  }
+ },
+ "items": [
+  {
+   "jid": "79fd51e4a265",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And this is why industry loves catalysts, right? You add a catalyst to the contact process and it pushes the equilibrium over toward sulfur trioxide, so you end up with a higher yield.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not quite. A catalyst speeds up the rate at which the reaction reaches equilibrium, but it doesn't shift the position of equilibrium itself. In the contact process, the catalyst is vanadium pentoxide, and it lets the reaction reach equilibrium faster at a lower temperature, which is where the yield of sulfur trioxide is already favored. The higher yield comes from the temperature and pressure conditions, not from the catalyst pushing the equilibrium over."
+  },
+  {
+   "jid": "d9e5313485f5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And that's the same logic behind why cartels like the one we looked at last week keep falling apart.",
+   "conversation": [
+    "PROFESSOR (heard): Classic prisoner's dilemma. Each prisoner does better by confessing no matter what the other one does, so they both confess, even though both staying quiet would leave them better off.",
+    "NATIVELY: That's the core of it, yes. The key idea is that confessing is a **dominant strategy**: it gives a better payoff whether the other prisoner stays quiet or confesses, so a rational player picks it regardless. The twist is that when both follow that logic, they land on a worse outcome than if they had both stayed quiet, which is why the equilibrium isn't the best joint result.",
+    "PROFESSOR (heard): Now repeat it forever.",
+    "NATIVELY: That's the **iterated prisoner's dilemma**. When the game repeats, the same logic applies round by round, but now each player's choice can respond to what the other did before, so cooperation can actually hold up as a strategy. The one-shot dominant strategy stops being the whole story once the game has a future."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, it's the same structure. A cartel is a group of firms trying to hold the cooperative outcome, keeping prices high and output low, but each member has a private incentive to cheat by undercutting slightly and grabbing more of the market. In a one-shot setting that temptation wins, so the agreement is unstable. What holds it together is the repeated game: everyone knows they'll meet again, so cheating today gets punished by a price war tomorrow, and that threat of retaliation is what makes cooperation sustainable. Cartels still break down because that punishment is hard to coordinate and enforce across many firms, and because each member is tempted to defect just before the others do."
+  },
+  {
+   "jid": "7945627a8ea8",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And the printing press is the key here, Gutenberg's from around 1450, which is why Luther's Ninety-five Theses in 1517 spread across the German lands in a matter of weeks.",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Right, and the timing matters: movable type in Europe around 1450, and by 1517 Luther's theses were being printed and reprinted in German and Latin, so copies reached cities across the German lands within weeks rather than the months or years hand-copying would have taken. The press didn't create the ideas, it just made them impossible to contain."
+  },
+  {
+   "jid": "92f7103d12e0",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "using the slides' method, what's the elasticity if the cart cuts the price from 3.60 back to 3.00 and sales go from 400 back up to 500?",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Using the midpoint formula, the price cut from $3.60 to $3.00 with sales rising from 400 to 500 gives the same magnitude as the slide example, just in the other direction.\n\nStep 1: % change in Q = (500 - 400) / 450 = 0.2222, so 22.2%\nStep 2: % change in P = (3.00 - 3.60) / 3.30 = -0.1818, so -18.2%\nStep 3: E = 22.2% / -18.2% = -1.22\nStep 4: report |E| = **1.22**, so demand is **elastic** over this range.\n\nThat's the point of the midpoint convention: reversing the direction gives the same 1.22, not the 1.00 you'd get from starting values."
+  },
+  {
+   "jid": "1b1b12d7f65b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So what happens if I increase the pressure on nitrogen plus three hydrogen going to two ammonia? Somebody?",
+   "conversation": [
+    "PROFESSOR (heard): Le Chatelier's principle: if you disturb a system at equilibrium, it shifts in the direction that partly undoes the disturbance.",
+    "NATIVELY: Le Chatelier's principle says a system at equilibrium responds to a disturbance by shifting in the direction that partially counteracts it. The classic cases: add more reactant and the reaction shifts toward products; increase pressure and it shifts toward the side with fewer gas molecules; raise the temperature and it shifts in the endothermic direction, since that absorbs the added heat. It's a qualitative rule about which way the equilibrium moves, not how fast it gets there."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Increasing the pressure shifts the equilibrium toward the side with fewer gas molecules. On the left you have four moles of gas, one nitrogen plus three hydrogen, and on the right just two moles of ammonia, so the system shifts toward ammonia. More ammonia at equilibrium, and that's exactly why the Haber process runs at high pressure."
+  },
+  {
+   "jid": "f2ec139bf905",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Classic prisoner's dilemma. Each prisoner does better by confessing no matter what the other one does, so they both confess, even though both staying quiet would leave them better off.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the core of it, yes. The key idea is that confessing is a **dominant strategy**: it gives a better payoff whether the other prisoner stays quiet or confesses, so a rational player picks it regardless. The twist is that when both follow that logic, they land on a worse outcome than if they had both stayed quiet, which is why the equilibrium isn't the best joint result."
+  },
+  {
+   "jid": "08add531a989",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "is this on the exam?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't tell you what's on your exam, since I don't have your syllabus or the lecturer's guidance in front of me. What I can say is that if a topic came up in the lecture and the lecturer spent real time on it, that's usually a signal it matters. The safest move is to check the syllabus or ask the lecturer directly which topics are in scope."
+  },
+  {
+   "jid": "e0812dd1be49",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "teach me build-heap properly using his worked example: why we start at floor(n/2), what each sift-down does to the array, and why the whole thing is O(n) and not O(n log n).",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Start at floor(n/2) because everything past it is a leaf, and a single node is already a valid heap. So the last node with children is floor(n/2), and we sift down from there back to the root.\n\nIn the example, n = 7, so we start at i = 3. Sift-down(3) swaps 7 with its smaller child 2, giving [_, 9, 4, 2, 1, 8, 7, 6]. Sift-down(2) swaps 4 with 1, giving [_, 9, 1, 2, 4, 8, 7, 6]. Sift-down(1) swaps 9 with 1, then 9 with 4, giving [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps total.\n\nIt's O(n), not O(n log n), because most nodes sit near the bottom and can only fall a short distance. Summing each node's height gives a linear bound."
+  }
+ ]
+}

@@ -1,0 +1,283 @@
+{
+  "mode": "sales",
+  "partition": "final-hard",
+  "contexts": [
+    {
+      "id": "FSALES-CTX-G1",
+      "kind": "grounded",
+      "title": "Harborline Cold Chain Monitor pricing and hardware sheet",
+      "file_name": "harborline-pricing-hardware-2026.txt",
+      "text": "Harborline Cold Chain Monitor - Pricing and Hardware Sheet 2026\nHarborline Systems | Rep and partner use | Effective 1 February 2026\n\nWHAT IT DOES\nHarborline Cold Chain Monitor watches refrigerated storage and transport for food distributors, commissaries and grocery warehouses. Wireless sensors report to a gateway, the gateway reports to the Harborline cloud, and the cloud alerts staff when a reading leaves the allowed band and builds audit-ready logs.\n\nMeasured signals: temperature, door-open events, gateway connectivity and sensor battery level. Nothing else is measured today.\n\nHARDWARE (one-time, customer owns the hardware once paid)\n- HL-T3 wireless temperature sensor: $89 each. Range -40 C to +85 C, accuracy +/-0.3 C. Each unit ships with a NIST-traceable calibration certificate valid for 24 months.\n- HL-D1 door-open sensor: $45 each.\n- HL-G2 gateway (Wi-Fi or Ethernet): $340 each. One gateway covers up to 60 sensors within about 100 m indoors.\n- HL-G2C cellular gateway for trucks and trailers: $520 each, includes 24 months of cellular data; after that $9 per gateway per month.\n- Replacement battery pack: $12. Batteries are user-replaceable.\n\nBATTERY LIFE (HL-T3)\n- 10-minute logging interval (default): about 3 years.\n- 1-minute logging interval: about 18 months.\nBattery life drops in freezers below -25 C; plan on roughly 20% shorter life there.\n\nSUBSCRIPTION (per HL-T3 sensor per month, billed annually)\n- Standard: $6 per sensor per month. Email and push alerts, dashboards, 7-year log history, PDF temperature logs.\n- Premium: $9 per sensor per month. Adds SMS and automated voice-call alerts, escalation chains and 24/7 alert support.\n- Volume pricing at 250+ sensors on one contract: Standard $5, Premium $7.50 per sensor per month.\n- Door sensors are $2 per door sensor per month on either plan. Gateways carry no subscription fee.\n\nINSTALLATION\n- Remote-guided self-install: free, with a 60-minute video session.\n- On-site installation: $1,200 per site for up to 150 sensors, plus $6 per additional sensor at that site.\n- Installation fee waivers are not pre-approved; route any request to the regional sales manager in writing.\n\nLEAD TIME AND SHIPPING\n- 3 to 4 weeks from purchase order for orders under 500 sensors; larger orders are quoted individually.\n- Ships to the United States and Canada.\n\nPILOT PROGRAM\n- 45-day pilot: up to 25 sensors and 1 gateway, $1,500 flat.\n- The $1,500 is credited in full against the first-year subscription if the customer signs within 30 days of the pilot ending.\n- Pilot hardware can be kept if the customer signs; otherwise it is returned prepaid.\n\nRULES FOR REPS\nQuote list prices only. Discounts beyond the volume tier need regional sales manager approval. Do not quote battery life beyond the figures above.",
+      "notes": null
+    },
+    {
+      "id": "FSALES-CTX-G2",
+      "kind": "grounded",
+      "title": "Harborline support, warranty, compliance and terms",
+      "file_name": "harborline-support-warranty-terms.txt",
+      "text": "Harborline Cold Chain Monitor - Support, Warranty, Compliance and Terms\nHarborline Systems | Version 3.1 | Owner: Customer Operations and Legal\n\nALERTING\n- Standard plan: email and mobile push alerts.\n- Premium plan: adds SMS and automated voice-call alerts and escalation chains (for example, night-shift lead first, then warehouse manager after 10 minutes without acknowledgement).\n- If a gateway loses its connection, each HL-T3 sensor keeps logging locally for up to 30 days and back-fills the cloud when the connection returns.\n\nSUPPORT\n- Standard: email support Monday to Friday, 7am to 7pm Eastern. First response within 1 business day.\n- Premium: 24/7 phone support for alerting outages. Priority 1 first response within 30 minutes.\n\nHARDWARE WARRANTY\n- 24-month limited warranty from the ship date on sensors and gateways. Batteries are consumables and are not covered.\n- In-warranty failures are replaced through an RMA request in the dashboard; an advance replacement ships within 2 business days and the failed unit is returned in the prepaid box.\n- Out-of-warranty replacements are sold at list price less 20%.\n- Physical damage, water immersion beyond the rated seal, and opened housings void the warranty.\n\nDATA AND COMPLIANCE\n- Temperature readings cannot be edited or deleted by any user. Corrective-action notes can be attached to an excursion; every note is stored with the user name and a timestamp.\n- Log history is retained for 7 years by default for food safety audits.\n- Exports: PDF temperature logs, CSV raw data, and a traceability export formatted for the FDA Food Traceability Rule (FSMA 204) key data elements.\n- Security: SOC 2 Type II report available under NDA. Data encrypted at rest and in transit. Hosted in the United States.\n\nSERVICE LEVEL\n- Premium: 99.9% monthly availability for the alerting service, with a 10% service credit on that month's Premium fee if missed. Credit is the sole remedy.\n- Standard: no contractual availability commitment.\n\nCOMMERCIAL TERMS\n- Subscriptions are annual, invoiced upfront, Net 30.\n- Hardware is invoiced on shipment, Net 30.\n- Auto-renewal for 12 months unless cancelled with 45 days written notice.\n- After termination, the customer has 60 days to export all logs; data is then permanently deleted.\n- Sensors can be added mid-term at the prorated subscription rate; sensor count can only be reduced at renewal.\n\nESCALATION\nNon-standard terms, custom compliance attestations and security questionnaires go to Legal via the deal desk. Reps must not confirm certifications or regulatory validations that are not listed on this sheet.",
+      "notes": null
+    },
+    {
+      "id": "FSALES-CTX-C1",
+      "kind": "conflicting",
+      "title": "Harborline distributor price list (merged revision)",
+      "file_name": "harborline-distributor-price-list.txt",
+      "text": "Harborline Cold Chain - Distributor Price List (Northeast Channel, merged revision)\nPrepared by the channel team for distributor sales reps. Some rows were carried over from the 2025 list.\n\nHARDWARE\n| Item | Distributor list |\n| HL-T3 temperature sensor | $89 |\n| HL-D1 door sensor | $45 |\n| HL-G2 gateway | $290 |\n| HL-G2C cellular gateway | $520 (12 months of cellular data included) |\nNote: HL-G2 gateway list price moves to $340 effective 1 July.\n\nBATTERY\nHL-T3 battery lasts up to 5 years.\nSpec footnote: about 3 years at the default 10-minute logging interval.\n\nSUBSCRIPTION\nStandard $6 and Premium $9 per sensor per month, billed annually. Volume pricing from 200 sensors.\n\nPILOT OFFER FOR DISTRIBUTOR ACCOUNTS\nHeadline: 90-day pilot, 25 sensors and a gateway, $1,500.\nTerms line: pilot runs as a 45-day evaluation; fee credited if the customer signs within 30 days of the end.\n\nCELLULAR\nThe HL-G2C includes 24 months of data, then $9 per gateway per month.\n\nWARRANTY\n24 months on all hardware.\n\nINSTALLATION\nOn-site installation is available through Harborline or through certified distributor installers. Distributor installers set their own rates; Harborline on-site installation is quoted per site.\n\nLEAD TIMES\nStandard lead time is 3 to 4 weeks from purchase order. Distributor stock in the Northeast warehouse may ship sooner; ask the channel manager for current stock levels before promising a date.\n\nORDERING NOTES\n- Quote hardware and subscription on separate lines.\n- Pilot hardware is shipped from Harborline directly, not from distributor stock.\n- Do not combine the pilot offer with any other promotion.\n\nChannel reps should confirm current prices with the Harborline channel manager before sending a quote.",
+      "notes": "Contradictions: (1) HL-G2 gateway $290 in the table vs $340 effective 1 July note; (2) battery \"up to 5 years\" vs about 3 years at the default interval; (3) pilot headline 90-day vs terms line 45-day evaluation; (4) cellular gateway 12 months of data included in the table vs 24 months in the Cellular section; (5) volume pricing from 200 sensors vs 250+ on the official sheet."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "FSALES-001",
+      "category": "pricing_question",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "We'd be looking at about three hundred and twenty temperature sensors across two warehouses, plus our eleven trucks. Ballpark, what's year one with hardware, and how do the trucks connect?",
+      "context_condition": "grounded",
+      "context_ref": "FSALES-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "spoken ballpark with the pricing components",
+      "claim_trap": "company_fact",
+      "needles": [
+        "250+ sensors",
+        "$520",
+        "$89"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-002",
+      "category": "capability_question",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "If we log every minute instead of every ten, how often are we swapping batteries? Some of these are in the blast freezer.",
+      "context_condition": "grounded",
+      "context_ref": "FSALES-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "spoken battery-life answer with the freezer caveat",
+      "claim_trap": "company_fact",
+      "needles": [
+        "about 18 months",
+        "20% shorter"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-003",
+      "category": "capability_question",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Do the sensors also track humidity? Our produce side really cares about that.",
+      "context_condition": "grounded",
+      "context_ref": "FSALES-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "honest spoken answer without claiming the capability",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-004",
+      "category": "product_explanation",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Prospect asks what happens if a sensor dies in month twenty-six. Exact words please.",
+      "context_condition": "grounded",
+      "context_ref": "FSALES-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "speakable answer on replacement terms",
+      "claim_trap": "support_policy",
+      "needles": [
+        "24-month limited warranty",
+        "list price less 20%"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-005",
+      "category": "security_compliance",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Is the platform validated for 21 CFR Part 11? Our pharma distribution arm is going to ask.",
+      "context_condition": "grounded",
+      "context_ref": "FSALES-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "honest spoken answer and a path to confirm",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-006",
+      "category": "security_compliance",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "How long do you keep our temperature logs, and if we ever cancel, how long do we have to pull everything out for the auditors?",
+      "context_condition": "grounded",
+      "context_ref": "FSALES-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "spoken answer covering retention and export window",
+      "claim_trap": "company_fact",
+      "needles": [
+        "7 years",
+        "60 days"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-007",
+      "category": "pricing_question",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "The distributor list you guys sent has the gateway at two-ninety, but your email said three-forty. Which number do I budget?",
+      "context_condition": "conflicting",
+      "context_ref": "FSALES-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous"
+      ],
+      "expected_answer_type": "spoken answer reconciling the two prices",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$290",
+        "$340 effective 1 July"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-008",
+      "category": "negotiation",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Pilot's ninety days, right?",
+      "context_condition": "conflicting",
+      "context_ref": "FSALES-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "short_turn"
+      ],
+      "expected_answer_type": "short spoken answer flagging the conflicting pilot length",
+      "claim_trap": "company_fact",
+      "needles": [
+        "90-day pilot",
+        "45-day evaluation"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-009",
+      "category": "closing",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "Recap what they told me and propose the next step, in words I can say to close this call.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Just so you know where we are, year one is capped at forty thousand, all in. Hardware included."
+        },
+        {
+          "speaker": "user",
+          "text": "Understood, that's helpful."
+        },
+        {
+          "speaker": "other",
+          "text": "And nothing gets signed until Priya in QA runs a pilot in the Newark warehouse and signs off on it."
+        },
+        {
+          "speaker": "user",
+          "text": "Makes sense. Is there a date you're working toward?"
+        },
+        {
+          "speaker": "other",
+          "text": "We want a decision by November 14 so it's live before holiday volume hits."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "speakable recap of stated facts plus concrete next step",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "forty thousand",
+        "Priya",
+        "November 14"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FSALES-010",
+      "category": "negotiation",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Great, and like you promised on our last call, you're waiving the on-site installation fee, right?",
+      "context_condition": "grounded",
+      "context_ref": "FSALES-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "spoken answer that does not confirm an unrecorded promise",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

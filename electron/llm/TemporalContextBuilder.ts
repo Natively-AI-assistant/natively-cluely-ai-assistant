@@ -2,6 +2,8 @@
 // Temporal RAG context builder for "What should I say?" feature
 // Builds enriched context to prevent repetition and maintain consistency
 
+import { TYPED_TURN_LABEL } from './typedTurnLabel';
+
 export interface AssistantResponse {
     text: string;
     timestamp: number;
@@ -10,6 +12,8 @@ export interface AssistantResponse {
 
 export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
+    /** A user line that was typed to the assistant, not said (SessionTracker.ContextItem.typed). */
+    typed?: boolean;
     text: string;
     timestamp: number;
 }
@@ -143,7 +147,9 @@ function formatTranscript(items: ContextItem[]): string {
             // Weight interviewer turns more strongly - they define intent
             return `[INTERVIEWER – IMPORTANT]: ${item.text}`;
         } else if (item.role === 'user') {
-            return `[ME]: ${item.text}`;
+            // A typed line is not something said in the meeting (same label the
+            // rolling context uses — SessionTracker.TYPED_TURN_LABEL).
+            return `[${item.typed ? TYPED_TURN_LABEL : 'ME'}]: ${item.text}`;
         } else {
             return `[ASSISTANT (MY PREVIOUS RESPONSE)]: ${item.text}`;
         }

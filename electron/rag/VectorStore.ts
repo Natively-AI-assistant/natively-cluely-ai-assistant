@@ -22,6 +22,7 @@
 // size genuinely needs main-thread relief, offload the WHOLE synchronous
 // call (not a hand-split protocol) via Electron's utilityProcess or a
 // promise-wrapped `setImmediate` batch, not a bespoke message protocol.
+import { isVecTableRebuildPending } from '../db/vecRebuildPending';
 import Database from 'better-sqlite3';
 import { Chunk } from './SemanticChunker';
 import { DatabaseManager } from '../db/DatabaseManager';
@@ -176,6 +177,27 @@ export class VectorStore {
     }
 
     /**
+     * The clock time of each meeting's earliest chunk — the meeting's start as
+     * far as the index knows. Chunk times are clock time; this is what turns
+     * one into "time into the meeting". A meeting with no stamped chunk is
+     * left out of the map.
+     */
+    getMeetingStartTimes(meetingIds: string[]): Map<string, number> {
+        const starts = new Map<string, number>();
+        const ids = meetingIds.filter(id => typeof id === 'string' && id.length > 0);
+        if (ids.length === 0 || !this.isDatabaseUsable()) return starts;
+        const rows = this.db.prepare(
+            `SELECT meeting_id AS id, MIN(start_timestamp_ms) AS start FROM chunks
+             WHERE meeting_id IN (${ids.map(() => '?').join(',')}) AND start_timestamp_ms > 0
+             GROUP BY meeting_id`
+        ).all(...ids) as { id: string; start: number }[];
+        for (const row of rows) {
+            if (Number.isFinite(Number(row.start))) starts.set(row.id, Number(row.start));
+        }
+        return starts;
+    }
+
+    /**
      * Get all chunks for a meeting
      */
     getChunksForMeeting(meetingId: string): StoredChunk[] {
@@ -215,7 +237,10 @@ export class VectorStore {
             return [];
         }
 
-        if (this.useNativeVec) {
+        // A table that is waiting to be rebuilt (wrong metric, missing vectors,
+        // or only part refilled) answers a native query with a confident wrong
+        // top-k, so it is read from the stored vectors until it is complete.
+        if (this.useNativeVec && !isVecTableRebuildPending(this.db, `vec_chunks_${queryEmbedding.length}`)) {
             try {
                 return this.searchSimilarNative(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
             } catch (e) {
@@ -428,11 +453,28 @@ export class VectorStore {
     /**
      * Save or update meeting summary
      */
-    saveSummary(meetingId: string, summaryText: string): void {
+    /**
+     * Returns true when the row now needs embedding (new, or its text changed).
+     *
+     * An upsert, not INSERT OR REPLACE: REPLACE deletes the old row and gives
+     * the new one a fresh id, which orphans the old id's vector in
+     * vec_summaries_* (a virtual table, so no foreign key reaps it). Keeping the
+     * id lets the re-embed overwrite the vector in place. The stored embedding
+     * is cleared only when the text actually changed, so re-saving the same
+     * notes (regenerate with no change, the launch backfill) costs no call.
+     */
+    saveSummary(meetingId: string, summaryText: string): boolean {
         this.db.prepare(`
-            INSERT OR REPLACE INTO chunk_summaries (meeting_id, summary_text)
+            INSERT INTO chunk_summaries (meeting_id, summary_text)
             VALUES (?, ?)
+            ON CONFLICT(meeting_id) DO UPDATE SET
+                embedding = CASE WHEN chunk_summaries.summary_text = excluded.summary_text THEN chunk_summaries.embedding ELSE NULL END,
+                summary_text = excluded.summary_text
         `).run(meetingId, summaryText);
+        const row = this.db.prepare(
+            'SELECT embedding IS NULL AS pending FROM chunk_summaries WHERE meeting_id = ?'
+        ).get(meetingId) as { pending: number } | undefined;
+        return !!row && row.pending === 1;
     }
 
     /**
@@ -542,7 +584,8 @@ export class VectorStore {
             console.warn('[VectorStore] searchSummaries called without an active spaceKey — returning empty.');
             return [];
         }
-        if (this.useNativeVec) {
+        // Same rule as searchSimilar: not while the table is waiting to be rebuilt.
+        if (this.useNativeVec && !isVecTableRebuildPending(this.db, `vec_summaries_${queryEmbedding.length}`)) {
             try {
                 return this.searchSummariesNative(queryEmbedding, limit, spaceKey);
             } catch (e) {

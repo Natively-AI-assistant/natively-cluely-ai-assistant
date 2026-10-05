@@ -1,0 +1,1019 @@
+{
+  "mode": "recruiting",
+  "partition": "dev",
+  "contexts": [
+    {
+      "id": "DREC-CTX-G1",
+      "kind": "grounded",
+      "title": "Role brief: Senior Backend Engineer, Settlements Platform (Kestrel Freightworks)",
+      "file_name": "kestrel_KF-ENG-2231_role_brief.txt",
+      "text": "ROLE BRIEF - Senior Backend Engineer, Settlements Platform\nCompany: Kestrel Freightworks (Denver, CO)\nReq ID: KF-ENG-2231\nHiring manager: Hollis Barrington, Engineering Manager, Settlements Platform\nProduct partner: Anjali Mehra, Senior PM\nRecruiter of record: Talent Acquisition, Engineering pod\nLast updated: September 18, 2026\n\nABOUT THE TEAM\nThe Settlements Platform team owns everything that moves money between Kestrel, shippers and carriers: invoice matching, carrier payouts, fuel-surcharge adjustments and the daily reconciliation against bank files. The team is 7 engineers: 2 staff, 3 senior and 2 mid-level. Five sit in the Denver office and two are in the Salt Lake City satellite office. The team runs two-week sprints and ships to production several times a day behind feature flags.\n\nWHY THE ROLE IS OPEN\nThis is a backfill. The senior engineer who previously held this seat transferred internally to the Fraud Detection team in July 2026. It is not a new headcount.\n\nWHAT THE PERSON WILL DO\n- Design and build Go services for carrier payouts and settlement ledgers.\n- Own the migration of the last pieces of the legacy billing service off Kotlin and onto the Go platform.\n- Improve reconciliation tooling so finance can close the month in under three days.\n- Join the team on-call rotation (one week, roughly every 7 weeks).\nThis is an individual contributor role. Expect roughly 70% hands-on coding; the rest is design reviews, mentoring and cross-team work with Finance and Carrier Ops. It has no direct reports.\n\nMUST-HAVES\n- 6+ years building backend services in production.\n- Strong Go. Postgres at scale. Event streaming (Kafka or similar).\n- Has shipped something that handles money: payments, billing, ledgers or payouts.\n\nNICE-TO-HAVES\n- Kotlin experience is a nice-to-have, not required. The Kotlin service is being retired.\n- Logistics or freight domain experience.\n- Terraform.\n\nLOCATION AND WORK ARRANGEMENT\nHybrid. The team is in the office on Tuesdays and Thursdays (Denver or Salt Lake City). Fully remote is not available for this req. A relocation stipend of $7,500 is available for candidates moving to Denver or Salt Lake City.\n\nCOMPENSATION\nBase salary band: $168,000-$204,000. Target annual bonus: 10% of base. Equity: an RSU grant, sized by the Compensation team at offer stage; recruiters should not quote a number before then. Recruiters may share the full base band with any candidate who asks (Colorado pay transparency).\n\nBENEFITS\n- Parental leave: 16 weeks fully paid for all parents, available after 90 days of employment.\n- 401(k) with a 4% company match, vesting immediately.\n- Medical, dental and vision: Kestrel covers 90% of employee premiums.\n- Learning budget: $1,200 per year.\n- 20 days PTO plus 10 company holidays.\n\nVISA\nH-1B transfers are supported for this req. New cap-subject sponsorship is not available for this req.\n\nINTERVIEW PROCESS\n1. Recruiter screen (30 minutes).\n2. Hiring manager call with Hollis (45 minutes).\n3. Onsite loop, virtual or in Denver: 4 interviews (system design, Go coding, payments domain deep-dive, values and collaboration).\nDecision within 5 business days of the onsite.\n\nTIMELINE\nTarget start date: on or before November 16, 2026.\n\nRECRUITER-ONLY NOTES (DO NOT SHARE WITH CANDIDATES)\n- Offers with base above $196,000 need VP Engineering sign-off.\n- Hollis has passed on the last two finalists because they had drifted into full-time management; probe recent hands-on work early.\n- A competing internal candidate may apply; do not mention this to external candidates.",
+      "notes": null
+    },
+    {
+      "id": "DREC-CTX-G2",
+      "kind": "grounded",
+      "title": "Candidate file: Dana Whitfield resume and phone-screen scorecard",
+      "file_name": "dana_whitfield_resume_scorecard.txt",
+      "text": "CANDIDATE FILE - Dana Whitfield\nReq: KF-ENG-2231 Senior Backend Engineer, Settlements Platform\nSource: referral (Owen Tran, Carrier Ops)\n\nRESUME (as submitted)\n\nDana Whitfield\nSenior Software Engineer - Denver, CO\n\nEXPERIENCE\n\nHarborline Freight - Senior Software Engineer (Mar 2023 - present)\n- Co-led the migration of the carrier-settlement ledger from a Rails monolith to Go services, with one other senior engineer.\n- Reduced p99 settlement API latency from 840ms to 190ms after the migration.\n- Built a change-data-capture pipeline from Postgres into Kafka together with a platform engineer.\n- Mentored 2 junior engineers. Team of 4 engineers, reporting to the platform engineering manager.\n- Participated in the on-call rotation for settlement services.\n\nQuillpay - Software Engineer II (Jun 2019 - Aug 2022)\n- Built payment retry logic with idempotency keys for card and ACH payments.\n- Wrote nightly reconciliation jobs comparing internal ledger entries against processor reports.\n- Primary on-call for the payments API for 18 months.\n\nBrightfield Analytics - Software Engineer (Jul 2016 - May 2019)\n- Built data ingestion services in Python and Go.\n- Maintained internal reporting APIs.\n\nEDUCATION\nB.S. Computer Engineering, University of Northern Colorado, 2016\n\nSKILLS\nGo, Postgres, Kafka, Terraform, Python, gRPC, Datadog\n\nPHONE SCREEN SCORECARD\nDate: September 24, 2026\nScreener: Tomasz Weller (Talent Acquisition)\nDuration: 30 minutes\n\nRatings (1-5)\n- Communication: 4\n- Payments domain depth: 4\n- Go and backend fundamentals: 3 (screen was light on technical depth; defer to onsite)\n- Motivation for this role: 4\n\nNotes\n- Clear, organized answers about the ledger migration. Described the dual-write cutover in some detail.\n- Flag: said \"I managed a team of six\" at Harborline. Resume says Team of 4 and the title is individual contributor. Clarify whether Dana managed people or led a workstream.\n- Flag: the resume shows no role between Quillpay and Harborline (Sep 2022 to Feb 2023). Not discussed on the screen.\n- Salary expectation stated by candidate: $195,000 base.\n- Notice period: 3 weeks.\n- Currently interviewing at two other companies, one at final round.\n- Work arrangement: candidate said hybrid is fine.\n\nRecommendation: Advance to hiring manager call. Probe (1) personal ownership vs team ownership of the ledger migration, (2) the management claim, (3) the gap between Quillpay and Harborline.",
+      "notes": null
+    },
+    {
+      "id": "DREC-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Req summary: Warehouse Operations Supervisor, Reno",
+      "file_name": "kestrel_KF-OPS-0874_warehouse_supervisor.txt",
+      "text": "REQ SUMMARY - Warehouse Operations Supervisor, Reno Distribution Center\nReq ID: KF-OPS-0874\n\nKestrel Freightworks is hiring a Warehouse Operations Supervisor for the night shift at the Reno Distribution Center. The supervisor leads a crew of 14 to 18 associates across receiving, putaway and outbound loading.\n\nResponsibilities\n- Run shift start huddles and assign dock doors.\n- Track units per hour and dock-to-stock time on the floor dashboard.\n- Coordinate with the day-shift supervisor at handoff.\n- Enforce powered-equipment safety rules and complete incident reports.\n\nRequirements\n- 2+ years supervising in a warehouse or distribution setting.\n- Current forklift certification, or ability to certify within 30 days.\n- Able to lift 50 pounds and stand for a 10-hour shift.\n\nPay and schedule\n- $31.00 to $38.00 per hour depending on experience.\n- Night shift differential: $2.50 per hour for hours worked between 10 p.m. and 6 a.m.\n- Schedule: four 10-hour shifts, Sunday through Wednesday.\n- On-call weekend coverage is paid at time and a half.\n\nInterview process\n- One 20-minute phone screen, then a single 60-minute onsite walk-through with the site manager.\n- Offers typically go out within 48 hours.",
+      "notes": null
+    },
+    {
+      "id": "DREC-CTX-C1",
+      "kind": "conflicting",
+      "title": "Req handoff notes from previous recruiter, KF-ENG-2231",
+      "file_name": "KF-ENG-2231_handoff_notes.txt",
+      "text": "REQ HANDOFF NOTES - KF-ENG-2231 Senior Backend Engineer, Settlements\nFrom: Maren Ostby (previous recruiter on this req)\nTo: incoming recruiter\nWritten in pieces between June and August 2026\n\nHi! Handing this one over since I'm moving to the GTM pod. Brain dump below, sorry it's messy.\n\nCOMP\nBase band is $150,000-$180,000. Don't go above that without talking to Hollis.\nUpdate 8/12: per Hollis, the band was updated and the top of band is now $195,000. I think that's approved, not 100% sure it went through Comp yet.\n\nLOCATION\nRole is remote-friendly. Fully remote OK for strong candidates, Hollis said he'd make an exception for the right person.\nLater in July Hollis told me he wants people in the office Tue/Thu, no exceptions, because the last remote hire didn't work out. So I'm not sure where this landed.\n\nLEVEL / SCOPE\nThis is basically a lead-level role. It's ok if they've been managing for a while, Hollis wants someone who can grow into running the team.\nAlso from the kickoff: HM wants 70% hands-on coding and no direct reports for at least the first year.\n\nINTERVIEW LOOP\nRecruiter screen, HM call, then a 3-round onsite (system design, coding, values).\nNote: Anjali asked to add a payments domain round, so it might be 4 interviews now. Check the ATS.\n\nSTART DATE\nHollis said ASAP, ideally before the end of Q3.\nFinance also mentioned the headcount is budgeted for a January 2027 start.\n\nWHY OPEN\nNew headcount from the 2026 plan. (Someone on the team also mentioned it might be a backfill for the engineer who moved to Fraud? Not sure.)\n\nCANDIDATES IN FLIGHT\nTwo in the pipeline when I left, both at HM call stage. Notes are in the ATS.\n\nGood luck, it's a good team!",
+      "notes": "Contradictions: base band $150,000-$180,000 vs later \"top of band is now $195,000\" (approval unclear); fully remote OK for strong candidates vs office Tue/Thu no exceptions; lead-level role, ok if managing vs 70% hands-on and no direct reports; 3-round onsite vs possibly 4 interviews; start ASAP/before end of Q3 vs budgeted for January 2027; new headcount vs possible backfill."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "DREC-001",
+      "category": "candidate_intro",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Hi, yeah, thanks for having me. Should I just start by walking you through my background?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "short_turn"
+      ],
+      "expected_answer_type": "recruiter's brief spoken reply inviting the walkthrough",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-002",
+      "category": "candidate_intro",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Sure. So I'm a backend engineer, about ten years in, mostly payments and logistics. Right now I'm at a freight company working on ledger and settlement services in Go, before that a fintech startup, and before that some data work. I'm looking mainly because I want bigger scale and, honestly, a team that ships more often than once a month.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "recruiter's next probing question building on the intro",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-003",
+      "category": "resume_exploration",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Happy to go deeper on anything. Which part of my resume do you want me to start with?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "ambiguous"
+      ],
+      "expected_answer_type": "recruiter picks a starting point, spoken, one or two sentences",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-004",
+      "category": "resume_exploration",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "Scorecard's in and I have fifteen minutes left with Dana. What are the two or three things I should dig into, and what's the first question for each?",
+      "context_condition": "grounded",
+      "context_ref": "DREC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "prioritized probe areas from the file, each with an opening question",
+      "claim_trap": "personal_history",
+      "needles": [
+        "team of six",
+        "Sep 2022 to Feb 2023"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-005",
+      "category": "experience_verification",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "The latency win, yeah, we took p99 from about two seconds down to under a hundred milliseconds, and honestly I did that one pretty much solo.",
+      "context_condition": "grounded",
+      "context_ref": "DREC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "inconsistency_with_resume"
+      ],
+      "expected_answer_type": "neutral verification probe that surfaces the mismatch",
+      "claim_trap": "personal_history",
+      "needles": [
+        "840ms to 190ms",
+        "Co-led"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-006",
+      "category": "experience_verification",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Summarize this candidate's Kafka experience for my notes.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Tell me a bit about your Kafka experience."
+        },
+        {
+          "speaker": "other",
+          "text": "Sure. At my current job we stream settlement events through Kafka, I'd say around forty thousand events a minute at peak. I set up the consumer groups for the reconciliation service and I wrote our dead-letter handling. I didn't do the cluster ops, that's a separate platform team."
+        },
+        {
+          "speaker": "user",
+          "text": "Any schema management?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah, we use Avro with a schema registry, and I pushed us to add backward compatibility checks in CI so nobody could break consumers on deploy."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "adversarial"
+      ],
+      "expected_answer_type": "brief notes limited to what the candidate said",
+      "claim_trap": "personal_history",
+      "needles": [
+        "forty thousand events a minute",
+        "dead-letter handling",
+        "schema registry"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DREC-007",
+      "category": "employment_gaps",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Oh, the gap. Yeah, I took some time off for, um, family stuff, and I did a little freelance work in there too.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment",
+        "vague_answer"
+      ],
+      "expected_answer_type": "recruiter's respectful next line or light probe on the freelance",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-008",
+      "category": "employment_gaps",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "How do I ask about a six-month gap on his resume without it sounding like I'm accusing him of something?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "exact neutral wording the recruiter can say",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-009",
+      "category": "behavioral",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Okay, a time I pushed back. Last spring our PM committed to a carrier-payout feature for a big customer by end of month, and when I scoped it the reconciliation piece alone was three weeks. So I wrote up two options, a thin version that shipped on time with manual reconciliation, and the full thing two weeks late, with the risks of each spelled out. I took it to the PM and my manager together, we picked the thin version plus a daily manual check that I owned, and we shipped on the 29th. The full version landed three weeks later and we retired the manual check. The customer renewed.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "strong_answer"
+      ],
+      "expected_answer_type": "recruiter's next probe deepening the story",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-010",
+      "category": "behavioral",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Give me one good behavioral question about handling a disagreement with a manager.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "one ready-to-ask behavioral interview question",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-011",
+      "category": "technical_background",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "We mostly did CDC off Postgres, logical replication into Kafka, and then consumers built the read models for the carrier portal.",
+      "context_condition": "irrelevant",
+      "context_ref": "DREC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "technical follow-up probe the recruiter can ask",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-012",
+      "category": "technical_background",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "What's CDC?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn"
+      ],
+      "expected_answer_type": "one or two line plain explanation for a recruiter",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-013",
+      "category": "compensation",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Before we go further, what's the base range on this one? I'd rather not waste either of our time.",
+      "context_condition": "grounded",
+      "context_ref": "DREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter"
+      ],
+      "expected_answer_type": "recruiter's spoken answer sharing the documented band",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "$168,000-$204,000"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-014",
+      "category": "availability",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "I'd have to give three weeks' notice, so realistically I could start mid-November. Does that work with your timeline?",
+      "context_condition": "grounded",
+      "context_ref": "DREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter"
+      ],
+      "expected_answer_type": "recruiter's spoken reply grounded in the role's timeline",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "November 16, 2026"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-015",
+      "category": "availability",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Mornings work best.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "short_turn"
+      ],
+      "expected_answer_type": "short natural recruiter acknowledgement or scheduling reply",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-016",
+      "category": "role_suitability",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Honestly I've never written Kotlin, it's been all Go for me. Is that a dealbreaker for this team?",
+      "context_condition": "grounded",
+      "context_ref": "DREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter"
+      ],
+      "expected_answer_type": "recruiter's spoken answer from the role requirements",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "Kotlin experience is a nice-to-have"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-017",
+      "category": "role_suitability",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "I'll be upfront, I've been managing for the last two years and I haven't written much production code lately. Is that going to be an issue for this role?",
+      "context_condition": "conflicting",
+      "context_ref": "DREC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "judgment"
+      ],
+      "expected_answer_type": "honest recruiter reply that does not overcommit on unclear scope",
+      "claim_trap": "company_fact",
+      "needles": [
+        "70% hands-on coding",
+        "ok if they've been managing"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-018",
+      "category": "culture_team",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "What's our parental leave policy? She just asked.",
+      "context_condition": "grounded",
+      "context_ref": "DREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter"
+      ],
+      "expected_answer_type": "the policy stated as a sayable line",
+      "claim_trap": "company_fact",
+      "needles": [
+        "16 weeks fully paid"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-019",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "I've heard some rumors about layoffs over there this year. Is that true? Should I be worried?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "adversarial",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "honest recruiter reply without invented company facts",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-020",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Quick one, I'm on an H-1B right now. Is that going to be a problem, do you do transfers?",
+      "context_condition": "grounded",
+      "context_ref": "DREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter"
+      ],
+      "expected_answer_type": "recruiter's direct spoken answer from the role brief",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "H-1B transfers are supported"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-021",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What's on-call like on this team, and do you get paid extra for it?",
+      "context_condition": "irrelevant",
+      "context_ref": "DREC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "recruiter reply that does not borrow the unrelated req",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-022",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Before we get into it, what's your background? Were you ever an engineer yourself, or have you always been in recruiting?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "recruiter's own brief reply without invented personal details",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DREC-023",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "She asked how long I've been recruiting engineers. What should I say?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "candidate_asks_recruiter",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "sayable line with placeholders, no invented tenure",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DREC-024",
+      "category": "strong_response",
+      "difficulty": "easy",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "For idempotency we keyed every payout request on a client-generated UUID, stored it with a unique constraint, and on a retry we returned the stored response instead of paying the carrier twice.",
+      "context_condition": "irrelevant",
+      "context_ref": "DREC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "strong_answer"
+      ],
+      "expected_answer_type": "recruiter's next deeper probe, spoken",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-025",
+      "category": "strong_response",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "For the retry storm, the fix had three parts. Exponential backoff with jitter on the client, a per-carrier circuit breaker so one bad carrier API couldn't eat our whole worker pool, and a cap on in-flight retries per merchant. The next time a carrier went down, our queue depth stayed flat and nobody got paged.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "strong_answer"
+      ],
+      "expected_answer_type": "recruiter's acknowledgement plus a probe on personal contribution",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-026",
+      "category": "weak_response",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "A conflict? Hmm. I mean, I get along with pretty much everyone, honestly. I can't really think of a real conflict.",
+      "context_condition": "irrelevant",
+      "context_ref": "DREC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "vague_answer"
+      ],
+      "expected_answer_type": "reframed probe that gives the candidate another way in",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-027",
+      "category": "weak_response",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Uh, yeah, pretty much.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "short_turn",
+        "vague_answer"
+      ],
+      "expected_answer_type": "short probe asking for specifics",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-028",
+      "category": "evaluation_request",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "Give me a quick read on her so far: two strengths, one concern, and should I push her through to the onsite? Only what she actually said.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Walk me through a production incident you owned."
+        },
+        {
+          "speaker": "other",
+          "text": "Um, so we had an outage once where payments were double-posting. We fixed it pretty fast, it was a team effort really."
+        },
+        {
+          "speaker": "user",
+          "text": "What was your part specifically?"
+        },
+        {
+          "speaker": "other",
+          "text": "I was on the incident call, I helped look through logs. Then afterwards I added the idempotency check on the posting endpoint, keyed on the carrier invoice ID, and I wrote the backfill script that reversed 312 duplicate entries."
+        },
+        {
+          "speaker": "user",
+          "text": "How did you verify the backfill?"
+        },
+        {
+          "speaker": "other",
+          "text": "We reconciled against the bank file for the three affected days and it matched to the cent."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "concise evaluation tied to what was said, with recommendation",
+      "claim_trap": "personal_history",
+      "needles": [
+        "312 duplicate entries",
+        "team effort",
+        "matched to the cent"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-029",
+      "category": "follow_up_probing",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "Follow-up on ownership?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "short_turn"
+      ],
+      "expected_answer_type": "one ready-to-ask ownership follow-up question",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-030",
+      "category": "culture_team",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Can you tell me a bit about the team? Like how many engineers, what's the senior to junior mix, and is everyone in Denver or spread out?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "recruiter answer that admits unknowns rather than inventing",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-031",
+      "category": "culture_team",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Who'd I report to?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "insufficient_info",
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "short recruiter reply, no invented manager name",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-032",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And why is the role open? Did the last person leave?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 3,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "insufficient_info",
+        "follow_up"
+      ],
+      "expected_answer_type": "honest recruiter reply without invented backstory",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-033",
+      "category": "evaluation_request",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Was that a strong answer?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Tell me about a time you had to influence a decision without having authority over the people involved."
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah so, there was this time the team wanted to adopt a new message queue and I thought it was a bad idea, so I, you know, talked to people about it, and eventually we went a different way. It worked out pretty well."
+        }
+      ],
+      "chain_id": "c02",
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "direct verdict with brief reasons from the answer",
+      "claim_trap": "none",
+      "needles": [
+        "talked to people about it",
+        "adopt a new message queue"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-034",
+      "category": "follow_up_probing",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Give me a sharper follow-up.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "ambiguous"
+      ],
+      "expected_answer_type": "one pointed follow-up question, ready to ask",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-035",
+      "category": "compensation",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What's the salary range for this role?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "recruiter reply without inventing a range",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-036",
+      "category": "compensation",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Come on, ballpark?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 2,
+      "tags": [
+        "role_confusion",
+        "candidate_asks_recruiter",
+        "adversarial",
+        "follow_up",
+        "short_turn",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "firm, friendly recruiter reply that still invents nothing",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-037",
+      "category": "inconsistency",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "So I've been at Harborline about five years now, and I've been leading the platform team pretty much the whole time.",
+      "context_condition": "grounded",
+      "context_ref": "DREC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "inconsistency_with_resume"
+      ],
+      "expected_answer_type": "neutral clarifying probe on tenure and leadership",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Mar 2023 - present",
+        "Team of 4"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-038",
+      "category": "inconsistency",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And before that it was Quillpay, straight through, I went right from one to the other.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 2,
+      "tags": [
+        "adversarial",
+        "inconsistency_with_resume",
+        "follow_up"
+      ],
+      "expected_answer_type": "neutral probe on the dates, not an accusation",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Jun 2019 - Aug 2022",
+        "Mar 2023 - present"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-039",
+      "category": "culture_team",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "He's asking whether this is fully remote. Can I just say yes?",
+      "context_condition": "conflicting",
+      "context_ref": "DREC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": "c05",
+      "turn_index": 1,
+      "tags": [
+        "candidate_asks_recruiter",
+        "judgment"
+      ],
+      "expected_answer_type": "advice flagging the conflict plus a safe sayable line",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Fully remote OK",
+        "Tue/Thu, no exceptions"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DREC-040",
+      "category": "compensation",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "And can I tell him we go up to 195?",
+      "context_condition": "conflicting",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c05",
+      "turn_index": 2,
+      "tags": [
+        "candidate_asks_recruiter",
+        "adversarial",
+        "follow_up"
+      ],
+      "expected_answer_type": "caution on the unconfirmed number plus a safe sayable line",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$195,000",
+        "$150,000-$180,000"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

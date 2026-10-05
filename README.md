@@ -41,9 +41,9 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 
 [![License](https://img.shields.io/badge/License-Personal%20Use%20Source-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blueviolet?style=flat-square)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
-[![Downloads](https://img.shields.io/github/downloads/evinjohnn/natively-cluely-ai-assistant/total?style=flat-square&color=success)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
-![Repo Views](https://img.shields.io/badge/Views-1.8M-red?style=flat-square)
-[![Stars](https://img.shields.io/github/stars/evinjohnn/natively-cluely-ai-assistant?style=flat-square&color=gold)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
+[![Downloads](https://img.shields.io/badge/downloads-300k%2B-success?style=flat-square)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
+![Repo Views](https://img.shields.io/badge/Views-3.8M-red?style=flat-square)
+[![Stars](https://img.shields.io/github/stars/Natively-AI-assistant/natively-cluely-ai-assistant?style=flat-square&color=gold)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
 ![Status](https://img.shields.io/badge/Status-active-success?style=flat-square)
 [![Telegram Chat](https://img.shields.io/badge/Telegram-Chat-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/nativelyaichat)
 [![LinkedIn Company](https://img.shields.io/badge/LinkedIn-Company-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/company/nativley-ai)
@@ -66,6 +66,16 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 </p>
 
 <small>Requires macOS 12+ (Apple Silicon & Intel) or Windows 10/11</small>
+
+<br/>
+
+**macOS — install with [Homebrew](https://brew.sh):**
+
+```bash
+brew install --cask Natively-AI-assistant/tap/natively
+```
+
+<small>Upgrades arrive through Natively's own updater; `brew upgrade --cask --greedy natively` forces one via Homebrew.</small>
 
 <br/>
 
@@ -450,7 +460,7 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 
 #### 🖥 Platform
 
-- Electron 43 and TypeScript 7; requires Node 22.6+ to build from source.
+- Electron 43 and TypeScript 7; requires Node 22.13+ to build from source.
 - Signed macOS builds for **both** Apple Silicon and Intel, plus a macOS 12 (Monterey) compatibility guard for local speech.
 
 > 📄 **[Read the full v2.8.7 release notes →](docs/releases/v2.8.7.md)**
@@ -549,7 +559,7 @@ You explicitly control:
 
 ### Prerequisites
 
-- Node.js (v22.6+ required)
+- Node.js (v22.13+ required)
 - Git
 - Rust (required for native audio capture)
 - Xcode 26+ with the macOS 26 SDK (required only to build the Apple Speech helper or package Natively for macOS)

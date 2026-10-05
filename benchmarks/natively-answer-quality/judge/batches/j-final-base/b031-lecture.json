@@ -1,0 +1,271 @@
+{
+ "batch": "b031-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-I1": {
+   "title": "Campus parking closure notice",
+   "text": "EASTBROOK UNIVERSITY - TRANSPORTATION AND PARKING SERVICES\nNotice to the campus community\n\nEffective Monday, Lot C (behind the Fenwick Athletic Center) will be closed for resurfacing. The closure is expected to last approximately three weeks, weather permitting.\n\nWhat this means for you:\n- Permit holders assigned to Lot C may park in Lot F or Lot H at no extra charge for the duration of the closure. Please display your existing permit.\n- Lot F is a ten-minute walk from the main quad. The free campus shuttle will run every fifteen minutes between Lot F and the Student Union from 7:30 a.m. to 6:30 p.m.\n- Visitor parking has been relocated to the lower level of the Ashworth Garage. Visitors should collect a temporary pass from the kiosk at the garage entrance.\n- Accessible parking spaces displaced by the closure have been reassigned to the first row of Lot F, nearest the shuttle stop.\n- Vehicles left in Lot C after 6:00 a.m. on Monday will be towed at the owner's expense.\n\nQuestions about permits can be sent to the Parking Services office in the Ashworth Building, room 104, or answered at the front desk between 9:00 a.m. and 4:00 p.m. on weekdays. Bicycle racks near the Fenwick Center remain open and are not affected. We appreciate your patience while we improve campus facilities."
+  },
+  "FLEC-CTX-G2": {
+   "title": "STAT 301 Lecture 11 notes: Comparing two groups",
+   "text": "STAT 301 - Applied Statistics\nLecture 11: Comparing two groups\nProf. Renata Szabo. Lecture notes, course site copy.\n\n1. Course conventions (apply to every test this term)\n- Significance level: alpha = 0.01 for all in-class examples, problem sets and mini-projects, unless a question states otherwise. The prof's reason: \"We run a lot of tests in this course, and I would rather you miss a small effect than chase noise.\"\n- Two independent samples: use Welch's t-test by default. Do not assume equal variances unless a problem explicitly says the population variances are equal.\n- Always report the test statistic, the degrees of freedom and the p-value, and state the conclusion in the context of the data, not as \"reject H0\" alone.\n- Choose the test before looking at results. Switching tests after seeing a p-value is marked as an error on problem sets.\n\n2. Paired vs independent designs\n- Paired: the same unit measured twice (before and after, or two seasons on the same tree). Analyze the differences d = x1 - x2 with a one-sample t-test.\n- Independent: two unrelated groups. Welch's t-test.\n- Pairing helps most when the variation between units is large compared with the change within a unit, because taking differences cancels the unit-to-unit spread.\n- Analyzing independent groups as if they were paired is invalid, not just less efficient.\n\n3. Worked example: the Brennock Orchard data (slides 8-13)\n- Question: do trees in the North plot yield more apples than trees in the South plot? Yield = kg of apples per tree, one harvest season.\n- North plot: n = 14, mean 38.2 kg, SD 6.1 kg.\n- South plot: n = 11, mean 31.5 kg, SD 9.8 kg.\n- Welch's t-test: t = 1.99, df = 15.9, p = 0.065.\n- For comparison only: a pooled-variance t-test on the same data gives t = 2.10, df = 23, p = 0.047. The prof showed this to make a point: \"If you had picked pooled because the p-value looked nicer, you would be under 0.05 and you would have fooled yourself. Our rule is Welch, decided in advance.\"\n- Frost week: three South trees were damaged in a late frost. With those three removed, South is n = 8, mean 35.9 kg, SD 5.4 kg, and Welch gives t = 0.92, df = 16.3, p = 0.37.\n- Removing data points after seeing results has to be justified independently of the results. Here the justification is the orchard manager's frost log, dated before harvest.\n\n4. Common mistakes flagged in lecture\n- Reading p = 0.065 as \"a 6.5% chance the plots are the same.\" It is not.\n- Concluding \"no difference\" from a non-significant result. The correct wording is that the data do not provide convincing evidence of a difference at the chosen alpha.\n- Reporting a confidence level that does not match alpha. With alpha = 0.01, report a 99% confidence interval.\n\n5. Admin\n- Problem Set 7 (two-sample tests) is due next Tuesday before lecture.\n- Office hours this week: Thursday 1-3 pm, Math Annex 104.\n- Mini-project 2 details were announced verbally in lecture; see the lecture recording."
+  }
+ },
+ "items": [
+  {
+   "jid": "d37aab6a10e7",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What am I missing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the lecture content in front of me, so I can't tell you what specifically you're missing from today's material. If you tell me the topic or paste the notes, I can point out the gaps.\n\nIn general, when you're reviewing a lecture, the things people most often miss are the **definitions** of key terms, the **assumptions** behind a formula or model, and the **one worked example** that ties the concept together. Those three usually cover what gets tested."
+  },
+  {
+   "jid": "33d6ea8a8eb5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "A hash table gives you constant time lookup on average, but I want you to be suspicious of those two words, on average.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The \"on average\" is doing real work, and it's worth being precise about what it hides. Average-case O(1) assumes a good hash function and a load factor that stays bounded, so keys spread evenly across buckets. The moment either assumption breaks, you fall off a cliff: adversarial or poorly distributed keys collide into one bucket and lookup degrades to O(n), which is exactly the worst case an attacker can engineer. That's why real implementations don't trust the average. They resize and rehash as the load factor climbs, they use randomized or keyed hash functions so an attacker can't predict collisions, and some switch to a balanced tree per bucket to cap the worst case at O(log n). So the honest statement is that hashing gives you expected constant time under assumptions you have to actively defend, not a guarantee."
+  },
+  {
+   "jid": "6641ca9332cd",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What's the difference between weather and climate?",
+   "conversation": [
+    "PROFESSOR: Before we begin, there is a fire drill scheduled for ten thirty, so we'll stop early and meet on the lawn.",
+    "PROFESSOR: Please leave your bags, they'll be safe, and don't use the elevators."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Weather is the short-term state of the atmosphere, what you get hour to hour or day to day: rain, sun, wind, temperature right now. Climate is the long-term pattern, the average and range of those conditions over many years, usually decades or more. So a cold snap doesn't disprove a warming climate, and a hot afternoon doesn't define it. Weather is your mood, climate is your personality."
+  },
+  {
+   "jid": "65054faab06c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "How is a virus different from a bacterium?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A virus isn't a cell at all. It's just genetic material, either DNA or RNA, wrapped in a protein coat, and it has no ribosomes or metabolism of its own, so it can't reproduce or make proteins by itself. It has to hijack a host cell's machinery to copy itself.\n\nA bacterium is a living single-celled organism. It has its own ribosomes, a cell membrane, and can carry out metabolism and reproduce on its own, usually by dividing. That's also why antibiotics work on bacteria but not on viruses: antibiotics target bacterial structures like the cell wall or ribosomes, which viruses simply don't have."
+  },
+  {
+   "jid": "05e4888f8703",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Where did the one half come from?",
+   "conversation": [
+    "USER (typed to Natively): Derive the kinetic energy formula from the definition of work.",
+    "NATIVELY: Work is force times displacement, so for a constant force along the direction of motion, \\(W = F\\,d\\). Using Newton's second law, \\(F = ma\\), and the kinematic relation \\(v^2 = v_0^2 + 2ad\\), we get \\(d = \\frac{v^2 - v_0^2}{2a}\\). Substituting both into the work expression gives \\(W = ma \\cdot \\frac{v^2 - v_0^2}{2a} = \\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\). That difference is the change in kinetic energy, so \\(KE = \\frac{1}{2}mv^2\\), where \\(m\\) is mass and \\(v\\) is speed. The intuition is that the work you do on an object shows up as a change in this quantity."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The one half comes from the kinematic relation \\(v^2 = v_0^2 + 2ad\\), which gives \\(d = \\frac{v^2 - v_0^2}{2a}\\). When you substitute that into \\(W = F d = ma \\cdot d\\), the \\(a\\) cancels and the \\(2\\) in the denominator stays, so you get \\(\\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\). That leftover factor of two is where the half comes from."
+  },
+  {
+   "jid": "3e47a9552c80",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "So which is faster, n log n or n squared?",
+   "conversation": [
+    "USER (typed to Natively): What is Big O notation?",
+    "NATIVELY: Big O notation describes how an algorithm's running time or memory grows as the input size grows. It gives the upper bound, ignoring constants, so O(n) means the work scales roughly in proportion to the input."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "n log n is faster, and by a lot once n gets big. For example, at n = 1,000, n log n is about 10,000 operations while n squared is a million. The gap keeps widening as n grows, which is why sorting algorithms like merge sort and heapsort aim for n log n rather than n squared."
+  },
+  {
+   "jid": "06db14be87a5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What should I say to them?",
+   "conversation": [
+    "PROFESSOR: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROFESSOR: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The vendor changed their API without telling us, so the integration slipped about two weeks, and the original date was already tight. I'd say: \"Thanks for flagging it early. Let's re-baseline the date together and agree on what we cut or move, and I'll follow up with the vendor about change notification.\""
+  },
+  {
+   "jid": "d233899bf317",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So what's the plan?",
+   "conversation": [
+    "PROFESSOR: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROFESSOR: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The integration slipped about two weeks because the vendor changed their API without telling us, and the original date was already tight. So the plan is to re-baseline the schedule against that two-week slip and figure out what we can pull forward or cut to protect the date. I'd also get the vendor on the phone to lock down what changed and get notice on any further changes, so this doesn't happen again."
+  },
+  {
+   "jid": "126b94200aa9",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "is the final cumulative? she must have said it at some point",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes don't say the final is cumulative. What they do cover is the course conventions for tests this term, the paired versus independent designs, the Brennock Orchard worked example, common mistakes, and admin items like Problem Set 7 and office hours. If she mentioned it, it would have been in the lecture recording rather than these notes, so that's the place to check."
+  },
+  {
+   "jid": "c2c8118a91f5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Can you explain that?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd need to know which part you mean, but if it's the idea we just covered, the short version is: it's the mechanism that makes the result hold, not just a step in the process. Tell me which bit and I'll go deeper."
+  },
+  {
+   "jid": "d176114ef9f5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Is there anything else I should know?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The main thing I'd want you to know is how I work when something's unclear: I ask early rather than guess, and I'd rather flag a risk while there's still time to act on it than stay quiet and hope it works out. Beyond that, I'd say the best next step is for me to confirm the specifics on my side and follow up with you directly, so nothing here rests on assumptions."
+  },
+  {
+   "jid": "ec2ec4b6980b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Who should own this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ownership usually follows the decision, not the org chart. The person who is accountable for the outcome should own it, with one clear name rather than a team, and everyone else contributing to it should know what they're on the hook for. If it's a technical call, the engineer closest to the work owns it and the lead backs the decision. If it cuts across teams, the person who feels the consequences most directly owns it, and a single coordinator keeps it moving. What I'd want settled first is who decides, who does the work, and who gets told, because those three are often different people and mixing them up is where things stall."
+  },
+  {
+   "jid": "07be88dfb87d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What's the difference between a Type I and a Type II error, which one is worse, and is there a trick to remember them?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Type I error is a false positive: you reject the null hypothesis when it's actually true. Type II is a false negative: you fail to reject the null when it's actually false. Neither is inherently worse, it depends on the cost. In medicine, a Type II error (missing a real disease) is usually worse than a false alarm, so you'd rather have a Type I. In a criminal trial, convicting an innocent person (Type I) is treated as worse than letting a guilty one go.\n\nThe trick: **Type I** has one letter, like the **one** mistake of crying wolf when there's no wolf. Or remember that Type I is the error you control with your significance level, alpha, and Type II is beta. Power is 1 minus beta."
+  },
+  {
+   "jid": "076e3c2572a7",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Reactions go faster when it's hot because the atoms expand, right? Why does expanding make them collide more?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not quite. Temperature isn't about atoms getting bigger, it's about them moving faster. Heating a substance raises the average kinetic energy of its particles, so they zip around quicker and hit each other more often and harder, which speeds up the reaction.\n\nExpansion is a side effect, not the cause. When things heat up they usually take up more space, but that's the particles spreading out, not swelling. The rate increase comes from **more frequent, higher-energy collisions**, and more of those collisions carrying enough energy to clear the activation barrier."
+  },
+  {
+   "jid": "4d423e4d34fd",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why did that happen?",
+   "conversation": [
+    "PROFESSOR: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROFESSOR: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The vendor changed their API without telling us, so the integration slipped by about two weeks. That's the direct cause. And the original date was already tight, so there wasn't much slack to absorb it."
+  },
+  {
+   "jid": "4bf6e40456a6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Why does inflation hurt people who keep their money in savings?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Inflation means prices rise over time, so the same amount of cash buys less later than it does now. If your savings sit in an account earning less than the inflation rate, your money loses purchasing power even though the balance looks the same. Say inflation runs at 5% and your account pays 1%, you're effectively going backwards by about 4% a year in real terms. That's why people try to move savings into assets that grow faster than inflation."
+  },
+  {
+   "jid": "20599489357b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Just tell me which topics from today will definitely be on the midterm, which ones I can safely skip, and what kind of question the professor likes best.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't tell you which topics will definitely be on your midterm or which you can safely skip, because I don't have your course material, syllabus, or the professor's past exams in front of me. What I can do is help you build that list yourself: go through today's notes and mark anything the professor repeated, wrote on the board, or tied to a \"this will come up again,\" since those are the strongest signals. For question style, the best predictor is the format of previous quizzes and problem sets in that course, so if you can share the syllabus or a past exam, I can help you sort topics by likely weight."
+  },
+  {
+   "jid": "55393ac372d0",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "which test and what alpha does this course want for the orchard comparison, what did north vs south actually come out to, and can I say the plots are different",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The course wants **Welch's t-test** at **alpha = 0.01**, decided before you look at results. On the Brennock Orchard data, North vs South came out to t = 1.99, df = 15.9, p = 0.065. Since that's above 0.01, you can't say the plots are different. The right wording is that the data don't give convincing evidence of a difference at this alpha. And don't read p = 0.065 as a 6.5% chance the plots are the same, that's the mistake the lecture flags."
+  },
+  {
+   "jid": "2f7622e82fc7",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Can you give me an example?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sure. Say a teammate keeps shipping code without tests, and it's starting to cause regressions. I'd pull them aside privately, not in the group chat, and lead with one specific case: \"The change to the checkout flow last week broke two things we caught in review.\" Then I'd ask how they see it, and we'd agree on one concrete change, like adding a test before merging. The point is to be direct about the problem and specific about the fix, without making it about them as a person."
+  },
+  {
+   "jid": "045592101af2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "But Aldria is better at both, so why trade?",
+   "conversation": [
+    "PROFESSOR: Two countries, Aldria and Brevin, each with one day of labor to spend on wheat or cloth.",
+    "PROFESSOR: In a day Aldria can make ten units of wheat or ten of cloth.",
+    "PROFESSOR: Brevin can make six units of wheat or three of cloth.",
+    "PROFESSOR: So Aldria is better at both, in absolute terms, that is absolute advantage.",
+    "PROFESSOR: But what matters for trade is opportunity cost: what each country gives up to make one more unit.",
+    "USER (typed to Natively): Who makes the wheat?",
+    "NATIVELY: In this example, both countries make wheat. Aldria can produce ten units of wheat in a day, and Brevin can produce six, so each country makes its own wheat rather than one making it for both."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because being better at both doesn't mean it's worth making both. What matters is the opportunity cost. For Aldria, one unit of cloth costs one unit of wheat given up, since it can make ten of each. For Brevin, one unit of cloth costs two units of wheat, since making three cloth means giving up six wheat. So Aldria gives up less wheat to make cloth, and Brevin gives up less cloth to make wheat. Each specializes where their opportunity cost is lower, and both end up with more than if they each made everything."
+  }
+ ]
+}

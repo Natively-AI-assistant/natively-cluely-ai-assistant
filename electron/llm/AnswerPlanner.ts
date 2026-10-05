@@ -1,8 +1,8 @@
 import type { IntentResult } from './PlannerDecision';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
-import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
+import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION, CODING_SHAPE_CONTRACTS, type CodingShape } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
-import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, HARD_MAX_WORDS, SPOKEN_FULL_MAX_WORDS } from './speakability';
+import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, HARD_MAX_WORDS, SPOKEN_FULL_PROMPT_MAX_WORDS } from './speakability';
 import { analyzeUserInstructions, getRegisteredUserInstructions, userInstructionsOverrideAppLength } from './userInstructionContract';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
@@ -447,6 +447,22 @@ Tradeoffs:
 
 Follow-up Points:
 [Likely interviewer follow-ups.]`;
+
+// When system-design diagrams are on, the diagram contract in the SYSTEM prompt
+// owns the shape of a design answer (approach → Mermaid → brief explanation).
+// The seven-section template above would contradict it from the user message,
+// so the plan's template defers instead of restating a second shape.
+const SYSTEM_DESIGN_DIAGRAM_TEMPLATE = `Follow the diagram contract in the system prompt: the approach and its assumptions first, then the diagram if the contract asks for one, then a brief explanation of components, data flow, scaling, failure handling and tradeoffs. When the contract says not to draw, or there is no contract, answer in words only. Do not use the fixed section headings unless the user asked for a detailed design.`;
+
+// Routes a design follow-up may be re-routed FROM (see planAnswer).
+const DESIGN_FOLLOW_UP_REROUTABLE: ReadonlySet<AnswerType> = new Set<AnswerType>([
+  'coding_question_answer',
+  'dsa_question_answer',
+  'technical_concept_answer',
+  'follow_up_answer',
+  'unknown_answer',
+  'general_meeting_answer',
+]);
 
 const DEBUGGING_TEMPLATE = `Use exactly these sections:
 
@@ -1488,6 +1504,9 @@ const resolveJdSourceType = (
   return 'jd_summary_answer';
 };
 
+/** A spoken request for code, as opposed to code words in someone's story ("I haven't written much production code"). */
+const EXPLICIT_CODING_ASK_RE = /\b(?:solve|implement|write (?:a|an|the|me|some|out|code)|code (?:up|this|that|it)|reverse (?:a|an|the)|sort (?:a|an|the|this)|find (?:the|a|all) |merge (?:two|the)|design (?:a|an) (?:algorithm|function|data structure))\b/i;
+
 export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const rawQuestion = input.question || input.extractedQuestion?.latestQuestion || '';
   const question = rawQuestion.trim();
@@ -2063,6 +2082,52 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = docShape === 'broad_overview' ? 'lecture_answer' : docShape;
   }
 
+  // RECRUITING LIVE TURN (2026-09-30): the user runs the interview, so a heard
+  // turn is the CANDIDATE talking and the output is the interviewer's next
+  // words. A code word in the candidate's answer — "I haven't written much
+  // production code lately", "a cap on in-flight retries" (bare `queue`) — is
+  // not a coding task. Routed as one, both benchmark turns took the coding
+  // contract and came back as advice to the recruiter (judged 7.0 and 7.5).
+  // Typed requests ("give me a coding question to ask") keep their routing, and
+  // so does an EXPLICIT coding ask heard aloud ("solve two sum in python") —
+  // the W1-5 invariant: an explicit answer-type signal is never overridden by
+  // a mode. Only a turn with no request verb is demoted.
+  if (input.activeMode?.templateType === 'recruiting' && input.source === 'what_to_answer' && isCodingAnswerType(answerType)
+      && !EXPLICIT_CODING_ASK_RE.test(text)) {
+    answerType = 'general_meeting_answer';
+  }
+
+  // DESIGN FOLLOW-UP (2026-10-01). With a system design on the table, "add a
+  // dead-letter queue", "replace Kafka with RabbitMQ" and "why do we need the
+  // queue?" are follow-ups on THAT design — but the keyword patterns above read
+  // "queue", "cache" and "add" as coding / DSA (measured on the real-wiring E2E:
+  // both routed as coding, and the turn lost its diagram contract while gaining
+  // the six-section coding one). The shared diagram resolver decides; only the
+  // generic and keyword-coding routes are re-routed, never a mode-specific or
+  // profile route, and never a turn that actually asks for code. No design on
+  // the table (every unit test, every first question) ⇒ nothing changes.
+  if (!docGroundedEnforcementActive && DESIGN_FOLLOW_UP_REROUTABLE.has(answerType)) {
+    try {
+      const { isDesignFollowUpTurn } = require('./diagramPromptSignals') as typeof import('./diagramPromptSignals');
+      if (isDesignFollowUpTurn(question, answerType)) answerType = 'system_design_answer';
+    } catch { /* routing only; the keyword verdict stands */ }
+  }
+
+  // VISUAL TURN ON A CODING ROUTE (2026-10-01, nine-mode catalog). "Model users,
+  // orders and payments" and "add a status column to orders" trip the same
+  // keyword patterns ("model", "column", "add"). When the shared visual
+  // resolver has claimed the turn for an ER diagram, a chart or a timeline and
+  // no code was asked for, the coding route would stream, validate and verify a
+  // diagram as code. It moves to the neutral meeting route — NOT to
+  // system_design_answer: a data model or a forecast is not a system design.
+  if (!docGroundedEnforcementActive && (answerType === 'coding_question_answer' || answerType === 'dsa_question_answer')) {
+    try {
+      const { visualTurnRoute } = require('./diagramPromptSignals') as typeof import('./diagramPromptSignals');
+      const route = visualTurnRoute(question, answerType);
+      if (route === 'general_meeting_answer') answerType = 'general_meeting_answer';
+    } catch { /* routing only; the keyword verdict stands */ }
+  }
+
   const speakerPerspective = input.speakerPerspective
     || (input.source === 'what_to_answer' || input.source === 'transcript' ? 'interviewer' : 'user');
 
@@ -2238,6 +2303,10 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
   `Cover the same substance — lead with the direct answer, ground every claim, close naturally. ` +
   `Never print "Speakable Final Answer", "Direct Answer", "The Honest Gap", "Short Fit Summary", or any other label.`;
 
+// The fuller-spoken-answer cap (STAR stories, multi-part, pressured negotiation).
+const spokenFullDirective = (): string =>
+  `LENGTH LIMIT: at most ${SPOKEN_FULL_PROMPT_MAX_WORDS} words (~45 seconds spoken) — a hard cap, not a target. This is a LIVE spoken answer: make the point completely, then stop — do not enumerate every angle. If your draft runs past ${SPOKEN_FULL_PROMPT_MAX_WORDS} words, cut whole branches, not adjectives.`;
+
 /**
  * The adaptive per-turn LENGTH directive as a bare line ('' when the plan's
  * speakability tier doesn't warrant one). Extracted (RC-5, session C
@@ -2248,6 +2317,14 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
  * length line was delivered at all on V3-owned turns.
  */
 export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
+  // Explicit styles get no line — including the auto-detected `star` style
+  // ("tell me about a time…"), deliberately. Measured 2026-09-29 on the exact
+  // captured prompts (5 story questions × 5 seeds, no résumé): ANY length line
+  // on a story question made gemini-3.1-flash-lite invent a past event
+  // ("I once miscalculated a project timeline…") 7-9/25 times, whatever its
+  // wording; with no line it was 0/25 and shorter (66 words). DeepSeek never
+  // invented one but ran ~93 words without the line — a length cost accepted
+  // over a fabrication risk.
   if (plan.answerStyle && plan.answerStyle !== 'default') return '';
   // Coding output owns its own length (the contract's sections + code).
   if (isCodingAnswerType(plan.answerType)) return '';
@@ -2261,10 +2338,10 @@ export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
   if (tier === 'STRUCTURED_FULL') return '';
   if (tier === 'SPOKEN_FULL') {
     // A fuller spoken answer (STAR story, multi-part, pressured negotiation)
-    // has its own budget — SPOKEN_FULL_MAX_WORDS, the same number
-    // speakability's telemetry classifies against. Cap-first framing chosen
-    // by paired live A/B (155w -> 131w on the equivalent outer-cap test).
-    return `LENGTH LIMIT: at most ${SPOKEN_FULL_MAX_WORDS} words (~60 seconds spoken) — a hard cap, not a target. This is a LIVE spoken answer: tell the story or make the case completely, then stop — do not enumerate every angle. If your draft runs past ${SPOKEN_FULL_MAX_WORDS} words, cut whole branches, not adjectives.`;
+    // has its own budget — SPOKEN_FULL_PROMPT_MAX_WORDS (~45s), below the
+    // 180-word telemetry ceiling. Cap-first framing chosen by paired live A/B
+    // (155w -> 131w on the equivalent outer-cap test).
+    return spokenFullDirective();
   }
   const band = classifyShortBand(plan.answerType, plan.answerStyle, plan.question);
   const t = shortBandTargetWords(band);
@@ -2278,8 +2355,43 @@ export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
   return `LENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number. Hard ceiling: never go past ${ceiling} words — if your draft runs longer, cut examples and caveats, keep the point.`;
 };
 
-export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false): string => {
-  const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType))
+/**
+ * The STRICT RESPONSE TEMPLATE for a coding turn written to a non-`full` shape
+ * (codingShape.ts), or null to keep the plan's own template. The plan's
+ * CODING_TEMPLATE is the six-section contract, which is right only for `full`.
+ * An implementation turn asking for code keeps CODING_IMPL_TEMPLATE, which is
+ * already code-first.
+ */
+export const shapedCodingTemplate = (plan: Pick<AnswerPlan, 'answerType'>, codingShape?: CodingShape): string | null => {
+  if (!codingShape || codingShape === 'full' || !isCodingAnswerType(plan.answerType)) return null;
+  if (plan.answerType === 'coding_question_answer' && (codingShape === 'code' || codingShape === 'solve')) return null;
+  return `You are generating a live coding answer.
+
+${CODING_SHAPE_CONTRACTS[codingShape]}
+
+Additional rules:
+- Do not include resume, JD, salary, negotiation, or unrelated profile context unless explicitly asked.
+- NEVER mention "Natively", the assistant, the product, or the candidate's profile/projects anywhere in the answer. This is a pure technical answer.`;
+};
+
+/** The system-design template that defers to the diagram contract, or null when diagrams are off. */
+const systemDesignDiagramTemplate = (plan: Pick<AnswerPlan, 'answerType'>): string | null => {
+  if (plan.answerType !== 'system_design_answer') return null;
+  try {
+    // Lazy: diagramPromptSignals imports userInstructionContract, as this file does.
+    const { isSystemDesignDiagramsEnabled } = require('./diagramPromptSignals') as typeof import('./diagramPromptSignals');
+    return isSystemDesignDiagramsEnabled() ? SYSTEM_DESIGN_DIAGRAM_TEMPLATE : null;
+  } catch {
+    return null;
+  }
+};
+
+export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false, codingShape?: CodingShape): string => {
+  const shapedTemplate = shapedCodingTemplate(plan, codingShape);
+  const diagramTemplate = systemDesignDiagramTemplate(plan);
+  // The hidden test block only makes sense when the answer writes new code.
+  const writesCode = !codingShape || codingShape === 'full' || codingShape === 'code' || codingShape === 'solve' || codingShape === 'optimize' || codingShape === 'debug';
+  const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType) && writesCode)
     ? `\n\n${CODING_VERIFICATION_INSTRUCTION}`
     : '';
   // Phase 2: a single explicit directive that translates the voice/policy split
@@ -2381,6 +2493,6 @@ VOICE: ${voiceLine}
 GROUNDING: ${policyLine}
 
 STRICT RESPONSE TEMPLATE:
-${plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}
+${shapedTemplate ?? diagramTemplate ?? plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}
 </answer_contract>`;
 };

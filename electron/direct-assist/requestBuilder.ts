@@ -1,6 +1,11 @@
 import { DirectAssistError } from './errors';
 import { DIRECT_ASSIST_PROVIDERS } from './types';
 import { getModelCapabilities } from '../llm/modelCapabilities';
+// The shared diagram modules are required at the point of use (see
+// diagramModules below): LLMHelper imports this file statically, and the
+// per-file tsc trees two test suites build do not emit `.mjs` modules that
+// have `.d.mts` siblings. esbuild bundles the requires like any other.
+import type { DiagramPromptSignals } from '../../src/lib/diagram/diagramContract.mjs';
 import type {
   DirectAssistHistoryTurn,
   DirectAssistNormalizedHistoryTurn,
@@ -512,6 +517,10 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
     requestedLanguage,
     requestedFormat,
     maxContextChars,
+    // What the system prompt may use: the 1,000-token reserve above is part of
+    // the model's input, not extra room.
+    modelInputChars: Math.max(MIN_MAX_CONTEXT_CHARS, (capabilities.maxContextTokens - capabilities.outputBudgetTokens) * 4),
+    smallModel: capabilities.tier === 'local-small',
   });
 }
 
@@ -588,6 +597,94 @@ function renderHistory(
     .join('\n\n');
 }
 
+// ── System-design diagrams ───────────────────────────────────────────────────
+//
+// Direct Assist keeps its own prompt and its own history; it is NOT routed
+// through the intelligence engine to get diagrams. It consults the same pure
+// resolver and the same contract text every other route uses
+// (src/lib/diagram/*), with the two inputs this surface owns:
+//   - the request text (plus the current-turn speech on a screenshot request);
+//   - the design on the table, derived from the history the overlay sent —
+//     Direct Assist answers are never recorded in the main process, so the
+//     history IS this surface's conversation state.
+// The contract is appended to the system prompt; the design rides inside a
+// <recent_transcript> block so the existing transcript-scope enforcement
+// (LLMHelper.stripDeniedScopedBlocksFromMessage) removes it with the history.
+
+function directAssistDiagramsEnabled(): boolean {
+  try {
+    const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
+    return isIntelligenceFlagEnabled('systemDesignDiagrams') === true;
+  } catch {
+    return true; // the documented default
+  }
+}
+
+/** Will the conversation history reach this provider (transcript scope, Settings > AI Providers > Privacy)? */
+function directAssistHistoryShareable(provider: string): boolean {
+  if (provider === 'ollama') return true;
+  try {
+    const { readProviderScopePolicy, isScopeDenied } = require('../context-intelligence/policies/provider-scope-policy');
+    return !isScopeDenied('transcript', readProviderScopePolicy());
+  } catch {
+    return true;
+  }
+}
+
+function diagramModules() {
+  return {
+    ...(require('../../src/lib/diagram/diagramRequest.mjs') as typeof import('../../src/lib/diagram/diagramRequest.mjs')),
+    ...(require('../../src/lib/diagram/diagramContract.mjs') as typeof import('../../src/lib/diagram/diagramContract.mjs')),
+    ...(require('../../src/lib/diagram/activeDesign.mjs') as typeof import('../../src/lib/diagram/activeDesign.mjs')),
+  };
+}
+
+interface DirectAssistDiagram {
+  /** The diagram signals for this turn; null when it has none. */
+  readonly contractSignals: DiagramPromptSignals | null;
+  /** The design on the table as a transcript-scoped block; '' when not needed. */
+  readonly designBlock: string;
+}
+
+function resolveDirectAssistDiagram(request: DirectAssistRequest, history: readonly DirectAssistNormalizedHistoryTurn[]): DirectAssistDiagram {
+  try {
+    if (!directAssistDiagramsEnabled()) return { contractSignals: null, designBlock: '' };
+    const { resolveDiagramRequest, diagramPromptSignals, renderDiagramTurnBlock, activeDesignFromHistory } = diagramModules();
+    // The request, and only the request. The transcript that rides a
+    // screenshot is what was said in the room: "honestly I would not draw that
+    // conclusion yet" is not an instruction to this app.
+    const question = request.currentRequest;
+    // Only history that survived trimming: a design the model cannot see must
+    // not be referred to as "the design on the table".
+    // And only a design the provider will actually be sent. The history block
+    // (and the design block with it) is transcript-scope data: with that scope
+    // withheld from a cloud provider it is stripped before dispatch, and a
+    // contract saying "the design is in <active_design>" would point at nothing.
+    // A model on this device is sent everything.
+    const activeDesign = directAssistHistoryShareable(request.selection.provider)
+      ? activeDesignFromHistory(history.map((turn) => ({ role: turn.role, content: turn.content })))
+      : null;
+    const diagramRequest = resolveDiagramRequest({
+      question,
+      activeDesign,
+      featureEnabled: true,
+      userInstructions: request.skill?.instructions ?? null,
+      hasVisualContext: request.imagePaths.length > 0 || Boolean(request.pageContext),
+    });
+    const contractSignals = diagramPromptSignals(diagramRequest, { question });
+    const block = renderDiagramTurnBlock(diagramRequest, activeDesign);
+    // Unescaped on purpose: an XML-escaped arrow ("--&gt;") is what the model
+    // would copy back, and that is not Mermaid. Only the wrapper's own tag is
+    // neutralised, which is all that keeps the block boundary honest.
+    const designBlock = block
+      ? `<recent_transcript kind="active_design">\n${block.replace(/<(\/?)recent_transcript/gi, '&lt;$1recent_transcript')}\n</recent_transcript>`
+      : '';
+    return { contractSignals, designBlock };
+  } catch {
+    return { contractSignals: null, designBlock: '' };
+  }
+}
+
 interface MutablePromptParts {
   manualContext: string;
   pageContext: string;
@@ -596,6 +693,8 @@ interface MutablePromptParts {
   currentTurnSpeech: string;
   transcript: string;
   meetingTranscript: string;
+  /** The design block is left out: its contract did not fit this model (see prepareDirectAssistPrompt). */
+  omitDesignBlock?: boolean;
 }
 
 function renderUserPrompt(request: DirectAssistRequest, parts: MutablePromptParts): string {
@@ -624,6 +723,10 @@ function renderUserPrompt(request: DirectAssistRequest, parts: MutablePromptPart
     attachmentNotice ? section('CURRENT ATTACHMENTS', attachmentNotice) : '',
     parts.referenceContext ? scopedBlock('reference_file', parts.referenceContext) : '',
     parts.history.length ? scopedBlock('recent_transcript', renderHistory(parts.history, carried)) : '',
+    // The design on the table, when this turn updates, re-views or asks about
+    // it (see resolveDirectAssistDiagram). Derived from the history that
+    // survived, so it disappears with it.
+    parts.history.length && !parts.omitDesignBlock ? resolveDirectAssistDiagram(request, parts.history).designBlock : '',
     parts.transcript ? scopedBlock('transcript', parts.transcript) : '',
     parts.currentTurnSpeech
       ? scopedBlock('transcript', `${DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER}\n${parts.currentTurnSpeech}`)
@@ -926,9 +1029,45 @@ export function prepareDirectAssistPrompt(input: DirectAssistRequestInput | Dire
     );
   }
 
+  // The diagram contract for THIS turn, decided against the history that
+  // actually survived the fitting above (same input renderUserPrompt used).
+  const diagram = resolveDirectAssistDiagram(request, parts.history);
+  // The contract is optional; the answer is not. It is added in the form that
+  // fits what is left of the model's input — the full one, the short one a
+  // small model gets, or none — and never makes a turn that fitted fail.
+  // (An 8k local model with a full prompt used to throw CONTEXT_TOO_LARGE on
+  // "design a URL shortener" and answer "what is a CDN?" fine.)
+  const systemPrompt = (() => {
+    if (!diagram.contractSignals) return DIRECT_ASSIST_SYSTEM_PROMPT;
+    // 8: the dispatcher estimates the two prompts' tokens separately, each
+    // rounded up (LLMHelper's CONTEXT_TOO_LARGE check).
+    const room = Number.isFinite(request.modelInputChars)
+      ? Number(request.modelInputChars) - userPrompt.length - 8
+      : Number.POSITIVE_INFINITY;
+    const tiers: Array<'cloud' | 'local'> = request.smallModel ? ['local'] : ['cloud', 'local'];
+    for (const tier of tiers) {
+      const withContract = diagramModules().appendDiagramContract(DIRECT_ASSIST_SYSTEM_PROMPT, diagram.contractSignals, { surface: 'live', tier });
+      if (withContract.length <= room) return withContract;
+    }
+    return DIRECT_ASSIST_SYSTEM_PROMPT;
+  })();
+  // The contract and the design block go together. The block opens with "the
+  // starting point for this turn, as the diagram contract describes": sent
+  // without the contract it asks for a redraw with none of the rules a redraw
+  // is held to (the whole diagram, every node kept), and what comes back
+  // replaces the design on the table. So when the contract did not fit, the
+  // block is left out too. Nothing is lost by that: the design was read from
+  // the history this prompt still carries, and the turn is answered from it
+  // like any other. (Re-rendering without the block only makes the prompt
+  // shorter, so a turn that fitted still fits.)
+  if (diagram.contractSignals && diagram.designBlock && systemPrompt === DIRECT_ASSIST_SYSTEM_PROMPT) {
+    parts.omitDesignBlock = true;
+    userPrompt = renderUserPrompt(request, parts);
+  }
+
   return Object.freeze({
     request,
-    systemPrompt: DIRECT_ASSIST_SYSTEM_PROMPT,
+    systemPrompt,
     userPrompt,
     imagePaths: request.imagePaths,
     // Off the SURVIVING history, not request.history: the loop above may have

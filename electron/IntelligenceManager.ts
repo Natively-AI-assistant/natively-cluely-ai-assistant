@@ -138,7 +138,7 @@ export class IntelligenceManager extends EventEmitter {
 
     addAssistantMessage(
         text: string,
-        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean; answersSpokenQuestion?: boolean },
         surface?: ConversationSurface,
         identity?: TurnIdentity,
     ): boolean {
@@ -153,12 +153,32 @@ export class IntelligenceManager extends EventEmitter {
         return this.session.getLastAssistantMessage(surface);
     }
 
+    /** The system design currently on the table (shared across surfaces), or null. */
+    getActiveDesign() {
+        return this.session.getActiveDesign();
+    }
+
+    /** A fresh design turn is starting; remember what it asked (a hint only). */
+    noteDesignQuestion(question: string | null | undefined): void {
+        this.session.noteDesignQuestion(question);
+    }
+
+    /** Record a renderer-validated Mermaid repair wherever the broken block was stored. */
+    applyDiagramRepair(originalSource: string, repairedSource: string): boolean {
+        return this.session.applyDiagramRepair(originalSource, repairedSource);
+    }
+
     getContextEpoch(): number {
         return this.session.getContextEpoch();
     }
 
     getFormattedContext(lastSeconds: number = 120): string {
         return this.session.getFormattedContext(lastSeconds);
+    }
+
+    /** What people said in the last `lastSeconds`, from the durable transcript (see SessionTracker). */
+    getFormattedSpeech(lastSeconds: number = 600): string {
+        return this.session.getFormattedSpeech(lastSeconds);
     }
 
     getLastInterviewerTurn(): string | null {
@@ -173,8 +193,9 @@ export class IntelligenceManager extends EventEmitter {
         return this.session.getFullTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp, ...(s.origin ? { origin: s.origin } : {}) }));
     }
 
-    logUsage(type: string, question: string, answer: string): void {
-        this.session.logUsage(type, question, answer);
+    /** `imagePaths`: the screenshots the answer used; the Usage tab shows previews of them. */
+    logUsage(type: string, question: string, answer: string, imagePaths?: readonly string[]): void {
+        this.session.logUsage(type, question, answer, imagePaths);
     }
 
     /**
@@ -228,6 +249,14 @@ export class IntelligenceManager extends EventEmitter {
     noteAutoAnswerCandidate(questionId: string, candidateGeneration: number): void {
         this.engine.noteAutoAnswerCandidate(questionId, candidateGeneration);
     }
+    /**
+     * How many answers the session log holds. A count only: the funnel reports
+     * how many answers a meeting produced, never what they were.
+     */
+    getAnswerCount(): number {
+        try { return this.session.getFullUsage().length; } catch { return 0; }
+    }
+
     getSpeculativeSnapshot(): { questionId: string | null; text: string | null } {
         return this.engine.getSpeculativeSnapshot();
     }
@@ -349,6 +378,11 @@ export class IntelligenceManager extends EventEmitter {
 
     async recoverUnprocessedMeetings(): Promise<void> {
         return this.persistence.recoverUnprocessedMeetings();
+    }
+
+    /** Called with the meeting id each time a meeting's notes are saved or regenerated. */
+    setMeetingNotesSavedListener(listener: ((meetingId: string) => void) | null): void {
+        this.persistence.setNotesSavedListener(listener);
     }
 
     /** Regenerate V3 notes for a saved meeting (optionally with a different mode/tone). */

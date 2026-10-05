@@ -53,7 +53,7 @@ export class FollowUpLLM {
         }
     }
 
-    async *generateStream(previousAnswer: string, refinementRequest: string, context?: string, options?: { contractRule?: string }): AsyncGenerator<string> {
+    async *generateStream(previousAnswer: string, refinementRequest: string, context?: string, options?: { contractRule?: string } & { diagramRule?: string }): AsyncGenerator<string> {
         try {
             let prompt = this.resolvePrompt();
             // Envelope decision uses the UNMODIFIED resolved prompt — appending
@@ -68,6 +68,12 @@ export class FollowUpLLM {
             // legacy prompt byte-for-byte.
             if (options?.contractRule) {
                 prompt = `${prompt}\n\n${options.contractRule}`;
+            }
+            // The answer being revised holds a diagram and the request is about
+            // wording: tell the model to carry the Mermaid block over unchanged.
+            // (The engine also enforces it on the finished text.)
+            if (options?.diagramRule) {
+                prompt = `${prompt}\n\n${options.diagramRule}`;
             }
             // See generate() above — ignoreKnowledgeMode=true.
             yield* this.llmHelper.streamChat(message, undefined, fittedContext, prompt, true);

@@ -168,8 +168,18 @@ const EVENT_DISCOVERY_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
  * are intentionally stripped before parsing. They are NOT version indicators.
  */
 export function parseModelVersion(modelId: string): ModelVersion | null {
+  // OpenAI release-date snapshots are NOT versions, same as Claude's below.
+  // "gpt-4o-mini-tts-2025-12-15" has no dotted version, so the trailing
+  // "12-15" fell through to Strategy 4 and parsed as version 12.15 — which
+  // outranks gpt-5.4 and was promoted to `latest` (found 2026-10-04 in a
+  // user's model_versions.json). Stripped first so a "-preview" left at the
+  // end ("gpt-4o-audio-preview-2024-12-17") is still removed below.
+  const undated = /^(gpt-|chatgpt-|o\d)/i.test(modelId)
+    ? modelId.replace(/-20\d{2}-\d{2}-\d{2}$/, '')
+    : modelId;
+
   // Normalize: strip vendor prefixes and non-version suffixes
-  let cleaned = modelId
+  let cleaned = undated
     .replace(/^meta-llama\//, '')                // vendor prefix
     .replace(/^anthropic\./, '')                 // Bedrock prefix: anthropic.claude-opus-5
     .replace(/-chat-latest$/, '')                // OpenAI suffix
@@ -312,8 +322,23 @@ function isClaudeModelId(lowerModelId: string): boolean {
  * Determine which vision ModelFamily a discovered model ID belongs to.
  * Returns null if it doesn't match any known vision-capable family.
  */
+/**
+ * True for ids that share a chat family's prefix but are not chat models:
+ * speech, transcription, realtime, image, embedding, moderation and search
+ * endpoints. OpenAI lists all of them under `gpt-` ("gpt-4o-mini-tts",
+ * "gpt-4o-transcribe", "gpt-image-1", "gpt-4o-realtime-preview"), and a
+ * prefix match alone put a text-to-speech model into the vision AND text
+ * tiers, where the fallback chain would have sent it a chat request.
+ * Matched on whole `-` separated words so "gpt-5.4" style ids never trip it.
+ */
+const NON_CHAT_MODEL_RE = /(?:^|[-_/.])(tts|transcribe|whisper|audio|realtime|image|embedding|embed|moderation|search|speech)(?:$|[-_/.\d])/;
+export function isNonChatModelId(modelId: string): boolean {
+  return NON_CHAT_MODEL_RE.test(String(modelId || '').toLowerCase());
+}
+
 export function classifyModel(modelId: string): ModelFamily | null {
   const lower = modelId.toLowerCase();
+  if (isNonChatModelId(lower)) return null;
 
   // OpenAI GPT vision models (exclude instruct-only variants)
   if (lower.startsWith('gpt-') && !lower.includes('instruct')) {
@@ -359,6 +384,7 @@ export function classifyModel(modelId: string): ModelFamily | null {
  */
 export function classifyTextModel(modelId: string): TextModelFamily | null {
   const lower = modelId.toLowerCase();
+  if (isNonChatModelId(lower)) return null;
 
   // OpenAI GPT text models
   if (lower.startsWith('gpt-') && !lower.includes('instruct')) {
@@ -409,8 +435,31 @@ export function classifyTextModel(modelId: string): TextModelFamily | null {
  */
 export function reconcileFamilyEntry(entry: FamilyState, currentBaseline: string): boolean {
   const baselineVersion = parseModelVersion(currentBaseline);
+
+  // Repair a `latest` that an older parser promoted by mistake (2026-10-04).
+  // Versions are re-derived from the id rather than trusted from disk: the
+  // stored latestVersion is what the OLD parser thought (12.15 for a dated
+  // speech model), and comparing it would keep the bad id forever. Tiers 2
+  // and 3 read `latest`, so this is what the vision retry chain would call.
+  // Runs on every load, independent of the baseline triggers below, and only
+  // touches `latest` — a legitimately promoted tier1 is left alone.
+  let repairedLatest = false;
+  if (entry.latest !== entry.tier1) {
+    const reparsedLatest = parseModelVersion(entry.latest);
+    const latestUnusable =
+      isNonChatModelId(entry.latest) ||
+      !reparsedLatest ||
+      (!!baselineVersion && compareVersions(reparsedLatest, baselineVersion) < 0);
+    if (latestUnusable) {
+      entry.latest = entry.tier1;
+      entry.latestVersion = parseModelVersion(entry.tier1);
+      entry.previousLatest = null;
+      repairedLatest = true;
+    }
+  }
+
   const baselineMismatch = entry.baseline !== currentBaseline;
-  const tier1Retired = RETIRED_MODEL_IDS.has(entry.tier1);
+  const tier1Retired = RETIRED_MODEL_IDS.has(entry.tier1) || isNonChatModelId(entry.tier1);
   // Code-review 2026-08-23: a retired `latest` ALONE must trigger — the old
   // trigger set only looked at baseline/tier1, so a healthy baseline let a
   // retired discovery-promoted `latest` keep serving tier 2/3 retries
@@ -422,7 +471,7 @@ export function reconcileFamilyEntry(entry: FamilyState, currentBaseline: string
     compareVersions(entry.tier1Version, baselineVersion) < 0
   );
 
-  if (!baselineMismatch && !tier1OlderThanBaseline && !tier1Retired && !latestRetired) return false;
+  if (!baselineMismatch && !tier1OlderThanBaseline && !tier1Retired && !latestRetired) return repairedLatest;
 
   entry.baseline = currentBaseline;
   entry.tier1 = currentBaseline;
@@ -449,6 +498,8 @@ export class ModelVersionManager {
   private persistPath: string;
   private discoveryTimer: ReturnType<typeof setInterval> | null = null;
   private lastEventTriggeredDiscovery: number = 0;
+  /** Set by reconcileBaselines() during loadState(); read once by the constructor. */
+  private reconciledOnLoad = false;
 
   // Provider API keys (set externally via setApiKeys)
   private openaiApiKey: string | null = null;
@@ -459,6 +510,10 @@ export class ModelVersionManager {
   constructor() {
     this.persistPath = path.join(app.getPath('userData'), PERSISTENCE_FILENAME);
     this.state = this.loadState();
+    // A reconcile used to live only in memory until the next discovery wrote
+    // the file (about two weeks out), so a repaired entry was re-repaired, and
+    // re-logged, on every launch. Write it back once.
+    if (this.reconciledOnLoad) this.persistState();
   }
 
   // ─── Client Configuration ──────────────────────────────────────────
@@ -885,6 +940,9 @@ export class ModelVersionManager {
     let best: { modelId: string; version: ModelVersion } | null = discovered.get(family) || null;
 
     for (const modelId of modelIds) {
+      // Same admission rule as findLatestInFamily above — the text scan never
+      // consulted the retirement list.
+      if (isRetiredModelId(modelId)) continue;
       const classified = classifyTextModel(modelId);
       if (classified !== family) continue;
 
@@ -1092,6 +1150,16 @@ export class ModelVersionManager {
     }
   }
 
+  /**
+   * Resume after stopScheduler (stealth toggle-off). Re-arms the 14-day tick;
+   * it does NOT run an immediate discovery — a discovery skipped during
+   * stealth waits for the next launch, which is the correct frugality for a
+   * fortnightly catalogue refresh.
+   */
+  public resumeScheduler(): void {
+    if (!this.discoveryTimer) this.startBackgroundScheduler();
+  }
+
   // ─── State Persistence ─────────────────────────────────────────────
 
   private loadState(): PersistedState {
@@ -1173,7 +1241,8 @@ export class ModelVersionManager {
    * Also resets families whose tier1 is older than the current baseline
    * (defensive — catches any other source of drift).
    */
-  private reconcileBaselines(state: PersistedState): void {
+  private reconcileBaselines(state: PersistedState): boolean {
+    let changed = false;
     const expected: Record<string, string> = {
       ...BASELINE_MODELS,
       ...TEXT_BASELINE_MODELS,
@@ -1184,6 +1253,7 @@ export class ModelVersionManager {
       if (!entry) continue;
       const before = { baseline: entry.baseline, tier1: entry.tier1, latest: entry.latest };
       if (reconcileFamilyEntry(entry, currentBaseline)) {
+        changed = true;
         console.log(
           `[ModelVersionManager] 🔄 Reconciling stale family "${family}": ` +
           `baseline ${before.baseline} → ${entry.baseline}, ` +
@@ -1191,6 +1261,8 @@ export class ModelVersionManager {
         );
       }
     }
+    if (changed) this.reconciledOnLoad = true;
+    return changed;
   }
 
   private persistState() {

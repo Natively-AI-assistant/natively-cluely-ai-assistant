@@ -1,0 +1,349 @@
+/* Settings › Calendar (CalendarSettings.tsx), in the language of Profile
+   Intelligence and the Modes Manager: a 14px page label over one grey line,
+   a 40px hero number, bordered section cards with a 20px icon square and a
+   12px bold label, "Title · detail" rows with quiet tabular times, soft pill
+   buttons, a bordered empty box, and an info footnote.
+
+   The tokens are PI's own (ProfileIntelligenceSettings.tsx, .pi-root), value
+   for value, under a cp- prefix: PI's live inside .pi-root, which Settings is
+   not. One deliberate departure: times use --cp-secondary, not PI's
+   --pi-tertiary (35% white, ~3:1), because a meeting's time is text people
+   read, not decoration. */
+.cal-pane {
+  --cp-border: rgba(255, 255, 255, 0.07);
+  --cp-card-bg: rgba(255, 255, 255, 0.015);
+  --cp-hero: #ffffff;
+  --cp-primary: rgba(255, 255, 255, 0.85);
+  --cp-secondary: rgba(255, 255, 255, 0.55);
+  --cp-tertiary: rgba(255, 255, 255, 0.35);
+  --cp-btn-bg: rgba(255, 255, 255, 0.06);
+  --cp-btn-bg-hover: rgba(255, 255, 255, 0.10);
+  --cp-btn-border: rgba(255, 255, 255, 0.10);
+  --cp-input-border: rgba(255, 255, 255, 0.10);
+  --cp-accent: var(--periwinkle-300);
+  --cp-danger: #ef4444;
+  --cp-danger-bg: rgba(239, 68, 68, 0.12);
+  --cp-r-sm: 6px;
+  --cp-r-md: 10px;
+  --cp-r-lg: 12px;
+  --cp-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  color: var(--cp-primary);
+}
+.cal-pane[data-theme='light'] {
+  --cp-border: rgba(0, 0, 0, 0.08);
+  --cp-card-bg: rgba(0, 0, 0, 0.015);
+  --cp-hero: #111827;
+  --cp-primary: #374151;
+  /* PI's light grey (#6b7280) is tuned for its WHITE panel; Settings' light
+     canvas is rgb(242,242,247), where it measures 4.19:1. One step darker
+     reads the same and measures 5.0:1. */
+  --cp-secondary: #5f6673;
+  --cp-tertiary: #9ca3af;
+  --cp-btn-bg: rgba(0, 0, 0, 0.04);
+  --cp-btn-bg-hover: rgba(0, 0, 0, 0.08);
+  --cp-btn-border: rgba(0, 0, 0, 0.05);
+  --cp-input-border: rgba(0, 0, 0, 0.10);
+  /* Periwinkle-700, as PI's own accent text on light (--pi-accent-icon):
+     -600 on the pill's tint over this canvas measures 3.66:1, -700 5.26:1. */
+  --cp-accent: var(--periwinkle-700);
+}
+
+/* ── Page label (PI .pi-section-label) ── */
+.cp-label {
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--cp-hero);
+  margin: 0;
+}
+.cp-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--cp-secondary);
+  margin: 4px 0 0;
+}
+
+/* ── Hero number (PI's "6 years of experience · 2 roles") ── */
+.cp-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+/* Transitions.dev #02 "Number pop-in" on the hero count (DigitPop). The
+   variables are scoped here, as ProviderChangeNotice scopes its own to
+   .lg-notice, and the rules sit under .cal-pane so they neither depend on
+   that stylesheet being loaded nor leak into it. The direction flips with
+   the change: up comes from below (--digit-dir-y 1), down from above (-1). */
+.cal-pane {
+  --digit-dur: 500ms;
+  --digit-distance: 8px;
+  --digit-stagger: 70ms;
+  --digit-blur: 2px;
+  --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --digit-dir-x: 0;
+  --digit-dir-y: 1;
+}
+@keyframes cp-digit-pop-in {
+  0% {
+    transform: translate(calc(var(--digit-distance) * var(--digit-dir-x)), calc(var(--digit-distance) * var(--digit-dir-y)));
+    opacity: 0;
+    filter: blur(var(--digit-blur));
+  }
+  100% { transform: translate(0, 0); opacity: 1; filter: blur(0); }
+}
+.cal-pane .t-digit-group { display: inline-flex; align-items: baseline; }
+.cal-pane .t-digit { display: inline-block; }
+.cal-pane .t-digit-group.is-animating .t-digit {
+  will-change: transform, opacity, filter;
+  animation: cp-digit-pop-in var(--digit-dur) var(--digit-ease) both;
+}
+.cal-pane .t-digit-group.is-animating .t-digit[data-stagger="1"] { animation-delay: var(--digit-stagger); }
+.cal-pane .t-digit-group.is-animating .t-digit[data-stagger="2"] { animation-delay: calc(var(--digit-stagger) * 2); }
+
+.cp-hero-num {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--cp-hero);
+  font-variant-numeric: tabular-nums;
+}
+.cp-hero-text { font-size: 13px; color: var(--cp-secondary); }
+.cp-hero-text .cp-quiet { color: var(--cp-secondary); opacity: 0.8; }
+
+/* ── Section card (PI .pi-section-card + header) ── */
+.cp-card {
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-r-lg);
+  background: var(--cp-card-bg);
+  padding: 14px 16px;
+}
+.cp-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.cp-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--cp-r-sm);
+  background: var(--cp-btn-bg);
+  color: var(--cp-secondary);
+  flex-shrink: 0;
+}
+.cp-card-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cp-hero);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.cp-card-daynum {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--cp-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.cp-card-aside {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--cp-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Rows ("Founding Engineer · Natively ........ 2024-01 – Present") ── */
+/* Rows and day cards are CollapseItems, so each carries its gap as bottom
+   padding INSIDE the part that folds (a flex gap would stay behind when a row
+   folds away, and jump); the list gives the last one's back. */
+.cp-slots { margin-bottom: -8px; }
+.cp-slots > * > .cp-slot { padding-bottom: 8px; }
+.cp-slots--cards { margin-bottom: -16px; }
+.cp-slots--cards > * > .cp-slot { padding-bottom: 16px; }
+.cp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 26px;
+}
+.cp-row-main {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.cp-row-title { font-weight: 600; color: var(--cp-primary); }
+.cp-row-detail { font-weight: 400; color: var(--cp-secondary); }
+.cp-row-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.cp-time {
+  font-size: 11px;
+  color: var(--cp-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* The Modes Manager's "Active" pill: the soonest meeting's countdown. */
+.cp-now {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  background: var(--cp-btn-bg-hover);
+  color: var(--cp-accent);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Pill buttons (PI .pi-pill-btn, .pi-upload-btn) ── */
+.cp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid var(--cp-btn-border);
+  background: var(--cp-btn-bg);
+  color: var(--cp-secondary);
+  /* Hover out: the tint lets go softly (250ms). Hover in and press: below. */
+  transition: background 250ms var(--cp-ease-out), color 250ms var(--cp-ease-out), transform 160ms var(--cp-ease-out);
+}
+.cp-pill:hover:not(:disabled) {
+  background: var(--cp-btn-bg-hover);
+  color: var(--cp-primary);
+  /* Hover in answers the pointer at once (150ms), quicker than it lets go. */
+  transition: background 150ms var(--cp-ease-out), color 150ms var(--cp-ease-out), transform 160ms var(--cp-ease-out);
+}
+/* The ↗ on Join and "Change in Google Calendar": it leans the way it points
+   while the pill is hovered, 1.5px up and out; in quick, back softer. */
+.cp-arrow { flex-shrink: 0; transition: transform 250ms var(--cp-ease-out); }
+.cp-pill:hover:not(:disabled) .cp-arrow { transform: translate(1.5px, -1.5px); transition-duration: 150ms; }
+.cp-pill:active:not(:disabled) { transform: scale(0.97); }
+.cp-pill:disabled { opacity: 0.4; cursor: not-allowed; }
+.cp-pill:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 2px; }
+/* Start Natively: the Modes Manager's primary pill, which wears its Active
+   pill's colours (the accent on the stronger tint), as the countdown it
+   replaces did. */
+.cp-pill--start { background: var(--cp-btn-bg-hover); border-color: transparent; color: var(--cp-accent); font-weight: 600; }
+.cp-pill--start:hover:not(:disabled) { background: color-mix(in srgb, var(--cp-accent) 16%, transparent); color: var(--cp-accent); }
+/* Refresh landed: the check and "Up to date" wear the accent for their moment. */
+.cp-pill.is-done { color: var(--cp-accent); }
+/* A row's Join: the same pill, smaller. */
+.cp-pill--sm { padding: 3px 10px; font-size: 11px; gap: 5px; }
+/* The empty box's call to action: PI's Upload file, which is primary-coloured text. */
+.cp-pill--lg { padding: 7px 18px; color: var(--cp-primary); }
+.cp-pill--danger:hover:not(:disabled),
+.cp-pill--danger.is-armed { background: var(--cp-danger-bg); color: var(--cp-danger); border-color: var(--cp-danger-bg); }
+
+/* ── The account, as PI shows the attached resume ── */
+.cp-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px 9px 14px;
+  border: 1px solid var(--cp-input-border);
+  border-radius: var(--cp-r-lg);
+  background: var(--cp-btn-bg);
+}
+.cp-file-main {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+/* ── Not connected: PI's empty upload box ── */
+.cp-empty {
+  border: 1px solid var(--cp-input-border);
+  border-radius: var(--cp-r-lg);
+  padding: 26px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.cp-empty p { margin: 0; font-size: 13px; color: var(--cp-secondary); }
+
+/* ── A quiet notice (PI's "Read without AI" line), for a refused sign-in ── */
+.cp-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--cp-r-md);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  background: rgba(239, 68, 68, 0.06);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cp-primary);
+}
+.cp-notice svg { color: var(--cp-danger); flex-shrink: 0; margin-top: 2px; }
+
+/* ── Footnote (PI's "Used only in Looking for work and …") ── */
+.cp-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cp-secondary);
+}
+.cp-foot svg { color: var(--cp-secondary); flex-shrink: 0; margin-top: 2px; }
+.cp-foot strong { color: var(--cp-primary); font-weight: 600; }
+
+/* ── Entrance: PI's list-in (8px rise, 420ms expo-out, 40ms apart) ──
+   Cards arrive one after another and the rows within each follow, the way
+   PI's Profile cards and their items do. Plays once per mount, so a refresh
+   that returns the same meetings moves nothing. */
+@keyframes cp-list-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cal-pane .cp-card,
+.cal-pane .cp-row { animation: cp-list-in 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+/* A day card is a large item (80ms apart); its rows follow IT at 40ms, so a
+   later day's rows rise after their card arrives rather than while it is still
+   invisible. Both capped: the last row lands within 280ms. The steps come from
+   the pane as --cp-card-delay / --cp-row-delay (each row and card sits in its
+   own CollapseItem, so :nth-child would count 1 for every one of them). */
+.cal-pane .cp-card { animation-delay: var(--cp-card-delay, 0ms); }
+.cal-pane .cp-row { animation-delay: calc(var(--cp-card-delay, 0ms) + var(--cp-row-delay, 0ms)); }
+/* Once the week has shown, a row or day the refresh adds grows in on its own
+   (CollapseItem); the rise is the first view's alone. */
+.cal-pane[data-entered] .cp-card,
+.cal-pane[data-entered] .cp-row { animation: none; }
+
+@keyframes cp-fade-only { from { opacity: 0; } }
+/* Reduced motion only: the account area's connect/disconnect swap (see the pane). */
+.cp-fade-in { animation: cp-fade-only 160ms ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .cp-pill, .cp-pill:hover:not(:disabled) { transition: background 180ms ease, color 180ms ease; }
+  .cp-pill:active:not(:disabled) { transform: none; }
+  .cp-arrow, .cp-pill:hover:not(:disabled) .cp-arrow { transition: none; transform: none; }
+  .cal-pane .t-digit-group .t-digit { animation: none !important; }
+  .cal-pane .cp-card,
+  .cal-pane .cp-row { animation: cp-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
+}

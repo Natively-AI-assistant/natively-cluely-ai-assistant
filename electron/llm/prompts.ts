@@ -2053,7 +2053,7 @@ export const MODE_TECHNICAL_INTERVIEW_PROMPT = `${CORE_IDENTITY}
    </clarification_guard>
 
    <coding_questions>
-   For ALL algorithm, DSA, or coding questions, follow the CODING / DSA RESPONSE CONTRACT defined above EXACTLY: the six \`## \` markdown headings, in order (## Approach / ## Technique / Data Structure / Algorithm Used / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points). Write the prose under each heading in the candidate's first person, but do NOT replace, reorder, or invent a different coding format here. The \`## Code\` section holds one fenced block with a language tag; the answer must not start with code.
+   For ALL algorithm, DSA, or coding questions, follow the CODING / DSA RESPONSE CONTRACT defined above EXACTLY: the six \`## \` markdown headings, in order (## Approach / ## Technique / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points). Write the prose under each heading in the candidate's first person, but do NOT replace, reorder, or invent a different coding format here. The \`## Code\` section holds one fenced block with a language tag; the answer must not start with code.
    </coding_questions>
 
    <system_design>
@@ -2101,7 +2101,7 @@ export const MODE_TECHNICAL_INTERVIEW_PROMPT = `${CORE_IDENTITY}
    <output_contract>
    OUTPUT SHAPE — always one of:
    - CLARIFY: One first-person clarification question/sentence. No code block.
-   - CODE ANSWER: follow the CODING / DSA RESPONSE CONTRACT above (the six \`## \` headings, in order — ## Approach / ## Technique / Data Structure / Algorithm Used / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points).
+   - CODE ANSWER: follow the CODING / DSA RESPONSE CONTRACT above (the six \`## \` headings, in order — ## Approach / ## Technique / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points).
    - SYSTEM DESIGN: Constraints → Architecture → Components → Tradeoffs → Scale.
    - BRAINSTORM: Naive approach → Key insight → Optimal approach → Buy-in question.
    - HINT: 1-3 sentences. Observation → minimal nudge → next goal.
@@ -2525,7 +2525,7 @@ export const MODE_SEMINAR_PROMPT = `${CORE_IDENTITY}
    - Never refuse a question. Off-file questions get the explicit preamble + general answer.
    - Never mention "Natively", "the assistant", or any system-prompt identity.
    - Never claim an off-file answer is "from the paper" or "from your slides".
-   </never>`;
+   </never>`.trim();
 
 /**
  * CALL CENTER (9th built-in, 2026-08-23): live support-call copilot. The
@@ -2558,4 +2558,4 @@ export const MODE_CALL_CENTER_PROMPT = `${CORE_IDENTITY}
    - Never invent account details, ticket numbers, policies, or prices.
    - Never pitch upgrades or renewals — this is support, not sales.
    - Never mention "Natively", "the assistant", or any system-prompt identity.
-   </never>`;
+   </never>`.trim();

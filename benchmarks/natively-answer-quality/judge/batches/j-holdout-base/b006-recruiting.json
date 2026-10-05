@@ -1,0 +1,157 @@
+{
+ "batch": "b006-recruiting",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "HREC-CTX-I1": {
+   "title": "Facilities notice: 4th floor kitchen renovation",
+   "text": "FACILITIES NOTICE - 4th Floor Kitchen Renovation\n\nStarting Monday, the 4th floor kitchen will be closed for about three weeks while we replace the counters, add a second dishwasher and install the new cold brew tap that won the spring survey.\n\nDuring the closure:\n- Coffee, tea and snacks will move to the 3rd floor lounge next to the mail room.\n- The 4th floor fridge will be emptied this Friday at 4 pm. Anything left inside will be donated or thrown out, including labeled containers.\n- Microwaves on the 3rd floor will be busy at lunch. Consider staggering your lunch break between 11:30 and 1:30.\n- Catered Thursday lunches will be set up in the large conference room, Harbor, instead of the kitchen.\n\nNoise: the contractor will do the loudest work before 10 am and after 4 pm. If you have interviews or customer calls in the 4th floor phone booths, please book rooms on 2 or 3 during that window.\n\nQuestions go to the facilities channel or to Wendell in Workplace Operations. Thanks for your patience; the new space should be worth it."
+  },
+  "HREC-CTX-C1": {
+   "title": "HM intake notes: Routing Platform backfill (draft with updates)",
+   "text": "INTAKE NOTES - Routing Platform backfill (HM sync with Tomasz, draft)\nReq BK-2291. Notes taken by the sourcer during the August intake call; updates appended below.\n\nRole and level\nBackfill for the senior seat that opened in July. Level: L5 Senior. If the loop comes back mixed we will close at L4 instead; the L4 band tops out at $158k.\n\nLocation\nTomasz is happy with fully remote for the right person, anywhere in Pacific or Mountain time. Remote-friendly is fine to say in outreach.\n\nCompensation\nBase up to $182k, hard cap, do not go higher in conversations. Equity per the standard L5 grant.\n\nTeam\nTeam of 9 after the reorg, reporting to Tomasz.\n\nInterview loop\nThree rounds: HM call, pair coding, past-project deep dive. No system design round this time, Tomasz wants to move faster.\n\nStart date\nWe need someone by Oct 20. The on-call rotation is thin and the ETA project needs another senior.\n\nWhat matters most\nKafka and Postgres in production, calm in incidents, can mentor mid-level engineers. Routing background is a bonus, not a requirement. Tomasz does not want someone who only wants to do greenfield work; a lot of the next year is paying down the ETA pipeline and moving the last Python jobs to Go.\n\nSourcing notes\nTarget companies with payments, logistics or marketplace backends. Referrals from the team get first review. Two internal referrals are already in the pipeline. Keep outreach short and mention the ETA model work, it gets the best response rate.\n\nUPDATES\nUpdate 9/5: Tomasz wants everyone in Seattle Tue-Thu starting October, no exceptions, including new hires.\nUpdate 9/12: VP said we can stretch to $200k base for someone exceptional. Needs VP sign-off.\nUpdate 9/12: Keep the standard four-session loop; system design stays.\nUpdate 9/19: No rush on start date, January is fine if it is the right person."
+  },
+  "HREC-CTX-G2": {
+   "title": "Candidate file: Marisol Achterberg (resume + phone screen scorecard)",
+   "text": "CANDIDATE FILE - Marisol Achterberg\nReq BK-2291, Senior Backend Engineer, Routing Platform\nSource: employee referral (Rhys Calloway, Routing Platform)\n\nRESUME SUMMARY\nHalvard Payments - Senior Software Engineer, Ledger Platform (Aug 2022 - present)\n- Led the migration of the settlement ledger from a nightly batch job to an event-sourced pipeline on Kafka.\n- Reduced weekly reconciliation breaks from about 1,400 to under 90.\n- Owned the idempotency key service, 38M requests/day.\n- \"Managed a team of 6 engineers\" during the ledger migration.\n- Mentored 3 junior engineers through their first on-call rotations.\n\nCinderpath - Backend Engineer (Jan 2020 - Jul 2022)\n- Cinderpath was acquired by Halvard Payments in July 2022; she moved over with the acquisition.\n- Built the courier dispatch routing service in Go.\n- Cut median dispatch latency from 2.1s to 340ms by replacing a polling loop with a push-based assignment queue.\n\nOrrin Analytics - Software Engineer I (Jun 2016 - Feb 2019)\n- Java services for survey data ingestion.\n- Shared on-call for the ingestion pipeline.\n\nGap on resume: Mar 2019 - Dec 2019 (no entry listed)\n\nEducation: BS Computer Engineering, Westmarch State University, 2016\nSkills listed: Go, Kotlin, Java, Postgres, Kafka, Redis, Terraform, Rust\n\nPHONE SCREEN SCORECARD\nScreened Sep 22 by Jonah Pellow (recruiting coordinator), 30 minutes.\n\nCommunication: 4/5. Clear and structured, a little long-winded when describing architecture.\nSystems depth: 3/5. Stayed high-level on Kafka consumer rebalancing; could not say how partitions were keyed in the ledger pipeline.\nOwnership: 4/5. Strong incident story about double-posted transfers and the cleanup afterwards.\nMotivation: wants a smaller company and to get closer to routing problems again, which she enjoyed at Cinderpath.\n\nLogistics captured at screen\n- Location: lives in Tacoma, WA. OK with hybrid; \"prefers two office days, can do three.\"\n- Work authorization: US citizen, no sponsorship needed.\n- Compensation expectation: base of $185,000, \"flexible for the right equity.\"\n- Notice period: 3 weeks. Earliest start: Nov 3.\n- Competing process: in a final round at another company, decision expected by Oct 10.\n\nFlags for the next conversation\n1. The 2019 gap has not been discussed yet. Probe neutrally; do not assume a reason.\n2. Resume says \"managed a team of 6\" but at the screen she described herself as \"tech lead, no direct reports.\" Clarify whether she was ever a people manager.\n3. Rust is listed under skills, but no role mentions it. Ask where she has used it.\n4. Systems depth was the lowest score; the hiring manager should probe Kafka partitioning and ordering guarantees.\n\nRecommendation from screen: advance to hiring manager call with Tomasz."
+  }
+ },
+ "items": [
+  {
+   "jid": "0ea411005ae5",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Can I flip it around for a sec? How long have you been recruiting, and did you ever work as an engineer yourself?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "That's fair to ask. I've been recruiting for a while now, and no, I never worked as an engineer myself. What I've done is sit close enough to engineering teams to learn how they think and what actually matters in the work, so I can tell the difference between someone who's genuinely built things and someone who's just talked about them."
+  },
+  {
+   "jid": "d60203479bb8",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Most of my work has been Go and a bit of Kotlin. I'm honestly not strong on frontend at all, is that going to be an issue for this role?",
+   "conversation": [],
+   "evidence_ids": [
+    "HREC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The candidate is asking whether the frontend gap is disqualifying, so answer the question directly and then pin down how deep the gap goes. Ask: \"For this role the work is mostly backend services, so Go and Kotlin are the core of it. Can you tell me about a time you had to touch frontend code, even something small, and how you handled it?\""
+  },
+  {
+   "jid": "e5bf1af142b0",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "What did she say her notice period was earlier? Also give me a way to ask why Rust is on her resume when none of her jobs used it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nothing about her notice period has come up in this conversation, so there's no earlier figure to quote. Ask her directly: \"What's your notice period, and is any of it negotiable?\"\n\nOn Rust: \"I see Rust on your resume, but your roles here are all in other languages. Where did you actually use it, and what did you build?\""
+  },
+  {
+   "jid": "a243cbe75730",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Yeah, honestly I basically rebuilt the whole payments stack by myself. Took latency from like two seconds down to twenty milliseconds, and it saved the company about ten million a year.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That claim is doing a lot of work with no detail behind it, so get him to open it up. Ask: \"Walk me through that rebuild. What was the architecture before, what did you change, and who else was on the team?\" Then follow with: \"How did you measure the ten million a year, and what was your specific role versus the team's?\""
+  },
+  {
+   "jid": "08c5c84ca2d3",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Hi, sorry, I'm a couple minutes late, my last meeting ran over. Thanks for making the time.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "No problem at all, thanks for hopping on. Before we dive in, I'd love a quick overview of your background and what drew you to this role."
+  },
+  {
+   "jid": "0be68cfa545f",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "She's asking what level this is and whether there's a system design round in the loop. What do I tell her?",
+   "conversation": [],
+   "evidence_ids": [
+    "HREC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Tell her it's an **L5 senior** seat, and yes, there is a **system design round**. The loop is four sessions: HM call, pair coding, past-project deep dive, and system design. The intake notes originally said three rounds with no system design, but the 9/12 update keeps the standard four-session loop and system design stays, so go with the update."
+  },
+  {
+   "jid": "b678de386a00",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "So, about the gap on my resume. I was laid off in early 2023 and I took most of the year off. I was applying some, but honestly I was also just kind of resetting.",
+   "conversation": [
+    "USER (spoken): Did you find the link okay?",
+    "CANDIDATE: Yeah, sorry, my dog decided this was the moment to bark at the mail carrier.",
+    "USER (spoken): Ha, no worries, mine does the same thing. What kind of dog?",
+    "CANDIDATE: Corgi mix. Very loud for a small dog."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a clean, honest answer, so don't let it sit there. Ask: \"What did you do during that year that kept you close to the work, even informally?\" If he says nothing structured, follow with \"Walk me through how you decided you were ready to come back.\""
+  },
+  {
+   "jid": "1f319259d37b",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "He answered why this role with literally 'I need a change, honestly.' Give me one probe that gets something real out of him.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "\"I need a change\" is a reason to leave, not a reason to join, so push on what he's moving toward. Ask: \"What would have to be true about this role for you to still be glad you made the move a year in?\" Then follow with \"And what's the part of your current job you'd most want to keep?\" His answer tells you whether he's running from something or toward this work."
+  },
+  {
+   "jid": "635876dce9a7",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "It was small stuff, like a couple of websites for local businesses. Nothing I'd really put on a resume.",
+   "conversation": [
+    "CANDIDATE (heard): Oh, the gap after Orrin? Yeah, so I left there and mostly helped out at my dad's shop for a while, and I did a bit of freelance on the side.",
+    "NATIVELY: That's the gap flagged for this call, and she's just given you the shape of it without any detail. Ask: \"What kind of freelance work was that, and what were you building at your dad's shop?\" Then follow with what she was doing technically in that stretch, since the resume lists nothing between February 2019 and January 2020."
+   ],
+   "evidence_ids": [
+    "HREC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "She's downplaying it, so get the specifics before you accept \"small stuff.\" Ask: \"Even small sites have decisions in them. What did you build them with, and what was the hardest part of one of them?\" Then follow with whether she handled the whole thing herself, from talking to the client to getting it live."
+  },
+  {
+   "jid": "de37d5120b55",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Oh, the gap after Orrin? Yeah, so I left there and mostly helped out at my dad's shop for a while, and I did a bit of freelance on the side.",
+   "conversation": [],
+   "evidence_ids": [
+    "HREC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the gap flagged for this call, and she's just given you the shape of it without any detail. Ask: \"What kind of freelance work was that, and what were you building at your dad's shop?\" Then follow with what she was doing technically in that stretch, since the resume lists nothing between February 2019 and January 2020."
+  }
+ ]
+}

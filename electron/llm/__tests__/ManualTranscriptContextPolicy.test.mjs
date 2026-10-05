@@ -226,6 +226,42 @@ describe('manual transcript integration with existing chat history', () => {
         (snapshot) => snapshot.split('\n').filter(line => !line.startsWith('[ASSISTANT')).join('\n'),
         () => false, { log() {} }, { noteContext() {} });
   }
+  // Exercise the actual assistant-voice regeneration payload as well: a
+  // secondary call must not fall back to a snapshot the attachment gate rejected.
+  const regenStart = ipc.indexOf('const regenPrompt = [', ipc.indexOf('// ALWAYS ANSWER (2026-09-07)'));
+  const regenEnd = ipc.indexOf("].filter(Boolean).join('\\n');", regenStart);
+  assert.ok(regenStart > 0 && regenEnd > regenStart);
+  const regenExpression = ipc.slice(regenStart + 'const regenPrompt = '.length, regenEnd + "].filter(Boolean).join('\\n')".length)
+    .replaceAll('(manualContextOsGeneration as any)', 'manualContextOsGeneration');
+  function regenerate(selectedContext) {
+    return new Function('context', 'autoContextSnapshot', 'message', 'manualContextOsGeneration',
+      'return ' + regenExpression)(selectedContext,
+        '[INTERVIEWER]: PRIVATE RAW MEETING\n[ASSISTANT (PREVIOUS SUGGESTION)]: Other surface answer',
+        'Typed question', { retrievedBlockRaw: 'Approved retrieved evidence' });
+  }
+  test('regeneration keeps the question and retrieved evidence without rejected meeting context', () => {
+    const output = regenerate(route('what is BFS?', undefined));
+    assert.match(output, /Typed question/);
+    assert.match(output, /Approved retrieved evidence/);
+    assert.doesNotMatch(output, /PRIVATE RAW MEETING|Other surface answer|## CONVERSATION/);
+  });
+  test('regeneration without an eligible prior answer does not borrow another surface', () => {
+    assert.doesNotMatch(regenerate(route('make that shorter', undefined, false, '')),
+      /PRIVATE RAW MEETING|Other surface answer|## CONVERSATION/);
+  });
+  test('regeneration preserves allowed conversation history and labeled refinements', () => {
+    assert.match(regenerate(route('what is BFS?', 'Chat history')), /Chat history/);
+    const answer = 'Here is the answer.\n[NOTE]: Keep this detail.';
+    const output = regenerate(route('make that shorter', undefined, false, answer));
+    assert.ok(output.includes(answer));
+    assert.doesNotMatch(output, /PRIVATE RAW MEETING|Other surface answer|Meeting fact/);
+  });
+  test('regeneration retains selected meeting context and its document-grounded stripping', () => {
+    assert.match(regenerate(route('summarize the meeting', undefined)), /Meeting fact/);
+    const stripped = regenerate(route('summarize the meeting', 'Chat history', true));
+    assert.match(stripped, /Meeting fact/);
+    assert.doesNotMatch(stripped, /ASSISTANT \(PREVIOUS SUGGESTION\)|PRIVATE RAW MEETING/);
+  });
   test('standalone questions preserve chat history without adding live speech', () => {
     assert.equal(route('what is BFS?', 'Chat history'), 'Chat history');
     assert.equal(route('what is BFS?', undefined), undefined);

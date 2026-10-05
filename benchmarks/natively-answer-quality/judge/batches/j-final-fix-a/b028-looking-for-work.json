@@ -1,0 +1,290 @@
+{
+ "batch": "b028-looking-for-work",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "JOB-CTX-G1": {
+   "title": "Candidate resume: Nadia Kovacs",
+   "text": "NADIA KOVACS\nSenior Program Manager, Supply Chain Software\nColumbus, Ohio | nadia.kovacs@example.com | 555-0142\n\nSUMMARY\nProgram manager with nine years in warehouse, returns and fulfilment software. I take messy multi-site rollouts and turn them into programs with a plan, a budget and a weekly rhythm that operations teams actually follow. Strongest at working between engineering, warehouse floor staff and vendors.\n\nEXPERIENCE\n\nTallgrass Logistics - Senior Program Manager, Returns Platform (Sep 2021 - present)\n- Led the migration of 14 regional warehouses onto a single returns-processing platform over 16 months, on a $2.4M program budget, with a cross-functional team of 9 (4 engineers, 3 warehouse leads, 1 analyst, 1 vendor manager).\n- Proposed a same-day triage rule for returned items after shadowing night-shift staff for two weeks. Piloted at two sites, then rolled out to all 14. Average returns processing time fell from 6.4 days to 4.4 days (31 percent).\n- Renegotiated terms with 3 carriers, saving about $610,000 a year.\n- Missed the original go-live for the Midwest cluster by six weeks in 2023 after underestimating vendor API rate limits. Rebuilt the cutover plan, added a load-testing gate that is now required on every program, and shipped the cluster with no customer-facing outage.\n- Mentored 3 junior coordinators; two have since been promoted.\n\nFernhill Software - Program Manager, Warehouse Systems (Jun 2018 - Feb 2021)\n- Delivered a handheld scanner rollout across 6 sites and 220 devices, on schedule and 4 percent under a $780,000 budget.\n- Built a weekly operations dashboard adopted by 40 site managers; escalations to engineering dropped 22 percent in the first two quarters.\n- Ran the customer-facing incident review for warehouse outages, a role I took on because nobody else owned it.\n\nCobalt Bay Systems - Operations Analyst (Jul 2015 - May 2018)\n- Built a forecasting model for inbound freight that improved dock scheduling accuracy by 12 percent.\n- Wrote the first standard operating procedures for the Portland cross-dock, later reused at two other sites.\n\nCAREER BREAK (Feb 2021 - Sep 2021)\nRelocated from Portland to Columbus and spent time supporting a parent through a health issue. Completed the Supply Chain Analytics Certificate (120 hours, Ridgemont Extension) and built a Python simulation of warehouse slotting that I later used at Tallgrass.\n\nEDUCATION AND CERTIFICATIONS\nB.S. Industrial Engineering, Ridgemont State University, 2015\nProject Management Professional (PMP), 2019\nSupply Chain Analytics Certificate, Ridgemont Extension, 2021\n\nSKILLS\nProgram planning, vendor negotiation, SQL, Python (analysis and simulation), Jira, dashboard design, stakeholder communication, incident review facilitation.\n\nVOLUNTEER\nCentral Ohio Food Network, logistics volunteer (2019 - present). Rebuilt the volunteer scheduling process and reduced no-shows by 35 percent."
+  },
+  "JOB-CTX-C1": {
+   "title": "Candidate resume: Daniel Okafor",
+   "text": "DANIEL OKAFOR\nSenior Analytics Lead | Analytics and Customer Insights\nAustin, Texas | daniel.okafor@example.com\n\nPROFILE\nAnalytics lead with seven years at Marlowe Analytics and a career in insights that began in 2012. Led a team of 12 direct reports. Reduced customer churn by 18 percent. Moved the company's reporting off spreadsheets in a year and a half. Built self-serve dashboards now used by 45 stakeholders across sales, support and finance.\n\nEXPERIENCE\n\nMarlowe Analytics - Senior Data Analyst, promoted to Lead Analyst in 2022 (March 2018 - June 2023)\n- Managed a team of 8 analysts across two time zones.\n- Built a churn-prediction workflow that reduced customer churn by 12 percent within a year.\n- Presented quarterly insight reviews to the executive team.\n- Owned the migration of reporting from spreadsheets to a shared warehouse, completed in about nine months (the profile elsewhere says it took a year and a half).\n- Introduced a self-serve dashboard used by 30 business stakeholders (later described in the skills section as used by 45).\n\nKestrel Insurance - Data Analyst (August 2014 - January 2017)\n- Built claims-severity dashboards used by adjusters in four offices.\n- Automated monthly regulatory reports, cutting preparation time from five days to two.\n\nGap note: Independent consulting for small retailers, 2017 (no client names listed).\n\nEDUCATION\nB.S. Statistics, Pinecrest University, graduated 2014. (Education section elsewhere on this resume lists 2013.)\n\nSKILLS\nSQL, R, Python, Tableau, experiment design, stakeholder management, executive presentation, mentoring junior analysts. Currently employed at Marlowe Analytics (2018 - present).\n\nCERTIFICATIONS AND AWARDS\nCertified Analytics Professional, 2019. Marlowe Analytics Insight Award, 2021 (awarded for the churn work, which the experience section dates to 2022).\n\nREFERENCES\nAvailable on request."
+  },
+  "JOB-CTX-I1": {
+   "title": "Apartment lease summary",
+   "text": "SUMMARY OF RESIDENTIAL LEASE - UNIT 4C, HARBOR LANE APARTMENTS\n\nTenant: Jordan Vale. Landlord: Beacon Row Property Management (fictional).\nLease term: 12 months, starting 1 March through the last day of February.\nMonthly rent: $1,640, due on the first of each month. A late fee of $60 applies after the fifth day.\nSecurity deposit: $1,640, refundable within 30 days of move-out less documented damage.\nUtilities: Tenant pays electricity and internet. Landlord covers water, sewer and trash.\nParking: One assigned space, number 27. Guest parking is limited to 48 hours.\nPets: One cat under 12 pounds allowed with a $300 non-refundable pet fee. No dogs.\nMaintenance: Non-emergency requests are answered within three business days through the resident portal. Emergencies (no heat, flooding) are answered within four hours by the on-call line.\nRenewal: Tenant must give written notice 60 days before the end of the term if not renewing. Otherwise the lease converts to month-to-month at a rate of $1,715.\nEarly termination: Permitted with 45 days notice and payment of two months' rent.\nQuiet hours: 10 pm to 7 am. No smoking anywhere inside the building.\nMove-out: Tenant must schedule a walkthrough at least one week before the end of the term. Cleaning charges of up to $185 apply if the unit is not returned in move-in condition.\nGuests: Any guest staying longer than 14 consecutive days must be added to the lease.\nContact: office hours are weekdays 9 am to 5 pm; the portal is monitored on weekends for emergencies only."
+  }
+ },
+ "items": [
+  {
+   "jid": "6ad6f851e236",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can you clarify what you mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I mean the point I just made, so let me put it more plainly. What I was getting at is how I approach that kind of situation, and I'm happy to go deeper on whichever part you want."
+  },
+  {
+   "jid": "031c4c3fbd0b",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Honestly, half the people we talk to say they're hard workers and quick learners. What makes you different?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "What makes me different is that I don't just say it, I show it. When I'm new to something, I ask the questions early, I write things down, and I check my work against what good looks like rather than assuming I've got it. And on the hard-worker side, I'd rather you judge that from output than from my saying so. Give me something real to work on and you'll see it quickly."
+  },
+  {
+   "jid": "0c2b0fa3cbe8",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Who should own this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ownership should sit with whoever is closest to the outcome and has the authority to change it. I'd want one clear owner, not a committee, with the people who do the work feeding into them. If it's genuinely cross-team, I'd name a single accountable person and make the others contributors."
+  },
+  {
+   "jid": "898349116b56",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Which achievement on my resume should I lead with if this is a product role?",
+   "conversation": [],
+   "evidence_ids": [
+    "JOB-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "For a product role, I'd lead with the same-day triage rule. I shadowed night-shift staff for two weeks, proposed the rule, piloted it at two sites, then rolled it out to all 14, and average returns processing time dropped from 6.4 days to 4.4 days. That's the one that shows customer discovery, a hypothesis, and a measured outcome."
+  },
+  {
+   "jid": "21fe30c41192",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a time you disagreed with your manager and it didn't go smoothly.",
+   "conversation": [
+    "INTERVIEWER: Before we start, I should say we're running about ten minutes behind, sorry.",
+    "USER (spoken): No worries at all.",
+    "INTERVIEWER: Thanks. I'll try to make up the time."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a specific blow-up story I'd want to dress up, so let me be straight about how I handle it. When I disagree with a manager, I raise it directly and privately, with the reasoning and the tradeoff I'm seeing, and I ask what they're weighing that I might not be. If they still decide differently, I commit to the call and make it work, and I keep the disagreement about the decision rather than the person. What I've learned is that the ones that go badly usually go badly because it got personal or because I sat on it too long instead of saying it early."
+  },
+  {
+   "jid": "0c6c01646d36",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "What am I missing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, the thing I'd want to check is whether I've tied my answers back to what this role actually needs, not just described what I've done. So I'd ask myself: have I shown the impact, not just the activity? And have I asked enough about the team and what success looks like here? Those are usually the gaps."
+  },
+  {
+   "jid": "9d1ce6b3b329",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How far away do you live, what would the commute look like, and would you be willing to move closer if we needed you in the office more days?",
+   "conversation": [
+    "INTERVIEWER: The role is hybrid, three days a week in the office in Columbus.",
+    "USER (spoken): Okay.",
+    "INTERVIEWER: Most of the team lives within thirty minutes."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm not local to Columbus right now, so I'd want to talk through the specifics of the commute before I give you a firm answer. What I can say is that I'm committed to making the hybrid schedule work, and I'm open to discussing relocation if the role calls for more days in office. Can you tell me more about how often the team is actually in?"
+  },
+  {
+   "jid": "926da7ee183b",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Give me one sentence I can say out loud.",
+   "conversation": [
+    "USER (typed to Natively): How do I answer why I want to work at a company I only just heard of?",
+    "NATIVELY: I'd keep it honest and specific: what I know about the company so far, and why that fits what I'm looking for. Something like, \"I came across you recently, and what stood out was X. That's the kind of problem I want to work on, and it lines up with where I've done my best work.\" Then ask them to tell me more about the role."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I came across you recently, and what stood out was the problem you're solving, which is exactly the kind of work I want to be doing, so I'd love to hear more about the role."
+  },
+  {
+   "jid": "e97f257faf9e",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How do you prioritize when you have several deadlines at once?",
+   "conversation": [
+    "INTERVIEWER: Can I get you some water or coffee before we start?",
+    "USER (spoken): Water would be great, thanks.",
+    "INTERVIEWER: Sure, one moment."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I look at what's actually fixed versus what can move, and I start with the deadline that has the hardest external commitment behind it. Then I flag early if two things genuinely can't both land, so nobody's surprised at the last minute."
+  },
+  {
+   "jid": "03ba30d0e080",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So, tell me a little about yourself.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start with what I do now and the kind of work I'm best at, then give one concrete example of something I've delivered and what changed because of it. I'd keep it short and end on why this role is the one I want next."
+  },
+  {
+   "jid": "61b4f98b82a2",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So what's the plan?",
+   "conversation": [
+    "INTERVIEWER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "INTERVIEWER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two weeks is recoverable if we cut scope rather than rush the integration. I'd re-baseline the date, flag what can move to a follow-up, and confirm the vendor's new API contract in writing before we commit."
+  },
+  {
+   "jid": "da8f77037863",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a time you failed at something at work.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "When I fail at something, I try to own it fast and get specific about what went wrong, rather than explaining it away. I go back to the people affected, say plainly that I got it wrong, and focus on what I'd do differently. The part I care most about is making sure the same mistake doesn't repeat, so I look for the process or assumption that let it happen and fix that, not just the symptom. I'd rather be the person who surfaces a problem early than the one who hides it."
+  },
+  {
+   "jid": "7e4b47e096e8",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So where in that range are you hoping to land?",
+   "conversation": [
+    "INTERVIEWER: For context, the posted band for this role is ninety-five to one hundred and ten thousand.",
+    "USER (spoken): Thanks for sharing that.",
+    "INTERVIEWER: We try to be transparent up front."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd be looking at the upper part of that band, around the one hundred and ten thousand mark, based on the scope of the role and what I bring to it. That said, I care more about the whole package and the fit than hitting an exact number, so I'm happy to talk through it."
+  },
+  {
+   "jid": "0c9353a07125",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Just so I have it right, was it eight people or twelve, and how did you actually lead them day to day, and what would they say about you if I asked them?",
+   "conversation": [
+    "INTERVIEWER: Earlier you told me you managed a team of eight at Marlowe.",
+    "USER (spoken): That's right.",
+    "INTERVIEWER: Okay, I'm looking at your resume now."
+   ],
+   "evidence_ids": [
+    "JOB-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The resume has both numbers in it, so let me clear that up: the team was **eight analysts**, and the twelve is a line in my profile summary that I should have caught and fixed. Day to day I ran the work through our standups and one-on-ones, set priorities across the two time zones, and paired with people on the harder analysis. If you asked them, I think they'd say I was clear about what mattered and that I made time to develop them, since mentoring junior analysts was a big part of the role."
+  },
+  {
+   "jid": "d36efbad7c84",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "This role is based in our Denver office. Would you be open to relocating?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm open to talking about relocation, and Denver is somewhere I'd want to understand better before I commit. What does the move look like in practice, and is there support for it? That would help me give you a straight answer."
+  },
+  {
+   "jid": "a8805c74223a",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And what did you do about it?",
+   "conversation": [
+    "INTERVIEWER (heard): Tell me about a time you and a coworker completely disagreed on how to solve a problem.",
+    "NATIVELY: When a coworker and I see a problem differently, I try to get to the root of it before arguing positions. Usually the disagreement is really about what we're optimizing for, speed versus robustness, or a different read on the risk. So I'll ask what they're most worried about and what a good outcome looks like to them, and lay out mine the same way. Often that surfaces a third option neither of us started with. If we still disagree, I'd rather test it small, a quick prototype or a narrow rollout, than keep debating in the abstract, and if it's genuinely a judgment call I'll defer to whoever owns that area. What I won't do is let it sit and go quiet, because that's how a technical disagreement turns into a personal one."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I asked what they were most worried about and what a good outcome looked like, then laid out mine the same way. That usually surfaces a third option neither of us started with. If we still disagreed, I'd rather test it small, a quick prototype or a narrow rollout, than keep debating in the abstract. And if it came down to a judgment call, I'd defer to whoever owned that area."
+  },
+  {
+   "jid": "ca83447bb467",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Describe a time the goals changed halfway through a project. What did you do?",
+   "conversation": [
+    "INTERVIEWER: The traffic on the bridge was terrible this morning, I nearly didn't make it.",
+    "USER (spoken): Same, it took me an extra twenty minutes.",
+    "INTERVIEWER: Ugh. Well, glad we both made it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "When goals shift mid-project, my first move is to get clear on what actually changed and why, then figure out what that means for the work already done. I'd rather surface the impact early than quietly absorb it and miss the new target. So I'd regroup with whoever owns the goal, map what still holds and what has to be reworked, and reset priorities with the team so everyone's working off the same picture. Then I keep checking in as it evolves, because a goal that moved once can move again."
+  },
+  {
+   "jid": "3d9884556d34",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a time you saw a colleague cutting corners. What did you do?",
+   "conversation": [],
+   "evidence_ids": [
+    "JOB-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "When I've seen someone cut a corner, I start by getting the facts straight before I say anything, because sometimes it's a misunderstanding and sometimes it's a real risk. Then I raise it with them directly and privately, one specific example, and ask how they see it. If it's something that affects quality or safety, I make clear it needs to be fixed, and if they don't act on it I'd take it to whoever owns that decision. I'd rather have an awkward conversation early than let a shortcut become the norm."
+  },
+  {
+   "jid": "f469b7c1cba9",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And you're comfortable with the base range I mentioned at the start, right?",
+   "conversation": [
+    "INTERVIEWER: So quick overview before we dig in. The team is nine people, you'd be the second mobile engineer, and we ship a build to TestFlight every Thursday.",
+    "USER (spoken): Got it, that's helpful. Is the other mobile engineer more on iOS or Android?",
+    "INTERVIEWER: Mostly iOS, which is part of why we want someone who's comfortable on Android too.",
+    "INTERVIEWER: Okay, tell me about the last app you shipped.",
+    "USER (spoken): The last one was a field inspection app that had to work completely offline, I owned the sync engine."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The range works for me. What I'd want to understand is how the band maps to the level, since I'd be coming in as the second mobile engineer and there's room to grow into the Android side. Can you walk me through how you think about that?"
+  },
+  {
+   "jid": "375b92c26ebc",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a time you picked up a problem nobody owned.",
+   "conversation": [
+    "INTERVIEWER: Last quarter our onboarding flow lost a lot of new users and nobody claimed the problem.",
+    "USER (spoken): That's a tough spot to be in.",
+    "INTERVIEWER: It was. It took weeks before anyone picked it up."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a specific story from my background that fits this exactly, so let me tell you how I actually handle it. When I notice something falling through the cracks, I don't wait for someone to assign it. I dig into what's actually happening, write up what I find, and bring it to whoever owns the adjacent area with a clear picture of the impact and a proposed next step. That way it's not me grabbing territory, it's me making the problem visible enough that it gets owned."
+  }
+ ]
+}

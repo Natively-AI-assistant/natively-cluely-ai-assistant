@@ -736,7 +736,7 @@ impl StealthKeyboardTap {
 
         let state = self.state.clone();
         let handle = thread::Builder::new()
-            .name("natively-keyboard-tap".into())
+            .name("input-tap".into())
             .spawn(move || tap_worker(state))
             .map_err(|e| {
                 // Spawn failed → roll back state so JS can retry cleanly.

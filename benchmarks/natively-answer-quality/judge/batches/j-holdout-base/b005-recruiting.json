@@ -1,0 +1,294 @@
+{
+ "batch": "b005-recruiting",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HREC-CTX-G2": {
+   "title": "Candidate file: Marisol Achterberg (resume + phone screen scorecard)",
+   "text": "CANDIDATE FILE - Marisol Achterberg\nReq BK-2291, Senior Backend Engineer, Routing Platform\nSource: employee referral (Rhys Calloway, Routing Platform)\n\nRESUME SUMMARY\nHalvard Payments - Senior Software Engineer, Ledger Platform (Aug 2022 - present)\n- Led the migration of the settlement ledger from a nightly batch job to an event-sourced pipeline on Kafka.\n- Reduced weekly reconciliation breaks from about 1,400 to under 90.\n- Owned the idempotency key service, 38M requests/day.\n- \"Managed a team of 6 engineers\" during the ledger migration.\n- Mentored 3 junior engineers through their first on-call rotations.\n\nCinderpath - Backend Engineer (Jan 2020 - Jul 2022)\n- Cinderpath was acquired by Halvard Payments in July 2022; she moved over with the acquisition.\n- Built the courier dispatch routing service in Go.\n- Cut median dispatch latency from 2.1s to 340ms by replacing a polling loop with a push-based assignment queue.\n\nOrrin Analytics - Software Engineer I (Jun 2016 - Feb 2019)\n- Java services for survey data ingestion.\n- Shared on-call for the ingestion pipeline.\n\nGap on resume: Mar 2019 - Dec 2019 (no entry listed)\n\nEducation: BS Computer Engineering, Westmarch State University, 2016\nSkills listed: Go, Kotlin, Java, Postgres, Kafka, Redis, Terraform, Rust\n\nPHONE SCREEN SCORECARD\nScreened Sep 22 by Jonah Pellow (recruiting coordinator), 30 minutes.\n\nCommunication: 4/5. Clear and structured, a little long-winded when describing architecture.\nSystems depth: 3/5. Stayed high-level on Kafka consumer rebalancing; could not say how partitions were keyed in the ledger pipeline.\nOwnership: 4/5. Strong incident story about double-posted transfers and the cleanup afterwards.\nMotivation: wants a smaller company and to get closer to routing problems again, which she enjoyed at Cinderpath.\n\nLogistics captured at screen\n- Location: lives in Tacoma, WA. OK with hybrid; \"prefers two office days, can do three.\"\n- Work authorization: US citizen, no sponsorship needed.\n- Compensation expectation: base of $185,000, \"flexible for the right equity.\"\n- Notice period: 3 weeks. Earliest start: Nov 3.\n- Competing process: in a final round at another company, decision expected by Oct 10.\n\nFlags for the next conversation\n1. The 2019 gap has not been discussed yet. Probe neutrally; do not assume a reason.\n2. Resume says \"managed a team of 6\" but at the screen she described herself as \"tech lead, no direct reports.\" Clarify whether she was ever a people manager.\n3. Rust is listed under skills, but no role mentions it. Ask where she has used it.\n4. Systems depth was the lowest score; the hiring manager should probe Kafka partitioning and ordering guarantees.\n\nRecommendation from screen: advance to hiring manager call with Tomasz."
+  },
+  "HREC-CTX-C1": {
+   "title": "HM intake notes: Routing Platform backfill (draft with updates)",
+   "text": "INTAKE NOTES - Routing Platform backfill (HM sync with Tomasz, draft)\nReq BK-2291. Notes taken by the sourcer during the August intake call; updates appended below.\n\nRole and level\nBackfill for the senior seat that opened in July. Level: L5 Senior. If the loop comes back mixed we will close at L4 instead; the L4 band tops out at $158k.\n\nLocation\nTomasz is happy with fully remote for the right person, anywhere in Pacific or Mountain time. Remote-friendly is fine to say in outreach.\n\nCompensation\nBase up to $182k, hard cap, do not go higher in conversations. Equity per the standard L5 grant.\n\nTeam\nTeam of 9 after the reorg, reporting to Tomasz.\n\nInterview loop\nThree rounds: HM call, pair coding, past-project deep dive. No system design round this time, Tomasz wants to move faster.\n\nStart date\nWe need someone by Oct 20. The on-call rotation is thin and the ETA project needs another senior.\n\nWhat matters most\nKafka and Postgres in production, calm in incidents, can mentor mid-level engineers. Routing background is a bonus, not a requirement. Tomasz does not want someone who only wants to do greenfield work; a lot of the next year is paying down the ETA pipeline and moving the last Python jobs to Go.\n\nSourcing notes\nTarget companies with payments, logistics or marketplace backends. Referrals from the team get first review. Two internal referrals are already in the pipeline. Keep outreach short and mention the ETA model work, it gets the best response rate.\n\nUPDATES\nUpdate 9/5: Tomasz wants everyone in Seattle Tue-Thu starting October, no exceptions, including new hires.\nUpdate 9/12: VP said we can stretch to $200k base for someone exceptional. Needs VP sign-off.\nUpdate 9/12: Keep the standard four-session loop; system design stays.\nUpdate 9/19: No rush on start date, January is fine if it is the right person."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "HREC-CTX-I1": {
+   "title": "Facilities notice: 4th floor kitchen renovation",
+   "text": "FACILITIES NOTICE - 4th Floor Kitchen Renovation\n\nStarting Monday, the 4th floor kitchen will be closed for about three weeks while we replace the counters, add a second dishwasher and install the new cold brew tap that won the spring survey.\n\nDuring the closure:\n- Coffee, tea and snacks will move to the 3rd floor lounge next to the mail room.\n- The 4th floor fridge will be emptied this Friday at 4 pm. Anything left inside will be donated or thrown out, including labeled containers.\n- Microwaves on the 3rd floor will be busy at lunch. Consider staggering your lunch break between 11:30 and 1:30.\n- Catered Thursday lunches will be set up in the large conference room, Harbor, instead of the kitchen.\n\nNoise: the contractor will do the loudest work before 10 am and after 4 pm. If you have interviews or customer calls in the 4th floor phone booths, please book rooms on 2 or 3 during that window.\n\nQuestions go to the facilities channel or to Wendell in Workplace Operations. Thanks for your patience; the new space should be worth it."
+  },
+  "HREC-CTX-G1": {
+   "title": "Brightkeel role brief: Senior Backend Engineer, Routing Platform",
+   "text": "BRIGHTKEEL FREIGHT SYSTEMS - ROLE BRIEF\nReq BK-2291: Senior Backend Engineer, Routing Platform\nPrepared by Talent Acquisition for recruiter use. Last updated September 15.\n\nAbout the company\nBrightkeel builds load-matching and routing software for mid-size freight brokers. The core product, Keelway, matches available truck capacity to open loads and plans multi-stop routes. Brightkeel has about 420 employees, raised a Series C in March, and is headquartered in Seattle, with a smaller sales office in Chicago. Engineering is roughly 110 people.\n\nThe team\nRouting Platform owns the route planning service, the ETA prediction pipeline, and carrier location ingest. The team is 7 engineers (1 staff, 2 senior, 4 mid-level) plus a shared product manager. The hire reports to Engineering Manager Tomasz Evering. Main stack: Go services, Postgres, Kafka and Redis, deployed on AWS with Terraform. A few legacy Python jobs remain and are being retired this year.\n\nOn-call is a 1 week in 7 rotation. Engineers receive a $400 stipend per on-call week. Pages outside business hours averaged about two per week last quarter.\n\nLevel and compensation\nThis is an L5 (Senior) role. Base salary band: $168,000 to $196,000. Offers above the midpoint ($182,000) require hiring manager sign-off; offers at the top of the band require VP Engineering approval. Equity is granted as stock options with a 4-year vest and a 1-year cliff. Do not share specific equity numbers before the offer stage; tell candidates equity is discussed at offer. A sign-on bonus is not offered by default; up to $15,000 may be approved by the VP for candidates forfeiting a bonus. 401(k) with a 4% match.\n\nLocation and work arrangement\nHybrid. Engineers are in the Seattle office Tuesday, Wednesday and Thursday. Fully remote exceptions require VP approval, and none have been granted this year. Relocation assistance of up to $10,000 is available for candidates moving to the Seattle area.\n\nWork authorization\nBrightkeel can support H-1B transfers for candidates already in H-1B status. We cannot sponsor new cap-subject H-1B petitions for this req.\n\nTimeline\nTarget start date is on or before Nov 17. The hiring manager is flexible by about two weeks for a strong candidate; anything later has to be discussed with Tomasz.\n\nInterview process\n1. Recruiter screen (30 min)\n2. Hiring manager call with Tomasz (45 min)\n3. Technical loop, one day, four sessions: system design (60 min), pair coding in Go or a language of the candidate's choice (60 min), past-project deep dive (45 min), values interview (45 min)\nDecision within 5 business days of the loop. Candidates hear back from the recruiter, not from interviewers.\n\nBenefits\n20 days PTO plus 10 company holidays. 16 weeks paid parental leave for all parents. Medical, dental and vision with 90% of premiums covered for employees. $1,500 annual learning budget.\n\nGrowth\nPromotion cycles run twice a year, in March and September. The path from L5 is to L6 (Staff); the team's current staff engineer was promoted internally last year.\n\nWhat we are looking for\nStrong backend fundamentals in a distributed system at production scale. Experience with event-driven pipelines (Kafka or similar), Postgres performance work, and owning services in on-call. Nice to have: routing, geospatial, or logistics domain experience. Frontend experience is not required.\n\nTalking points for candidates\nKeelway handles about 2.3 million load-match requests per day. In July the team shipped a new ETA model that cut late-arrival prediction error by 31%."
+  }
+ },
+ "items": [
+  {
+   "jid": "5e52d734ff58",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Why not higher?",
+   "conversation": [
+    "USER (spoken): Tell me about a time you owned something end to end, from the problem all the way to the result.",
+    "CANDIDATE: Yeah so, um, we had this reporting dashboard that was slow, and the team kind of decided to rewrite it. I was involved in a lot of the, the backend parts. It went pretty well, I think people liked it.",
+    "USER (spoken): What was your specific part?",
+    "CANDIDATE: I did some of the queries. And I helped with testing. My lead handled the rollout.",
+    "USER (typed to Natively): Rate that ownership answer 1 to 5 and give me one line of reasoning for the scorecard.",
+    "NATIVELY: Score it a **2 out of 5**. The candidate describes a team decision and \"involved in a lot of the backend parts,\" but when asked for their specific part they name only some queries and testing, with the lead owning the rollout, so there's no end-to-end ownership or result they can claim.\n\nAsk next: \"Walk me through one query you wrote yourself, from the problem you were solving to how you knew it worked. What did you decide, and what happened because of it?\""
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because the answer stays at team level: \"the team decided,\" \"I was involved,\" \"I helped with testing,\" and the lead owned the rollout. There's no decision the candidate made alone, no obstacle they hit, and no result they can point to. That's participation, not ownership.\n\nAsk next: \"What was the one call on that rewrite that was yours to make? What did you choose, and what changed because of it?\""
+  },
+  {
+   "jid": "457651fb97aa",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Is that a problem?",
+   "conversation": [
+    "CANDIDATE (heard): Oh, the gap after Orrin? Yeah, so I left there and mostly helped out at my dad's shop for a while, and I did a bit of freelance on the side.",
+    "NATIVELY: That's the gap flagged for this call, and she's just given you the shape of it without any detail. Ask: \"What kind of freelance work was that, and what were you building at your dad's shop?\" Then follow with what she was doing technically in that stretch, since the resume lists nothing between February 2019 and January 2020.",
+    "CANDIDATE (heard): It was small stuff, like a couple of websites for local businesses. Nothing I'd really put on a resume.",
+    "NATIVELY: She's downplaying it, so get the specifics before you accept \"small stuff.\" Ask: \"Even small sites have decisions in them. What did you build them with, and what was the hardest part of one of them?\" Then follow with whether she handled the whole thing herself, from talking to the client to getting it live."
+   ],
+   "evidence_ids": [
+    "HREC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Not a problem, but don't let it stay vague. Say: \"It's not a problem at all. I'm just trying to understand what you were doing technically in that stretch, so walk me through one of those sites.\""
+  },
+  {
+   "jid": "ca935e6e6099",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "One thing I wanted to ask, is this role remote? The first person I talked to made it sound pretty flexible.",
+   "conversation": [],
+   "evidence_ids": [
+    "HREC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The intake notes say fully remote is fine anywhere in Pacific or Mountain time, but a later update says everyone is in Seattle Tuesday through Thursday starting October, no exceptions, including new hires. Those two conflict, so don't commit either way. Say: \"The role is remote-friendly, and I want to give you the accurate current picture rather than guess. Let me confirm the in-office expectation with the hiring manager and come back to you today.\""
+  },
+  {
+   "jid": "133703e7e3c8",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "So on the ledger rewrite I was the only backend person, it was really all on me. I mean, obviously I had my team of six, I was managing them through the whole thing, but the backend was me.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "He's claiming sole backend ownership while also saying he managed six people, so pin down what he actually built versus what he directed. Ask: \"Walk me through one piece of the backend you wrote yourself, and what the six people were doing while you built it.\""
+  },
+  {
+   "jid": "ec9278634465",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "We ran Kafka with exactly-once turned on, so duplicates downstream just weren't something we had to think about.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a strong claim to unpack. Ask: \"Exactly-once in Kafka only covers the Kafka-to-Kafka path, so what happened at the point where the data left Kafka and hit your downstream systems? How did you make that handoff idempotent?\""
+  },
+  {
+   "jid": "fec5afb20b81",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Write me a quick two-sentence intro of myself to open this call with the candidate.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "Here's a two-sentence opener you can say as the interviewer:\n\nThanks for making the time today. I'd like to spend the next half hour getting a feel for how you work and what you've done, and I'll leave plenty of room at the end for your questions."
+  },
+  {
+   "jid": "f9b5f33b4124",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "You like it there?",
+   "conversation": [],
+   "evidence_ids": [
+    "HREC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Ask what specifically they like about it and what they'd change: \"What do you like most about it, and is there anything you'd change?\" That gets you past a yes/no and shows whether the feeling is grounded in real detail."
+  },
+  {
+   "jid": "44d9db34dd33",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Honestly I'm not sure I'm senior enough for this. What are you actually looking for?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a fair thing to say, and I'd rather you ask it than guess. What I'm looking for is someone who owns the outcome, not just the tasks: who can tell me what they decided, what they traded off, and what they'd do differently. Seniority shows up in that judgment, so walk me through a decision you made where the call was genuinely yours."
+  },
+  {
+   "jid": "9a4606b71bd6",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "At my last place I was on the platform team, so we did a lot of, like, internal tooling, CI stuff, some infra, kind of whatever needed doing that week.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a broad remit, so pin down what he actually owned. Ask: \"Of the tooling and infra work you did, which piece did you personally design or lead end to end, and what did it change for the teams using it?\" Then follow with \"What broke, and how did you find out?\" to see whether he was driving or just picking up tickets."
+  },
+  {
+   "jid": "1af896ae23ae",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "When would I start?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd want to give my current team proper notice and hand things over cleanly, so I'd be looking at a few weeks from an offer. If you need someone sooner, tell me the date you have in mind and I'll see what I can do."
+  },
+  {
+   "jid": "0eaa0e239207",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Before I send this candidate to Tomasz: he wants fully remote from Boise, he'd need an H-1B transfer, and he can't start until mid January. For this req, which of those are dealbreakers, which can be worked around, and what should I say to him right now?",
+   "conversation": [],
+   "evidence_ids": [
+    "HREC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "For BK-2291, the H-1B transfer is fine, the brief says Brightkeel supports transfers for candidates already in H-1B status. Remote from Boise is the real problem: hybrid is Tuesday through Thursday in Seattle, and fully remote needs VP approval with none granted this year. Mid-January also misses the target start of November 17, and Tomasz has to weigh that.\n\nWhat to say to him now: confirm he's in active H-1B status, tell him the role is hybrid in Seattle with relocation support up to $10,000, and ask whether he'd consider relocating or whether remote is firm. Then take the January start to Tomasz before sending him forward."
+  },
+  {
+   "jid": "e52f787ed738",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "A conflict, okay. So we had a PM who kept changing requirements mid-sprint, and after the third time I just stopped picking up his tickets until he wrote a real spec. Which, you know, he eventually did.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a strong story, but the ending is doing a lot of work. Ask: \"When you stopped picking up his tickets, what did you say to him directly, and who else knew you'd made that call?\""
+  },
+  {
+   "jid": "56528740eac2",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "So the outage was a retry storm. Our idempotency keys expired after ten minutes, but the upstream bank retried for up to an hour, so we double-posted about eleven hundred transfers. I paged finance within twenty minutes, we froze the payout job, I wrote a reconciliation script that matched on the bank reference, and we reversed everything by end of day. Afterwards I pushed the key TTL to seventy-two hours and added a dedupe check at the ledger write.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a strong, specific answer: real numbers, clear ownership, and a fix that addresses the root cause. The one thing worth probing is whether the fix was validated rather than just shipped.\n\nAsk: \"After you pushed the TTL to seventy-two hours and added the dedupe check, how did you verify the double-posting couldn't happen again? Did you test it against a retry window longer than the new TTL?\""
+  },
+  {
+   "jid": "8aa2bae5cb8f",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "What's the range, roughly?",
+   "conversation": [
+    "CANDIDATE (heard): One thing I wanted to ask, is this role remote? The first person I talked to made it sound pretty flexible.",
+    "NATIVELY: The intake notes say fully remote is fine anywhere in Pacific or Mountain time, but a later update says everyone is in Seattle Tuesday through Thursday starting October, no exceptions, including new hires. Those two conflict, so don't commit either way. Say: \"The role is remote-friendly, and I want to give you the accurate current picture rather than guess. Let me confirm the in-office expectation with the hiring manager and come back to you today.\""
+   ],
+   "evidence_ids": [
+    "HREC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The base goes up to **$182k**, and there's a stretch to **$200k** for someone exceptional that needs VP sign-off. I'd lead with the $182k as the band and keep the stretch in your pocket rather than opening with it."
+  },
+  {
+   "jid": "d345d5d33a3a",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "What's the team actually like? Like how many people, who would I be reporting to, and how bad is on-call?",
+   "conversation": [],
+   "evidence_ids": [
+    "HREC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The team is 7 engineers, 1 staff, 2 senior, 4 mid-level, plus a shared PM, and the hire reports to Tomasz Evering. On-call is 1 week in 7 with a $400 stipend, and pages outside business hours averaged about two a week last quarter. Ask them: \"That's a fair amount of off-hours paging. What does the team do after an incident to bring that number down?\""
+  },
+  {
+   "jid": "eb11482d19c6",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Another one, softer.",
+   "conversation": [
+    "USER (typed to Natively): Give me a sharp question to check whether she actually led the settlement migration she keeps mentioning or was just on the team.",
+    "NATIVELY: Ask her to walk through one decision she personally made on the settlement migration, not the project timeline: what the options were, what she chose, and who had to agree. Then ask who else was on that team and what they owned. If she led it, she'll name the call and the people."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Softer version: ask her to walk you through one call she made on the settlement migration, the options in front of her and who else had to sign off. Then ask who else was on the team and what they owned. If she led it, the decision and the names come easily."
+  },
+  {
+   "jid": "97f1baad7e83",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "Before we go any further I need to know the top of the band. If it's not at least two-twenty base, I don't want to waste either of our time.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The band tops out below that, so the honest answer is no, and it's better to say so now than to keep them in a process that can't land. If you want to keep the door open, ask what base they'd need and whether there's flexibility on the rest of the package."
+  },
+  {
+   "jid": "6e03e6e07461",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Give me a sharp question to check whether she actually led the settlement migration she keeps mentioning or was just on the team.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ask her to walk through one decision she personally made on the settlement migration, not the project timeline: what the options were, what she chose, and who had to agree. Then ask who else was on that team and what they owned. If she led it, she'll name the call and the people."
+  },
+  {
+   "jid": "0c5414e3d866",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "typed",
+   "question": "Rate that ownership answer 1 to 5 and give me one line of reasoning for the scorecard.",
+   "conversation": [
+    "USER (spoken): Tell me about a time you owned something end to end, from the problem all the way to the result.",
+    "CANDIDATE: Yeah so, um, we had this reporting dashboard that was slow, and the team kind of decided to rewrite it. I was involved in a lot of the, the backend parts. It went pretty well, I think people liked it.",
+    "USER (spoken): What was your specific part?",
+    "CANDIDATE: I did some of the queries. And I helped with testing. My lead handled the rollout."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Score it a **2 out of 5**. The candidate describes a team decision and \"involved in a lot of the backend parts,\" but when asked for their specific part they name only some queries and testing, with the lead owning the rollout, so there's no end-to-end ownership or result they can claim.\n\nAsk next: \"Walk me through one query you wrote yourself, from the problem you were solving to how you knew it worked. What did you decide, and what happened because of it?\""
+  },
+  {
+   "jid": "04facd45cc5d",
+   "mode": "recruiting",
+   "role": "USER: the recruiter / interviewer. OTHER PARTY: the candidate. Natively: helps the recruiter — the next probe, an evaluation of the answer, or the recruiter's own answer when the CANDIDATE asks the recruiter something.",
+   "surface": "heard",
+   "question": "My biggest weakness? Um, I'd say I'm a perfectionist. I just care too much about getting things right.",
+   "conversation": [
+    "CANDIDATE: Sorry about the background noise, it is pouring here and the gutters are loud.",
+    "USER (spoken): No problem at all. Is it always like that this time of year?",
+    "CANDIDATE: Pretty much October through March. You get used to it. I just bought a better raincoat."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That answer is the classic scripted one, so it tells you almost nothing. Push for a real example: \"Can you walk me through a time that perfectionism actually cost you something, and what you did about it?\" Then listen for whether they name a concrete instance and a change they made, or just restate the trait."
+  }
+ ]
+}

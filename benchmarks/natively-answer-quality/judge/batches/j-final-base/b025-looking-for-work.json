@@ -1,0 +1,278 @@
+{
+ "batch": "b025-looking-for-work",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "JOB-CTX-C1": {
+   "title": "Candidate resume: Daniel Okafor",
+   "text": "DANIEL OKAFOR\nSenior Analytics Lead | Analytics and Customer Insights\nAustin, Texas | daniel.okafor@example.com\n\nPROFILE\nAnalytics lead with seven years at Marlowe Analytics and a career in insights that began in 2012. Led a team of 12 direct reports. Reduced customer churn by 18 percent. Moved the company's reporting off spreadsheets in a year and a half. Built self-serve dashboards now used by 45 stakeholders across sales, support and finance.\n\nEXPERIENCE\n\nMarlowe Analytics - Senior Data Analyst, promoted to Lead Analyst in 2022 (March 2018 - June 2023)\n- Managed a team of 8 analysts across two time zones.\n- Built a churn-prediction workflow that reduced customer churn by 12 percent within a year.\n- Presented quarterly insight reviews to the executive team.\n- Owned the migration of reporting from spreadsheets to a shared warehouse, completed in about nine months (the profile elsewhere says it took a year and a half).\n- Introduced a self-serve dashboard used by 30 business stakeholders (later described in the skills section as used by 45).\n\nKestrel Insurance - Data Analyst (August 2014 - January 2017)\n- Built claims-severity dashboards used by adjusters in four offices.\n- Automated monthly regulatory reports, cutting preparation time from five days to two.\n\nGap note: Independent consulting for small retailers, 2017 (no client names listed).\n\nEDUCATION\nB.S. Statistics, Pinecrest University, graduated 2014. (Education section elsewhere on this resume lists 2013.)\n\nSKILLS\nSQL, R, Python, Tableau, experiment design, stakeholder management, executive presentation, mentoring junior analysts. Currently employed at Marlowe Analytics (2018 - present).\n\nCERTIFICATIONS AND AWARDS\nCertified Analytics Professional, 2019. Marlowe Analytics Insight Award, 2021 (awarded for the churn work, which the experience section dates to 2022).\n\nREFERENCES\nAvailable on request."
+  },
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  }
+ },
+ "items": [
+  {
+   "jid": "7da196cb8917",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How long will this take?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a fixed timeline I can give you yet. It depends on how much scope we're talking about, so let me look at what's actually involved and come back to you with a realistic estimate."
+  },
+  {
+   "jid": "53e605cbbd71",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How would you handle it if one of your teammates in another time zone kept missing handoffs?",
+   "conversation": [
+    "INTERVIEWER: Our team here is eight people spread across three time zones, and we do almost everything async.",
+    "USER (spoken): Okay, that's helpful to know.",
+    "INTERVIEWER: It works well, but handoffs are where things can slip."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start by assuming the process is the problem before the person. I'd look at where the handoff actually breaks: is the timing unrealistic, is the context unclear, or is it landing at a bad hour for them? Then I'd talk to them directly, one on one, and agree on a fix, like a written handoff note with a clear owner and a check-in at the start of their day. If it kept happening, I'd raise it with the team so we adjust the process rather than blame one person."
+  },
+  {
+   "jid": "f3e1da4455e7",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "You list two different churn numbers. Which is it, eighteen or twelve percent?",
+   "conversation": [
+    "INTERVIEWER (heard): Walk me through why you left Marlowe Analytics and when that was.",
+    "NATIVELY: I left Marlowe in June 2023, after about five years there. I'd started as a senior data analyst in March 2018 and was promoted to lead analyst in 2022, so it was a good run. The reason was pretty simple: I'd taken the reporting migration and the churn work as far as I could in that seat, and I wanted to lead analytics somewhere the function was still being built rather than maintained.",
+    "INTERVIEWER (heard): And your title then?",
+    "NATIVELY: Lead Analyst. I was promoted into that in 2022, and I held it through to when I left in June 2023. Before that I was a senior data analyst from March 2018."
+   ],
+   "evidence_ids": [
+    "JOB-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The twelve percent is the one I stand behind. That's the churn-prediction workflow I built at Marlowe, and it's the figure tied to the actual work. The eighteen percent in my profile is the one I'd correct, so I'd go with twelve."
+  },
+  {
+   "jid": "6ffac801f7cf",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What was your GPA?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have my exact GPA in front of me, so I'd rather confirm it than give you a number I'm not sure of. What I can tell you is that I did well in the courses most relevant to this work, and I'm happy to send the exact figure right after this."
+  },
+  {
+   "jid": "9b32541635e6",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What do you think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I think it's the right direction, and I'd rather move on it than wait for perfect information. What I care about is whether it actually solves the problem we're trying to solve, and what it costs us if we're wrong. So my instinct is to try it in a contained way first, see what the results tell us, and then decide whether to commit fully."
+  },
+  {
+   "jid": "c2be2420325f",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What do you know about our company, what do you think our biggest challenge is, and why do you want to work here rather than at one of our competitors?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'll be honest, I don't have a detailed picture of your roadmap, so I'd rather ask than pretend. What I can tell you is what drew me to this role: the problem space, and the chance to work on it with a team that's clearly serious about it. On the challenge, my guess is that scaling without losing what makes the product good is the hard part, but I'd want to hear how you see it. And on competitors, I'm less interested in the logo than in the work and the people I'd be doing it with."
+  },
+  {
+   "jid": "198b6e082092",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What's your biggest strength?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "My biggest strength is that I stay steady when things get messy. When a problem is unclear or a deadline is tight, I don't freeze or rush, I break it into the parts I can actually control and work through them one at a time. People tend to bring me the hard, ambiguous stuff because I keep a clear head and I'm honest about what I know and what I don't. That's what I lean on most."
+  },
+  {
+   "jid": "b3ad59019a4c",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What's the biggest risk?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The biggest risk is that we optimize for speed and skip the parts that keep things reliable later. I'd rather flag that early and build in the checks as we go."
+  },
+  {
+   "jid": "4649384174e3",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What did you learn?",
+   "conversation": [
+    "INTERVIEWER (heard): Tell me about a time you failed at something at work.",
+    "NATIVELY: I don't have a specific failure story I can point to here, so let me tell you how I handle it when something goes wrong. I own it early and directly, I focus on what I'd do differently rather than defending the original call, and I bring the fix and the lesson to the team instead of sitting on it. The failures that stick with me are the ones where I moved too fast on a decision I should have checked with someone first, and that's shaped how I work now.",
+    "INTERVIEWER (heard): What specifically did you do?",
+    "NATIVELY: When I've moved too fast on a call I should have checked first, what I actually do is go back to the person it affected and say plainly that I got it wrong, then bring them the fix rather than just the apology. After that I build the check into how I work, so the same shortcut doesn't happen twice."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The lesson was that the cost of checking first is almost always smaller than the cost of being wrong. So now, before I move fast on something that touches other people, I pause and get one other set of eyes on it. It's a small habit, but it's kept me from repeating that same shortcut."
+  },
+  {
+   "jid": "9985f4afa5dd",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Can you summarize where we are?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let me pull together where things stand, what's still open, and anything blocking us, then I'll send a short update right after this."
+  },
+  {
+   "jid": "1e93288003b8",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How would you earn the respect of people who are more experienced than you?",
+   "conversation": [
+    "INTERVIEWER: We're growing fast, and the person in this role will end up leading a small team of five analysts.",
+    "USER (spoken): That's exciting.",
+    "INTERVIEWER: Some of them are more senior than whoever takes the job."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start by being useful before being in charge. With people who know more than I do, I'd ask about their work, listen to how they see problems, and lean on their judgment instead of overriding it. I'd be clear about decisions when they're mine, but I'd earn trust by being consistent, giving credit, and following through on what I say. Respect comes from that, not from the title."
+  },
+  {
+   "jid": "01b34ef22c5f",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Are we on the same page?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, we are. I'm clear on what you're looking for and where I can add value. If there's anything you want me to go deeper on, I'm happy to."
+  },
+  {
+   "jid": "1414f1be0719",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Your resume says you cut pages a lot at Cindervale. What were the numbers, and what did you actually change?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "At Cindervale I built Grafana SLO dashboards for the 12 tier-1 services, and after we moved to multi-window burn-rate alerts, pages dropped from about 260 a month to about 70. So the change was the alerting model itself, not just tuning thresholds."
+  },
+  {
+   "jid": "173c34315e7c",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Who assigned it?",
+   "conversation": [
+    "INTERVIEWER: Last quarter our onboarding flow lost a lot of new users and nobody claimed the problem.",
+    "USER (spoken): That's a tough spot to be in.",
+    "INTERVIEWER: It was. It took weeks before anyone picked it up.",
+    "INTERVIEWER (heard): Tell me about a time you picked up a problem nobody owned.",
+    "NATIVELY: When something's clearly broken and nobody's picked it up, I don't wait for it to land on someone's plate. I start by writing down what I actually know: what's failing, who it affects, and how long it's been going on. Then I take it to whoever owns the closest piece and say I'll drive it unless they'd rather. Usually that's enough to get it moving, and I keep a short written trail so it doesn't quietly stall again. The part I care about most is making the problem visible early, because the weeks of silence are usually worse than the bug itself."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nobody assigned it. That's the whole point. I noticed it, wrote down what was failing and who it affected, and took it to whoever owned the closest piece, saying I'd drive it unless they'd rather. So I put my own name on it rather than waiting for someone to hand it to me."
+  },
+  {
+   "jid": "1f6ee3752155",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can you clarify what you mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I mean I'd rather be direct than vague, so let me put it plainly. Tell me which part you want me to expand on, and I'll walk through it in more detail."
+  },
+  {
+   "jid": "83f8492cd856",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So why does this role appeal to you?",
+   "conversation": [
+    "INTERVIEWER: So this is a program manager role on our returns team. You'd own the reverse logistics roadmap and work with three warehouse sites.",
+    "USER (spoken): That sounds great, thanks for the overview.",
+    "INTERVIEWER: Good. I like to give people the picture before we dig in."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The scope is what draws me: owning the reverse logistics roadmap end to end and working across three warehouse sites means the decisions actually show up on the ground. That mix of planning and operational reality is where I do my best work, and returns is a space where getting it right has real cost impact."
+  },
+  {
+   "jid": "fdce3bebea51",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why this role?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm drawn to this role because it sits right where I want to keep growing, and the problems I'm solving are the kind I actually enjoy digging into. What matters most to me is doing work that has real impact alongside people who care about getting it right, and that's the sense I get here."
+  },
+  {
+   "jid": "63fc7b3744f7",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "That's above what we budgeted.",
+   "conversation": [
+    "INTERVIEWER (heard): What are your salary expectations for this role?",
+    "NATIVELY: I'd rather not anchor on a number before I understand the full scope of the role. What range have you set aside for this position? If it helps, I'm open on the specifics and more focused on the work and the team. Once I know the band, I can tell you whether it works on my side."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I understand, and I appreciate you being straight with me. I don't have a number I'm anchored to, so if the budget sits below where you'd expect, I'd rather understand the whole picture first. What's the range you're working with, and what else is on the table, like the scope of the role or flexibility on the title? If the fit is right, I'm confident we can find something that works for both of us."
+  },
+  {
+   "jid": "78542f2fc4a2",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How do you usually handle conflict on a team?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I try to deal with it early and directly, one on one, rather than letting it build up. I start by assuming the other person has a reason I don't know yet, so I ask questions before I make my case. Then I keep it about the work, not the person, and I'm clear about what I need. If we still don't agree, I'd rather bring in whoever owns the decision than let it drag. What matters to me is that people feel heard and we still move forward."
+  },
+  {
+   "jid": "058d9a449362",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "remind me what the take-home is and who the last conversation is with",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "The take-home is a 90-minute exercise where you debug a broken three-node cluster. The last conversation is with Oyelaran, after the systems deep-dive with two engineers."
+  }
+ ]
+}

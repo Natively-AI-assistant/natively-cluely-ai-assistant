@@ -61,7 +61,8 @@ export function stripPriorAssistantTurns(snapshot: string): string {
       skipping = true;
       continue;
     }
-    if (/^\[(ME|INTERVIEWER)\]:/.test(line)) {
+    // ME TYPED: a line the user typed to the assistant (SessionTracker.TYPED_TURN_LABEL).
+    if (/^\[(ME TYPED|ME|INTERVIEWER)\]:/.test(line)) {
       skipping = false;
       kept.push(line);
       continue;
@@ -76,8 +77,29 @@ export function applyHistoryGrant(snapshot: string, grant: HistoryGrant): string
   return grant.included ? snapshot : stripPriorAssistantTurns(snapshot);
 }
 
-/** Character budget of the live speech window in a V3 prompt. */
-export const SPEECH_WINDOW_MAX_CHARS = 2400;
+/**
+ * Character budget of the live speech window in a V3 prompt.
+ *
+ * 6000 since 2026-10-04 (was 2400; owner's decision, E12). Measured in the real
+ * app: at 2,400 a 20-line exchange — about ninety seconds of talk — had already
+ * lost its first line, in General, Team Meet and Call Center. 6,000 is the
+ * figure a meeting reconstruction is already handed (DIAGRAM_SPEECH_WINDOW_CHARS):
+ * four to five minutes of talk, about 1,300 provider tokens.
+ */
+export const SPEECH_WINDOW_MAX_CHARS = 6000;
+/**
+ * How far back the speech window reads, from the DURABLE transcript. The
+ * rolling context it used to read is evicted after 180 s (and the heard path
+ * asked for 60–90 s of it), so the character budget above could never be
+ * filled by more than about two minutes of speech.
+ */
+export const SPEECH_WINDOW_SECONDS = 600;
+/**
+ * The most the speech window may take out of the conversation budget it shares
+ * with earlier exchanges (engine-bridge). The window grew; what earlier
+ * answers and screens are given did not shrink to pay for it.
+ */
+export const SPEECH_WINDOW_HISTORY_CHARGE_MAX = 2400;
 
 /**
  * The live meeting's recent SPEECH for the composer's "Conversation so far"

@@ -36,15 +36,52 @@ test('what the card promises comes from the trial limits, not literals', () => {
   }
 });
 
-test('start trial: hides on success, stays open with an error on failure', () => {
+test('start trial: hides on success, stays open and says why otherwise', () => {
   const start = between('const handleStartTrial', 'const handleManual');
-  assert.ok(start.includes('if (starting) return;'), 'a second click cannot start a second trial');
-  assert.ok(start.includes('await onStartTrial();'));
-  assert.ok(start.indexOf('closeThen(onDismiss)') > start.indexOf('await onStartTrial();'),
+  assert.ok(start.includes('if (starting || blocked) return;'), 'a second click cannot start a second trial');
+  assert.ok(start.includes("try { kind = await onStartTrial(); } catch { kind = 'failed'; }"), 'a throw is our error too');
+  assert.ok(start.indexOf("if (kind === 'started') { closeThen(() => onDismiss()); return; }") > start.indexOf('kind = await onStartTrial();'),
     'the card only hides after the trial actually started');
-  assert.ok(start.includes('setError(') && start.includes('setStarting(false)'),
-    'a failure re-enables the button and says why');
-  assert.ok(rendered.includes('role="alert"'), 'the error is announced');
+  assert.ok(start.includes('setOutcome(kind);') && start.includes('setStarting(false);'),
+    'anything else re-enables the card and says why');
+  assert.ok(rendered.includes('role="alert"'), 'the message is announced');
+});
+
+// Toaster policy Phase 3 (spec §6 rows 7-8): the card never shows a raw code,
+// says "already used" plainly and offers the two ways forward, and a close
+// after OUR error (network, server) is not a strike.
+test('the message is the vetted copy for the outcome, never an error string', () => {
+  assert.ok(source.includes("import { TRIAL_START_COPY, type TrialStartKind } from '../../lib/trial/trialStart.mjs';"));
+  assert.ok(rendered.includes("const message = outcome && outcome !== 'started' ? TRIAL_START_COPY[outcome] : null;"));
+  assert.ok(!/e\??\.message/.test(rendered), 'no exception text reaches the card');
+});
+
+test('rate limited: the start button waits; failed: it says Try again', () => {
+  assert.ok(rendered.includes("const blocked = outcome === 'rate_limited' || outcome === 'unavailable';"));
+  assert.ok(rendered.includes("disabled={starting || outcome === 'rate_limited'}"));
+  assert.ok(rendered.includes("outcome === 'failed' ? 'Try again' : 'Start free trial'"));
+});
+
+test('trial unavailable: Get a Natively key and Use my own keys', () => {
+  assert.ok(rendered.includes("onClick={outcome === 'unavailable' ? handleGetKey : handleStartTrial}"), 'the primary becomes Get a key');
+  assert.ok(rendered.includes("outcome === 'unavailable' ? 'Get a Natively key'"));
+  assert.ok(rendered.includes("{outcome === 'unavailable' ? 'Use my own keys' : \"I'll set up manually\"}"));
+  assert.ok(between('const handleGetKey', 'const ctaDur').includes('closeThen(() => { onGetKey(); onDismiss(); })'));
+});
+
+test('a close after our own error reports it, so the host counts no strike', () => {
+  assert.ok(rendered.includes("const handleDismiss = () => closeThen(() => onDismiss(ourErrorRef.current ? 'after_error' : undefined));"));
+  assert.ok(rendered.includes("ourErrorRef.current = kind === 'failed' || kind === 'rate_limited';"));
+});
+
+test('host: retries our error once, retires on "already used", no strike after our error', () => {
+  const host = readFileSync(resolve(__dirname, '../onboarding/OrchestratedToasterHost.tsx'), 'utf8');
+  const trial = host.slice(host.indexOf("case 'trial_promo':"), host.indexOf("case 'quiet_window':"));
+  // The surface is named so a failed start is reported from where it was asked (funnel).
+  assert.ok(trial.includes("const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.('trial_promo') ?? Promise.resolve(undefined));"));
+  assert.ok(trial.includes("if (kind === 'unavailable') { orch.setUserState({ trialClaimed: true }); recorder.outcome('never'); }"));
+  assert.ok(trial.includes("onGetKey={() => openSettings('plans')}"));
+  assert.ok(host.includes("if (reason === 'after_error') recorder.end();"), 'our error: the showing ends with no outcome');
 });
 
 test('manual setup and every dismissal still work, but not mid-start', () => {

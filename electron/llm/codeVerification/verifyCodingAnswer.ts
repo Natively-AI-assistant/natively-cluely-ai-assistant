@@ -16,6 +16,7 @@ import {
 import { isLocallyRunnable, smokeCase } from './drivers';
 import { runCase as defaultRunCase, localLanguageAvailable as defaultLangAvailable, runSqlCase as defaultRunSql } from './localRunner';
 import { renderValue } from './judge';
+import type { CodingShape } from '../codingContract';
 
 /** Injected model-correction: given a repair prompt, return the corrected full answer. */
 export type CorrectionFn = (repairPrompt: string) => Promise<string>;
@@ -45,7 +46,17 @@ export interface VerifyCodingOptions {
   languageAvailable?: (lang: VerifyLanguage) => Promise<boolean>;
   /** Telemetry sink (metadata only — never raw code/answer). */
   onEvent?: (name: string, props?: Record<string, unknown>) => void;
+  /** The turn's coding shape (codingShape.ts). A correction keeps the answer's
+   *  own shape; only a 'full' turn is told to keep the six sections. */
+  codingShape?: CodingShape | null;
 }
+
+/** How a correction must keep its format: the six sections only when the turn
+ *  asked for the full walkthrough, otherwise whatever the previous answer had. */
+export const repairFormatInstruction = (codingShape?: CodingShape | null): string =>
+  codingShape === 'full'
+    ? 'Keep the same six-section coding format'
+    : 'Keep the SAME format and sections as your previous answer (add none, drop none)';
 
 const emptyVerdict = (skipReason: NonNullable<Verdict['skipReason']>, language?: VerifyLanguage): Verdict => ({
   passed: false, skipped: true, skipReason, language, results: [], total: 0, passedCount: 0,
@@ -74,7 +85,7 @@ const executeAll = async (
 };
 
 /** Build the one-shot repair prompt from the first failing run. */
-const buildRepairPrompt = (question: string | undefined, code: string, language: VerifyLanguage, failure: RunResult): string => {
+const buildRepairPrompt = (question: string | undefined, code: string, language: VerifyLanguage, failure: RunResult, codingShape?: CodingShape | null): string => {
   const f = failure;
   const what = f.status === 'error'
     ? `it failed to run: ${f.error}`
@@ -86,11 +97,11 @@ ${question ? `Problem:\n${question}\n\n` : ''}Your code:
 ${code}
 \`\`\`
 
-Fix ONLY the bug so the function returns the correct output for that input (and all others). Keep the SAME six-section coding format (## Approach / ## Technique / Data Structure / Algorithm Used / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points) and re-emit the hidden <verification_spec> with the same cases. Do not change the function name. Output the full corrected answer.`;
+Fix ONLY the bug so the function returns the correct output for that input (and all others). ${repairFormatInstruction(codingShape)} and re-emit the hidden <verification_spec> with the same cases. Do not change the function name. Output the full corrected answer.`;
 };
 
 /** One-shot repair prompt for a SQL answer whose result set was wrong. */
-const buildSqlRepairPrompt = (question: string | undefined, query: string, expected: unknown, actual: unknown): string =>
+const buildSqlRepairPrompt = (question: string | undefined, query: string, expected: unknown, actual: unknown, codingShape?: CodingShape | null): string =>
   `Your SQL query returned a different result set than expected.
 
 ${question ? `Problem:\n${question}\n\n` : ''}Your query:
@@ -101,7 +112,7 @@ ${query}
 Expected rows: ${renderValue(expected, 400)}
 Your query returned: ${renderValue(actual, 400)}
 
-Fix the query to produce EXACTLY the expected rows. Keep the same six-section coding format and re-emit the hidden <verification_spec> with the same schema/seeds/expected (language "sql"). Output the full corrected answer.`;
+Fix the query to produce EXACTLY the expected rows. ${repairFormatInstruction(codingShape)} and re-emit the hidden <verification_spec> with the same schema/seeds/expected (language "sql"). Output the full corrected answer.`;
 
 /**
  * Verify a coding answer end-to-end. Returns a VerificationOutcome describing
@@ -179,7 +190,7 @@ export const verifyCodingAnswer = async (opts: VerifyCodingOptions): Promise<Ver
       emit('code_verify_failed', { language: 'sql', firstFailureStatus: sqlResult.status });
       if (sqlResult.status !== 'fail' || !opts.correct) return { verdict: sqlVerdict };
       emit('code_correction_used', { language: 'sql' });
-      const sqlRepair = buildSqlRepairPrompt(opts.question, codeBlock.code, spec.sql.expected, sqlResult.actual);
+      const sqlRepair = buildSqlRepairPrompt(opts.question, codeBlock.code, spec.sql.expected, sqlResult.actual, opts.codingShape);
       let correctedSqlAnswer = '';
       try { correctedSqlAnswer = await opts.correct(sqlRepair); }
       catch (e: any) { emit('code_correction_error', { message: String(e?.message || e).slice(0, 120) }); return { verdict: sqlVerdict }; }
@@ -252,7 +263,7 @@ export const verifyCodingAnswer = async (opts: VerifyCodingOptions): Promise<Ver
       return { verdict };
     }
     emit('code_correction_used', { language });
-    const repairPrompt = buildRepairPrompt(opts.question, codeBlock.code, language, verdict.firstFailure);
+    const repairPrompt = buildRepairPrompt(opts.question, codeBlock.code, language, verdict.firstFailure, opts.codingShape);
     let correctedAnswer = '';
     try {
       correctedAnswer = await opts.correct(repairPrompt);

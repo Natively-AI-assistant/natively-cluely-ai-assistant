@@ -1,12 +1,24 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
+import { repairCapReached, endsInsideFence } from './llm/repairCap';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
-import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, nativeImage, shell, systemPreferences } from 'electron';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
+import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
+import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
+import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
+import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
+import { stripGistTrailer } from '../src/lib/displayMarkup';
+import { CardLedger } from './services/cards/CardLedger';
+import { funnelTelemetry } from './services/FunnelTelemetry';
+import { checkFunnelProps, SURFACES as FUNNEL_SURFACES } from '../src/lib/funnel/funnelCatalog.mjs';
+import { mapTrialStartResult, resolveEntitlement, resolveMeetingAi, trialCardActionForChoice, usesLocalModel } from '../src/lib/funnel/funnelState.mjs';
+import { nativePromptsBlocked, UNDETECTABLE_REFUSAL_ERROR, UNDETECTABLE_REFUSAL_MESSAGES } from './services/stealthPromptGate';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
+import { routeOverlayUiAction } from './utils/overlayUiActionRouter';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -15,7 +27,7 @@ import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manag
 import { AppState } from './main';
 import { CodexCliService, getCodexAuthStatus, isCodexAuthError } from './services/CodexCliService';
 import { describeServiceAccountRejection } from './services/googleServiceAccount';
-import { PhoneMirrorService } from './services/PhoneMirrorService';
+import { PHONE_THUMB_MAX_CHARS, PhoneMirrorService } from './services/PhoneMirrorService';
 import { sanitizeContextEnvelope } from './services/browser-context/sanitize';
 import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelopeForPrompt';
 import { BrowserMetadataClassifierService } from './services/browser-context/BrowserMetadataClassifierService';
@@ -31,6 +43,8 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
+import { resolveDiagramTurn, v3DiagramTurn, withDiagramContract, withDiagramTurnBlock, withMeetingSpeechForDiagramTurn, liveQuestionWantsADrawing, spokenRouteCarriesContract, undecidedTurnAnsweredInWords, turnStartsAFreshDesign, DIAGRAM_SPEECH_WINDOW_SECONDS, type DiagramTurn } from './llm/diagramPromptSignals';
+import { registerDiagramIpc, broadcastDiagramsEnabled } from './services/diagram/diagramIpc';
 import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 
@@ -125,7 +139,15 @@ function resolveManualChatBasePrompt(
   // over the resolver's output verbatim — contract shape, explicit format, and
   // supplied template — instead of degrading it to a bare boolean.
   opts?: import('./llm/codingPromptSignals').CodingPromptSignals,
+  // 'live' for the overlay's typed box and the phone mirror (the user says the
+  // answer aloud), 'chat' for the launcher's reading surfaces. See
+  // BuildSystemPromptV2Input.surface.
+  surface: 'live' | 'chat' = 'chat',
+  // The turn's diagram decision (diagramPromptSignals.ts). Omitted by callers
+  // that have none — the result is then exactly what it was before.
+  diagramTurn?: DiagramTurn | null,
 ): string {
+  const tier = llmHelper?.getPromptTier?.() === 'tiny' ? 'local' as const : 'cloud' as const;
   try {
     const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
     const v2 = resolveV2SystemPrompt({
@@ -136,22 +158,26 @@ function resolveManualChatBasePrompt(
       codingTask: opts?.codingTask,
       codingTaskKind: opts?.codingTaskKind,
       codingFormat: opts?.codingFormat,
+      codingShape: opts?.codingShape,
       suppliedTemplate: opts?.suppliedTemplate,
-      // This is the TYPED chat panel — the one surface where the user reads
-      // the answer instead of speaking it. Attaches the scannable chat layout
-      // (lead sentence → labeled sections → quotable close); every live and
-      // spoken surface leaves this unset and keeps the spoken shape.
-      chatSurface: true,
+      surface,
+      // Semantic diagram activation, same principle (2026-10-01).
+      diagram: diagramTurn?.signals ?? null,
     });
     if (v2) return v2;
   } catch { /* legacy fallback */ }
-  return CHAT_MODE_PROMPT;
+  // Flag-off fallback: the legacy constant never knew about diagrams, so the
+  // shared contract is appended. No diagram turn ⇒ CHAT_MODE_PROMPT itself.
+  return withDiagramContract(CHAT_MODE_PROMPT, diagramTurn, { tier, surface });
 }
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { extractLatestPriorAssistantTurn, isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } from './llm/manualTranscriptContextPolicy';
 import type { ContextItem } from './SessionTracker';
+import { spokenLineAlreadyInTranscript } from './llm/spokenLineAlreadyInTranscript';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
+import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
+import { stripUnsupportedDerivedResumeFields } from './context-intelligence/retrieval/profile-derived-support';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType, isAssistantRefusal, SYSTEM_REFUSAL_RE } from './llm/documentGroundedPrompt';
 // ONE list of provider data scopes (see ProviderRouter). The handler below used
 // to carry its own copy, which had already drifted and was erasing an enforced
@@ -308,6 +334,234 @@ export function initializeIpcHandlers(appState: AppState): void {
     ipcMain.on(channel, listener);
   };
 
+  // System-design diagram artifacts: repair, export, the feature switch and
+  // the Phone Mirror render path. One module, registered once here.
+  registerDiagramIpc(appState, safeHandle);
+
+  // ── Expired free trial (toaster policy Phase 0) ─────────────────────────
+  // Defined above every safeHandle registration: source-contract tests scan
+  // each handler's text up to the next registration, and these helpers are
+  // not part of any handler.
+  // A Codex route the model router would answer through: Codex enabled and
+  // signed in, Natively's own ChatGPT sign-in OR the Codex CLI's `codex
+  // login` (which stores nothing in Natively's credentials).
+  const codexRouteReady = (): boolean => {
+    try {
+      return appState.processingHelper?.getLLMHelper?.()?.getCodexCliConfig?.()?.enabled === true
+        && getCodexAuthStatus().signedIn;
+    } catch {
+      return false;
+    }
+  };
+
+  const isLicensed = (): boolean => {
+    try {
+      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+      if (LicenseManager.getInstance().isPremium() === true) return true;
+    } catch {
+      /* premium module unavailable: fall through to the file check */
+    }
+    // isPremium() memoises a `false` when the stored licence cannot be read
+    // THIS session (a safeStorage decrypt failure; on Windows a Gumroad/Dodo
+    // licence whose native module antivirus quarantined). For the decisions
+    // made here (the profile wipe and the uncloseable Trial ended card, whose
+    // exit deletes the licence) a licence file on disk counts. Same file
+    // LicenseManager writes (LICENSE_PATH). Entitlement checks keep isPremium().
+    try {
+      return fs.existsSync(path.join(app.getPath('userData'), 'license.enc'));
+    } catch {
+      return false;
+    }
+  };
+
+  // ── Funnel telemetry (electron/services/FunnelTelemetry.ts) ─────────────
+  // The one place that answers "what can this install do right now" for a
+  // funnel event. Booleans and enums only: no key, no email, no model name.
+  funnelTelemetry.setSnapshotResolver(() => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const nativelyKey = cm.getNativelyApiKey();
+    const hasApiKey = !!nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY;
+    const defaultModel = cm.getDefaultModel();
+    // A selected local model is the user's own AI too (hasOwnAiKey leaves Ollama out on purpose).
+    const hasOwnAi = hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }) || usesLocalModel(defaultModel);
+    const hasPro = isLicensed();
+    const trialExpiresAt = cm.getTrialExpiresAt();
+    return {
+      entitlement: resolveEntitlement({
+        licensed: hasPro,
+        hasRealApiKey: hasApiKey,
+        hasTrialToken: !!cm.getTrialToken(),
+        trialExpired: !!trialExpiresAt && new Date(trialExpiresAt).getTime() <= Date.now(),
+        hasOwnAi,
+      }),
+      hasOwnAi,
+      hasApiKey,
+      hasPro,
+      meetingAi: resolveMeetingAi({ defaultModel, hasOwnAi }),
+    };
+  });
+  // Who this is. The device id is the hardware id the app already sends for
+  // trials and licences; the trial token and the key go out as headers, and the
+  // server works the trial and the account out from them. The trial sentinel is
+  // not a key and is never sent as one.
+  // The hardware id comes from the native module, synchronously, and this
+  // resolver runs for every event on the main thread: a good id is read once
+  // per process. A failed read is not remembered, so it is tried again.
+  let funnelDeviceId: string | undefined;
+  funnelTelemetry.setIdentityResolver(() => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    if (!funnelDeviceId) {
+      try {
+        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+        const hwid = LicenseManager.getInstance().getHardwareId();
+        // 'unavailable' is what every machine without the native module holds:
+        // the absence of an id, not an id.
+        if (typeof hwid === 'string' && hwid && hwid !== 'unavailable') funnelDeviceId = hwid;
+      } catch { /* premium module absent: no device id */ }
+    }
+    const nativelyKey = cm.getNativelyApiKey();
+    return {
+      deviceId: funnelDeviceId,
+      trialToken: cm.getTrialToken() || undefined,
+      apiKey: nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY ? nativelyKey : undefined,
+    };
+  });
+  /** Where in the app something was clicked, when the renderer says; 'other' when it does not. */
+  const funnelSurface = (v: unknown): string =>
+    typeof v === 'string' && (FUNNEL_SURFACES as readonly string[]).includes(v) ? v : 'other';
+
+  /**
+   * Remove the Pro-only profile data a free trial left behind (résumé/JD
+   * documents, their indexes and profile packs). Meetings, transcripts and
+   * recordings are never touched. Callers decide WHEN: settleExpiredTrial (the
+   * expiry, once) and trial:end-byok ("Use my own API keys").
+   */
+  const wipeTrialProfileData = (): { success: boolean; failed: string[] } => {
+    // Every step runs, and every step that fails is named: a wipe that left
+    // data behind must never read as success (toaster policy §5 row 5).
+    const failed: string[] = [];
+    const step = (name: string, fn: () => void) => {
+      try { fn(); } catch (e: any) {
+        failed.push(name);
+        console.warn(`[IPC] trial wipe: ${name} failed:`, e?.message || e);
+      }
+    };
+
+    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
+    step('raw-indexes', () => require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes());
+
+    // 1. Disable knowledge mode + wipe orchestrator in-memory caches. No
+    //    orchestrator (not initialised, or an open-source build) is nothing to wipe.
+    step('knowledge', () => {
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) return;
+      orchestrator.setKnowledgeMode(false);
+      const { DocType } = require('../premium/electron/knowledge/types');
+      orchestrator.deleteDocumentsByType(DocType.RESUME);
+      orchestrator.deleteDocumentsByType(DocType.JD);
+      // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
+      try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* a re-index kick, not a wipe */ }
+    });
+
+    // 2. Wipe Pro-specific SQLite tables, one statement each: a multi-statement
+    //    exec stops at its first error, so one missing table used to leave the
+    //    rest untouched. A table that does not exist holds nothing to wipe.
+    //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
+    const sqliteDb = (() => { try { return DatabaseManager.getInstance().getDb(); } catch { return null; } })();
+    if (sqliteDb) {
+      for (const table of ['company_dossiers', 'knowledge_documents', 'resume_nodes', 'user_profile']) {
+        step(`sqlite:${table}`, () => {
+          try { sqliteDb.exec(`DELETE FROM ${table};`); }
+          catch (e: any) { if (!/no such table/i.test(String(e?.message))) throw e; }
+        });
+      }
+    }
+
+    // 2b. PII BACKSTOP (2026-07-02): also wipe the profile OKF packs (name/
+    //     companies/education) — the raw DELETE above does not cover the
+    //     knowledge_sources/packs/cards rows.
+    step('profile-packs', () => {
+      const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
+      ProfilePackBuilder.getInstance().deleteAllProfilePacks();
+    });
+
+    return { success: failed.length === 0, failed };
+  };
+
+  // Trials whose expiry wipe already ran in this process. The persisted
+  // once-marker is the real record; this keeps the wipe to once per launch
+  // when the settings store cannot write it (degraded) or a step failed.
+  const expiryWipeAttempted = new Set<string>();
+
+  /**
+   * Settle an EXPIRED trial token in one place (toaster policy Phase 0,
+   * src/lib/trialPolicy.mjs). Called from every path where the answer can
+   * change: the startup read, the status poll, licence activation, a Natively
+   * key save, and every credentials change.
+   *
+   * - A licence, a real Natively key or an own AI key supersedes the trial:
+   *   the token is cleared (trialClaimed stays) and every window is told
+   *   (`trial-ended`, choice 'superseded'), which closes an open card.
+   * - Otherwise the "Trial ended" card is shown (showEndedCard).
+   * - The profile wipe runs once per trial, and never for a licensed user.
+   *
+   * Idempotent: once cleared there is no token; once wiped the marker blocks
+   * a second wipe. A trial with time left is never touched. Fails OPEN (no
+   * card): a wall the user cannot close must never be raised on a guess.
+   */
+  const settleExpiredTrial = (
+    reason: string,
+    opts: { serverExpired?: boolean } = {},
+  ): { showEndedCard: boolean; wipe: boolean; clearToken: boolean } => {
+    const none = { showEndedCard: false, wipe: false, clearToken: false };
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const token = cm.getTrialToken();
+      if (!token) return none;
+      const expiresAt = cm.getTrialExpiresAt();
+      const expired = opts.serverExpired === true
+        || (!!expiresAt && new Date(expiresAt).getTime() <= Date.now());
+      if (!expired) return none;
+
+      const trialId = cm.getTrialStartedAt() || expiresAt || 'unknown-trial';
+      const nativelyKey = cm.getNativelyApiKey();
+      const sm = SettingsManager.getInstance();
+      const licensed = isLicensed();
+      const decision = resolveExpiredTrial({
+        hasToken: true,
+        expired: true,
+        licensed,
+        hasRealNativelyKey: !!nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY,
+        hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }),
+        wipedForThisTrial: sm.get('trialExpiryWipedFor') === trialId,
+      });
+
+      if (decision.wipe && !expiryWipeAttempted.has(trialId)) {
+        expiryWipeAttempted.add(trialId);
+        const wiped = wipeTrialProfileData();
+        if (wiped.success) sm.set('trialExpiryWipedFor', trialId);
+      }
+      if (decision.clearToken) {
+        cm.clearTrialToken();
+        // clearTrialToken refuses while the credential store is degraded; only
+        // announce an end that actually happened.
+        if (!cm.getTrialToken()) {
+          console.log(`[IPC] Expired trial superseded (${reason}) — token cleared, Trial ended card suppressed`);
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('trial-ended', { choice: 'superseded' });
+          });
+        }
+      }
+      return decision;
+    } catch (e: any) {
+      console.warn('[IPC] settleExpiredTrial failed:', e?.message || e);
+      return none;
+    }
+  };
+
   // ── Genie snapshots (genieSnapshots.ts) ────────────────────────────────
   // A popup card's genie warps one picture of the card. The capture reads the
   // CALLING window's own compositor output (event.sender), never another
@@ -333,6 +587,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('credentials-changed');
     });
+    // A key saved while an expired trial token lingers supersedes that trial:
+    // settle it now so an open "Trial ended" card closes at once.
+    settleExpiredTrial('credentials changed');
   };
 
   /**
@@ -433,6 +690,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         // user's real Anthropic/OpenAI/Gemini key, and nothing about the request
         // or the answer looks wrong.
         if (modelId.startsWith('fluxion/')) return 'fluxion';
+        // Fluxion's reason exactly: AgentRouter resells claude-opus-5, gpt-6-astra
+        // and deepseek-v4-flash under the vendors' own ids, so every vendor check
+        // below would claim one. MUST stay above them.
+        if (modelId.startsWith('agentrouter/')) return 'agentrouter';
         // MUST stay above every vendor check below, same as the three gateways
         // above. 9Router namespaces its catalogue by upstream, so
         // `ninerouter/openai/gpt-5` is an includes('openai') match and
@@ -486,9 +747,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         // pins the two together.
         const optInFamily = family === 'litellm' || family === 'openrouter' || family === 'ninerouter';
         const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
+        // The bare `codex-cli` id runs the Codex card's default model and is never
+        // itself in the allow-list, which holds `codex-cli:<model>` ids. Without
+        // this, un-ticking any Codex model made the bare id "unavailable".
+        const allowListId = modelId === 'codex-cli' ? `codex-cli:${codexConfig.model}` : modelId;
         if (optInFamily) {
-          if (!enabledForFamily.includes(modelId)) return false;
-        } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
+          if (!enabledForFamily.includes(allowListId)) return false;
+        } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(allowListId)) return false;
 
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
@@ -501,6 +766,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Above the gemini/groq/openai/claude/deepseek lines for the reason
         // providerFamily() gives — all five would otherwise claim a Fluxion id.
         if (modelId.startsWith('fluxion/')) return has(cm.getFluxionApiKey());
+        // Above the vendor lines for the reason providerFamily() gives.
+        if (modelId.startsWith('agentrouter/')) return has(cm.getAgentRouterApiKey());
         // Above the vendor lines for the reason providerFamily() gives. Gated on
         // the BASE URL, not a key: 9Router's own REQUIRE_API_KEY defaults to
         // false, so a stock local instance is legitimately keyless and gating on
@@ -537,6 +804,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Same contract: stored fully prefixed (`fluxion/<model>`), the form
       // modelAvailable() classifies. Do not re-prefix.
       const fluxionFallbackModel: string | null = cm.getPreferredModel?.('fluxion') || null;
+      // Stored prefixed like the two above. Unlike them it has a default when
+      // the user never promoted one: AGENTROUTER_DEFAULT_MODEL (DeepSeek, the
+      // one model not rationed per day). modelAvailable() still gates it on the
+      // key, the disabled switch and the allow-list.
+      const agentrouterFallbackModel: string =
+        cm.getPreferredModel?.('agentrouter')
+        || (require('./llm/agentRouter') as typeof import('./llm/agentRouter')).AGENTROUTER_DEFAULT_MODEL;
       // Same contract again: stored fully prefixed (`ninerouter/<alias>/<model>`),
       // the form modelAvailable() classifies. Do not re-prefix.
       const ninerouterFallbackModel: string | null = cm.getPreferredModel?.('ninerouter') || null;
@@ -581,7 +855,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         ? (antigravityCatalog ?? await AntigravityService.getInstance().getModels().catch(() => []))
           .map(({ id }) => `antigravity:${id}`).find(modelAvailable)
         : undefined;
+      // Same-provider first, like Antigravity: un-ticking the active Codex model
+      // in the Codex card's model list must land on another Codex model, not on
+      // whichever key the ladder below reaches first.
+      const codexFallback = defaultModel.startsWith('codex-cli') && codexConfig.enabled === true && codexSignedIn
+        ? ['codex-cli', ...(cm.getCloudEnabledModels?.('codex-cli') || [])].find(modelAvailable)
+        : undefined;
       const next = defaultModel.startsWith('antigravity:') && antigravityFallback ? antigravityFallback
+        : codexFallback ? codexFallback
         : modelAvailable('natively') ? 'natively'
         : geminiNext ? geminiNext
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
@@ -603,6 +884,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         // default went stale fell through to `allProviders.find(...)` -> null and
         // was told "No AI providers configured" while holding a working key.
         : (fluxionFallbackModel && modelAvailable(fluxionFallbackModel)) ? fluxionFallbackModel
+        // AgentRouter earns a rung for Fluxion's reason, with the default above.
+        : modelAvailable(agentrouterFallbackModel) ? agentrouterFallbackModel
         // 9Router earns a rung on the same evidence, and it is the cheap kind
         // rather than LiteLLM's: no catalogue fetch, because modelAvailable()
         // already enforces the base URL, the disabled switch and the OPT-IN
@@ -754,6 +1037,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         premium = LicenseManager.getInstance().isPremium();
       } catch { /* premium module absent — treat as not premium */ }
       if (!premium) clearActiveModeOnLicenseLoss();
+      funnelTelemetry.track('trial_expired');
     } catch (e: any) {
       console.warn('[IPC] endExpiredTrialRuntime failed:', e?.message);
       return false;
@@ -822,11 +1106,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       const result = await LicenseManager.getInstance().activateLicense(key);
+      funnelTelemetry.keyEntered('pro_licence', result?.success ? 'ok' : 'invalid');
       if (result?.success) {
         BrowserWindow.getAllWindows().forEach((win) => {
           if (!win.isDestroyed())
             win.webContents.send('license-status-changed', { isPremium: true });
         });
+        // A licence supersedes an EXPIRED trial (a running one keeps going: the
+        // licence is the Pro app, not AI access).
+        settleExpiredTrial('licence activated');
       }
       return result;
     } catch (err: any) {
@@ -951,6 +1239,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const overlayWin = appState.getWindowHelper().getOverlayWindow();
       const launcherWin = appState.getWindowHelper().getLauncherWindow();
       const pillWin = appState.getWindowHelper().getPillWindow();
+      const modelSelectorWin = appState.modelSelectorWindowHelper?.getWindow?.();
 
       if (
         pillWin &&
@@ -966,6 +1255,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         settingsWin.webContents.id === senderWebContents.id
       ) {
         appState.settingsWindowHelper.setWindowDimensions(settingsWin, width, height);
+      } else if (
+        modelSelectorWin &&
+        !modelSelectorWin.isDestroyed() &&
+        modelSelectorWin.webContents.id === senderWebContents.id
+      ) {
+        // Model dropdown: the window hugs the panel, whose height follows the list.
+        appState.modelSelectorWindowHelper.setContentSize(width, height);
       } else if (
         overlayWin &&
         !overlayWin.isDestroyed() &&
@@ -1105,8 +1401,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     },
   );
 
-  // Aux windows → overlay renderer: user actions (toggle-width / end-meeting /
-  // toggle-expand). Only the pill/toggle windows may send.
+  // Aux windows: user actions. Layout actions (toggle-width / toggle-expand)
+  // go on to the overlay renderer; end-meeting is ended here, in main, so Stop
+  // does not depend on the overlay renderer being responsive. Only the
+  // pill/toggle windows may send.
   safeHandle('overlay-ui-action', async (event, action: { type?: string }) => {
     const helper = appState.getWindowHelper();
     const pillWin = helper.getPillWindow();
@@ -1115,7 +1413,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       (pillWin && !pillWin.isDestroyed() && pillWin.webContents.id === event.sender.id) ||
       (toggleWin && !toggleWin.isDestroyed() && toggleWin.webContents.id === event.sender.id);
     if (!fromAux || !action?.type) return;
-    helper.forwardOverlayUiAction(action);
+    await routeOverlayUiAction(action, {
+      endMeeting: () => appState.endMeeting(),
+      forwardToOverlay: (a) => helper.forwardOverlayUiAction(a),
+    });
   });
 
   // Pill window → main: drag the welded overlay group by a pointer delta.
@@ -1282,6 +1583,19 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-donation-complete', async () => {
     const { DonationManager } = require('./DonationManager');
     DonationManager.getInstance().setHasDonated(true);
+    // A supporter never sees "Support Natively" again (toaster policy §6 row
+    // 10), whichever surface they donated from: About as well as the card.
+    try {
+      const cardLedger = CardLedger.getInstance();
+      if (cardLedger.isReadable()) {
+        const ledger = cardLedger.record('support', 'acted');
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('cards:changed', ledger);
+        });
+      }
+    } catch (e: any) {
+      console.warn('[IPC] set-donation-complete: card ledger not updated:', e?.message);
+    }
     return { success: true };
   });
 
@@ -1371,7 +1685,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         });
 
         // Log Usage
-        intelligenceManager.logUsage('chat', message, result);
+        intelligenceManager.logUsage('chat', message, result, imagePaths);
 
         return result;
       } catch (error: any) {
@@ -1434,10 +1748,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       message: string,
       imagePaths?: string[],
       context?: string,
-      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; surface?: 'live' | 'chat'; liveQuestion?: boolean },
     ): Promise<null> => {
       let myController: AbortController | null = null;
       let _manualFgToken: string | null = null;
+      // The Answer button routes a SPOKEN question through this handler
+      // (`liveQuestion`). Its reply is recorded on the 'manual_chat' surface
+      // like any other, so the write is told it answers speech — meeting notes
+      // keep replies to typed chat only (SessionTracker.chatReply).
+      //
+      // The tag follows what was RECORDED, not the flag alone: it is set only
+      // when the question is already in the transcript as speech. If it had to
+      // be added here as a typed line (its STT final never landed), the reply
+      // stays a chat reply, so the pair is kept or dropped together instead of
+      // leaving a "typed" question with its answer removed.
+      let questionOnRecordAsSpeech = false;
+      const forThisTurn = <T extends object>(decision: T | undefined): (T & { answersSpokenQuestion?: boolean }) | undefined =>
+        questionOnRecordAsSpeech ? { ...(decision ?? ({} as T)), answersSpokenQuestion: true } : decision;
       // Intelligence OS observe-only trace (Phase 1). Hoisted so the catch can record
       // an error + commit. Assigned to the real trace right after planAnswer; until
       // then it's the shared zero-cost NO-OP, so this is free when the flag is off.
@@ -1447,6 +1774,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         const llmHelper = appState.processingHelper.getLLMHelper();
 
         const senderId = event.sender.id;
+        // Which surface is asking (2026-09-29). The overlay's typed box and the
+        // launcher's chat share this handler, which used to hardcode the reading
+        // layout for both: an answer the user was about to say aloud mid-
+        // interview came back as a labelled card. An explicit option wins (the
+        // E2E harness has a synthetic sender); otherwise the overlay window is
+        // the live surface and every other sender is a reading surface.
+        const answerSurface: 'live' | 'chat' = options?.surface ?? (() => {
+          try { return appState.getWindowHelper?.()?.getOverlayWindow?.()?.webContents?.id === senderId ? 'live' : 'chat'; } catch { return 'chat'; }
+        })();
         const myStreamId = ++_chatStreamId;
         const priorStream = _chatStreamsBySender.get(senderId);
         if (priorStream) {
@@ -1574,6 +1910,35 @@ export function initializeIpcHandlers(appState: AppState): void {
           // dedicated V3 surface owns them.
           const callerOwnsPrompt = options?.skipSystemPrompt === true && Boolean(context);
           if (!callerOwnsPrompt && isContextIntelligenceV3Enabled()) {
+            // Assistant-identity short-circuit, ahead of the V3 turn (2026-10-04).
+            // The legacy handler's probe sits ~900 lines below, after this
+            // block's `return null`, so with V3 on it never ran: "what model are
+            // you ?" was planned as a DOCUMENT_FACT/MEETING_FACT question, sent
+            // with the transcript in scope, and answered with the
+            // hidden-configuration refusal. Only the UNAMBIGUOUS probes are
+            // taken here; "who are you?" / "introduce yourself" still reach V3,
+            // which can see whether a profile or the mode's files make them a
+            // question about the user. Same guards as the legacy probe: a skill
+            // turn or an attached screen is never hijacked.
+            if (!skillPromptBlock && !imagePaths?.length && typeof message === 'string') {
+              const { resolveUnambiguousAssistantProbe } = require('./llm/manualIdentityRouting') as typeof import('./llm/manualIdentityRouting');
+              const identityReply = resolveUnambiguousAssistantProbe(message);
+              if (identityReply) {
+                // The emission lives in replyWithAssistantIdentity, below this
+                // handler: several structure tests read this branch from its
+                // first line to its catch, and the reply's own stream events
+                // would otherwise be the first ones they find.
+                replyWithAssistantIdentity({ event, senderId, streamId: myStreamId, message, reply: identityReply, imagePaths });
+                return null;
+              }
+            }
+            // The phone shows the question now, with Thinking under it, as the
+            // overlay does: everything below (screen understanding, retrieval,
+            // the prompt) can take seconds before a first word, and the phone
+            // used to get the question only with the finished answer.
+            try {
+              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''), { awaitingAnswer: true });
+            } catch { /* mirror only */ }
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
@@ -1600,7 +1965,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // with the engine surfaces — a second inline copy of a
             // security-relevant construction is how the tokenizer copies
             // drifted, and this one decides what evidence a turn may see.
-            const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { createModeRetrievalPort, attachmentSourceTypeExtensions, referenceCorpusTokens } = require('./context-intelligence/retrieval/mode-retrieval-port');
             const { combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
             // Custom/general modes gain the source types their OWN attachments
             // evidence (deep-test D10): a candidate résumé + JD attached to an
@@ -1681,12 +2046,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             let v3ProfilePort: unknown = null;
             let v3ProfileCounts = { profileResume: 0, profileJd: 0, profileFact: 0 };
             let v3ProfileResolved: Array<{ role: string; id: string }> = [];
+            let v3ProfileWhole: { tokens: number; docs: number } | null = null;
             try {
               if (policy.profileSources?.length) {
                 const { collectV3ProfileSources } = require('./services/knowledge/v3ProfileSources');
                 const collected = collectV3ProfileSources(llmHelper.getKnowledgeOrchestrator?.() ?? null);
                 if (collected.docs.length) {
-                  const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                  const { createProfileRetrievalPort, profileWholeInfo } = require('./context-intelligence/retrieval/profile-retrieval-port');
                   const v3ProfileRawRetriever = require('./services/knowledge/v3ProfileSources').buildProfileRawRetriever(mm, collected.docs, { tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'manual', meetingActive: () => appState.getIsMeetingActive() });
                   v3ProfilePort = createProfileRetrievalPort({
                     docs: collected.docs,
@@ -1697,6 +2063,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   });
                   if (v3ProfilePort) {
                     v3ProfileCounts = collected.counts;
+                    v3ProfileWhole = profileWholeInfo(collected.docs, policy.allowedSourceTypes, policy.profileSources);
                     v3ProfileResolved = collected.resolved;
                   }
                 }
@@ -1745,7 +2112,18 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // caches and hits exactly like a single-image one.
                 const cacheKey = screenStore.hashImageSet(imagePaths);
                 if (cacheKey) {
-                  v3ScreenDescription = screenStore.getScreenshotDescription(cacheKey)?.description ?? '';
+                  const cachedDescription = screenStore.getScreenshotDescription(cacheKey)?.description ?? '';
+                  // A description made while this screenshot was being kept on
+                  // this device feeds THIS turn's prompt only when the turn
+                  // stays on this device. Otherwise it is a miss: the pre-pass
+                  // below reads the screen again under today's setting (or not
+                  // at all, when that setting is still on).
+                  const { hasOnDeviceScreenText } = require('./context-intelligence/question/on-device-screen') as
+                    typeof import('./context-intelligence/question/on-device-screen');
+                  const turnOnDevice = (() => {
+                    try { return appState.processingHelper.getLLMHelper().selectionStaysOnDevice() === true; } catch { return false; }
+                  })();
+                  v3ScreenDescription = hasOnDeviceScreenText(cachedDescription) && !turnOnDevice ? '' : cachedDescription;
                 }
                 const {
                   getScreenUnderstandingService,
@@ -1825,8 +2203,31 @@ export function initializeIpcHandlers(appState: AppState): void {
             // block previously carried its own copy of all of that — two copies
             // of a security-relevant construction is how the tokenizer copies
             // drifted (§2 of the architecture review).
+            // System-design diagram turn — resolved ONCE and handed to the
+            // persona (the contract) and the composer (the note + the design on
+            // the table), so the two cannot disagree. Same planner call the
+            // coding verdict below uses.
+            const manualDiagramTurn: DiagramTurn | null = (() => {
+              try {
+                const im = appState.getIntelligenceManager?.();
+                const turn = resolveDiagramTurn({
+                  question: v3Question,
+                  answerType: planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined }).answerType,
+                  activeDesign: im?.getActiveDesign?.() ?? null,
+                  pinnedModeId: modeInfo?.id ?? undefined,
+                  hasVisualContext: (imagePaths?.length ?? 0) > 0,
+                });
+                if (turnStartsAFreshDesign(turn)) {
+                  im?.noteDesignQuestion?.(v3Question);
+                }
+                return turn;
+              } catch { return null; }
+            })();
+
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
+              readingSurface: answerSurface === 'chat',
+              diagramTurn: v3DiagramTurn(manualDiagramTurn),
               pathTag: 'ipc',
               queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(llmHelper),
               question: v3Question,
@@ -1843,6 +2244,23 @@ export function initializeIpcHandlers(appState: AppState): void {
               // unclassified factual question in General (see
               // ClassificationInput.inLiveMeeting).
               inLiveMeeting: v3MeetingEvidence.inLiveMeeting,
+              // The meeting's recent speech, as the hotkey path already sends it
+              // (2026-09-30, measured: typed "summarize what we've decided so far",
+              // "calm her down", "another one, different numbers" during a live
+              // meeting took the no-retrieval path and reached the model with NO
+              // transcript at all — the BM25 port admits nothing for a meeting-wide
+              // ask, and typed chat had no speech window). Overlay (live) surface
+              // only; the launcher's reading surface is not inside a meeting.
+              conversationSummary: answerSurface === 'live' ? (() => {
+                try {
+                  const { speechWindowForPrompt, SPEECH_WINDOW_SECONDS } = require('./llm/conversationHistoryPolicy') as typeof import('./llm/conversationHistoryPolicy');
+                  // Durable transcript, like the heard path (2026-10-04, E12).
+                  const im: any = appState.getIntelligenceManager?.();
+                  const formatted = String((typeof im?.getFormattedSpeech === 'function' ? im.getFormattedSpeech(SPEECH_WINDOW_SECONDS) : im?.getFormattedContext?.(180)) ?? '');
+                  const w = speechWindowForPrompt(formatted);
+                  return w.trim() ? w : undefined;
+                } catch { return undefined; }
+              })() : undefined,
               // Settings > Intelligence > Memory > "Chat history". Read HERE, not
               // in the bridge: context-intelligence has no dependency on the flag
               // registry (see contracts/retrieval-flags.ts for what the first one
@@ -1872,19 +2290,32 @@ export function initializeIpcHandlers(appState: AppState): void {
               // for v2/universal prompts and for every coding turn. Same
               // per-answer-type scoping as the live overlay path; the composer
               // renders it LAST in the user message and keeps the raw text out
-              // of the system prompt (§19.2). No defaultLengthDirective: typed
-              // chat never carried the spoken-length target on this path.
+              // of the system prompt (§19.2).
               realtimeInstruction: (() => {
                 try {
                   const _plan = planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined });
                   return ModesManager.getInstance().getActiveModePinnedInstructions?.(_plan.answerType, modeInfo?.id ?? undefined) || undefined;
                 } catch { return undefined; }
               })(),
+              // The app's spoken-length default, on the LIVE surface only
+              // (2026-09-29). The overlay's typed box is read to be said aloud,
+              // exactly like Cmd+Enter, which has always carried this line; the
+              // typed path never did, and its answers ran 100-130 words. The
+              // launcher's reading surface keeps no line (its layout sets its own
+              // length). Same planner, same exemptions (story questions get none).
+              defaultLengthDirective: answerSurface === 'live' ? (() => {
+                try {
+                  const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
+                  return renderLengthDirectiveForPlan(planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined })) || undefined;
+                } catch { return undefined; }
+              })() : undefined,
               modeTemplateType: rawMode,
               modeUniqueId: modeInfo?.id ?? null,
               modeName: (modeInfo as any)?.name ?? null,
               attachedSourceCount: files.length,
               attachedFileNames: (files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
+              attachedCorpusTokens: referenceCorpusTokens(files as Array<{ content?: string }>),
+              profileWhole: v3ProfileWhole,
               profileSourceCount: v3ProfileCounts.profileResume + v3ProfileCounts.profileJd + v3ProfileCounts.profileFact,
               resolvedProfileSources: v3ProfileResolved,
               extraAllowedSourceTypes: extraSourceTypes,
@@ -1985,6 +2416,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                       // dry_run_only) fire so "what's the complexity" gets the
                       // analysis instead of a full re-solve.
                       priorCodingTurnExists: !!priorProblem,
+                      // A recalled prior problem makes this a coding turn
+                      // (codingTask below) even when the planner routed the
+                      // follow-up elsewhere ("what's the brute force?").
+                      // Without this the resolver returned before deciding the
+                      // format and the shape, and the turn fell back to the
+                      // six-section default.
+                      codingTurnPromoted: !!priorProblem,
                     });
                     // ATTACHED-SCREENSHOT promotion, mirroring the WTA surface.
                     // A chat message with an attached screenshot and a question
@@ -1999,7 +2437,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                     if (!resolved.codingTask
                         && (imagePaths?.length ?? 0) > 0
                         && (!v3Question.trim() || require('./llm/codingPromptSignals').isDeicticAsk(v3Question))) {
-                      return { codingTask: true, codingTaskKind: 'dsa' } as import('./llm/codingPromptSignals').CodingPromptSignals;
+                      // The screenshot grounds the problem; the words decide
+                      // the shape ("explain this" is not "solve this").
+                      return require('./llm/codingPromptSignals').screenPromotedCodingSignals(v3Question) as import('./llm/codingPromptSignals').CodingPromptSignals;
                     }
                     return resolved;
                   } catch { return { codingTask: false } as import('./llm/codingPromptSignals').CodingPromptSignals; }
@@ -2014,8 +2454,20 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // keeps whatever format the resolver derived (complexity_only,
                   // dry_run_only, or none for "make it iterative").
                   codingFormat: (priorProblem && bareCode) ? 'code_only' : codingSignals.codingFormat,
+                  // Every coding turn gets a shape: the bridge's own coding
+                  // verdict can arrive without the resolver's.
+                  codingShape: codingSignals.codingShape
+                    ?? ((codingTask || !!priorProblem) ? (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(v3Question) : undefined),
                   suppliedTemplate: codingSignals.suppliedTemplate,
-                  chatSurface: true,
+                  surface: answerSurface,
+                  diagram: manualDiagramTurn?.signals ?? null,
+                });
+                require('./llm/promptDebug').setPromptDebugTurnFacts({
+                  personaAction: 'answer',
+                  surface: answerSurface,
+                  mode: modeInfo?.templateType ?? null,
+                  codingTask: Boolean(codingTask || codingSignals.codingTask || !!priorProblem),
+                  v2PersonaNull: !base,
                 });
                 return base ? base + priorProblem : base;
               },
@@ -2053,7 +2505,23 @@ export function initializeIpcHandlers(appState: AppState): void {
             // the antecedent for the NEXT turn's referent resolution.
             // Bug 003: V3 owns this turn end to end, so if the skill block is not
             // appended here it is injected nowhere at all.
-            const v3SystemPrompt = skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system;
+            // A persona-less V3 system (v2 kill-switch) has no diagram contract;
+            // a v2 persona already carries exactly one, and the helper never
+            // adds a second.
+            const v3SystemPrompt = withDiagramContract(
+              skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system,
+              manualDiagramTurn,
+              { tier: llmHelper?.getPromptTier?.() === 'tiny' ? 'local' : 'cloud', surface: answerSurface },
+            );
+            require('./llm/promptDebug').notePromptComposition({
+              surface: 'manual-chat',
+              promptSource: 'v3',
+              tier: String(llmHelper?.getPromptTier?.() ?? ''),
+              mode: modeInfo?.templateType ?? null,
+              system: v3SystemPrompt,
+              user: composed.user,
+              extra: { v3Sections: composed.sections ?? null, hasImages: (imagePaths?.length ?? 0) > 0 },
+            });
             const v3Stream = llmHelper.streamChatWithOutcome(
               composed.user,
               imagePaths,
@@ -2079,18 +2547,47 @@ export function initializeIpcHandlers(appState: AppState): void {
               { v3Owned: true },
             );
 
+            // Meta-preamble gate (2026-09-30): this path has no post-stream
+            // pass, so "The interviewer's question is…" / "Here's how I'd
+            // answer:" reached the screen verbatim. The gate holds only the
+            // opening while it could still be such a preamble, drops it, and
+            // passes everything after through untouched — nothing on screen is
+            // rewritten, and finalText is exactly what was streamed. Off when
+            // the user asked ABOUT the question ("what is the interviewer
+            // asking?"), where that opening is the answer.
+            const v3PreambleGate = (() => {
+              try {
+                const pp = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                return pp.asksAboutTheQuestion(String(message || '')) ? null : new pp.PreambleStreamGate();
+              } catch { return null; }
+            })();
+            const emitV3Visible = (visible: string) => {
+              if (!visible) return;
+              finalText += visible;
+              event.sender.send('gemini-stream-token', visible, { streamId: myStreamId });
+              // Streamed to the phone as it is written, like the legacy path.
+              try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), visible); } catch { /* mirror only */ }
+            };
             try {
               for await (const tok of v3Stream.stream) {
                 if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
                   finishDebug(finalText, false, 'superseded_by_newer_stream');
+                  try { PhoneMirrorService.getInstance().publishError(String(myStreamId), 'a newer question replaced it'); } catch { /* mirror only */ }
                   return null;
                 }
                 if (!v3SawFirstToken) {
                   v3SawFirstToken = true;
                   try { v3DebugCollector?.recordFirstToken(); } catch { /* noop */ }
                 }
-                finalText += tok;
-                event.sender.send('gemini-stream-token', tok, { streamId: myStreamId });
+                emitV3Visible(v3PreambleGate ? v3PreambleGate.push(tok) : tok);
+              }
+              // End of stream: release whatever the gate still holds (a short
+              // answer, or an all-preamble one, which fails open unchanged).
+              if (v3PreambleGate) {
+                emitV3Visible(v3PreambleGate.flush());
+                if (v3PreambleGate.removedUnits > 0) {
+                  console.log('[IPC] manual chat: meta preamble held back and dropped', { streamId: myStreamId, units: v3PreambleGate.removedUnits });
+                }
               }
             } catch (streamErr) {
               // Finalize the debug record with the partial answer, then let the
@@ -2140,6 +2637,46 @@ export function initializeIpcHandlers(appState: AppState): void {
             // payload is already an object, so this is additive and older
             // renderers simply ignore it) and record it in the debug trace as a
             // non-success, which is what it is.
+            // CLAIM VERIFIER (2026-09-30): the typed surface's copy of the
+            // hotkey pass (IntelligenceEngine.verifyAnswerClaims; see
+            // llm/claimVerifier.ts). The row streamed as written; an accepted
+            // edit replaces it through finalText on 'gemini-stream-done'. Not
+            // on a screenshot turn: the edit would not see what the answer saw.
+            // Not on a turn that carries a visual contract either (same reason
+            // as the hotkey pass: one provider call, the answer kept as written).
+            if (v3Stream.outcome.truncated !== true && finalText.trim() && !(imagePaths?.length)
+                && !manualDiagramTurn?.signals
+                && process.env.NATIVELY_CLAIM_VERIFIER !== '0') {
+              try {
+                const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
+                const cvMode = modeInfo?.templateType ?? null;
+                const cvKind = cv.claimVerifierKind({ modeId: cvMode, question: String(message || ''), draft: finalText, surface: 'typed' });
+                if (cvKind && cvMode) {
+                  const cvSystem = cv.claimVerifierSystemPrompt(cvMode, 'typed', { noDocuments: cv.materialHasNoDocuments(composed.user) });
+                  const run = await cv.runClaimVerifier({
+                    answer: finalText,
+                    material: composed.user,
+                    budgetMs: cv.CLAIM_VERIFIER_BUDGET_MS,
+                    startStream: (body, signal) => llmHelper.streamChat(
+                      cv.claimVerifierStandaloneMessage(composed.user, body), undefined, undefined, cvSystem,
+                      true, true, composed.packedDataScopes ?? [], signal, undefined, { v3Owned: true },
+                    ) as AsyncGenerator<string>,
+                    parentSignal: myController.signal,
+                    isSuperseded: () => _chatStreamsBySender.get(senderId)?.streamId !== myStreamId,
+                    clean: (t) => require('./llm').cleanAnswerArtifacts?.(t) ?? t,
+                    observe: secondaryStreamObserver('verification'),
+                  });
+                  console.log(`[ClaimVerifier] typed kind=${cvKind} ${run.changed ? 'edited' : 'kept'} (${run.outcome}) ${run.ms}ms`);
+                  if (run.changed) finalText = run.text;
+                }
+              } catch (cvErr: any) {
+                console.warn('[IPC] claim verifier skipped:', cvErr?.message);
+              }
+              if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+                finishDebug(finalText, false, 'superseded_by_newer_stream');
+                return null;
+              }
+            }
             const v3Truncated = v3Stream.outcome.truncated === true;
             if (v3Truncated) {
               console.warn('[IPC] manual chat answer is INCOMPLETE — not storing it as conversation history', {
@@ -2154,7 +2691,16 @@ export function initializeIpcHandlers(appState: AppState): void {
               incomplete: v3Truncated,
               incompleteReason: v3Truncated ? v3Stream.outcome.reason : undefined,
             });
+            // The phone watched it stream: end it as the overlay does (a cut-off
+            // answer keeps its words and says it stopped).
+            try {
+              if (v3Truncated) PhoneMirrorService.getInstance().publishError(String(myStreamId), 'it was cut off');
+              else PhoneMirrorService.getInstance().publishDone(String(myStreamId), finalText);
+            } catch { /* mirror only */ }
             finishDebug(finalText, !v3Truncated, v3Truncated ? 'stream_truncated' : null);
+            // Compile-only syntax check of fenced JavaScript (observe-only:
+            // telemetry + log, the answer is never changed).
+            try { require('./llm/codeVerification/syntaxCheckReport').observeAnswerJsSyntax(finalText, 'manual_chat_v3'); } catch { /* observe only */ }
 
             // ── Record the turn (V3 previously recorded NOTHING) ────────────
             // The short-circuit skipped every store the legacy path writes, so
@@ -2252,15 +2798,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                     answer: finalText,
                     source: 'manual_chat',
                     synthetic: true,
+                    imagePaths,
                   });
                 } else {
-                  im?.logUsage?.('chat', String(message || ''), finalText);
+                  im?.logUsage?.('chat', String(message || ''), finalText, imagePaths);
                 }
               } catch { /* session transcript only */ }
-              try {
-                PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
-                if (!v3Truncated) PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
-              } catch { /* mirror only */ }
             }
 
             return null;
@@ -2333,12 +2876,18 @@ export function initializeIpcHandlers(appState: AppState): void {
           // candidate_fast_path → fall through; the fast-path block below owns it.
           if (probe.kind === 'assistant_reply') {
             const identityHit = probe.reply;
-            intelligenceManager.addTranscript(
-              { text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' },
-              true,
-            );
+            // Same rule as the main record site below: a spoken question the
+            // mic already stored is not stored again as typed chat.
+            questionOnRecordAsSpeech = options?.liveQuestion === true
+              && spokenLineAlreadyInTranscript(intelligenceManager.getCurrentMeetingTranscript(), message, Date.now());
+            if (!questionOnRecordAsSpeech) {
+              intelligenceManager.addTranscript(
+                { text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' },
+                true,
+              );
+            }
             try {
-              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
+              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message, { awaitingAnswer: true });
             } catch (_) {
               /* noop */
             }
@@ -2363,8 +2912,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             } catch (_) {
               /* noop */
             }
-            intelligenceManager.addAssistantMessage(identityHit, undefined, 'manual_chat');
-            intelligenceManager.logUsage('chat', message, identityHit);
+            intelligenceManager.addAssistantMessage(identityHit, forThisTurn(undefined), 'manual_chat');
+            intelligenceManager.logUsage('chat', message, identityHit, imagePaths);
             // Observe-only trace for the app-identity canned reply (common path). The
             // hoisted iTrace is still the NOOP here (real trace is created post-planAnswer),
             // so begin a dedicated one. Zero-cost when the flag is off.
@@ -2389,13 +2938,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // history as `context` from the second turn on — the deleted renderer
         // pre-flight (`ragQueryLive`) used to be the only live-transcript
         // grounding that surface had. With the old `if (!context)` gate,
-        // `autoContextSnapshot` stayed permanently undefined for every typed
-        // follow-up during a meeting, so the merge a few hundred lines below
-        // (the `context && autoContextSnapshot` sibling of the pre-existing
-        // `!context && autoContextSnapshot` branch) could never fire — the
-        // legacy path (V3's rollback lever) silently lost meeting grounding.
-        // Always capturing here is what makes that merge possible; it is a
-        // cheap in-memory read regardless of whether `context` is set.
+        // `autoContextSnapshot` stayed undefined for typed follow-ups during a
+        // meeting, so the legacy path (V3's rollback lever) lost grounding.
+        // Capture regardless of existing chat history; the policy below decides
+        // whether to merge the transcript or select a same-surface prior answer.
+        // Capturing the window is a cheap in-memory read, not permission to
+        // include it in a standalone question or a regeneration prompt.
         let autoContextSnapshot: string | undefined;
         let autoContextItems: ContextItem[] = [];
         try {
@@ -2407,20 +2955,33 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
 
         // Now add USER message to IntelligenceManager (after context snapshot)
-        intelligenceManager.addTranscript(
-          {
-            text: message,
-            speaker: 'user',
-            timestamp: Date.now(),
-            final: true,
-            origin: 'manual_chat',
-          },
-          true,
-        );
+        //
+        // …unless it is already there. The Answer button sends what the user
+        // just SAID (`liveQuestion`), and the mic's STT seam has already stored
+        // that line as speech. Re-adding it here wrote the same sentence a
+        // second time, as typed chat: a live session's transcript had "Name."
+        // twice, 1.7 s apart (2026-10-04), and notes and search both read the
+        // duplicate. Checked against the transcript rather than assumed from
+        // the flag, so a question whose STT final never landed is still kept.
+        questionOnRecordAsSpeech = options?.liveQuestion === true
+          && spokenLineAlreadyInTranscript(intelligenceManager.getCurrentMeetingTranscript(), message, Date.now());
+        if (!questionOnRecordAsSpeech) {
+          intelligenceManager.addTranscript(
+            {
+              text: message,
+              speaker: 'user',
+              timestamp: Date.now(),
+              final: true,
+              origin: 'manual_chat',
+            },
+            true,
+          );
+        }
 
-        // Mirror to phone (no-op if PhoneMirrorService isn't running).
+        // Mirror to phone (no-op if PhoneMirrorService isn't running). Already
+        // published if the V3 path ran first and fell through; published once.
         try {
-          PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
+          PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message, { awaitingAnswer: true });
         } catch (_) {
           /* noop */
         }
@@ -2464,6 +3025,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { ModesManager } = require('./services/ModesManager');
           manualActiveMode = ModesManager.getInstance().getActiveModeInfo();
         } catch { /* mode prior unavailable — planAnswer stays mode-blind */ }
+        // PROFILE INTELLIGENCE GATE (2026-09-30). This legacy body also runs
+        // when V3 throws (the fallthrough above), and its three profile
+        // injections — the JIT evidence route, the TurnEvidenceCoordinator pack
+        // and the OKF profile cards — were gated only by source ownership, which
+        // grants the résumé to a General mode with a prompt or file and to a
+        // turn with no mode at all. The ONE eligibility rule (mode-policy-
+        // registry, by template type) now bounds all three and the knowledge
+        // intercept below. A null mode (none selected, or the read threw) is
+        // not eligible: fail closed.
+        const manualProfileIntelligenceAllowed = isProfileIntelligenceAllowed(manualActiveMode?.templateType ?? null);
 
         // Defense-in-depth at the LLM boundary: as of 2026-07-18, no known code path
         // injects <answer_contract>...</answer_contract> into `message` (the renderer
@@ -2767,6 +3338,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         // service the bare-follow-up path uses; gated on conversationMemoryV2 (flag OFF →
         // exactly the legacy behavior). All variables default to "no change".
         let explicitCodingContract: ExplicitCodingContract = detectExplicitCodingContract(message);
+        // WHAT this coding message asked for (codingShape.ts). Chooses the
+        // contract below when no explicit format was given, and tells the repair
+        // what the answer should contain.
+        const manualCodingShape = (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(message);
+        // "Solve three sum and give me the time complexity" asks for a solution
+        // with the complexity in it, not for the complexity alone.
+        if ((explicitCodingContract === 'complexity_only' || explicitCodingContract === 'dry_run_only')
+            && ['code', 'solve', 'optimize', 'debug', 'full'].includes(manualCodingShape)) {
+          explicitCodingContract = null;
+        }
         let codingPriorProblemBlock = '';
         let codingFollowupResolved = false;
         // BARE CODE REQUEST — "code?", "show me the code" — deliberately NOT gated
@@ -3035,8 +3616,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           event.sender.send('gemini-stream-done', { finalText: clarification, streamId: myStreamId });
           try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarification); } catch (_) { /* noop */ }
           try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarification); } catch (_) { /* noop */ }
-          intelligenceManager.addAssistantMessage(clarification, undefined, 'manual_chat');
-          intelligenceManager.logUsage('chat', message, clarification);
+          intelligenceManager.addAssistantMessage(clarification, forThisTurn(undefined), 'manual_chat');
+          intelligenceManager.logUsage('chat', message, clarification, imagePaths);
           chatTrace.markFirstUseful({ via: 'context_free_clarification' });
           chatTrace.mark('response_completed', { chars: clarification.length, deterministic: true });
           chatTrace.finish({ chars: clarification.length });
@@ -3121,8 +3702,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
-            intelligenceManager.addAssistantMessage(clarify, clarifyWrite, 'manual_chat');
-            intelligenceManager.logUsage('chat', message, clarify);
+            intelligenceManager.addAssistantMessage(clarify, forThisTurn(clarifyWrite), 'manual_chat');
+            intelligenceManager.logUsage('chat', message, clarify, imagePaths);
             chatTrace.markFirstUseful({ via: 'context_os_clarification' });
             chatTrace.mark('response_completed', { chars: clarify.length, deterministic: true, finalGenerationMode: 'source_safe_refusal' });
             chatTrace.finish({ chars: clarify.length });
@@ -3281,7 +3862,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         })();
         const sourceOwnershipAllowsProfile = ((manualOwnership && !_ownerEnforcementOff)
           ? manualOwnership.profileAllowed
-          : legacyDocGuardEligible) && _contractAllowsProfile && _impossibleStateGateAllowsProfile;
+          : legacyDocGuardEligible) && _contractAllowsProfile && _impossibleStateGateAllowsProfile
+          && manualProfileIntelligenceAllowed;
         // TurnEvidenceCoordinator wiring gap fix (grounding campaign, 2026-07-18):
         // this legacy fast path and the coordinator below (`coordinatorInScopeKinds`,
         // ~line 2179) previously raced with no reconciliation. When the canonical
@@ -3357,8 +3939,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
-            intelligenceManager.addAssistantMessage(clarify, clarifyWrite, 'manual_chat');
-            intelligenceManager.logUsage('chat', message, clarify);
+            intelligenceManager.addAssistantMessage(clarify, forThisTurn(clarifyWrite), 'manual_chat');
+            intelligenceManager.logUsage('chat', message, clarify, imagePaths);
             chatTrace.markFirstUseful({ via: 'source_switch_clarification' });
             chatTrace.mark('response_completed', { chars: clarify.length, deterministic: false, finalGenerationMode: 'source_safe_refusal' });
             chatTrace.finish({ chars: clarify.length });
@@ -3545,16 +4127,19 @@ export function initializeIpcHandlers(appState: AppState): void {
             });
             context = codingPriorProblemBlock ? `${codingContract}\n\n${codingPriorProblemBlock}` : codingContract;
           } else if (planIsCodingType) {
-            // Plain coding question (no constraint) → the EXACT proven path, byte unchanged.
-            const baseContract = formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled());
+            // Plain coding question (no constraint) → the plan's contract, with the
+            // coding template chosen by the question's shape (six sections only for
+            // an explicit full ask).
+            const baseContract = formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled(), manualCodingShape);
             context = codingPriorProblemBlock ? `${baseContract}\n\n${codingPriorProblemBlock}` : baseContract;
           } else {
             // A follow-up ("now optimize it") promoted to coding though the plan type is
-            // follow_up/unknown → use the full six-section coding contract (null builder),
-            // NOT the follow_up template, plus the prior problem.
+            // follow_up/unknown → the coding contract for the follow-up's shape (not the
+            // follow_up template), plus the prior problem.
             const codingContract = buildCodingContractPrompt(null, {
               includeVerification: isCodeVerificationEnabled(),
               verificationInstruction: CODING_VERIFICATION_INSTRUCTION,
+              codingShape: manualCodingShape,
             });
             context = codingPriorProblemBlock ? `${codingContract}\n\n${codingPriorProblemBlock}` : codingContract;
           }
@@ -3830,7 +4415,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         // CONTEXT OS (Phase 7): capability check joins the legacy ownership
         // decision (narrowing only — see _contractAllowsProfile above).
         const ownershipAllowsProfileEvidence = (manualOwnership ? manualOwnership.profileAllowed : true)
-          && _contractAllowsProfile;
+          && _contractAllowsProfile
+          && manualProfileIntelligenceAllowed;
 
         // ── CONTEXT OS (2026-07-17): TurnEvidenceCoordinator multi-family pack ──
         // Extends the H1 typed-EvidencePack path — previously built ONLY for a
@@ -3894,7 +4480,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             const { ModesManager } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
-            const activeResumeStructured = (orchestrator as any)?.activeResume?.structured_data ?? null;
+            // Derived-evidence hygiene (2026-09-30): see profile-derived-support.ts.
+            const activeResumeStructured = stripUnsupportedDerivedResumeFields(
+              (orchestrator as any)?.activeResume?.structured_data ?? null,
+              (orchestrator as any)?.activeResume?.raw_text,
+            );
             const activeJdStructured = (orchestrator as any)?.activeJD?.structured_data ?? null;
             const _tc = turnContract;
 
@@ -4091,6 +4681,46 @@ export function initializeIpcHandlers(appState: AppState): void {
         // the six-section treatment onto trivial code — proof the model already
         // resolves this conflict in the contract's favor. Left as-is; see
         // docs/answer-pipeline-rebuild/02_STATUS.md Phase 4 for the full writeup.
+        // Diagram turn on the legacy path (V3 off, or V3 fell through): the same
+        // resolver, the same contract. A caller that owns its own prompt
+        // (skipSystemPrompt) gets neither the contract nor the design block —
+        // unless it is the overlay's spoken question (`liveQuestion`): that is
+        // a turn of THIS session like any other, so "add a cache" said aloud
+        // reaches the design on the table. (The other caller-owned prompt is a
+        // question about a PAST meeting: the live session's design is not its.)
+        const callerOwnedLiveQuestion = options?.skipSystemPrompt === true && options?.liveQuestion === true;
+        // (…when the transport will put the contract on it: see spokenRouteCarriesContract.)
+        const liveQuestionDraws = callerOwnedLiveQuestion && spokenRouteCarriesContract();
+        const legacyDiagramTurn: DiagramTurn | null = (options?.skipSystemPrompt && !liveQuestionDraws) ? null : (() => {
+          try {
+            const im = appState.getIntelligenceManager?.();
+            const turn = resolveDiagramTurn({
+              question: message,
+              answerType: answerPlan.answerType,
+              activeDesign: im?.getActiveDesign?.() ?? null,
+              pinnedModeId: manualActiveMode?.id ?? undefined,
+              hasVisualContext: (imagePaths?.length ?? 0) > 0,
+            });
+            if (turnStartsAFreshDesign(turn)) {
+              im?.noteDesignQuestion?.(message);
+            }
+            return turn;
+          } catch { return null; }
+        })();
+        // Always, not only when a design is attached: a chart turn with a
+        // missing input carries its "say what is missing" note here too.
+        if (legacyDiagramTurn) context = withDiagramTurnBlock(context, legacyDiagramTurn) || context;
+        // "Draw what we discussed", said aloud: the spoken question's prompt
+        // holds at most the last 100 seconds of the meeting (the snapshot added
+        // above, and not on every turn), so a drawing OF the conversation had
+        // little or nothing to be drawn from. It is handed what was said in the
+        // last ten minutes, from the durable transcript — the rolling window
+        // getFormattedContext reads is evicted after three. (Only that route,
+        // only a drawing of the conversation, and only where the transcript
+        // may be sent at all.)
+        if (callerOwnedLiveQuestion && legacyDiagramTurn) {
+          context = withMeetingSpeechForDiagramTurn(context, legacyDiagramTurn, () => appState.getIntelligenceManager?.()?.getFormattedSpeech?.(DIAGRAM_SPEECH_WINDOW_SECONDS), message) || context;
+        }
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
           : resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({
@@ -4108,7 +4738,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // coding_contract gate drops the block from the SYSTEM prompt
             // even though the user-channel contract is attached below.
             codingTurnPromoted: isCodingChat,
-          }));
+          }), answerSurface, legacyDiagramTurn);
         // NOTE (audit 2026-06-28): the document-grounded greeting-suppression +
         // question-first restructuring now lives INSIDE LLMHelper._streamChatInner
         // (shapeDocumentGroundedSystemPrompt + buildDocumentGroundedUserContent),
@@ -4131,7 +4761,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           // knowledge intercept at all — no profile, no intro, no candidate
           // grounding belongs in a policy redirect (release 2026-06-06b).
           const isSafetyAnswer = answerPlan.answerType === 'ethical_usage_answer';
-          const ignoreKnowledge = isCodingChat || isSafetyAnswer ? true : options?.ignoreKnowledgeMode;
+          // A mode without Profile Intelligence never runs the knowledge
+          // intercept either (LLMHelper re-checks the same rule; this keeps the
+          // decision visible in the trace line below).
+          const ignoreKnowledge = isCodingChat || isSafetyAnswer || !manualProfileIntelligenceAllowed ? true : options?.ignoreKnowledgeMode;
           iTrace.lifecycle('evidence_selected', {
             selectedEvidenceCount: selectedProfileEvidence?.items.length ?? 0,
             renderedEvidenceCount: selectedProfileEvidence?.items.length ?? 0,
@@ -4182,6 +4815,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               // every mode read inside streamChat after an await resolved the
               // LIVE singleton instead.
               pinnedModeId: manualActiveMode?.id ?? null,
+              // The spoken question's prompt is composed by the transport: hand
+              // it this turn's diagram decision, made with the session's design.
+              ...(callerOwnedLiveQuestion ? { diagramSignals: legacyDiagramTurn?.signals ?? null } : {}),
               // Surface-scoped (Phase 9, 2026-07-14): the referent hint must come
               // from THIS manual-chat conversation's own last answer, never a
               // WTA/phone-mirror turn that happened to write the shared
@@ -4339,16 +4975,24 @@ export function initializeIpcHandlers(appState: AppState): void {
           // local generation aborted to zero tokens and the user saw the canned
           // fallback line below. Codex CLI shares the cold-load profile
           // (subprocess spawn → codex CLI loads the model → first delta).
-          const usingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
+          //
+          // Every route read below goes through THIS answer's view of the helper
+          // (LLMHelper.textTurn), keyed by the signal the answer call carries: the
+          // first read pins which model answers, and the dispatch uses that pin.
+          // Read off the bare helper, a Fast Response order refresh or another
+          // turn's failure in between could time and file the answer for one
+          // model while another answered it.
+          const answerLlm = llmHelper.textTurn?.(myController?.signal) ?? llmHelper;
+          const usingLocalLlm = answerLlm.isUsingOllama() || answerLlm.isUsingCodexCli();
           // F-301: on the natively-api route the server rotates providers at
           // 10s; give it room to rescue the turn instead of aborting at 7s.
-          const viaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
+          const viaServerCascade = answerLlm.isUsingNativelyServerCascade?.() === true;
           // A user-supplied endpoint gets the longer ceiling; a shipped provider
           // called directly gets the shorter one. WTA and manual chat read the
           // same route table so one surface cannot inherit the other's bound.
-          const usingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+          const usingUserEndpoint = answerLlm.isUsingUserEndpoint?.() === true;
           const observedUserEndpointLatency = usingUserEndpoint
-            ? (llmHelper.observedAnswerLatency?.() ?? null)
+            ? (answerLlm.observedAnswerLatency?.() ?? null)
             : null;
           const manualStreamStartedAt = Date.now();
           let manualRecordedFirstToken = false;
@@ -4366,7 +5010,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             if (manualPendingFirstTokenMs == null) return;
             const ms = manualPendingFirstTokenMs;
             manualPendingFirstTokenMs = null;
-            try { llmHelper.recordAnswerFirstToken?.(ms); } catch { /* never break the answer */ }
+            try { answerLlm.recordAnswerFirstToken?.(ms); } catch { /* never break the answer */ }
           };
           let manualFirstUseful = false;
           let manualSuperseded = false;
@@ -4377,7 +5021,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           // comment on firstUsefulDeadlineMs below) — so they take the same
           // helper with the same inputs rather than each assembling their own.
           const manualPerf = performanceHooks({
-            llmHelper: llmHelper as any,
+            llmHelper: answerLlm as any,
             hasImages: (imagePaths?.length ?? 0) > 0,
             inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
             isUserCancelled: () => manualSuperseded || myController?.signal.aborted === true,
@@ -4405,7 +5049,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               (imagePaths?.length ?? 0) > 0
                 ? totalHardTimeoutMs({ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade })
                 : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint, observedUserEndpointLatency),
-              { llmHelper: llmHelper as any, hasImages: (imagePaths?.length ?? 0) > 0, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+              { llmHelper: answerLlm as any, hasImages: (imagePaths?.length ?? 0) > 0, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
             ),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
@@ -4551,12 +5195,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // 8s regen latency is acceptable for a misfire rate of ~1/30 coding
                 // questions; a silent retry is strictly better than a stranded
                 // marker on failure.
+                // The turn's own shape: six sections only for a 'full' ask.
                 const regenContract = explicitCodingContract
                   ? buildCodingContractPrompt(explicitCodingContract)
-                  : buildCodingContractPrompt(null);
+                  : buildCodingContractPrompt(null, { codingShape: manualCodingShape });
                 const directive = explicitCodingContract === 'code_only'
                   ? 'Output ONLY the solution as a single fenced code block with a language tag. NO prose before or after, NO headings, NO explanation, NO clarifying questions.'
-                  : 'Output the full solution NOW in one fenced code block with the six-section coding format. Do NOT ask clarifying questions; produce a working implementation.';
+                  : manualCodingShape === 'full'
+                    ? 'Output the full solution NOW in one fenced code block with the six-section coding format. Do NOT ask clarifying questions; produce a working implementation.'
+                    : 'Output the solution NOW, with the code in one fenced code block, in the shape the contract above asks for. Do NOT ask clarifying questions; produce a working implementation.';
                 const regenPrompt = `${regenContract}\n\nThe previous answer did not contain any code. ${directive}\n\nProblem: ${message}`;
                 let regen = '';
                 const regenAbort = new AbortController();
@@ -4630,7 +5277,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             const validationType = isCodingAnswerType(answerPlan.answerType)
               ? answerPlan.answerType
               : 'dsa_question_answer';
-            const structureValidation = validateAnswerStructure(validationType, fullResponse, explicitCodingContract);
+            const structureValidation = validateAnswerStructure(validationType, fullResponse, explicitCodingContract, manualCodingShape);
             if (!structureValidation.ok && structureValidation.repaired) {
               console.warn('[IPC] Repaired coding chat answer structure', {
                 answerType: answerPlan.answerType,
@@ -4654,10 +5301,14 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!completeness.ok && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
                 piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'code_truncation_detected', markerCount: completeness.issues.length });
                 console.warn('[IPC] code-only answer looks truncated, regenerating once', { issues: completeness.issues.map(i => i.code) });
+                // The turn's own shape (the same manualCodingShape the prompt
+                // and validateAnswerStructure use): six sections only for a
+                // 'full' ask. Passing no shape here used to demand the six
+                // sections on every truncated coding answer.
                 const regenContract = explicitCodingContract
                   ? buildCodingContractPrompt(explicitCodingContract)
-                  : buildCodingContractPrompt(null);
-                const regenPrompt = `${regenContract}\n\nThe previous answer was cut off before the code finished. Output the COMPLETE code now, nothing truncated.\n\nProblem: ${message}`;
+                  : buildCodingContractPrompt(null, { codingShape: manualCodingShape });
+                const regenPrompt = `${regenContract}\n\nThe previous answer was cut off before the code finished. Output the COMPLETE answer again in the shape above, with the code complete and nothing truncated.\n\nProblem: ${message}`;
                 let regen = '';
                 // HIGH #3 (audit 2026-06-29): iterator.return() alone can't
                 // cancel a parked fetch; without an abort the upstream
@@ -4700,9 +5351,18 @@ export function initializeIpcHandlers(appState: AppState): void {
             // bounded regeneration with buildProfileRepairInstruction.
             try {
               const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
-              const activeResume = (orchestrator as any)?.activeResume?.structured_data ?? null;
+              // Derived-evidence hygiene (2026-09-30): the validator's evidence and
+              // the repair's <candidate_facts> fallback use the same filtered
+              // résumé as every other profile route.
+              const activeResume = stripUnsupportedDerivedResumeFields(
+                (orchestrator as any)?.activeResume?.structured_data ?? null,
+                (orchestrator as any)?.activeResume?.raw_text,
+              );
               const activeJD = (orchestrator as any)?.activeJD?.structured_data ?? null;
-              const profileAvailable = profileFactsReady(activeResume);
+              // A mode without Profile Intelligence has no profile for this
+              // answer: not a candidate-directed turn, and never a repair that
+              // re-injects the résumé (2026-09-30 PI gate).
+              const profileAvailable = manualProfileIntelligenceAllowed && profileFactsReady(activeResume);
               // Phase 6: evidence-aware validation. Composes the perspective /
               // identity / refusal / leak checks AND flags FABRICATED metrics
               // ("25% retention") or companies not present in the grounded facts.
@@ -4793,9 +5453,10 @@ export function initializeIpcHandlers(appState: AppState): void {
                     stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
                     firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => repaired.length >= 5,
-                    shouldAbort: () => repaired.length > 1200,
+                    shouldAbort: () => repairCapReached(repaired, 1200),
                     onToken: (tok: string) => { repaired += tok; },
                   });
+                  if (endsInsideFence(repaired)) repaired = ''; // half a block is not a repair (repairCap.ts)
                   const repairedTrim = repaired.trim();
                   if (repairedTrim.length >= 5) {
                     const reCheck = validateProfileEvidence({ answer: repairedTrim, plan: answerPlan, evidence, profileAvailable, candidateDirected: true });
@@ -5002,10 +5663,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                 try {
                   const regenPrompt = [
                     '<answer_instructions note="follow these; never repeat them">',
-                    'The user explicitly asked for an answer. Answer the question directly and concretely. Do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, clearly marked as such.',
+                    'The user explicitly asked for an answer. Answer the question directly and concretely. Do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, never presenting it as sourced. A question about the user gets their own first-person words: how they approach it, with no invented employer, project, event, number, or earlier discussion, and no advice about how to answer.',
                     '</answer_instructions>',
                     (manualContextOsGeneration as any)?.retrievedBlockRaw ? `## EVIDENCE\n${String((manualContextOsGeneration as any).retrievedBlockRaw).trim()}` : '',
-                    context || autoContextSnapshot ? `## CONVERSATION\n${String(context || autoContextSnapshot).trim()}` : '',
+                    // Regeneration inherits only the context selected above. A raw
+                    // snapshot fallback would undo manual transcript/surface isolation.
+                    context ? `## CONVERSATION\n${String(context).trim()}` : '',
                     `## QUESTION\n${message}`,
                     'Output ONLY the answer.',
                   ].filter(Boolean).join('\n');
@@ -5016,11 +5679,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                     stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal)) as AsyncGenerator<string>,
                     firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                     isUsefulYet: () => regen.trim().length >= 5,
-                    shouldAbort: () => regen.length > 1800,
+                    shouldAbort: () => repairCapReached(regen, 1800),
                     onToken: (tok: string) => { regen += tok; },
                     onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
                   });
-                  const regenTrim = regen.trim();
+                  if (endsInsideFence(regen)) regen = ''; // half a block is not an answer (repairCap.ts)
+                const regenTrim = regen.trim();
                   if (regenTrim.length >= 5 && !detectAssistantVoiceMisfire(regenTrim).isMisfire) regenerated = regenTrim;
                 } catch (regenErr: any) {
                   console.warn('[ProfileIntelligence] misfire regeneration skipped:', regenErr?.message);
@@ -5086,7 +5750,12 @@ export function initializeIpcHandlers(appState: AppState): void {
               // cases" list, a long analogy the user didn't ask for) is tightened to a
               // short spoken answer. Only for technical_concept_answer; analogy kept when
               // the user asked for simple/beginner terms.
-              if (answerPlan.answerType === 'technical_concept_answer') {
+              // Never on a diagram turn: this pass deletes fenced blocks, and an
+              // explicitly requested diagram ("draw the TLS handshake") routes
+              // as a technical concept.
+              // An undecided turn (see undecidedTurnAnsweredInWords) is one
+              // only when its answer holds a drawing.
+              if (answerPlan.answerType === 'technical_concept_answer' && (!legacyDiagramTurn?.signals || undecidedTurnAnsweredInWords(legacyDiagramTurn, fullResponse))) {
                 const simpleRequested = answerPlan.answerStyle === 'beginner' || /\b(simple|simply|beginner|eli5|like i'?m (?:5|five)|layman)\b/i.test(message);
                 // FLATTEN-ONLY (user decision 2026-06-16): strip doc structure (headers/bullets/
                 // tables/code) into one spoken paragraph, but NEVER truncate — all prose content
@@ -5215,7 +5884,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               const priorAnswer = (intelligenceManager.getLastAssistantMessage('manual_chat') || '').trim();
               const isGreeting = GREETING_RE.test(trimmed) || /what would you like help with/i.test(trimmed);
               const isEmpty = trimmed.length < 8;
-              const isExactRepeat = priorAnswer.length > 0 && trimmed === priorAnswer;
+              // History stores answers without the [[GIST]] display line
+              // (SessionTracker), so compare like with like.
+              const isExactRepeat = priorAnswer.length > 0 && stripGistTrailer(trimmed).trim() === priorAnswer;
               // EVIDENCE-EXECUTION-REPAIR (2026-07-11): when EvidenceResolver
               // already governed this turn (manualContextOsGeneration.evidencePack
               // populated by _streamChatInner during the stream), reuse that SAME
@@ -5825,14 +6496,24 @@ export function initializeIpcHandlers(appState: AppState): void {
                     const _mm = _MMRegen.getInstance();
                     // Prompt System v2: a v2 base already carries the mode
                     // contract — don't stack the legacy template suffix on it.
-                    const _regenBase = resolveManualChatBasePrompt(llmHelper);
+                    const _regenBase = resolveManualChatBasePrompt(llmHelper, undefined, answerSurface);
                     const _regenBaseIsV2 = _regenBase !== CHAT_MODE_PROMPT;
+                    // The regenerated answer is for the same turn: one that was
+                    // asked to draw is still asked to draw. On a v2 base the
+                    // contract is composed INSIDE the builder — appended after
+                    // it, LLMHelper no longer recognised the prompt as v2 and
+                    // could stack the legacy mode suffix on top.
+                    const _regenBaseForTurn = _regenBaseIsV2 && legacyDiagramTurn?.signals
+                      ? resolveManualChatBasePrompt(llmHelper, undefined, answerSurface, legacyDiagramTurn)
+                      : _regenBase;
                     regenSystemPrompt = appendCustomModeSystemPromptLayer({
-                      baseSystemPrompt: _regenBase,
+                      baseSystemPrompt: _regenBaseForTurn,
                       modePromptSuffix: _regenBaseIsV2 ? undefined : _mm.getActiveModeSystemPromptSuffix?.(manualActiveMode?.id ?? undefined),
                       pinnedInstructions: _mm.getActiveModePinnedInstructions?.(answerPlan.answerType, manualActiveMode?.id ?? undefined),
                       isActiveCustomMode: manualActiveMode?.isCustom === true || _mm.isCustomMode?.(manualActiveMode),
                     });
+                    // (The legacy base never knew about diagrams: there the contract is appended.)
+                    if (!_regenBaseIsV2) regenSystemPrompt = withDiagramContract(regenSystemPrompt, legacyDiagramTurn, { surface: answerSurface });
                   } catch { regenSystemPrompt = undefined; }
                   await raceStreamWithDeadline({
                       observe: secondaryStreamObserver('regeneration'),
@@ -5846,13 +6527,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                     stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, strictPrompt, regenAbort.signal, undefined, regenSystemPrompt)) as AsyncGenerator<string>,
                     firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => regen.length >= 8,
-                    shouldAbort: () => regen.length > 2000,
+                    shouldAbort: () => repairCapReached(regen, 2000),
                     onToken: (tok: string) => { regen += tok; },
                     onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
                   });
                 } catch (regenErr: any) {
                   console.warn('[DocGrounded] regeneration failed (non-fatal):', regenErr?.message || regenErr);
                 }
+                if (endsInsideFence(regen)) regen = ''; // half a block is not an answer (repairCap.ts)
                 const regenTrim = regen.trim();
                 // For false_refusal regen, also reject if the model still refuses
                 // after the synthesis-focused prompt — treat it as a true not-found
@@ -6089,6 +6771,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             // already-streamed tokens stand. streamId (audit finding #3) lets the
             // renderer ignore a stale done from a superseded stream.
             event.sender.send('gemini-stream-done', { ...(finalText ? { finalText } : {}), streamId: myStreamId });
+            // Compile-only syntax check of fenced JavaScript (observe-only).
+            try { require('./llm/codeVerification/syntaxCheckReport').observeAnswerJsSyntax(finalText ?? fullResponse, 'manual_chat_legacy'); } catch { /* observe only */ }
             chatTrace.mark('response_completed', { chars: fullResponse.length, repaired: Boolean(finalText) });
             chatTrace.finish({ chars: fullResponse.length });
             iTrace.setProvider({ provider: 'llm', model: undefined })
@@ -6118,9 +6802,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                 && !blockedFromSessionTracker
                 && !sessionWriteDecision.blockedFromSessionTracker
                 && !contextChangedSinceAsk()) {
-              intelligenceManager.addAssistantMessage(fullResponse, sessionWriteDecision, 'manual_chat');
+              intelligenceManager.addAssistantMessage(fullResponse, forThisTurn(sessionWriteDecision), 'manual_chat');
               // Log Usage for streaming chat
-              intelligenceManager.logUsage('chat', message, fullResponse);
+              intelligenceManager.logUsage('chat', message, fullResponse, imagePaths);
               // CONTEXT OS memory safety (Phase 9, 2026-07-10): persist the
               // answer's factual CLAIMS separately from the conversational
               // message, default validation_status='unverified'. Only VERIFIED
@@ -6301,6 +6985,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   const outcome = await verifyCodingAnswer({
                     answer: verifyTarget,
                     question: message,
+                    codingShape: manualCodingShape,
                     correct: async (repairPrompt: string) => {
                       // Background coding-correction (post-answer). Deadline-guarded
                       // so a stalled provider can't leave a hung background task. 7s
@@ -6366,7 +7051,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               event.sender.send('gemini-stream-token', safe, { streamId: myStreamId });
               event.sender.send('gemini-stream-done', { finalText: safe, streamId: myStreamId });
               try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), safe); PhoneMirrorService.getInstance().publishDone(String(myStreamId), safe); } catch (_) { /* noop */ }
-              intelligenceManager.addAssistantMessage(safe, sessionWriteDecision, 'manual_chat');
+              intelligenceManager.addAssistantMessage(safe, forThisTurn(sessionWriteDecision), 'manual_chat');
               _emitAttr({ answer_type: answerPlan.answerType, profile_tree_used: false, profile_tree_fast_path_used: false, structured_resume_used: false });
               return null;
             }
@@ -6411,6 +7096,45 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Register the manual chat handler; also expose it for the E2E manual-ask
   // harness (test-only; NATIVELY_E2E gates the caller).
   safeHandle('gemini-chat-stream', _geminiChatStreamHandler);
+
+  /**
+   * Send the fixed assistant-identity line for a typed turn and record the
+   * exchange, without calling a model. Used by the V3 branch of the chat
+   * handler above for probes that are about the assistant whatever is loaded
+   * (see resolveUnambiguousAssistantProbe). A function declaration, so it is
+   * hoisted and callable from the handler defined before it.
+   */
+  function replyWithAssistantIdentity(turn: {
+    event: any; senderId: number; streamId: number; message: string; reply: string; imagePaths?: string[];
+  }): void {
+    const { event, senderId, streamId, message, reply, imagePaths } = turn;
+    const im = appState.getIntelligenceManager();
+    im?.addTranscript?.({ text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+    try { PhoneMirrorService.getInstance().publishUserMessage(String(streamId), message, { awaitingAnswer: true }); } catch { /* mirror only */ }
+    // A newer chat stream may have taken over; same guard as the legacy probe.
+    if (_chatStreamsBySender.get(senderId)?.streamId !== streamId) {
+      console.log(`[IPC] gemini-chat-stream ${streamId} (identity probe, pre-V3) superseded for sender ${senderId}, skipping emit.`);
+      return;
+    }
+    event.sender.send('gemini-stream-token', reply, { streamId });
+    event.sender.send('gemini-stream-done', { finalText: reply, streamId });
+    try { PhoneMirrorService.getInstance().publishToken(String(streamId), reply); } catch { /* mirror only */ }
+    try { PhoneMirrorService.getInstance().publishDone(String(streamId), reply); } catch { /* mirror only */ }
+    im?.addAssistantMessage?.(reply, undefined, 'manual_chat');
+    im?.logUsage?.('chat', message, reply, imagePaths);
+    // The continuity sink a V3 answer writes, so the next turn's
+    // "Conversation so far" still shows this exchange.
+    try {
+      require('./context-intelligence/question/conversation-state-store')
+        .recordAnswerSummary(v3ConversationSessionId(appState, senderId), reply, undefined, message);
+    } catch { /* continuity only */ }
+    try {
+      const probeTrace = beginTrace(message);
+      probeTrace.setRouting({ source: 'manual_input', answerType: 'unknown_answer', deterministicFastPathUsed: true, profileFactsReady: false });
+      probeTrace.noteFallback('assistant_identity_reply');
+      commitTrace(probeTrace);
+    } catch { /* trace never affects the answer */ }
+  }
   if (process.env.NATIVELY_E2E === '1') {
     (globalThis as any).__nativelyGeminiChatStream = _geminiChatStreamHandler;
   }
@@ -6686,6 +7410,28 @@ export function initializeIpcHandlers(appState: AppState): void {
     // degraded store refused it (RefusedSettingWriteReported2026_08_21).
     const persisted = appState.setVerboseLogging(enabled);
     return persisted ? { success: true } : { success: false, error: 'settings_write_refused' };
+  });
+
+  // Usage statistics: the one switch behind every optional report this app
+  // makes about itself (funnel events, checkout-link tagging, Auto Answer
+  // diagnostics, TelemetryService). On unless the user turned it off.
+  safeHandle('get-usage-statistics', async () => {
+    return SettingsManager.getInstance().get('telemetryEnabled') !== false;
+  });
+
+  safeHandle('set-usage-statistics', async (_, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return { success: false, error: 'invalid_value' };
+    // SettingsManager refuses rather than half-applies: when the write does not
+    // reach disk the in-memory value is put back, so `success: false` here means
+    // the setting did NOT change and the switch must say so.
+    const persisted = SettingsManager.getInstance().set('telemetryEnabled', enabled);
+    if (!persisted) return { success: false, error: 'settings_store_degraded' };
+    try {
+      require('./services/telemetry/TelemetryService').telemetryService.configure({ enabled });
+    } catch { /* that service reads the setting again at the next launch */ }
+    // Turning it off discards what was queued now, not at the next timer tick.
+    if (!enabled) void funnelTelemetry.tick();
+    return { success: true };
   });
 
   safeHandle('get-stealth-shortcut-guard', async () => {
@@ -7019,13 +7765,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       // read-only cache probe — every actual dispatch still goes through the
       // full validation below.
       const describedByTurn = new Map<number, string>();
+      const { hasOnDeviceScreenText: keptOnDeviceText, ON_DEVICE_SCREEN_WITHHELD } = require('./context-intelligence/question/on-device-screen') as
+        typeof import('./context-intelligence/question/on-device-screen');
+      const directSelectionOnDevice = (() => {
+        try { return appState.processingHelper.getLLMHelper().selectionStaysOnDevice() === true; } catch { return false; }
+      })();
       const screenStorePre = require('./services/screen/ScreenshotDescriptionStore') as
         typeof import('./services/screen/ScreenshotDescriptionStore');
       for (let i = rawTurns.length - 1; i >= 0; i -= 1) {
         if (!rawTurns[i].imagePaths.length) continue;
         try {
           const described = screenStorePre.getDescriptionForImageSet(rawTurns[i].imagePaths);
-          if (described) describedByTurn.set(i, described);
+          // A description made while that screenshot was being kept on this
+          // device goes only to a provider on this device; anyone else gets a
+          // note that a screenshot was there (never a silent gap). The note
+          // also keeps the image's bytes from being carried instead.
+          if (described) describedByTurn.set(i, keptOnDeviceText(described) && !directSelectionOnDevice ? ON_DEVICE_SCREEN_WITHHELD : described);
         } catch { /* a cache miss is the normal case */ }
       }
 
@@ -7469,8 +8224,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               sequence: lastSequence + 1,
               partial: lastSequence > 0,
               error: directAssistError(
-                'INCOMPLETE_STREAM',
-                'The Direct Assist stream ended before completion.',
+                'INTERNAL_ERROR',
+                'Natively lost track of this answer.',
                 true,
               ),
             });
@@ -7490,8 +8245,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             sequence: lastSequence + 1,
             partial: lastSequence > 0,
             error: directAssistError(
-              'INCOMPLETE_STREAM',
-              'The Direct Assist stream failed before completion.',
+              'INTERNAL_ERROR',
+              'Natively lost track of this answer.',
               true,
             ),
           });
@@ -7684,6 +8439,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (typeof key !== 'string' || !intelligenceFlagKeys().includes(key as any)) return { success: false, error: 'unknown_flag' };
       if (value !== null && typeof value !== 'boolean') return { success: false, error: 'invalid_value' };
       const ok = setIntelligenceFlag(key as any, value === null ? null : Boolean(value));
+      // The diagram switch governs rendering in every open window as well as
+      // the next prompt, so windows are told at once instead of on next mount.
+      if (ok && key === 'systemDesignDiagrams') broadcastDiagramsEnabled();
       return { success: ok, enabled: isIntelligenceFlagEnabled(key as any) };
     } catch (e: any) {
       console.warn('[IntelligenceFlags] set failed:', e?.message);
@@ -7922,8 +8680,14 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Onboarding & gate persistent backup flags
   safeHandle('onboarding:get-flags', async () => {
     const sm = SettingsManager.getInstance();
+    // An agent instance (scripts/dev-agent.mjs) starts on a blank profile, and
+    // the first-launch welcome would sit in front of every launcher check.
+    // NATIVELY_AGENT_WELCOME=1 keeps it for the agent that is testing it.
+    const agentSkipsWelcome = !app.isPackaged
+      && !!process.env.NATIVELY_AGENT_USER_DATA
+      && process.env.NATIVELY_AGENT_WELCOME !== '1';
     return {
-      seenStartup: sm.get('seenStartup') ?? false,
+      seenStartup: agentSkipsWelcome || (sm.get('seenStartup') ?? false),
       seenProfileOnboarding: sm.get('seenProfileOnboarding') ?? false,
       seenModesOnboarding: sm.get('seenModesOnboarding') ?? false,
       permsShown: sm.get('permsShown') ?? false,
@@ -7941,6 +8705,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     }
     return { success: false, error: 'invalid_key' };
+  });
+
+  // First-launch shortcut tour: route the shortcuts it teaches to the calling
+  // renderer as practice presses (AppState.setShortcutTour). Bound to the
+  // sender, and dropped automatically when that renderer reloads or dies.
+  safeHandle('onboarding:set-shortcut-tour', async (event, active: boolean) => {
+    appState.setShortcutTour(active === true, event.sender);
+    return { success: true };
   });
 
   safeHandle('get-log-file-path', async () => {
@@ -8169,6 +8941,21 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (win.isDestroyed()) return;
       try {
         win.webContents.send('interface-theme:changed', theme);
+      } catch {
+        // Renderer may be tearing down between isDestroyed() and send.
+      }
+    });
+  });
+
+  // Settings → Advanced → "Genie animation": the same cross-window hop as the
+  // theme above, so every window's popups follow the switch without a reload.
+  // Only a boolean is passed on.
+  safeOn('genie-animation:set', (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return;
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('genie-animation:changed', enabled);
       } catch {
         // Renderer may be tearing down between isDestroyed() and send.
       }
@@ -9736,6 +10523,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('extensions:install-from-folder', async () => {
     const manager = extensionManager();
     if (!manager) return { success: false, error: 'extensions_unavailable' };
+    // Before the folder picker: it and the trust prompt are both system
+    // windows, which would show in a screen share (stealthPromptGate.ts).
+    if (nativePromptsBlocked(() => appState.getUndetectable())) {
+      return { success: false, error: UNDETECTABLE_REFUSAL_ERROR, errors: [UNDETECTABLE_REFUSAL_MESSAGES.extensionInstall] };
+    }
 
     const { dialog, BrowserWindow } = require('electron');
     const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -9870,6 +10662,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     const manager = extensionManager();
     if (!manager) return { success: false, error: 'extensions_unavailable' };
     if (typeof id !== 'string' || !id.trim()) return { success: false, error: 'invalid_id' };
+    // Before anything downloads: the trust prompt install() would open is a
+    // system dialog, which would show in a screen share (stealthPromptGate.ts).
+    if (nativePromptsBlocked(() => appState.getUndetectable())) {
+      return { success: false, error: UNDETECTABLE_REFUSAL_ERROR, errors: [UNDETECTABLE_REFUSAL_MESSAGES.extensionInstall] };
+    }
 
     const { stageFromRegistry } = require('./services/extensions/extensionRegistryService') as
       typeof import('./services/extensions/extensionRegistryService');
@@ -10485,6 +11282,42 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) { return { success: false, error: error.message }; }
   });
 
+  /**
+   * AgentRouter: a key and nothing else. The protocol is chosen per MODEL
+   * (llm/agentRouter.ts), so there is no protocol to store or detect, and the
+   * key backs chat only, so there is no hosted-retrieval coupling to sample —
+   * the shortest of the gateway handlers. `''` clears.
+   */
+  safeHandle('set-agentrouter-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const normalizedKey = (apiKey || '').trim();
+      const keyChanged = (cm.getAgentRouterApiKey() || '') !== normalizedKey;
+
+      // Degraded-store rule shared by every key handler: stop BEFORE the live
+      // client is built, or chat works this session on a key that is gone after
+      // the next restart while the card reads "Saved".
+      const saved = cm.setAgentRouterApiKey(normalizedKey);
+      if (saved === false) {
+        return {
+          success: false,
+          error: 'credential_store_degraded',
+          message: 'Could not save the key. Your credential store is unavailable this session.',
+        };
+      }
+      appState.processingHelper.getLLMHelper().setAgentRouterApiKey(normalizedKey);
+
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      if (keyChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -11028,6 +11861,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // not a verdict on the key — it means the key is good and only the Pro
       // entitlement is still settling. The one case that must NOT end the trial
       // is a 4xx refusal, and the branch above hands the trial back there.
+      if (apiKey && !liveTrialUnderneath && !keyRejection) {
+        settleExpiredTrial('Natively key saved');
+      }
       if (apiKey && liveTrialUnderneath && !keyRejection) {
         cm.clearTrialToken();
         console.log('[IPC] set-natively-api-key: real key stored — free trial ended (purchased)');
@@ -11036,6 +11872,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         });
       }
 
+      // A cleared key is not a key entered; the trial sentinel never comes
+      // through this handler (trial:start writes it directly).
+      if (apiKey) funnelTelemetry.keyEntered('api_key', keyRejection ? 'invalid' : 'ok');
+
       return keyRejection
         ? { success: false, error: keyRejection.error }
         : proPending
@@ -11043,6 +11883,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           : { success: true };
     } catch (error: any) {
       console.error('Error saving Natively API key:', error);
+      if (apiKey) funnelTelemetry.keyEntered('api_key', 'error');
       return { success: false, error: error.message };
     } finally {
       // Always bust the cache when the key changes so the next usage fetch is fresh
@@ -11148,7 +11989,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Free Trial IPC ───────────────────────────────────────────────────────────
 
   // Start or resume a free trial. Fetches HWID, calls server, persists token locally.
-  safeHandle('trial:start', async () => {
+  safeHandle('trial:start', async (_event, surface?: unknown) => {
+    const startSurface = funnelSurface(surface);
+    const reportStart = (r: Parameters<typeof mapTrialStartResult>[0]) =>
+      funnelTelemetry.track('trial_start_result', { surface: startSurface, result: mapTrialStartResult(r) });
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -11175,18 +12019,33 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       if (!hwid || hwid === 'unavailable') {
         console.error('[Trial] Refusing to start a trial without a real hardware id (native module unavailable).');
+        reportStart({ hwidUnavailable: true });
         return { ok: false, error: 'hardware_id_unavailable' };
+      }
+
+      // install_id / app_version / platform let the server tie this trial to
+      // the install that started it (natively-api lib/funnel.js). They are sent
+      // only while telemetry is on; the server starts the trial the same either way.
+      const analytics: Record<string, string> = {};
+      if (funnelTelemetry.isEnabled()) {
+        try {
+          const installId = require('./services/InstallPingManager').getOrCreateInstallId();
+          if (installId) analytics.install_id = installId;
+        } catch { /* no install id: the trial still starts */ }
+        analytics.app_version = app.getVersion();
+        analytics.platform = process.platform;
       }
 
       const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hwid }),
+        body: JSON.stringify({ hwid, ...analytics }),
         signal: AbortSignal.timeout(10_000),
       });
 
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as any;
+        reportStart({ status: res.status, error: body.error });
         return { ok: false, error: body.error || 'request_failed', status: res.status };
       }
 
@@ -11247,6 +12106,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         });
       }
 
+      // Reported here, after the token is stored, so the event carries the
+      // entitlement the start produced rather than the one it began with.
+      reportStart({ body: data });
+      if (data.ok && data.trial_token && !data.expired && !data.already_used) funnelTelemetry.trialStarted();
+
       const { trial_token, ...safeData } = data;
       // `persisted:false` means "running now, gone after a restart" — a real
       // state the UI has to be able to say out loud, and the reason the trial
@@ -11254,6 +12118,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { ok: true, ...safeData, hasToken: Boolean(data.trial_token), persisted };
     } catch (error: any) {
       console.error('[IPC] trial:start failed:', error);
+      reportStart({ threw: true });
       return { ok: false, error: error.message || 'network_error' };
     }
   });
@@ -11272,6 +12137,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       const localExpiry = cm.getTrialExpiresAt();
       if (localExpiry && new Date(localExpiry).getTime() <= Date.now()) {
         await endExpiredTrialRuntime('Trial expired (local clock)');
+        settleExpiredTrial('status poll (local clock)');
+        // A licence or key superseded it and the token is gone: answer now,
+        // without asking the server about a token that no longer exists.
+        if (!cm.getTrialToken()) return { ok: true, expired: true, showEndedCard: false };
       }
 
       const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/status`, {
@@ -11288,16 +12157,92 @@ export function initializeIpcHandlers(appState: AppState): void {
       // The server's verdict wins: it can end a trial before this machine's
       // clock says so, and /v1/trial/status answers 200 with `expired: true`
       // rather than a 4xx, so this is the one reliable signal.
-      if (data?.expired) await endExpiredTrialRuntime('Trial expired (server)');
+      if (data?.expired) {
+        await endExpiredTrialRuntime('Trial expired (server)');
+        const settled = settleExpiredTrial('status poll (server)', { serverExpired: true });
+        // A superseded token is gone by now; the renderer then drops the card.
+        return { ...data, showEndedCard: settled.showEndedCard };
+      }
       return data;
     } catch (error: any) {
       return { ok: false, error: error.message || 'network_error' };
     }
   });
 
+  // The one-time "everyone may try again" reset (src/lib/trialCampaign.mjs). The
+  // server archived every device's trial row; this forgets the local record of it
+  // (claimed flag, expired token) and brings the trial promo card back. Runs from
+  // the first startup read, once per campaign, and never touches a live trial.
+  // Single-flight: the launcher asks for the local trial from three places at once.
+  let trialCampaignInFlight: Promise<void> | null = null;
+  // Set only when the marker could not be written (a degraded settings store): without
+  // it every Settings open would re-run the reset and undo a "never" the user just chose.
+  let trialCampaignSettledInProcess = false;
+  const applyTrialCampaignReset = (): Promise<void> => {
+    if (trialCampaignSettledInProcess) return Promise.resolve();
+    if (trialCampaignInFlight) return trialCampaignInFlight;
+    const run = (async () => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        const sm = SettingsManager.getInstance();
+        if (sm.get('trialCampaignReset') === TRIAL_CAMPAIGN) return;
+
+        // Only someone with no licence, no real Natively key and no AI key of their own
+        // (the same three tests settleExpiredTrial applies). Everyone else is left exactly
+        // as they are, and the normal expiry flow below still settles their old trial.
+        const nativelyKey = cm.getNativelyApiKey();
+        const eligible = !isLicensed()
+          && !(!!nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY)
+          && !hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() });
+
+        // An expired trial owes its once-only profile wipe, which clearing the token below
+        // would skip: settle it first (a no-op for a live trial). For an eligible user this
+        // never clears the token (that needs a licence or a key), so the trial sentinel is
+        // still reverted afterwards by runTrialCampaignReset's sentinelActive step.
+        if (eligible && cm.getTrialToken()) settleExpiredTrial('trial campaign reset');
+
+        const ms = (iso?: string): number => (iso ? new Date(iso).getTime() : NaN);
+        let reopened: unknown = null;
+        const result = await runTrialCampaignReset({
+          now: Date.now(),
+          getMarker: () => sm.get('trialCampaignReset'),
+          setMarker: (v: string) => { if (!sm.set('trialCampaignReset', v)) trialCampaignSettledInProcess = true; },
+          trial: {
+            hasToken: !!cm.getTrialToken(),
+            expiresAtMs: ms(cm.getTrialExpiresAt()),
+            startedAtMs: ms(cm.getTrialStartedAt()),
+          },
+          eligible,
+          sentinelActive: cm.getNativelyApiKey() === TRIAL_SENTINEL_KEY,
+          endExpiredRuntime: () => endExpiredTrialRuntime('Trial campaign reset'),
+          resetClaim: () => cm.resetTrialClaim(),
+          reopenPromo: () => {
+            reopened = CardLedger.getInstance().reopen(TRIAL_PROMO_ID);
+            return reopened !== null;
+          },
+        });
+        if (result.status !== 'ineligible') console.log(`[IPC] Trial campaign ${TRIAL_CAMPAIGN}: ${result.status}`);
+        if (result.status === 'reset') {
+          broadcastCredentialsChanged();
+          if (reopened) broadcastCardsChanged(reopened);
+        }
+      } catch (e: any) {
+        console.warn('[IPC] Trial campaign reset failed (will retry next launch):', e?.message || e);
+      }
+    })();
+    // Cleared from the promise, not from inside the function: a run that finishes
+    // without awaiting (marker already set) would otherwise clear the slot BEFORE
+    // it is assigned here, and every later call would get that stale promise.
+    trialCampaignInFlight = run;
+    void run.finally(() => { if (trialCampaignInFlight === run) trialCampaignInFlight = null; });
+    return run;
+  };
+
   // Return local trial state from credentials (no network call — safe for startup check).
   safeHandle('trial:get-local', async () => {
     try {
+      await applyTrialCampaignReset();
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       const token = cm.getTrialToken();
@@ -11311,12 +12256,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       // read, and the part that matters (the credential and model revert) runs
       // synchronously anyway; only the STT rebuild is deferred.
       if (expired) void endExpiredTrialRuntime('Trial expired (startup read)');
+      const expiresAt = cm.getTrialExpiresAt();
+      const startedAt = cm.getTrialStartedAt();
+      // Decide the card, the wipe and the token in main (settleExpiredTrial).
+      const settled = expired ? settleExpiredTrial('startup read') : null;
+      // Judge by the token itself: the expiry revert above broadcasts a
+      // credentials change, which may already have settled (and cleared) it.
+      if (expired && !cm.getTrialToken()) {
+        return { hasToken: false, trialClaimed: true, superseded: true, expired: true, showEndedCard: false };
+      }
       return {
         hasToken: true,
         trialClaimed: true,
-        expiresAt: cm.getTrialExpiresAt(),
-        startedAt: cm.getTrialStartedAt(),
+        expiresAt,
+        startedAt,
         expired,
+        showEndedCard: settled?.showEndedCard === true,
       };
     } catch {
       return { hasToken: false, trialClaimed: false };
@@ -11327,7 +12282,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('trial:convert', async (_, choice: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const token = CredentialsManager.getInstance().getTrialToken();
+      const cm = CredentialsManager.getInstance();
+      const token = cm.getTrialToken();
+      // Every plan-tile click, not only the first: the server keeps one
+      // `converted_to` per trial, which hides a second look at the plans.
+      const action = trialCardActionForChoice(choice);
+      if (action && action !== 'byok') {
+        const expiresAt = cm.getTrialExpiresAt();
+        const live = !!token && !!expiresAt && new Date(expiresAt).getTime() > Date.now();
+        funnelTelemetry.track('trial_card', { mode: live ? 'active' : 'expired', action });
+      }
       if (!token) return { ok: true }; // no token to report
 
       await fetch(`${NATIVELY_API_BASE}/v1/trial/convert`, {
@@ -11366,17 +12330,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('review:record-session', async () => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      svc.recordSessionStart();
-      return { ok: true };
-    } catch (error: any) {
-      console.error('[IPC] review:record-session failed:', error);
-      return { ok: false, error: error?.message || 'unknown' };
-    }
-  });
 
   safeHandle('review:flush-session', async () => {
     try {
@@ -11510,14 +12463,38 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
-  safeHandle('trial:end-byok', async () => {
-    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
-    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
+  safeHandle('trial:end-byok', async (_event, opts?: { force?: boolean }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
 
-      // 1. Fire-and-forget analytics (non-blocking)
+      // Wipe FIRST. A wipe that fails leaves the trial exactly as it was (token,
+      // key, licence), says so, and announces nothing, so the card can show the
+      // error with Try again instead of "All set" (toaster policy §5 row 5).
+      // After repeated failures (a full disk, a locked database) the card offers
+      // "End trial anyway" (force): the trial ends and the card says honestly
+      // that some data was left behind, so nobody is walled in for good.
+      const byokExpiresAt = cm.getTrialExpiresAt();
+      const byokMode = !!cm.getTrialToken() && !!byokExpiresAt && new Date(byokExpiresAt).getTime() > Date.now() ? 'active' : 'expired';
+      const wiped = wipeTrialProfileData();
+      if (!wiped.success) {
+        console.warn('[IPC] trial:end-byok: wipe incomplete:', wiped.failed.join(', '), opts?.force ? '(ending anyway)' : '');
+        if (!opts?.force) {
+          funnelTelemetry.track('trial_card', { mode: byokMode, action: 'wipe_failed' });
+          return { success: false, error: 'wipe_failed' };
+        }
+      }
+      funnelTelemetry.track('trial_card', { mode: byokMode, action: wiped.success ? 'byok' : 'end_anyway' });
+      funnelTelemetry.byokExited();
+      // No once-marker needed: the token is cleared below, so the expiry
+      // settle never sees this trial again.
+
+      // From here on every step is best-effort: the decision has been carried
+      // out, and a later step failing must not read as "the wipe failed".
+      const step = async (name: string, fn: () => unknown) => {
+        try { await fn(); } catch (e: any) { console.warn(`[IPC] trial:end-byok: ${name} failed:`, e?.message || e); }
+      };
+
       const token = cm.getTrialToken();
       if (token) {
         fetch(`${NATIVELY_API_BASE}/v1/trial/convert`, {
@@ -11528,78 +12505,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         }).catch(() => {});
       }
 
-      // 2. Clear trial token
-      cm.clearTrialToken();
-
-      // 3. Clear the trial sentinel key + revert model / STT to open defaults
-      cm.setNativelyApiKey('');
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper) llmHelper.setNativelyKey(null);
-      // The mirror of the trial:start gap: setNativelyApiKey('') reverts the
-      // stored default off 'natively', but LLMHelper would keep routing there
-      // with a null key and the chip would keep reading "Natively API".
-      syncNativelyModelRuntime();
-      await appState.reconfigureSttProvider();
-
-      // 4. Deactivate Pro license (removes license.enc)
-      try {
-        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        await LicenseManager.getInstance().deactivate();
-      } catch {
-        /* LicenseManager not available in this build */
-      }
-
-      // 5. Disable knowledge mode + wipe orchestrator in-memory caches for resume/JD
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
-          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
+      await step('clear trial token', () => cm.clearTrialToken());
+      await step('clear Natively key', () => cm.setNativelyApiKey(''));
+      await step('LLM runtime', () => {
+        const llmHelper = appState.processingHelper?.getLLMHelper?.();
+        if (llmHelper) llmHelper.setNativelyKey(null);
+        syncNativelyModelRuntime();
+      });
+      await step('speech provider', () => appState.reconfigureSttProvider());
+      await step('licence', async () => {
+        try {
+          const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+          await LicenseManager.getInstance().deactivate();
+        } catch {
+          /* LicenseManager not available in this build */
         }
-      } catch {
-        /* ignore */
-      }
-
-      // 6. Wipe Pro-specific cached data from local SQLite
-      //    Targets: company dossiers, knowledge docs (+ cascades), resume nodes, user profile
-      //    NOT wiped: meetings, transcripts, chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-          console.log('[IPC] trial:end-byok: Pro data wiped from SQLite');
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:end-byok: SQLite wipe partial error:', dbErr.message);
-      }
-
-      // 6b. PII BACKSTOP (2026-07-02): the profile OKF packs (knowledge_sources/
-      //     packs/cards hanging off the reserved '__profile_okf__' mode) hold the
-      //     candidate's name / companies / education. Step 5's deleteProfilePack
-      //     runs ONLY when the orchestrator is present AND swallows its own
-      //     errors, so on trial-end with an uninitialized orchestrator the PII
-      //     would survive. Delete the profile OKF rows directly as a backstop
-      //     regardless of orchestrator state. Document reference-file packs (any
-      //     OTHER mode_id) are intentionally NOT touched — those are the user's
-      //     own uploaded documents, not Pro profile data.
-      try {
-        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
-        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
-      } catch (piiErr: any) {
-        console.warn('[IPC] trial:end-byok: profile OKF pack wipe failed:', piiErr?.message || piiErr);
-      }
-
-      // 7. Notify all windows to refresh license + model state
-      clearActiveModeOnLicenseLoss();
+      });
+      await step('active mode', () => clearActiveModeOnLicenseLoss());
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('license-status-changed', { isPremium: false });
@@ -11607,65 +12529,89 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       });
 
-      return { success: true };
+      return { success: true, wipeIncomplete: !wiped.success };
     } catch (error: any) {
       console.error('[IPC] trial:end-byok error:', error);
       return { success: false, error: error.message };
     }
   });
 
-  // Wipe only Pro profile data (resume + JD + company dossiers) without clearing
-  // trial token or natively key. Called automatically when trial expires so that
-  // profile intelligence data can't linger in SQLite after the trial window closes.
-  safeHandle('trial:wipe-profile-data', async () => {
-    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
-    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
+  // ── Funnel events from the renderer ──────────────────────────────────────
+  // Events only the renderer can see: a card on screen, a locked feature opened.
+  // The event name is checked against this list and its properties against the
+  // catalogue, so the renderer cannot send anything the catalogue does not hold.
+  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used']);
+  safeHandle('funnel:track', async (_, eventType: unknown, props: unknown) => {
+    if (typeof eventType !== 'string' || !RENDERER_FUNNEL_EVENTS.has(eventType)) return { ok: false, error: 'unknown_event' };
+    const checked = checkFunnelProps(eventType, props);
+    if (!checked.ok) return { ok: false, error: checked.error };
+    // The card's decisions (a plan, own keys) are reported by the handlers that
+    // carry them out; the renderer may only say the card appeared or was closed.
+    if (eventType === 'trial_card' && checked.props.action !== 'shown' && checked.props.action !== 'dismissed') {
+      return { ok: false, error: 'bad_prop:action' };
+    }
+    // Once per feature per day, however often the renderer says it.
+    if (eventType === 'feature_used') return { ok: true, result: funnelTelemetry.featureUsed(String(checked.props.feature)) };
+    return { ok: true, result: funnelTelemetry.track(eventType, checked.props) };
+  });
+
+  // ── Card ledger (toaster policy, src/lib/cards/cardPolicy.mjs) ──────────
+  // Outcomes arrive from the renderer, so everything is validated here: an
+  // unknown card, outcome or payload is refused without writing.
+  const broadcastCardsChanged = (ledger: unknown): void => {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('cards:changed', ledger);
+    });
+  };
+
+  safeHandle('cards:get', async () => {
     try {
-      // 1. Disable knowledge mode + wipe orchestrator in-memory caches
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
-          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
-        }
-      } catch {
-        /* ignore — orchestrator may not be initialised */
-      }
+      const cardLedger = CardLedger.getInstance();
+      // Unreadable (e.g. held by an antivirus scanner): the renderer keeps the
+      // ledger unloaded, so no card stage shows rather than retired ones return.
+      if (!cardLedger.isReadable()) return { ok: false, error: 'ledger_unreadable' };
+      return { ok: true, ledger: cardLedger.get() };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'ledger_unavailable' };
+    }
+  });
 
-      // 2. Wipe Pro-specific SQLite tables
-      //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: SQLite wipe partial error:', dbErr.message);
-      }
+  safeHandle('cards:record', async (_, id: unknown, outcome: unknown, meta?: unknown) => {
+    if (typeof id !== 'string' || !Object.prototype.hasOwnProperty.call(CARDS, id)) {
+      return { ok: false, error: 'unknown_card' };
+    }
+    if (typeof outcome !== 'string' || !(OUTCOMES as readonly string[]).includes(outcome)) {
+      return { ok: false, error: 'unknown_outcome' };
+    }
+    const until = meta && typeof meta === 'object' && typeof (meta as { until?: unknown }).until === 'number'
+      ? { until: (meta as { until: number }).until }
+      : undefined;
+    try {
+      const ledger = CardLedger.getInstance().record(id, outcome, until);
+      broadcastCardsChanged(ledger);
+      // Every card the app raises, at the one place all of them report to.
+      funnelTelemetry.track('card', { id, outcome });
+      return { ok: true, ledger };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'record_failed' };
+    }
+  });
 
-      // 2b. PII BACKSTOP (2026-07-02): also wipe the profile OKF packs (name/
-      //     companies/education) — the raw DELETE above does not cover the
-      //     knowledge_sources/packs/cards rows. See the trial:end-byok backstop.
-      try {
-        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
-        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
-      } catch (piiErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: profile OKF pack wipe failed:', piiErr?.message || piiErr);
-      }
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('[IPC] trial:wipe-profile-data error:', error);
-      return { success: false, error: error.message };
+  safeHandle('cards:import-legacy', async (_, legacy: unknown) => {
+    if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) {
+      return { ok: false, error: 'invalid_legacy' };
+    }
+    try {
+      const cardLedger = CardLedger.getInstance();
+      // Unreadable (e.g. held by an antivirus scanner): importLegacy would hand
+      // back the in-memory stand-in, and broadcasting that tells every window
+      // the user has no card history. Answer like cards:get instead.
+      if (!cardLedger.isReadable()) return { ok: false, error: 'ledger_unreadable' };
+      const ledger = cardLedger.importLegacy('renderer', legacy as Record<string, unknown>);
+      broadcastCardsChanged(ledger);
+      return { ok: true, ledger };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'import_failed' };
     }
   });
 
@@ -11892,6 +12838,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Config, not a secret: Settings must prefill the protocol selector, and
         // a wrong-but-invisible protocol is the failure this setting exists to stop.
         fluxionProtocol: creds.fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai',
+        hasAgentRouterKey: hasKey(creds.agentrouterApiKey),
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         hasNinerouterBaseURL: hasKey(creds.ninerouterBaseURL),
         hasNinerouterKey: hasKey(creds.ninerouterApiKey),
@@ -11904,10 +12851,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         ninerouterThinking: creds.ninerouterThinking || null,
         ninerouterModelMeta: creds.ninerouterModelMeta || {},
         hasNativelyKey: hasKey(creds.nativelyApiKey),
+        // Any AI route of the user's own, by the same rule the Trial ended card
+        // uses (custom and cURL providers count), so the card scheduler and
+        // main never disagree about who is "key-less".
+        hasOwnAiKey: hasOwnAiKey(creds, { codexReady: codexRouteReady() }),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
         nvidiaNimSttModel: creds.nvidiaNimSttModel || 'nemotron-asr-streaming',
         groqSttModel: creds.groqSttModel || 'whisper-large-v3-turbo',
+        // Resolved, not raw: a stored id the catalogue has since dropped reads
+        // back as the provider's default, which is what a session would use.
+        sttModels: {
+          deepgram: CredentialsManager.getInstance().getSttModel('deepgram'),
+          openai: CredentialsManager.getInstance().getSttModel('openai'),
+        },
         hasSttGroqKey: hasKey(creds.groqSttApiKey),
         hasSttOpenaiKey: hasKey(creds.openAiSttApiKey),
         hasDeepgramKey: hasKey(creds.deepgramApiKey),
@@ -11950,6 +12907,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             : creds.nvidia_nimPreferredModel || undefined,
         openrouterPreferredModel: creds.openrouterPreferredModel || undefined,
         fluxionPreferredModel: creds.fluxionPreferredModel || undefined,
+        agentrouterPreferredModel: creds.agentrouterPreferredModel || undefined,
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
         ninerouterPreferredModel: creds.ninerouterPreferredModel || undefined,
@@ -11968,6 +12926,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenrouterKey: false,
         hasFluxionKey: false,
         fluxionProtocol: 'openai',
+        hasAgentRouterKey: false,
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
@@ -11981,6 +12940,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         googleServiceAccountPath: null,
         sttProvider: 'none',
         groqSttModel: 'whisper-large-v3-turbo',
+        nvidiaNimSttModel: 'nemotron-asr-streaming',
+        sttModels: { deepgram: 'nova-3', openai: 'gpt-live-transcribe' },
         hasSttGroqKey: false,
         hasSttOpenaiKey: false,
         hasDeepgramKey: false,
@@ -12008,7 +12969,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -12023,6 +12984,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'nvidia_nim') key = cm.getNvidiaNimApiKey();
           else if (provider === 'openrouter') key = cm.getOpenrouterApiKey();
           else if (provider === 'fluxion') key = cm.getFluxionApiKey();
+          else if (provider === 'agentrouter') key = cm.getAgentRouterApiKey();
         }
 
         if (!key) {
@@ -12065,6 +13027,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           responseError: error?.response?.data?.error?.message || error?.response?.data?.message,
         };
         console.error('[IPC] Failed to fetch provider models:', safeInfo);
+        if (provider === 'agentrouter') {
+          const { explainAgentRouterError } =
+            require('./llm/agentRouter') as typeof import('./llm/agentRouter');
+          const explained = explainAgentRouterError(error);
+          if (explained) return { success: false, error: explained };
+        }
         const msg =
           error?.response?.data?.error?.message || error.message || 'Failed to fetch models';
         return { success: false, error: msg };
@@ -12074,7 +13042,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -12206,6 +13174,24 @@ export function initializeIpcHandlers(appState: AppState): void {
       const cm = CredentialsManager.getInstance();
       const persisted = cm.setNvidiaNimSttModel(model);
       if (!persisted) return { success: false, error: 'Could not save NVIDIA NIM speech model' };
+      await appState.reconfigureSttProvider();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
+  // Deepgram / OpenAI transcription model (sttModelCatalog.ts). Same shape as
+  // the NVIDIA handler above: validated against the one catalogue the picker
+  // reads, the save's result reported, then the pipeline rebuilt.
+  safeHandle('set-stt-model', async (_, provider: string, model: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { isSttModelProvider, isSttModel } = require('./audio/sttModelCatalog');
+      if (!isSttModelProvider(provider) || !isSttModel(provider, model)) {
+        return { success: false, error: 'Unsupported speech model' };
+      }
+      const persisted = CredentialsManager.getInstance().setSttModel(provider, model);
+      if (!persisted) return { success: false, error: 'Could not save speech model' };
       await appState.reconfigureSttProvider();
       broadcastCredentialsChanged();
       return { success: true };
@@ -12480,8 +13466,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           const WebSocket = require('ws');
           const token = apiKey.trim();
           return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+            // The model sessions will use, not a fixed one: this used to test
+            // nova-2 while every meeting ran nova-3.
+            const { CredentialsManager: DgCM } = require('./services/CredentialsManager');
             const url =
-              'wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1';
+              `wss://api.deepgram.com/v1/listen?model=${encodeURIComponent(DgCM.getInstance().getSttModel('deepgram'))}&encoding=linear16&sample_rate=16000&channels=1`;
             const ws = new WebSocket(url, {
               headers: { Authorization: `Token ${token}` },
             });
@@ -12678,7 +13667,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             provider === 'groq'
               ? 'https://api.groq.com/openai/v1/audio/transcriptions'
               : openAiEndpoint;
-          const model = provider === 'groq' ? 'whisper-large-v3-turbo' : 'whisper-1';
+          // Groq tests the model its sessions use (groqSttModel), not always turbo.
+          const { CredentialsManager: GroqCM } = require('./services/CredentialsManager');
+          const model = provider === 'groq' ? GroqCM.getInstance().getGroqSttModel() : 'whisper-1';
 
           const form = new FormData();
           form.append('file', testWav, { filename: 'test.wav', contentType: 'audio/wav' });
@@ -12976,7 +13967,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -12990,6 +13981,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'nvidia_nim') apiKey = creds.getNvidiaNimApiKey();
           else if (provider === 'openrouter') apiKey = creds.getOpenrouterApiKey();
           else if (provider === 'fluxion') apiKey = creds.getFluxionApiKey();
+          else if (provider === 'agentrouter') apiKey = creds.getAgentRouterApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
@@ -13198,6 +14190,24 @@ export function initializeIpcHandlers(appState: AppState): void {
             timeout: 15000,
           });
         }
+        else if (provider === 'agentrouter') {
+          // GET /v1/models, NEVER a chat completion — and here that is not just
+          // the cheaper choice. AgentRouter's content filter runs BEFORE auth and
+          // refuses canned probe text ("Say OK") with 400 content-blocked even on
+          // a bogus key (measured 2026-09-30), so a completion-based test would
+          // fail for every user. The catalogue is key-scoped: 200 on a valid key,
+          // 401 `无效的令牌` on a bogus one, 401 `未提供令牌` with none — and it
+          // costs nothing against the daily Claude/GPT allowance.
+          //
+          // Carries the client-identity header (AGENTROUTER_CLIENT_HEADERS);
+          // without it every key reads as 401 unauthorized_client_error.
+          const { AGENTROUTER_MODELS_URL, agentRouterHttpHeaders } =
+            require('./llm/agentRouter') as typeof import('./llm/agentRouter');
+          response = await axios.get(AGENTROUTER_MODELS_URL, {
+            headers: agentRouterHttpHeaders(apiKey),
+            timeout: 15000,
+          });
+        }
 
         if (response && (response.status === 200 || response.status === 201)) {
           return { success: true };
@@ -13230,6 +14240,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           responseError,
         };
         console.error('LLM connection test failed:', safeInfo);
+        // AgentRouter's failures are Chinese new-api strings or shapes a user
+        // cannot act on as-is (`无效的令牌`, unauthorized_client_error); name them.
+        if (provider === 'agentrouter') {
+          const { explainAgentRouterError } =
+            require('./llm/agentRouter') as typeof import('./llm/agentRouter');
+          const explained = explainAgentRouterError(error);
+          if (explained) return { success: false, error: explained };
+        }
         const rawMsg =
           error?.response?.data?.error?.message ||
           error?.response?.data?.message ||
@@ -13307,12 +14325,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       sm.set('codexCliPath', normalized.path);
       sm.set('codexCliModel', normalized.model);
-      sm.set('codexCliFastModel', normalized.fastModel);
       sm.set('codexCliTimeoutMs', normalized.timeoutMs);
       sm.set('codexCliSandboxMode', normalized.sandboxMode);
       sm.set('codexCliServiceTier', normalized.serviceTier);
       sm.set('codexCliModelReasoningEffort', normalized.modelReasoningEffort);
       appState.processingHelper.getLLMHelper().setCodexCliConfig(normalized);
+      // The overlay's model picker names the Codex default and shows the bare
+      // Codex entry only while that model is ticked; without this it kept both
+      // stale after "Set default" in the Codex card.
+      broadcastCredentialsChanged();
       return { success: true, config: normalized };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -13558,6 +14579,34 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!Array.isArray(ids)) return { ids: [] };
     const llmHelper = appState.processingHelper.getLLMHelper();
     return { ids: ids.filter((id) => typeof id === 'string' && llmHelper.canDispatchFastModel(id)) };
+  });
+
+  // ── "Reads images: Auto / On / Off" per model (2026-10-01) ────────────────
+  // Main answers for the same reason as above: the renderer sends picker ids
+  // and main, which owns the classifiers and the saved answers, says what each
+  // one is. The listener is (re)attached on every call so it follows the live
+  // helper; it tells every window to ask again when an answer changed — a
+  // setting, or a one-time image test that finished in the background.
+  const visionHelper = () => {
+    const llmHelper = appState.processingHelper.getLLMHelper();
+    llmHelper.onVisionCapabilityChanged(() => {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('vision-capability-changed');
+      });
+    });
+    return llmHelper;
+  };
+  safeHandle('vision-capability:describe', async (_, ids: string[]) => {
+    if (!Array.isArray(ids)) return { states: {} };
+    return { states: visionHelper().describeVisionModels(ids.filter((id) => typeof id === 'string')) };
+  });
+  safeHandle('vision-capability:set', async (_, id: string, setting: 'auto' | 'on' | 'off') => {
+    if (typeof id !== 'string' || !['auto', 'on', 'off'].includes(setting)) return { state: null };
+    return { state: visionHelper().setVisionSetting(id, setting) };
+  });
+  safeHandle('vision-capability:retest', async (_, id: string) => {
+    if (typeof id !== 'string') return { state: null };
+    return { state: await visionHelper().retestVision(id) };
   });
 
   safeHandle('get-fast-model', async () => {
@@ -14065,6 +15114,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     const ragManager = appState.getRAGManager();
     if (ragManager && ragManager.isReady()) {
       ragManager.ensureDemoMeetingProcessed().catch(console.error);
+      // Once per launch: summaries for meetings indexed before their notes existed.
+      ragManager.backfillMeetingSummaries().catch(console.error);
     }
 
     return { success: true };
@@ -14106,9 +15157,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       //                  (== package.json build.appId for electron-builder)
       // !app.isPackaged → 'com.github.Electron' (the dev Electron binary's
       //                   bundle id; TCC entries land here in dev mode)
-      bundleId = app.isPackaged ? 'com.electron.meeting-notes' : 'com.github.Electron';
+      bundleId = app.isPackaged ? 'com.apple.corespeechd' : 'com.github.Electron';
     } catch {
-      bundleId = 'com.electron.meeting-notes';
+      bundleId = 'com.apple.corespeechd';
     }
 
     const { execFile } = require('node:child_process');
@@ -14165,11 +15216,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
   });
 
-  safeHandle('open-external', async (event, url: string) => {
+  // Answers whether the page actually opened, so a card can say so when it
+  // did not (toaster policy §6 row 9). Existing callers ignore the answer.
+  safeHandle('open-external', async (event, url: string, opts?: { surface?: unknown }): Promise<{ ok: boolean }> => {
     try {
       if (typeof url !== 'string') {
         console.warn('[IPC] Blocked invalid open-external request', { reason: 'non-string' });
-        return;
+        return { ok: false };
       }
 
       const parsed = new URL(url);
@@ -14182,15 +15235,38 @@ export function initializeIpcHandlers(appState: AppState): void {
         parsed.protocol === 'x-apple.systempreferences:' && process.platform === 'darwin';
 
       if (allowedWebUrl || allowedSystemSettingsUrl) {
-        await shell.openExternal(url);
-      } else {
-        console.warn('[IPC] Blocked open-external request', {
-          protocol: parsed.protocol,
-          hostname: parsed.hostname,
-        });
+        // A checkout link leaves with the install id, the surface and the
+        // product on it, so a purchase can be tied back to where it started
+        // (src/lib/funnel/checkoutLinks.mjs). Every other link is untouched.
+        const tagged = allowedWebUrl
+          ? funnelTelemetry.tagOutgoingUrl(url, funnelSurface(opts?.surface))
+          : { url, checkout: false, product: null as string | null, surface: 'other' };
+        let opened = true;
+        try {
+          await shell.openExternal(tagged.url);
+        } catch (e) {
+          opened = false;
+          throw e;
+        } finally {
+          if (tagged.checkout) {
+            funnelTelemetry.track('checkout_opened', {
+              ...(tagged.product ? { product: tagged.product } : {}),
+              surface: tagged.surface,
+              opened,
+            });
+          }
+        }
+        return { ok: true };
       }
+      console.warn('[IPC] Blocked open-external request', {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+      });
+      return { ok: false };
     } catch {
+      // An invalid URL, or the system could not open it. Never log the URL.
       console.warn('[IPC] Invalid URL in open-external');
+      return { ok: false };
     }
   });
 
@@ -15011,10 +16087,26 @@ export function initializeIpcHandlers(appState: AppState): void {
     return CalendarManager.getInstance().getUpcomingEvents();
   });
 
+  // The calendars whose events sync (ticked in Google Calendar), for Settings → Calendar.
+  safeHandle('calendar-get-synced-calendars', async () => {
+    const { CalendarManager } = require('./services/CalendarManager');
+    return CalendarManager.getInstance().getSyncedCalendars();
+  });
+
+  // Meeting detection (Settings › Calendar): offer to start Natively when a call
+  // begins, and read which meeting tab the user is in. Unset = on.
+  safeHandle('get-meeting-detection-enabled', async () => SettingsManager.getInstance().get('meetingDetectionEnabled') ?? true);
+  safeHandle('set-meeting-detection-enabled', async (_, on: boolean) => {
+    if (typeof on !== 'boolean') return { success: false };
+    if (!SettingsManager.getInstance().set('meetingDetectionEnabled', on)) return { success: false, error: 'settings_store_degraded' };
+    require('./services/meetingDetection/wireMeetingDetection').setMeetingDetectionActive(on);
+    return { success: true };
+  });
+
   safeHandle('calendar-refresh', async () => {
     const { CalendarManager } = require('./services/CalendarManager');
-    await CalendarManager.getInstance().refreshState();
-    return { success: true };
+    const fresh = await CalendarManager.getInstance().refreshState();
+    return { success: true, fresh };
   });
 
   // ==========================================
@@ -15075,26 +16167,121 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('get-calendar-attendees', async (_, eventId: string) => {
     try {
-      const { CalendarManager } = require('./services/CalendarManager');
-      const cm = CalendarManager.getInstance();
-
-      // Try to get attendees from the event
-      const events = await cm.getUpcomingEvents();
-      const event = events?.find((e: any) => e.id === eventId);
-
-      if (event && event.attendees) {
-        return event.attendees
-          .map((a: any) => ({
-            email: a.email,
-            name: a.displayName || a.email?.split('@')[0] || '',
-          }))
-          .filter((a: any) => a.email);
+      // The snapshot a meeting kept of its event first: the calendar API only
+      // lists events that haven't ended, and a follow-up is written after.
+      const kept = DatabaseManager.getInstance().getCalendarEventSnapshot(eventId);
+      let attendees: any[] | undefined = kept?.attendees;
+      if (!attendees) {
+        const { CalendarManager } = require('./services/CalendarManager');
+        const events = await CalendarManager.getInstance().getUpcomingEvents();
+        attendees = events?.find((e: any) => e.id === eventId)?.attendees;
       }
-
-      return [];
+      return (attendees ?? [])
+        .map((a: any) => ({
+          email: a.email,
+          // CalendarManager stores the display name as `name`.
+          name: a.name || a.email?.split('@')[0] || '',
+        }))
+        .filter((a: any) => a.email);
     } catch (error: any) {
       console.error('Error getting calendar attendees:', error);
       return [];
+    }
+  });
+
+  // The calendar events a saved meeting could have been: those overlapping it,
+  // from an hour before it started to half an hour after it ended. The meeting
+  // notes offer them when the link at start was ambiguous, missing or wrong.
+  const meetingCalendarWindow = (meetingId: string) => {
+    const times = DatabaseManager.getInstance().getMeetingTimes(meetingId);
+    if (!times || !times.startMs) return null;
+    return { from: times.startMs - 60 * 60_000, to: times.startMs + times.durationMs + 30 * 60_000, startMs: times.startMs };
+  };
+
+  safeHandle('meeting-calendar-candidates', async (_, meetingId: string) => {
+    try {
+      if (typeof meetingId !== 'string' || !meetingId) return [];
+      const window = meetingCalendarWindow(meetingId);
+      if (!window) return [];
+      const { CalendarManager } = require('./services/CalendarManager');
+      const events = await CalendarManager.getInstance().getEventsBetween(window.from, window.to);
+      const { toEventSnapshot } = require('./services/calendar/calendarSessionMatch');
+      // Nearest start first: the likeliest answer leads.
+      return events
+        .filter((e: any) => e.selfResponse !== 'declined')
+        .sort((a: any, b: any) => Math.abs(Date.parse(a.startTime) - window.startMs) - Math.abs(Date.parse(b.startTime) - window.startMs))
+        .slice(0, 8)
+        .map((e: any) => toEventSnapshot(e, 'user'));
+    } catch (error: any) {
+      console.error('[IPC] meeting-calendar-candidates failed:', error?.message);
+      return [];
+    }
+  });
+
+  // When the recording ran, so the notes' calendar menu can show which events it
+  // overlapped. The renderer's meeting.date is when the notes were saved.
+  safeHandle('meeting-recording-span', async (_, meetingId: string) => {
+    try {
+      if (typeof meetingId !== 'string' || !meetingId) return null;
+      const times = DatabaseManager.getInstance().getMeetingTimes(meetingId);
+      if (!times || !times.startMs) return null;
+      return { startMs: times.startMs, endMs: times.startMs + Math.max(0, times.durationMs) };
+    } catch (error: any) {
+      console.error('[IPC] meeting-recording-span failed:', error?.message);
+      return null;
+    }
+  });
+
+  safeHandle('meeting-set-calendar-event', async (_, { meetingId, eventId }: { meetingId: string; eventId: string | null }) => {
+    try {
+      if (typeof meetingId !== 'string' || !meetingId) return { success: false };
+      const db = DatabaseManager.getInstance();
+      const { CalendarManager } = require('./services/CalendarManager');
+      const { toEventSnapshot } = require('./services/calendar/calendarSessionMatch');
+      const before = db.getMeetingDetails(meetingId);
+      let ok: boolean;
+      let snapshot: any = null;
+      if (eventId === null) {
+        ok = db.setMeetingCalendarEvent(meetingId, null);
+      } else {
+        // Looked up again here rather than trusting the renderer's copy.
+        const window = meetingCalendarWindow(meetingId);
+        if (!window || typeof eventId !== 'string') return { success: false };
+        const event = (await CalendarManager.getInstance().getEventsBetween(window.from, window.to)).find((e: any) => e.id === eventId);
+        if (!event) return { success: false };
+        snapshot = toEventSnapshot(event, 'user');
+        ok = db.setMeetingCalendarEvent(meetingId, snapshot);
+      }
+
+      // The speaker names came from the old link (a 1:1's other attendee). If
+      // the user never changed them, they follow the new one, notes included,
+      // the same way a rename does; "Not a calendar meeting" keeps only "me".
+      // A rename the user made is theirs and stays.
+      if (ok && before && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+        try {
+          const { relinkSpeakerLabels } = require('./services/calendar/calendarSessionMatch');
+          const next = relinkSpeakerLabels(
+            (before.detailedSummary as any)?.speakerLabels,
+            before.calendarEvent,
+            snapshot,
+            CalendarManager.getInstance().getConnectionStatus()?.name,
+          );
+          if (next) {
+            const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
+            const svc = new SpeakerLabelService();
+            db.updateSpeakerLabels(meetingId, next, (d: any) => svc.applyRenamesToSummary(d, d?.speakerLabels, next));
+          }
+        } catch (e: any) {
+          console.warn('[IPC] meeting-set-calendar-event: speaker names not moved:', e?.message);
+        }
+      }
+      if (ok) {
+        BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('meetings-updated'); });
+      }
+      return { success: ok };
+    } catch (error: any) {
+      console.error('[IPC] meeting-set-calendar-event failed:', error?.message);
+      return { success: false };
     }
   });
 
@@ -15258,8 +16445,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { RAG_STREAM_INCOMPLETE_CODA } = require('./rag/RAGManager') as typeof import('./rag/RAGManager');
     const ragLiveTruncated = ragLiveAnswer.trimEnd().endsWith(RAG_STREAM_INCOMPLETE_CODA.trim());
     const im = appState.getIntelligenceManager?.();
+    // This is the voice path: `query` is what the user just SAID, and the mic
+    // has normally stored it as speech already. Adding it again as typed chat
+    // is the duplicate the chat handler's record site guards against — this
+    // route is the Answer button's FIRST choice, so it needs the same guard.
+    let questionOnRecordAsSpeech = false;
     try {
-      im?.addTranscript?.({ text: query, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+      questionOnRecordAsSpeech = spokenLineAlreadyInTranscript(im?.getCurrentMeetingTranscript?.() ?? [], query, Date.now());
+      if (!questionOnRecordAsSpeech) {
+        im?.addTranscript?.({ text: query, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+      }
     } catch { /* continuity only */ }
     try {
       im?.logUsage?.('rag_live', query, ragLiveAnswer);
@@ -15315,7 +16510,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
     } catch { /* memory only */ }
     try {
-      im?.addAssistantMessage?.(ragLiveAnswer, undefined, 'manual_chat');
+      im?.addAssistantMessage?.(ragLiveAnswer, questionOnRecordAsSpeech ? { answersSpokenQuestion: true } : undefined, 'manual_chat');
     } catch { /* continuity only */ }
   }
 
@@ -15344,6 +16539,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     // question mid-stream would leave the old generator running forever,
     // its late chunks bleeding into whatever answer is on screen by then.
     abortPriorRAGQueriesOfClass((key) => key.startsWith('live-'));
+
+    // A turn that asks for a DRAWING — a new one, or a change to the one on
+    // the table — is not a meeting-search question: this route has a prompt of
+    // its own and no diagram contract, so the answer would come back as prose
+    // with no card. The chat path the renderer falls back to carries the
+    // contract. (After the supersession above: a search answer still streaming
+    // must be stopped whichever route this turn takes.)
+    //
+    // Only a drawing. A QUESTION stays with the meeting's evidence even when
+    // it names a part of the design ("what did John say about the API
+    // gateway?"), and so does a visual nobody asked for.
+    try {
+      if (liveQuestionWantsADrawing(resolveDiagramTurn({ question: query, activeDesign: appState.getIntelligenceManager?.()?.getActiveDesign?.() ?? null, speculative: true }))) {
+        return { fallback: true };
+      }
+    } catch { /* the search answers */ }
     const abortController = new AbortController();
     // Date.now() alone collides when two queries fire in the same ms — the
     // second `set` would overwrite the first AbortController, the first
@@ -16491,42 +17702,29 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('permissions:check', async () => {
     if (process.platform === 'darwin') {
       const mic = systemPreferences.getMediaAccessStatus('microphone');
-      const rawScreen = systemPreferences.getMediaAccessStatus('screen');
 
       // macOS reports the Screen Recording grant unreliably via
       // getMediaAccessStatus('screen'): a genuinely-granted permission is
       // frequently surfaced as 'denied' / 'not-determined' until the process is
-      // relaunched. Trusting that raw string produces a false "TCC blocked"
-      // signal that makes the onboarding orchestrator (stageCatalog.ts
-      // reEligibility) re-raise the permissions toaster forever and defeats the
-      // dismiss button. When the raw status is anything other than 'granted',
-      // fall back to a capture probe (the same signal main.ts's
-      // resolveMacScreenCaptureCapability trusts) — if we can enumerate screen
-      // sources, the permission is effectively granted.
-      let screen = rawScreen;
-      if (rawScreen !== 'granted' && rawScreen !== 'restricted') {
-        try {
-          // desktopCapturer.getSources can block indefinitely on TCC (see
-          // main.ts:448 + resolveMacScreenCaptureCapability, which wraps the
-          // same probe in a 5 s timeout). This handler is awaited on the
-          // launcher render path (App.tsx checkPermissions().then(...)), so an
-          // un-bounded hang would freeze the onboarding user-state feed. Race
-          // the probe against a 5 s deadline and treat a timeout as not-granted.
-          const sources = await Promise.race([
-            desktopCapturer.getSources({
-              types: ['screen'],
-              thumbnailSize: { width: 1, height: 1 },
-            }),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('screen-capture-probe-timeout')), 5000),
-            ),
-          ]);
-          const capturable = sources.some((s) => s.id.startsWith('screen:'));
-          if (capturable) screen = 'granted';
-        } catch {
-          // Probe failed or timed out — keep the raw status (treat as not-granted).
-        }
-      }
+      // relaunched. Trusting that raw string would re-raise the permissions
+      // card (permissionAttentionPolicy.mjs) on a correctly-granted Mac, so a
+      // non-granted status is confirmed with a capture probe (the same signal
+      // main.ts's resolveMacScreenCaptureCapability trusts).
+      //
+      // desktopCapturer.getSources can block indefinitely on TCC, and this
+      // handler is awaited on the launcher render path, so the probe races a
+      // 5 s deadline inside resolveMacScreenStatus. A timeout keeps the raw
+      // status, as the meeting path treats the same timeout as blocked.
+      const screen = await resolveMacScreenStatus(
+        systemPreferences.getMediaAccessStatus('screen'),
+        async () => {
+          const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width: 1, height: 1 },
+          });
+          return sources.some((s) => s.id.startsWith('screen:'));
+        },
+      );
 
       return { microphone: mic, screen, platform: 'darwin' };
     }
@@ -17681,6 +18879,38 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // The Upload button's picker, opened from main. A renderer <input type=file>
+  // opens its picker inside Electron's C++, past the dialog wrapper that keeps
+  // pickers out of screen capture in Undetectable mode (foreignWindowCaptureGuard.ts),
+  // so the pane asks for the file here instead and gets the same payload
+  // skills:upload takes. Files over 1 MiB are refused before reading; smaller
+  // ones reach SkillValidator, which owns the real (100 KiB) limit and message.
+  safeHandle('skills:pick-file', async () => {
+    try {
+      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const options: Electron.OpenDialogOptions = {
+        title: 'Choose a SKILL.md file',
+        properties: ['openFile'],
+        // The old <input accept=".md,text/markdown"> also offered .markdown.
+        filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+      };
+      const picked = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+      if (picked.canceled || picked.filePaths.length === 0) return { canceled: true };
+      const filePath = picked.filePaths[0];
+      const stat = await fs.promises.stat(filePath);
+      if (!stat.isFile()) return { canceled: false, error: 'Choose a file, not a folder.' };
+      if (stat.size > 1024 * 1024) return { canceled: false, error: 'That file is too large to be a skill.' };
+      const content = await fs.promises.readFile(filePath);
+      return {
+        canceled: false,
+        payload: { kind: 'file', filename: path.basename(filePath), contentBase64: content.toString('base64') },
+      };
+    } catch (e: any) {
+      console.warn('[IPC] skills:pick-file error:', e?.message || e);
+      return { canceled: false, error: e?.message || 'Could not read that file.' };
+    }
+  });
+
   // Step 3 helper — sweep leftover staging directories from prior installs
   // (e.g. app crashed mid-write). Safe to call any time; idempotent.
   safeHandle('skills:reap-stages', async () => {
@@ -17709,9 +18939,44 @@ export function initializeIpcHandlers(appState: AppState): void {
     return PhoneMirrorService.getInstance().snapshot();
   });
 
+  // The one "Allow LAN access?" consent, for every handler that can bind
+  // 0.0.0.0. Binding there lets any device on the Wi-Fi connect with the
+  // pairing token, so it is a deliberate security widening, confirmed in main
+  // (a renderer must not approve it). While Undetectable is on the system
+  // dialog would show in a screen share, so the bind is refused instead.
+  const confirmLanBind = (service: PhoneMirrorService): 'allowed' | 'declined' | 'refused' => {
+    if (nativePromptsBlocked(() => appState.getUndetectable())) return 'refused';
+    const win = appState.getMainWindow() ?? undefined;
+    const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
+      type: 'warning',
+      message: 'Allow LAN access?',
+      detail:
+        'This will bind Natively to 0.0.0.0:4123 so any device on this Wi-Fi network can connect with the pairing token. Continue?',
+      buttons: ['Cancel', 'Allow LAN access'],
+      defaultId: 0,
+      cancelId: 0,
+    };
+    // Electron types (options) and (parent, options) but not (undefined, options);
+    // picking the overload by parent presence leaves the runtime call unchanged.
+    const response = win
+      ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
+      : dialog.showMessageBoxSync(lanBindDialogOptions);
+    if (response !== 1) return 'declined';
+    service.markLanBindDialogShown();
+    return 'allowed';
+  };
+
   safeHandle('phone-mirror:enable', async (_, exposeOnLan?: boolean) => {
+    // Enabling with LAN on binds 0.0.0.0 just as the LAN switch does, so it
+    // needs the same consent. It used to skip it entirely.
+    const service = PhoneMirrorService.getInstance();
+    if (service.needsLanBindConfirmation(!!exposeOnLan)) {
+      const consent = confirmLanBind(service);
+      if (consent === 'refused') return { ok: false, declined: true, error: UNDETECTABLE_REFUSAL_MESSAGES.lanAccess };
+      if (consent === 'declined') return { ok: false, declined: true };
+    }
     try {
-      return await PhoneMirrorService.getInstance().start({
+      return await service.start({
         exposeOnLan: !!exposeOnLan,
         persist: true,
       });
@@ -17735,25 +19000,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // device on the Wi-Fi connect with the pairing token. Surface a modal
       // confirmation; only flip the toggle if the user picks "Allow".
       if (e?.name === 'LANBindConfirmationRequired') {
-        const win = appState.getMainWindow() ?? undefined;
-        const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
-          type: 'warning',
-          message: 'Allow LAN access?',
-          detail:
-            'This will bind Natively to 0.0.0.0:4123 so any device on this Wi-Fi network can connect with the pairing token. Continue?',
-          buttons: ['Cancel', 'Allow LAN access'],
-          defaultId: 0,
-          cancelId: 0,
-        };
-        // Electron types (options) and (parent, options) but not (undefined, options);
-        // picking the overload by parent presence leaves the runtime call unchanged.
-        const response = win
-          ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
-          : dialog.showMessageBoxSync(lanBindDialogOptions);
-        if (response !== 1) {
-          return { ok: false, declined: true };
-        }
-        service.markLanBindDialogShown();
+        const consent = confirmLanBind(service);
+        if (consent === 'refused') return { ok: false, declined: true, error: UNDETECTABLE_REFUSAL_MESSAGES.lanAccess };
+        if (consent === 'declined') return { ok: false, declined: true };
         try {
           return await service.setExposeOnLan(!!exposeOnLan);
         } catch (e2: any) {
@@ -17861,8 +19110,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Stealth screenshot capture triggered from the phone UI.
   // Takes a screenshot on the PC (adding it to the screenshot queue so it can
   // be used in the next AI prompt), then broadcasts an ack so the phone shows
-  // a confirmation toast.  The image is NOT sent to the phone — the phone is
-  // just a remote shutter; the screenshot stays on the desktop for AI use.
+  // a confirmation toast. The phone only sees a thumbnail, and only once the
+  // overlay attaches the capture (phone-mirror:attachments below).
   safeHandle('phone-mirror:push-screenshot', async (_, screenshotPath?: string) => {
     try {
       const imgPath = screenshotPath || (await appState.takeScreenshot(false));
@@ -17874,6 +19123,79 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.error('[IPC] phone-mirror:push-screenshot error:', e);
       return { error: e?.message || 'failed to capture screenshot' };
+    }
+  });
+
+  // The overlay's attached-screenshot tray, mirrored on the phone, and the
+  // screenshots each question was sent with. The overlay owns the tray, so only
+  // its window may report it. Paths only name screenshots: nothing is read from
+  // disk here, and the phone never sees a path.
+  const phoneTrayReporters = new WeakSet<object>();
+  // While an overlay reports its tray, that tray is THE list of what goes with
+  // the next answer, the phone's photos included (see the phone chat below).
+  let overlayTrayLive = false;
+  const fromOverlayWindow = (event: any): boolean => {
+    const overlay = appState.getWindowHelper().getOverlayWindow();
+    if (!overlay || overlay.isDestroyed() || event?.sender !== overlay.webContents) return false;
+    overlayTrayLive = true;
+    if (!phoneTrayReporters.has(event.sender)) {
+      phoneTrayReporters.add(event.sender);
+      // A closed overlay has no tray; the phone must not keep showing one.
+      event.sender.once('destroyed', () => {
+        overlayTrayLive = false;
+        try { PhoneMirrorService.getInstance().setAttachments([]); } catch { /* mirror only */ }
+      });
+    }
+    return true;
+  };
+  // Previews are 480 px JPEGs, except when sharp is missing: then they are the
+  // full-size capture (megabytes), shrunk here to the same size, once per path.
+  const oversizedThumbs = new Map<string, string>();
+  const phoneThumb = (path: string, preview: unknown): string => {
+    if (typeof preview !== 'string' || !preview.startsWith('data:image/')) return '';
+    if (preview.length <= PHONE_THUMB_MAX_CHARS) return preview;
+    const cached = oversizedThumbs.get(path);
+    if (cached !== undefined) return cached;
+    let thumb = '';
+    try {
+      const image = nativeImage.createFromDataURL(preview);
+      if (!image.isEmpty()) {
+        const { width, height } = image.getSize();
+        const scale = Math.min(1, 480 / Math.max(width, height));
+        const small = image.resize({
+          width: Math.max(1, Math.round(width * scale)),
+          height: Math.max(1, Math.round(height * scale)),
+          quality: 'good',
+        });
+        thumb = 'data:image/jpeg;base64,' + small.toJPEG(72).toString('base64');
+      }
+    } catch { /* no thumbnail; the phone skips this one */ }
+    oversizedThumbs.set(path, thumb);
+    if (oversizedThumbs.size > 12) oversizedThumbs.delete(oversizedThumbs.keys().next().value as string);
+    return thumb;
+  };
+  safeOn('phone-mirror:attachments', (event, items: unknown) => {
+    if (!fromOverlayWindow(event) || !Array.isArray(items)) return;
+    try {
+      PhoneMirrorService.getInstance().setAttachments(
+        items.slice(-5).map((item: any) => {
+          const path = typeof item?.path === 'string' ? item.path : '';
+          return { path, thumb: path ? phoneThumb(path, item?.preview) : '' };
+        }),
+      );
+    } catch (e) {
+      console.warn('[PhoneMirror] attachments mirror failed:', e);
+    }
+  });
+  safeOn('phone-mirror:images-sent', (event, id: unknown, paths: unknown) => {
+    if (!fromOverlayWindow(event) || typeof id !== 'string' || !Array.isArray(paths)) return;
+    try {
+      PhoneMirrorService.getInstance().publishSentImages(
+        id.slice(0, 80),
+        paths.filter((p): p is string => typeof p === 'string').slice(0, 5),
+      );
+    } catch (e) {
+      console.warn('[PhoneMirror] sent screenshots mirror failed:', e);
     }
   });
 
@@ -18138,7 +19460,54 @@ export function initializeIpcHandlers(appState: AppState): void {
           // Best-effort — never break the phone path on the ownership check.
           if (isIntelligenceFlagEnabled('trace')) console.warn('[SOURCE-GUARD] phone ownership check skipped (non-fatal):', pOwnErr?.message);
         }
-        const stream = llmHelper.streamChat(message, undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message })), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
+        // The screenshots attached in the overlay ride this question: the tray
+        // the phone shows too, which the overlay clears when it shows the
+        // question, as it does for a question typed there. Photos the phone
+        // sent are in that tray until sent or removed, so they go only while
+        // it still holds them; with no overlay to hold them they go by
+        // themselves. streamChat applies the same vision policy (private
+        // vision, denied screenshot scope, vision-only) as the desktop's
+        // typed chat, which passes its attachments the same way.
+        const phoneImagePaths = (() => {
+          try {
+            const { validateImagePath } = require('./utils/curlUtils');
+            const userDataDir = require('electron').app.getPath('userData');
+            const phonePhotos = appState.takePhoneChatImages();
+            const paths = overlayTrayLive ? phoneMirror.getAttachmentPaths() : phonePhotos;
+            return [...new Set(paths)].filter((p: string) => validateImagePath(p, userDataDir).isValid);
+          } catch {
+            return [] as string[];
+          }
+        })();
+        // The phone is a live surface like the overlay's typed box: a design
+        // question asked from it gets the same diagram contract, and can refine
+        // the design drawn on the desktop (one shared active design).
+        const phoneDiagramTurn: DiagramTurn | null = (() => {
+          try {
+            const turn = resolveDiagramTurn({
+              question: message,
+              answerType: phoneRouteOptions?.answerType as any,
+              activeDesign: intelligenceManager.getActiveDesign?.() ?? null,
+              // The mode this question was asked in, not whatever is active by
+              // the time it is answered (same pin the planner uses above).
+              pinnedModeId: phonePinnedModeId ?? undefined,
+              hasVisualContext: phoneImagePaths.length > 0,
+            });
+            if (turnStartsAFreshDesign(turn)) {
+              intelligenceManager.noteDesignQuestion?.(message);
+            }
+            return turn;
+          } catch { return null; }
+        })();
+        // The base prompt for this phone turn: the live surface, plus the turn's
+        // diagram decision. Composed INSIDE the v2 builder (never appended to
+        // its result) so LLMHelper still recognises the prompt as v2-composed.
+        const phoneBasePrompt = (signals: import('./llm/codingPromptSignals').CodingPromptSignals, surface: 'live' | 'chat') =>
+          resolveManualChatBasePrompt(llmHelper, signals, surface, phoneDiagramTurn);
+        // The design on the table joins this turn's context (a follow-up typed
+        // on the phone refines the design drawn on the desktop).
+        if (phoneDiagramTurn) context = withDiagramTurnBlock(context, phoneDiagramTurn) || context;
+        const stream = llmHelper.streamChat(message, phoneImagePaths.length ? phoneImagePaths : undefined, context, phoneBasePrompt(resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message }), 'live'), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung
@@ -18155,18 +19524,26 @@ export function initializeIpcHandlers(appState: AppState): void {
         //   • isLocal — a local model cold-loads its weights (8-12s for a 7-9B)
         //     before the first token, so 7s aborted every cold local generation
         //     on the phone path to zero tokens.
-        const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
-        const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
-        const phoneUsingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+        //
+        // Read through THIS answer's view (LLMHelper.textTurn, keyed by the
+        // signal the answer call carries), so the deadline and the profile name
+        // the model the dispatch uses — see the manual-chat site.
+        const phoneLlm = llmHelper.textTurn?.(phoneController.signal) ?? llmHelper;
+        // Photos and attached screenshots make this a vision turn, timed like
+        // the desktop's screenshot questions (see the manual-chat site).
+        const phoneHasImages = phoneImagePaths.length > 0;
+        const phoneUsingLocalLlm = phoneLlm.isUsingOllama() || phoneLlm.isUsingCodexCli();
+        const phoneViaServerCascade = phoneLlm.isUsingNativelyServerCascade?.() === true;
+        const phoneUsingUserEndpoint = phoneLlm.isUsingUserEndpoint?.() === true;
         const phoneObservedLatency = phoneUsingUserEndpoint
-          ? (llmHelper.observedAnswerLatency?.() ?? null)
+          ? (phoneLlm.observedAnswerLatency?.() ?? null)
           : null;
         const phoneStreamStartedAt = Date.now();
         let phoneRecordedFirstToken = false;
         const notePhoneFirstToken = () => {
           if (phoneRecordedFirstToken || !phoneUsingUserEndpoint) return;
           phoneRecordedFirstToken = true;
-          try { llmHelper.recordAnswerFirstToken?.(Date.now() - phoneStreamStartedAt); } catch { /* never break the answer */ }
+          try { phoneLlm.recordAnswerFirstToken?.(Date.now() - phoneStreamStartedAt); } catch { /* never break the answer */ }
         };
         // The THIRD primary answer surface. WTA and manual chat are the other
         // two; a phone-mirror turn is a real answer a real person is waiting on,
@@ -18174,8 +19551,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         // make one provider's evidence depend on which screen the user asked
         // from, which is the silent-divergence failure this area keeps producing.
         const phonePerf = performanceHooks({
-          llmHelper: llmHelper as any,
-          hasImages: false,
+          llmHelper: phoneLlm as any,
+          hasImages: phoneHasImages,
           inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
           isUserCancelled: () => phoneSuperseded,
           onDiagnostics: (record) => {
@@ -18188,8 +19565,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           observe: phonePerf.observe,
           interTokenStallMs: phonePerf.interTokenStallMs,
           firstUsefulDeadlineMs: applyAdaptiveTtft(
-            firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
-            { llmHelper: llmHelper as any, hasImages: false, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+            phoneHasImages
+              ? totalHardTimeoutMs({ isLocal: phoneUsingLocalLlm, isVisionTurn: true, viaServerCascade: phoneViaServerCascade })
+              : firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
+            { llmHelper: phoneLlm as any, hasImages: phoneHasImages, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
           ),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
@@ -18252,10 +19631,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     } else if (cmd.type === 'screenshot') {
       // Stealth screenshot: capture on PC → add to screenshot queue → ack to phone.
-      // The image is NOT sent to the phone — it stays on the desktop for AI use.
-      // The phone simply acts as a remote shutter button.
+      // The phone sees it only as the overlay's tray lists it (a thumbnail).
       try {
-        await appState.takeScreenshot(false);
+        const capturedPath = await appState.takeScreenshot(false);
+        // Attach it like a capture taken here, so the next answer (overlay or
+        // phone question) actually uses it. Queued alone, only Code Hint and
+        // Brainstorm ever read it.
+        await appState.attachImageToMeeting(capturedPath);
         PhoneMirrorService.getInstance().publishAck(
           'screenshot',
           'Screenshot captured — queued for AI',
@@ -18264,6 +19646,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         console.error('[PhoneMirror] phone screenshot request failed:', e);
         PhoneMirrorService.getInstance().publishAck('screenshot', 'Screenshot failed');
       }
+    } else if (cmd.type === 'detach') {
+      // The phone took a screenshot or photo off its tray. The overlay owns the
+      // tray, so it removes it there and reports the tray back; a phone photo
+      // must not then ride a later phone question on its own either.
+      appState.dropPhoneImage(cmd.path);
+      const overlay = appState.getWindowHelper().getOverlayWindow();
+      if (overlay && !overlay.isDestroyed()) overlay.webContents.send('phone-mirror:detach', { path: cmd.path });
     }
   });
 
@@ -18842,6 +20231,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     });
 
+    // Dev-only prompt recorder (electron/llm/promptDebug.ts): what each provider
+    // received on the wire, the composition notes it links to, and the adapter-
+    // level payload ring for transports that bypass fetch (groq-sdk, axios).
+    safeHandle('__e2e__:prompt-debug', async (_event, params?: { clear?: boolean; last?: number }) => {
+      const pd = require('./llm/promptDebug') as typeof import('./llm/promptDebug');
+      const pc = require('./llm/providerPayloadCapture') as typeof import('./llm/providerPayloadCapture');
+      const st = pd.getPromptDebugState();
+      const n = params?.last ?? 20;
+      const out = { success: true, enabled: pd.isPromptDebugEnabled(), records: st.records.slice(-n), notes: st.notes.slice(-n), adapter: pc.getProviderPayloadCapture().slice(-n) };
+      if (params?.clear) { pd.clearPromptDebugState(); pc.clearProviderPayloadCapture(); }
+      return out;
+    });
+
     safeHandle('__e2e__:memory-probe', async (_event, params?: { prompts?: number; clear?: boolean; transcriptTail?: number }) => {
       const g = globalThis as any;
       const store: Map<string, any> | undefined = g.__nativelyV3ConversationStateV1__;
@@ -18905,7 +20307,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const timer = setTimeout(() => { if (!done) { done = true; resolve({ success: false, timedOut: true, streamedTokens: tokens }); } }, timeoutMs);
         const handler = (globalThis as any).__nativelyGeminiChatStream;
         Promise.resolve()
-          .then(() => handler ? handler(synthEvent, params.question, params.imagePaths, undefined, undefined) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
+          .then(() => handler ? handler(synthEvent, params.question, params.imagePaths, undefined, { surface: (params as any).surface ?? 'live' }) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
           .catch((e: any) => { if (!done) { done = true; resolve({ success: false, error: e?.message, streamedTokens: tokens }); } })
           .finally(() => clearTimeout(timer));
       });

@@ -22,8 +22,8 @@
 
 import type { EvidenceScope } from '../contracts/types';
 import {
-  advance, appendTurn, resolveReference, MAX_SUMMARY_CHARS, SHARED_SESSION_BUCKET,
-  type ConversationState, type ResolvedReference,
+  advance, appendTurn, withTurnScreen, resolveReference, MAX_SUMMARY_CHARS, SHARED_SESSION_BUCKET,
+  type ConversationState, type HistoryTurn, type ResolvedReference,
 } from './conversation-state';
 
 const STORE_KEY = '__nativelyV3ConversationStateV1__';
@@ -172,13 +172,13 @@ export function recordAnswerSummary(
     /** Who asked — see HistoryTurn.from. Live surfaces pass 'meeting'. */
     from?: 'meeting';
   },
-): void {
+): HistoryTurn | null {
   const s = store();
   let cur = s.get(sessionId);
   if (!cur && question?.trim()) {
     cur = { previousQuestion: question.trim(), turns: [] } as unknown as ConversationState;
   }
-  if (!cur) return;
+  if (!cur) return null;
   // THE question this answer answers, captured by the caller at turn time.
   //
   // `cur.previousQuestion` is read HERE, at write time, and that is wrong twice
@@ -195,6 +195,8 @@ export function recordAnswerSummary(
   // this very turn.
   const turnQuestion = question?.trim() || cur.previousQuestion || '';
   const text = String(answerText ?? '');
+  const before = cur.turns ?? [];
+  const turns = appendTurn(before, turnQuestion, text, screenContext, opts?.from);
   s.set(sessionId, {
     ...cur,
     previousAnswerSummary: text.slice(0, MAX_SUMMARY_CHARS) || undefined,
@@ -203,7 +205,7 @@ export function recordAnswerSummary(
     // (rather than only overwriting a single slot) is what lets turn N see
     // turn N-2. A turn whose stream was truncated never reaches this call, so
     // it correctly leaves no half-turn behind.
-    turns: appendTurn(cur.turns ?? [], turnQuestion, text, screenContext, opts?.from),
+    turns,
     // An ANCHORED write also moves the follow-up anchor (task 7b, issue #552,
     // live-verified): a voice turn answered and recorded via the live RAG
     // path, but the next TYPED "expand on that" resolved against whichever
@@ -214,6 +216,30 @@ export function recordAnswerSummary(
     // not.
     ...(opts?.anchor && turnQuestion ? { previousQuestion: turnQuestion } : {}),
   });
+  // The turn this call wrote, for a writer that completes it later (the screen
+  // text). null when appendTurn refused it (no question, or no answer).
+  const last = turns[turns.length - 1];
+  return last && !before.includes(last) ? last : null;
+}
+
+/**
+ * Attach the screen text to an already-recorded turn (see withTurnScreen):
+ * `opts.turn`, the turn recordAnswerSummary returned, when it is still there;
+ * otherwise the newest turn that gave `answerText` and is still waiting for its
+ * text. Returns whether a turn was updated. Never adds a turn and never moves
+ * the follow-up anchor: it completes a record, it is not a new one.
+ */
+export function attachScreenToAnsweredTurn(
+  sessionId: string, answerText: string, screenText: string,
+  opts: { turn?: HistoryTurn | null; placeholder?: string } = {},
+): boolean {
+  const s = store();
+  const cur = s.get(sessionId);
+  if (!cur) return false;
+  const turns = withTurnScreen(cur.turns ?? [], answerText, screenText, opts);
+  if (!turns) return false;
+  s.set(sessionId, { ...cur, turns });
+  return true;
 }
 
 /** Resolve a question against the session's state. Pure pass-through when no state. */

@@ -85,6 +85,7 @@ describe('the selected reranker runs on the V3 retrieval path', () => {
       modesManager: { retrieveHybridRaw: async (_m, _f, opts) => { calls.push(opts); return { chunks: [] }; } },
       modeInfo: { id: 'm' }, files: [{ id: 'f1', fileName: 'sow.txt', content: 'x' }],
       allowedSourceTypes: ['REFERENCE_FILE'], tokenBudget: 3600, userId: 'u', ...(rerankSurface ? { rerankSurface } : {}),
+      wholeSmallCorpus: false, // placeholder file stands for a large one: the retriever seam is under test
     });
     return { port, calls };
   };

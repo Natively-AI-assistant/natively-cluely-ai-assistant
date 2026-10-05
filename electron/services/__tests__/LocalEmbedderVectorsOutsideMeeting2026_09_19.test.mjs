@@ -29,18 +29,34 @@ function retriever(provider) {
       getEmbeddingsWithFallback: async (t) => ({ embeddings: t.map(() => [1, 0, 0, 0]), space: `${provider}:x:4` }) });
   return { hr, embeds };
 }
-const ask = (hr, meetingActive) => hr.retrieve({ query: 'how long are audit logs kept', modeId: 'm', files: FILES, tokenBudget: 1500, topK: 20, forceDocumentGrounding: true, allowRerank: false, ...(meetingActive === undefined ? {} : { meetingActive }) });
+const ask = (hr, meetingActive, rerankSurface) => hr.retrieve({ query: 'how long are audit logs kept', modeId: 'm', files: FILES, tokenBudget: 1500, topK: 20, forceDocumentGrounding: true, allowRerank: false, ...(meetingActive === undefined ? {} : { meetingActive }), ...(rerankSurface ? { rerankSurface } : {}) });
 
 describe('local provider', () => {
-  test('meeting running → lexical-only, no query embed (the hotfix stands)', async () => {
+  // 2026-10-04 (owner's pick, E11 d): in a meeting a TYPED question queries the
+  // vectors; a heard turn keeps the July keyword search (and with it the awaited
+  // rerank, which the owner decided on 2026-10-03 to keep as it is).
+  test('meeting running, TYPED question → the vectors are queried', async () => {
     const { hr, embeds } = retriever('local');
-    const r = await ask(hr, true);
+    const r = await ask(hr, true, 'manual');
+    assert.equal(r.usedHybrid, true); assert.ok(embeds.query > 0);
+  });
+  test('meeting running, heard turn → lexical-only, no query embed (unchanged)', async () => {
+    const { hr, embeds } = retriever('local');
+    const r = await ask(hr, true, 'live');
     assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
   });
-  test('UNKNOWN meeting state → still lexical-only (conservative default)', async () => {
+  test('UNKNOWN meeting state and surface → still lexical-only (conservative default)', async () => {
     const { hr, embeds } = retriever('local');
     const r = await ask(hr, undefined);
     assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+  });
+  test('the July hotfix can be forced back for typed questions too', async () => {
+    process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL = '1';
+    try {
+      const { hr, embeds } = retriever('local');
+      const r = await ask(hr, true, 'manual');
+      assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+    } finally { delete process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL; }
   });
   test('explicitly NO meeting → the vectors are queried', async () => {
     const { hr, embeds } = retriever('local');
@@ -61,7 +77,7 @@ describe('mode port forwards the state, read at RETRIEVAL time', () => {
   const d = decide({ requestId: 'r', requestSequence: 1, surface: 'manual_chat', modeId: 'general', scope: { userId: 'u' }, sessionId: 's', manualQuestion: 'How long are audit logs retained?', hasAttachedDocuments: true, attachedFileNames: ['notes.md'] });
   const build = (meetingActive) => {
     const box = { seen: 'never-called' };
-    const port = createModeRetrievalPort({ modesManager: { retrieveHybridRaw: async (_m, _f, o) => { box.seen = o.meetingActive; return { chunks: [] }; } }, modeInfo: { id: 'm' }, files: FILES, allowedSourceTypes: policy.allowedSourceTypes, tokenBudget: 1500, userId: 'u', ...(meetingActive ? { meetingActive } : {}) });
+    const port = createModeRetrievalPort({ modesManager: { retrieveHybridRaw: async (_m, _f, o) => { box.seen = o.meetingActive; return { chunks: [] }; } }, modeInfo: { id: 'm' }, files: FILES, allowedSourceTypes: policy.allowedSourceTypes, tokenBudget: 1500, userId: 'u', wholeSmallCorpus: false /* placeholder files stand for large ones: the retriever seam is under test */, ...(meetingActive ? { meetingActive } : {}) });
     return { port, box };
   };
   const seenWith = async (meetingActive) => { const { port, box } = build(meetingActive); await port.retrieve({ decision: d }); return box.seen; };

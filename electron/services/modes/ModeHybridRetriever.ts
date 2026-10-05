@@ -8,7 +8,7 @@ import { VectorStore, ScoredChunk } from '../../rag/VectorStore';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
-import { wordsOf, buildLexicalStats, queryWeights, weightedOverlapScore, anchorTerms, anchorCoverage, corpusAnchorsQuestion, isProbeFunctionWord, type LexicalStats } from './lexicalTokens';
+import { wordsOf, buildLexicalStats, queryWeights, weightedOverlapScore, anchorTerms, anchorCoverage, corpusAnchorsQuestion, smallPoolAnchorsQuestion, isProbeFunctionWord, type LexicalStats } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks, normalizeLineEndings } from './semanticChunker';
 import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
 import { buildRerankPool, RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './rerankPool';
@@ -51,6 +51,8 @@ export interface ModeRetrievedChunk {
     anchorScore?: number;
     /** Structural/property answerability boost, same story as above. */
     answerabilityScore?: number;
+    /** Pre-E11 answerability, read by the confidence gate only (see DocumentAnswerabilityScore.gateScore). */
+    answerabilityGateScore?: number;
 }
 
 /**
@@ -77,11 +79,22 @@ export interface RetrievalConfidence {
     reasons: Array<'weak_top' | 'flat_margin' | 'thin_results' | 'lexical_degraded' | 'no_candidates'>;
 }
 
+/** See ModeRetrievedContext.degradedReason. */
+export type RetrievalDegradedReason = 'embedding_unavailable' | 'local_lexical' | 'hybrid_threw';
+
 export interface ModeRetrievedContext {
     chunks: ModeRetrievedChunk[];
     formattedContext: string;
     usedFallback: boolean;
     usedHybrid: boolean;
+    /**
+     * WHY this turn's ranking had no semantic arm, when it had none (2026-09-30).
+     * `usedFallback` cannot say it: it is `!isEmbeddingAvailable() || localLexical`
+     * and so reads FALSE when the query embed hard-failed mid-turn
+     * (`hybrid_threw`) — the most common degraded case, and the one that was
+     * invisible in the [V3] line. Absent = the semantic arm ran.
+     */
+    degradedReason?: RetrievalDegradedReason;
     /**
      * Present only when the `ragConfidenceGate` flag is on (Phase 0, observe
      * only). Optional so the default-OFF path is byte-for-byte unchanged.
@@ -329,10 +342,12 @@ const CONF_MIN_QUERY_TOKENS = 3;     // ignore trivially short queries for the "
 // total, well inside the retrieval budget.
 const RERANK_BATCH_SIZE = 6;
 
-function keylessManualRetrievalUsesLexical(): boolean {
+// The July hotfix (keyword-only retrieval while the bundled local embedder is
+// the provider and a meeting is running) can be forced back for every turn:
+// NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1. See shouldUseLexicalForLocalManualQuery.
+function keylessManualRetrievalForcedLexical(): boolean {
     const raw = String(process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL || '').trim().toLowerCase();
-    if (['0', 'false', 'off', 'disabled', 'no'].includes(raw)) return false;
-    return true;
+    return ['1', 'true', 'on', 'enabled', 'yes'].includes(raw);
 }
 
 // Escape XML special characters in text content
@@ -412,6 +427,8 @@ interface ChunkCandidate {
      */
     rerankScore?: number;
     answerabilityScore?: number;
+    /** Pre-E11 answerability, read by the confidence gate only (see DocumentAnswerabilityScore.gateScore). */
+    answerabilityGateScore?: number;
     /**
      * ANCHOR_BOOST × (coverage of the query's rare terms)² — see
      * lexicalTokens.anchorCoverage. Part of rankScore and of admission; absent
@@ -1144,17 +1161,86 @@ export class ModeHybridRetriever {
      * Corpus arbitration (lexicalTokens.corpusAnchorsQuestion): does some chunk
      * of these files hold the question's distinctive terms together? Lexical
      * and synchronous — no embedding, no model — so the orchestrator can ask it
-     * on a turn the classifier sent down the no-retrieval path. False for a
-     * pool too small for document frequencies to mean anything.
+     * on a turn the classifier sent down the no-retrieval path. A pool too
+     * small for document frequencies (under IDF_MIN_POOL chunks — every upload
+     * of a few pages) is judged by content-word share instead of returning
+     * false, which silently disabled arbitration for small files (2026-09-30).
      */
     public probeAnchors(files: ModeReferenceFile[], question: string): boolean {
         try {
-            const pool = this.getModeFileChunks(files);
-            const { stats } = this.lexicalStatsFor(pool);
-            return stats ? corpusAnchorsQuestion(question, stats) : false;
+            const probe = this.probePoolFor(files);
+            if (!probe) return false;
+            return probe.stats ? corpusAnchorsQuestion(question, probe.stats) : smallPoolAnchorsQuestion(question, probe.texts);
         } catch {
             return false; // a probe must never break a turn
         }
+    }
+
+    /**
+     * The probe's pool and statistics, reused while the files' chunk arrays are
+     * unchanged. getModeFileChunks() builds a NEW candidate array per call, so
+     * lexicalStatsFor()'s identity cache never hit for the probe, and the probe
+     * now runs on every FAST turn with files attached (including live-meeting
+     * turns) — a large file would rebuild its idf table on the main process each
+     * time. The per-file chunk arrays ARE stable (chunkCache), so they key this.
+     */
+    private probePoolCache: { chunkArrays: string[][]; texts: string[]; stats: LexicalStats | null } | null = null;
+
+    private probePoolFor(files: ModeReferenceFile[]): { texts: string[]; stats: LexicalStats | null } | null {
+        const pool = this.getModeFileChunks(files);
+        if (pool.length === 0) return null;
+        const chunkArrays = files
+            .filter((f) => f.content.trim())
+            .map((f) => this.chunkCache.get(f.id)?.chunks)
+            .filter((c): c is string[] => Array.isArray(c));
+        const cached = this.probePoolCache;
+        if (cached && cached.chunkArrays.length === chunkArrays.length
+            && cached.chunkArrays.every((c, i) => c === chunkArrays[i])) {
+            return cached;
+        }
+        const texts = pool.map((c) => c.text);
+        this.probePoolCache = { chunkArrays, texts, stats: buildLexicalStats(texts) };
+        return this.probePoolCache;
+    }
+
+    /**
+     * The lexical branches' floors, shared by the embedder-unavailable branch and
+     * the hybrid_threw catch (2026-09-30):
+     *
+     * EMPTY-LEXICAL FLOOR (2026-09-11) — zero chunks over the threshold while the
+     * corpus has some → the best-overlapping chunks at a zero threshold. Strictly
+     * positive: a query sharing NO token with the corpus keeps its honest zero.
+     *
+     * THIN-RESULTS TOP-UP, lexical (2026-09-19). With one or two chunks over the
+     * threshold the evidence budget went out mostly EMPTY — room for eight
+     * chunks, one sent — and a paraphrased question whose answer sat in the
+     * third-best chunk read as "not in the file". A weak extra costs a slot.
+     */
+    private applyLexicalFloors(
+        candidates: ChunkCandidate[],
+        allCandidates: ChunkCandidate[],
+        queryWords: Set<string>,
+        mark: (stage: string, details?: Record<string, unknown>) => void,
+        stageSuffix: string,
+    ): ChunkCandidate[] {
+        if (candidates.length === 0 && allCandidates.length > 0) {
+            const floored = this.performLexicalRetrieval(allCandidates, queryWords, 0).filter((c) => c.ftsScore > 0);
+            mark(`empty_lexical_floor${stageSuffix}`, { candidateCount: floored.length, pool: allCandidates.length });
+            return floored;
+        }
+        if (candidates.length < THIN_RESULTS_TOPUP_BELOW && allCandidates.length > candidates.length) {
+            const seen = new Set(candidates.map((c) => `${c.sourceId}#${c.chunkIndex}`));
+            const extra = this.performLexicalRetrieval(allCandidates, queryWords, 0)
+                .filter((c) => c.ftsScore > 0 && !seen.has(`${c.sourceId}#${c.chunkIndex}`))
+                .sort((a, b) => b.ftsScore - a.ftsScore)
+                .slice(0, THIN_RESULTS_TOPUP_MAX);
+            if (extra.length) {
+                const out = candidates.concat(extra);
+                mark(`thin_results_topup_lexical${stageSuffix}`, { added: extra.length, candidateCount: out.length, pool: allCandidates.length });
+                return out;
+            }
+        }
+        return candidates;
     }
 
     /** Lexical score (and anchor boost) for every candidate of `pool`, index-aligned. */
@@ -1232,21 +1318,22 @@ export class ModeHybridRetriever {
      * streaming. Use the existing lexical fallback for manual turns unless the
      * env escape hatch disables this mitigation.
      */
-    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean, meetingActive?: boolean): boolean {
+    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean, meetingActive?: boolean, surface?: 'live' | 'manual'): boolean {
         if (hasTranscript) return false;
-        if (!keylessManualRetrievalUsesLexical()) return false;
         const provider = this.embeddingPipeline.getActiveProviderName?.();
         if (provider !== 'local') return false;
         // OUTSIDE A MEETING THE PRESSURE THIS GUARDS AGAINST DOES NOT EXIST
-        // (2026-09-19, owner's decision). The hotfix is about ONNX arena pressure
-        // stacked with local STT and streaming during a live meeting — but under
-        // forceDocumentGrounding `hasTranscript` is always false, so the rule had
-        // swallowed EVERY V3 turn: a key-less user's vectors were built and never
-        // queried. Measured: of 162 questions at 70k tokens the answer chunk
-        // reached the prompt for 149 lexical-only vs 160 with the same MiniLM
-        // vectors. Only an EXPLICIT "no meeting" lifts it; an unknown state keeps
-        // the conservative behaviour.
-        return meetingActive !== false;
+        // (2026-09-19, owner's decision): only an EXPLICIT "no meeting" lifts it.
+        if (meetingActive === false) return false;
+        if (keylessManualRetrievalForcedLexical()) return true;
+        // IN A MEETING (2026-10-04, owner's pick "smart search for typed too"): a
+        // TYPED question queries the vectors. A heard turn keeps the keyword
+        // search it has had since July — with it the confidence gate reads
+        // "low" and the bundled rerank is awaited, which the owner decided on
+        // 2026-10-03 to keep as it is. Lifting the rule for every turn (the
+        // first version of this change) gave heard turns vector scores, the
+        // gate stopped firing, and the rerank stopped running on them.
+        return surface !== 'manual';
     }
 
     /**
@@ -1343,10 +1430,18 @@ export class ModeHybridRetriever {
         // Adding only the positive answerability term never LOWERS a chunk's
         // confidence, so a genuinely weak retrieval still trips the gate. Generic:
         // no document, entity, or question text is special-cased.
+        // THE GATE READS THE PRE-E11 SCORE (2026-10-04). E11 made a named match
+        // worth more in the RANKING; read here, the higher top score satisfied
+        // this gate on most heard turns and the bundled rerank stopped being
+        // awaited (heard pre-dispatch 500 ms → 24 ms on the dev run) — the
+        // opposite of the owner's decision of 2026-10-03 to keep it as it is.
+        // The two best gate scores are taken over the whole list, because the
+        // list is ordered by the new ranking score.
         const scoreOf = (c: ChunkCandidate) =>
-            this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + Math.max(0, c.answerabilityScore ?? 0);
-        const topScore = sorted.length > 0 ? scoreOf(sorted[0]) : 0;
-        const secondScore = sorted.length > 1 ? scoreOf(sorted[1]) : 0;
+            this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + Math.max(0, c.answerabilityGateScore ?? c.answerabilityScore ?? 0);
+        const gateScores = sorted.map(scoreOf).sort((x, y) => y - x);
+        const topScore = gateScores[0] ?? 0;
+        const secondScore = gateScores[1] ?? 0;
         const margin = topScore - secondScore;
         const clearedCount = sorted.length;
         const reasons: RetrievalConfidence['reasons'] = [];
@@ -1529,6 +1624,8 @@ export class ModeHybridRetriever {
         queryEmbedRetryBudgetMs?: number;
         /** Is a meeting / STT session running? Only an explicit `false` lets the bundled embedder's vectors be queried. */
         meetingActive?: boolean;
+        /** Packer cost per item beyond its text, counted against tokenBudget (E11). */
+        perItemOverheadTokens?: number;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1542,6 +1639,7 @@ export class ModeHybridRetriever {
             rerankDeadlineMs,
             rerankPoolMultiplier,
             queryEmbedRetryBudgetMs,
+            perItemOverheadTokens = 0,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -1632,7 +1730,8 @@ export class ModeHybridRetriever {
 
         let candidates: ChunkCandidate[] = [];
 
-        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript, params.meetingActive);
+        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript, params.meetingActive, rerankSurface);
+        let degradedReason: RetrievalDegradedReason | undefined;
 
         const h4StageTrace = process.env.NATIVELY_E2E === '1'
             && process.env.NATIVELY_H4_STAGE_TRACE === '1';
@@ -1691,9 +1790,16 @@ export class ModeHybridRetriever {
                     modeId: params.modeId,
                     errorClass: error instanceof Error ? error.constructor.name : typeof error,
                 });
+                degradedReason = 'hybrid_threw';
                 candidates = this.performLexicalRetrieval(allCandidates, queryWords, toLexicalThreshold(adaptiveThreshold));
+                // Same floors as the embedder-unavailable branch (2026-09-30): this
+                // catch is where a query embed that hard-failed MID-TURN lands, and
+                // it handed the model nothing whenever the lexical threshold kept
+                // no chunk — the one branch of the three without a floor.
+                candidates = this.applyLexicalFloors(candidates, allCandidates, queryWords, markH4HybridStage, '_after_throw');
             }
         } else {
+            degradedReason = usingLexicalForLocalManualQuery ? 'local_lexical' : 'embedding_unavailable';
             if (usingLexicalForLocalManualQuery) {
                 console.warn('[ModeHybridRetriever] Local ONNX provider active for manual query; using lexical fallback');
             } else {
@@ -1718,27 +1824,7 @@ export class ModeHybridRetriever {
             // still judged for answerability downstream.
             // Strictly positive: a query sharing NO token with the corpus keeps
             // its honest zero (the confidence signal reports no_candidates).
-            if (candidates.length === 0 && allCandidates.length > 0) {
-                candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0).filter((c) => c.ftsScore > 0);
-                markH4HybridStage('empty_lexical_floor', { candidateCount: candidates.length, pool: allCandidates.length });
-            } else if (candidates.length < THIN_RESULTS_TOPUP_BELOW && allCandidates.length > candidates.length) {
-                // THIN-RESULTS TOP-UP, lexical branch (2026-09-19). The hybrid
-                // branch has had this since 2026-09-11; the branch a key-less
-                // user lives in did not. With one or two chunks over the
-                // threshold the evidence budget went out mostly EMPTY — room for
-                // eight chunks, one sent — and a paraphrased question whose
-                // answer sat in the third-best chunk read as "not in the file".
-                // An unused budget buys nothing; a weak extra costs a slot.
-                const seen = new Set(candidates.map((c) => `${c.sourceId}#${c.chunkIndex}`));
-                const extra = this.performLexicalRetrieval(allCandidates, queryWords, 0)
-                    .filter((c) => c.ftsScore > 0 && !seen.has(`${c.sourceId}#${c.chunkIndex}`))
-                    .sort((a, b) => b.ftsScore - a.ftsScore)
-                    .slice(0, THIN_RESULTS_TOPUP_MAX);
-                if (extra.length) {
-                    candidates = candidates.concat(extra);
-                    markH4HybridStage('thin_results_topup_lexical', { added: extra.length, candidateCount: candidates.length, pool: allCandidates.length });
-                }
-            }
+            candidates = this.applyLexicalFloors(candidates, allCandidates, queryWords, markH4HybridStage, '');
         }
 
         markH4HybridStage('ranking_complete', { candidateCount: candidates.length });
@@ -1827,6 +1913,7 @@ export class ModeHybridRetriever {
                         ? {
                             ...c,
                             answerabilityScore: (c.answerabilityScore ?? 0) + 0.6,
+                            answerabilityGateScore: (c.answerabilityGateScore ?? c.answerabilityScore ?? 0) + 0.6,
                             answerabilityBoosts: [...(c.answerabilityBoosts ?? []), 'positional_locator_match'],
                         }
                         : c));
@@ -1882,6 +1969,7 @@ export class ModeHybridRetriever {
                     return {
                         ...candidate,
                         answerabilityScore: (candidate.answerabilityScore ?? 0) + 1.2,
+                        answerabilityGateScore: (candidate.answerabilityGateScore ?? candidate.answerabilityScore ?? 0) + 1.2,
                         answerabilityBoosts: [...(candidate.answerabilityBoosts ?? []), 'table_of_contents_navigation_match'],
                     };
                 });
@@ -2023,7 +2111,7 @@ export class ModeHybridRetriever {
         // guarantee each file contributes its best chunk so a large dataset can't
         // starve a small one out of the retrieved set.
         const guaranteePerFile = forceDocumentGrounding && files.length > 1;
-        const selected = this.enforceTokenBudget(deduped, tokenBudget, reranked, topK, guaranteePerFile, forceDocumentGrounding);
+        const selected = this.enforceTokenBudget(deduped, tokenBudget, reranked, topK, guaranteePerFile, forceDocumentGrounding, perItemOverheadTokens);
         markH4HybridStage('selection_complete', { chunkCount: selected.length });
 
         // Format output with citations
@@ -2088,6 +2176,7 @@ export class ModeHybridRetriever {
                 formattedContext: finalContext,
                 usedFallback,
                 usedHybrid: !usedFallback,
+                ...(degradedReason ? { degradedReason } : {}),
                 ...(confidence ? { confidence } : {})
             };
         }
@@ -2109,6 +2198,7 @@ export class ModeHybridRetriever {
             formattedContext,
             usedFallback,
             usedHybrid: this.isEmbeddingAvailable(),
+            ...(degradedReason ? { degradedReason } : {}),
             ...(confidence ? { confidence } : {})
         };
     }
@@ -2610,6 +2700,7 @@ export class ModeHybridRetriever {
             return {
                 ...c,
                 answerabilityScore: a.score + targetBoost,
+                answerabilityGateScore: a.gateScore + targetBoost,
                 answerabilityBoosts: targetBoost > 0
                     ? [...a.boosts, `target_section:${targetBoost.toFixed(2)}`]
                     : a.boosts,
@@ -2756,7 +2847,7 @@ export class ModeHybridRetriever {
      * Enforce token budget by selecting highest-scoring chunks that fit. When
      * `byRerank` is true, "highest" is the cross-encoder order.
      */
-    private enforceTokenBudget(candidates: ChunkCandidate[], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K, guaranteePerFile = false, forceDocumentGrounding = false): ChunkCandidate[] {
+    private enforceTokenBudget(candidates: ChunkCandidate[], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K, guaranteePerFile = false, forceDocumentGrounding = false, perItemOverheadTokens = 0): ChunkCandidate[] {
         const sorted = [...candidates].sort((a, b) => this.rankScore(b, byRerank) - this.rankScore(a, byRerank));
 
         const selected: ChunkCandidate[] = [];
@@ -2764,7 +2855,11 @@ export class ModeHybridRetriever {
         let totalTokens = 0;
         const tryAdd = (candidate: ChunkCandidate): boolean => {
             if (picked.has(candidate)) return false;
-            const tokens = estimateTokens(candidate.text);
+            // What the packer will charge for this item: its text AND its tag
+            // (perItemOverheadTokens, E11). Counting the text alone selected
+            // 1–2 more chunks than the packer could fit; it then dropped the
+            // lowest-ranked ones whole.
+            const tokens = estimateTokens(candidate.text) + perItemOverheadTokens;
             if (totalTokens + tokens > budget && selected.length > 0) return false;
             selected.push(candidate);
             picked.add(candidate);

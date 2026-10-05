@@ -99,13 +99,17 @@ describe('code hint with V3', () => {
   });
 });
 
-describe('the vision guard still fires first', () => {
-  test('a model without image support refuses before any V3 work', async () => {
+describe('Code Hint does not second-guess the vision chain (2026-10-01)', () => {
+  test('a text-only SELECTED model still hands the screenshot to streamChat', async () => {
+    // streamChat sends every image-bearing turn through the vision chain, which
+    // answers with any configured provider that reads images. The old gate
+    // refused here, so a DeepSeek user with a Gemini key could never get a hint.
     const h = fakeHelper();
-    h.getCapabilities = () => ({ supportsImages: false, tier: 'local-small', name: 'tiny' });
+    h.getCapabilities = () => ({ supportsImages: false, tier: 'cloud', name: 'deepseek-v4-flash' });
     const out = await drain(new CodeHintLLM(h).generateStream(['/tmp/a.png'], 'two sum', 'screenshot', undefined,
       { system: 'S', user: 'U' }));
-    assert.equal(h.calls.length, 0, 'must not call the provider at all');
-    assert.match(out.join(''), /doesn't support image input/);
+    assert.equal(h.calls.length, 1);
+    assert.deepEqual(h.calls[0][ARG.images], ['/tmp/a.png']);
+    assert.doesNotMatch(out.join(''), /doesn't support image input/);
   });
 });

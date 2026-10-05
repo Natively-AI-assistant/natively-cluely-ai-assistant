@@ -23,6 +23,12 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// The claim verifier (llm/claimVerifier.ts, 2026-09-30) follows every spoken General answer with one more provider
+// call. These tests are about another guard and hand the provider a fixed queue of replies, so that call would take
+// the next reply in the queue and its text would be accepted as the verifier's edit. Off here; the verifier has its
+// own suite (electron/llm/__tests__/ClaimVerifier2026_09_30.test.mjs).
+process.env.NATIVELY_CLAIM_VERIFIER = '0';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const enginePath = path.resolve(__dirname, '../../../dist-electron/electron/IntelligenceEngine.js');
 const sessionPath = path.resolve(__dirname, '../../../dist-electron/electron/SessionTracker.js');

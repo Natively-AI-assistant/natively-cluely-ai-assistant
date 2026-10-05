@@ -30,7 +30,13 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import url from 'node:url';
+import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
+
+// The on-disk app identity is disguised at build time (productName, sourced from
+// scripts/disguise-name.cjs) — the packaged .app is NOT "Natively.app".
+const require = createRequire(import.meta.url);
+const APP_NAME = require('./disguise-name.cjs').darwin;
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -151,12 +157,12 @@ check('update-available handler is gated by isRealUpgrade', () => {
   }
 });
 
-// 7. release manifest pre-flight: release/ dir shouldn't contain a Natively.app
+// 7. release manifest pre-flight: release/ dir shouldn't contain a packaged app
 //    whose app-update.yml points at a channel other than "latest".
 check('packaged app-update.yml has provider=github + releaseType=release', () => {
   const candidates = [
-    path.join(repoRoot, 'release', 'mac', 'Natively.app', 'Contents', 'Resources', 'app-update.yml'),
-    path.join(repoRoot, 'release', 'mac-arm64', 'Natively.app', 'Contents', 'Resources', 'app-update.yml'),
+    path.join(repoRoot, 'release', 'mac', `${APP_NAME}.app`, 'Contents', 'Resources', 'app-update.yml'),
+    path.join(repoRoot, 'release', 'mac-arm64', `${APP_NAME}.app`, 'Contents', 'Resources', 'app-update.yml'),
   ];
   let found = false;
   for (const f of candidates) {
@@ -177,7 +183,7 @@ check('packaged app-update.yml has provider=github + releaseType=release', () =>
     }
   }
   if (!found) {
-    console.log('    skipped (no packaged Natively.app found in release/)');
+    console.log(`    skipped (no packaged ${APP_NAME}.app found in release/)`);
   }
 });
 

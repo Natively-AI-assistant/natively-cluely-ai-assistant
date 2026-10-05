@@ -30,21 +30,16 @@ export class CodeHintLLM {
         v3?: { system: string; user: string }
     ): AsyncGenerator<string> {
         try {
-            // Vision-required + small model lacking image support → fail loud, not malformed.
-            if (imagePaths?.length) {
-                const caps = this.llmHelper.getCapabilities();
-                if (!caps.supportsImages) {
-                    // The advice has to match where the model actually runs. This
-                    // said "The current local model (…) — switch to llava" for a
-                    // cloud model reached through a LiteLLM proxy, which is both
-                    // wrong and unactionable; the tier says which sentence applies.
-                    const isLocal = caps.tier === 'local-small' || caps.tier === 'local-large';
-                    yield isLocal
-                        ? `The current local model (${caps.name}) doesn't support image input. Switch to a vision-capable model (e.g. llava, llama3.2-vision, gemma3) or use a cloud model.`
-                        : `The current model (${caps.name}) doesn't support image input. Pick a vision-capable model in Settings — through a gateway, that means one whose upstream accepts images (e.g. a GPT-4o, Claude, or Gemini route).`;
-                    return;
-                }
-            }
+            // No capability gate here (2026-10-01). streamChat sends every
+            // image-bearing turn through the vision chain, the same path Ask AI
+            // takes with a screenshot. Gating on the SELECTED model refused
+            // screenshots the chain would have answered: a DeepSeek user with a
+            // Gemini key never got a hint.
+            //
+            // A selected gateway model that its catalogue (OpenRouter, 9Router)
+            // or its one-time image test marks text-only is not seated. One
+            // still UNTESTED is seated as before while its background test runs
+            // — docs/plans/2026-10-01-vision-capability-design.md.
 
             const message = buildCodeHintMessage(
                 questionContext ?? null,
@@ -53,7 +48,10 @@ export class CodeHintLLM {
             );
 
             const promptOverride = v3?.system
-                ?? resolveV2SystemPrompt({ action: 'code_hint', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+                // A hint is a nudge, not a solution (2026-09-29): code_hint attaches
+                // the coding contract by itself, and without a shape that was the
+                // six mandatory sections beside "give the smallest useful nudge".
+                ?? resolveV2SystemPrompt({ action: 'code_hint', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()), codingShape: 'approach' })
                 ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_CODE_HINT_PROMPT : CODE_HINT_PROMPT);
             // V3 composed the turn content too, evidence and all, so it must not
             // be re-fitted: fitContextForCurrentModel would truncate a governed

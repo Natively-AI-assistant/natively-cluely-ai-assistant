@@ -1,0 +1,271 @@
+{
+ "batch": "b026-looking-for-work",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FJOB-CTX-G2": {
+   "title": "Brackenlight Robotics interview prep notes",
+   "text": "BRACKENLIGHT ROBOTICS - PREP NOTES FOR THE MOBILE ENGINEER LOOP\nRole: Senior Mobile Engineer, Fleet Tools. Interviews on Thursday.\n\nWHAT THEY DO\n- Brackenlight makes Wren, an autonomous mobile robot that moves totes around mid-size warehouses. About 2,600 Wren units are deployed at 70 customer sites.\n- Founded in 2020 in Pittsburgh. CEO is Adaeze Holloway; VP Engineering is Tomasz Brandt.\n- The Fleet Tools team builds the technician app that field techs use to diagnose, update and recover robots on the warehouse floor.\n\nRECENT NEWS\n- In June 2026 they issued a voluntary firmware recall affecting 1,200 Wren units after a bug in the obstacle map cache caused robots to stop and block aisles. No injuries. The fix was pushed over the air, but about 180 units at sites with locked-down networks had to be updated by technicians with a laptop and a USB cable.\n- In their July blog post, Tomasz wrote that the recall \"showed us our technicians are our update channel of last resort, and our tooling wasn't ready for that.\" They are now building offline firmware updates into the technician app.\n- They opened a second office in Columbus in 2025, mostly for customer support.\n\nTHE TEAM (from the recruiter)\n- Fleet Tools is 5 engineers: 2 mobile, 2 backend, 1 embedded liaison. The hiring manager is Rosalind Eke.\n- The technician app is React Native. Warehouses often have dead zones between steel racks.\n\nINTERVIEW LOOP\n1. Hiring manager chat with Rosalind (45 min).\n2. Mobile system design: \"design offline firmware delivery to robots through the technician app.\"\n3. Pairing session in TypeScript.\n4. Values interview. Their three values are \"Stop the line\", \"Leave the floor better\" and \"Say what you saw.\"\n\nMY ANGLE\n- Saltmarsh is almost the same shape of problem: field workers, no signal, data that must not be lost or duplicated.\n- The recall story is the obvious hook for why now.\n- \"Say what you saw\" lines up with the photo compression rollback story.\n\nQUESTIONS TO ASK\n- How do technicians find out an update failed halfway?\n- What does Rosalind want the app to do in 12 months that it can't do today?"
+  },
+  "FJOB-CTX-G1": {
+   "title": "Portfolio case study: Saltmarsh offline field inspections",
+   "text": "PORTFOLIO CASE STUDY - SALTMARSH: OFFLINE-FIRST FIELD INSPECTIONS\nMy role: mobile and sync engineer (1 of 3 engineers). Timeline: April 2024 - January 2025.\n\nTHE PROBLEM\nFerrow County Water Authority sends inspectors out to check backflow valves, hydrants and meter vaults. Before Saltmarsh they filled in paper forms, then retyped them at the office. About a third of the sites have no cell signal at all, so an online-only app was never going to work. There were 42 inspectors when we started.\n\nWHAT WE BUILT\n- A React Native app (iOS and Android) that stores every inspection in SQLite on the device and works fully offline.\n- A small Go sync service in front of PostgreSQL.\n- A web dashboard for supervisors (built by my teammate Ines Carvalho; I only touched the export endpoint).\n\nTHE PART I OWNED: THE SYNC ENGINE\n- Every record is split into fields, and each field carries its own version stamp: a hybrid logical clock value plus the device ID.\n- When two inspectors edit the same inspection offline, the server merges field by field. If they changed different fields, both edits survive. If they changed the same field, the higher clock wins and the losing value is kept in a \"conflict shelf\" that the supervisor sees on the dashboard.\n- Photos never conflict: they are append-only and keyed by a content hash, so a re-upload after a dropped connection is a no-op.\n- Sync runs in batches of 50 records with a resumable cursor, so a sync that dies halfway through a canyon picks up where it stopped.\n- In the first 6 months after launch, 214 field-level conflicts went to the conflict shelf. Supervisors overrode the automatic winner 9 times.\n\nRESULTS\n- Average time per inspection went from 26 minutes to 11 minutes (the county's own time study, 3 weeks before and 3 weeks after).\n- Crash-free sessions went from 97.1% in the beta to 99.6% at the 1.0 release.\n- Retyping at the office went away entirely; the county reassigned one clerk position to scheduling.\n\nWHAT WENT WRONG\n- In version 1.3 I shipped on-device photo compression to cut upload size. It worked, but it ran on the main thread at full resolution and drained batteries: inspectors reported phones dying by early afternoon. I rolled it back within 4 days, then moved compression to a background worker that only runs while charging. My lesson: I tested on a new phone plugged into my desk, not on a three-year-old phone in the field in August.\n- I underestimated how long the Android permission flow for background location would take to get through review. We slipped the 1.0 date by two weeks.\n\nWHAT I WOULD DO DIFFERENTLY\n- Put a field test with real inspectors into every release, not just the big ones.\n- Write the conflict rules down as a one-page spec earlier. We argued about \"last writer wins\" for weeks before agreeing on per-field clocks.\n\nSTACK\nReact Native, TypeScript, SQLite (op-sqlite), Go, PostgreSQL, Sentry, GitHub Actions, Fastlane."
+  },
+  "JOB-CTX-G1": {
+   "title": "Candidate resume: Nadia Kovacs",
+   "text": "NADIA KOVACS\nSenior Program Manager, Supply Chain Software\nColumbus, Ohio | nadia.kovacs@example.com | 555-0142\n\nSUMMARY\nProgram manager with nine years in warehouse, returns and fulfilment software. I take messy multi-site rollouts and turn them into programs with a plan, a budget and a weekly rhythm that operations teams actually follow. Strongest at working between engineering, warehouse floor staff and vendors.\n\nEXPERIENCE\n\nTallgrass Logistics - Senior Program Manager, Returns Platform (Sep 2021 - present)\n- Led the migration of 14 regional warehouses onto a single returns-processing platform over 16 months, on a $2.4M program budget, with a cross-functional team of 9 (4 engineers, 3 warehouse leads, 1 analyst, 1 vendor manager).\n- Proposed a same-day triage rule for returned items after shadowing night-shift staff for two weeks. Piloted at two sites, then rolled out to all 14. Average returns processing time fell from 6.4 days to 4.4 days (31 percent).\n- Renegotiated terms with 3 carriers, saving about $610,000 a year.\n- Missed the original go-live for the Midwest cluster by six weeks in 2023 after underestimating vendor API rate limits. Rebuilt the cutover plan, added a load-testing gate that is now required on every program, and shipped the cluster with no customer-facing outage.\n- Mentored 3 junior coordinators; two have since been promoted.\n\nFernhill Software - Program Manager, Warehouse Systems (Jun 2018 - Feb 2021)\n- Delivered a handheld scanner rollout across 6 sites and 220 devices, on schedule and 4 percent under a $780,000 budget.\n- Built a weekly operations dashboard adopted by 40 site managers; escalations to engineering dropped 22 percent in the first two quarters.\n- Ran the customer-facing incident review for warehouse outages, a role I took on because nobody else owned it.\n\nCobalt Bay Systems - Operations Analyst (Jul 2015 - May 2018)\n- Built a forecasting model for inbound freight that improved dock scheduling accuracy by 12 percent.\n- Wrote the first standard operating procedures for the Portland cross-dock, later reused at two other sites.\n\nCAREER BREAK (Feb 2021 - Sep 2021)\nRelocated from Portland to Columbus and spent time supporting a parent through a health issue. Completed the Supply Chain Analytics Certificate (120 hours, Ridgemont Extension) and built a Python simulation of warehouse slotting that I later used at Tallgrass.\n\nEDUCATION AND CERTIFICATIONS\nB.S. Industrial Engineering, Ridgemont State University, 2015\nProject Management Professional (PMP), 2019\nSupply Chain Analytics Certificate, Ridgemont Extension, 2021\n\nSKILLS\nProgram planning, vendor negotiation, SQL, Python (analysis and simulation), Jira, dashboard design, stakeholder communication, incident review facilitation.\n\nVOLUNTEER\nCentral Ohio Food Network, logistics volunteer (2019 - present). Rebuilt the volunteer scheduling process and reduced no-shows by 35 percent."
+  }
+ },
+ "items": [
+  {
+   "jid": "dbb14cc1d768",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So where in that range are you hoping to land?",
+   "conversation": [
+    "INTERVIEWER: For context, the posted band for this role is ninety-five to one hundred and ten thousand.",
+    "USER (spoken): Thanks for sharing that.",
+    "INTERVIEWER: We try to be transparent up front."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd be looking at the upper part of that range, around the one hundred and ten thousand mark, based on the scope of the role and what I bring to it. That said, I'm flexible on the exact number if the overall package makes sense."
+  },
+  {
+   "jid": "0745fd0202ec",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Good. So where do you want your career to go over the next few years?",
+   "conversation": [
+    "INTERVIEWER: Sorry about the delay, my last meeting ran over. Did you find parking okay?",
+    "USER (spoken): Yes, no problem at all, the garage was easy to find.",
+    "INTERVIEWER: Great, glad to hear it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I want to keep growing in the direction I'm already heading, taking on more ownership of the work and getting better at the parts I'm still learning. Over the next few years I'd like to be someone the team trusts with the harder problems, and this role looks like a good place to do that."
+  },
+  {
+   "jid": "20f868527f39",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let me think about it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's fair. While you think it over, is there anything I can clarify about the role or what I'd bring to it? I'm happy to go into more detail on any part that would help you decide."
+  },
+  {
+   "jid": "fd6d4f3b5eb0",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "What should I say to them?",
+   "conversation": [
+    "INTERVIEWER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "INTERVIEWER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The date was already tight, so a two-week slip from a vendor API change is worth taking seriously. I'd want to know what we can pull forward or descope to protect the original date, and what we do so a silent vendor change can't surprise us again. Let's agree on that today."
+  },
+  {
+   "jid": "a68dc70cb583",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What would your last manager say is your biggest weakness?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "My last manager would probably say I take on too much myself before asking for help. I care a lot about getting things right, so my instinct is to dig in and solve it rather than pull someone else in early. It's something I've worked on, being quicker to say I'm stuck and to bring the right person in sooner. I'd rather hear that than something I can't act on, and honestly it's a fair one."
+  },
+  {
+   "jid": "7ac0465de8ea",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a real weakness, not 'I work too hard.' Something that actually cost you, what happened, and what you've done about it since.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The weakness I've had to work on is over-preparing. I'd rather sit with a problem longer than I should, which has cost me time I could have spent moving. What's helped is setting a decision point up front and holding myself to it, then treating the first version as something to improve rather than perfect."
+  },
+  {
+   "jid": "8939f1e997f4",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Give me a five-year answer that doesn't sound rehearsed.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a rigid five-year plan, honestly. I want to keep getting better at the work I'm doing now, take on more ownership over time, and grow into a role where I'm helping shape decisions, not just executing them. What matters most to me is being somewhere I can keep learning."
+  },
+  {
+   "jid": "df2642384387",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What are your salary expectations for this role?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd rather not anchor on a number before I understand the full scope of the role. What range have you set aside for this position? If it helps, I'm open on the specifics and more focused on the work and the team. Once I know the band, I can tell you whether it works on my side."
+  },
+  {
+   "jid": "7dc9d3e5f486",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why did you only stay a year at your last company?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd rather be somewhere I can commit for the long run, so a short stay isn't something I take lightly. What I look at is whether the work is still growing and whether I'm still learning. When that stalls, I'd rather be honest about it than coast."
+  },
+  {
+   "jid": "411c0a639819",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What was the result?",
+   "conversation": [
+    "INTERVIEWER (heard): Tell me about a time you and a coworker completely disagreed on how to solve a problem.",
+    "NATIVELY: When a coworker and I see a problem differently, I try to get us both looking at the same evidence before we argue about solutions. So I'll ask what outcome each approach is actually optimizing for, and where we agree on the goal, the disagreement usually narrows to a real tradeoff: speed versus durability, or a smaller change now versus a bigger one later. I'd rather name that tradeoff out loud than keep debating in the abstract.\n\nIf we still don't land in the same place, I'm fine letting the person closest to the work make the call, as long as we agree on how we'll know it's working and when we'd revisit it. What I care about is that we leave the room aligned on the decision, not that I win it.",
+    "INTERVIEWER (heard): And what did you do about it?",
+    "NATIVELY: I asked what each approach was actually optimizing for, and once we agreed on the goal, the disagreement came down to a real tradeoff. I named it out loud, we agreed on how we'd know it was working and when we'd revisit, and then I let the person closest to the work make the call."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The result was that we stopped arguing about whose solution was better and started arguing about the actual tradeoff, which we could settle. We agreed on how we'd measure it and when we'd check back, and the person closest to the work made the call. We left aligned, and it held."
+  },
+  {
+   "jid": "db27bcbb132e",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a time you disagreed with your manager and it didn't go smoothly.",
+   "conversation": [
+    "INTERVIEWER: Before we start, I should say we're running about ten minutes behind, sorry.",
+    "USER (spoken): No worries at all.",
+    "INTERVIEWER: Thanks. I'll try to make up the time."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a specific blow-up story I'd want to hand you, so let me be straight about how I handle it. When I disagree with a manager, I raise it directly and privately, with the reasoning and the tradeoff as I see it, and I try to separate the decision from the relationship. If it still doesn't go my way, I commit to the call and make it work, and I'd rather keep the disagreement visible than pretend I agree. What I'd want to know from you is how decisions actually get made here when the team isn't aligned."
+  },
+  {
+   "jid": "894e6f6e6995",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "rosalind just asked why brackenlight and why this team. give me something short that uses my notes and connects it to saltmarsh, and one question i can ask her back",
+   "conversation": [],
+   "evidence_ids": [
+    "FJOB-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Brackenlight because the recall showed the technician app is the update channel of last resort, and that's the same shape of problem I worked on at Saltmarsh: field workers, no signal, data that can't be lost or duplicated. Fleet Tools is where that problem actually lives, and it's a five-person team where the mobile work is the product, not a side surface.\n\nOne question back: what does Rosalind want the app to do in 12 months that it can't do today?"
+  },
+  {
+   "jid": "6d1ca3812ab0",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Who needs to know about this?",
+   "conversation": [
+    "INTERVIEWER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "INTERVIEWER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The people who need to know are whoever's downstream of the integration, plus anyone tracking the timeline. I'd flag it to the vendor-facing side so they can push back on the API change, and give the team a heads-up that the date moves by about two weeks. I'd rather they hear it from me early than find out when something doesn't land."
+  },
+  {
+   "jid": "e67c013ec4d9",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "This role is based in our Denver office. Would you be open to relocating?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, I'm open to relocating for the right role, and Denver works well for me. I'd want to understand the timeline and whether there's any relocation support, but I'm ready to make that move."
+  },
+  {
+   "jid": "4bfa43f836d1",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why should we hire you over the other candidates we're seeing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "What I'd bring is a habit of owning the outcome, not just my part of it. I ask a lot of questions early, I flag problems before they get expensive, and I'd rather be the person who says the hard thing than let it slide. I can't speak to what other candidates bring, but I know how I work, and I'd rather show that than claim it."
+  },
+  {
+   "jid": "c8c5da179606",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What did the county end up paying for Saltmarsh, and did it get rolled out to any other counties after that?",
+   "conversation": [],
+   "evidence_ids": [
+    "FJOB-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have the contract value in front of me, so I can't give you a number for what the county paid. What I can tell you is the impact: average inspection time dropped from 26 minutes to 11, and the county reassigned a clerk position to scheduling. On other counties, I'd have to check before I say anything."
+  },
+  {
+   "jid": "fee24dd8c285",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Who was your last manager, what would they say about you if I called them, and would you be comfortable with me contacting them today?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "My last manager would tell you I'm straightforward to work with, I take ownership of problems instead of waiting to be told, and I'm honest when something isn't going well. I'd be glad for you to reach out, and I'll share their contact details so you can set that up directly."
+  },
+  {
+   "jid": "e5df49675147",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a time you and a coworker completely disagreed on how to solve a problem.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "When a coworker and I see a problem differently, I try to get us both looking at the same evidence before we argue about solutions. So I'll ask what outcome each approach is actually optimizing for, and where we agree on the goal, the disagreement usually narrows to a real tradeoff: speed versus durability, or a smaller change now versus a bigger one later. I'd rather name that tradeoff out loud than keep debating in the abstract.\n\nIf we still don't land in the same place, I'm fine letting the person closest to the work make the call, as long as we agree on how we'll know it's working and when we'd revisit it. What I care about is that we leave the room aligned on the decision, not that I win it."
+  },
+  {
+   "jid": "2eede89c89a6",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "What are the next steps?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the specifics of this process in front of me, so I'd rather confirm than guess. Let me check where things stand on my side and what the team's timeline looks like, and I'll follow up with you directly today with the exact next steps."
+  },
+  {
+   "jid": "fafcf3411a42",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Which achievement on my resume should I lead with if this is a product role?",
+   "conversation": [],
+   "evidence_ids": [
+    "JOB-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "For a product role, I'd lead with the same-day triage rule. I spent two weeks shadowing night-shift staff, found the real bottleneck, piloted the change at two sites, then rolled it out to all 14, and returns processing time dropped from 6.4 days to 4.4 days. That's the one that shows I find a user problem, test it small, and scale what works."
+  }
+ ]
+}

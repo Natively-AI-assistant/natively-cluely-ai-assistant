@@ -69,6 +69,12 @@ export interface ModeRetrievalOptions {
     /** See ModeHybridRetriever.shouldUseLexicalForLocalManualQuery. */
     meetingActive?: boolean;
     /**
+     * What the prompt packer charges per evidence item on top of its text (the
+     * <evidence …> tag), in estimated tokens. Counted against tokenBudget so the
+     * retriever never selects more than the packer can fit (2026-10-04, E11).
+     */
+    perItemOverheadTokens?: number;
+    /**
      * The caller's own race deadline for the whole retrieval, in ms. A rerank
      * whose budget cannot fit inside it is skipped rather than started and
      * discarded (rerankBudget.ts → rerankBudgetFitsDeadline). Absent = not raced.
@@ -1879,6 +1885,7 @@ export class ModeContextRetriever {
             rerankPoolMultiplier: options.rerankPoolMultiplier,
             queryEmbedRetryBudgetMs: options.queryEmbedRetryBudgetMs,
             meetingActive: options.meetingActive,
+            perItemOverheadTokens: options.perItemOverheadTokens,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

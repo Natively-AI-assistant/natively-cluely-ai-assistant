@@ -1,0 +1,303 @@
+{
+  "mode": "general",
+  "partition": "final-hard",
+  "contexts": [
+    {
+      "id": "FGENH-CTX-G1",
+      "kind": "grounded",
+      "title": "Condo association board meeting minutes",
+      "file_name": "harbor-point-board-minutes-sept.txt",
+      "text": "Harbor Point Condominium Association - Board Meeting Minutes\nDate: Thursday, September 24\nLocation: Community room, Building B\nPresent: Linda Marsh (President), Owen Castellano (Treasurer), Priya Nair (Secretary), Hal Jensen, Beatriz Soto. Also present: Renee Okoro (property manager, Seaside Management) and 11 owners.\nQuorum confirmed. Meeting called to order at 7:02 pm.\n\n1. Approval of August minutes\nApproved unanimously without changes.\n\n2. Treasurer's report\nOwen Castellano reported the operating account is on budget for the year. The reserve fund balance is $179,500. Delinquent dues stand at three units, total $4,210; the management company has sent second notices.\n\n3. Building A elevator\nThe Building A elevator has been out of service intermittently since July because of a failing controller. Two quotes were received. The board voted 4-1 (Jensen opposed) to accept the Carver Lift Services quote of $38,500 to replace the controller, paid from the reserve fund. Carver estimates the work takes six to eight weeks once parts arrive; parts are on order and no arrival date has been given. Renee Okoro will post updates in the lobby and by email.\n\n4. Roof replacement, Buildings A and B\nThree bids were reviewed for full roof replacement on both buildings:\n- Kessler Roofing: $212,000\n- Summit Exteriors: $236,500\n- Delgado & Sons: $249,000\nThe board voted unanimously to move forward with Kessler Roofing, subject to reference checks and a signed contract. A start date will be negotiated after the contract is signed. The treasurer noted that after the elevator payment the reserve fund cannot cover the full roof cost. A special assessment across all 64 units was discussed at length. Several owners asked for a payment plan option. The motion on a special assessment was tabled to the October 22 meeting, pending an updated reserve study. No assessment amount was agreed.\n\n5. Pet policy\nThe board voted 5-0 to remove the 35-pound weight limit for dogs. The limit of two pets per unit is unchanged. All pets, including existing ones, must be registered with the management office using the new form, with proof of rabies vaccination for dogs and cats. Registration deadline: November 15.\n\n6. Guest parking\nThe old paper guest passes are being retired because of misuse. Each unit will receive two numbered hang-tag guest passes. Renee Okoro will order the passes and distribute them to units by October 10. Vehicles in guest spaces without a hang-tag after October 10 may be towed after one warning sticker.\n\n7. Open forum\nOwners raised noise from the pool pump at night (management to check timer), a request for a second bike rack by Building B (board to get a price), and a question about EV charging (no action; to be revisited in spring).\n\nAction items\n- Renee Okoro: sign Carver contract; order guest hang-tags and distribute by October 10; post elevator updates.\n- Owen Castellano: request updated reserve study before October 22.\n- Priya Nair: circulate new pet registration form to all owners by October 1.\n- Linda Marsh: contact Kessler references.\n\nNext meeting: Thursday, October 22, 7 pm, community room.\nAdjourned 8:41 pm.",
+      "notes": null
+    },
+    {
+      "id": "FGENH-CTX-G2",
+      "kind": "grounded",
+      "title": "Charity 10K volunteer briefing",
+      "file_name": "riverside-10k-volunteer-briefing.txt",
+      "text": "Riverside 10K - Volunteer Briefing\n\nThank you for volunteering! Race day is Sunday 25 October. About 1,100 runners are registered. Please read this whole sheet; it answers most of what people ask on the morning.\n\nCheck-in\nAll volunteers check in at the volunteer tent next to the finish arch in Alder Park. Course volunteers (water stations and marshals) check in by 6:15 am so we can drive you out before the roads close at 7:15 am. Finish-line and bag-drop volunteers check in by 7:00 am. You will get a volunteer shirt, a lanyard and your station card at check-in. Please wear closed-toe shoes.\n\nRace timing\nThe race starts at 8:00 am. The lead runners reach the 3K station around 8:10 and the 6K station around 8:19. The course closes at 9:45 am, and the sweep bike passes each station after the last runner; do not pack down until the sweep bike has passed.\n\nWater stations\nThere are two water stations. The 3K station is on Mill Lane beside the boathouse; station captain is Grace Adeyemi. The 6K station is at the corner of River Road and Hatch Street; station captain is Marcus Bell. Each station has 8 volunteers. Pour cups about two-thirds full, set out the first 200 cups before 8:00, and hold cups out at arm's length with your arm still, not moving toward the runner. Empty cups go in the green bins; there is a litter pick along 100 meters after each station once the course closes.\n\nMarshals\nMarshals stand at each turn with a flag. Your job is to point the way and keep spectators off the course. You are not police and cannot stop traffic; if a car tries to enter the course, radio the course director.\n\nRadios and problems\nEach station captain carries a radio. Channel 1 is the course director, Sam Ruiz. Channel 2 is the medical lead. If a runner collapses or looks unwell, tell your captain immediately; the captain radios channel 2 and a medical cyclist is sent. Do not move a runner who has fallen unless they are in danger where they are. Lost children go to the volunteer tent.\n\nWeather\nWe run in rain. If there is lightning, the course director will make the call and captains will be told on channel 1.\n\nAfter the race\nVolunteers are welcome at the finish area for food from 10:00 am. Please return lanyards and radios to the volunteer tent. Shirts are yours to keep.\n\nVolunteer coordinator: Tessa Morgan, volunteers@riverside10k.org.",
+      "notes": null
+    },
+    {
+      "id": "FGENH-CTX-C1",
+      "kind": "conflicting",
+      "title": "Condo resident newsletter",
+      "file_name": "harbor-point-happenings-october.txt",
+      "text": "Harbor Point Happenings - October Newsletter\n\nHello neighbors! Here is your quick roundup of what the board decided in September and what is coming up this month.\n\nElevator news\nGood news for Building A: the board approved the controller replacement for the elevator, and we expect it back in service by October 30. Thank you for your patience with the stairs.\n\nPets\nThe board kept the limit at two pets per unit and removed the old weight limit for dogs, so bigger dogs are welcome. Every pet needs to be registered with the management office by November 1. Forms are at the front desk.\n\nGuest parking\nNew hang-tag guest passes are on the way. Each unit gets two. Please keep them visible on your rear-view mirror.\n\nPool\nThe pool closes for the season on October 18. The pump timer has been adjusted after complaints about night noise.\n\nRoof project\nThe board picked Kessler Roofing for the roof. More details at the next meeting.\n\nReminders from the management office\nMoving in or out? The Building A elevator will be out until early December, so please book the freight stairs slot and plan extra help. Pet owners: with the new rules residents may now keep up to three pets, and registration must be completed by November 15 or a fine of $50 may apply. Recycling pick-up moves to Tuesdays starting this month.\n\nNext board meeting: Thursday, October 22, 7 pm in the community room. All owners welcome.\n\nHave news to share? Email the newsletter team at happenings@harborpointcondos.org.",
+      "notes": "Contradictions: (1) elevator back in service by October 30 vs out until early December; (2) pet limit two pets per unit vs up to three pets; (3) pet registration deadline November 1 vs November 15 (fine of $50 only mentioned with the latter)."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "FGENH-001",
+      "category": "factual_question",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "My neighbor says the board already approved a special assessment for the roof and we're all getting a bill next month. Is that actually true?",
+      "context_condition": "grounded",
+      "context_ref": "FGENH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "false_premise",
+        "context_dependent"
+      ],
+      "expected_answer_type": "direct correction grounded in the minutes",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "tabled to the October 22 meeting",
+        "No assessment amount was agreed"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-002",
+      "category": "general_call",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Did they say how much the elevator fix is going to cost, and where the money's coming from?",
+      "context_condition": "grounded",
+      "context_ref": "FGENH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "context_dependent"
+      ],
+      "expected_answer_type": "short spoken reply with the figure and source",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "$38,500",
+        "reserve fund",
+        "Carver Lift Services"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-003",
+      "category": "planning",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And when are the roofers actually starting? I need to know if I should move my patio stuff this month.",
+      "context_condition": "grounded",
+      "context_ref": "FGENH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "context_dependent"
+      ],
+      "expected_answer_type": "spoken reply saying no start date is set",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-004",
+      "category": "decision_support",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Work out what my unit's share of the new roof is going to be so I can start budgeting for it.",
+      "context_condition": "grounded",
+      "context_ref": "FGENH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial",
+        "context_dependent"
+      ],
+      "expected_answer_type": "explains the share is not set; no invented per-unit figure",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-005",
+      "category": "quick_clarification",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Who's handling the new guest parking passes and when are we supposed to have them?",
+      "context_condition": "grounded",
+      "context_ref": "FGENH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "context_dependent"
+      ],
+      "expected_answer_type": "one or two sentence factual answer",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "Renee Okoro",
+        "October 10"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-006",
+      "category": "factual_question",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "They put me on the water station at the 6K. What time do I have to be there and who am I reporting to?",
+      "context_condition": "grounded",
+      "context_ref": "FGENH-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "context_dependent"
+      ],
+      "expected_answer_type": "short spoken reply with time and person",
+      "claim_trap": "none",
+      "needles": [
+        "6:15 am",
+        "Marcus Bell",
+        "River Road and Hatch Street"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-007",
+      "category": "advice_request",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "One of the volunteers at my station is asking whether she's covered by the race's insurance if she gets hurt during the event. What do I tell her?",
+      "context_condition": "grounded",
+      "context_ref": "FGENH-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "context_dependent"
+      ],
+      "expected_answer_type": "honest reply that the briefing does not say, and who to ask",
+      "claim_trap": "support_policy",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-008",
+      "category": "general_call",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Alright, so with all that, who owes who and how much?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Okay so I paid for the campsite, that was $84 for both nights."
+        },
+        {
+          "speaker": "user",
+          "text": "Cool, and I got all the groceries."
+        },
+        {
+          "speaker": "other",
+          "text": "Right, how much were those again?"
+        },
+        {
+          "speaker": "user",
+          "text": "Like sixty two something, I'd have to check the receipt."
+        },
+        {
+          "speaker": "other",
+          "text": "Okay. And I put $40 of gas in on the way up, and you got the firewood, which was twelve I think?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yeah, twelve."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "context_dependent",
+        "arithmetic"
+      ],
+      "expected_answer_type": "spoken reply with the settle-up amount and direction",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "$84",
+        "sixty two something",
+        "$40 of gas"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-009",
+      "category": "quick_clarification",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Pet registration deadline's when?",
+      "context_condition": "conflicting",
+      "context_ref": "FGENH-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn",
+        "ambiguous",
+        "conflicting_context"
+      ],
+      "expected_answer_type": "short spoken reply flagging the two different dates",
+      "claim_trap": "none",
+      "needles": [
+        "November 1",
+        "November 15"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FGENH-010",
+      "category": "advice_request",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "My roommate is moving in on November 7 with her three cats. Going by the newsletter: is she even allowed three cats, what does she need to register and by when, and will the Building A elevator be working on moving day?",
+      "context_condition": "conflicting",
+      "context_ref": "FGENH-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multi_part",
+        "ambiguous",
+        "conflicting_context"
+      ],
+      "expected_answer_type": "answers each ask while surfacing the contradictions",
+      "claim_trap": "none",
+      "needles": [
+        "two pets per unit",
+        "up to three pets",
+        "early December"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

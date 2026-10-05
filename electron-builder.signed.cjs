@@ -60,6 +60,16 @@ const signIdentity =
 
 module.exports = {
   ...base,
+  // A signed release without the calendar client secret ships a calendar that
+  // can never connect (scripts/lib/calendar-client-secret.cjs). Checked at pack
+  // time rather than when this file loads, so the notary preflight and tests
+  // that load this config never need the secret. CI's release job calls
+  // electron-builder directly, so scripts/package-app.js's check does not
+  // cover it; this does.
+  beforePack: async (context) => {
+    require('./scripts/lib/calendar-client-secret.cjs').assertCalendarSecretBaked(__dirname);
+    return require(base.beforePack)(context);
+  },
   // Bake a runtime flag into the packaged app's package.json so the main process
   // knows it is a real Developer ID-signed build and may perform a true in-place
   // auto-install + relaunch (autoUpdater.quitAndInstall). The default/dev build

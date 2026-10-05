@@ -1,0 +1,432 @@
+[
+ {
+  "jid": "6ad6f851e236",
+  "scores": {
+   "correctness": 6,
+   "grounding": 8,
+   "role_fidelity": 7,
+   "direct_usefulness": 3,
+   "relevance": 4,
+   "speakability_usability": 6.5,
+   "cognitive_load": 7,
+   "concision": 6.5,
+   "continuity": 8,
+   "mode_fit": 4.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "Promises to clarify but says nothing concrete; 'the point I just made' refers to an unknown point.",
+  "specific_problem": "Hollow filler that neither clarifies nor asks which part needs clarifying.",
+  "minimal_improvement": "Ask which part they want clarified, or restate the last point in one plain sentence."
+ },
+ {
+  "jid": "031c4c3fbd0b",
+  "scores": {
+   "correctness": 8,
+   "grounding": 8.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 6,
+   "relevance": 8,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Speakable, non-fabricated differentiation answer, but still generic habits that echo the cliché it was asked to beat.",
+  "specific_problem": "No concrete evidence of difference; 'I don't just say it, I show it' is itself a cliché.",
+  "minimal_improvement": "Anchor the difference to one specific, verifiable behaviour or offer a quick concrete example the user can supply."
+ },
+ {
+  "jid": "0c2b0fa3cbe8",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 6.5,
+   "relevance": 7,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Sensible single-owner principle for an unanchored ownership question.",
+  "specific_problem": "Doesn't ask what 'this' refers to; generic.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "898349116b56",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 9.5,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Picks the triage rule with accurate details and a clear product-role rationale (discovery, hypothesis, measured outcome).",
+  "specific_problem": "Voice shifts between advising the user and speaking as her.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "21fe30c41192",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 6.5,
+   "cognitive_load": 7.5,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Solid approach to manager disagreement without fabricating, but opens by saying there's no story to tell.",
+  "specific_problem": "'I don't have a specific blow-up story I'd want to dress up' is self-undermining meta; long.",
+  "minimal_improvement": "Drop the disclaimer, lead with how it went wrong when it did (too late or personal) and the lesson."
+ },
+ {
+  "jid": "0c6c01646d36",
+  "scores": {
+   "correctness": 7.5,
+   "grounding": 9,
+   "role_fidelity": 7,
+   "direct_usefulness": 5,
+   "relevance": 5.5,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Generic interview self-check for an unanchored 'What am I missing?'.",
+  "specific_problem": "Doesn't ask what 'this' refers to; voice 'I'd ask myself' is awkward for a typed private request.",
+  "minimal_improvement": "Ask what they're preparing or reviewing, or give the general checklist addressed to the user."
+ },
+ {
+  "jid": "9d1ce6b3b329",
+  "scores": {
+   "correctness": 6,
+   "grounding": 3,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 8,
+   "mode_fit": 5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "Speakable and conditional on relocation, but asserts 'I'm not local to Columbus right now' with no evidence.",
+  "specific_problem": "Invents where the candidate lives; commute question gets no real answer.",
+  "minimal_improvement": "Keep location conditional or prompt the user privately; answer the relocation part openly."
+ },
+ {
+  "jid": "926da7ee183b",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9.5,
+   "speakability_usability": 9.5,
+   "cognitive_load": 9.5,
+   "concision": 9.5,
+   "continuity": 9.5,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Delivers exactly one speakable sentence built on the earlier template.",
+  "specific_problem": "'the problem you're solving' stays generic.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "e97f257faf9e",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9.5,
+   "concision": 9.5,
+   "continuity": 9,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Crisp, practical prioritisation answer, easy to say.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "03ba30d0e080",
+  "scores": {
+   "correctness": 6,
+   "grounding": 9,
+   "role_fidelity": 3,
+   "direct_usefulness": 2,
+   "relevance": 3,
+   "speakability_usability": 2,
+   "cognitive_load": 7,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 2
+  },
+  "hard_flags": [
+   "coaching_instead_of_answer"
+  ],
+  "code_central": false,
+  "overall_estimate": 2.5,
+  "one_sentence_reason": "'Tell me about yourself' gets instructions on how to structure the answer instead of words to say.",
+  "specific_problem": "Pure coaching on a heard surface; nothing speakable.",
+  "minimal_improvement": "Give a short first-person intro the user can say, kept general or conditional without inventing history."
+ },
+ {
+  "jid": "61b4f98b82a2",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 8.5,
+   "role_fidelity": 8,
+   "direct_usefulness": 7.5,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 9,
+   "continuity": 9,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Sensible recovery plan (re-baseline, scope cut, confirm vendor contract) tied to the stated slip.",
+  "specific_problem": "'Two weeks is recoverable' is asserted without knowing the schedule.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "da8f77037863",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 6.5,
+   "relevance": 7,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Honest approach-based answer to a failure question with no invented story.",
+  "specific_problem": "Behavioural question gets a philosophy, not an example; somewhat long.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "7e4b47e096e8",
+  "scores": {
+   "correctness": 8,
+   "grounding": 5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 9.5,
+   "mode_fit": 7
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Directly answers within the stated band, but the target (top, ~110k) is an invented preference.",
+  "specific_problem": "Salary preference not in evidence; states a firm point without conditional framing.",
+  "minimal_improvement": "Keep upper-part framing but phrase it conditionally so the user confirms their own target."
+ },
+ {
+  "jid": "0c9353a07125",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 6.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 7.5,
+   "cognitive_load": 7.5,
+   "concision": 7.5,
+   "continuity": 9,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Resolves eight vs twelve correctly from the experience section and answers all three parts.",
+  "specific_problem": "Day-to-day specifics (standups, pairing) are invented; bold markup in speech.",
+  "minimal_improvement": "Keep the correction and describe leadership conditionally; tie to supported facts (two time zones, mentoring)."
+ },
+ {
+  "jid": "d36efbad7c84",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 8,
+   "role_fidelity": 9,
+   "direct_usefulness": 7,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Conditional openness to Denver with a sensible follow-up about relocation support.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "a8805c74223a",
+  "scores": {
+   "correctness": 6,
+   "grounding": 4,
+   "role_fidelity": 8,
+   "direct_usefulness": 5,
+   "relevance": 7,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8,
+   "concision": 6.5,
+   "continuity": 5.5,
+   "mode_fit": 5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 4.5,
+  "one_sentence_reason": "Recasts the earlier general approach as a specific past event and repeats it nearly verbatim.",
+  "specific_problem": "Past-tense 'I asked...' implies a real incident not in evidence; tense slips back to 'I'd'.",
+  "minimal_improvement": "Either be honest it's a pattern or supply a real example from the user; avoid re-reading the prior answer."
+ },
+ {
+  "jid": "ca83447bb467",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 7,
+   "relevance": 8,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Reasonable approach to changing goals with no invented story; ignores small talk correctly.",
+  "specific_problem": "Behavioural 'a time' question answered generally; a bit long.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "3d9884556d34",
+  "scores": {
+   "correctness": 9,
+   "grounding": 8.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 7,
+   "relevance": 8,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Measured approach to a colleague cutting corners; irrelevant lease evidence correctly ignored.",
+  "specific_problem": "'When I've seen someone' implies experience without a concrete example.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "f469b7c1cba9",
+  "scores": {
+   "correctness": 6,
+   "grounding": 3,
+   "role_fidelity": 7,
+   "direct_usefulness": 5,
+   "relevance": 7,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 6,
+   "mode_fit": 4.5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 3.5,
+  "one_sentence_reason": "Accepts an unseen 'base range' as working and implies weaker Android skills, neither supported.",
+  "specific_problem": "Agrees to an unknown number; 'room to grow into the Android side' undercuts the role's key need.",
+  "minimal_improvement": "Ask to confirm the range figure before agreeing, and stress Android comfort only if the user has it."
+ },
+ {
+  "jid": "375b92c26ebc",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 7,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 5.5,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 6.5,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Honest approach answer, but opens with a machinery-sounding disclaimer and ignores the interviewer's onboarding-flow context.",
+  "specific_problem": "'I don't have a specific story from my background' sounds robotic when spoken.",
+  "minimal_improvement": "Drop the disclaimer and connect the approach to how they'd handle the unowned onboarding drop."
+ }
+]

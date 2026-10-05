@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check, Globe, ArrowUp } from 'lucide-react';
+import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { stripGistTrailer } from '../lib/displayMarkup';
 
 // ============================================
 // Types
@@ -64,12 +66,12 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
     </motion.div>
 );
 
-const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
+const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean; isLatest?: boolean }> = ({ content, isStreaming, isLatest }) => {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = async () => {
         try {
-            await navigator.clipboard.writeText(content);
+            await navigator.clipboard.writeText(stripGistTrailer(content));
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
@@ -85,7 +87,18 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
             className="flex flex-col items-start mb-6"
         >
             <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
-                {content}
+                {/* This chat shows answers as plain text. Its standard-chat fallback
+                    can answer a design question, so a ```mermaid block is still
+                    drawn by the shared diagram card; everything else is exactly
+                    the plain text it was. */}
+                <DiagramAwareMarkdown
+                    text={content}
+                    streaming={Boolean(isStreaming)}
+                    // Only the answer just given may be repaired by itself (one model
+                    // call); an older answer in the thread keeps its "Try to fix" button.
+                    allowAutoRepair={Boolean(isLatest)}
+                    renderMarkdown={(chunk, key) => <React.Fragment key={key}>{chunk}</React.Fragment>}
+                />
             </div>
             {!isStreaming && content && (
                 <button
@@ -495,7 +508,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                             {messages.map((msg) => (
                                 msg.role === 'user'
                                     ? <UserMessage key={msg.id} content={msg.content} />
-                                    : <AssistantMessage key={msg.id} content={msg.content} isStreaming={msg.isStreaming} />
+                                    : <AssistantMessage key={msg.id} content={msg.content} isStreaming={msg.isStreaming} isLatest={msg.id === messages[messages.length - 1]?.id} />
                             ))}
 
                             {chatState === 'waiting_for_llm' && <TypingIndicator />}
