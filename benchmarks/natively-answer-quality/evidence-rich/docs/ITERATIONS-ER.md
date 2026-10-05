@@ -1491,3 +1491,19 @@ personal claim on a missing-evidence question; LFW-010 9.4 → 7.3; TI-011 9.7 �
 the résumé and worse with it in view. One run each, so run-to-run variation is inside these numbers (same build, 30
 rows: ± 0.7); the rule does not ask for a second run and none was made.
 Autopilot paused here at Evin's word (2026-10-05). E17's rule and variant are committed; its replay was not started.
+
+### E17 — note written 2026-10-05 11:30 UTC, after the replay and before any judgment of it
+**E17 retests the idea of E6 v1** (2026-10-03: "a current document against an older one is not a conflict"). I wrote
+E17's rule from the 630-row loss analysis without rereading E6, and found the overlap afterwards. E6 v1 was not kept
+because its rule asked for a gain on ALL rows with an interval excluding zero (+0.06 ±0.08 on 333 rows); its other
+lines held (hard fails 32 → 27, resolved conflicts +0.22, unresolved conflicts +0.71). E17 differs in wording (it also
+names "the general rule against the specific case asked about", and rule 3 forbids adding a second value when there is
+no conflict), in the set (630 rows of the build now on main, where the "two ways" edits cost 8.39 → 6.11 on twelve
+rows), in the judge (Astra, the judge of record) and in the rule, which is built for a targeted change. The rule stands
+as committed in 4d5866a7; nothing in it is changed by this note. Reported beside it, not part of it: the rows whose
+oracle holds an UNRESOLVED conflict (E6's line 3), because that is where a weaker conflict line could do harm.
+**Replay (judge-free):** the pass ran on 472 of the 630 turns; the rebuilt request equals the recorded one on 472 of
+472 and every rebuilt system prompt matches its recorded hash. Edited: control arm 101, E17 arm 99. Edits that ADD
+"two ways": 8 → 1 (line 1: −87.5 %, holds). Pass time p50 1,252 → 1,397 ms, p90 1,572 → 1,842 ms.
+**Judge:** Astra only from here (Evin, 2026-10-05: "dont use claude code as judge since we are low on quota"; "judge
+with astra as much as possible"). Astra reopened 11:00 UTC; calibration 38/38 on charter er1-ebec3e9a021e.
