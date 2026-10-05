@@ -692,3 +692,31 @@ agent-browser.json
 /stealth-comparison.html
 /cluely-*
 /start-button-cluely.png
+
+# Dev harnesses, benchmark datasets, and prototype docs
+/actionCardHarness.html
+/aboutSettingsHarness.html
+/aiProvidersTablistHarness.html
+/CLUELY_FONTS.md
+/CLUELY_MEETING_DETECTION.md
+/cluely-icon.png
+/cluely-C1T-w6e0.js
+/cluely-logo.svg
+/cluely-logo-source.js
+/hand_check_line_by_line_rechecked (1).xlsx
+/helpSettingsHarness.html
+/harness.html
+/intelligenceSettingsHarness.html
+/launcherAppPreview.html
+/launcherTransitionHarness.html
+/genieHarness.html
+/embeddingSettingsHarness.html
+/natively-light-theme.css
+/NATIVELY_LIGHT_MODE_COLOR_PALETTE.md
+/overlayResizeHarness.html
+/rerankerSettingsHarness.html
+/retrievalSettingsHarness.html
+/revealHarness.html
+/spotlightArrowsHarness.html
+/thinkingDotHarness.html
+/trialCardHarness.html
