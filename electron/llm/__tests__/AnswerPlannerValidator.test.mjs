@@ -10,7 +10,7 @@ const planFor = (question, source = 'what_to_answer') => planAnswer({
 
 const REQUIRED_CODING_HEADINGS = [
   '## Approach',
-  '## Technique / Data Structure / Algorithm Used',
+  '## Technique',
   '## Code',
   '## Dry Run',
   '## Complexity',
@@ -40,7 +40,7 @@ test('planAnswer detects terse DSA questions as dsa_question_answer', () => {
   assert.ok(twoSum.forbiddenContextLayers.includes('resume'));
   assert.ok(twoSum.forbiddenContextLayers.includes('jd'));
   assert.match(twoSum.responseTemplate, /## Approach/);
-  assert.match(twoSum.responseTemplate, /## Technique \/ Data Structure \/ Algorithm Used/);
+  assert.match(twoSum.responseTemplate, /^## Technique$/m);
 });
 
 test('planAnswer detects system design and debugging answer types', () => {
@@ -61,6 +61,8 @@ test('planAnswer routes identity and JD-fit questions with isolated context', ()
 });
 
 test('validateAnswerStructure accepts complete coding answer', () => {
+  // Deliberately the pre-2026-09-29 heading ("Technique / Data Structure /
+  // Algorithm Used"): answers written before the rename must still validate.
   const answer = `## Approach\n\nUse a hash map to check complements as we scan.\n\n## Technique / Data Structure / Algorithm Used\n\nHash map for O(1) average lookup.\n\n## Code\n\n\`\`\`typescript\nfunction twoSum(nums: number[], target: number): number[] {\n  const seen = new Map<number, number>();\n  for (let i = 0; i < nums.length; i++) {\n    const complement = target - nums[i];\n    if (seen.has(complement)) return [seen.get(complement)!, i];\n    seen.set(nums[i], i);\n  }\n  return [];\n}\n\`\`\`\n\n## Dry Run\n\nFor [2,7,11,15] and target 9, 2 is stored, then 7 finds complement 2.\n\n## Complexity\n\nTime Complexity: O(n), because we scan once.\n\nSpace Complexity: O(n), because the map can store all numbers.\n\n## Interviewer Follow-up Points\n\n- Duplicates work because we check before insert.\n- Clarify whether to return indices or values.`;
 
   const result = validateAnswerStructure('dsa_question_answer', answer);
@@ -80,16 +82,14 @@ test('validateAnswerStructure repairs unstructured dsa answer', () => {
   assertCodingMarkdownContract(result.repaired ?? '');
 });
 
-test('classifyIntent prioritizes coding over generic example phrasing', async () => {
-  const prompts = [
-    'give me an example of a React component in TypeScript',
-    'can you give a concrete implementation of binary search in Python?',
-  ];
-
-  for (const prompt of prompts) {
-    const result = await classifyIntent(prompt, prompt, 0);
-    assert.equal(result.intent, 'coding', `${prompt} classified as ${result.intent}`);
-  }
+test('planAnswer routes example-phrased coding asks as coding without the deleted classifier tier (2026-09-05)', () => {
+  // The legacy regex tier caught this with `example of .* in .*`; its removal left
+  // the planner's `intent === 'coding'` arm permanently false. CODING_PATTERNS now
+  // carries the shape, with an object required so behavioral asks stay out.
+  const coding = planAnswer({ question: 'give me an example of a React component in TypeScript', transcriptContext: '', intentResult: { intent: 'general', confidence: 0.5 } });
+  assert.equal(coding.answerType, 'coding_question_answer');
+  const behavioral = planAnswer({ question: 'give me an example of a conflict in your last team and how you handled it', transcriptContext: '', intentResult: { intent: 'general', confidence: 0.5 } });
+  assert.notEqual(behavioral.answerType, 'coding_question_answer', 'a behavioral "example of ... in your ..." must not become code');
 });
 
 test('planAnswer classifies required odd/even manual prompts as coding answers', () => {

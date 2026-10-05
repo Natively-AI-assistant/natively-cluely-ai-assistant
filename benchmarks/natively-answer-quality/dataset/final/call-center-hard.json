@@ -1,0 +1,305 @@
+{
+  "mode": "call-center",
+  "partition": "final-hard",
+  "contexts": [
+    {
+      "id": "FCC-CTX-G1",
+      "kind": "grounded",
+      "title": "Veltro Mobile agent handbook section 4: account security and SIM services",
+      "file_name": "veltro-handbook-s4-security-sim.txt",
+      "text": "Veltro Mobile Agent Handbook, Section 4: Account Security and SIM Services (revision 12, internal)\n\n4.1 Verification levels\nStandard verification: the 6-digit account PIN, OR the account holder's date of birth plus the billing ZIP code. Standard verification is enough to discuss plan details, balances and usage, and to suspend a line reported lost or stolen.\nHigh-risk verification is required for SIM swaps (physical SIM replacement), eSIM transfers to a new device, generating a Number Transfer PIN, changing the account email or billing address, and adding a line. High-risk verification means the account PIN AND a one-time passcode (OTP) texted to a different line on the account, or to the account holder's registered backup number. If the caller cannot receive an OTP on another line (for example, the customer has a single line and that phone is lost or broken), the agent must direct them to a Veltro store with photo ID. There is no agent override for high-risk verification, including for supervisors.\n\n4.2 Fraud Hold\nThree failed PIN attempts within 24 hours place the account on Fraud Hold automatically. A Fraud Hold lasts 72 hours. During a Fraud Hold no high-risk action can be completed by phone or in store. Only the Fraud Team can lift a hold early; agents open a case type FRH and the Fraud Team contacts the account holder. Agents cannot lift a hold.\n\n4.3 Unauthorised SIM swap or port-out\nIf a customer suddenly loses service and suspects a SIM swap or a number port they did not request: (1) complete Standard verification, (2) suspend any active SIM that is not in the customer's hands, (3) open a case type SSW and warm-transfer to the Fraud Team, which is available 24/7. Do not read out or discuss account notes about who made the change, which store or channel was used, or the other device. Advise the customer to contact their bank directly about any activity they did not make. Veltro does not reimburse losses at banks or other third parties; do not promise compensation.\n\n4.4 Lost or stolen devices\nSuspending a line stops calls, texts and data but does not pause billing. To blocklist the device itself the customer must provide the IMEI (from the box, the original receipt or the device page in the account). Without the IMEI the device can still be used with another carrier's SIM. Replacement SIM cards ship in 2 business days, free for postpaid accounts and $10 for prepaid accounts. An eSIM can be reissued in store at no charge after high-risk verification. Device insurance claims (VeltroCare) are filed online by the customer, not by agents.\n\n4.5 Number Transfer PIN (leaving Veltro)\nCustomers moving their number to another carrier need a Number Transfer PIN. It can be generated in the Veltro app or by an agent after high-risk verification, and it is valid for 5 days. Port-outs are blocked while the account is on Fraud Hold. The final bill includes any remaining device installments; agents cannot waive device balances.\n\n4.6 Account PIN resets\nCustomers can reset the account PIN in the Veltro app using the phone's biometric login, or in store with photo ID. Agents can send a reset link to the account email on file only. Agents must never set a PIN for the customer or read a PIN back.\n\n4.7 Things agents do not do\nAgents do not give out other customers' details, confirm whether a number belongs to a Veltro customer, provide call or text logs over the phone (those requests go to legal.requests@veltro.example), or promise timelines owned by other teams.",
+      "notes": null
+    },
+    {
+      "id": "FCC-CTX-G2",
+      "kind": "grounded",
+      "title": "Veltro Mobile billing reference: roaming and adjustments",
+      "file_name": "veltro-billing-roaming-reference.txt",
+      "text": "Veltro Mobile Billing Reference: International Roaming and Adjustments (revision 9)\n\nR1. TravelPass\nTravelPass costs $8 per day and lets postpaid customers use their domestic plan in Zone 1 destinations (138 countries; agents look up individual countries in the destination tool). The daily charge applies only on days the line makes a call, sends a text or uses data while connected to a Zone 1 network. Background data counts as use, so a phone left on with apps refreshing can trigger the daily charge. TravelPass charges are capped at 10 per bill cycle, so a customer never pays more than $80 in TravelPass charges in one cycle. TravelPass must be on the line before the usage happens; it is not applied retroactively.\n\nR2. Zone 2 (not covered by TravelPass)\nCruise ships, ferries with onboard networks and in-flight networks are maritime and aviation networks. They are billed at Zone 2 rates even when TravelPass is active: data $2.05 per MB, calls $3.49 per minute, outgoing texts $0.50 each. Customers can avoid these charges by switching on \"Block Zone 2\" in the app before they travel.\n\nR3. Roaming dispute adjustments\nIf a customer disputes roaming charges and TravelPass was active on the line at the time, the agent may credit up to $150 per bill cycle without approval, using reason code RMA. Disputes above $150 go to Billing Review as case type BRV. Billing Review decides within 10 business days and notifies the customer by text. Agents must not promise the outcome of a Billing Review.\n\nR4. Courtesy adjustment for customers without TravelPass\nIf the customer had no TravelPass, the agent may offer a one-time courtesy adjustment of 50% of the disputed roaming charges, up to $200, once per 24 months per account. Check the \"Courtesy used\" flag on the account first. If the flag is set, no courtesy adjustment is available by phone.\n\nR5. How adjustments appear\nAll adjustments appear as a credit on the next bill. Postpaid customers do not receive card refunds for adjustments. Prepaid customers receive adjustments as account balance.\n\nR6. Late fees and autopay\nThe late fee is $7. Agents may waive one late fee per account per 12 months. The autopay discount is $5 per line per month and applies only when autopay uses a debit card or bank account; since 1 June, autopay by credit card no longer earns the discount.\n\nR7. Network problems\nCredits for network problems, such as a local tower outage, are handled by the Network Credits team (case type NWC). Agents cannot set up recurring monthly credits of any kind.",
+      "notes": null
+    },
+    {
+      "id": "FCC-CTX-C1",
+      "kind": "conflicting",
+      "title": "Veltro roaming FAQ for store staff (handout)",
+      "file_name": "veltro-store-roaming-faq.txt",
+      "text": "Veltro Roaming FAQ for Store Staff (printed handout)\n\nHow much is TravelPass?\nTravelPass is $10 a day in covered countries. The customer is only charged on days they use the phone abroad.\n\nIs there a cap?\nNo cap. The customer pays for every day they use it, however long the trip is.\n\nDoes TravelPass work on cruise ships?\nYes. TravelPass works on most cruise lines once the ship leaves port, so customers do not need to buy the cruise line's own package.\n\nCan TravelPass be added after the trip?\nYes. If the customer adds TravelPass within 3 days of returning, the call center can re-rate the trip at the TravelPass price.\n\nA customer without TravelPass got a big roaming bill. What can we do?\nStore staff cannot adjust bills. Send the customer to the call center, which can credit 100% of the roaming charges once every 12 months as a courtesy.\n\nQuick tips for the counter\n- Remind customers that TravelPass tops out at $80 a cycle, so a long trip is never more than that.\n- Maritime and in-flight networks are excluded from all roaming packages, including TravelPass. Tell cruise passengers to switch on Block Zone 2.\n- Courtesy adjustments are half of the roaming charges, and the account can only get one every two years.\n- TravelPass has to be on the line before the customer uses the phone abroad. It never applies backwards.\n- The daily price is $8 in every covered country.\n- For anything not on this sheet, ask the store manager to call the agent support line before promising the customer anything.",
+      "notes": "Contradicts itself: TravelPass $10 a day vs $8 a day; no cap vs tops out at $80 a cycle; works on cruise ships vs maritime networks excluded from all packages; can be added within 3 days after the trip and re-rated vs never applies backwards; courtesy credit 100% once every 12 months vs half, once every two years."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "FCC-001",
+      "category": "account_verification",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Hi, I dropped my phone in the lake, it's completely dead. I bought a new one and I need my number moved onto the eSIM. I've got my PIN. It's my only line though, so I can't get a text on anything else.",
+      "context_condition": "grounded",
+      "context_ref": "FCC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial"
+      ],
+      "expected_answer_type": "spoken verification outcome and correct path from the handbook",
+      "claim_trap": "support_policy",
+      "needles": [
+        "photo ID"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-002",
+      "category": "escalation",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Somebody swapped my SIM last night. I've got no service, I'm calling from my work phone, and my bank's been texting security codes to whoever has my number now. I want to know which of your stores did this, and I want you to cover whatever they take out of my account.",
+      "context_condition": "grounded",
+      "context_ref": "FCC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multipart",
+        "adversarial"
+      ],
+      "expected_answer_type": "urgent spoken fraud response within handbook limits",
+      "claim_trap": "support_policy",
+      "needles": [
+        "Fraud Team"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-003",
+      "category": "unsupported_request",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "While the new SIM is on its way, can you send me a loaner phone? I'm on call for work and I can't go two days without one.",
+      "context_condition": "grounded",
+      "context_ref": "FCC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "spoken reply that does not invent a loaner program",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-004",
+      "category": "billing",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "TravelPass was active but the 412 is all maritime data from the ship. What can I credit myself, what happens to the rest, and give me what to say to her.",
+      "context_condition": "grounded",
+      "context_ref": "FCC-CTX-G2",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "I was on a Caribbean cruise for six days. I had TravelPass on, I specifically added it before I left."
+        },
+        {
+          "speaker": "user",
+          "text": "I can see TravelPass on your line from the 3rd. Let me pull up the charges."
+        },
+        {
+          "speaker": "other",
+          "text": "It's four hundred and twelve dollars. That's insane."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multipart",
+        "judgment"
+      ],
+      "expected_answer_type": "agent-facing limits plus speakable words for the customer",
+      "claim_trap": "support_policy",
+      "needles": [
+        "$150",
+        "10 business days"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-005",
+      "category": "billing",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "I was in Portugal for eight days but I only actually used my phone on three of them. So why is my bill showing eighty dollars for TravelPass?",
+      "context_condition": "grounded",
+      "context_ref": "FCC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "spoken explanation from the billing rules, flags the mismatch",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$8",
+        "Background data"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-006",
+      "category": "unsupported_request",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "TravelPass in Cuba?",
+      "context_condition": "grounded",
+      "context_ref": "FCC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "brief spoken reply without guessing country coverage",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-007",
+      "category": "guarantee_demand",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "The guy at your store on Riverside told me TravelPass works on cruise ships. I sail Saturday. Am I covered or not? I need a straight answer.",
+      "context_condition": "conflicting",
+      "context_ref": "FCC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "adversarial"
+      ],
+      "expected_answer_type": "straight spoken answer resolving the contradictory handout",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Maritime"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-008",
+      "category": "refund",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "No TravelPass, 300 in roaming from Mexico, first time he's ever asked. What courtesy credit can I give him?",
+      "context_condition": "conflicting",
+      "context_ref": "FCC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous"
+      ],
+      "expected_answer_type": "agent-facing answer that flags the conflicting courtesy rules",
+      "claim_trap": "support_policy",
+      "needles": [
+        "100%",
+        "half"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-009",
+      "category": "angry_customer",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "The lady I spoke to promised me a twenty dollar credit every month until the tower's fixed. It's not on my bill. Where is it?",
+      "context_condition": "grounded",
+      "context_ref": "FCC-CTX-G2",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Thanks, you're verified. What can I help you with today?"
+        },
+        {
+          "speaker": "other",
+          "text": "The tower by my house was down most of last month. I called about it back then."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "spoken reply that neither confirms nor denies an unrecorded promise",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FCC-010",
+      "category": "policy_restriction",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Okay, whatever. So you're sending me a new SIM for free, right? And the thief can't use my phone now that it's suspended?",
+      "context_condition": "grounded",
+      "context_ref": "FCC-CTX-G1",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "I've suspended the line so nobody can use it. Just to confirm, is this a monthly postpaid plan or a prepaid account?"
+        },
+        {
+          "speaker": "other",
+          "text": "It's prepaid. I top it up every month at the gas station."
+        },
+        {
+          "speaker": "user",
+          "text": "Thanks. And do you have the IMEI from the phone box by any chance?"
+        },
+        {
+          "speaker": "other",
+          "text": "No, the box is long gone."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multipart",
+        "judgment"
+      ],
+      "expected_answer_type": "spoken correction of both assumptions from handbook and call",
+      "claim_trap": "support_policy",
+      "needles": [
+        "$10",
+        "IMEI"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

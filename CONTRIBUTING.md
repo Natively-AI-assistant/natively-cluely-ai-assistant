@@ -72,6 +72,7 @@ Enhancement suggestions are tracked as GitHub issues. When you are creating an e
 - Node.js (v20+ recommended)
 - Git
 - Rust (required for native audio capture compilation)
+- Xcode 26+ with the macOS 26 SDK (required only for Apple Speech helper and macOS package builds)
 
 ### Local Development
 
@@ -80,6 +81,14 @@ Enhancement suggestions are tracked as GitHub issues. When you are creating an e
 3. Install dependencies: `npm install`
 4. Set up your `.env` file (refer to the README for template).
 5. Start the development server: `npm start`
+
+On macOS, build the Apple Speech helper explicitly if you want to test that provider locally:
+
+```bash
+npm run build:apple-speech -- --arch arm64
+```
+
+Use `x64` for Intel or `universal` for both architectures. Regular development, tests, and non-macOS builds do not invoke the Swift compiler. Production macOS packaging builds the helper for the package's target architecture.
 
 If you've added code that should be tested, add tests.
 If you've changed APIs, update the documentation.
@@ -92,6 +101,7 @@ Natively uses a modern stack consisting of:
 - **Frontend**: React, Vite, TypeScript, TailwindCSS
 - **Backend/Desktop**: Electron
 - **Native Audio**: Rust (`napi-rs` for zero-copy ABI transfers)
+- **Native Speech (macOS)**: Swift (`SpeechAnalyzer` and `SpeechTranscriber`)
 - **Database**: SQLite (local storage with `sqlite-vec` for RAG)
 
 When contributing, ensure you understand which context (Main Process, Renderer Process, or Native/Rust addon) your code will run in, and use the IPC correctly for communication.

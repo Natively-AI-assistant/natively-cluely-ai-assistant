@@ -12,32 +12,66 @@
 // intentionally lazy-import LLMHelper so tests can replace this registry
 // without booting the whole LLM stack.
 
-import fs from 'node:fs/promises';
 import type {
   VisionProviderConfig,
   VisionInvocationParams,
   VisionMode,
 } from './VisionProviderFallbackChain';
 import { CredentialsManager } from '../CredentialsManager';
+import { GROQ_PRIMARY_MODEL } from '../../llm/groqModels';
+import {
+  customProviderSupportsVision,
+  customProviderIsLocal,
+  isOllamaVisionModelByName,
+} from '../../llm/visionCapability';
+import {
+  readActiveCustomProvider, readActiveCurlProvider, readActiveModelId, readActiveSelection, readFixedVisionModels,
+  readOllamaRecordTarget, readUsingOllama,
+} from '../../llm/activeCustomProvider';
+import { gatewaySeatReadsImages, readsImages, resolveVision } from '../../llm/visionResolver';
+import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionOverride, storedVisionTest } from '../../llm/visionCapabilityStore';
+import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
 
 export interface VisionProviderBuildInputs {
   mode: VisionMode;
   localOnly: boolean;
   scopeAllowsScreenshots: boolean;
+  /**
+   * What the description is for (2026-10-01). `prepass` (the default) runs
+   * BEFORE the answer and feeds it. `record` runs AFTER the answer and only
+   * stores the screen's text so a later turn can quote it.
+   */
+  purpose?: 'prepass' | 'record';
 }
 
 /**
  * Produce the ordered list of vision providers for the given mode. Order is:
  *   vision_first / vision_only: Natively → OpenAI → Gemini Flash-Lite →
  *                                Gemini Flash → Claude → Gemini Pro → Groq Scout
- *                                → Ollama → Codex → Custom
+ *                                → LiteLLM → NVIDIA NIM → Ollama → Codex → Custom
  *   private_vision: Ollama → Codex → local Custom only
  */
-export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionProviderConfig[] {
-  const credentials = CredentialsManager.getInstance();
+export function buildVisionProviders(
+  inputs: VisionProviderBuildInputs,
+  // Injectable so the rung list can be EXECUTED in a test (2026-10-01): each
+  // file is its own bundle, so this module carries a private copy of
+  // CredentialsManager that a test cannot reach from outside.
+  credentials: CredentialsManager = CredentialsManager.getInstance(),
+): VisionProviderConfig[] {
   const providers: VisionProviderConfig[] = [];
 
-  const cloudAllowed = inputs.mode !== 'private_vision';
+  // With a LOCAL model selected the pre-pass stays off cloud providers (Evin,
+  // 2026-10-01). Before this, an Ollama or local-endpoint user's screenshot
+  // went to whichever cloud key was configured first, unless "Keep screenshots
+  // on this device" was on. Only local rungs remain: a local custom or cURL
+  // endpoint that reads images runs the pre-pass; Ollama gets none and reads
+  // the screenshot in the answer itself.
+  //
+  // The RECORD is exempt (Evin, 2026-10-01): it goes to a cloud provider when
+  // one is available, so an Ollama user can still ask about an earlier screen,
+  // unless "Keep screenshots on this device" is on.
+  const cloudAllowed = inputs.mode !== 'private_vision'
+    && (inputs.purpose === 'record' || !selectionIsLocal());
 
   if (cloudAllowed) {
     providers.push(natively(credentials, inputs));
@@ -48,14 +82,38 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
     providers.push(claude(credentials, inputs));
     providers.push(geminiPro(credentials, inputs));
     providers.push(groqScout(credentials, inputs));
+    // OpenAI-compatible gateways, last among the cloud rungs. Added 2026-09-03:
+    // they were absent entirely, so a profile whose only configured provider was
+    // a LiteLLM proxy produced an EMPTY chain and ScreenUnderstandingService
+    // reported "no vision-capable provider" for every screenshot — verified live.
+    //
+    // Seated ONLY when the gateway is the SELECTED model, which is what
+    // streamVisionWithFallback enforces — it excludes an unselected gateway
+    // outright rather than ordering it last, and this comment previously
+    // misdescribed that (code review, 2026-09-04). The distinction matters: a
+    // configured base URL is not a standing offer to serve images. Auto-recruiting
+    // one as a fallback would send a screenshot to a proxy the user had not
+    // pointed this turn at, and the streaming chain would never have done so —
+    // two subsystems, two privacy policies.
+    providers.push(litellm(credentials, inputs));
+    providers.push(nvidiaNim(credentials, inputs));
+    providers.push(openrouter(credentials, inputs));
+    providers.push(fluxion(credentials, inputs));
+    providers.push(agentrouter(credentials, inputs));
+    // Unlike the four above, this one knows per model whether it can read an
+    // image — see ninerouter() for why that matters, and why an empty
+    // catalogue still seats it.
+    providers.push(ninerouter(credentials, inputs));
+    providers.push(deepseek(credentials, inputs));
   }
 
   // Local providers — always allowed, including in private_vision.
   providers.push(ollama(credentials, inputs));
   providers.push(codex(credentials, inputs));
   providers.push(custom(credentials, inputs));
+  providers.push(curl(credentials, inputs));
 
-  return providers.filter(p => p !== null) as VisionProviderConfig[];
+  return (providers.filter(p => p !== null) as VisionProviderConfig[]).map(withUserOverride);
 }
 
 // ─── Provider builders ────────────────────────────────────────────────────
@@ -80,7 +138,8 @@ function openai(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): 
   return {
     id: 'openai',
     displayName: 'OpenAI',
-    modelId: 'gpt-4o',
+    // The model runVisionRequest('openai') actually sends to (it was a stale `gpt-4o`).
+    modelId: readFixedVisionModels().openai ?? 'gpt-4o',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -110,7 +169,7 @@ function geminiFlash(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
   return {
     id: 'gemini_flash',
     displayName: 'Gemini Flash',
-    modelId: 'gemini-3.5-flash',
+    modelId: 'gemini-3.8-flash',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -125,7 +184,7 @@ function claude(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): 
   return {
     id: 'claude',
     displayName: 'Claude',
-    modelId: 'claude-sonnet-4-6',
+    modelId: readFixedVisionModels().claude ?? 'claude-sonnet-4-6',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -153,9 +212,13 @@ function geminiPro(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
 function groqScout(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getGroqApiKey();
   return {
+    // The `groq_scout` id is a stable key (health tracking, telemetry, the
+    // provider-order tests) and stays even though Scout itself is gone. The
+    // model id is derived, not repeated — a second literal is how the NEXT
+    // retirement gets missed in one of the two places.
     id: 'groq_scout',
-    displayName: 'Groq Llama-4 Scout',
-    modelId: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    displayName: `Groq (${GROQ_PRIMARY_MODEL})`,
+    modelId: GROQ_PRIMARY_MODEL,
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -165,20 +228,32 @@ function groqScout(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
   };
 }
 
-function ollama(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
-  const baseUrl = (creds.getAllCredentials() as any)?.ollamaBaseUrl as string | undefined;
-  const ollamaModel = (creds.getAllCredentials() as any)?.ollamaModel as string | undefined;
-  const isVisionModel = ollamaModel ? isOllamaVisionModel(ollamaModel) : false;
+function ollama(_creds: CredentialsManager, inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  // The after-the-answer RECORD only (2026-10-01, Evin's rule: "send it to
+  // cloud if available, else send it to the Ollama model"). The PRE-PASS never
+  // uses Ollama: it runs before the answer inside 6 s, and Ollama reads the
+  // screenshot in the answer itself.
+  //
+  // Fed by the live helper, not the credential store: this rung used to read
+  // `ollamaBaseUrl` / `ollamaModel` from credentials, which nothing ever wrote,
+  // so it had never run. The helper names the model only when Ollama is the
+  // SELECTED provider and `/api/show` (else the name list) says an installed
+  // model reads images; ScreenUnderstandingService resolves it before building.
+  //
+  // "Local" is earned from the daemon's host, as for the custom and cURL
+  // rungs: OLLAMA_URL / switchToOllama can point at another machine, and that
+  // must not satisfy "Keep screenshots on this device".
+  const target = inputs.purpose === 'record' ? readOllamaRecordTarget() : null;
   return {
     id: 'ollama',
-    displayName: 'Ollama (local)',
-    modelId: ollamaModel,
-    isLocal: true,
-    isConfigured: !!baseUrl && !!ollamaModel,
-    supportsVision: isVisionModel,
+    displayName: target ? `Ollama (${target.model})` : 'Ollama (local)',
+    modelId: target?.model,
+    isLocal: !!target && customProviderIsLocal({ curlCommand: target.url }),
+    isConfigured: !!target,
+    supportsVision: !!target,
     scopeAllowsScreenshots: true,
     hint: 'ollama',
-    invoke: async (p) => callOllamaVision(baseUrl!, ollamaModel!, p),
+    invoke: async (p) => callLLMHelperVision('ollama', p),
   };
 }
 
@@ -186,13 +261,37 @@ function codex(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): V
   const cliPath = (creds.getAllCredentials() as any)?.codexCliPath as string | undefined;
   // Codex CLI vision capability is not yet verified across builds — we configure
   // the provider as available but the vision flag is conservative. See ROADMAP.
+  //
+  // SAFETY — READ BEFORE FLIPPING `supportsVision` TO TRUE.
+  // `isLocal: true` below is a ROUTING hint (no API key, runs via a local CLI
+  // binary), NOT a statement about where the pixels go. Codex CLI sends to
+  // chatgpt.com/backend-api/codex/responses — it is a CLOUD vision provider.
+  //
+  // VisionProviderFallbackChain implements `private_vision` as "skip every
+  // provider where isLocal !== true", so the moment `supportsVision` becomes
+  // true this entry becomes a private_vision-eligible CLOUD destination, and
+  // the Settings copy "Use a local vision model (Ollama) only. Cloud vision is
+  // never called." becomes false on the one screenshot path that is wired.
+  //
+  // This is inert TODAY only because `supportsVision: false` and `invoke`
+  // throws. If you enable CLI vision, you MUST also set `isLocal: false` (or
+  // give the chain a separate `isOnDevice` predicate). Note
+  // electron/llm/visionPolicy.ts deliberately does NOT share this predicate —
+  // its `isLocalVisionProvider()` is Ollama-only for exactly this reason.
   return {
     id: 'codex_cli',
     displayName: 'Codex CLI',
     modelId: (creds.getAllCredentials() as any)?.codexCliModel,
-    isLocal: true,
+    // false since 2026-10-01: Codex sends to chatgpt.com. `true` was a routing
+    // hint that would have made this rung eligible under "Keep screenshots on
+    // this device" the day `supportsVision` was flipped (see SAFETY above).
+    isLocal: false,
+    // `codexCliPath` lives in SettingsManager, never in the credential store,
+    // so this has always been false. No Codex pre-pass is built: it is a slow
+    // reasoning route, the pre-pass has 6 s, and a rung that cannot answer in
+    // time delays every screenshot answer by that much.
     isConfigured: !!cliPath,
-    supportsVision: false, // unverified; flip to true when CLI vision is confirmed end-to-end
+    supportsVision: false,
     scopeAllowsScreenshots: true,
     hint: 'codex',
     invoke: async () => { throw new Error('Codex CLI vision unverified — capability disabled'); },
@@ -201,21 +300,29 @@ function codex(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): V
 
 function custom(creds: CredentialsManager, inputs: VisionProviderBuildInputs): VisionProviderConfig {
   // The active custom provider lives on the live LLMHelper instance (set via
-  // switchToCustom in main.ts). CredentialsManager stores all configured custom
-  // providers; we only show the active one as a vision target so the chain
-  // never silently calls a provider the user didn't pick.
-  const customProviders = creds.getCustomProviders();
-  // Prefer the explicitly-set active provider if any; fall back to the first
-  // configured entry so the registry remains useful when LLMHelper hasn't been
-  // initialized yet (e.g. during unit tests).
-  const fromHelper = readActiveCustomProviderSync();
-  const active = fromHelper || customProviders[0];
+  // switchToCustom in main.ts). That is the ONLY provider this entry may
+  // advertise, because `invoke` resolves the provider from that same instance
+  // (runVisionRequest reads this.customProvider).
+  //
+  // There used to be a `|| customProviders[0]` fallback here, which broke that
+  // correspondence in both directions: with a cloud model selected it seated an
+  // entry whose invoke throws "No custom provider configured", and with two
+  // legacy providers configured it gated on #1's flags while sending to #2 —
+  // directly against the comment above it. If no custom provider is active,
+  // there is no custom vision target, and isConfigured:false skips the rung.
+  const active = readActiveCustomProvider();
 
-  const multimodal = (active as any)?.multimodal === true;
-  // Treat a provider as local-only if explicitly flagged OR if its URL targets
-  // a loopback host. This keeps `private_vision` mode from silently calling a
-  // public custom endpoint.
-  const localOnly = isLocalOnlyCustomProvider(active);
+  // Both answers come from the SHARED predicates rather than a local copy.
+  // `multimodal === true` here disagreed with customProviderSupportsVision in
+  // the streaming chain: it read the Settings default of "Auto-detect" (which
+  // stores no flag at all) as "no vision", so auto-detect was dead on this
+  // path, and it trusted an explicit flag on a template that cannot carry an
+  // image, committing to a provider that then dropped the screenshot.
+  const multimodal = customProviderSupportsVision(active);
+  // Keeps `private_vision` from calling a public custom endpoint. The local
+  // copy this replaces recognized only loopback and .local, so an LM Studio box
+  // at 192.168.1.50 was "local" to the streaming chain and "cloud" here.
+  const localOnly = customProviderIsLocal(active);
 
   return {
     id: 'custom',
@@ -230,42 +337,325 @@ function custom(creds: CredentialsManager, inputs: VisionProviderBuildInputs): V
   };
 }
 
-function readActiveCustomProviderSync(): any | null {
-  try {
-    const g = global as any;
-    if (typeof g.__nativelyGetLLMHelper === 'function') {
-      const helper = g.__nativelyGetLLMHelper();
-      if (helper && typeof helper.getActiveCustomProvider === 'function') {
-        return helper.getActiveCustomProvider() || null;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return null;
+/**
+ * A LiteLLM proxy as a vision rung.
+ *
+ * `isConfigured` keys off the base URL, matching every other LiteLLM gate in the
+ * app (ipcHandlers' modelAvailable) — the API key is optional because a keyless
+ * local proxy is supported.
+ *
+ * `supportsVision` cannot be answered from here: the proxy fronts arbitrary
+ * upstreams and only its own config knows whether the routed model takes images.
+ * Seating it as vision-capable is the honest choice — the alternative, gating on
+ * a guess, is what produced "no vision provider configured" for users who had
+ * one. It sits last among the cloud rungs, so a wrong guess costs one failed
+ * attempt and the chain moves on; the health tracker deprioritizes it after that.
+ */
+function litellm(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const baseURL = creds.getLitellmBaseURL();
+  // The SELECTED model, not the saved preference: runVisionRequest dispatches
+  // against LLMHelper's live currentModelId, so a rung seated off a stored
+  // preference would advertise one model and execute another.
+  const activeModelId = readActiveModelId();
+  const isSelected = /^litellm\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'litellm',
+    displayName: modelId ? `LiteLLM (${modelId.replace(/^litellm\//, '')})` : 'LiteLLM proxy',
+    modelId,
+    isLocal: false,
+    isConfigured: !!baseURL && isSelected,
+    // A model tested as text-only is not seated; untested seats as before.
+    // The rule LLMHelper's streaming chain uses (2026-10-01).
+    supportsVision: !!baseURL && isSelected
+      && gatewaySeatReadsImages('litellm', modelId, registryVisionFacts(normalizeVisionBaseURL(baseURL))),
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('litellm', p),
+  };
 }
 
-function isLocalOnlyCustomProvider(provider: any | undefined | null): boolean {
-  if (!provider) return false;
-  if (provider.localOnly === true) return true;
-  // Inspect the cURL command for a localhost / 127.0.0.1 / 0.0.0.0 / ::1 target.
-  const curl: string | undefined = provider.curlCommand;
-  if (!curl) return false;
-  try {
-    const urlMatch = curl.match(/https?:\/\/([^\s'"`]+)/i);
-    if (!urlMatch) return false;
-    const host = new URL(urlMatch[0]).hostname.toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1' || host.endsWith('.local');
-  } catch {
-    return false;
-  }
+
+/**
+ * A 9Router instance as a vision rung.
+ *
+ * Differs from litellm() above in exactly one way, and it is the point of the
+ * whole seat: `supportsVision` is ANSWERED rather than assumed. LiteLLM's
+ * builder seats every proxied model as vision-capable because /model/info says
+ * nothing about modalities, and its comment is right that gating on a guess is
+ * what produced "no vision provider configured" for users who had one.
+ *
+ * 9Router's /v1/models reports `capabilities.vision` per model, and the
+ * discovery path persists the vision-capable subset. On a stock instance 30 of
+ * 47 are capable and 17 are not, so assuming would route screenshots into
+ * seventeen models that cannot read them.
+ *
+ * An EMPTY persisted list means the catalogue has never been fetched, which is
+ * UNKNOWN, not "none" — so it falls back to LiteLLM's behaviour and seats the
+ * rung. Failing closed on absent data is the bug, not the fix.
+ */
+function ninerouter(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const baseURL = creds.getNinerouterBaseURL();
+  // The SELECTED model, not the stored preference — same reason litellm() gives:
+  // runVisionRequest dispatches against LLMHelper's live currentModelId.
+  const activeModelId = readActiveModelId();
+  const isSelected = /^ninerouter\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  const wireId = modelId.replace(/^ninerouter\//i, '');
+  // The same rule LLMHelper's streaming chain seats this rung by (2026-10-01).
+  const supportsImages = gatewaySeatReadsImages('ninerouter', modelId,
+    registryVisionFacts(normalizeVisionBaseURL(baseURL), { ninerouterVisionModels: creds.getNinerouterVisionModels?.() || [] }));
+  return {
+    id: 'ninerouter',
+    displayName: modelId ? `9Router (${wireId})` : '9Router',
+    modelId,
+    isLocal: false,
+    isConfigured: !!baseURL && isSelected,
+    supportsVision: !!baseURL && isSelected && supportsImages,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('ninerouter', p),
+  };
+}
+
+/** An NVIDIA NIM endpoint as a vision rung. Same reasoning as litellm() above. */
+function nvidiaNim(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getNvidiaNimApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = /^nvidia_nim\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'nvidia_nim',
+    displayName: modelId ? `NVIDIA NIM (${modelId.replace(/^nvidia_nim\//, '')})` : 'NVIDIA NIM',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected && gatewaySeatReadsImages('nvidia_nim', modelId, registryVisionFacts()),
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('nvidia_nim', p),
+  };
+}
+
+/**
+ * OpenRouter as a vision rung. Same reasoning as litellm() and nvidiaNim():
+ * gated on `isSelected`, so it is only ever a rung for the model the user
+ * actually picked and never gets auto-recruited into someone else's turn.
+ *
+ * Registered rather than omitted DELIBERATELY. All three shipped presets take
+ * images, and without an entry here a user whose only configured provider is
+ * OpenRouter would get "no vision provider" on every screenshot while the
+ * streaming chain was perfectly willing to call it — the gap litellm()'s own
+ * comment records having fixed.
+ */
+function openrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getOpenrouterApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = /^openrouter\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'openrouter',
+    displayName: modelId ? `OpenRouter (${modelId.replace(/^openrouter\//, '')})` : 'OpenRouter',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    // The rule LLMHelper's streaming chain seats this rung by (2026-10-01):
+    // OpenRouter's own catalogue, when fetched, decides.
+    supportsVision: !!apiKey && isSelected
+      && gatewaySeatReadsImages('openrouter', modelId, registryVisionFacts()),
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('openrouter', p),
+  };
+}
+
+/**
+ * Fluxion AI as a vision rung. Same `isSelected` gate as the three gateways
+ * above, and for Fluxion the gate is doing more work than it is for them: its
+ * model ids are the upstream vendors' own, so an ungated Fluxion rung would be
+ * indistinguishable in the logs from the user's real Anthropic/OpenAI/Gemini
+ * provider while spending a different account.
+ *
+ * `supportsVision` is reported for the SELECTED model only, and the image-only
+ * ids (gpt-image-2, nano-banana-2) never reach here because modelFetcher drops
+ * them from the chat catalogue — they answer on /v1/images/generations, which
+ * is not a chat endpoint at all.
+ */
+function fluxion(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getFluxionApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = /^fluxion\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'fluxion',
+    displayName: modelId ? `Fluxion (${modelId.replace(/^fluxion\//, '')})` : 'Fluxion',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected && gatewaySeatReadsImages('fluxion', modelId, registryVisionFacts()),
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('fluxion', p),
+  };
+}
+
+/**
+ * AgentRouter as a vision rung. Fluxion's `isSelected` gate, for Fluxion's
+ * reason (bare vendor ids — an ungated rung would look exactly like the user's
+ * real Anthropic/OpenAI provider while spending a different account), plus a
+ * per-model gate from the capability table, so a model that cannot read images
+ * is never handed a screenshot. All four live models can (measured 2026-09-30).
+ * Mirrors the seat LLMHelper's streaming vision chain builds
+ * (agentRouterModelSupportsVision), so the two cannot disagree.
+ */
+function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getAgentRouterApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = isAgentRouterModelId(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  const readsImages = isSelected && gatewaySeatReadsImages('agentrouter', activeModelId, registryVisionFacts());
+  return {
+    id: 'agentrouter',
+    displayName: modelId ? `AgentRouter (${agentRouterWireModel(modelId)})` : 'AgentRouter',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && readsImages,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('agentrouter', p),
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-const OLLAMA_VISION_MODELS_RE = /(llava|bakllava|moondream|llama3\.2-vision|llama-3\.2-vision|gemma3|minicpm-v|qwen2\.5-vl|qwen2-vl|pixtral)/i;
+// The saved facts both screenshot paths read: provider catalogues and one-time
+// test results (visionCapabilityStore). `baseURL` is the normalised address of a
+// self-hosted provider, '' for hosted services — the key LLMHelper writes under.
+/**
+ * Direct DeepSeek, for the model the user selected (2026-10-01). Seated only
+ * when the resolver says that model reads images — the name list for Flash
+ * (measured), or a passed one-time test. Never on unknown: deepseek-v4-pro
+ * answers HTTP 200 without seeing the image. Last among the cloud rungs, so it
+ * matters only when nothing faster is configured; before this a DeepSeek-only
+ * user got no pre-pass at all.
+ */
+function deepseek(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getDeepseekApiKey?.();
+  const selection = readActiveSelection();
+  const isSelected = selection?.provider === 'deepseek';
+  const modelId = isSelected ? selection!.model : '';
+  const reads = isSelected
+    && readsImages(resolveVision({ provider: 'deepseek', model: modelId }, registryVisionFacts()), false);
+  return {
+    id: 'deepseek',
+    displayName: modelId ? `DeepSeek (${modelId})` : 'DeepSeek',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && reads,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('deepseek', p),
+  };
+}
+
+/**
+ * UNREACHABLE FROM THE UI TODAY (found in phase 5c-2): only the
+ * `switch-to-curl-provider` IPC selects a cURL-lane provider, the preload does
+ * not expose it, and saved cURL providers are loaded as custom providers (the
+ * rung above). This rung works if that lane is ever revived.
+ *
+ * The cURL provider the user selected (2026-10-01), on the same two shared
+ * predicates as the custom rung above: it must be able to carry an image, and
+ * it is local only when its host is loopback or private — never by default, so
+ * a hosted endpoint cannot satisfy "Keep screenshots on this device".
+ */
+function curl(_creds: CredentialsManager, inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const selection = readActiveSelection();
+  const active = selection?.provider === 'curl' ? readActiveCurlProvider() : null;
+  return {
+    id: 'curl',
+    displayName: active?.name || 'cURL provider',
+    modelId: (active as any)?.model,
+    isLocal: customProviderIsLocal(active),
+    isConfigured: !!active,
+    supportsVision: customProviderSupportsVision(active),
+    scopeAllowsScreenshots: inputs.scopeAllowsScreenshots,
+    hint: 'custom',
+    invoke: async (p) => callLLMHelperVision('curl', p),
+  };
+}
+
+/**
+ * Did the user select a model that runs on this machine? Ollama, or a custom /
+ * cURL endpoint on a loopback or private host (customProviderIsLocal — never
+ * "local" by default). No selection known → false: today's behaviour.
+ */
+function selectionIsLocal(): boolean {
+  const selection = readActiveSelection();
+  // No nameable selection: still local when Ollama is the selected provider
+  // (it has no model name at startup, or with nothing installed).
+  if (!selection) return readUsingOllama();
+  if (selection.provider === 'ollama') return true;
+  if (selection.provider === 'custom') return customProviderIsLocal(readActiveCustomProvider());
+  if (selection.provider === 'curl') return customProviderIsLocal(readActiveCurlProvider());
+  return false;
+}
+
+/**
+ * The rung that carries the SELECTED model, with a key that changes whenever
+ * that selection does, or null when no rung does. Vendor rungs (OpenAI,
+ * Claude, Gemini, Groq, Natively) run a fixed model, so the selection does not
+ * own their breaker. Used by ScreenUnderstandingService to forget a breaker
+ * that was opened for a different selection.
+ */
+export function selectionRung(): { id: string; key: string } | null {
+  const selection = readActiveSelection();
+  if (!selection) return null;
+  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'ninerouter', 'deepseek'];
+  const id = GATEWAYS.includes(selection.provider) ? selection.provider
+    : selection.provider === 'custom' || selection.provider === 'curl' ? selection.provider
+    : null;
+  if (!id) return null;
+  // A custom or cURL provider keeps its id when its command is edited.
+  const command = id === 'custom' ? readActiveCustomProvider()?.curlCommand
+    : id === 'curl' ? readActiveCurlProvider()?.curlCommand : '';
+  return { id, key: `${selection.provider}|${selection.model}|${command ?? ''}` };
+}
+
+function registryVisionFacts(baseURL = '', extra: { ninerouterVisionModels?: readonly string[] } = {}) {
+  return {
+    ...extra,
+    providerReportsVision: (p: string, m: string) => storedVisionAnswer(p, m, baseURL),
+    testedVision: (p: string, m: string) => storedVisionTest(p, m, baseURL)?.reads,
+    overriddenVision: (p: string, m: string) => storedVisionOverride(p, m, baseURL),
+  };
+}
+
+// The rungs whose model is fixed, not asked of the resolver: rung id → the
+// provider its model is saved under. "Reads images: Off" (Settings, phase 4)
+// is about the MODEL, whichever rung would send to it — the same rule, and
+// the same list, as LLMHelper.buildVisionChain's fixedRungModel.
+const FIXED_RUNG_PROVIDER: Readonly<Record<string, string>> = {
+  natively: 'natively', openai: 'openai', claude: 'claude', groq_scout: 'groq',
+  gemini_flash_lite: 'gemini', gemini_flash: 'gemini', gemini_pro: 'gemini',
+};
+
+/** A fixed-model rung the user switched Off reads no screenshot. (A custom or
+ *  cURL provider has its own "Screenshot / Vision Support" control.) */
+function withUserOverride(p: VisionProviderConfig): VisionProviderConfig {
+  const provider = FIXED_RUNG_PROVIDER[p.id];
+  if (!p.supportsVision || !provider || !p.modelId) return p;
+  return storedVisionOverride(provider, p.modelId) === false ? { ...p, supportsVision: false } : p;
+}
+
+// Single definition, re-exported. The local copy this replaces had drifted:
+// it was missing llama-4, granite3.2-vision, mistral-small3.1 and
+// llama-guard3-vision, so a user running one of those got no vision here while
+// the streaming chain happily used it.
 export function isOllamaVisionModel(modelId: string): boolean {
-  return OLLAMA_VISION_MODELS_RE.test(modelId);
+  return isOllamaVisionModelByName(modelId);
 }
 
 /**
@@ -276,63 +666,21 @@ export function isOllamaVisionModel(modelId: string): boolean {
 async function callLLMHelperVision(providerId: string, params: VisionInvocationParams): Promise<string> {
   const helper = await getActiveLLMHelper();
   if (!helper) throw new Error('LLMHelper not initialized');
-  return helper.runVisionRequest(providerId, params.userPrompt, params.systemPrompt, params.optimized.path);
-}
-
-/**
- * Call a local Ollama vision model. Uses the OpenAI-compatible /v1/chat/completions
- * endpoint at `${baseUrl}/v1/` with an image_url data URL — supported by every
- * vision-capable Ollama model we care about (llava family, qwen2.5-vl, etc.).
- */
-async function callOllamaVision(baseUrl: string, model: string, params: VisionInvocationParams): Promise<string> {
-  const { optimized, systemPrompt, userPrompt, signal } = params;
-  const data = await fs.readFile(optimized.path);
-  const dataUrl = `data:${optimized.mimeType};base64,${data.toString('base64')}`;
-  const trimmedBase = baseUrl.replace(/\/+$/, '');
-  const url = `${trimmedBase}/v1/chat/completions`;
-
-  const body = {
-    model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: userPrompt },
-          { type: 'image_url', image_url: { url: dataUrl } },
-        ],
-      },
-    ],
-    stream: false,
-  };
-
-  const serializedBody = JSON.stringify(body);
-  require('../../llm/providerPayloadCapture').captureProviderPayload({
-    provider: 'ollama_vision',
-    classification: 'exact_serialized_provider_payload',
-    payload: body,
-    serializedPayload: serializedBody,
-  });
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: serializedBody,
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    // Surface a classifiable error so VisionProviderFallbackChain can bucket it.
-    throw new Error(`Ollama ${res.status}: ${text.substring(0, 200)}`);
-  }
-
-  const json: any = await res.json();
-  const content = json?.choices?.[0]?.message?.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content.map((part: any) => (typeof part === 'string' ? part : part?.text || '')).join('');
-  }
-  throw new Error('Ollama returned empty content');
+  // `signal` and `timeoutMs` used to stop here. VisionProviderFallbackChain
+  // builds an AbortController per attempt and arms it with perProviderTimeoutMs
+  // (12s), but this hand-off dropped both, so the chain's budget and its
+  // cancellation were INERT for every cloud rung — whatever inner deadline the
+  // provider method happened to carry was the real one. For the Natively rung
+  // that was generateWithNatively's 8s text default, which is why every
+  // screenshot in natively_debug (3).log failed at exactly 8.0s and the
+  // chain's 12s never appeared anywhere.
+  return helper.runVisionRequest(
+    providerId,
+    params.userPrompt,
+    params.systemPrompt,
+    params.optimized.path,
+    { signal: params.signal, timeoutMs: params.timeoutMs },
+  );
 }
 
 /**

@@ -1,0 +1,1845 @@
+{
+ "model": "default",
+ "userData": "/var/folders/rr/s6z6gxfx68g48sbfn5g8_x2w0000gn/T/natively-live-corpus-default-1790040733715",
+ "uploads": {
+  "ok": 59,
+  "failed": [],
+  "ms": 242
+ },
+ "queries": [
+  {
+   "query_id": "q0001-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "ms": 63,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0002-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "ms": 59,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 10
+  },
+  {
+   "query_id": "q0003-en",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0004-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0005-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 44,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0006-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 7
+  },
+  {
+   "query_id": "q0007-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0008-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0009-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0010-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0011-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0012-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0013-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0014-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 6
+  },
+  {
+   "query_id": "q0015-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0016-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 37,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 6
+  },
+  {
+   "query_id": "q0017-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0018-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0019-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0020-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 3
+  },
+  {
+   "query_id": "q0021-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 2
+  },
+  {
+   "query_id": "q0022-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0023-en",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0024-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0025-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0026-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0027-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0028-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 12
+  },
+  {
+   "query_id": "q0029-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 2
+  },
+  {
+   "query_id": "q0030-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0031-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 6
+  },
+  {
+   "query_id": "q0032-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0033-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 6
+  },
+  {
+   "query_id": "q0034-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0035-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 3
+  },
+  {
+   "query_id": "q0036-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0037-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0038-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0039-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0040-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0041-en",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0042-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0043-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0044-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0045-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 3
+  },
+  {
+   "query_id": "q0046-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0047-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0048-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0049-en",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 8
+  },
+  {
+   "query_id": "q0050-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0051-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 43,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0052-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0053-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 43,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 2
+  },
+  {
+   "query_id": "q0054-en",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0055-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 2
+  },
+  {
+   "query_id": "q0056-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "ms": 43,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 6
+  },
+  {
+   "query_id": "q0057-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 43,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0058-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0059-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0060-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0061-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "semantic"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0062-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 7
+  },
+  {
+   "query_id": "q0063-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0064-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0065-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0066-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0067-en",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0068-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 10
+  },
+  {
+   "query_id": "q0069-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0070-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0071-en",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0072-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0073-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0074-en",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 6
+  },
+  {
+   "query_id": "q0075-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "semantic"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 11
+  },
+  {
+   "query_id": "q0126-en",
+   "track": "text",
+   "categories": [
+    "configuration"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0127-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "configuration"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0128-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "configuration"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0129-en",
+   "track": "text",
+   "categories": [
+    "configuration"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0130-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "debugging"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0131-en",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0132-en",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0133-en",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0134-en",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0135-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "debugging"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0136-en",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 8
+  },
+  {
+   "query_id": "q0137-en",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0138-en",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "ms": 42,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0139-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0140-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0394-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 37,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0395-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 37,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0396-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0397-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0398-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 4
+  },
+  {
+   "query_id": "q0399-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0400-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0401-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0402-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0403-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 8
+  },
+  {
+   "query_id": "q0404-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0405-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0406-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 37,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0407-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 37,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 2
+  },
+  {
+   "query_id": "q0408-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0409-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 9
+  },
+  {
+   "query_id": "q0410-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0411-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0412-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 37,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0413-en",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0414-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 37,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 6
+  },
+  {
+   "query_id": "q0415-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 39,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0416-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0417-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0418-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 41,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0419-en",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "ms": 40,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 2
+  },
+  {
+   "query_id": "q0420-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 5
+  },
+  {
+   "query_id": "q0421-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 38,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0422-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 37,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": null
+  },
+  {
+   "query_id": "q0423-en",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "ms": 36,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "reranked": false,
+   "firstHitRank": 2
+  }
+ ],
+ "embeddingStatus": {
+  "configured": true,
+  "provider": "local",
+  "model": "Xenova/multilingual-e5-small",
+  "dimensions": 384,
+  "space": "local:xenova/multilingual-e5-small:384",
+  "location": "on-device",
+  "lightweight": false
+ },
+ "index": {
+  "ms": 50081,
+  "files": 59,
+  "byStatus": {
+   "ready": 59
+  },
+  "chunks": 900,
+  "embedded": 900
+ },
+ "matchedSnippetRate": 0.966,
+ "embeddingStatusAtEnd": {
+  "configured": true,
+  "provider": "local",
+  "model": "Xenova/multilingual-e5-small",
+  "dimensions": 384,
+  "space": "local:xenova/multilingual-e5-small:384",
+  "location": "on-device",
+  "lightweight": false
+ },
+ "modelLoadedInApp": "Xenova/multilingual-e5-small",
+ "expectedModel": "Xenova/multilingual-e5-small",
+ "selfPoison": 0,
+ "cloudProviderSelected": [],
+ "dotenvInjected": [
+  "injected env (0)",
+  "injected env (0)"
+ ],
+ "providersSelected": [
+  "Selected provider: local"
+ ],
+ "appBinary": null,
+ "modelPathEvidence": [],
+ "queryFile": "/Users/evin/natively-cluely-ai-assistant/embedding-benchmark/queries/crosslang_en_control.json",
+ "rerankEvents": 0
+}

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: April 25th 2026_
+_Last updated: October 1st 2026_
 
 This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
@@ -25,10 +25,12 @@ If you're using Natively on behalf of an organisation (under a bulk or team lice
 We've designed Natively to keep as much of your data on your device as possible. In practice that means:
 
 - **Audio you capture, screen content, transcripts, notes, and meeting history are stored locally on your device** in a SQLite database. They are **not** uploaded to a Natively-operated server.
-- When you use AI or speech-to-text features, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
+- When **Apple Speech** is selected, microphone and system audio are transcribed by Apple's on-device speech framework. The audio is not sent to Natively or a cloud speech provider. macOS may contact Apple to download the selected language's speech asset.
+- When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
 - For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
 - For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters).
-- We **do not sell** your data. We **do not use your content to train AI models**. We don't use third-party analytics or marketing trackers inside the desktop app.
+- **Every installation**, paid or not, reports **product-usage events** to our own servers: that the app was opened on a given day, that a meeting was held, which features were used, that a trial was started, that a plan page was opened, and the like. They are **linked to your device and, if you have one, your trial or account**. They cannot contain anything you say, see or type. You can turn them off. See §3.2.1.
+- We **do not sell** your data. We **do not use your content to train AI models**. The desktop app also sends anonymous usage events to **Google Analytics**: that the app was opened or closed, which feature or AI model was used, and how long a session lasted. These events never contain anything you say, see or type, and IP addresses are anonymised. We don't use advertising or marketing trackers inside the desktop app.
 
 The rest of this document explains those flows in detail.
 
@@ -62,15 +64,85 @@ For Natively Pro, the Natively API, and the Free Trial we maintain a small opera
 | Plan / product / order ID | Operate billing, refunds, and support | Same as above |
 | Billing email | Send order confirmations, renewal notices, security &amp; terms updates, and support | Until you ask us to delete the account, plus any period required by tax law |
 | Quota counters (AI / STT / search) | Enforce plan limits and bill correctly | Rolling — counters reset per cycle; aggregate history kept for accounting |
+| Usage ledger — a record of each AI, search and speech-to-text request we run for you: timestamp, endpoint, provider and model name, token and duration counts, and whether it succeeded or failed | Bill correctly, investigate billing disputes and refunds, diagnose failures, and meet statutory accounting-record obligations | 8 years from the date of the event (Companies Act 2013 record-keeping; GST records for 72 months from annual-return filing) |
+| Licence activity — a timestamped record, at most once every 6 hours, that your licensed application contacted our servers to check its entitlement | Confirm a licence was in active use, investigate billing disputes, detect licence sharing | Same as above |
+| Feature activity reported by the app — which built-in feature ran (for example Technical Interview or Meeting Copilot), whether it completed, failed or was cancelled, how long it took, and a category for any error | Understand which features are used, diagnose failures, and evidence usage in a billing dispute where the work ran on your own device and our servers therefore never saw it | Same as above |
+| App context — application version, operating system, and a random installation identifier generated on your device | Tell one installation of your licence apart from another, and reproduce version-specific bugs | Same as above |
+| Diagnostics — timings and counts from the answer pipeline (how long a step took, how many documents were consulted, whether re-ranking ran) | Diagnose slow or failing behaviour | 45 days |
 | Free Trial token, started_at / expires_at | Provide and time-limit the trial | Until 90 days after trial expiry |
 | Anti-abuse signals (rate-limited IP, multi-account heuristics) | Prevent trial farming, refund-rebuy abuse, license sharing | Up to 12 months from last signal |
 | Support correspondence | Answer your questions and keep a record of what we agreed | Up to 3 years from the last message in the thread |
 
 We do **not** store the audio you capture, the screen content you capture, your transcripts, your prompts, or your generated outputs on our servers.
 
+This applies to the usage ledger too. The ledger records **that** something happened — when,
+through which endpoint, on which model, whether it succeeded, and how much of your quota it
+used. It never records **what** it was about. No prompt text, answer text, résumé or
+job-description content, meeting transcript, document content, clipboard content, keystroke
+or screenshot is written to it, and neither is any provider API key: your Natively key
+appears only as a one-way hash that cannot be reversed back into the key.
+
+The installation identifier is a random value generated on your device the first time the app
+runs. It is not derived from your hardware, and we do not collect a hardware fingerprint for
+this purpose. One licence may have several installations, and we record them separately so we
+can tell them apart — not so we can identify a machine.
+
+Where the app reports its own feature activity to us, we label those records as
+**self-reported by the application** and keep them separate from what our servers observed
+directly. We do not present the two as the same kind of evidence, because they are not: the
+first is a report from software running on your computer, and the second is something our own
+systems executed and measured.
+
+### 3.2.1 Product-usage events — what every installation reports, and who it is linked to
+
+The desktop app reports product-usage events to our own servers, whether or not you have bought
+anything. We use them to follow how people move through the product: who installs it, who holds a
+first meeting, who tries it, who pays, where the others stop, and who comes back. They go to us
+only, not to an analytics company.
+
+**These events are linked to you, not anonymous.** Each one is tied to your device, and, when you
+have a trial or an account, to that trial or account.
+
+| Data | Purpose | Retained for |
+|---|---|---|
+| Hardware identifier (the same device fingerprint used for trials and licences) and a random installation identifier | Recognise the same device across launches and reinstalls, and tell installations apart | 13 months |
+| Your trial or your Natively account, worked out by our server from the trial token or Natively key the app sends with the request (through the account: your billing email and plan) | Know which trial or customer an event belongs to | 13 months |
+| Usage events — the app was opened for the first time; the app was used on a given day; a getting-started step was shown or completed; a meeting started or ended, how many whole minutes it lasted and how many answers it produced; which features you used that day; a card or a locked feature was shown, and what you chose; a free trial was started, or could not be and why; a checkout page was opened, and from which screen; a licence key or API key was entered, and whether it was accepted | Understand how the product is used, where people give up, and what leads to a purchase | 13 months |
+| The state of the installation at that moment, as yes/no values — whether it is on a trial, has a plan, has a Pro licence, or uses its own AI keys — with the application version and operating system | Compare those groups | 13 months |
+
+Every event is a fixed name with fixed choices, whole numbers, or yes/no values. No field in it
+can hold text, so an event cannot contain anything you say, see, type or paste, a file name, a
+meeting title, the name of a model, or a key. A count of answers is a number; the answers are
+never sent. We do not store your IP address with these events.
+
+**Registering the installation.** Before it reports anything, the app registers its installation
+with our server once: it does a short calculation in the background (about a second on most
+computers, never during a meeting) and receives a token that it sends with later events. This
+exists to stop made-up installations being reported to us; it sends nothing about you.
+
+**What gets linked.** Events from one device are joined into one history, so we can see the steps
+one person took. When you start a free trial or use a Natively key, those events are linked to that
+trial or account. When you open a checkout page from the app, the link carries your installation
+identifier and the screen you came from, and Dodo Payments returns both to us with the purchase, so
+a purchase is linked to the installation it started from. Your purchase history is part of the same
+record: the purchase, each renewal, a cancellation, a failed renewal payment, and any refund or
+chargeback, with the product, amount, currency and billing country. It is tied to your account, and
+through your account to the devices it has been used on. This includes free trials and purchases made
+before this version of the app. We can look up one person's history by their email or device when we
+need to, for example to answer a support question.
+
+**Turning it off.** Open **Settings › General › Advanced** and turn off **Usage statistics**. That
+stops these events, discards any that had not been sent yet, and stops the identifier being added
+to checkout links. It is on by default. If you email **natively.contact@gmail.com**, we will also
+delete the events already reported for your device and account.
+
+The switch does not change the records described in §3.2 for paid products and the Free Trial
+(the usage ledger, licence activity and the feature activity a licensed app reports). Billing and
+dispute handling depend on those, so they continue while you hold a licence or a plan.
+
 ### 3.3 What payment processors handle
 
-Payments are processed by **Dodo Payments**. Card details, bank details, and similar payment-instrument data are handled by Dodo and are subject to Dodo's privacy policy. We receive transaction metadata from Dodo (order ID, amount, currency, status, billing email) but we do **not** receive or store full card or bank details on our servers.
+Payments are processed by **Dodo Payments**. Card details, bank details, and similar payment-instrument data are handled by Dodo and are subject to Dodo's privacy policy. We receive transaction metadata from Dodo (order ID, amount, currency, status, billing email, and the installation identifier and screen name the app attached to the checkout link — see §3.2.1) but we do **not** receive or store full card or bank details on our servers.
 
 ### 3.4 What software updates send
 
@@ -85,6 +157,26 @@ This is the standard data sent by any GitHub-hosted update check and is governed
 
 When you pair the desktop app with a phone via the Phone Mirror beta feature, a short-lived pairing token is generated and used to establish the connection. The session content (the mirrored screen and notifications) is **not** stored on our servers. You are responsible for the security of any device you pair and for the network on which the pairing happens.
 
+### 3.6 Google Calendar (optional)
+
+Connecting Google Calendar is optional. If you connect it, Natively asks Google for **read-only** access to your name and email address (to show which account is connected), the list of calendars you have turned on, and the events on those calendars. Natively cannot add, change, or delete anything in your calendar.
+
+We use this data only for the calendar features you see in the app:
+
+- showing your upcoming meetings, with a Join button that opens the meeting link stored in the event;
+- linking a session you start to the calendar event it belongs to, so the saved notes carry that meeting's title, time, and attendees;
+- naming the speakers in your notes: your own first name and, in a one-to-one meeting, the other attendee's first name;
+- filling in the recipients of a follow-up email, which opens as a draft in your own Gmail. Natively never sends email for you.
+
+The app fetches calendar data directly from Google to your device. The sign-in tokens are encrypted with your operating system's secure storage, and the details of an event are kept on your device with the meeting they belong to. Your calendar events are **not** stored on a Natively-operated server. Two things derived from this data leave your device:
+
+- When Natively writes notes, answers, or a follow-up for a meeting, the text it sends to the AI provider you have chosen (see section 4.2; this can be Natively AI) can include the meeting's title and those speaker first names.
+- To show attendee pictures, the app asks Gravatar for an image using a SHA-256 hash of each attendee's email address. The address itself is not sent.
+
+**Limited Use.** Natively's use and transfer of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. The use of raw or derived user data received from Workspace APIs will adhere to the Google User Data Policy, including the Limited Use requirements. We do not use Google user data, whether raw, aggregated, or derived, to create, train, or improve foundational or generalized AI or machine-learning models, and we do not transfer it to anyone for that purpose. We do not sell it or use it for advertising.
+
+You can disconnect at any time in Settings › Calendar, which deletes the stored tokens from your device. You can also remove Natively's access from your [Google Account](https://myaccount.google.com/permissions).
+
 ---
 
 ## 4. Where your data goes when you use AI / STT / search features
@@ -97,7 +189,9 @@ The data sent to a provider is **not anonymised** — transcripts and prompts co
 
 ### 4.1 Speech-to-text providers
 
-Depending on your settings, audio chunks may be sent to one of:
+**Apple Speech** and the local Whisper models process captured audio on your device. Apple Speech uses the speech assets managed by macOS; the operating system may contact Apple to download a language asset the first time it is needed, but Natively does not send captured audio to Apple for transcription.
+
+If you select a cloud speech-to-text provider instead, audio chunks may be sent to one of:
 
 - **Natively STT** (operated by us, billed via the Natively API)
 - **Google Cloud Speech-to-Text**
@@ -161,7 +255,7 @@ To function, the desktop app needs the following operating-system permissions. Y
 - **Screen Recording / Screen Capture** — to capture system audio (on macOS, this is bundled into the same permission) and to capture screen content for Vision features.
 - **Accessibility** — required on macOS for global hotkeys, window-management, and certain capture paths.
 - **Notifications** — to alert you when summaries are ready, when a session ends, etc.
-- **Network** — to call AI / STT / search providers and to verify your licence.
+- **Network** — to call AI / STT / search providers, verify your licence, and let macOS download an Apple Speech language asset when one is not already installed.
 
 We request the minimum necessary set for the features you've enabled.
 
@@ -187,7 +281,7 @@ You have the following rights in respect of personal data we hold about you:
 
 - **Access** — you can ask what data we hold about you and receive a copy.
 - **Correction** — you can ask us to correct data that's inaccurate or incomplete.
-- **Erasure** — you can ask us to delete your account and the data associated with it, subject to retention required by law (e.g., tax records).
+- **Erasure** — you can ask us to delete your account and the data associated with it. Where a record must be kept by law (for example accounting and tax records), we **pseudonymise** it rather than keep it identifiable: your billing email, installation identifiers and licence-key hash are erased from the usage ledger, and the remaining rows are re-keyed to a salted hash so they survive only as an anonymous count for accounting. The salt is not stored, so the link back to you cannot be rebuilt afterwards. If a payment dispute is open when you ask, we hold the underlying records until it closes and pseudonymise immediately after.
 - **Portability** — you can ask for a copy of your data in a machine-readable format.
 - **Withdraw consent** — where processing relies on your consent, you can withdraw it at any time. (Note that this may require us to terminate paid services that depend on the data.)
 - **Object** — you can object to processing that relies on legitimate interest (e.g., anti-abuse).

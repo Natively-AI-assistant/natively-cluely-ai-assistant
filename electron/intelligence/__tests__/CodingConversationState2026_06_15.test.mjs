@@ -92,4 +92,16 @@ describe('CodingConversationState — original stays, current advances', () => {
     assert.doesNotThrow(() => turn(s, 'a', '', '', null, false));
     assert.equal(s.resolveProblemFor('nope', 'x'), null);
   });
+
+  test('clearAllSessions wipes every session, not just one (answer-pipeline-rebuild Phase 3, 2026-07-28)', () => {
+    const s = new CodingConversationState();
+    turn(s, 'a', 'Solve Two Sum', codeAns('twoSum'), null, false);
+    turn(s, 'b', 'Solve Merge Sort', codeAns('mergeSort'), null, false);
+    turn(s, 'c', 'Solve Quick Sort', codeAns('quickSort'), null, false);
+    s.clearAllSessions();
+    assert.equal(s.resolveProblemFor('a', 'complexity'), null);
+    assert.equal(s.resolveProblemFor('b', 'complexity'), null);
+    assert.equal(s.resolveProblemFor('c', 'complexity'), null);
+    assert.equal(s.sessionCount, 0);
+  });
 });

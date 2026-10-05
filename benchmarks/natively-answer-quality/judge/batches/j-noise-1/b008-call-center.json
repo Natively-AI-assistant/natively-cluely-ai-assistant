@@ -1,0 +1,84 @@
+{
+ "batch": "b008-call-center",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DCC-CTX-G1": {
+   "title": "Harborline Support Policy Handbook v4.2",
+   "text": "Harborline Home Support Policy Handbook - Version 4.2\nEffective 1 July 2026. Applies to all Tier 1 phone and chat agents. Supersedes every earlier version.\n\n1. Identity verification\nBefore discussing any account detail, verify the caller with the full name on the account plus TWO of: (a) the email address on file, (b) the last 4 digits of the card on file, (c) the 6-digit Support PIN shown in the app under Settings > Support. The caller must provide the information; never read it out to them. Account changes (email change, password reset, adding or removing a household member, transferring the subscription) also require the Support PIN or a one-time code sent to the email on file. A caller who is not the account holder can only be helped if they are listed as a household member on the account.\n\n2. Account recovery\nIf the caller cannot access the email on file and has no Support PIN, open an Account Recovery case using form AR-1. The customer receives a secure upload link for a government photo ID. Trust & Safety reviews AR-1 cases within 3 business days. Agents cannot bypass or speed up AR-1 and must not change the email on file during the call.\n\n3. Password resets\nAgents trigger a reset email to the address on file only. The link expires in 30 minutes. Agents never see, set, read out or text a password. Password resets by SMS, or to any new phone number or new email address, are not permitted under any circumstances.\n\n4. Refunds\nHardware: full refund to the original payment method within 30 days of delivery. Opened, non-defective hardware returned within 30 days carries a 15% restocking fee. After 30 days, defective hardware under the 1-year limited warranty is replaced, not refunded.\nSubscriptions: monthly Protect and Protect Plus plans are not refunded for partial months. Annual plans cancelled within 14 days of the renewal charge receive a prorated refund; after 14 days the plan runs to the end of the term.\nTier 1 agents may issue refunds up to $150 per case. Anything above $150 needs Tier 2 approval. Refunds post in 5-7 business days.\n\n5. Goodwill credits\nTier 1 agents may apply one goodwill credit of up to $20 per account in any 12-month period, and only for a documented service failure: a cloud outage longer than 4 hours or a missed delivery window. Check the account's credit history before offering anything. Never promise a credit before confirming eligibility. Outage credits for declared incidents are applied automatically on the next bill and do not count toward the goodwill limit.\n\n6. Duplicate charges\nTwo identical charges within 24 hours: check the billing console. If one is a pending authorization, it drops off on its own within 3-5 business days and no refund is needed. A confirmed duplicate settled charge may be refunded by Tier 1 regardless of the $150 limit.\n\n7. Cancellations\nCustomers may cancel in the app or by phone. Cancellation takes effect at the end of the current billing period; cameras keep working in free mode (live view only, no recordings). One retention offer may be made per account: 50% off Protect Plus for the next 2 months. If the customer declines, process the cancellation without a second pitch.\n\n8. Shipping\nStandard shipping is 3-5 business days; no delivery date is guaranteed. If tracking shows delivered but the customer has nothing, ask them to wait 48 hours, then open a carrier trace. A replacement ships when the trace closes or 7 days after the trace is opened, whichever comes first.\n\n9. Escalation tiers\nTier 1: frontline phone and chat. Tier 2: Senior Support, refunds up to $500, hardware RMAs and unresolved technical faults. Tier 3: Customer Relations (supervisors), complaints about staff, legal or media threats, refunds above $500.\nWarm transfers to Tier 2 are available 8am-8pm ET, Monday to Friday. Outside those hours, create an escalation ticket.\nA caller who asks for a manager is offered a Tier 3 callback. Supervisors call back within 1 business day. Do not promise a specific time.\n\n10. Response-time targets\nChat: first reply within 2 minutes. Email tickets: first response within 24 hours. Tier 2 escalation tickets: acknowledged within 4 business hours. Callbacks are booked in 2-hour windows, never exact times.\n\n11. Outages\nDuring a declared outage, direct customers to the status page and read only what it says. Do not give an ETA unless the status page shows one.\n\n12. Privacy\nCloud video is kept for 30 days on Protect and 60 days on Protect Plus. Requests to export or delete data go through the Privacy Portal; agents cannot delete recordings on a call. Support staff cannot view live video or recordings."
+  },
+  "DCC-CTX-I1": {
+   "title": "Contact Center October Floor Notes",
+   "text": "Harborline Contact Center - October Floor Notes\n\nParking: Garage level B is closed for resurfacing October 6-10. Please use the overflow lot on Dean Street and allow an extra ten minutes to walk over. Security will validate overflow tickets at the front desk.\n\nPotluck: The fall potluck is Friday, October 17, in the second-floor break room from noon to 2pm. Sign-up sheet is on the fridge. We already have eleven pasta salads, so please consider bringing a dessert or something with vegetables.\n\nBadge photos: If you joined after June, your temporary badge expires at the end of the month. Photo retakes run Tuesday and Thursday mornings in room 214.\n\nCoffee: The new espresso machine on the third floor takes pods only. Do not put ground coffee in the water tank again.\n\nCostume contest: Halloween falls on a Friday this year. Costumes are welcome on the floor as long as your headset still fits and nothing covers your face on video huddles. Voting closes at 3pm and the winning team gets the good conference room for a month.\n\nQuiet room: The quiet room can now be booked in 30-minute slots through the room calendar. Please do not take calls from it."
+  }
+ },
+ "items": [
+  {
+   "jid": "8e32bb7c9701",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "I bought your doorbell camera five weeks ago, it's already dead, and I want my money back. All of it.",
+   "conversation": [],
+   "evidence_ids": [
+    "DCC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm sorry the camera's failed on you, and I want to get this sorted. Before I can look at the account, I need to verify you: can you give me the full name on the account, plus two of these, the email on file, the last four digits of the card, or the 6-digit Support PIN from Settings, then Support in the app?\n\nOnce I've got that, here's where we stand on the refund. Hardware is refundable in full within 30 days of delivery, but you're at five weeks, so past that window a defective camera falls under the 1-year limited warranty, which means a replacement rather than a refund. I know that's not what you were hoping to hear. Let me verify you first and pull up the account, and I'll walk you through the replacement and what else we can do."
+  },
+  {
+   "jid": "5e7102a8967c",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Fine. Then give me a credit for all this hassle.",
+   "conversation": [
+    "CUSTOMER (heard): I bought your doorbell camera five weeks ago, it's already dead, and I want my money back. All of it.",
+    "NATIVELY: I'm sorry the camera's failed on you, and I want to get this sorted. Before I can look at the account, I need to verify you: can you give me the full name on the account, plus two of these, the email on file, the last four digits of the card, or the 6-digit Support PIN from Settings, then Support in the app?\n\nOnce I've got that, here's where we stand on the refund. Hardware is refundable in full within 30 days of delivery, but you're at five weeks, so past that window a defective camera falls under the 1-year limited warranty, which means a replacement rather than a refund. I know that's not what you were hoping to hear. Let me verify you first and pull up the account, and I'll walk you through the replacement and what else we can do.",
+    "CUSTOMER (heard): Why not?",
+    "NATIVELY: Because the refund window is 30 days from delivery, and you're at five weeks. The policy says a full refund to the original payment method applies within 30 days, and after 30 days defective hardware under the 1-year limited warranty is replaced, not refunded. So I can't process a refund on this one, but I can get you a replacement camera under that warranty. Let me verify you first and pull up the account, then I'll set the replacement up."
+   ],
+   "evidence_ids": [
+    "DCC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I hear you, and I want to be straight with you: a goodwill credit only applies for a documented service failure, like a cloud outage over four hours or a missed delivery window, so I can't offer one just for the hassle. What I can do is get your replacement camera set up under the warranty. Let me verify you first and pull up the account."
+  },
+  {
+   "jid": "10c8379104b1",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "I want every recording you have of my house deleted. Can you do that now, while I'm on the phone?",
+   "conversation": [],
+   "evidence_ids": [
+    "DCC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can't delete recordings on this call, and I want to be straight with you about why. I don't have access to your account or your recordings from here, and I can't make that kind of change while we're talking.\n\nWhat I can do is get this to the right place. I'll log your request to have all recordings of your home deleted, and the team that handles data and privacy requests will follow up with you directly to confirm what's on file and what gets removed. Can I get the best number or email to reach you on for that follow-up?"
+  },
+  {
+   "jid": "c5060c1da402",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "typed",
+   "question": "how do I verify him? he's asking about a charge on his account",
+   "conversation": [],
+   "evidence_ids": [
+    "DCC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Before I can look at any charge, I need to verify him first. Can you get the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app? He has to give them to you, so don't read anything out to him. Once that's confirmed, we can pull up the charge and see whether it's a pending authorization or a settled duplicate."
+  },
+  {
+   "jid": "8339c002c42f",
+   "mode": "call-center",
+   "role": "USER: the support agent. OTHER PARTY: the customer. Natively: words the agent says next (short, customer-facing), or private help when the agent types.",
+   "surface": "heard",
+   "question": "Can you just reset my password by text? I'm not near my computer and I don't have my email on my phone.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't send a password reset by text, so let's get you back in another way. Can you tell me the email address on the account, and do you have any other device or number we have on file that I can verify you with?"
+  }
+ ]
+}

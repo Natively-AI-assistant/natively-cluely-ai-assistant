@@ -15,6 +15,13 @@ import { telemetryService } from './TelemetryService';
  * re-reading the JSONL log.
  */
 export type PiMilestone =
+    // A first attempt produced no answer in time and the SAME request was
+    // re-sent. Distinct markers so a log can tell "retried and succeeded" from
+    // "succeeded slowly" — without them a 25s time-to-first-token has no
+    // explanation in the trace.
+    | 'answer_regeneration_started'
+    | 'answer_regeneration_succeeded'
+    | 'answer_regeneration_failed'
   | 'question_submitted'
   | 'what_to_answer_clicked'
   | 'transcript_window_loaded'
@@ -51,7 +58,11 @@ export type PiMilestone =
   | 'code_correction_used'
   | 'code_correction_error'
   | 'code_correction_reverified'
-  | 'code_verify_error';
+  | 'code_verify_error'
+  // Answer-diversity guard (answer-pipeline-rebuild Phase 5): emitted whenever the
+  // guard is CHECKED, whether or not it fired, so "guard never fired" is
+  // distinguishable from "guard fired but the repair was a no-op" in a live trace.
+  | 'wta_diversity_guard_checked';
 
 function monotonicNow(): number {
   try {

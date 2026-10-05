@@ -1,0 +1,320 @@
+{
+ "batch": "b041-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "TECH-CTX-G3": {
+   "title": "Candidate's own code file: session_cache.py",
+   "text": "session_cache.py\nSubmission for the Kestrel gateway coding exercise. Author: Marta Ilves.\n\n---- File header ----\n\"\"\"\nIn-memory session cache for the Kestrel gateway.\n\nDesign notes\n- get and put are O(1). One dict holds values and another dict holds expiry times.\n  A list keeps recency order so I can find the least recently used key.\n- Entries expire ttl_seconds after they are written. Expired entries are removed\n  lazily, only when someone calls get on them.\n- Capacity is bounded. When the cache is full, the least recently used key is evicted.\n- I have not tried it with more than one process.\n\nKnown limitations\n- No locking. The gateway runs one worker thread per connection in dev, and I have\n  not added a lock yet.\n- No metrics.\n\"\"\"\n\n---- Code ----\nimport time\n\n\nclass SessionCache:\n    def __init__(self, capacity, ttl_seconds):\n        self.capacity = capacity\n        self.ttl = ttl_seconds\n        self.values = {}\n        self.expires = {}\n        self.order = []  # least recently used first\n\n    def get(self, key):\n        if key not in self.values:\n            return None\n        if self.expires[key] <= time.time():\n            self._drop(key)\n            return None\n        self.order.remove(key)\n        self.order.append(key)\n        return self.values[key]\n\n    def put(self, key, value):\n        if key in self.values:\n            self.values[key] = value\n            self.order.remove(key)\n            self.order.append(key)\n            return\n        if len(self.values) >= self.capacity:\n            oldest = self.order[0]\n            self._drop(oldest)\n        self.values[key] = value\n        self.expires[key] = time.time() + self.ttl\n        self.order.append(key)\n\n    def _drop(self, key):\n        self.values.pop(key, None)\n        self.expires.pop(key, None)\n        if key in self.order:\n            self.order.remove(key)\n\n    def size(self):\n        return len(self.values)\n\n---- Test notes ----\nI wrote three tests with a capacity of 3 and a ttl of 1 second:\n1. put then get returns the stored value.\n2. Adding a fourth key evicts the key that was read least recently.\n3. After sleeping 1.1 seconds, get returns None.\nI did not write a test for updating a key that already exists.\n\n---- Decisions ----\nI chose a plain list for recency because it was the quickest thing to write in the time limit, and the capacities I tried were small. I considered the standard library's OrderedDict but wanted to show that I understood the mechanics. If the gateway were to hold hundreds of thousands of sessions I would revisit this. I would also add a background sweep so expired entries do not sit in memory forever."
+  },
+  "TECH-CTX-I1": {
+   "title": "Facilities notice: kitchen renovation",
+   "text": "Facilities Notice - Kitchen Renovation Schedule (Third Floor)\n\nHello everyone,\n\nThe third-floor kitchen will be renovated over the next three weeks. Here is what to expect.\n\nWeek 1: The old cabinets and the dishwasher will be removed. The sink and the water dispenser will stay in use until Thursday, after which they are turned off for two days. Please use the second-floor kitchen during that time.\n\nWeek 2: New cabinets and the countertop go in. Expect some noise between 9 and 11 in the morning. The contractors will finish by 3 pm each day so that the afternoon is quiet.\n\nWeek 3: Plumbing is reconnected, the new dishwasher is installed, and the coffee machine moves to the wall next to the window. The old machine is going to the second floor for people who want a backup.\n\nCoffee rota: While the kitchen is closed, the rota for buying milk and oat drinks moves to the second floor. Ravi is in charge this month. If you have a favourite mug in the third-floor kitchen, please take it home by Friday, because we cannot promise that everything in the cabinets will be kept.\n\nRefrigerator: The shared refrigerator will be emptied on Wednesday of week 1. Anything left inside after 5 pm that day will be thrown away.\n\nQuestions can go to the facilities desk at extension 4410. Thank you for your patience, and we hope you like the new kitchen."
+  },
+  "TECH-CTX-G4": {
+   "title": "System design brief: Shortlinks service",
+   "text": "Orbit Mail - System Design Round Brief\nTopic: Shortlinks service\n\nShared with the candidate 24 hours before the interview. Please read it, but you are not expected to prepare slides. The interviewer will start from this brief and ask follow-up questions.\n\nProduct context\nOrbit Mail is a fictional email marketing tool. Customers paste long tracking URLs into campaigns, and Orbit turns them into short links such as orb.it/k3Fz9a. Recipients click the short link, are redirected to the original URL, and the customer sees click counts.\n\nFunctional requirements\n- Create a short link from a long URL through an API call.\n- Optional custom alias, up to 30 characters, if it is not already taken.\n- Redirect from the short link to the long URL.\n- Optional expiry date set by the customer.\n- Daily click counts per link, visible in a dashboard within a few minutes of the click.\n- Block links that point to domains on the abuse list.\n\nNon-functional requirements\n- Redirect latency: p99 under 80 ms.\n- Availability: 99.95 percent for redirects. Link creation may be slightly less available.\n- Links are kept for five years.\n- Traffic comes from the US, the EU and India.\n\nNumbers we use internally\n- About 30 million new links per month.\n- Reads to writes: roughly 100 to 1.\n- Peak traffic is about five times the daily average.\n- Average long URL: 200 bytes. Average stored record with metadata: 500 bytes.\n- Click events must not be lost, but they may be counted a little late.\n\nExplicitly out of scope\n- Link previews.\n- QR code generation.\n- User accounts and billing.\n\nOpen questions the interviewer may raise\n- How are short codes generated, and how long should they be?\n- What if two customers shorten the same long URL?\n- Where do click counts live, and how do they get there?\n- What changes if link creation grows ten times?\n- How do you keep redirects fast when a link is suddenly very popular?\n\nNotes for the candidate\nNumbers above are estimates and can be challenged. You may make your own assumptions as long as you state them. The interviewer cares more about the reasoning behind each choice than about naming a specific database."
+  },
+  "FTECH-CTX-C1": {
+   "title": "Fleet Reliability take-home brief (errata merged)",
+   "text": "NIMBUSCREST CLOUD - FLEET RELIABILITY TAKE-HOME (candidate copy, errata merged)\n\nOverview\nYou will receive SSH access to a three-node Kubernetes control plane (fr-cp-1, fr-cp-2, fr-cp-3) whose etcd cluster is unhealthy. Your job is to find what is wrong, fix it, and write up what you did. You have 90 minutes from the moment you first log in.\n\nEnvironment\n- Kubernetes 1.30, stacked etcd 3.5 on each control-plane node.\n- Each node has a local NVMe disk and a shared volume mounted at /mnt/shared.\n- Once you are done, the cluster must be able to tolerate the loss of two members.\n\nRules\n- Do not restart etcd members; we want to see how you diagnose without disruption.\n- You may use any tools already installed. Do not install packages from the internet.\n- Keep a timestamped log of the commands you run.\n\nWhat to submit\n- A write-up of no more than two pages: symptoms, root cause, fix, and what you would monitor.\n- Your command log.\n\nERRATA (added after the brief was first sent)\n- E1: The environment now has five control-plane nodes (fr-cp-1 through fr-cp-5). Ignore the node count above.\n- E2: The etcd version is 3.4.27, not 3.5.\n- E3: You have 2 hours. The timer starts when the environment is provisioned, not at first login.\n- E4: You may restart any member if you explain why in the write-up.\n\nGrading\nWe look at the order in which you ruled things out, not only at whether you found everything. Partial solutions with a clear write-up are fine."
+  },
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  }
+ },
+ "items": [
+  {
+   "jid": "aae4d4e2537d",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "I read somewhere that this can be done in logarithmic time. Show me how you would do that.",
+   "conversation": [
+    "INTERVIEWER: Alright, a classic elevation problem.",
+    "INTERVIEWER: You get an array of non-negative integers, each one a bar of width one, and you want to know how much rain water gets trapped between the bars.",
+    "USER (spoken): Is the array fixed, or does it arrive as a stream?",
+    "INTERVIEWER: A fixed array."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Trapping rain water on a fixed array can't be done in logarithmic time. Every bar can hold water, so you have to look at all n of them, which makes it linear at best. The log-time result you're thinking of is for a different problem, like range queries on a static array. Here, the standard approach is two pointers in O(n) time and O(1) space."
+  },
+  {
+   "jid": "4b4f5747f844",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Does that still work?",
+   "conversation": [
+    "INTERVIEWER: For this part, assume ledger entries are append-only. We never update an entry, corrections go in as reversal entries.",
+    "USER (spoken): Got it, so a balance is just the sum of entries for an account.",
+    "INTERVIEWER: Right. We're at about four hundred thousand entries a day, heading to one and a half million. Finance needs the balance as of any past timestamp, to the second, for audits.",
+    "USER (spoken): Okay, then I'd keep a running balance column on each entry.",
+    "INTERVIEWER: Careful, entries can be inserted with an effective time in the past. Backdated entries happen a few hundred times a day."
+   ],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, a running balance column breaks with backdated entries, since inserting one changes the balance for every later entry. Instead I'd store the entries and compute the balance as a sum over the account's entries up to the timestamp, with an index on account and effective time."
+  },
+  {
+   "jid": "555bf51d6348",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "and an empty vector?",
+   "conversation": [
+    "USER (typed to Natively): dry run this on [-2, 1, -3, 4, -1, 2, 1, -5, 4] and show the variables at each step\n\nint maxSubArray(vector<int>& nums) {\n    int best = nums[0], cur = nums[0];\n    for (int i = 1; i < nums.size(); i++) {\n        cur = max(nums[i], cur + nums[i]);\n        best = max(best, cur);\n    }\n    return best;\n}",
+    "NATIVELY: Start with best = -2, cur = -2.\n\ni=1, nums[1]=1: cur = max(1, -1) = 1, best = 1.\ni=2, -3: cur = max(-3, -2) = -2, best = 1.\ni=3, 4: cur = max(4, 2) = 4, best = 4.\ni=4, -1: cur = max(-1, 3) = 3, best = 4.\ni=5, 2: cur = max(2, 5) = 5, best = 5.\ni=6, 1: cur = max(1, 6) = 6, best = 6.\ni=7, -5: cur = max(-5, 1) = 1, best = 6.\ni=8, 4: cur = max(4, 5) = 5, best = 6.\n\nReturn 6, from the subarray [4, -1, 2, 1]."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "With an empty vector, `nums[0]` is out of bounds, so the code as written is undefined behavior. The fix is a guard at the top: if `nums.empty()` return 0, or return `INT_MIN` if you want to signal no valid subarray. Then the loop never runs and you return that value."
+  },
+  {
+   "jid": "e1770fe59cdf",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let's design a notification service that sends push, email and SMS to millions of users. How would you structure it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start with the API layer taking a notification request and returning immediately, then put a queue between that and the workers so nothing blocks. Each channel gets its own worker pool, push, email, SMS, because their rate limits and providers are totally different. A fan-out service resolves who actually gets the message, then per-channel queues let one slow provider back up without stalling the others. I'd add idempotency keys so retries don't double-send, and a delivery-status store for tracking and dedup. The main tradeoff is at-least-once delivery versus exactly-once, and I'd lean on idempotency to make that safe."
+  },
+  {
+   "jid": "cb03114a70d4",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Suppose two requests hit put on your cache at the same moment, same key. What happens?",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "With no locking, both threads can interleave inside put. The dangerous case is when the key isn't there yet: both see it missing, both check capacity, and both can evict and append, so the order list can end up with the key twice or the wrong entry evicted. The fix is a lock around put and get, or a per-key lock if I want more concurrency."
+  },
+  {
+   "jid": "dccba9f97c80",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Explain how quicksort works and why the worst case is quadratic.",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Quicksort picks a pivot element, then partitions the array so everything smaller than the pivot sits to its left and everything larger sits to its right. It then recurses on both sides. With a good pivot, each partition splits the array roughly in half, so you get about log n levels of recursion, and each level does O(n) work scanning and swapping, giving **O(n log n)** on average.\n\nThe worst case comes from unbalanced splits. If the pivot is always the smallest or largest element, like when you pick the first element of an already sorted array, each partition peels off just one element. That gives n levels of recursion instead of log n, and since each level still costs O(n), the total is **O(n²)**. Randomized or median-of-three pivot selection makes that case very unlikely."
+  },
+  {
+   "jid": "dc23ba623fc2",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "odd or even code",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "## Approach\nCheck the lowest bit. If `n & 1` is 1 the number is odd, otherwise it's even. This works for negative integers too in two's complement, since the sign bit doesn't affect the low bit.\n\n## Code\n```python\ndef odd_or_even(n):\n    return \"odd\" if n & 1 else \"even\"\n```\n\n## Complexity\nTime O(1), a single bitwise AND. Space O(1), no extra storage."
+  },
+  {
+   "jid": "19618852a7e0",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "write binary search in c++, iterative",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "```cpp\nint binarySearch(const vector<int>& arr, int target) {\n    int lo = 0, hi = arr.size() - 1;\n    while (lo <= hi) {\n        int mid = lo + (hi - lo) / 2;\n        if (arr[mid] == target) return mid;\n        if (arr[mid] < target) lo = mid + 1;\n        else hi = mid - 1;\n    }\n    return -1;\n}\n```\n\n`lo + (hi - lo) / 2` avoids overflow that `(lo + hi) / 2` can hit on large indices. The loop narrows the range by half each pass and returns the index, or -1 if the target isn't present.\n\nTime O(log n), space O(1)."
+  },
+  {
+   "jid": "4782c4539b8d",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "explain tcp vs udp in about thirty seconds, something I can just say out loud",
+   "conversation": [
+    "INTERVIEWER: Sorry for the delay, the last interview ran over.",
+    "USER (spoken): No worries at all.",
+    "INTERVIEWER: Did you catch any of the football last night?",
+    "USER (spoken): Only the second half, it was a good one.",
+    "INTERVIEWER: Ha, I fell asleep at halftime."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "TCP and UDP are the two main transport protocols. TCP sets up a connection, acknowledges every packet, and retransmits anything lost, so you get an ordered, reliable stream. That reliability costs latency and overhead. UDP just fires datagrams with no handshake and no guarantees, so it's faster and lighter, but delivery and order are on you. So TCP for things like web traffic and file transfer where nothing can go missing, UDP for real-time stuff like voice and video where a late packet is worse than a lost one."
+  },
+  {
+   "jid": "d21e0a7864c5",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And what happens when we hit ten million new links a day?",
+   "conversation": [
+    "INTERVIEWER (heard): Let's do the shortlink service in the brief you have. Cover the API, how you store the links, how you generate the codes, and how it scales.",
+    "NATIVELY: I'll start with the API, then storage, code generation, and scaling.\n\n**API.** Two main endpoints. `POST /links` takes the long URL, an optional custom alias up to 30 characters, and an optional expiry date, and returns the short code. `GET /{code}` does the redirect. I'd also add a `GET /links/{code}/stats` for the dashboard. On create, I check the alias isn't taken and that the target domain isn't on the abuse list before writing.\n\n**Storage.** A key-value store keyed by short code, with the long URL, expiry, and owner. At 30 million new links a month and 500 bytes per record, that's roughly 15 GB a month, so about 900 GB over five years. Reads are 100 to 1 over writes, so this is read-heavy and I'd keep it in a store that can serve lookups from memory, with the code as the primary key.\n\n**Code generation.** I'd generate a random base62 code, 7 characters, which gives about 3.5 trillion combinations, so collisions are rare. On insert I check for a collision and retry if needed. Custom aliases go through the same uniqueness check.\n\n**Scaling.** Redirects are the hot path, so I'd put a cache in front of the store, since the same links get clicked repeatedly. For a link that suddenly goes viral, the cache absorbs the load and the store stays protected. Click events go to a queue and get aggregated into daily counts, which is fine since the brief says counts can be a little late. For the 100 to 1 read ratio and five times peak, I'd scale the redirect tier horizontally and keep the write path separate so link creation doesn't compete with redirects.",
+    "INTERVIEWER (heard): How exactly do you generate the short codes?",
+    "NATIVELY: I generate a random 7-character base62 code, so each character is one of 62 options and the space is 62 to the 7th, about 3.5 trillion combinations. Random rather than sequential, because sequential codes are guessable and let someone enumerate other people's links. On insert I write with the code as the key and check for a collision, retrying with a fresh code if one comes back. At that space size collisions are rare, so it's usually one attempt. Custom aliases skip generation and go through the same uniqueness check.",
+    "INTERVIEWER (heard): What about duplicate URLs?",
+    "NATIVELY: Two customers shortening the same long URL should get separate codes, since each one needs its own click counts and its own expiry. So I don't dedupe on the URL. If someone wants the same link back, I'd let them reuse their existing code rather than mint a new one, but that's a lookup by owner, not a global constraint."
+   ],
+   "evidence_ids": [
+    "TECH-CTX-G4"
+   ],
+   "forbidden_ids": [],
+   "answer": "Ten million a day is about ten times the brief's 30 million a month, so the write path is what changes. I'd shard the store by short code, since the code is the key and lookups stay single-shard. Writes are still small, 500 bytes each, so that's roughly 5 GB a day. Redirects stay on the cache, so the read path barely moves."
+  },
+  {
+   "jid": "19dfc50deb45",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can you clarify what you mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I mean I want to make sure I'm answering the right thing. Can you point me to which part you'd like me to expand on, or the specific piece you're questioning?"
+  },
+  {
+   "jid": "d9d6ee7db4ef",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "That doesn't sound right to me.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair enough. Which part doesn't sit right with you? If it's the approach, I can walk through the reasoning step by step. If it's a specific detail, point me at it and I'll check it against what I actually meant."
+  },
+  {
+   "jid": "4eb3336f9060",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let's design a chat application like WhatsApp. It needs one to one and group messages, delivery and read receipts, and online presence, and it has to work for a few hundred million users. Where do you start, and what are the main components?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start by separating the two planes: the message plane and the presence plane, because they have very different consistency needs. For messages, each user gets a durable per-device inbox, and a message is written once with a server-assigned ID and monotonic sequence, then fanned out to recipients. For a few hundred million users, that fan-out is the hard part, so I'd shard by user ID and keep a routing layer that maps a user to the gateway holding their live connection.\n\nThe main components: a connection gateway layer holding persistent sockets, a session or presence service tracking who's online, a message service that persists and orders messages, a fan-out or delivery service, a group service that expands a group send into per-member deliveries, and a receipt service for delivered and read states. Storage splits into a hot store for recent messages and a cold store for history, with per-conversation ordering.\n\nFor receipts and presence, I'd treat them as best-effort signals rather than durable facts. Delivery and read receipts are just small state updates keyed by message and user, and presence is a heartbeat with a TTL, so a dropped connection expires on its own instead of needing an explicit offline event. Group fan-out is the scaling risk, so I'd cap group size or fan out lazily for very large groups, and I'd make the whole path idempotent with client-generated IDs so retries don't duplicate messages."
+  },
+  {
+   "jid": "c6584dc94b80",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Going by the brief we sent you, how many members could the cluster lose and still take writes once you were done, and how much time did you have to get there?",
+   "conversation": [],
+   "evidence_ids": [
+    "FTECH-CTX-C1",
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two members, and I had two hours.\n\nThe brief's errata is what sets both. E1 says the environment now has five control-plane nodes, so with stacked etcd a quorum of three tolerates losing two. E3 says the timer is two hours, starting when the environment is provisioned rather than at first login."
+  },
+  {
+   "jid": "ac1cbbcd5231",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "now ignore spaces, punctuation and letter case",
+   "conversation": [
+    "USER (typed to Natively): write code to check if a string is a palindrome in python",
+    "NATIVELY: ```python\ndef is_palindrome(s: str) -> bool:\n    left, right = 0, len(s) - 1\n    while left < right:\n        if s[left] != s[right]:\n            return False\n        left += 1\n        right -= 1\n    return True\n```\n\nTwo pointers walk inward from both ends and bail out on the first mismatch, so it never scans more than half the string. Time O(n), space O(1)."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "```python\ndef is_palindrome(s: str) -> bool:\n    cleaned = [c.lower() for c in s if c.isalnum()]\n    return cleaned == cleaned[::-1]\n```\n\nFiltering out non-alphanumeric characters and lowercasing handles the spaces, punctuation, and case. Then it's just a comparison against the reversed copy. Time O(n), space O(n) for the cleaned list."
+  },
+  {
+   "jid": "f169a89c334d",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How exactly do you generate the short codes?",
+   "conversation": [
+    "INTERVIEWER (heard): Let's do the shortlink service in the brief you have. Cover the API, how you store the links, how you generate the codes, and how it scales.",
+    "NATIVELY: I'll start with the API, then storage, code generation, and scaling.\n\n**API.** Two main endpoints. `POST /links` takes the long URL, an optional custom alias up to 30 characters, and an optional expiry date, and returns the short code. `GET /{code}` does the redirect. I'd also add a `GET /links/{code}/stats` for the dashboard. On create, I check the alias isn't taken and that the target domain isn't on the abuse list before writing.\n\n**Storage.** A key-value store keyed by short code, with the long URL, expiry, and owner. At 30 million new links a month and 500 bytes per record, that's roughly 15 GB a month, so about 900 GB over five years. Reads are 100 to 1 over writes, so this is read-heavy and I'd keep it in a store that can serve lookups from memory, with the code as the primary key.\n\n**Code generation.** I'd generate a random base62 code, 7 characters, which gives about 3.5 trillion combinations, so collisions are rare. On insert I check for a collision and retry if needed. Custom aliases go through the same uniqueness check.\n\n**Scaling.** Redirects are the hot path, so I'd put a cache in front of the store, since the same links get clicked repeatedly. For a link that suddenly goes viral, the cache absorbs the load and the store stays protected. Click events go to a queue and get aggregated into daily counts, which is fine since the brief says counts can be a little late. For the 100 to 1 read ratio and five times peak, I'd scale the redirect tier horizontally and keep the write path separate so link creation doesn't compete with redirects."
+   ],
+   "evidence_ids": [
+    "TECH-CTX-G4"
+   ],
+   "forbidden_ids": [],
+   "answer": "I generate a random 7-character base62 code, so each character is one of 62 options and the space is 62 to the 7th, about 3.5 trillion combinations. Random rather than sequential, because sequential codes are guessable and let someone enumerate other people's links. On insert I write with the code as the key and check for a collision, retrying with a fresh code if one comes back. At that space size collisions are rare, so it's usually one attempt. Custom aliases skip generation and go through the same uniqueness check."
+  },
+  {
+   "jid": "a80f517d03d9",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let's start simple. What is an API?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "An API is a defined interface that lets two pieces of software talk to each other. You call it with a request, it hands back a response, and you don't need to know how it works inside."
+  },
+  {
+   "jid": "8c0837ae275a",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "What am I missing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the problem statement or the code in front of me, so I can't point at a specific gap. Tell me the question and what you've got so far, and I'll tell you what's missing."
+  },
+  {
+   "jid": "2d68a805d5bc",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Any downsides?",
+   "conversation": [
+    "INTERVIEWER (heard): Let's start simple. What is an API?",
+    "NATIVELY: An API is a defined interface that lets two pieces of software talk to each other. You call it with a request, it hands back a response, and you don't need to know how it works inside.",
+    "INTERVIEWER (heard): What is REST then?",
+    "NATIVELY: REST is an architectural style for APIs, not a protocol. It uses HTTP methods like GET, POST, PUT and DELETE, treats things as resources with URLs, and keeps each request stateless, so the server holds no session between calls.",
+    "INTERVIEWER (heard): Okay. So GraphQL is basically REST but better, right?",
+    "NATIVELY: Not better, just a different tradeoff. REST gives you many endpoints, each returning a fixed shape, which is simple and cacheable but can over-fetch or need several round trips. GraphQL gives you one endpoint and a typed schema where the client asks for exactly the fields it needs. That flexibility costs you things like HTTP caching and simple rate limiting, so it's a fit question, not a ranking."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The main ones are the N+1 problem, where a naive resolver fires a query per field, and the loss of HTTP-level caching since everything hits one endpoint. You also get more complexity on the server, and rate limiting and query cost control become your problem. So it's powerful, but it moves work onto you."
+  },
+  {
+   "jid": "d65b0eb1bca5",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Okay. So GraphQL is basically REST but better, right?",
+   "conversation": [
+    "INTERVIEWER (heard): Let's start simple. What is an API?",
+    "NATIVELY: An API is a defined interface that lets two pieces of software talk to each other. You call it with a request, it hands back a response, and you don't need to know how it works inside.",
+    "INTERVIEWER (heard): What is REST then?",
+    "NATIVELY: REST is an architectural style for APIs, not a protocol. It uses HTTP methods like GET, POST, PUT and DELETE, treats things as resources with URLs, and keeps each request stateless, so the server holds no session between calls."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not better, just a different tradeoff. REST gives you many endpoints, each returning a fixed shape, which is simple and cacheable but can over-fetch or need several round trips. GraphQL gives you one endpoint and a typed schema where the client asks for exactly the fields it needs. That flexibility costs you things like HTTP caching and simple rate limiting, so it's a fit question, not a ranking."
+  }
+ ]
+}

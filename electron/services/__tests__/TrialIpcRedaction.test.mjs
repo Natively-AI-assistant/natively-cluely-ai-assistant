@@ -22,9 +22,25 @@ test('trial IPC handlers do not return raw trial tokens to the renderer', () => 
 
   assert.ok(startStart >= 0, 'trial:start handler should exist');
   assert.ok(localStart >= 0, 'trial:get-local handler should exist');
-  assert.match(startHandler, /const \{ trial_token, \.\.\.safeData \} = data/);
-  assert.match(startHandler, /return \{ ok: true, \.\.\.safeData, hasToken: Boolean\(data\.trial_token\) \}/);
-  assert.doesNotMatch(startHandler, /return \{ ok: true, \.\.\.data \}/);
+  // The property under test is that the RAW TOKEN never reaches the renderer —
+  // not the exact punctuation of the return statement. The previous assertion
+  // pinned the literal `return { ok: true, ...safeData, hasToken: ... }` and so
+  // failed the moment a safe boolean (`persisted`) was appended, which is a
+  // change that cannot leak anything. Asserting the property keeps the guard
+  // strict against the leak while allowing additive non-secret fields.
+  assert.match(startHandler, /const \{ trial_token, \.\.\.safeData \} = data/,
+    'the token must be destructured OUT of the returned object');
+  assert.match(startHandler, /return \{ ok: true, \.\.\.safeData,[^}]*hasToken: Boolean\(data\.trial_token\)/,
+    'the handler must return safeData plus a boolean presence flag');
+  assert.doesNotMatch(startHandler, /return \{ ok: true, \.\.\.data \}/,
+    'spreading the raw response would republish the token');
+  // Belt and braces: no return statement in this handler may name the token.
+  for (const line of startHandler.split('\n')) {
+    if (/^\s*return\b/.test(line)) {
+      assert.doesNotMatch(line, /(^|[^.\w])trial_token\b(?!\s*,\s*\.\.\.)/,
+        `a return statement referenced trial_token: ${line.trim()}`);
+    }
+  }
   assert.doesNotMatch(localHandler, /trialToken:\s*token/);
 });
 

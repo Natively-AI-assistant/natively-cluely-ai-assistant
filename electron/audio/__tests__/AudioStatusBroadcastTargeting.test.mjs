@@ -49,7 +49,12 @@ test('audio and STT status channels target meeting surfaces', () => {
 
   assert.ok(/sendToMeetingSurfaces\s*\(\s*['"]stt-status['"]\s*,\s*payload\s*\)/.test(sttBody), 'BUG: stt-status must be sent to meeting surfaces (launcher+overlay).');
   assert.ok(/sendToMeetingSurfaces\s*\(\s*['"]audio-capture-failed['"]\s*,\s*payload\s*\)/.test(audioBody), 'BUG: audio-capture-failed must be sent to meeting surfaces (launcher+overlay).');
-  assert.ok(/sendToMeetingSurfaces\s*\(\s*['"]system-audio-permission-denied['"]\s*,\s*message\s*\)/.test(permissionBody), 'BUG: system-audio-permission-denied must be sent to meeting surfaces (launcher+overlay).');
+  // `message` may be followed by additional forwarded arguments (the banner
+  // `titleKey`). The invariant under test is the ROUTING — that the payload
+  // goes through sendToMeetingSurfaces rather than an overlay-only or
+  // all-window path — not the channel's arity, so the trailing args are
+  // matched loosely on purpose.
+  assert.ok(/sendToMeetingSurfaces\s*\(\s*['"]system-audio-permission-denied['"]\s*,\s*message\s*[,)]/.test(permissionBody), 'BUG: system-audio-permission-denied must be sent to meeting surfaces (launcher+overlay).');
 
   for (const channel of ['stt-status', 'audio-capture-failed', 'system-audio-permission-denied']) {
     assert.ok(!new RegExp(`sendToOverlay\\s*\\(\\s*['"]${channel}['"]`).test(mainSource), `BUG: ${channel} must not use overlay-only routing.`);

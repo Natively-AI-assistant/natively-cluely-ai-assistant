@@ -23,14 +23,15 @@ import { loadNativeModule } from "../audio/nativeModuleLoader"
 const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || "https://api.natively.software").replace(/\/+$/, "")
 const REVIEW_STATE_FILE = "review-state.json"
 
-const PROMPT_FIRST_SESSION_THRESHOLD = 3
-const PROMPT_FIRST_USAGE_MS_THRESHOLD = 30 * 60 * 1000
-const PROMPT_REDISPLAY_SESSION_THRESHOLD = 3
-const PROMPT_REDISPLAY_DELAY_MS = 7 * 24 * 60 * 60 * 1000
-
-// Pure eligibility logic is in ReviewPromptLogic.ts (testable without Electron).
-import { shouldShowPromptLocal } from "./ReviewPromptLogic"
+// Pure eligibility logic is in ReviewPromptLogic.ts (testable without Electron),
+// which also OWNS the thresholds. This file previously redeclared all four as
+// private copies; three were never read, and the fourth silently duplicated the
+// redisplay delay used to stamp next_eligible_at. Import instead, so a change
+// to the policy cannot leave this file writing cooldowns on the old schedule.
+import { shouldShowPromptLocal, REVIEW_PROMPT_CONSTANTS } from "./ReviewPromptLogic"
 export { shouldShowPromptLocal }
+
+const { PROMPT_REDISPLAY_DELAY_MS } = REVIEW_PROMPT_CONSTANTS
 
 export interface ReviewPromptLocalState {
     has_reviewed: boolean
@@ -67,6 +68,23 @@ export class ReviewService {
     private statePath: string
     private writeTimer: NodeJS.Timeout | null = null
     private sessionStartTime: number | null = null
+
+    /** Wait before the one automatic retry of a request that never reached the server. */
+    static NETWORK_RETRY_MS = 1500
+
+    /**
+     * One quiet retry when the request never got a reply (offline blip, DNS,
+     * connection reset). A timeout is not retried: the user already waited.
+     */
+    private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+        try {
+            return await fetch(url, init)
+        } catch (err: any) {
+            if (err?.name === "TimeoutError" || err?.name === "AbortError") throw err
+            await new Promise((resolve) => setTimeout(resolve, ReviewService.NETWORK_RETRY_MS))
+            return fetch(url, init)
+        }
+    }
 
     private constructor() {
         this.statePath = path.join(app.getPath("userData"), REVIEW_STATE_FILE)
@@ -308,7 +326,7 @@ export class ReviewService {
             const headers: Record<string, string> = { "Content-Type": "application/json" }
             if (apiKey) headers["x-natively-key"] = apiKey
             const body = JSON.stringify({ ...payload, hardware_id: hardwareId })
-            const res = await fetch(`${NATIVELY_API_URL}/api/reviews`, {
+            const res = await this.fetchWithRetry(`${NATIVELY_API_URL}/api/reviews`, {
                 method: "POST",
                 headers,
                 body,
@@ -320,7 +338,8 @@ export class ReviewService {
             }
             return { ok: true, id: data.id }
         } catch (err: any) {
-            return { ok: false, error: err?.message || "network_error" }
+            // Never the raw fetch text: the modal knows this code ("No connection").
+            return { ok: false, error: "network_error" }
         }
     }
 
@@ -335,7 +354,7 @@ export class ReviewService {
             const headers: Record<string, string> = { "Content-Type": "application/json" }
             if (apiKey) headers["x-natively-key"] = apiKey
             const body = JSON.stringify({ ...payload, hardware_id: hardwareId })
-            const res = await fetch(`${NATIVELY_API_URL}/api/reviews/${reviewId}/testimonial-details`, {
+            const res = await this.fetchWithRetry(`${NATIVELY_API_URL}/api/reviews/${reviewId}/testimonial-details`, {
                 method: "PATCH",
                 headers,
                 body,
@@ -347,7 +366,8 @@ export class ReviewService {
             }
             return { ok: true }
         } catch (err: any) {
-            return { ok: false, error: err?.message || "network_error" }
+            // Never the raw fetch text: the modal knows this code ("No connection").
+            return { ok: false, error: "network_error" }
         }
     }
 

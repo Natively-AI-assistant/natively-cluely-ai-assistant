@@ -1,0 +1,317 @@
+{
+ "batch": "b001-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FGEN-CTX-G2": {
+   "title": "Riverbend Family Clinic - preparing for your annual physical",
+   "text": "RIVERBEND FAMILY CLINIC\nPreparing for Your Annual Physical\n\nThank you for booking your annual physical with Riverbend Family Clinic. This sheet explains how to prepare so your visit runs smoothly. Your visit will be with Dr. Hollis Varga or a member of her care team.\n\nBefore your visit\n- If your provider ordered fasting bloodwork (such as a lipid panel or fasting glucose), do not eat or drink anything except water for 10 hours before your appointment. Please avoid coffee, including black coffee, and chewing gum during the fasting period. Take your usual medications with water unless your provider has told you otherwise.\n- Complete the health history questionnaire in the patient portal at least 2 days before your visit. If you cannot use the portal, arrive 30 minutes early to fill it in on paper.\n- Make a list of every medication, vitamin and supplement you take, including the dose.\n\nWhat to bring\n- Photo ID and your current insurance card.\n- Your medication list.\n- Glasses or hearing aids if you use them.\n- Any home blood pressure readings from the last month.\n\nArriving\nPlease arrive 15 minutes before your appointment time to check in. If you are more than 15 minutes late, we may need to reschedule you. Parking is available in Lot B behind the building; bring your ticket to the front desk for 2 hours of free validated parking. Street parking on Weller Avenue is metered.\n\nDuring your visit\nYour visit includes a review of your history, vital signs, a physical exam, and any screenings recommended for your age. Flu shots are available at no extra charge during your physical from October through March while supplies last. If you have a specific concern, mention it at check-in so enough time can be set aside; a separate appointment may be needed for complex issues.\n\nAfter your visit\nLab results are posted to the patient portal, usually within 3 business days. Your provider will message you if anything needs follow-up. Normal results may be posted without a personal note. Follow-up visits can often be done by telehealth.\n\nCancellations\nWe ask for at least 24 hours notice if you need to cancel or reschedule. Appointments missed or cancelled with less than 24 hours notice are subject to a $40 missed-appointment fee, which is not covered by insurance.\n\nBilling\nMost insurance plans cover one preventive physical per year at no cost to you. Additional services discussed or treated during the visit, such as a new problem or a chronic condition review, may be billed separately and may involve a copay. Questions about coverage should be directed to your insurance company; our billing office can provide the procedure codes.\n\nFront desk hours: Monday to Friday, 7:30 a.m. to 6:00 p.m.; Saturday, 8:00 a.m. to 12:00 p.m."
+  },
+  "FGENH-CTX-G1": {
+   "title": "Condo association board meeting minutes",
+   "text": "Harbor Point Condominium Association - Board Meeting Minutes\nDate: Thursday, September 24\nLocation: Community room, Building B\nPresent: Linda Marsh (President), Owen Castellano (Treasurer), Priya Nair (Secretary), Hal Jensen, Beatriz Soto. Also present: Renee Okoro (property manager, Seaside Management) and 11 owners.\nQuorum confirmed. Meeting called to order at 7:02 pm.\n\n1. Approval of August minutes\nApproved unanimously without changes.\n\n2. Treasurer's report\nOwen Castellano reported the operating account is on budget for the year. The reserve fund balance is $179,500. Delinquent dues stand at three units, total $4,210; the management company has sent second notices.\n\n3. Building A elevator\nThe Building A elevator has been out of service intermittently since July because of a failing controller. Two quotes were received. The board voted 4-1 (Jensen opposed) to accept the Carver Lift Services quote of $38,500 to replace the controller, paid from the reserve fund. Carver estimates the work takes six to eight weeks once parts arrive; parts are on order and no arrival date has been given. Renee Okoro will post updates in the lobby and by email.\n\n4. Roof replacement, Buildings A and B\nThree bids were reviewed for full roof replacement on both buildings:\n- Kessler Roofing: $212,000\n- Summit Exteriors: $236,500\n- Delgado & Sons: $249,000\nThe board voted unanimously to move forward with Kessler Roofing, subject to reference checks and a signed contract. A start date will be negotiated after the contract is signed. The treasurer noted that after the elevator payment the reserve fund cannot cover the full roof cost. A special assessment across all 64 units was discussed at length. Several owners asked for a payment plan option. The motion on a special assessment was tabled to the October 22 meeting, pending an updated reserve study. No assessment amount was agreed.\n\n5. Pet policy\nThe board voted 5-0 to remove the 35-pound weight limit for dogs. The limit of two pets per unit is unchanged. All pets, including existing ones, must be registered with the management office using the new form, with proof of rabies vaccination for dogs and cats. Registration deadline: November 15.\n\n6. Guest parking\nThe old paper guest passes are being retired because of misuse. Each unit will receive two numbered hang-tag guest passes. Renee Okoro will order the passes and distribute them to units by October 10. Vehicles in guest spaces without a hang-tag after October 10 may be towed after one warning sticker.\n\n7. Open forum\nOwners raised noise from the pool pump at night (management to check timer), a request for a second bike rack by Building B (board to get a price), and a question about EV charging (no action; to be revisited in spring).\n\nAction items\n- Renee Okoro: sign Carver contract; order guest hang-tags and distribute by October 10; post elevator updates.\n- Owen Castellano: request updated reserve study before October 22.\n- Priya Nair: circulate new pet registration form to all owners by October 1.\n- Linda Marsh: contact Kessler references.\n\nNext meeting: Thursday, October 22, 7 pm, community room.\nAdjourned 8:41 pm."
+  },
+  "FGEN-CTX-I2": {
+   "title": "Tallpine Hiking Club newsletter - October trail conditions",
+   "text": "TALLPINE HIKING CLUB - OCTOBER NEWSLETTER\n\nTrail conditions\nThe Ridgeback Loop reopened after the September washout, but the lower creek crossing is still slippery; poles recommended. The Cedar Falls spur is closed until further notice while the footbridge is rebuilt. Hemlock Meadow is dry and in good shape.\n\nUpcoming group hikes\n- Saturday, October 10: Ridgeback Loop, 7.4 miles, moderate. Meet at the north trailhead at 8:00 a.m. Leader: Gus Almeida.\n- Sunday, October 18: Hemlock Meadow family walk, 3 miles, easy. Dogs on leash welcome.\n- Saturday, October 31: Full moon night hike, 4 miles. Headlamps required. Limited to 15 people; sign up on the club board.\n\nClub notes\nAnnual dues of $30 are due by December 1. The gear library now has two extra-large rain shells and a set of microspikes available to borrow. Please return borrowed items within one week.\n\nReminder: hunting season opens October 15 on the state land bordering the east trails. Wear blaze orange if you hike there."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "FGEN-CTX-C1": {
+   "title": "Brightline Home Renovations - quote Q-2291, hall bathroom remodel",
+   "text": "BRIGHTLINE HOME RENOVATIONS\nQuote Q-2291 - Hall bathroom remodel\nPrepared for: homeowner, 27 Birchwood Lane\nPrepared by: Sam Ferreira, project lead\nDate: September 24, 2026\n\nSummary\nFull remodel of the hall bathroom: remove existing tub and tile, install walk-in shower, new vanity, toilet, flooring, lighting and exhaust fan. Quoted total: $14,200, including materials, labor, disposal and permit.\n\nSchedule\nStart date: Monday, October 12. Estimated duration: 3 weeks.\n\nLine items\nDemolition and disposal - $1,350\nPlumbing rough-in and fixtures - $3,900\nWalk-in shower, tile and glass - $5,200\nVanity, toilet and hardware - $2,300\nFlooring - $1,200\nElectrical, lighting and fan - $1,100\nPaint and finish - $600\nLine item total: $15,650\n\nPayment terms\nA deposit of 30% is due on signing to reserve the start date. The balance is due in two installments: 40% at completion of rough-in and the remainder at final walkthrough. For this project the deposit is $5,000.\n\nPermits\nBrightline pulls the building permit on your behalf. Permit fees are billed separately at cost, typically $250 to $400 depending on the city.\n\nWarranty\nAll workmanship carries a 2-year warranty from the completion date. Manufacturer warranties apply to fixtures.\n\nTimeline notes\nWork begins October 19 pending tile delivery. Most bathrooms of this size take approximately 5 weeks, including inspection. Water to the bathroom will be off for most of the project; the rest of the house stays connected.\n\nTerms\nThis quote is valid for 30 days. Changes after signing are handled by written change order. Workmanship warranty: 12-month on labor, excluding misuse and normal wear.\n\nQuestions: Sam Ferreira, project lead."
+  },
+  "FGEN-CTX-I1": {
+   "title": "Sourdough starter feeding schedule",
+   "text": "SOURDOUGH STARTER - FEEDING SCHEDULE\n\nDay 1: Mix 50 g whole wheat flour with 50 g lukewarm water in a clean jar. Cover loosely and leave at room temperature, ideally 24 to 26 C.\n\nDay 2: You may see a few bubbles or nothing at all. Both are normal. Leave it alone.\n\nDays 3 to 6: Once a day, discard all but 50 g of the starter, then add 50 g flour (half whole wheat, half white) and 50 g water. Stir well and mark the level on the jar with a rubber band.\n\nDays 7 onward: Switch to two feedings a day, about 12 hours apart. A healthy starter should roughly double within 4 to 8 hours of feeding and smell pleasantly sour, like yogurt.\n\nTroubleshooting\n- Grey liquid on top (\"hooch\") means it is hungry. Pour it off and feed.\n- No rise after day 10: move it somewhere warmer and use more whole wheat flour.\n- Pink or orange streaks: throw it out and start again.\n\nStorage\nOnce established, keep it in the fridge and feed once a week. Take it out the night before baking and give it two room-temperature feedings before mixing dough."
+  }
+ },
+ "items": [
+  {
+   "jid": "589e20d951cd",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "And you're aware of our cancellation policy, correct?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, I'm aware of it. The policy asks for at least 24 hours notice to cancel or reschedule, and appointments missed or cancelled with less than 24 hours notice are subject to a $40 fee that insurance doesn't cover. I'll make sure to give you that notice if anything comes up."
+  },
+  {
+   "jid": "28de3b44f028",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "And when are the roofers actually starting? I need to know if I should move my patio stuff this month.",
+   "conversation": [],
+   "evidence_ids": [
+    "FGENH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The minutes don't give a start date. The board picked Kessler Roofing, but it's subject to reference checks and a signed contract, and the start date gets negotiated after that. So nothing's confirmed for this month yet. I'd keep the patio stuff where it is and check with the board or management for an update."
+  },
+  {
+   "jid": "e915a0c336d6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Another one, cheaper.",
+   "conversation": [
+    "USER (typed to Natively): Give me gift ideas for my mom's 60th. She loves gardening and hates surprise parties.",
+    "NATIVELY: For a gardener who hates surprise parties, go with something quiet and personal. A really good pair of pruning shears or a nice set of hand tools she'll actually use, a beautiful ceramic pot with a plant she doesn't have yet, or a gift certificate to a local nursery so she picks her own. If you want it to feel bigger, a raised bed or a personalized garden stone works well. Keep it low-key, maybe a small family dinner instead of a party."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A cheaper option: a nice pair of hand pruners, or a small set of seed packets for things she'd actually grow. A terracotta pot with a plant she doesn't have yet is cheap and personal too. If you want it to feel like more, write a little note about why you picked it."
+  },
+  {
+   "jid": "05d7491a0c9f",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Tomato's a fruit, right?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Botanically, yes. A tomato develops from the flower's ovary and contains seeds, so it's a fruit. The confusion is culinary: we treat it as a vegetable because it's savory and goes in salads and sauces rather than dessert. So both labels are right, just in different contexts."
+  },
+  {
+   "jid": "a5a7b0a0d6aa",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What was the reference number she just gave me?",
+   "conversation": [
+    "OTHER PERSON: Okay, the wire has been sent. It should arrive in two to three business days.",
+    "OTHER PERSON: Your reference number is KX-4471, and if anything goes wrong call us back and quote that.",
+    "USER (spoken): Great, thank you."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The reference number she gave you is **KX-4471**. She said the wire should arrive in two to three business days, and to call back and quote that number if anything goes wrong."
+  },
+  {
+   "jid": "52be376c7c7f",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Explain what a VPN does in two sentences.",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-I2"
+   ],
+   "forbidden_ids": [],
+   "answer": "A VPN creates an encrypted tunnel between your device and a server, so your traffic can't be read by anyone in between, like someone on the same Wi-Fi. It also makes your traffic appear to come from that server's location instead of your own, which hides your IP address from the sites you visit."
+  },
+  {
+   "jid": "b1ee1c0eba21",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Did we decide whether we're inviting their finance person?",
+   "conversation": [
+    "OTHER PERSON: Okay, quick recap before we grab food. The Friday demo is moving to Tuesday the 6th because the client's out.",
+    "OTHER PERSON: Leon's doing the slides, Amara's handling the room booking.",
+    "USER (spoken): And I'm still on the budget numbers?",
+    "OTHER PERSON: Yep, budget numbers are yours, due Monday by noon.",
+    "OTHER PERSON (heard): Sorry, I totally zoned out. Who's doing the slides again?",
+    "NATIVELY: Leon's doing the slides. Amara's on the room booking, and I've got the budget numbers, due Monday by noon. The demo itself moved from Friday to Tuesday the 6th.",
+    "OTHER PERSON (heard): When's the demo now?",
+    "NATIVELY: **Tuesday the 6th**. It moved off Friday because the client's out."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nothing on that came up in the recap, so it's still open. I'd say we confirm it before Monday, since the budget numbers are mine and their finance person would want those."
+  },
+  {
+   "jid": "80426f3b26bb",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Now use real numbers.",
+   "conversation": [
+    "USER (typed to Natively): Explain compound interest like I'm twelve.",
+    "NATIVELY: Compound interest is when your money earns interest, and then that interest starts earning interest too. Say you put in a hundred dollars at ten percent. After one year you have a hundred and ten. The next year you earn ten percent on all hundred and ten, not just the original hundred. So it grows faster and faster the longer you leave it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Say you put in a hundred dollars at ten percent. After one year you have a hundred and ten. The next year you earn ten percent on all hundred and ten, so you get eleven, not ten. Now you have a hundred and twenty-one. The interest is earning interest, so it snowballs the longer you leave it."
+  },
+  {
+   "jid": "42e840013be4",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hi, this is Jordan with your bank's security team. Before we go any further I need you to confirm the last four of your social and your mother's maiden name.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm not going to give out my Social Security digits or my mother's maiden name over an unsolicited call. A real bank security team already has that on file and won't ask you to confirm it out loud. If this is legitimate, I'll hang up and call the number on the back of my card directly."
+  },
+  {
+   "jid": "a7d3a03fadaf",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Where do I park at the clinic, and is it free?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Parking is in **Lot B** behind the building. Bring your ticket to the front desk and you get **2 hours free** validated parking. Street parking on Weller Avenue is metered, so Lot B is the better bet."
+  },
+  {
+   "jid": "791def93dae7",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "When's the demo now?",
+   "conversation": [
+    "OTHER PERSON: Okay, quick recap before we grab food. The Friday demo is moving to Tuesday the 6th because the client's out.",
+    "OTHER PERSON: Leon's doing the slides, Amara's handling the room booking.",
+    "USER (spoken): And I'm still on the budget numbers?",
+    "OTHER PERSON: Yep, budget numbers are yours, due Monday by noon.",
+    "OTHER PERSON (heard): Sorry, I totally zoned out. Who's doing the slides again?",
+    "NATIVELY: Leon's doing the slides. Amara's on the room booking, and I've got the budget numbers, due Monday by noon. The demo itself moved from Friday to Tuesday the 6th."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "**Tuesday the 6th**. It moved off Friday because the client's out."
+  },
+  {
+   "jid": "744fb9cfa664",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "I'm trying to decide between leasing a new car and buying a used one. I drive about 8,000 miles a year, I have about 6,000 saved, and I really hate dealing with repairs. Walk me through the trade-offs and tell me which way you'd lean.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "At 8,000 miles a year, you're a low-mileage driver, which is the key fact here. Leasing is usually priced around 10,000 to 12,000 miles a year, so you'd be paying for miles you won't use, and you'd still have a monthly payment forever with nothing to show at the end. Buying used means the car is yours once it's paid off, and at your mileage a well-chosen used car can last many years. The catch is repairs, which you hate. That's the real trade-off: a lease keeps you under warranty the whole time, while a used car eventually falls out of warranty and you're the one handling it.\n\nWith about 6,000 saved, I'd lean toward buying used, but a specific kind of used car: something a few years old, low miles, and with a reputation for reliability, ideally still under some factory warranty. Put your savings toward the down payment and keep a few thousand aside as a repair fund, so a surprise doesn't wreck you. If the idea of any repair at all is genuinely unbearable, a lease on a low-mileage plan can make sense, but you're paying a premium for that peace of mind and you'll never own anything."
+  },
+  {
+   "jid": "84665ab166fb",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "So what's the rule of 72 thing people mention?",
+   "conversation": [
+    "USER (typed to Natively): Explain compound interest like I'm twelve.",
+    "NATIVELY: Compound interest is when your money earns interest, and then that interest starts earning interest too. Say you put in a hundred dollars at ten percent. After one year you have a hundred and ten. The next year you earn ten percent on all hundred and ten, not just the original hundred. So it grows faster and faster the longer you leave it.",
+    "USER (typed to Natively): Now use real numbers.",
+    "NATIVELY: Say you put in a hundred dollars at ten percent. After one year you have a hundred and ten. The next year you earn ten percent on all hundred and ten, so you get eleven, not ten. Now you have a hundred and twenty-one. The interest is earning interest, so it snowballs the longer you leave it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The rule of 72 is a shortcut for how long money takes to double. You divide 72 by the interest rate, and that's roughly the number of years. At 8 percent, 72 divided by 8 is 9, so about nine years to double. It's an estimate, but it's close enough to do in your head."
+  },
+  {
+   "jid": "e7875c8425cf",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "How many time zones does Russia have?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Russia has **11 time zones**, more than any other country. They run from Kaliningrad on the Baltic, which is two hours behind Moscow, all the way to Kamchatka, nine hours ahead of it."
+  },
+  {
+   "jid": "344674f00719",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What's my experience with project management? A friend wants to refer me for something.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I don't have your actual background in front of me, so I can't list your specific projects or roles. What I'd tell your friend is how you actually run things: you scope the work, keep the moving pieces visible, and flag risks early rather than at the deadline. If they want specifics, send me your résumé and I'll pull the real examples."
+  },
+  {
+   "jid": "841da34f273e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Great, so can we do the five thousand deposit today? Thirty percent is standard.",
+   "conversation": [
+    "OTHER PERSON (heard): So you've had a chance to look over the quote. Any questions before we lock in the start date?",
+    "NATIVELY: Thanks for sending it over. Before we lock the start date, I want to walk through the scope and the line items once more, and confirm what's included in the price. Can you take me through the breakdown, and is there any flexibility on the timing?",
+    "OTHER PERSON (heard): Like I said, fourteen two is everything, all in, no surprises.",
+    "NATIVELY: Fourteen two is the total, but the quote's own line items add up to fifteen six fifty, so I want to understand that gap before we lock anything. And the permit fees are billed separately at cost, so \"all in\" doesn't quite cover those. Can you walk me through how the total reconciles with the line items?"
+   ],
+   "evidence_ids": [
+    "FGEN-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm not ready to put a deposit down today. The line items still add up to fifteen six fifty against a fourteen two total, and the permit fees sit outside that, so I want the numbers reconciled first. Once that's clear, I'm happy to talk about the deposit and the start date."
+  },
+  {
+   "jid": "cf2f20692075",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Go ahead.",
+   "conversation": [
+    "OTHER PERSON: Okay so from the highway take exit 31B, not 31A, then left at the gas station, and we're the blue house on the corner.",
+    "USER (spoken): Got it, 31B then left.",
+    "OTHER PERSON: Actually repeat the whole thing back to me, last time you ended up across town."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "From the highway, take exit 31B, not 31A. Then turn left at the gas station. Your place is the blue house on the corner."
+  },
+  {
+   "jid": "9baca9ea5659",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "I have to give a two minute toast at my brother's wedding on Saturday. Help me write the opening.",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have any details about your brother or his partner, so I can't write the personal parts for you. But here's an opening shape that works, with the blanks being things only you know:\n\n\"Good evening, everyone. For those who don't know me, I'm [name], [brother's name]'s brother. I've known him longer than almost anyone in this room, which means I've also had the longest front-row seat to the person he's become. And I have to say, watching him meet [partner's name] has been one of the best things I've ever seen.\"\n\nFrom there, one specific memory of the two of them, then a short wish for their marriage. The key is to keep it to one story, not three, and to say the partner's name early so it doesn't feel like a speech about your brother alone."
+  },
+  {
+   "jid": "612d14f36261",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What exactly is she deducting and for what?",
+   "conversation": [
+    "OTHER PERSON: Hi, it's Marisol from Greyfield Property, calling about your move-out inspection.",
+    "USER (spoken): Hi, yes, thanks for calling.",
+    "OTHER PERSON: So overall the unit looked good. We are holding back 220 dollars from the deposit, that's carpet cleaning in the bedroom and the scuffed closet door.",
+    "OTHER PERSON: The rest, 1,380, goes out by check within 21 days to the forwarding address you gave us.",
+    "USER (spoken): Okay, one second, let me look at my notes."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "She's holding back **220 dollars** from the deposit, and it's for two things: **carpet cleaning** in the bedroom and the scuffed closet door. The rest, **1,380**, goes out by check within 21 days to the forwarding address I gave her."
+  },
+  {
+   "jid": "07f53d84cba6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay, settle this for us. Is a hot dog a sandwich?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, it depends on the definition you pick. If a sandwich is just filling between two pieces of bread, then yes, a hot dog qualifies. But if the bun has to be two separate slices, then no, because a hot dog bun is one piece hinged together. So I'd say it's a sandwich by the loose definition, and its own thing by the strict one."
+  }
+ ]
+}

@@ -28,7 +28,7 @@ import {
 
 const REQUIRED_HEADINGS = [
   '## Approach',
-  '## Technique / Data Structure / Algorithm Used',
+  '## Technique',
   '## Code',
   '## Dry Run',
   '## Complexity',
@@ -57,7 +57,7 @@ const planFor = (question, source = 'what_to_answer') => planAnswer({
 describe('canonical coding contract', () => {
   test('CODING_SECTIONS has exactly the six required sections', () => {
     assert.deepEqual([...CODING_SECTIONS], [
-      'Approach', 'Technique / Data Structure / Algorithm Used', 'Code',
+      'Approach', 'Technique', 'Code',
       'Dry Run', 'Complexity', 'Interviewer Follow-up Points',
     ]);
   });

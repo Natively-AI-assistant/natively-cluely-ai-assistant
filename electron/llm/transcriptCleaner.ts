@@ -6,6 +6,11 @@ export interface TranscriptTurn {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    /** Punctuation provenance (WTA audit F9, additive). 'unavailable' means
+     *  the STT provider never guaranteed punctuation, so question scoring
+     *  must treat a missing '?' as NEUTRAL. Absent = legacy writer (legacy
+     *  scoring applies unchanged). */
+    punctuationSource?: import('./punctuationProvenance').PunctuationSource;
 }
 
 /**
@@ -37,6 +42,11 @@ const CONTENT_AMBIGUOUS = new Set([
     'right', 'like', 'well', 'so', 'sure', 'great', 'nice', 'perfect', 'cool',
     'all right', 'alright', 'yes', 'no',
 ]);
+
+// A short but genuinely interrogative turn: either it ends in '?', or it is a
+// bare wh-/aux word optionally punctuated. Used to exempt such turns from the
+// length floor in isMeaningfulTurn (see the comment there).
+const SHORT_INTERROGATIVE = /\?\s*$|^(why|how|when|where|what|who|which|whose|whom|really|seriously)[\s!.,?]*$/i;
 
 function cleanText(text: string): string {
     let result = text.toLowerCase().trim();
@@ -81,6 +91,19 @@ function cleanText(text: string): string {
  * Check if a turn is meaningful enough to keep
  */
 function isMeaningfulTurn(turn: TranscriptTurn, cleanedText: string): boolean {
+    // Bare one-word interrogatives ("Why?", "When?", "How?", "Where?") are
+    // legitimate — and extremely common — interview follow-ups, but they are
+    // 3-5 characters long and were being dropped by the length floor below.
+    // Dropping them does not merely lose the question: extractLatestQuestion
+    // then walks further back and selects a STALE turn the candidate has
+    // already answered (dataset wta_projfu_089 — "Talk about your data
+    // project." / "I built an analytics pipeline." / "Why?" selected turn 0
+    // instead of turn 2). Keep any interviewer turn that carries interrogative
+    // shape, regardless of length.
+    if (turn.role === 'interviewer' && SHORT_INTERROGATIVE.test(cleanedText.trim())) {
+        return true;
+    }
+
     // Always keep interviewer speech (priority)
     if (turn.role === 'interviewer' && cleanedText.length >= 5) {
         return true;
@@ -115,7 +138,10 @@ export function cleanTranscript(turns: TranscriptTurn[]): TranscriptTurn[] {
             cleaned.push({
                 role: turn.role,
                 text: cleanedText,
-                timestamp: turn.timestamp
+                timestamp: turn.timestamp,
+                // F9: provenance rides through cleaning so the extractor can
+                // score punctuation absence correctly for the CHOSEN turn.
+                ...(turn.punctuationSource ? { punctuationSource: turn.punctuationSource } : {}),
             });
         }
     }
@@ -140,18 +166,33 @@ export function sparsifyTranscript(
     const interviewerTurns = turns.filter(t => t.role === 'interviewer');
     const otherTurns = turns.filter(t => t.role !== 'interviewer');
 
-    // Keep all interviewer turns if under limit
-    const result: TranscriptTurn[] = [];
+    // Budget allocation. The previous version hard-capped interviewer speech at
+    // `slice(-6)` and handed the OTHER `maxTurns - 6` slots to `otherTurns`
+    // unconditionally — so when one role underfilled, its slots were simply
+    // FORFEITED rather than reallocated. An interviewer-heavy window (very
+    // common: several questions in a row while the candidate is still thinking)
+    // put 14 turns in and got 6 out, discarding half the budget and with it the
+    // earlier, still-unanswered questions.
+    //
+    // Instead: reserve a floor for interviewer speech, cap the other role at
+    // whatever is left above that floor, then give every unused slot back to
+    // the interviewer — and if the interviewer underfills, give the slack back
+    // to the other role. The budget is always fully spent.
+    const INTERVIEWER_FLOOR = 6;
+    const otherWanted = Math.min(otherTurns.length, Math.max(0, maxTurns - INTERVIEWER_FLOOR));
+    const interviewerCount = Math.min(interviewerTurns.length, maxTurns - otherWanted);
+    const otherCount = Math.min(otherTurns.length, maxTurns - interviewerCount);
 
-    // Prioritize recent interviewer turns (last 6)
-    const recentInterviewer = interviewerTurns.slice(-6);
+    // Both take the MOST RECENT turns of their role. `slice(-0)` returns the
+    // WHOLE array, so a zero count must be handled explicitly.
+    const lastN = (arr: TranscriptTurn[], n: number) => (n <= 0 ? [] : arr.slice(-n));
 
-    // Fill remaining with recent other turns
-    const remainingSlots = maxTurns - recentInterviewer.length;
-    const recentOther = otherTurns.slice(-remainingSlots);
+    const result: TranscriptTurn[] = [
+        ...lastN(interviewerTurns, interviewerCount),
+        ...lastN(otherTurns, otherCount),
+    ];
 
     // Merge and sort by timestamp
-    result.push(...recentInterviewer, ...recentOther);
     result.sort((a, b) => a.timestamp - b.timestamp);
 
     return result;

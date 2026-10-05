@@ -1,0 +1,79 @@
+{
+ "batch": "b009-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  },
+  "DTECH-CTX-G1": {
+   "title": "Quarrystone take-home: Pager Quiet Windows (problem statement)",
+   "text": "QUARRYSTONE ANALYTICS - PLATFORM TEAM TAKE-HOME (v3)\nProblem: Pager Quiet Windows\n\nBackground\nOur on-call tool lets engineers schedule \"quiet windows\" during which non-critical pages for a host are held back. Engineers create windows independently, so the list for one host arrives unsorted and often overlapping. Before we push windows to the pager we collapse them into the smallest equivalent list.\n\nPart 1: merge_windows(windows, grace)\nInput:\n- windows: a list of pairs [start, end], in integer minutes since the start of the quarter. A window covers minute start (inclusive) up to end (exclusive), so [10, 20] covers 10 minutes.\n- grace: an integer number of minutes.\n\nRules:\n1. If any window has end < start, raise ValueError with the message \"inverted window at index i\", where i is the index of the FIRST such window in the input list as given (before any sorting).\n2. A window with end == start covers no time and is dropped silently. A dropped window must not bridge two other windows.\n3. After sorting by start, a window merges into the current merged window when its start <= current end + grace. Windows that touch (next start == current end) therefore always merge, even with grace 0.\n4. Grace only decides whether two windows merge; it never extends a window. A merged window ends at the largest end among the windows it absorbed.\n5. Return the merged windows sorted by start, as a new list of [start, end] pairs. Do not mutate the input list or the pairs inside it.\n\nExamples\nExample 1: windows = [[10, 20], [15, 30], [40, 50]], grace = 0\nOutput: [[10, 30], [40, 50]]\n\nExample 2: windows = [[5, 10], [10, 12], [13, 20]], grace = 0\nOutput: [[5, 12], [13, 20]]\n([5, 10] and [10, 12] touch, so they merge. The gap from 12 to 13 is 1 minute, which is larger than grace 0.)\n\nExample 3: windows = [[5, 10], [10, 12], [13, 20]], grace = 1\nOutput: [[5, 20]]\n(Note the result is [5, 20], not [5, 21]: grace never extends a window.)\n\nExample 4: windows = [[30, 30], [1, 4], [2, 3]], grace = 5\nOutput: [[1, 4]]\n([30, 30] is dropped; [2, 3] lies inside [1, 4].)\n\nExample 5: windows = [[0, 10], [11, 11], [12, 20]], grace = 1\nOutput: [[0, 10], [12, 20]]\n([11, 11] is dropped before merging, so it cannot bridge the gap between 10 and 12.)\n\nExample 6: windows = [[7, 3], [1, 2], [9, 4]], grace = 0\nRaises ValueError(\"inverted window at index 0\")\n\nExample 7: windows = [], grace = 10\nOutput: []\n\nPart 2: total_quiet_minutes(windows, grace)\nReturn the total number of minutes covered by the output of merge_windows. A gap that grace bridged is counted, because the merged window spans it. For Example 1 the answer is 30, for Example 3 it is 15, and for Example 7 it is 0.\n\nConstraints\n- 0 <= len(windows) <= 200,000\n- 0 <= start, end <= 10^9\n- 0 <= grace <= 60\n- Your solution must run in O(n log n) time. Our reference solution runs in under 1 second in Python for n = 200,000.\n- Python 3.10+ or Go 1.22+. Standard library only.\n\nWhat we look at\nCorrectness on our hidden cases (including every edge case above), readability, the tests you write yourself, and a short note (under 200 words) explaining your approach and its complexity. Please do not spend more than 3 hours.\n\nLive follow-up\nIn the follow-up interview we will ask how your design changes if windows arrive one at a time from a stream and the pager needs to ask \"is minute t quiet?\" at any moment."
+  }
+ },
+ "items": [
+  {
+   "jid": "3a4af2061cfa",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "interviewer says this is wrong for some inputs, fix it:\n\ndef length_of_longest_substring(s):\n    seen = {}\n    left = 0\n    best = 0\n    for right, ch in enumerate(s):\n        if ch in seen:\n            left = seen[ch] + 1\n        seen[ch] = right\n        best = max(best, right - left + 1)\n    return best",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "The bug is that `enumerate` gives you `(index, char)` tuples, so `ch` is a tuple and `right` is never defined. You want the index as the loop variable and the character as the key.\n\n```python\ndef length_of_longest_substring(s):\n    seen = {}\n    left = 0\n    best = 0\n    for right, ch in enumerate(s):\n        if ch in seen and seen[ch] >= left:\n            left = seen[ch] + 1\n        seen[ch] = right\n        best = max(best, right - left + 1)\n    return best\n```\n\nThe `seen[ch] >= left` guard matters: without it, a character seen before `left` would wrongly pull the window back."
+  },
+  {
+   "jid": "4ae21c6cdb5b",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And the complexity?",
+   "conversation": [
+    "INTERVIEWER (heard): Okay, let's go over your take-home. For example two and example three, walk me through what your merge returns and why the two outputs are different.",
+    "NATIVELY: I don't have the actual outputs for examples two and three in front of me, so let me walk through the logic and what each should return.\n\nBoth examples go through the same merge: sort the windows by start, then sweep through and merge any window that overlaps or is within grace of the current one. The difference in output comes down to whether the gap between two windows is small enough for grace to bridge it. If the gap is at or under grace, the two collapse into one window spanning both. If it's larger, they stay separate.\n\nCan you pull up the two examples so I can point at the exact numbers?"
+   ],
+   "evidence_ids": [
+    "DTECH-CTX-G1",
+    "PI-B:RESUME"
+   ],
+   "forbidden_ids": [],
+   "answer": "Sorting dominates, so it's **O(n log n)** time. The sweep after that is a single pass, so it's linear, and the merged output is at most n windows, so **O(n)** space. That matches the constraint in the prompt, and it's why the reference solution stays under a second at n = 200,000."
+  },
+  {
+   "jid": "95e3cd573692",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why a heap?",
+   "conversation": [
+    "INTERVIEWER (heard): Given an array of integers and a number k, return the k most frequent elements. For example one, one, one, two, two, three with k equal to two gives you one and two. How would you solve it?",
+    "NATIVELY: ## Approach\nCount frequencies with a hash map, then keep the top k. Two clean options: bucket sort by frequency for O(n) time, or a min-heap of size k for O(n log k). I'll use the heap since it's simple and doesn't depend on frequency bounds.\n\n## Code\n```python\nimport heapq\nfrom collections import Counter\n\ndef topKFrequent(nums, k):\n    counts = Counter(nums)\n    return heapq.nlargest(k, counts.keys(), key=counts.get)\n```\n\n## Complexity\nTime O(n log k), since we count in O(n) and pull the k largest from the map. Space O(n) for the frequency map."
+   ],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Because I only need the top k, not a full ordering. A min-heap of size k keeps the k largest frequencies seen so far, and each new element either gets rejected against the smallest or replaces it, so every push and pop is O(log k) instead of O(log n). That's the win when k is much smaller than the number of distinct elements. If k were close to n, or I needed everything sorted, I'd just sort the counts instead."
+  },
+  {
+   "jid": "a464b2c69c4c",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Here's a quick one. Someone wrote a Java method to check if two strings are anagrams. It turns both into char arrays, sorts both with Arrays.sort, and then returns first dot equals second. It returns false even for listen and silent. What's wrong, and how would you fix it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `Arrays.sort(a).equals(...)` wouldn't even compile. If it's compiling and returning false, the likely culprit is comparing the two arrays with `equals` instead of `Arrays.equals`, since array `equals` is reference equality and always false for two different arrays.\n\n```java\nboolean isAnagram(String s, String t) {\n    if (s.length() != t.length()) return false;\n    char[] a = s.toCharArray();\n    char[] b = t.toCharArray();\n    Arrays.sort(a);\n    Arrays.sort(b);\n    return Arrays.equals(a, b);\n}\n```\n\nSorting both and comparing with `Arrays.equals` works because anagrams have identical sorted character sequences, and the length check short-circuits the obvious mismatch."
+  }
+ ]
+}

@@ -1,9 +1,13 @@
 // electron/llm/visionCapability.ts
 //
-// Pure, dependency-free helpers for deciding whether a LOCAL provider (Ollama
-// model, custom cURL endpoint) can actually accept an image. Kept free of fetch
-// / fs / Electron so the decision logic is unit-testable; the I/O (Ollama
-// /api/show probe, reading the model list) stays in LLMHelper and feeds these.
+// Pure helpers for deciding whether a LOCAL provider (Ollama model, custom cURL
+// endpoint) can actually accept an image. Kept free of fetch / fs / Electron so
+// the decision logic is unit-testable; the I/O (Ollama /api/show probe, reading
+// the model list) stays in LLMHelper and feeds these. One import: the cURL
+// parser the dispatch itself uses, so "where does this request go" has a single
+// answer.
+
+import curl2Json from '@bany/curl-to-json';
 //
 // Why this exists: cloud providers (OpenAI/Claude/Gemini/Groq) have known,
 // fixed vision support. Local providers don't — an Ollama install can hold any
@@ -17,12 +21,59 @@
 
 // Name heuristic (fallback only). Ollama's /api/show `capabilities` array is the
 // authoritative source; this regex is used when capabilities are absent (older
-// Ollama servers) or the probe failed.
+// Ollama servers) or the probe failed. The ONLY Ollama list (2026-10-01):
+// modelCapabilities.ts had a second, drifted copy. `qwen[0-9.]*-?vl` because
+// Ollama publishes the family as `qwen2.5vl` (no dash); `qwen2.5-vl`,
+// `qwen3-vl` and Hugging Face names keep theirs.
 const OLLAMA_VISION_NAME_RE =
-  /(llava|bakllava|moondream|llama-?3\.2-vision|llama3\.2-vision|gemma3|minicpm-v|qwen2\.5-vl|qwen2-vl|pixtral|llama-?4|granite3\.2-vision|mistral-small3\.1|llama-?guard3-vision)/i;
+  /(llava|bakllava|moondream|llama-?3\.2-vision|llama3\.2-vision|gemma3|minicpm-v|qwen[0-9.]*-?vl|pixtral|llama-?4|granite3\.2-vision|mistral-small3\.1|llama-?guard3-vision)/i;
+
+/**
+ * The names the remote-Ollama rule knew BEFORE 2026-10-01, frozen. A daemon on
+ * another machine may take a keep-on-device screenshot only in the states it
+ * could before (Evin: "keep the old behaviour"), and that rule judged the
+ * selected model by this older, shorter list. The consolidated list above has
+ * more names (llama4, qwen2.5vl, mistral-small3.1, granite3.2-vision,
+ * llama-guard3-vision); through this rule each would be a new state in which a
+ * screenshot leaves the machine. A user who wants one of those on a remote
+ * daemon says so: "Reads images: On" for that model. Do not add names here.
+ */
+const LEGACY_REMOTE_OLLAMA_VISION_NAME_RE = /llava|bakllava|moondream|llama3\.2-vision|llama-3\.2-vision|gemma3|minicpm-v|qwen2\.5-vl|qwen2-vl|pixtral/;
+
+export function isLegacyRemoteOllamaVisionName(modelId: string): boolean {
+  return !!modelId && LEGACY_REMOTE_OLLAMA_VISION_NAME_RE.test(modelId.toLowerCase());
+}
 
 export function isOllamaVisionModelByName(modelId: string): boolean {
   return !!modelId && OLLAMA_VISION_NAME_RE.test(modelId.toLowerCase());
+}
+
+// A bare `vision` segment. High precision — a model with "vision" in its name
+// is one — and it catches the shapes the family list above cannot, because they
+// carry a parameter count between the family and the marker:
+// `llama-3.2-90b-vision-instruct`, `granite-3.2-2b-vision`.
+const GENERIC_VISION_MARKER_RE = /(?:^|[-_./])vision(?:[-_./]|$)/i;
+
+/**
+ * Best-effort "does this model name describe a vision model" for a provider
+ * whose capabilities we cannot probe — specifically a gateway (LiteLLM, NVIDIA
+ * NIM) fronting an arbitrary upstream.
+ *
+ * WHY (2026-09-03, follow-up): stripping the routing prefix let
+ * `litellm/openai/gpt-4o` be recognised, but only because `gpt-4o` matches a
+ * known cloud family. A gateway-routed OPEN-WEIGHTS vision model
+ * (`litellm/mistral/pixtral-12b`, `nvidia_nim/meta/llama-3.2-90b-vision-instruct`)
+ * matched nothing and still came back `supportsImages: false`, so Code Hint went
+ * on refusing the very models the vision chain and the provider registry had
+ * just been taught to seat. Three subsystems, two answers.
+ *
+ * Built on the Ollama family list rather than beside it: these are the same
+ * open-weights families served through either route, and a second private copy
+ * is exactly how the two drifted the last time.
+ */
+export function modelNameSuggestsVision(modelId: string): boolean {
+  if (!modelId) return false;
+  return isOllamaVisionModelByName(modelId) || GENERIC_VISION_MARKER_RE.test(modelId);
 }
 
 /**
@@ -91,14 +142,125 @@ export function customProviderSupportsVision(
   //     can't actually carry the screenshot.
   const hasMessagesArray = /"messages"\s*:\s*\[/.test(curl);
   const hasUserRole = /"role"\s*:\s*"user"/.test(curl);
-  return hasMessagesArray && hasUserRole;
+  if (!hasMessagesArray || !hasUserRole) return false;
+
+  //     A `messages` array is NOT proof the endpoint speaks OpenAI's multimodal
+  //     dialect — only that it has a messages array. Two other APIs share the
+  //     shape and reject what injectImageIntoMessages produces:
+  //
+  //       • Anthropic Messages wants `{type:"image", source:{...}}`; handed an
+  //         `image_url` part it returns 400 invalid_request.
+  //       • Ollama's native /api/chat wants a message-level `images:[b64]`; it
+  //         IGNORES the `image_url` part and answers text-only about a
+  //         screenshot it never saw — the silent drop this whole function
+  //         exists to prevent.
+  //
+  //     So the auto-detect branch requires the absence of those signatures.
+  //     A user on such an endpoint can still force vision on with the explicit
+  //     `multimodal` flag plus an `{{IMAGE_BASE64}}` placeholder they position
+  //     correctly for their API — branch (1) above, which is checked first.
+  //     Failing closed here is the documented intent: skip the provider rather
+  //     than commit to one that cannot carry the image.
+  if (isNonOpenAiMessagesDialect(curl)) return false;
+
+  return true;
 }
 
 /**
- * Heuristically decide whether a custom provider's endpoint is loopback/local,
- * so local-only mode keeps using it and the chain doesn't treat it as a cloud
- * provider. Inspects the first http(s) URL in the cURL template for a
- * loopback / link-local / RFC-1918 private host.
+ * True when a `messages`-shaped cURL template targets an API that is NOT
+ * OpenAI-multimodal-compatible. Deliberately narrow — it names only the two
+ * dialects we can identify from a template with confidence, because a false
+ * positive here silently disables vision for a working OpenAI-compatible
+ * gateway.
+ */
+function isNonOpenAiMessagesDialect(curl: string): boolean {
+  // Anthropic Messages API: the version header is mandatory on every request,
+  // so it is a reliable marker; the host is the second.
+  //
+  // Both are matched against the URL and the HEADER FLAGS only, never the whole
+  // template. Scanning everything meant a body that merely mentioned
+  // `anthropic-version:` — a system prompt about the Anthropic API, say — made
+  // a working OpenAI-compatible endpoint read as non-multimodal and silently
+  // lose vision, which is the false positive this function's docblock warns
+  // against. It cut the other way too: any `https://…/v1/…` string inside a
+  // prompt defeated the Ollama-native guard below.
+  if (/(?:^|\s)(?:-H|--header)\s+(?:'|")?\s*anthropic-version\s*:/i.test(curl)) return true;
+  if (/https?:\/\/[^\s'"`]*\bapi\.anthropic\.com\b/i.test(firstUrl(curl))) return true;
+
+  // Ollama's NATIVE endpoints. Its OpenAI-compatible surface lives at
+  // /v1/chat/completions and is deliberately not matched — that one does accept
+  // image_url parts (see callOllamaVision in VisionProviderRegistry).
+  //
+  // The path alone is NOT enough. `/api/chat` is an ordinary route name: a
+  // self-hosted OpenAI-compatible gateway at https://gw.example.com/api/chat
+  // matched it and silently lost vision, which is precisely the false positive
+  // this function's own docblock warns against. So require corroboration —
+  // Ollama's default port, or a host that is actually on this machine/LAN. A
+  // public gateway on 443 no longer matches.
+  const url = firstUrl(curl);
+  const ollamaNativePath = /\/api\/(chat|generate)\b/i.test(url) && !/\/v1\//i.test(url);
+  if (ollamaNativePath && (/:11434\b/.test(url) || customProviderIsLocal({ curlCommand: curl }))) {
+    return true;
+  }
+
+  return false;
+}
+
+/** The first http(s) URL in a cURL template, or '' — so URL-shaped checks never
+ *  read the request BODY, which is user prose and can contain anything. */
+function firstUrl(curl: string): string {
+  const m = curl.match(/https?:\/\/[^\s'"`]+/i);
+  return m ? m[0] : '';
+}
+
+/**
+ * The URL a cURL template's request actually GOES to — parsed by the same
+ * parser the dispatch uses (curl2Json), so classification and dispatch cannot
+ * disagree. A bare URL (the Ollama daemon address) is taken as it is. '' when
+ * the command cannot be parsed: unknown is never "local".
+ *
+ * Not `firstUrl`: the first http(s) string in a template is often NOT the
+ * endpoint. `-H "HTTP-Referer: http://localhost:3000"` (which OpenRouter's own
+ * docs suggest), `-x http://127.0.0.1:7890` and a URL inside the body all made
+ * a HOSTED endpoint read as local — exempt from the cloud data scopes, usable
+ * in local-only mode and, in "Keep screenshots on this device", sent the
+ * screenshot (found 2026-10-01).
+ */
+function requestUrl(curl: string): string {
+  const command = (curl || '').trim();
+  if (!command) return '';
+  if (/^https?:\/\/\S+$/i.test(command)) return command;
+  try {
+    const url = (curl2Json(command) as { url?: unknown } | null | undefined)?.url;
+    return typeof url === 'string' ? url : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Loopback, link-local or RFC-1918, decided on the PARSED address — never by a
+ *  string prefix (`10.example.com` and `172.16.evil.com` are public names). */
+function isPrivateHost(rawHost: string): boolean {
+  const host = rawHost.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '::1') return true;
+  if (host.endsWith('.local')) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!v4) return false;
+  const [a, b, c, d] = v4.slice(1).map(Number);
+  if ([a, b, c, d].some((n) => n > 255)) return false;
+  if (a === 127 || a === 10) return true;                 // loopback, RFC-1918
+  if (a === 0 && b === 0 && c === 0 && d === 0) return true;
+  if (a === 192 && b === 168) return true;                 // RFC-1918
+  if (a === 172 && b >= 16 && b <= 31) return true;        // RFC-1918
+  if (a === 169 && b === 254) return true;                 // link-local
+  return false;
+}
+
+/**
+ * Decide whether a custom provider's endpoint is on this machine or the local
+ * network, so local-only mode keeps using it and the chain doesn't treat it as
+ * a cloud provider. Judges the host of the URL the request goes to
+ * (requestUrl) for a loopback / link-local / RFC-1918 address.
  *
  * An explicit `localOnly` flag, when present, wins over URL detection.
  */
@@ -107,24 +269,11 @@ export function customProviderIsLocal(
 ): boolean {
   if (!provider) return false;
   if (typeof provider.localOnly === 'boolean') return provider.localOnly;
-
-  const curl = provider.curlCommand || '';
-  const m = curl.match(/https?:\/\/[^\s'"`]+/i);
-  if (!m) return false;
-  let host: string;
+  const url = requestUrl(provider.curlCommand || '');
+  if (!url) return false;
   try {
-    host = new URL(m[0]).hostname.toLowerCase();
+    return isPrivateHost(new URL(url).hostname);
   } catch {
     return false;
   }
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') return true;
-  if (host.endsWith('.local')) return true;
-  if (host.startsWith('169.254.')) return true;      // link-local
-  if (host.startsWith('10.')) return true;            // RFC-1918
-  if (host.startsWith('192.168.')) return true;       // RFC-1918
-  if (host.startsWith('172.')) {                      // RFC-1918 172.16.0.0–172.31.255.255
-    const second = parseInt(host.split('.')[1], 10);
-    if (second >= 16 && second <= 31) return true;
-  }
-  return false;
 }

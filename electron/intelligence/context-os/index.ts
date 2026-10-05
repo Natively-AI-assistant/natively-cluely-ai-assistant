@@ -39,6 +39,7 @@ export {
   type BuildTurnContractInput,
 } from './SourceAuthorityKernel';
 export { PROPERTY_RULES, propertyRuleFor, textCanProveProperty } from './requestedProperty';
+export { packGovernsGeneration, sourceAuthorityPermitsRefusal, clarificationIsActionable, clarificationShortCircuitEnabled, declineYieldsToAttachedImages, boundaryDeclineYieldsToAttachedImages } from './refusalPolicy';
 export {
   EvidenceOrchestrator,
   parseModeSnippets,
@@ -65,9 +66,7 @@ export {
   buildTurnContractForSurface,
   buildTurnContractIfEnabled,
   contractBlocks,
-  assertNoAuthorityContradiction,
   type BuildTurnContractForSurfaceInput,
-  type AuthorityContradictionCheck,
 } from './integration';
 export {
   extractCandidateClaims,
@@ -79,12 +78,24 @@ export {
   type ClaimValidationStatus,
 } from './assistantClaims';
 export {
+  checkAssistantClaimsPrecedence,
+  type ContradictedClaimRow,
+  type AssistantClaimsPrecedenceVerdict,
+} from './assistantClaimsPrecedenceCheck';
+export {
   ProfileEvidenceService,
   type ProfileEvidenceServiceInput,
 } from './ProfileEvidenceService';
 export {
+  checkImpossibleEvidenceState,
+  type ImpossibleStateViolation,
+  type ImpossibleStateViolationCode,
+  type ImpossibleStateCheckResult,
+} from './evidencePackValidation';
+export {
   TurnEvidenceCoordinator,
   allocateRequiredEvidenceFamilies,
+  DEFAULT_EVIDENCE_PACK_MAX_CHARS,
   type RequiredFamilyFailure,
   type TurnEvidenceCoordinatorInput,
   type TurnEvidenceCoordinatorResult,

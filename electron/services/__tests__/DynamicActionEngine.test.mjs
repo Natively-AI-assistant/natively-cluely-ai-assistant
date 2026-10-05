@@ -282,6 +282,24 @@ test('Evidence refs contain transcript snippet and timestamp', async () => {
   assert.ok(evidence.timestamp, 'Expected timestamp in evidence');
 });
 
+test('screen coding actions carry screen evidence so renderer captures a fresh screenshot', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.detectActions({
+    transcript: 'The coding problem is visible on screen.',
+    speaker: 'Interviewer',
+    modeTemplateType: 'technical_interview',
+    modeId: 'mode_technical',
+    sessionId: 'session_screen_action',
+  });
+
+  const screenAction = actions.find(action => action.type === 'screen_coding_problem');
+  assert.ok(screenAction, 'Expected a screen_coding_problem dynamic action');
+  assert.equal(screenAction.requiresScreen, true);
+  assert.equal(screenAction.evidenceRefs[0].source, 'screen');
+});
+
 test('dynamic actions are isolated by session and mode to prevent bleeding', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

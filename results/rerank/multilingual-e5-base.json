@@ -1,0 +1,34 @@
+{
+  "model_id": "multilingual-e5-base",
+  "reranker": "Xenova/ms-marco-MiniLM-L-6-v2 (q8, bundled)",
+  "n_queries": 60,
+  "pool": 30,
+  "sampled": true,
+  "embedding_only": {
+    "r1": 0.1,
+    "r5": 0.2667,
+    "r10": 0.3833,
+    "mrr": 0.1788,
+    "ndcg": 0.2021
+  },
+  "reranked": {
+    "r1": 0.1667,
+    "r5": 0.3667,
+    "r10": 0.4333,
+    "mrr": 0.2343,
+    "ndcg": 0.2643
+  },
+  "gain": {
+    "r1": 0.0667,
+    "r5": 0.1,
+    "r10": 0.05,
+    "mrr": 0.0555
+  },
+  "rescued_queries": 5,
+  "lost_queries": 2,
+  "unrecoverable_queries": 27,
+  "unrecoverable_rate": 0.45,
+  "rerank_failures": 0,
+  "rerank_latency_p50_ms": 3580,
+  "rerank_latency_p95_ms": 3733
+}

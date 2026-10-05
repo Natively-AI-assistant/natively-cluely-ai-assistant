@@ -1,0 +1,177 @@
+{
+  "mode": "lecture",
+  "partition": "supp-behavior",
+  "contexts": [
+    {
+      "id": "SBLEC-CTX-C1",
+      "kind": "conflicting",
+      "title": "STAT 210 Handout 6 - Sampling distributions and the standard error",
+      "file_name": "stat210_handout6_standard_error.txt",
+      "text": "STAT 210 - HANDOUT 6: SAMPLING DISTRIBUTIONS AND THE STANDARD ERROR\nProf. Adaeze Whitcombe | Week 6\n\nKEY TAKEAWAYS (read this first)\n1. The standard error of the mean is SE = s / sqrt(n).\n2. To halve the standard error, double the sample size.\n3. A rough 95% confidence interval for a mean is the sample mean plus or minus 2 SE.\n4. With n of 30 or more, the sampling distribution of the mean is always normal.\n\n1. TWO KINDS OF SPREAD\nThe standard deviation (SD, written s for a sample) describes how spread out individual observations are. The standard error (SE) describes how much the sample mean would vary across repeated samples of the same size. SD does not shrink as you collect more data; SE does.\nThe rule: SE = s / sqrt(n). Because n sits under a square root, you must quadruple the sample size to halve the standard error. Doubling n only shrinks SE by a factor of about 1.41.\n\n2. THE CENTRAL LIMIT THEOREM, INFORMALLY\nFor many populations, the distribution of sample means is close to normal once n is moderately large. 'n of 30' is a rule of thumb, not a guarantee: strongly skewed data such as incomes or waiting times can need much larger samples before the normal approximation is good.\n\n3. WORKED EXAMPLES\nExample 1. Exam scores: n = 25, s = 10 points. SE = 10 / 5 = 2 points. Rough 95% CI half-width: 4 points.\nExample 2. A sample of n = 36 commute times has s = 12 minutes. SE = 12 / 36 = 0.33 minutes. The rough 95% CI half-width is therefore about 0.67 minutes, so the estimate of the mean commute is very precise.\nExample 3. Reaction times: n = 100, s = 20 ms. SE = 20 / 10 = 2 ms. Rough 95% CI half-width: 4 ms.\n\n4. PRACTICE\nP1. Using the class sleep survey from last spring (data on the course site), compute the SE of mean hours slept.\nP2. How large a sample would you need in Example 3 to get the SE down to 1 ms?\nP3. Explain in one sentence why SD does not shrink as n grows.\nP4. A classmate says a bigger sample 'reduces the variability of the data'. What is right and what is wrong about that?\n\nNext week: confidence intervals done properly, with t instead of 2.",
+      "notes": "Contradictions: key takeaway 2 says double the sample size to halve the SE, but section 1 correctly says quadruple; Example 2 applies the rule wrongly (SE = 12 / 36 = 0.33, dividing by n instead of sqrt(n); the stated rule gives 12 / 6 = 2 minutes and a half-width near 4 minutes); Example 2 therefore overstates precision; key takeaway 4 says n of 30 is always normal, but section 2 calls it a rule of thumb, not a guarantee. The class sleep survey has no n or s in the handout."
+    },
+    {
+      "id": "SBLEC-CTX-I1",
+      "kind": "irrelevant",
+      "title": "STAT 210 course logistics",
+      "file_name": "stat210_course_logistics.txt",
+      "text": "STAT 210 - COURSE LOGISTICS\n\nOffice hours: Tuesdays 2-4 pm in Crane Hall 309, and Thursdays 10-11 am on video. No appointment needed.\nTeaching assistants: Rafferty Nkemelu (sections A and B) and Solveig Amundsen (sections C and D). Email your TA first for grading questions.\nProblem sets: due Fridays at 11:59 pm on the course site. Each student gets three late days for the term, usable in whole days. After that, late work earns no credit.\nMidterm: week 8, in class. Final exam: during the exam period, date set by the registrar.\nCalculators: any non-graphing calculator is allowed in exams. Phones must be off and in bags.\nCollaboration: discuss ideas freely, but write up your own solutions and list who you worked with.\nAccommodations: contact the accessibility office by week 3 so arrangements are in place for the midterm.\nAttendance is not graded, but in-class exercises count for 5% of the course grade.",
+      "notes": null
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SBLEC-001",
+      "category": "didnt_understand",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "is example 2 right??",
+      "context_condition": "conflicting",
+      "context_ref": "SBLEC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "rule_misapplied",
+        "short_turn",
+        "typed_private"
+      ],
+      "expected_answer_type": "private explanation that checks the worked example against the rule",
+      "claim_trap": "research_claim",
+      "needles": [
+        "12 / 36",
+        "s / sqrt(n)"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBLEC-002",
+      "category": "professor_meaning",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So, as you can see in example two, the standard error comes out to about a third of a minute, which tells you the estimate is, uh, extremely precise. Okay, moving on.",
+      "context_condition": "conflicting",
+      "context_ref": "SBLEC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "rule_misapplied",
+        "professor_error",
+        "adversarial"
+      ],
+      "expected_answer_type": "private note for the student that rechecks the arithmetic",
+      "claim_trap": "research_claim",
+      "needles": [
+        "n = 36",
+        "s / sqrt(n)"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBLEC-003",
+      "category": "formula",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "the summary box says double the sample to halve the SE but section 1 says something else. which is it, why, and how big would n need to be in example 2 to get the SE down to 1 minute?",
+      "context_condition": "conflicting",
+      "context_ref": "SBLEC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "summary_body_mismatch",
+        "multi_part",
+        "typed_private"
+      ],
+      "expected_answer_type": "private explanation resolving the mismatch with a worked calculation",
+      "claim_trap": "research_claim",
+      "needles": [
+        "double the sample size",
+        "quadruple the sample size",
+        "s = 12 minutes"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBLEC-004",
+      "category": "compare",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "whats the difference between SD and SE the way this handout puts it",
+      "context_condition": "grounded",
+      "context_ref": "SBLEC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "supported",
+        "typed_private"
+      ],
+      "expected_answer_type": "short private explanation grounded in the handout wording",
+      "claim_trap": "none",
+      "needles": [
+        "individual observations",
+        "repeated samples"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBLEC-005",
+      "category": "connect_earlier",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "how many people were in last springs sleep survey from the handout, and what SE did it come out to?",
+      "context_condition": "grounded",
+      "context_ref": "SBLEC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_conflicting",
+        "not_in_material",
+        "insufficient_info",
+        "typed_private"
+      ],
+      "expected_answer_type": "private reply that the handout gives no such figures",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SBLEC-006",
+      "category": "simple_explain",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Okay, intuitively, why does averaging more observations make the estimate less noisy? Anyone? Think about it for a second.",
+      "context_condition": "irrelevant",
+      "context_ref": "SBLEC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "irrelevant_doc"
+      ],
+      "expected_answer_type": "plain-language intuition for the student",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    }
+  ]
+}

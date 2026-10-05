@@ -1,0 +1,320 @@
+{
+ "blind_id": "S-5544c583",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 53462,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 20394,
+  "candidatesTokenCount": 2228,
+  "totalTokenCount": 28076,
+  "cachedContentTokenCount": 12232,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 20394
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 12232
+   }
+  ],
+  "thoughtsTokenCount": 5454,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 9,
+  "action_item_retention": 9,
+  "decision_retention": 8,
+  "speaker_attribution": 7,
+  "numeric_accuracy": 4,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 3,
+  "structure": 3,
+  "conciseness": 1,
+  "readability": 2,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "The notes present the superseded salary band ($128k-$146k) and superseded target ($155k) as current, unresolved risks and open questions, directly contradicting the later correction that the target is $165k and within the $148k-$172k band.",
+   "Extreme repetition of facts across almost every section, including duplicating action items with raw speaker labels ('Me', 'Speaker 1')."
+  ],
+  "missing_important_information": [
+   "Brightlane is moving everyone to three days a week in office starting January, which is why Maya prefers remote work.",
+   "The plan to do Dana's interview next week and the portfolio review the week of October 5."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Maya’s base target of approximately $155,000 exceeds Corvella’s stated salary-band maximum of $146,000."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Can Corvella meet or offset Maya’s $155,000 base target through the overall compensation package? [open]"
+   },
+   {
+    "correction_id": "C07",
+    "reported": "The candidate's three-week notice period and H-1B transfer process make the originally desired November 2 start date impractical."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The false assumption that the role is fully remote (listed as a concern).",
+   "The superseded $155k target and $128k-$146k band.",
+   "The superseded Nov 2 start date."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "partial"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "partial"
+   },
+   {
+    "id": "F55",
+    "status": "missing"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a high volume of facts but suffer from severe structural and logical flaws. The most critical error is the inclusion of superseded compensation numbers ($128k-$146k band and $155k target) as current, unresolved risks and open questions, directly contradicting the notes' own acknowledgment of the corrected $148k-$172k band and $165k target. Additionally, the conciseness is extremely poor; almost every fact is repeated 3-5 times across the Overview, Summary, Opportunity Summary, Company Details, Fit Signals, and structured blocks. Action items are also duplicated, sometimes using raw speaker labels ('Me', 'Speaker 1'). These issues make the notes highly confusing and difficult to read."
+ }
+}

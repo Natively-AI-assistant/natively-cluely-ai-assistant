@@ -1,0 +1,529 @@
+{
+ "id": "TEAM-S",
+ "segments": [
+  {
+   "speaker": "user",
+   "text": "Morning everyone. Okay, let's keep this tight, we've got the release planning sync right after at 10.",
+   "timestamp": 1789480807400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Before we start, has anyone else noticed the coffee machine on the third floor is just dispensing hot brown water now?",
+   "timestamp": 1789480816400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It's been doing that since Friday. I think it's decided it wants to be a tea machine.",
+   "timestamp": 1789480823800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I filed a ticket with facilities. Priority critical, obviously.",
+   "timestamp": 1789480828000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha. Okay. Quick reminder, we're on 4.12.0 and the plan is still to cut the release branch Wednesday. Ravi, you want to go first?",
+   "timestamp": 1789480838200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sure. Yesterday I finished MOB-1423, the, uh, the workout timer drifting when the app goes to the background on iOS. That's merged.",
+   "timestamp": 1789480847600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Root cause was we were trusting the display link timer instead of wall clock time, so after like ten minutes in the background you'd lose 20 or 30 seconds.",
+   "timestamp": 1789480859800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Today I'm picking up MOB-1431, the push notification deep link that opens the wrong screen. No blockers on my side yet.",
+   "timestamp": 1789480868800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Great. Is 1423 in the latest TestFlight build?",
+   "timestamp": 1789480872600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes, it went out in build 318 last night.",
+   "timestamp": 1789480876800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Katya?",
+   "timestamp": 1789480878200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah, so yesterday I was mostly on the crash spike from the Android 4.11.2 rollout. The crash rate on that version is sitting at 8 percent.",
+   "timestamp": 1789480889200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Eight percent? We'd all be on fire right now.",
+   "timestamp": 1789480893400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Sorry, no, I misspoke, it's 0.8 percent. Zero point eight. Still roughly double our usual baseline, which is around 0.4.",
+   "timestamp": 1789480902000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It's almost all one crash, a null pointer in the heart rate sync service on Samsung devices running Android 14. That's MOB-1440.",
+   "timestamp": 1789480911400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Today I'm writing the fix for 1440 and I, um, I hope to have a PR up by this afternoon.",
+   "timestamp": 1789480920000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Is that going into 4.12 or do we need a hotfix?",
+   "timestamp": 1789480925000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I was thinking maybe we ship a 4.11.3 hotfix just for that crash.",
+   "timestamp": 1789480930800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Honestly a separate hotfix means a second full regression pass. I'd rather it just ride along with 4.12.",
+   "timestamp": 1789480938600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, let's not decide on a hotfix yet. If 1440 lands in time it goes in 4.12, and we look at the crash numbers again Thursday.",
+   "timestamp": 1789480949600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, works for me. Also, related, I want to talk about whether we even keep supporting Android 9. It's like 3 percent of our users and it's a lot of the weird crashes.",
+   "timestamp": 1789480963400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's a bigger conversation. Let's take that offline, I don't want to eat the whole standup with it.",
+   "timestamp": 1789480971200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Fair enough.",
+   "timestamp": 1789480972600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Theo?",
+   "timestamp": 1789480973600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yep. Yesterday I got the new workout history endpoint deployed to staging. p95 latency went from about 4 seconds down to 1.9 seconds, so that's a nice win.",
+   "timestamp": 1789480985400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Mostly from paginating the query to 50 workouts per page instead of loading the whole history. I'd still like to load test it before it goes to prod.",
+   "timestamp": 1789480997200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Nice. Is the pagination change backwards compatible with the 4.11 clients?",
+   "timestamp": 1789481002200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yes, old clients just get the first page by default, so nothing breaks.",
+   "timestamp": 1789481008000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Today I'm on the token refresh changes for the Apple sign-in flow. And that's where my blocker is.",
+   "timestamp": 1789481015800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I need the platform team to add the new client secret to the production vault, and I don't have write access. Jon on platform said he'd look at it, but that was Friday.",
+   "timestamp": 1789481029600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Jon, not Joan, to be clear. I don't have vault access either.",
+   "timestamp": 1789481035000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Ha, yes, Jon with no A.",
+   "timestamp": 1789481038000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, I'll escalate that. I'll ping Jon and his manager directly, and I'll get you an answer by noon today.",
+   "timestamp": 1789481046600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Thanks. Without that secret the Apple sign-in fix can't go into 4.12 at all.",
+   "timestamp": 1789481052800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Understood. Joan, you're up.",
+   "timestamp": 1789481055000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "So yesterday I ran the regression suite against build 318. 142 test cases, 9 failures. Most of them are the known onboarding flakiness, but 2 are real bugs.",
+   "timestamp": 1789481066800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "One is the deep link thing Ravi just picked up, and the other is Android offline mode not syncing saved routes.",
+   "timestamp": 1789481075800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Today I'm triaging the rest of the failures and writing up tickets.",
+   "timestamp": 1789481081200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'm also borrowing two Pixel devices from the design team since our Pixel 8 in the device lab won't hold a charge anymore.",
+   "timestamp": 1789481091000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Just a heads up, 318 is already stale. CI produced build 321 about an hour ago, and it has the offline sync fix Katya merged last night.",
+   "timestamp": 1789481102400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Oh, okay. Then I'll rerun everything on 321 instead, no point filing tickets against 318.",
+   "timestamp": 1789481109000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Good catch. Now, about the branch cut. Joan, realistically, can you get a full regression pass done by tomorrow?",
+   "timestamp": 1789481117200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Not a full one. Maybe 60 percent of it. And Theo's blocker isn't resolved, and Katya's crash fix isn't in yet.",
+   "timestamp": 1789481126200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Could we still cut Wednesday and just cherry-pick the late fixes onto the branch?",
+   "timestamp": 1789481132400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'd rather not. Cherry-picking last time is how we lost the analytics fix in 4.10.",
+   "timestamp": 1789481139000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah. Okay, decision: we cut the release branch Thursday instead of Wednesday. Thursday at 2pm. App Store and Play Store submission stays on Monday.",
+   "timestamp": 1789481149200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Thursday 2pm, got it.",
+   "timestamp": 1789481151400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Joan, action item for you, full regression pass on build 321, results posted in the release channel by Wednesday 5pm.",
+   "timestamp": 1789481160000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Wednesday 5pm, yep. Got it, Dana.",
+   "timestamp": 1789481163000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "One more thing. Ravi, I know you just picked up 1431, but I need you on the App Store screenshots and release notes for 4.12, since you did them last time.",
+   "timestamp": 1789481176000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Katya, can you take 1431 after 1440? It's mostly shared routing logic anyway.",
+   "timestamp": 1789481181800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Uh, yeah, I can take it. It'll be tomorrow though.",
+   "timestamp": 1789481186400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's fine, I'll hand it over with my notes. I only got as far as reproducing it on an iPhone 13.",
+   "timestamp": 1789481195400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Great, so 1431 is Katya's now.",
+   "timestamp": 1789481198400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Should we also feature flag the new onboarding off if it's still flaky?",
+   "timestamp": 1789481204200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Maybe. Let's see what the rerun on 321 says before we start talking about flags.",
+   "timestamp": 1789481210800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Can I just add, the Android 9 question does affect backend too, we keep an old auth path alive just for those clients.",
+   "timestamp": 1789481220600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Noted, that goes into the offline chat as well. I'll find a time for it, but not today.",
+   "timestamp": 1789481228400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And someone should really do something about that coffee machine before Thursday, or the branch cut isn't happening.",
+   "timestamp": 1789481236200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha. Okay, thanks everyone. Theo, you'll hear from me by noon. See you all in the planning sync.",
+   "timestamp": 1789481244000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  }
+ ],
+ "words": 1020,
+ "speakerCount": 5,
+ "durationMs": 444000,
+ "startEpochMs": 1789480800000
+}

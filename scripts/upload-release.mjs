@@ -45,12 +45,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
+import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
+
+// The on-disk app identity (and thus the DMG file name) is disguised at build
+// time — see scripts/disguise-name.cjs. The DMG is named "<alias>-<version>.dmg"
+// by scripts/afterAllArtifactBuild.cjs (VOLNAME = the darwin alias), so the
+// filename match below must use the same alias, not the historical "Natively".
+const require = createRequire(import.meta.url);
+const DISGUISE_MAC = require('./disguise-name.cjs').darwin;
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
-const GDRIVE_FOLDER_ID = '18efvri8m_JBwuVdD3AxrCG8QZ_SbghSn';
+const GDRIVE_FOLDER_ID = process.env.GDRIVE_FOLDER_ID || '1z-qmuddJ8SiKyepCd4OprJPds5tWkXGb';
 // Drive's rclone backend needs the folder id passed via `--drive-root-folder-id`
 // when the destination path itself starts with `/` (i.e. rooted). The curly-brace
 // path syntax (`gdrive:{folderid}/`) is ambiguous: if a sibling folder whose
@@ -90,14 +98,15 @@ console.log(`[upload-release] version = ${version}`);
 //    `output` setting + afterAllArtifactBuild's path resolution vary by build).
 //    We build a regex because:
 //      (a) `productName` may be missing from package.json (live: only `name:"natively"`)
-//      (b) scripts/afterAllArtifactBuild.cjs hardcodes VOLNAME='Natively' so the
-//          actual filename casing is "Natively-…", not always matching productName
+//      (b) scripts/afterAllArtifactBuild.cjs names the DMG from the darwin disguise
+//          alias (VOLNAME), so the actual filename is "<alias>-…", not always
+//          matching productName
 //      (c) multiple architectures can ship side-by-side (universal / arm64 / x64)
 const productName = pkg.productName || pkg.name || 'natively';
 const dmgRegexes = [
-  new RegExp(`^Natively-${version.replace(/\./g, '\\.')}\\.dmg$`, 'i'),
-  new RegExp(`^Natively-${version.replace(/\./g, '\\.')}-arm64\\.dmg$`, 'i'),
-  new RegExp(`^Natively-${version.replace(/\./g, '\\.')}-x64\\.dmg$`, 'i'),
+  new RegExp(`^${DISGUISE_MAC}-${version.replace(/\./g, '\\.')}\\.dmg$`, 'i'),
+  new RegExp(`^${DISGUISE_MAC}-${version.replace(/\./g, '\\.')}-arm64\\.dmg$`, 'i'),
+  new RegExp(`^${DISGUISE_MAC}-${version.replace(/\./g, '\\.')}-x64\\.dmg$`, 'i'),
   new RegExp(`^${productName}-Setup-${version.replace(/\./g, '\\.')}\\.dmg$`, 'i'),
   new RegExp(`^${productName}-Setup-${version.replace(/\./g, '\\.')}-arm64\\.dmg$`, 'i'),
 ];

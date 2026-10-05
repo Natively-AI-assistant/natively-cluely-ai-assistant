@@ -21,18 +21,20 @@ export class DynamicActionEngine {
         modeTemplateType: string;
         modeId: string;
         sessionId: string;
+        /** False when "Diagrams and charts" is off: no card offers a drawing. */
+        visualsEnabled?: boolean;
     }): DynamicAction[] {
         const { transcript, speaker, modeTemplateType, modeId, sessionId } = params;
         const now = Date.now();
         const candidateActions: DynamicAction[] = [];
 
         // Detect triggers using regex patterns
-        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType });
+        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType, visualsEnabled: params.visualsEnabled });
 
         for (const { trigger, match, index } of matchedTriggers) {
-            // Build evidence ref from transcript
+            const requiresScreen = Boolean(trigger.requiresScreen);
             const evidenceRef: EvidenceRef = {
-                source: 'transcript',
+                source: requiresScreen ? 'screen' : 'transcript',
                 text: transcript,
                 timestamp: now,
                 speaker,
@@ -53,6 +55,7 @@ export class DynamicActionEngine {
                 description: `Triggered by: "${match}"`,
                 confidence: trigger.priority,
                 priority: trigger.priority,
+                requiresScreen: requiresScreen || undefined,
                 evidenceRefs: [evidenceRef],
                 status: 'candidate',
                 createdAt: now,
@@ -80,6 +83,11 @@ export class DynamicActionEngine {
         return activeActions
             .sort((a, b) => b.priority - a.priority)
             .slice(0, 3);
+    }
+
+    /** Store an action built elsewhere (Auto Answer V3 offer card) verbatim — no trigger pack, no dedup. */
+    registerAction(action: DynamicAction): void {
+        this.store.addAction(action);
     }
 
     acceptAction(actionId: string): DynamicAction | null {

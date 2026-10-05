@@ -10,6 +10,7 @@ const {
   extractStructuredActionItems,
   buildFollowUpDraft,
   generateCoachingInsights,
+  INCLUDE_COACHING_INSIGHTS,
 } = await import(pathToFileURL(workflowPath).href);
 
 // Ids switched from `action_<N>` (length-derived; collided across reruns /
@@ -42,14 +43,18 @@ test('extractStructuredActionItems merges summary action items without duplicate
   assert.deepEqual(items.map(item => item.text), ['send the recap', 'share the deck']);
 });
 
-test('buildFollowUpDraft includes overview and structured next steps', () => {
+test('buildFollowUpDraft includes the overview and suppresses the next-steps block', () => {
   const draft = buildFollowUpDraft('sales', [
     { id: 'action_1', text: 'send the proposal', owner: 'Me', deadline: 'Friday' },
   ], { overview: 'We aligned on a pilot scope.' });
 
   assert.match(draft, /Thanks for the conversation today/);
   assert.match(draft, /We aligned on a pilot scope/);
-  assert.match(draft, /- Me: send the proposal by Friday/);
+  // INCLUDE_NEXT_STEPS is false in PostCallWorkflow.ts (mirrors MeetingSummaryReducer.ts) —
+  // the labelled next-steps list is omitted and the neutral closing line takes its place.
+  assert.equal(/next steps:/i.test(draft), false, `next-steps block leaked into the draft: ${draft}`);
+  assert.equal(/send the proposal/i.test(draft), false, `action item leaked into the draft: ${draft}`);
+  assert.match(draft, /I will follow up if anything else is needed/);
 });
 
 test('generateCoachingInsights flags sales objection with no captured objection section', () => {
@@ -84,7 +89,10 @@ test('buildPostCallEnhancements returns schema v2 payload', () => {
   assert.equal(result.schemaVersion, 2);
   assert.ok(Array.isArray(result.actionItemsStructured));
   assert.ok(result.followUpDraft.includes('Lecture covered graph traversal'));
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'study_follow_up'));
+  // INCLUDE_COACHING_INSIGHTS is false in PostCallWorkflow.ts (mirrors INCLUDE_NEXT_STEPS
+  // in MeetingSummaryReducer.ts) — the lecture transcript still trips the study_follow_up
+  // rule, but the rule is never run, so the payload carries no coaching items.
+  assert.deepEqual(result.coachingInsights, [], `coaching insights leaked into the payload: ${JSON.stringify(result.coachingInsights)}`);
 });
 
 test('post-call schema remains JSON-safe and excludes raw transcript fields', () => {
@@ -122,4 +130,50 @@ test('structured action items cap at eight and mint unique ids after dedupe', ()
   for (const item of items) assert.match(item.id, ACTION_ID_RE);
   assert.equal(new Set(items.map(item => item.id)).size, 8, 'every action id must be unique');
   assert.equal(items.filter(item => item.text === 'prepare follow up item 1').length, 1);
+});
+
+// ── Coaching-insight suppression (2026-08-26 product decision) ────────────────
+// The "Coaching" section was removed from the notes page. Generation is gated on
+// INCLUDE_COACHING_INSIGHTS in PostCallWorkflow.ts and the renderer section is gone.
+// generateCoachingInsights() itself is kept (and still tested above) so the flip is
+// one constant — the same shape as INCLUDE_NEXT_STEPS.
+
+test('INCLUDE_COACHING_INSIGHTS is off', () => {
+  assert.equal(INCLUDE_COACHING_INSIGHTS, false,
+    'the Coaching section is retired — generation must stay switched off');
+});
+
+test('buildPostCallEnhancements produces no coaching items for any mode while the flag is off', () => {
+  // One transcript per coaching rule: each of these WOULD trip its rule if the producer ran.
+  const cases = [
+    ['sales', 'The pricing is too expensive compared with our current vendor.'],
+    ['recruiting', 'Tell me about your backend work.'],
+    ['looking-for-work', "I don't know, maybe I think it uses a hash map."],
+    ['technical-interview', "I'm not sure, maybe a queue would work."],
+    ['team-meet', 'We agreed to change the launch plan.'],
+    ['lecture', 'Read chapter 4 before Friday.'],
+  ];
+
+  for (const [modeTemplateType, text] of cases) {
+    const result = buildPostCallEnhancements({
+      modeTemplateType,
+      transcript: [{ speaker: 'interviewer', text, timestamp: 10 }],
+      summaryData: { overview: 'Discussed the plan.', actionItems: [], sections: [{ title: 'Objections', bullets: [] }] },
+    });
+    assert.ok(Array.isArray(result.coachingInsights), `coachingInsights key must survive for ${modeTemplateType}`);
+    assert.equal(result.coachingInsights.length, 0,
+      `coaching insights were generated for ${modeTemplateType}: ${JSON.stringify(result.coachingInsights)}`);
+  }
+});
+
+test('the producer is never invoked while the flag is off', () => {
+  // The gate must skip the CALL, not filter its output afterwards: no coach_ ids are
+  // minted at all, so nothing can leak through a later merge.
+  const serialized = JSON.stringify(buildPostCallEnhancements({
+    modeTemplateType: 'technical-interview',
+    transcript: [{ speaker: 'user', text: "I don't know, maybe I think so.", timestamp: 1 }],
+    summaryData: { overview: 'Interview.', actionItems: [] },
+  }));
+  assert.equal(/coach_/.test(serialized), false, `a coaching insight id was minted: ${serialized}`);
+  assert.equal(/Uncertainty appeared in answers/.test(serialized), false, `coaching copy leaked: ${serialized}`);
 });

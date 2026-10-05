@@ -1,0 +1,162 @@
+{
+ "blind_id": "S-08704a8f",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 37615,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 10812,
+  "candidatesTokenCount": 844,
+  "totalTokenCount": 16297,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 10812
+   }
+  ],
+  "thoughtsTokenCount": 4641,
+  "serviceTier": "standard"
+ },
+ "fact_count": 28,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 10,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 10,
+  "structure": 4,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 3,
+  "critical_errors": [],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "45 seats in the original proposal",
+   "October 1st start date",
+   "Harrow retired its mainframe two years ago; mainframe connector costs extra"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes capture almost all facts perfectly, with excellent detail on pricing, terms, and next steps. However, the notes suffer from severe generation and formatting issues. The Summary section is entirely composed of copy-pasted sentences from other sections, and one bullet point cuts off mid-sentence. The Action Items section repeats several tasks twice. Additionally, the notes include several distractors (superseded values and irrelevant details about the mainframe). While factually pristine, the conciseness, structure, and readability scores are heavily penalized for the extreme repetition and broken text."
+ }
+}

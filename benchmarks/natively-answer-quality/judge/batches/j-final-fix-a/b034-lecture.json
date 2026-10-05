@@ -1,0 +1,286 @@
+{
+ "batch": "b034-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-G3": {
+   "title": "HIST 214 Lecture 4 notes: the first Industrial Revolution",
+   "text": "HIST 214 - Modern Britain\nLecture 4 notes: Why Britain? The first Industrial Revolution\nLecturer: Prof. Ifeoma Castellanos, Eastbrook University\n\nBackground: the farm economy\nThe enclosure movement consolidated open fields into private farms. Yields rose and fewer farm workers were needed, so displaced rural labour drifted into towns and later into factories. Prof. Castellanos called enclosure \"the front door of the story\".\n\nResources and markets\nBritain had abundant coal, navigable rivers and, later, canals. Overseas trade supplied capital, raw cotton and export markets for finished cloth.\n\nTextile mechanization\nFlying shuttle, 1733 (John Kay). Spinning jenny, 1764 (James Hargreaves): one worker could spin several threads at once, but it was small and hand-powered, so it suited cottage workshops. Water frame, 1769 (Richard Arkwright): it produced stronger thread but needed water power, so production moved into mills beside rivers, and that is the start of the factory system. Power loom, 1785 (Edmund Cartwright).\n\nTransport\nCanals built in the late 1700s made moving coal and raw cotton much cheaper, and railways followed in the 1830s, which tied the growing industrial towns to ports and to each other. Prof. Castellanos noted that cheaper transport also widened the market, so a mill could sell far beyond its own town.\n\nSteam\nThe Newcomen engine, early 1700s, pumped water out of mines and burned huge amounts of coal. James Watt's separate condenser, patented in 1769, made engines far more efficient. Steam freed factories from riverbanks and let them move to cities near coal and labour.\n\nSocial consequences\nManchester grew from a market town into a city of several hundred thousand people by the mid-1800s. Working conditions were harsh, including child labour. The Factory Act of 1833 limited working hours for children in textile mills.\n\nThe lecturer's own view\nProf. Castellanos said there is no single cause, and that historians disagree. Some stress institutions and property rights, including the settlement after the Glorious Revolution of 1688, and others stress culture and ideas. If forced to pick, she gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She described institutions and markets as \"necessary but not sufficient\".\n\nEssay note: the essay is due in Week 7, at 1,500 words, on the question \"Was the Industrial Revolution inevitable?\" Use at least three primary sources. Reading for this week: chapters 3 and 4 of the course reader."
+  },
+  "FLEC-CTX-G2": {
+   "title": "STAT 301 Lecture 11 notes: Comparing two groups",
+   "text": "STAT 301 - Applied Statistics\nLecture 11: Comparing two groups\nProf. Renata Szabo. Lecture notes, course site copy.\n\n1. Course conventions (apply to every test this term)\n- Significance level: alpha = 0.01 for all in-class examples, problem sets and mini-projects, unless a question states otherwise. The prof's reason: \"We run a lot of tests in this course, and I would rather you miss a small effect than chase noise.\"\n- Two independent samples: use Welch's t-test by default. Do not assume equal variances unless a problem explicitly says the population variances are equal.\n- Always report the test statistic, the degrees of freedom and the p-value, and state the conclusion in the context of the data, not as \"reject H0\" alone.\n- Choose the test before looking at results. Switching tests after seeing a p-value is marked as an error on problem sets.\n\n2. Paired vs independent designs\n- Paired: the same unit measured twice (before and after, or two seasons on the same tree). Analyze the differences d = x1 - x2 with a one-sample t-test.\n- Independent: two unrelated groups. Welch's t-test.\n- Pairing helps most when the variation between units is large compared with the change within a unit, because taking differences cancels the unit-to-unit spread.\n- Analyzing independent groups as if they were paired is invalid, not just less efficient.\n\n3. Worked example: the Brennock Orchard data (slides 8-13)\n- Question: do trees in the North plot yield more apples than trees in the South plot? Yield = kg of apples per tree, one harvest season.\n- North plot: n = 14, mean 38.2 kg, SD 6.1 kg.\n- South plot: n = 11, mean 31.5 kg, SD 9.8 kg.\n- Welch's t-test: t = 1.99, df = 15.9, p = 0.065.\n- For comparison only: a pooled-variance t-test on the same data gives t = 2.10, df = 23, p = 0.047. The prof showed this to make a point: \"If you had picked pooled because the p-value looked nicer, you would be under 0.05 and you would have fooled yourself. Our rule is Welch, decided in advance.\"\n- Frost week: three South trees were damaged in a late frost. With those three removed, South is n = 8, mean 35.9 kg, SD 5.4 kg, and Welch gives t = 0.92, df = 16.3, p = 0.37.\n- Removing data points after seeing results has to be justified independently of the results. Here the justification is the orchard manager's frost log, dated before harvest.\n\n4. Common mistakes flagged in lecture\n- Reading p = 0.065 as \"a 6.5% chance the plots are the same.\" It is not.\n- Concluding \"no difference\" from a non-significant result. The correct wording is that the data do not provide convincing evidence of a difference at the chosen alpha.\n- Reporting a confidence level that does not match alpha. With alpha = 0.01, report a 99% confidence interval.\n\n5. Admin\n- Problem Set 7 (two-sample tests) is due next Tuesday before lecture.\n- Office hours this week: Thursday 1-3 pm, Math Annex 104.\n- Mini-project 2 details were announced verbally in lecture; see the lecture recording."
+  },
+  "LECTURE-CTX-G2": {
+   "title": "BIO 110 Lecture 11 notes: cellular respiration",
+   "text": "BIO 110 - Introductory Biology\nLecture 11 notes: Cellular respiration\nLecturer: Dr. Tomasz Reidel, Eastbrook University\n\nOverall reaction\nC6H12O6 + 6 O2 -> 6 CO2 + 6 H2O + energy (some captured as ATP, the rest released as heat). This is a redox process: glucose is oxidized (it loses electrons, in practice hydrogen atoms) and oxygen is reduced. Memory aid: OIL RIG, oxidation is loss, reduction is gain.\n\nStage 1: Glycolysis\nLocation: cytosol. One glucose (6 carbons) is split into two pyruvate (3 carbons each). Four ATP are made but two are spent to start the process, so the net gain is 2 ATP, plus 2 NADH. No oxygen is needed.\n\nStage 2: Pyruvate oxidation\nLocation: mitochondrial matrix. Each pyruvate becomes acetyl-CoA, releasing one CO2 and making one NADH. Per glucose that is 2 CO2 and 2 NADH.\n\nStage 3: Krebs cycle (citric acid cycle)\nLocation: mitochondrial matrix. The cycle turns twice per glucose. Per glucose it produces 4 CO2, 6 NADH, 2 FADH2 and 2 ATP.\n\nStage 4: Oxidative phosphorylation\nLocation: inner mitochondrial membrane. NADH and FADH2 hand their electrons to the electron transport chain. As electrons move along the chain, protons are pumped into the intermembrane space, building a proton gradient. ATP synthase lets the protons flow back into the matrix and uses that flow to make ATP (chemiosmosis). Oxygen is the final electron acceptor and ends up as water. Without oxygen the chain backs up and the earlier stages stall.\n\nATP yield\nAbout 2.5 ATP per NADH and about 1.5 ATP per FADH2, giving roughly 30 to 32 ATP per glucose. Older textbooks quote 36 to 38 because they assumed 3 ATP per NADH and 2 per FADH2 and ignored the cost of moving ATP, ADP and NADH across the mitochondrial membranes. Proton leak also lowers the real yield, so the modern figure is lower.\n\nFermentation\nWithout oxygen, pyruvate is converted to lactate (animal muscle) or to ethanol and CO2 (yeast). The purpose is to regenerate NAD+ so glycolysis can keep running. The yield is only the 2 ATP from glycolysis.\n\nPoisons and heat\nCyanide blocks the last complex of the electron transport chain, so the chain stops. Brown fat contains an uncoupling protein that lets protons leak back across the membrane, so the energy is released as heat instead of ATP.\n\nExam note: know the location, inputs and outputs of each stage, and be able to explain why oxygen matters. There is a short quiz on Friday."
+  },
+  "LECTURE-CTX-I1": {
+   "title": "Campus parking closure notice",
+   "text": "EASTBROOK UNIVERSITY - TRANSPORTATION AND PARKING SERVICES\nNotice to the campus community\n\nEffective Monday, Lot C (behind the Fenwick Athletic Center) will be closed for resurfacing. The closure is expected to last approximately three weeks, weather permitting.\n\nWhat this means for you:\n- Permit holders assigned to Lot C may park in Lot F or Lot H at no extra charge for the duration of the closure. Please display your existing permit.\n- Lot F is a ten-minute walk from the main quad. The free campus shuttle will run every fifteen minutes between Lot F and the Student Union from 7:30 a.m. to 6:30 p.m.\n- Visitor parking has been relocated to the lower level of the Ashworth Garage. Visitors should collect a temporary pass from the kiosk at the garage entrance.\n- Accessible parking spaces displaced by the closure have been reassigned to the first row of Lot F, nearest the shuttle stop.\n- Vehicles left in Lot C after 6:00 a.m. on Monday will be towed at the owner's expense.\n\nQuestions about permits can be sent to the Parking Services office in the Ashworth Building, room 104, or answered at the front desk between 9:00 a.m. and 4:00 p.m. on weekdays. Bicycle racks near the Fenwick Center remain open and are not affected. We appreciate your patience while we improve campus facilities."
+  }
+ },
+ "items": [
+  {
+   "jid": "8a18070d81ab",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Give me an example of a public good, and make sure it is one the professor definitely used in class.",
+   "conversation": [
+    "PROFESSOR: Quick housekeeping before we start: the exam moves to room two twelve in the science building.",
+    "PROFESSOR: Also, the problem set is due Thursday at noon, not Friday, and late submissions lose ten percent.",
+    "PROFESSOR: Okay, and please stop propping the back door open, the alarm goes off in the library."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have anything from class that names a specific public good, so I can't tell you which one the professor used. The general textbook example is national defense, since everyone benefits and no one can be excluded from it. If you want the one from lecture, check your notes or the slides for that section."
+  },
+  {
+   "jid": "fc21a67b076f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Reactions go faster when it's hot because the atoms expand, right? Why does expanding make them collide more?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not quite. Heat doesn't make the atoms themselves bigger, it makes them move faster. Temperature is really a measure of the average kinetic energy of the particles, so hotter means higher average speed.\n\nFaster particles collide more often and harder, which is why reaction rates climb with temperature. The expansion you're picturing is a side effect, not the cause. A gas does expand when heated, but that's the particles spreading out, not each atom swelling.\n\nThe rate increase comes from two things: more frequent collisions, and more collisions with enough energy to clear the activation barrier. The second one matters most, since the fraction of molecules with sufficient energy rises steeply with temperature."
+  },
+  {
+   "jid": "72894a68f303",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Which mattered most?",
+   "conversation": [
+    "USER (typed to Natively): Summarize the causes of the Industrial Revolution in Britain from the notes.",
+    "NATIVELY: The notes give several causes rather than one. Enclosure consolidated open fields into private farms, raising yields and pushing displaced rural workers toward towns and factories. Britain also had abundant coal, navigable rivers, and later canals, while overseas trade supplied capital, raw cotton, and export markets. Mechanization followed: the spinning jenny, the water frame, and the power loom, with the water frame's need for water power starting the factory system. Cheaper transport from canals and then railways widened markets, and steam, especially Watt's separate condenser, freed factories from riverbanks.\n\nProf. Castellanos stresses that there's no single cause and that historians disagree, with some emphasizing institutions and property rights and others culture and ideas. Her own view gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam made the factory city possible. She calls institutions and markets necessary but not sufficient."
+   ],
+   "evidence_ids": [
+    "LECTURE-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "Prof. Castellanos gives the most weight to **energy**: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She calls institutions and markets necessary but not sufficient."
+  },
+  {
+   "jid": "c62b4a383008",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "But notice K itself doesn't change, only the concentrations do, and that trips up everybody.",
+   "conversation": [
+    "PROFESSOR: Take the Haber process: nitrogen plus three hydrogen gives two ammonia, and it is reversible.",
+    "PROFESSOR: At equilibrium the forward and reverse rates are equal, and we describe where it sits with the equilibrium constant, K.",
+    "PROFESSOR: Now suppose I pump in extra nitrogen.",
+    "PROFESSOR: The system responds by making more ammonia, so the concentrations shift."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, and the reason is that K only depends on temperature. Adding nitrogen changes the concentrations, so the reaction quotient Q drops below K, and the system shifts forward to make more ammonia until Q climbs back up to K. The value of K stays put the whole time."
+  },
+  {
+   "jid": "597b1972dc25",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "How would you handle this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start by pinning down what the situation actually is and what outcome we're aiming for, because the right move depends on that. Then I'd lay out the realistic options, weigh each one against the constraints we're working with, and pick the one that best fits. I'd flag the main risk in that choice, say how I'd watch for it, and check in early so we can adjust if it's not working."
+  },
+  {
+   "jid": "3fa1187c834d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "If you throw out the frost-damaged trees, does the gap between the plots get more convincing or less? Think before you answer.",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Less convincing. With the three frost-damaged South trees removed, South's mean actually rises to 35.9 kg, so the gap between the plots shrinks from about 6.7 kg to roughly 2.3 kg, and Welch's test gives t = 0.92, p = 0.37. So the difference goes from borderline to clearly not convincing at alpha = 0.01."
+  },
+  {
+   "jid": "9f295aecdefa",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Who makes the wheat?",
+   "conversation": [
+    "PROFESSOR: Two countries, Aldria and Brevin, each with one day of labor to spend on wheat or cloth.",
+    "PROFESSOR: In a day Aldria can make ten units of wheat or ten of cloth.",
+    "PROFESSOR: Brevin can make six units of wheat or three of cloth.",
+    "PROFESSOR: So Aldria is better at both, in absolute terms, that is absolute advantage.",
+    "PROFESSOR: But what matters for trade is opportunity cost: what each country gives up to make one more unit."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The question is who gives up less to make wheat. For Aldria, one unit of wheat costs one unit of cloth, since ten of each trade off one for one. For Brevin, six wheat against three cloth means one wheat costs half a unit of cloth. So Brevin gives up less to make wheat, and that's its comparative advantage, even though Aldria is better at both in absolute terms."
+  },
+  {
+   "jid": "20376aead184",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "I zoned out for the last few minutes and now the professor is on a totally different topic. What did I miss, what should I write down now, and what should I look up afterwards?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't tell you what was covered in those minutes, since I don't have the lecture content in front of me. What I can do is give you a fast way to catch up.\n\nWrite down the topic name the professor is on right now, plus any term they've repeated more than once, since repetition usually signals the exam-relevant idea. Then note the one example or problem they're working through, because that's usually where the concept clicks.\n\nAfterward, look up the topic heading in your textbook or syllabus, skim the section summary, and check whether it builds on something from earlier in the lecture. If it does, that earlier piece is probably what you missed."
+  },
+  {
+   "jid": "31928a0e3ba3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So the punchline is that the market didn't fail, it did exactly what the incentives told it to do.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the core of it: the outcome wasn't a malfunction, it was the predictable result of the incentives in place. When the rules reward a certain behavior, people follow it, and the aggregate looks like a \"failure\" only if you expected the incentives to produce something else. The interesting question is usually which incentive was doing the work, and whether it was intended."
+  },
+  {
+   "jid": "7afe1cdcdb72",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So what's the plan?",
+   "conversation": [
+    "PROFESSOR: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROFESSOR: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The integration slipped about two weeks because the vendor changed their API without telling us, and the original date was already tight. So the plan has two tracks: first, get the vendor on a call to pin down exactly what changed and whether they'll support the old version while we adapt, and second, re-baseline the schedule with the team so we know what the two-week slip actually costs us. Then we decide whether to pull scope in or move the date, and I'll bring that back to you."
+  },
+  {
+   "jid": "d190003c36d4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So if you take one thing away, it is that a fiscal crisis turned into a political crisis.",
+   "conversation": [
+    "PROFESSOR: By the 1780s the French crown was drowning in debt, partly from helping fund the American war.",
+    "PROFESSOR: Then a poor harvest in 1788 pushed the price of bread way up, so ordinary people were spending most of their income on it.",
+    "PROFESSOR: The king called the Estates-General in 1789 to raise taxes, the first time in over a hundred and fifty years.",
+    "PROFESSOR: And the Third Estate, the commoners, refused to just rubber-stamp it, and declared themselves a National Assembly."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The through-line is that money problems became power problems. The crown's debt, made worse by funding the American war, forced the king to call the Estates-General in 1789 for the first time in over a hundred and fifty years. That opened the door for the Third Estate to break away and declare a National Assembly, so a fight over taxes turned into a fight over who actually held authority."
+  },
+  {
+   "jid": "15d672bd9d9f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What is the formula for compound interest and what does each letter stand for?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Compound interest is **A = P(1 + r/n)^(nt)**. A is the final amount, P is the principal you start with, r is the annual interest rate as a decimal, n is how many times interest compounds per year, and t is the time in years. The idea is that each period you earn interest on both the original principal and the interest already added, so the balance grows faster than with simple interest."
+  },
+  {
+   "jid": "4076fa796261",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Is that realistic?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It depends on the assumptions behind it. If the numbers and conditions it rests on hold up, then yes, it's realistic. If any of those are shaky, the whole thing gets a lot less convincing. So the real question is which assumptions it depends on, and whether those are solid."
+  },
+  {
+   "jid": "c90a1a809597",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "I'm confused. My old textbook says 36 to 38 ATP per glucose but the notes say 30 to 32. Did the textbook get it wrong, and which number do I write on the exam?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The textbook isn't wrong, it's just using older assumptions. The 36 to 38 figure comes from counting 3 ATP per NADH and 2 per FADH2 and ignoring the cost of shuttling ATP, ADP and NADH across the mitochondrial membranes. The modern 30 to 32 figure uses about 2.5 ATP per NADH and 1.5 per FADH2, and proton leak lowers the real yield further. For the exam, write **30 to 32** and be ready to explain why it's lower than the old number."
+  },
+  {
+   "jid": "10060aa16a20",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Summarize the causes of the Industrial Revolution in Britain from the notes.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes give several causes rather than one. Enclosure consolidated open fields into private farms, raising yields and pushing displaced rural workers toward towns and factories. Britain also had abundant coal, navigable rivers, and later canals, while overseas trade supplied capital, raw cotton, and export markets. Mechanization followed: the spinning jenny, the water frame, and the power loom, with the water frame's need for water power starting the factory system. Cheaper transport from canals and then railways widened markets, and steam, especially Watt's separate condenser, freed factories from riverbanks.\n\nProf. Castellanos stresses that there's no single cause and that historians disagree, with some emphasizing institutions and property rights and others culture and ideas. Her own view gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam made the factory city possible. She calls institutions and markets necessary but not sufficient."
+  },
+  {
+   "jid": "0e9cd21d96e8",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And the whole thing collapses into F equals G m one m two over r squared.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's Newton's law of universal gravitation. **F** is the force between the two masses, **m one** and **m two** are their masses, and **r** is the distance between their centers. **G** is the gravitational constant, the same everywhere in the universe.\n\nThe intuition: the pull grows with both masses, but falls off with the square of the distance. Double the distance and the force drops to a quarter. That inverse-square behavior is what makes orbits work the way they do."
+  },
+  {
+   "jid": "6fc7a4766126",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "What would you recommend?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It depends what we're optimizing for, so I'd start there. If it's speed, I'd take the simplest option that works and refine later. If it's quality or scale, I'd invest more upfront. My general rule is to pick the choice that's hardest to reverse, and stay flexible on the rest."
+  },
+  {
+   "jid": "32fb67b5a959",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "A monopolist restricts output to push the price up, and the gap between what is produced and what would be produced is the deadweight loss.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A monopolist maximizes profit where marginal revenue equals marginal cost, and that point sits at a lower quantity and a higher price than the competitive outcome. The deadweight loss is the lost surplus on all the units between the monopoly quantity and the socially efficient quantity, where buyers value the good more than it costs to produce, but those trades never happen. So the gap isn't just the missing output itself, it's the value of the mutually beneficial trades that the restriction wipes out."
+  },
+  {
+   "jid": "68e6b761b778",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Give me an example.",
+   "conversation": [
+    "USER (typed to Natively): What is entropy?",
+    "NATIVELY: Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. The more arrangements available, the higher the entropy.\n\nIn thermodynamics, it's often described as disorder, but the cleaner idea is missing information: entropy counts the microscopic configurations consistent with what you can actually observe. The second law says it tends to increase in a closed system, which is why heat flows from hot to cold and not the reverse.\n\nIn information theory, Shannon entropy measures the average surprise in a message, and it uses the same mathematical form. A fair coin flip has one bit of entropy because the outcome is maximally uncertain.",
+    "USER (typed to Natively): Can you say that in plainer words?",
+    "NATIVELY: Entropy is a way of counting how much you don't know about a system. If lots of different arrangements all look the same from the outside, entropy is high. If only one arrangement fits what you see, entropy is low.\n\nThat's why it gets called disorder: a messy room has more possible arrangements than a tidy one. And it's why heat flows from hot to cold, since that spreads the energy into more possible arrangements."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Think of a shuffled deck of cards. If I only tell you the top card is the ace of spades, that leaves a huge number of possible orderings for the rest, so the entropy is high. If I tell you the whole deck is in perfect order, there's only one arrangement that fits, so entropy is zero. Same idea with a room: a messy one has far more arrangements that look messy than a tidy one has arrangements that look tidy."
+  },
+  {
+   "jid": "4b14c459e92a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "The whole argument hinges on the ergodic hypothesis, which we'll just take as given for today.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The ergodic hypothesis says that over long times, a single system's time average equals the average over all possible states at one instant. So instead of tracking one trajectory forever, you can average over an ensemble of copies at a fixed moment and get the same answer. It's what lets statistical mechanics replace a hopelessly long time average with a tractable ensemble average, and it's the bridge between the microscopic dynamics and the thermodynamic quantities we actually measure."
+  }
+ ]
+}

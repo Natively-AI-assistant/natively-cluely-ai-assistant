@@ -31,9 +31,10 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import Module from 'node:module';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { NODE_MODULES_LINK_TYPE, removeIsolatedDistTree } from './isolatedDistTree.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -57,16 +58,21 @@ const distDir = (() => {
   fs.symlinkSync(
     path.join(repoRoot, 'node_modules'),
     path.join(target, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
+    NODE_MODULES_LINK_TYPE,
   );
   // tsc exits non-zero on pre-existing type errors in unrelated test files,
   // but still emits JS for files that compile cleanly. We swallow the
   // non-zero status and verify post-hoc that LLMHelper.js was produced.
   try {
-    execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, {
-      cwd: repoRoot,
-      stdio: 'pipe',
-    });
+    execFileSync(process.execPath, [
+      // lib/tsc.js, not bin/tsc: bin/tsc is EXTENSIONLESS and contains `import`,
+    // and Node only treats an extensionless entry as ESM from >=22.7 (module
+    // detection). lib/tsc.js is a real .js under "type": "module", so it is ESM
+    // on every Node version. This repo declares no `engines` floor.
+    path.join('node_modules', 'typescript7', 'lib', 'tsc.js'),
+      '-p', path.join('electron', 'tsconfig.emit.json'),
+      '--outDir', target,
+    ], { cwd: repoRoot, stdio: 'pipe' });
   } catch (_tscErr) {
     // expected — tsc returns 1 on type errors elsewhere
   }
@@ -128,6 +134,13 @@ function installActiveMode(templateType, modeName = templateType) {
     createdAt: '2026-05-26T00:00:00.000Z',
   } : null;
   manager.getActiveMode = () => mode;
+  // The pinned Real-time prompt follows THIS mode's customContext. It used to be
+  // left untouched here, so the sentinel an earlier installCustomDocumentMode()
+  // stubbed onto the shared singleton leaked into "General" — a mode this very
+  // fixture declares to have NO prompt (customContext: ''). The old blanket
+  // skip hid the inconsistency; 2026-09-20 made the user's instructions reach
+  // built-in modes, which exposed it.
+  manager.getActiveModePinnedInstructions = () => (mode?.customContext || '');
   // Neutralize mode-context injection that runs AFTER the gate so the
   // streaming path doesn't try to retrieve real reference files.
   manager.getActiveModeSystemPromptSuffix = () => '';
@@ -172,7 +185,16 @@ function installCustomDocumentMode({ documentGrounded = true } = {}) {
   manager.buildRetrievedActiveModeContextBlock = (_query, _ctx, _budget, _answerType, _exclude, _pinned, options) => {
     return options?.forceDocumentGrounding ? 'REFERENCE_FILE_CONTEXT_SENTINEL' : '';
   };
-  manager.buildRetrievedActiveModeContextBlockHybrid = async () => '';
+  // Must mirror the sync retriever above. A doc-grounded turn PREFERS the hybrid
+  // path (`wantHybrid = isRagLocalRerankEnabled() || forceDocumentGrounding`) and
+  // only falls back to the sync lexical retriever on TIMEOUT — never on an empty
+  // result, which production reads as "retrieval found nothing". So a stub that
+  // always returned '' here modelled a mode with no matching content, and the
+  // reference block could never reach dispatch once doc-grounded retrieval
+  // started routing through hybrid. Options is the 8th argument on this call.
+  manager.buildRetrievedActiveModeContextBlockHybrid = async (
+    _query, _ctx, _budget, _answerType, _exclude, _pinned, _allowRerank, options,
+  ) => (options?.forceDocumentGrounding ? 'REFERENCE_FILE_CONTEXT_SENTINEL' : '');
   manager.buildActiveModeContextBlock = () => '';
 }
 
@@ -220,7 +242,10 @@ async function callChat(helper, message) {
 
 after(() => {
   if (isolatedDistDir) {
-    fs.rmSync(isolatedDistDir, { recursive: true, force: true });
+    // NOT a bare rmSync: this tree contains a link to the REAL node_modules,
+    // and on Windows that link is a junction a recursive delete can traverse.
+    // See isolatedDistTree.mjs for the CI timeline that caught it.
+    removeIsolatedDistTree(isolatedDistDir);
   }
 });
 
@@ -243,18 +268,20 @@ test('streamChat: handler IS invoked when active mode allows coaching (looking-f
   assert.deepEqual(chunks, []);
 });
 
-test('streamChat: handler IS invoked when no active mode is set (default-open)', async () => {
+// Profile Intelligence eligibility (2026-09-30): the intercept is built from
+// the résumé/JD, so it runs only in a mode whose TEMPLATE opts into PI
+// (looking-for-work, technical-interview). No active mode used to default OPEN;
+// it is now closed, like every other PI path.
+test('streamChat: handler is NOT invoked when no active mode is set (PI fails closed)', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildOrchestratorStub());
   const captured = [];
   helper.setNegotiationCoachingHandler(payload => captured.push(payload));
 
   installActiveMode(null);
-  const chunks = await drainStream(helper.streamChat('Any salary thoughts?'));
+  await drainStream(helper.streamChat('Any salary thoughts?'));
 
-  assert.equal(captured.length, 1, 'handler must fire when no mode is active');
-  assert.deepEqual(captured[0], PAYLOAD_SENTINEL);
-  assert.deepEqual(chunks, []);
+  assert.equal(captured.length, 0, 'no mode → no Profile Intelligence → no coaching card');
 });
 
 test('streamChat: handler is NOT invoked when active mode is technical-interview (issue #272)', async () => {
@@ -291,7 +318,7 @@ test('streamChat: handler is NOT invoked for team-meet or lecture either', async
   }
 });
 
-test('streamChat: handler IS invoked for the remaining coaching-eligible modes', async () => {
+test('streamChat: handler is NOT invoked in modes without Profile Intelligence (sales, recruiting, general)', async () => {
   for (const templateType of ['sales', 'recruiting', 'general']) {
     const helper = buildHelper();
     helper.setKnowledgeOrchestrator(buildOrchestratorStub());
@@ -303,10 +330,9 @@ test('streamChat: handler IS invoked for the remaining coaching-eligible modes',
 
     assert.equal(
       captured.length,
-      1,
-      `${templateType} should still allow coaching short-circuit`,
+      0,
+      `${templateType} has no Profile Intelligence — the candidate's salary coaching does not belong in it`,
     );
-    assert.deepEqual(captured[0], PAYLOAD_SENTINEL);
   }
 });
 
@@ -375,51 +401,126 @@ function buildInjectionOrchestratorStub() {
   };
 }
 
-test('streamChat: intro shortcut FIRES in looking-for-work mode (regression guard)', async () => {
+// ─── Identity recall under the FULL-JIT LAW ─────────────────────────────────
+//
+// These three asserted that the AOT-precomputed intro was emitted VERBATIM as
+// the answer (`chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL')`). That is no
+// longer how it works, by design: `jitFinalAnswerEnforced` (default TRUE)
+// demotes the precomputed intro from ANSWER to EVIDENCE — it is wrapped in a
+// <candidate_identity_fact> block, prepended to the prompt, and the provider
+// writes the answer just-in-time. The precompute still saves the retrieval
+// round-trip; only the verbatim emit was removed.
+//
+// So the invariant worth pinning is unchanged in spirit — identity recall must
+// reach the answer regardless of mode — but its observable moved from the
+// output stream to the dispatched prompt. Verified against the real compiled
+// LLMHelper before rewriting: the spy receives the identity-fact block with the
+// sentinel inside it, and the stream carries the provider's text instead.
+//
+// Asserting on the dispatch is also STRICTER than the old form: emitting the
+// canned string verbatim would now be a regression (it bypasses the JIT law),
+// and these tests would catch it, whereas the old ones required it.
+
+const introDispatchSpy = (helper) => {
+  helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
+  const calls = [];
+  helper.streamWithCustom = async function* (message, context) {
+    calls.push({ message: String(message ?? ''), context: String(context ?? '') });
+    yield 'PROVIDER_GENERATED';
+  };
+  return calls;
+};
+
+const assertIdentityFactReachedProvider = (calls, where) => {
+  assert.equal(calls.length, 1, `expected exactly one provider dispatch (${where})`);
+  const seen = `${calls[0].message}\n${calls[0].context}`;
+  assert.match(
+    seen,
+    /<candidate_identity_fact source="aot_precomputed_intro"/,
+    `identity recall must reach the provider as a grounded evidence block (${where})`,
+  );
+  assert.ok(
+    seen.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
+    `the precomputed identity text must be inside that block (${where})`,
+  );
+};
+
+test('streamChat: identity recall reaches the provider as evidence in looking-for-work mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = introDispatchSpy(helper);
 
   installActiveMode('looking-for-work');
   const chunks = await drainStream(helper.streamChat('Tell me about yourself.'));
 
-  assert.ok(
-    chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
-    'intro shortcut must still fire in modes where it is appropriate',
-  );
+  assert.deepEqual(chunks, ['PROVIDER_GENERATED'],
+    'under the full-JIT law the provider writes the answer — the canned intro must NOT be emitted verbatim');
+  assertIdentityFactReachedProvider(calls, 'looking-for-work');
 });
 
-// NOTE: These tests previously checked that the intro shortcut was SUPPRESSED in
+// NOTE: these previously checked that the intro shortcut was SUPPRESSED in
 // technical-interview / lecture modes (issue #272). That behaviour was revised:
-// identity recall (isIntroQuestion + introResponse) now always passes through
-// regardless of mode compatibility, because it is factual retrieval (candidate name,
-// current role, years of experience), NOT persona injection. Suppressing it in any
-// mode meant the user could never ask "what is my name?" in a technical interview.
-// The mode gate still blocks negotiation coaching and premium context/prompt injection.
-test('streamChat: intro shortcut PASSES THROUGH even in technical-interview mode', async () => {
+// identity recall is factual retrieval (candidate name, current role, years of
+// experience), NOT persona injection, so suppressing it by mode meant the user
+// could never ask "what is my name?" in a technical interview. The mode gate
+// still blocks negotiation coaching and premium context/prompt injection.
+test('streamChat: identity recall is not mode-suppressed in technical-interview mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = introDispatchSpy(helper);
 
   installActiveMode('technical-interview');
-  const chunks = await drainStream(helper.streamChat('What is my name?'));
+  await drainStream(helper.streamChat('What is my name?'));
 
-  assert.ok(
-    chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
-    'identity recall (intro shortcut) must fire even in technical-interview mode',
-  );
+  assertIdentityFactReachedProvider(calls, 'technical-interview');
 });
 
-test('chatWithGemini: intro shortcut PASSES THROUGH even in lecture mode', async () => {
+const chatDispatchSpy = (helper) => {
+  const calls = [];
+  helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
+  helper.executeCustomProvider = async (message, context) => {
+    calls.push({ message: String(message ?? ''), context: String(context ?? '') });
+    return 'PROVIDER_GENERATED';
+  };
+  return calls;
+};
+
+test('chatWithGemini: identity recall is not mode-suppressed in technical-interview mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = chatDispatchSpy(helper);
 
-  installActiveMode('lecture');
+  installActiveMode('technical-interview');
   const result = await callChat(helper, 'What is my name?');
 
-  assert.strictEqual(
-    result,
-    'CANNED_INTRO_RESPONSE_SENTINEL',
-    'identity recall (intro shortcut) must fire even in lecture mode',
-  );
+  assert.strictEqual(result, 'PROVIDER_GENERATED',
+    'the non-streaming path must also let the provider write the answer, not return the canned intro');
+  assertIdentityFactReachedProvider(calls, 'technical-interview (non-streaming)');
+});
+
+// Lecture (and every other mode without Profile Intelligence) gets NO résumé
+// identity, on either transport (2026-09-30). This used to assert the opposite:
+// the intercept ran in any mode while knowledge mode was on.
+test('chatWithGemini + streamChat: no identity recall in lecture or with no mode (no Profile Intelligence)', async () => {
+  for (const templateType of ['lecture', null]) {
+    const helper = buildHelper();
+    helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+    const calls = chatDispatchSpy(helper);
+    installActiveMode(templateType);
+    await callChat(helper, 'What is my name?');
+    assert.equal(calls.length, 1);
+    assert.doesNotMatch(`${calls[0].message}\n${calls[0].context}`, /candidate_identity_fact|CANNED_INTRO_RESPONSE_SENTINEL/,
+      `${templateType ?? 'no mode'} (non-streaming) must not receive the résumé intro`);
+
+    const streamHelper = buildHelper();
+    streamHelper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+    const streamCalls = introDispatchSpy(streamHelper);
+    installActiveMode(templateType);
+    const chunks = await drainStream(streamHelper.streamChat('What is my name?'));
+    assert.ok(!chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'));
+    assert.ok(streamCalls.every((c) => !/candidate_identity_fact|CANNED_INTRO_RESPONSE_SENTINEL/.test(`${c.message}\n${c.context}`)),
+      `${templateType ?? 'no mode'} (streaming) must not receive the résumé intro`);
+  }
 });
 
 // Helper to wire a fake customProvider + spy on the dispatch so we can read
@@ -542,6 +643,14 @@ test('WhatToAnswerLLM: document-grounded custom mode fails closed when reference
         modeId: 'custom-doc-mode',
         modeName: 'Custom doc mode',
         hasCustomPrompt: true,
+        // Same partial-payload gap the sibling stub above already documents, missed
+        // on this inline one. `documentGroundedCustomModeActive` is DERIVED
+        // (custom && hasCustomPrompt && documentGrounded && hasReferenceFiles) — all
+        // four of which this stub sets — so omitting it described a mode that cannot
+        // exist. Without it `forceDocumentGrounding` is false, and the fail-closed
+        // refusal at WhatToAnswerLLM.ts:446 is gated on exactly that, so the turn
+        // dispatched to the provider instead of refusing.
+        documentGroundedCustomModeActive: true,
       }),
       buildRetrievedActiveModeContextBlock: () => 'REFERENCE_FILE_CONTEXT_SENTINEL',
       getActiveModePinnedInstructions: () => '',
@@ -612,6 +721,33 @@ test('streamChat: seeded General mode still skips CHAT_MODE_PROMPT mode injectio
     !dispatched.systemPrompt.includes('PINNED_CUSTOM_MODE_SENTINEL'),
     'default General mode must remain neutral and not get custom-mode injection',
   );
+});
+
+test('streamChat: a built-in mode WITH a Real-time prompt gets the instruction layer — and only that', async () => {
+  // 2026-09-20, found by driving this method against a real ModesManager + DB:
+  // with a universal/v2 base prompt, NO built-in mode (General, Seminar, Call
+  // Centre, Sales) ever received the user's Real-time prompt in typed chat, and
+  // no typed-chat coding turn did in any mode. The skip exists to keep the mode
+  // TEMPLATE and REFERENCE context out — the user's instructions are neither.
+  const helper = buildHelper();
+  const calls = attachDispatchSpy(helper);
+  installActiveMode('general', 'General');
+  const manager = ModesManager.getInstance();
+  manager.getActiveModePinnedInstructions = () => 'Answer in 100 words.';
+  manager.getActiveModeSystemPromptSuffix = () => 'GENERAL_TEMPLATE_SENTINEL';
+  manager.buildRetrievedActiveModeContextBlock = () => 'REFERENCE_SENTINEL';
+  await drainStream(helper.streamChat(
+    'What is the main topic?', undefined, undefined,
+    cjsRequire(path.resolve(distDir, 'electron/llm/prompts.js')).CHAT_MODE_PROMPT,
+    true, false, [], undefined, undefined, { answerType: 'unknown_answer' },
+  ));
+  const dispatched = calls.find(c => c.via === 'streamWithCustom');
+  assert.ok(dispatched, 'streamWithCustom must be reached');
+  assert.match(dispatched.systemPrompt, /<user_instructions[^>]*cannot authorize a source/);
+  assert.match(dispatched.systemPrompt, /LENGTH is set by the user: about 100 words/);
+  assert.ok(!dispatched.systemPrompt.includes('GENERAL_TEMPLATE_SENTINEL'), 'the mode template must still be skipped');
+  assert.ok(!`${dispatched.systemPrompt}${dispatched.context}`.includes('REFERENCE_SENTINEL'), 'reference context must still be skipped');
+  installActiveMode('general', 'General');
 });
 
 test('streamChat: premium context block REACHES dispatch in looking-for-work (positive control)', async () => {
@@ -691,20 +827,40 @@ test('chatWithGemini: premium context block is SUPPRESSED at dispatch in team-me
   assert.equal(result, 'spy-response', 'dispatch must have produced the spy response');
 });
 
-test('chatWithGemini: premium context block REACHES dispatch in recruiting (positive control)', async () => {
+test('chatWithGemini: premium context block REACHES dispatch in looking-for-work (positive control)', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
   const calls = attachDispatchSpy(helper);
 
-  installActiveMode('recruiting');
-  await callChatWithSystem(helper, 'How did the candidate respond?');
+  installActiveMode('looking-for-work');
+  await callChatWithSystem(helper, 'How should I answer the salary question?');
 
   const dispatched = calls.find(c => c.via === 'executeCustomProvider');
   assert.ok(dispatched, 'executeCustomProvider must be reached after the intercept');
   assert.ok(
     dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
-    `recruiting must inject premium context at dispatch; saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
+    `looking-for-work must inject premium context at dispatch; saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
   );
+});
+
+// Recruiting used to be the positive control here — and that was the leak:
+// the premium context is the USER's résumé/JD, and in recruiting the person
+// being discussed is a candidate. Profile Intelligence eligibility (2026-09-30)
+// keeps it out, like every mode whose template has no profile sources.
+test('chatWithGemini: premium context block does NOT reach dispatch in recruiting, general or with no mode', async () => {
+  for (const templateType of ['recruiting', 'general', null]) {
+    const helper = buildHelper();
+    helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
+    const calls = attachDispatchSpy(helper);
+
+    installActiveMode(templateType);
+    await callChatWithSystem(helper, 'How did the candidate respond?');
+
+    const dispatched = calls.find(c => c.via === 'executeCustomProvider');
+    assert.ok(dispatched, 'executeCustomProvider must be reached');
+    assert.ok(!dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'), `${templateType ?? 'no mode'}: no premium context`);
+    assert.ok(!String(dispatched.systemPrompt ?? '').includes('PREMIUM_PROMPT_SENTINEL'), `${templateType ?? 'no mode'}: no premium system prompt`);
+  }
 });
 
 test('streamChat: premium prompt injection STILL FIRES in looking-for-work (regression guard)', async () => {

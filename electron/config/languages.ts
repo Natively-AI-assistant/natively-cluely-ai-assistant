@@ -130,7 +130,39 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'hebrew': { label: 'Hebrew', code: 'hebrew', bcp47: 'he-IL', iso639: 'he', group: 'Hebrew' },
     'malay': { label: 'Malay', code: 'malay', bcp47: 'ms-MY', iso639: 'ms', group: 'Malay' },
     'finnish': { label: 'Finnish', code: 'finnish', bcp47: 'fi-FI', iso639: 'fi', group: 'Finnish' },
+    'croatian': { label: 'Croatian', code: 'croatian', bcp47: 'hr-HR', iso639: 'hr', group: 'Croatian' },
+    'estonian': { label: 'Estonian', code: 'estonian', bcp47: 'et-EE', iso639: 'et', group: 'Estonian' },
+    'latvian': { label: 'Latvian', code: 'latvian', bcp47: 'lv-LV', iso639: 'lv', group: 'Latvian' },
+    'lithuanian': { label: 'Lithuanian', code: 'lithuanian', bcp47: 'lt-LT', iso639: 'lt', group: 'Lithuanian' },
+    'maltese': { label: 'Maltese', code: 'maltese', bcp47: 'mt-MT', iso639: 'mt', group: 'Maltese' },
+    'slovak': { label: 'Slovak', code: 'slovak', bcp47: 'sk-SK', iso639: 'sk', group: 'Slovak' },
+    'slovenian': { label: 'Slovenian', code: 'slovenian', bcp47: 'sl-SI', iso639: 'sl', group: 'Slovenian' },
 };
+
+/**
+ * Recognition languages offered ONLY while Parakeet TDT v3 is the active local
+ * model. They exist for its 25-language set; no cloud provider, Apple Speech,
+ * or other local model was verified for them, so every other picker hides them
+ * (getLocalModelLanguageSupport, and isRecognitionLanguageOffered below).
+ */
+export const PARAKEET_ONLY_LANGUAGE_KEYS: ReadonlySet<string> = new Set([
+    'croatian', 'estonian', 'latvian', 'lithuanian', 'maltese', 'slovak', 'slovenian',
+]);
+
+/**
+ * Whether the STT language picker offers `key`.
+ * `localModelKeys` — what the active local model(s) accept; null unless the
+ * provider is local-whisper. `providerKeys` — the active backend's restriction
+ * (local model, NVIDIA, Apple); null for an unrestricted cloud provider.
+ */
+export function isRecognitionLanguageOffered(
+    key: string,
+    localModelKeys: ReadonlySet<string> | null,
+    providerKeys: ReadonlySet<string> | null,
+): boolean {
+    if (PARAKEET_ONLY_LANGUAGE_KEYS.has(key) && !localModelKeys?.has(key)) return false;
+    return !providerKeys || providerKeys.has(key);
+}
 
 export const AI_RESPONSE_LANGUAGES = [
     { label: 'Auto (Detect)', code: 'auto' },
@@ -165,3 +197,39 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Malay', code: 'Malay' },
     { label: 'Finnish', code: 'Finnish' },
 ];
+
+/**
+ * Map a persisted STT language to a key RECOGNITION_LANGUAGES actually has.
+ *
+ * Every language has a plain key — 'spanish', 'french' — except English, which
+ * exists only as english-us/uk/in/au/ca. Installs predating that split still
+ * have a bare 'english' persisted, which resolves to nothing, and BOTH readers
+ * of this value are downstream of here: main.ts feeds it to the provider and
+ * ipcHandlers hands it to Settings. Normalising once, at the single source,
+ * keeps the two from disagreeing — Settings was telling users
+ * `"english" isn't available in Apple Speech` while the provider was happily
+ * transcribing en-US.
+ *
+ * It also un-breaks the other providers, which were silently no-oping on
+ * 'english': GoogleSTT warns and returns on an unknown key, Deepgram's
+ * `if (config && …)` skips it. They looked correct only because their own
+ * default is English.
+ *
+ * An unrecognised key is returned unchanged rather than forced to 'auto', so
+ * this can only ever resolve a value, never silently switch someone's language.
+ */
+export function normalizeSttLanguageKey(stored: string | undefined | null): string {
+    const key = (stored ?? '').trim();
+    if (!key) return 'auto';
+    if (RECOGNITION_LANGUAGES[key]) return key;
+    // Group name ('english' -> the English family). Prefer the entry whose
+    // bcp47 matches its own declared `primary`, which is the family's default.
+    const lower = key.toLowerCase();
+    const family = Object.entries(RECOGNITION_LANGUAGES)
+        .filter(([, l]) => String((l as any)?.group ?? '').toLowerCase() === lower);
+    if (family.length) {
+        const primary = family.find(([, l]) => (l as any)?.primary === (l as any)?.bcp47);
+        return (primary ?? family[0])[0];
+    }
+    return key;
+}

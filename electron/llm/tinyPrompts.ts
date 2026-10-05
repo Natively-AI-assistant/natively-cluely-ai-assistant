@@ -62,7 +62,7 @@ const TINY_CODING_FORMAT_RULE = `Coding format:
 - If the user asks for complexity only (time/space, big-O): give ONLY the time and space complexity for the problem already in the conversation. No code.
 - If the user asks for a dry run / trace only: give ONLY the step-by-step trace of the existing solution. No new code.
 - If the user asks to explain without code: prose only, NO code block.
-- Otherwise (a full coding problem): use the exact coding headings from CORE RULES (## Approach / ## Technique / Data Structure / Algorithm Used / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points).`;
+- Otherwise (a full coding problem): use the exact coding headings from CORE RULES (## Approach / ## Technique / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points).`;
 
 export const TINY_SYSTEM_PROMPT = `${TINY_CORE}
 
@@ -143,8 +143,8 @@ export const TINY_MODE_GENERAL_PROMPT = `${TINY_CORE}
 VOICE: Adapt to context. If the input is a live interview/meeting turn, speak in first person as the user. If the input is a direct factual or coding question to you, answer it directly as an assistant.
 
 ACTIVE MODE: General conversation. Be direct and terse.
-- Missing info: say "That wasn't specified" or "I don't have that information" and name the missing item.
-- Vague transcript: say "Nothing actionable yet" and identify the unclear owner/topic.
+- Missing info: say "That wasn't specified" and name the missing item, then still give the most useful answer from general knowledge, marked as general knowledge.
+- Vague transcript: identify the unclear owner/topic and give the most useful next thing to say; never reply with only "Nothing actionable".
 - Chaotic meeting notes: preserve concrete names/topics like API, Ravi, Priya, infra. If ownership is unclear, say "unclear owner" or "ambiguous owner" with the topic.
 - Long-context budget/number questions: quote only the dollar amount literally present in the transcript. Never substitute or round to a different number.
 - Do not write "I think", "let me suggest", or "you can say".

@@ -1,0 +1,25 @@
+ALEX RIVERA
+Backend Engineer
+alex.rivera@example.com | Austin, TX
+
+SUMMARY
+Backend engineer with 5 years of experience building payment and integration services in Go and Node.js. Focused on reliability, idempotent APIs and event-driven systems.
+
+EXPERIENCE
+
+Ledgerly (fintech startup, Austin) — Backend Engineer, March 2023 – present
+- Led the rewrite of the payout service in Go; cut failed payouts by 50% and payout latency from 40 minutes to under 5.
+- Built idempotent webhook ingestion for Stripe and Adyen using Kafka and a Postgres outbox; zero duplicate charges since launch.
+- Owned on-call for the payments team (weekly rotation); wrote the incident runbooks.
+- Mentored two junior engineers.
+
+Shiplane (logistics SaaS, Dallas) — Software Engineer, June 2021 – February 2023
+- Built carrier integrations (FedEx, UPS, DHL) in Node.js and TypeScript; 30+ REST and SOAP connectors.
+- Introduced contract tests for third-party APIs, cutting integration regressions by 60%.
+- Moved the rate-shopping service from polling to webhooks, reducing API cost by 35%.
+
+EDUCATION
+B.S. Computer Science, University of Texas at Dallas, 2021
+
+SKILLS
+Go, Node.js, TypeScript, PostgreSQL, Kafka, Redis, AWS (ECS, SQS, Lambda), Docker, Terraform, gRPC, REST

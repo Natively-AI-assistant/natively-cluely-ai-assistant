@@ -1,0 +1,430 @@
+[
+ {
+  "jid": "26853747f232",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 6.5,
+   "relevance": 7,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Context-free 'What do you think?' handled by asking for context without inventing an opinion; sensible and speakable.",
+  "specific_problem": "Opening line 'That's a fair question to put back to me' assumes a turn-back that isn't in evidence; slightly padded.",
+  "minimal_improvement": "Drop the framing line and ask directly which decision or topic they want a view on."
+ },
+ {
+  "jid": "f9949f53153c",
+  "scores": {
+   "correctness": 7,
+   "grounding": 5,
+   "role_fidelity": 8,
+   "direct_usefulness": 6.5,
+   "relevance": 8,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 6.5,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Answers who assigned it, but converts the earlier generic approach into an asserted real incident with no evidence behind it.",
+  "specific_problem": "'Nobody assigned it... I noticed it, dug into...' claims a specific past event; 'That's the whole point' sounds defensive.",
+  "minimal_improvement": "Keep it as a pattern ('when that happens, nobody assigns it; I pick it up...') or offer a concrete example only if real."
+ },
+ {
+  "jid": "f1a79f9cc855",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 6,
+   "direct_usefulness": 5.5,
+   "relevance": 7,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 7,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Restates the interviewer's own explanation back to them; accurate to the conversation but adds little the interviewer doesn't already know.",
+  "specific_problem": "Echoes 'without telling us' as if the candidate were on their team; no added insight on root cause or prevention.",
+  "minimal_improvement": "Acknowledge the vendor API change, then add a brief view on why it bit (no change notice/contract tests) and how to guard against it."
+ },
+ {
+  "jid": "257871810bda",
+  "scores": {
+   "correctness": 6,
+   "grounding": 7,
+   "role_fidelity": 5,
+   "direct_usefulness": 4,
+   "relevance": 5,
+   "speakability_usability": 5.5,
+   "cognitive_load": 7,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4.5,
+  "one_sentence_reason": "Typed private request for a salary number gets a spoken deflection script; no advice on how to arrive at a number.",
+  "specific_problem": "'I'd rather not put one out that isn't mine' reads like leaked meta; never tells the user how to pick or frame a range.",
+  "minimal_improvement": "Advise privately: research the market range, ask theirs first, and if pressed give a range with the target near the bottom; include a line to say."
+ },
+ {
+  "jid": "e1b82bdc3a20",
+  "scores": {
+   "correctness": 6,
+   "grounding": 4,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 8,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 8,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Defends the 6.4-to-4.4 figure, but invents how it was measured ('same measurement the platform already used', 'I didn't pick the metric').",
+  "specific_problem": "Measurement method and baseline comparability are not in the résumé; fabricated verification detail under credibility challenge.",
+  "minimal_improvement": "Stick to supported facts (average processing time, pilot at two sites then all 14) and offer to share how it was tracked."
+ },
+ {
+  "jid": "25c0e4f1635f",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 7.5,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Accurate titles and dates for Marlowe and Kestrel with correct résumé details, in natural first person.",
+  "specific_problem": "Slightly long list of accomplishments for a dates-and-titles walk-through; 2017 consulting gap between roles left unmentioned.",
+  "minimal_improvement": "Trim to one highlight per role and briefly bridge the 2017 independent consulting period."
+ },
+ {
+  "jid": "705e246766d2",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Faithful, precise explanation of per-field HLC merge, conflict shelf, and append-only photos, all from the case study.",
+  "specific_problem": "Dense recitation; could say it was a deliberate choice over last-writer-wins to sound more conversational.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "0520d3fc1804",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 7.5,
+   "relevance": 7.5,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Describes a concrete approach to ambiguous projects without fabricating a story; speakable and sensible.",
+  "specific_problem": "Behavioural 'tell me about a time' gets a method rather than an example; acceptable absent evidence but less compelling.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "342f86301e58",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 6.5,
+   "relevance": 8,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 8.5,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Honest pushback on 'Just once?' framing it as a pattern without inventing a story.",
+  "specific_problem": "'I don't have a single dramatic example to point to' undercuts the candidate; repeats the prior answer.",
+  "minimal_improvement": "Frame it positively as recurring situations (deadline crunches) and offer to go deeper on one, without the self-undermining line."
+ },
+ {
+  "jid": "0691b8d8bfe4",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 7,
+   "direct_usefulness": 5,
+   "relevance": 5,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Context-free 'Is that realistic?' answered with a guessed scope/timeline framing.",
+  "specific_problem": "Assumes 'that' refers to a delivery plan; may be irrelevant to what was actually asked.",
+  "minimal_improvement": "Briefly clarify what 'that' refers to, or give a conditional answer tied to the likely referent."
+ },
+ {
+  "jid": "21d5b0005624",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 7,
+   "direct_usefulness": 7,
+   "relevance": 8.5,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Useful honest framing plus a template line for the unfamiliar-company question.",
+  "specific_problem": "Voice slips ('ask them to tell me more'); template leaves X blank without suggesting quick research to fill it.",
+  "minimal_improvement": "Address the user consistently and suggest a two-minute look at the company's product/news to fill in X."
+ },
+ {
+  "jid": "ca4d87ce649a",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 8.5,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Grounded, humble, speakable answer on earning respect from more senior analysts; no fabrication.",
+  "specific_problem": "Doesn't tie back to the team-of-five context (e.g., using their expertise in decisions).",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "3c23e19433d9",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 7.5,
+   "relevance": 8,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 8.5,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Consistent, natural follow-up on staying calm; no invented story.",
+  "specific_problem": "Past-tense question answered as a general habit; fine but somewhat generic.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "417a29bc8351",
+  "scores": {
+   "correctness": 8,
+   "grounding": 7,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Uses real certificate facts and the slotting simulation later used at Tallgrass; answers both parts.",
+  "specific_problem": "Says the simulation was built during the certificate and 'modeling side stuck'; the résumé lists them as separate activities in the break.",
+  "minimal_improvement": "Say that during the break she completed the certificate and built the slotting simulation, later used at Tallgrass."
+ },
+ {
+  "jid": "a83b0e1e6c10",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 7.5,
+   "relevance": 8,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Appropriate clarifying response to an unanchored objection; open and non-defensive.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "5fecfce5bf01",
+  "scores": {
+   "correctness": 8,
+   "grounding": 7,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 9,
+   "continuity": 8.5,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Picks the experience-section 12 percent and owns the inconsistency directly.",
+  "specific_problem": "Calls 18 percent 'a broader figure' then says it shouldn't be there; the explanation is invented and self-contradictory.",
+  "minimal_improvement": "Just say 12 percent is the accurate figure from the churn workflow and the 18 was an error to be corrected."
+ },
+ {
+  "jid": "44191a45737e",
+  "scores": {
+   "correctness": 7,
+   "grounding": 4,
+   "role_fidelity": 9,
+   "direct_usefulness": 7,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Speakable start-date answer, but asserts a current team and handover need with no evidence.",
+  "specific_problem": "'my current team... a few weeks' invents employment status and notice period.",
+  "minimal_improvement": "Use conditional phrasing ('if I need to give notice, a couple of weeks') and ask their preferred date."
+ },
+ {
+  "jid": "05323f7c0477",
+  "scores": {
+   "correctness": 6,
+   "grounding": 4,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 5,
+  "one_sentence_reason": "Correct dates, but the reason for leaving and 'the move I made' are invented.",
+  "specific_problem": "Motivation and a subsequent move are fabricated; the résumé also says currently employed at Marlowe, a conflict left unaddressed.",
+  "minimal_improvement": "Give the dates and title, keep the reason conditional or ask the user privately; avoid claiming a move not in the résumé."
+ },
+ {
+  "jid": "8ab2a4ba6697",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Reasonable deferential candidate response to 'what next' without context.",
+  "specific_problem": "Generic; could propose a concrete next step (e.g., ask about timeline and next interview stage).",
+  "minimal_improvement": "Ask directly about the next stage and timeline, and offer to send anything useful."
+ },
+ {
+  "jid": "cf1b0fdc45c9",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9.5,
+   "cognitive_load": 9.5,
+   "concision": 9.5,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.5,
+  "one_sentence_reason": "Correct from the JD: 90-minute broken three-node cluster take-home; final conversation with Oyelaran after the deep-dive.",
+  "specific_problem": "Could add Oyelaran Fitch is the Engineering Manager.",
+  "minimal_improvement": null
+ }
+]

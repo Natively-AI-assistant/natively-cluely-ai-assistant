@@ -1,20 +1,113 @@
-import React, { useState, useRef, useEffect, useId } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useId, useMemo } from 'react';
 import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, ChevronLeft, SquarePen, FileText } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import MeetingChatOverlay from './MeetingChatOverlay';
+import GlassSurface from '../ui-components/GlassSurface';
+// .lg-bubble (the Usage tab's question bubble).
+// Imported here rather than left to arrive through Launcher's LiquidGlassBadge import.
+import '../ui-components/LiquidGlassButton.css';
+import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import EditableTextBlock from './EditableTextBlock';
 import NativelyLogo from './icon.png';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vividDarkCodeTheme } from '../lib/codeTheme';
+import { splitGistLine } from '../lib/displayMarkup';
+import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
+import { followUpRecipients, recipientSummary, gmailComposeUrl } from '../lib/followUpRecipients.mjs';
+import { reflowFlattenedList, leadingItem, techniqueLabel, techniqueFromApproach, extractComplexity, isNotApplicable, splitTrailingAnswer, plainTitle, breakGluedLines, fixBoldSpacing, latexParensToDollars, stripLeadingReasoning, stripStrayGistLines, plainEmailText, plainMeetingTitle } from '../lib/codingAnswer.mjs';
+import { normalizeFinalizedMarkdownMath } from '../lib/streamingMarkdown';
+import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+// Transcript turns, and which source-quality notes the page does not show. Kept pure so they are tested on their own.
+import { groupTranscriptTurns, isHiddenQualityNote } from '../lib/meetingNotesView.mjs';
+import { CalendarLinkChip, type CalendarEventSnapshot } from './meeting/CalendarLinkChip';
 
 registerPrismLanguages();
+
+/*
+ * Ask-bar glass — the four values that had to be re-derived for a pill.
+ * Kept at module scope so a variant is a one-line edit rather than a hunt
+ * through the footer JSX. See the call site for what each one is doing.
+ */
+/** Pill height in px. Also its radius x2 and the basis of the band width. */
+const ASK_BAR_HEIGHT = 48;
+/** Refracting band as a fraction of the short side: 48 x 0.25 / 2 = 6px. */
+const ASK_BAR_EDGE = 0.25;
+/** Blur of the lens rect inside the map. Held under the 6px band: a blur
+ *  wider than its own inset flattens the gradient that IS the effect. */
+const ASK_BAR_MAP_BLUR = 4;
+/*
+ * How hard the lens bends the backdrop: the band samples it |scale| / 2 px away.
+ *
+ * The two themes diverge here, and deliberately. Light is a near-white page
+ * behind a near-white pane — there is very little contrast to bend, so a strong
+ * scale buys nothing and only risks the chromatic edge; -24 is what Evin
+ * approved and it stays. Dark transmits a dark page with bright text on it, and
+ * at -24 the bend was too slight to read as a lens at all, so the refraction is
+ * doubled and it is the lens, rather than the fill, that makes the material
+ * legible as glass.
+ *
+ * Both stay achromatic (the channel offsets are 0): a prism fringe at 13px type
+ * reads as a rendering fault, whatever the scale.
+ */
+const ASK_BAR_DISTORTION_LIGHT = -24;
+const ASK_BAR_DISTORTION_DARK = -52;
+/*
+ * Tint — the flat fill painted OVER the refracted backdrop, so it decides both
+ * how much of the notes comes through and where the pill sits in the stack.
+ *
+ * The two themes ended up in genuinely different places, from a side-by-side of
+ * six treatments in the running app:
+ *
+ *   LIGHT is a raised opaque-ish surface. White at 0.6 over a near-white page
+ *   is already the raised surface, the notes do not show through, and it was
+ *   approved as-is. Nothing about the light branch has changed since.
+ *
+ *   DARK is a genuinely transparent pane. Evin picked the most transmitting of
+ *   the six, so the notes DO show through here — that is the chosen look, not a
+ *   defect, and it is why the earlier no-bleed floor (0.7, measured) is
+ *   deliberately not met on this branch. What makes the query legible at 0.60
+ *   is that the fill is lighter than the page (--bg-item-surface #27272A over
+ *   --bg-elevated #151515) and the type sits on top of it, not behind it.
+ *
+ * Tinting toward pure black, which is what the component does without a `tint`,
+ * is wrong on both: over this app's dark page it blends to #060606 and reads as
+ * a hole punched in the notes rather than a control resting on them.
+ */
+const ASK_BAR_TINT_DARK = 'rgba(39, 39, 42, 0.60)';   /* --bg-item-surface */
+const ASK_BAR_TINT_LIGHT = 'rgba(255, 255, 255, 0.6)';
+/** Saturation of the transmitted backdrop. Dark leans warmer because there is
+ *  so little light coming through that it needs help to read as glass. */
+const ASK_BAR_SATURATION_DARK = 1.4;
+const ASK_BAR_SATURATION_LIGHT = 1.2;
+
+/*
+ * The send orb — a plain circle, deliberately.
+ *
+ * It sits ON the pill, and the pill is already the glass: it refracts, it
+ * tints, it carries a rim. A second refracting surface nested inside that one
+ * competes with it — two lenses 8px apart, each bending the other's output —
+ * and at 30px the result reads as an artefact rather than as a material. So
+ * the orb contributes no glass of its own and lets the body's show through
+ * around it.
+ *
+ * Which leaves it doing the one job a send affordance has: being findable. A
+ * solid disc against the pill's translucency is the strongest possible signal
+ * for that, and it inverts by theme so the contrast survives both.
+ */
+const ASK_ORB_SIZE = 30;
+/** The disc: white on the dark pill, grey on the light one. */
+const ASK_ORB_FILL = { dark: '#FFFFFF', light: '#8E8E93' };
+/** The arrow, chosen against its own disc rather than against the theme. */
+const ASK_ORB_GLYPH = { dark: '#111113', light: '#FFFFFF' };
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -25,57 +118,6 @@ const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
     const seconds = ((ms % 60000) / 1000).toFixed(0);
     return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
-};
-
-// Some stored answers arrive with their list newlines collapsed to spaces, so a
-// bullet list becomes a run-on line ("- a. - b - c"). remark then parses that as
-// ONE list item with literal inline dashes. Re-break mid-line bullet markers onto
-// their own lines so the list renders. Heavily gated to avoid corrupting prose:
-// only fires when the text actually looks like a flattened list, protects code,
-// and never splits number ranges ("3 - 1") or hyphenated words ("state-of-art").
-const reflowFlattenedList = (text: string): string => {
-    // Detect a list whose newlines were collapsed to spaces upstream, e.g.
-    // "Here's the plan: - Build it. - Test it." or "Steps: 1. Do x. 2. Do y.".
-    // remark then parses that run-on as a single paragraph / single list item.
-    // We re-break the inline markers onto their own lines so it renders as a list.
-    //
-    // Gating (to avoid corrupting prose): require at least TWO inline markers of
-    // the same kind. Bullets must be space-surrounded with a non-digit neighbour
-    // (so "3 - 1" ranges and "state-of-art" are untouched); numbered items match
-    // " N. Capital" runs (so "version 2. x" mid-sentence is unlikely to trip).
-    const bulletRun = /(^|\s)[-*\u2022]\s+(?=[^\d\s])/g;
-    const numberRun = /(^|\s)\d{1,2}[.)]\s+(?=[A-Z(`])/g;
-    const bulletCount = (text.match(bulletRun) || []).length;
-    const numberCount = (text.match(numberRun) || []).length;
-    const looksBullet = bulletCount >= 2;
-    const looksNumber = numberCount >= 2;
-    if (!looksBullet && !looksNumber) return text;
-    // If it already has real newlines separating most markers, leave it alone.
-    if (/\n\s*(?:[-*\u2022]|\d{1,2}[.)])\s+/.test(text) && !/\S[ \t]+(?:[-*\u2022]|\d{1,2}[.)])[ \t]+/.test(text)) {
-        return text;
-    }
-
-    // Protect fenced + inline code so a marker inside code is never broken.
-    const stash: string[] = [];
-    const put = (m: string): string => {
-        stash.push(m);
-        return '\u0001' + (stash.length - 1) + '\u0001';
-    };
-    let out = text
-        .replace(/```[\s\S]*?```/g, put)
-        .replace(/`[^`]*`/g, put);
-
-    if (looksBullet) {
-        // Break " <char> <marker> <non-digit>" onto a new bullet line.
-        out = out.replace(/([^\d\s])[ \t]+([-*\u2022])[ \t]+(?=[^\d\s])/g, '$1\n$2 ');
-    }
-    if (looksNumber) {
-        // Break " N. Capital" onto a new numbered line (keep the number).
-        out = out.replace(/([^\s])[ \t]+(\d{1,2}[.)])[ \t]+(?=[A-Z(\u0001])/g, '$1\n$2 ');
-    }
-
-    // Restore code.
-    return out.replace(/\u0001(\d+)\u0001/g, (_m, i) => stash[Number(i)] || '');
 };
 
 const cleanMarkdown = (content: string) => {
@@ -95,12 +137,12 @@ interface CodingSection {
 
 type DetailKind = 'approach' | 'dry-run' | 'complexity' | 'followup';
 
-// Ordered labels for the detail pill strip. "Approach" only appears when the full
+// Ordered labels for the detail pill strip. Complexity is not here: it is the cost
+// chip under the code. "Approach" only appears when the full
 // reasoning is longer than the one-line thesis we already show above the code.
 const DETAIL_PILLS: { kind: DetailKind; label: string }[] = [
     { kind: 'approach',   label: 'Approach'       },
     { kind: 'dry-run',    label: 'Dry run'        },
-    { kind: 'complexity', label: 'Complexity'     },
     { kind: 'followup',   label: 'Follow-up tips' },
 ];
 
@@ -129,46 +171,6 @@ const MOUNT_CHILD_REDUCED = {
 // within the session, which is exactly the lifetime we want.
 const seenInteractionIds = new Set<string>();
 
-// Pull the first sentence from the approach so we can lead with a one-line thesis
-// and tuck the full reasoning into a pill. Avoids cutting on common false
-// terminators — decimals (3.4x), abbreviations (e.g., i.e., etc.), and single
-// initials — by requiring the terminator to be followed by a space + a capital or
-// end-of-string, and rejecting matches that end in a known abbreviation. Falls
-// back to a length cap so a run-on paragraph never becomes the whole thesis.
-const ABBREV_RE = /(?:^|\s)(?:e\.g|i\.e|etc|vs|approx|Dr|Mr|Ms|Mrs|Fig|No|cf|al)\.$/i;
-function firstSentence(text: string): string {
-    const flat = text.replace(/\s+/g, ' ').trim();
-    // Terminator = .!? not preceded by a digit (decimals) and followed by space +
-    // uppercase/quote/end. Scan for the first that isn't a known abbreviation.
-    const re = /(?<!\d)[.!?](?=\s+["'“(]?[A-Z0-9]|\s*$)/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(flat)) !== null) {
-        const candidate = flat.slice(0, m.index + 1);
-        if (!ABBREV_RE.test(candidate)) {
-            return candidate.trim();
-        }
-    }
-    // No clean sentence boundary — cap length so the thesis stays one line.
-    return flat.length > 160 ? flat.slice(0, 157).trimEnd() + '…' : flat;
-}
-
-// Extract a compact "O(n) time · O(1) space" chip from the complexity section so
-// the single most-scanned fact is never hidden behind a click. Returns null when
-// nothing parseable is found (caller then keeps complexity as a pill).
-function extractComplexity(body: string): string | null {
-    // NOTE: a negated class like [^O] under /i also excludes lowercase 'o', which
-    // breaks on the common phrasing "Time complexity: O(n)" (the 'o' in
-    // "complexity" blocks the lazy scan). Match Big-O on the SAME line as the
-    // time/space keyword instead, so any prose in between is fine.
-    const time  = /time[^\n]*?(O\([^)]*\))/i.exec(body)?.[1];
-    const space = /space[^\n]*?(O\([^)]*\))/i.exec(body)?.[1];
-    if (time || space) {
-        return [time && `${time} time`, space && `${space} space`].filter(Boolean).join(' · ');
-    }
-    const bare = body.match(/O\([^)]*\)/g);
-    return bare && bare.length ? Array.from(new Set(bare)).slice(0, 2).join(' · ') : null;
-}
-
 // Render a complexity string with real superscripts: "O(N^2 2^N)" → O(N²2ᴺ) via
 // <sup>, plus the middot separator styled down. The exponent after ^ is the run
 // of alphanumerics that follows (e.g. 2, N, log).
@@ -196,17 +198,9 @@ function extractCodeBlock(body: string): { lang: string; code: string } | null {
     if (matches.length !== 1) return null;
     const m = matches[0];
     if (trimmed.replace(m[0], '').trim().length > 0) return null; // prose outside fence
+    // A diagram is not a code hero: let the markdown renderer hand it to the diagram card.
+    if (['mermaid', 'natively-chart', 'natively-diagram'].includes((m[1] || '').toLowerCase())) return null;
     return { lang: m[1] || '', code: m[2].replace(/\n$/, '') };
-}
-
-// Short, single-line label for the technique chip in the code header.
-function techniqueLabel(body: string): string {
-    return body
-        .replace(/[`*_#>]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/^(via|using|use|technique[:\s-]*)\s*/i, '')
-        .slice(0, 48);
 }
 
 // Copy-to-clipboard control for the code hero. Ghosted until hover on desktop,
@@ -233,7 +227,8 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
             type="button"
             onClick={handle}
             aria-label={copied ? t('Copied') : t('Copy code')}
-            className="relative w-6 h-6 inline-flex items-center justify-center rounded-md text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-[color,background-color,transform] duration-100 ease-out active:scale-[0.92] opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/20"
+            // opacity is in the list so the hover reveal fades rather than popping in.
+            className="relative w-6 h-6 inline-flex items-center justify-center rounded-md text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-[color,background-color,transform,opacity] duration-150 ease-out active:scale-[0.92] opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:outline-none focus-visible:opacity-100"
         >
             <AnimatePresence mode="wait" initial={false}>
                 {copied ? (
@@ -250,53 +245,12 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
     );
 };
 
-// Strip markdown to plain text for the "copy whole answer" action — drops
-// heading hashes, list bullets, emphasis, and code fences but keeps the words and
-// code body, so what lands on the clipboard reads like the rendered answer.
-function markdownToPlainText(md: string): string {
-    return md
-        .replace(/```[\w+#-]*\n?/g, '')      // fence openers
-        .replace(/```/g, '')                  // fence closers
-        .replace(/^#{1,6}\s+/gm, '')          // heading hashes
-        .replace(/^\s*[-*+]\s+/gm, '• ')      // list bullets
-        .replace(/^\s*\d+\.\s+/gm, (m) => m.trim() + ' ')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')    // bold
-        .replace(/\*([^*]+)\*/g, '$1')        // italic
-        .replace(/`([^`]+)`/g, '$1')          // inline code
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-}
+// Title of the synthetic section holding the answer-to-say-out-loud that follows the
+// last template section (see splitTrailingAnswer).
+const SPOKEN_TITLE = '\u0000spoken';
 
-// Text button used in the answer-level hover action bar (copy whole answer).
-// Same copy→check feedback as CopyButton but with a visible label.
-const AnswerCopyButton: React.FC<{ text: string }> = ({ text }) => {
-    const t = useT();
-    const [copied, setCopied] = useState(false);
-    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-    const handle = () => {
-        const p = navigator.clipboard?.writeText(text);
-        if (!p) return;
-        p.then(() => {
-            setCopied(true);
-            if (timer.current) clearTimeout(timer.current);
-            timer.current = setTimeout(() => setCopied(false), 2000);
-        }).catch(() => {});
-    };
-    return (
-        <button
-            type="button"
-            onClick={handle}
-            aria-label={copied ? t('Copied answer') : t('Copy answer')}
-            className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md cursor-default select-none text-[11px] font-medium text-text-tertiary hover:text-text-secondary hover:bg-white/[0.05] transition-[color,background-color,transform] duration-[120ms] ease-out active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
-        >
-            {copied ? <Check className="w-3 h-3 text-emerald-400" strokeWidth={2.5} /> : <Copy className="w-3 h-3" strokeWidth={2} />}
-            <span>{copied ? t('Copied') : t('Copy')}</span>
-        </button>
-    );
-};
-
-function classifySection(title: string): 'approach' | 'technique' | 'code' | DetailKind | 'other' {
+function classifySection(title: string): 'approach' | 'technique' | 'code' | 'spoken' | DetailKind | 'other' {
+    if (title === SPOKEN_TITLE) return 'spoken';
     const t = title.toLowerCase().trim();
     if (/approach/.test(t))                            return 'approach';
     if (/technique|data.?structure|algorithm/.test(t)) return 'technique';
@@ -328,11 +282,36 @@ function parseCodingTemplate(answer: string): CodingSection[] | null {
     }
     if (current) sections.push(current);
 
+    // The last section may be followed by the spoken answer; lift it out so it is
+    // not buried inside the Follow-up pill.
+    const last = sections[sections.length - 1];
+    if (last && classifySection(last.title) === 'followup') {
+        const { body, tail } = splitTrailingAnswer(last.body);
+        if (tail) { last.body = body; sections.push({ title: SPOKEN_TITLE, body: tail }); }
+    }
+
     const KNOWN = new Set(['approach','technique','code','dry-run','complexity','followup']);
     const knownCount = sections.filter(s => KNOWN.has(classifySection(s.title))).length;
     if (knownCount < 2) return null;
     return sections;
 }
+
+// GFM table renderers, defined once and shared by every ReactMarkdown surface in
+// this file. Tailwind's preflight zeroes cell padding, so columns need explicit
+// gaps (right padding) and a hairline under the header. The min-w-0 wrapper is
+// what makes a wide table scroll instead of stretching the column it sits in,
+// and `code-scroll` keeps that scrollbar discreet — see the .code-scroll block
+// in index.css for why the global scrollbar rule does not cover this case.
+// `tableClass` is the only thing that varies between surfaces (font size).
+const makeTableComponents = (tableClass: string) => ({
+    table: ({ node, ...props }: any) => (
+        <div className="code-scroll w-full min-w-0 overflow-x-auto mb-2 last:mb-0">
+            <table className={`border-collapse ${tableClass}`} {...props} />
+        </div>
+    ),
+    th: ({ node, ...props }: any) => <th className="text-left align-top font-semibold text-text-primary pr-5 last:pr-0 pb-1.5 border-b border-border-muted" {...props} />,
+    td: ({ node, ...props }: any) => <td className="text-left align-top text-text-secondary tabular-nums pr-5 last:pr-0 py-1" {...props} />,
+});
 
 // Shared markdown renderer config — used by both CodingAnswerBlock and plain answers.
 const mdComponents = {
@@ -344,7 +323,8 @@ const mdComponents = {
     ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1.5" {...props} />,
     li: ({ node, ...props }: any) => <li className="text-[15px] text-text-secondary font-normal leading-relaxed" {...props} />,
     strong: ({ node, ...props }: any) => <strong className="font-semibold text-text-primary" {...props} />,
-    a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors duration-150" {...props} />,
+    ...makeTableComponents('text-[13.5px] leading-relaxed'),
+    a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:text-accent-hover underline underline-offset-2 transition-colors duration-150" {...props} />,
     pre: ({ children }: any) => <div className="mb-3 last:mb-0">{children}</div>,
     code: ({ node, className, children, ...props }: any) => {
         const match = /language-([\w+#-]+)/.exec(className || '');
@@ -360,6 +340,41 @@ const mdComponents = {
         );
     },
 };
+
+// The thesis line inside CodingAnswerBlock: the wrapping <p> already styles it, so
+// the markdown paragraph collapses to a fragment; bold reads brighter than the
+// surrounding text-primary body the way it does everywhere else.
+const THESIS_MD_COMPONENTS = {
+    p: ({ children }: any) => <>{children}</>,
+    strong: mdComponents.strong,
+    code: mdComponents.code,
+};
+
+// Markdown for a Usage answer: the shared components plus KaTeX ($$…$$, $…$, and
+// \(…\) converted to $…$), and "**Label:**" lines kept on their own lines.
+// Same math pipeline as the overlay (NativelyInterface).
+const KATEX_OPTIONS = { throwOnError: false, strict: false, errorColor: '#cc0000' };
+const ANSWER_REMARK = [remarkGfm, remarkMath];
+const ANSWER_REHYPE = [[rehypeKatex, KATEX_OPTIONS]] as any;
+const answerMarkdown = (text: string) => normalizeFinalizedMarkdownMath(latexParensToDollars(breakGluedLines(fixBoldSpacing(cleanMarkdown(text)))));
+
+// What the Usage tab shows and copies for a stored answer: no leaked <think> block,
+// the trailing [[GIST]] split off (it becomes a chip elsewhere), and no [[GIST]] lines
+// left in the middle of a multi-part answer.
+const usageAnswerText = (raw?: string | null): string => raw ? stripStrayGistLines(splitGistLine(stripLeadingReasoning(raw)).body) : '';
+// A saved answer's Mermaid blocks are drawn again from their stored source
+// (nothing but the answer text is persisted), by the same card the live overlay
+// uses. Each block is cut out before the clean-up above runs, so the diagram
+// source is never rewritten by math or bold-spacing normalisation. A replay
+// never starts a repair on its own.
+const renderAnswerChunk = (chunk: string, key: string) => (
+    <ReactMarkdown key={key} remarkPlugins={ANSWER_REMARK} rehypePlugins={ANSWER_REHYPE} components={mdComponents}>
+        {answerMarkdown(chunk)}
+    </ReactMarkdown>
+);
+const AnswerMarkdown: React.FC<{ children: string }> = ({ children }) => (
+    <DiagramAwareMarkdown text={children} renderMarkdown={renderAnswerChunk} />
+);
 
 // Bespoke code hero: custom header (language label · technique chip · copy button),
 // inner top-edge highlight instead of a drop shadow, line numbers only past 8 lines.
@@ -385,15 +400,15 @@ const CodeHero: React.FC<{ lang: string; code: string; technique?: string }> = (
         return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
     }, [code]);
     return (
-        <div className="group relative w-full min-w-0 rounded-xl overflow-hidden border border-white/[0.08] ring-1 ring-inset ring-white/[0.05] bg-zinc-900/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors duration-200 hover:border-white/[0.12]">
+        <div className="group relative w-full min-w-0 rounded-xl overflow-hidden border border-white/[0.08] ring-1 ring-inset ring-white/[0.05] bg-[#0a0a0d]/90 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors duration-200 hover:border-white/[0.12]">
             <div className="flex items-center gap-2 h-9 px-3 border-b border-white/[0.05] bg-white/[0.02]">
                 <span className="text-[11px] uppercase tracking-[0.04em] font-medium text-text-tertiary font-mono select-none cursor-default">
                     {resolved || 'code'}
                 </span>
                 <div className="flex-1" />
                 {technique && (
-                    <span className="hidden sm:inline-flex items-center max-w-[220px] truncate text-[11px] font-medium text-white/45 select-none cursor-default">
-                        {technique}
+                    <span className="hidden sm:flex min-w-0 max-w-[340px] items-center text-[11px] font-medium text-white/45 select-none cursor-default" title={technique}>
+                        <span className="truncate">{technique}</span>
                     </span>
                 )}
                 <CopyButton text={code} />
@@ -405,7 +420,7 @@ const CodeHero: React.FC<{ lang: string; code: string; technique?: string }> = (
             >
                 <SyntaxHighlighter
                     language={resolved}
-                    style={vscDarkPlus}
+                    style={vividDarkCodeTheme}
                     customStyle={{ margin: 0, borderRadius: 0, fontSize: '13px', lineHeight: '1.6', background: 'transparent', padding: '14px 16px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
                     showLineNumbers={lineCount > 8}
                     lineNumberStyle={{ minWidth: '2.2em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '11px', userSelect: 'none' }}
@@ -445,27 +460,32 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
     const approach  = tagged.find(s => s.kind === 'approach');
     const technique = tagged.find(s => s.kind === 'technique');
     const code      = tagged.find(s => s.kind === 'code');
-    const others    = tagged.filter(s => s.kind === 'other');
+    const spoken    = tagged.find(s => s.kind === 'spoken');
+    // Sections that only say "N/A" are not shown.
+    const others    = tagged.filter(s => s.kind === 'other' && !isNotApplicable(s.body));
 
-    const thesis = approach ? firstSentence(approach.body.trim()) : '';
+    const thesis = approach ? leadingItem(approach.body.trim()) : '';
     // Only surface the full approach as a pill when it says more than the thesis.
     const approachIsRicher = approach ? approach.body.trim().length > thesis.length + 24 : false;
 
     const parsedCode = code ? extractCodeBlock(code.body) : null;
-    const techniqueChip = technique ? techniqueLabel(technique.body) : '';
+    // No Technique section (the usual Approach / Code / Complexity answer since
+    // 2026-09-29): the chip comes from the technique the Approach names first.
+    const techniqueChip = technique
+        ? techniqueLabel(technique.body)
+        : (approach ? techniqueFromApproach(approach.body) : '');
 
     const complexitySection = tagged.find(s => s.kind === 'complexity');
     const complexityChip = complexitySection ? extractComplexity(complexitySection.body) : null;
 
-    // Build the ordered detail map. Approach (full) is optional; complexity stays a
-    // pill only when we couldn't distil a chip from it.
+    // Build the ordered detail map. Approach (full) is optional. Complexity is never a
+    // pill: it is the cost chip, or nothing when the section has no Big-O in it.
     const detailMap = new Map<DetailKind, CodingSection>();
     if (approach && approachIsRicher) detailMap.set('approach', approach);
     const dryRun = tagged.find(s => s.kind === 'dry-run');
-    if (dryRun) detailMap.set('dry-run', dryRun);
-    if (complexitySection && !complexityChip) detailMap.set('complexity', complexitySection);
+    if (dryRun && !isNotApplicable(dryRun.body)) detailMap.set('dry-run', dryRun);
     const followup = tagged.find(s => s.kind === 'followup');
-    if (followup) detailMap.set('followup', followup);
+    if (followup && !isNotApplicable(followup.body)) detailMap.set('followup', followup);
 
     const availablePills = DETAIL_PILLS.filter(p => detailMap.has(p.kind));
     const activeSection  = activeDetail != null ? detailMap.get(activeDetail) : undefined;
@@ -514,8 +534,18 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
             {/* Thesis — one-line claim, the answer at a glance */}
             {thesis && (
                 <motion.p variants={childVariant} className="text-[15px] leading-[1.6] text-text-primary m-0 select-text">
-                    {thesis}
+                    {/* Inline markdown: the thesis can carry **bold** and `code`. */}
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={THESIS_MD_COMPONENTS}>{thesis}</ReactMarkdown>
                 </motion.p>
+            )}
+
+            {/* Technique — normally the chip in the code card's header. With no code card
+                to carry it, it gets its own line so it is never silently dropped. */}
+            {technique && !parsedCode && !isNotApplicable(technique.body) && (
+                <motion.div variants={childVariant} className="flex flex-col gap-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 select-none cursor-default">{t('Technique')}</p>
+                    <AnswerMarkdown>{technique.body.trim()}</AnswerMarkdown>
+                </motion.div>
             )}
 
             {/* Code — hero block with technique chip + copy button */}
@@ -523,11 +553,9 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                 <motion.div variants={childVariant} className="min-w-0 w-full">
                     <CodeHero lang={parsedCode.lang} code={parsedCode.code} technique={techniqueChip} />
                 </motion.div>
-            ) : code ? (
+            ) : code && !isNotApplicable(code.body) ? (
                 <motion.div variants={childVariant} className="flex flex-col gap-3 min-w-0 w-full">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                        {cleanMarkdown(code.body.trim())}
-                    </ReactMarkdown>
+                    <AnswerMarkdown>{code.body.trim()}</AnswerMarkdown>
                 </motion.div>
             ) : null}
 
@@ -542,12 +570,17 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
             {/* Unrecognised sections — graceful fallthrough */}
             {others.map(s => (
                 <motion.div key={s.title} variants={childVariant} className="flex flex-col gap-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 select-none cursor-default">{s.title}</p>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                        {cleanMarkdown(s.body.trim())}
-                    </ReactMarkdown>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 select-none cursor-default">{plainTitle(s.title)}</p>
+                    <AnswerMarkdown>{s.body.trim()}</AnswerMarkdown>
                 </motion.div>
             ))}
+
+            {/* The answer to say out loud, when the model wrote it after the template. */}
+            {spoken && (
+                <motion.div variants={childVariant} className="min-w-0 w-full">
+                    <AnswerMarkdown>{spoken.body}</AnswerMarkdown>
+                </motion.div>
+            )}
 
             {/* Detail pill strip + continuous-height panel */}
             {availablePills.length > 0 && (
@@ -578,7 +611,7 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                                         className={[
                                             'relative inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12.5px] font-medium select-none cursor-default',
                                             'transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]',
-                                            'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25',
+                                            'focus:outline-none',
                                             isActive ? 'text-text-primary' : 'text-white/35 hover:text-text-tertiary hover:bg-white/[0.04]',
                                         ].join(' ')}
                                     >
@@ -590,13 +623,6 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                                             />
                                         )}
                                         <span className="relative z-10">{pill.label}</span>
-                                        {/* Chevron signals panel OPEN vs closed (not which pill) */}
-                                        {isActive && (
-                                            <ChevronDown
-                                                className="relative z-10 w-3 h-3 text-text-tertiary transition-transform duration-200 ease-out rotate-180"
-                                                strokeWidth={2.5}
-                                            />
-                                        )}
                                     </button>
                                 );
                             })}
@@ -626,9 +652,7 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                                         transition={{ duration: 0.18, ease: CROSSFADE_EASE, delay: reduce ? 0 : 0.04 }}
                                     >
                                         <div className="rounded-xl px-4 py-3.5 bg-white/[0.025] border border-white/[0.05] ring-1 ring-inset ring-white/[0.02]">
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                                                {cleanMarkdown(activeSection.body.trim())}
-                                            </ReactMarkdown>
+                                            <AnswerMarkdown>{activeSection.body.trim()}</AnswerMarkdown>
                                         </div>
                                     </motion.div>
                                 )}
@@ -641,22 +665,34 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
     );
 };
 
+// The timestamp row under a question bubble and under an answer. One string so
+// the two can never drift: h-6 (the row the removed Copy button set) + mt-2 gives
+// both the same gap from the card above and the same space before the next one.
+const USAGE_TIME_ROW = 'flex items-center h-6 mt-2 opacity-0 translate-y-1 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none';
+
 // One Q&A pair in the usage/history tab. Owns its first-view entrance (question
-// enters from the right, answer settles just after) and a hover-revealed
-// answer-action bar (copy full answer + timestamp). Entrance plays only the first
-// time this interaction is seen this session — history is read-mostly, so
-// re-viewing must be instant, never a re-cascade.
+// enters from the right, answer settles just after) and the answer's
+// hover-revealed timestamp. Copying is the tab's own "Copy usage" — there is no
+// per-answer copy. Entrance plays only the first time this interaction is seen
+// this session — history is read-mostly, so re-viewing must be instant, never a
+// re-cascade.
 const UsageInteraction: React.FC<{
-    interaction: { timestamp: number; question?: string; answer?: string };
+    interaction: { timestamp: number; question?: string; answer?: string; images?: string[] };
     id: string;
     staggerDelay: number;
-}> = ({ interaction, id, staggerDelay }) => {
+    /** Open preview `index` of `interaction.images` full size. */
+    onOpenImage?: (index: number) => void;
+}> = ({ interaction, id, staggerDelay, onOpenImage }) => {
+    const t = useT();
     const reduce = useReducedMotion();
     const firstView = !seenInteractionIds.has(id);
     useEffect(() => { seenInteractionIds.add(id); }, [id]);
 
-    const codingSections = interaction.answer ? parseCodingTemplate(interaction.answer) : null;
-    const answerPlain = interaction.answer ? markdownToPlainText(interaction.answer) : '';
+    // Persisted answers can end with the live overlay's [[GIST]] line. History has
+    // no use for it, so it is stripped before either renderer sees the answer —
+    // no chip, and no stray marker line at the end of a coding answer's last section.
+    const answerBody = usageAnswerText(interaction.answer);
+    const codingSections = answerBody ? parseCodingTemplate(answerBody) : null;
 
     const enter = (offset: { x?: number; y?: number }, delay: number) => {
         // Repeat views are always instant. First view: full slide-in normally,
@@ -666,39 +702,68 @@ const UsageInteraction: React.FC<{
         return { initial: { opacity: 0, ...offset }, animate: { opacity: 1, x: 0, y: 0 }, transition: { duration: 0.32, ease: CROSSFADE_EASE, delay } };
     };
 
+    const images = interaction.images ?? [];
+
     return (
         <div className="space-y-4">
             {/* User question — contained bubble, enters from the right, selectable */}
-            {interaction.question && (
+            {(interaction.question || images.length > 0) && (
                 <div className="group/q flex flex-col items-end">
-                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="bg-accent-primary text-white px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed shadow-sm select-text">
+                    {/* The screenshots this answer used, above the question the way a
+                        message shows its attachments. Previews are made when the answer
+                        is logged (electron usagePreviews.ts); the screenshots themselves
+                        are deleted after the meeting. Click opens one full size. */}
+                    {images.length > 0 && (
+                        <motion.div {...enter({ x: 8 }, staggerDelay)} className="mb-1.5 flex flex-wrap justify-end gap-1.5 max-w-[80%]">
+                            {images.map((src, k) => (
+                                <button
+                                    key={k}
+                                    type="button"
+                                    onClick={() => onOpenImage?.(k)}
+                                    aria-label={images.length > 1 ? `${t('Screenshot')} ${k + 1} / ${images.length}` : t('Screenshot')}
+                                    className="block overflow-hidden rounded-[14px] border border-border-subtle bg-bg-input cursor-zoom-in transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:scale-[0.98]"
+                                >
+                                    <img src={src} alt="" decoding="async" draggable={false} className="block h-[108px] w-auto max-w-[220px] object-cover" />
+                                </button>
+                            ))}
+                        </motion.div>
+                    )}
+                    {interaction.question && (<>
+                    {/* .lg-bubble (ui-components): the original Liquid Glass material on the
+                        Settings toggle's periwinkle blue (--toggle-on, lifted toward white in light
+                        mode), with nothing painted around it and no hover effect. Fill and
+                        foreground come from --bubble-user-* in index.css; the radius stays here.
+                        White text on the fill is 3.28:1 (2.35:1 in light mode) — an accepted AA
+                        shortfall, recorded in PeriwinkleContrastGuard.test.mjs. */}
+                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="lg-bubble px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed select-text">
                         {interaction.question}
                     </motion.div>
-                    <span className="mt-1 pr-1 text-[11px] text-text-tertiary select-none cursor-default opacity-0 translate-y-1 group-hover/q:opacity-100 group-hover/q:translate-y-0 transition-all duration-[160ms] ease-out">
-                        {formatTime(interaction.timestamp)}
-                    </span>
+                    {/* Same row as the answer's timestamp below (USAGE_TIME_ROW): equal
+                        height, equal gap from the card above, same reveal rules. */}
+                    <div className={`${USAGE_TIME_ROW} justify-end pr-1 [@media(hover:hover)]:group-hover/q:opacity-100 [@media(hover:hover)]:group-hover/q:translate-y-0 group-focus-within/q:opacity-100 group-focus-within/q:translate-y-0`}>
+                        <span className="text-[11px] text-text-tertiary cursor-default">{formatTime(interaction.timestamp)}</span>
+                    </div>
+                    </>)}
                 </div>
             )}
 
-            {/* AI answer — open canvas (no bubble), avatar + body + hover action bar */}
+            {/* AI answer — open canvas (no bubble): a small logo + name line, then the
+                body full width beneath it, then the hover-revealed timestamp. */}
             {interaction.answer && (
-                <motion.div {...enter({ y: 8 }, staggerDelay + 0.08)} className="group/a flex items-start gap-4">
-                    <div className="mt-1 w-6 h-6 rounded-full bg-bg-input flex items-center justify-center border border-border-subtle shrink-0 select-none opacity-40 group-hover/a:opacity-60 transition-opacity duration-[160ms]">
-                        <img src={NativelyLogo} alt="" aria-hidden="true" className="w-4 h-4 object-contain force-black-icon" />
+                <motion.div {...enter({ y: 8 }, staggerDelay + 0.08)} className="group/a">
+                    <div className="mb-2 flex items-center gap-2 select-none">
+                        <img src={NativelyLogo} alt="" aria-hidden="true" className="w-4 h-4 object-contain force-black-icon opacity-60" />
+                        <span className="text-[13px] font-medium leading-none text-text-secondary">Natively</span>
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0">
                         <div className="text-text-secondary text-[15px] leading-relaxed max-w-none select-text">
                             {codingSections
                                 ? <CodingAnswerBlock sections={codingSections} firstView={firstView} />
-                                : (
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                                        {cleanMarkdown(interaction.answer || '')}
-                                    </ReactMarkdown>
-                                )}
+                                : <AnswerMarkdown>{answerBody}</AnswerMarkdown>}
                         </div>
-                        {/* Answer action bar — bottom-left, revealed on hover/focus-within */}
-                        <div className="flex items-center gap-2 mt-2 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover/a:opacity-100 [@media(hover:hover)]:group-hover/a:translate-y-0 group-focus-within/a:opacity-100 group-focus-within/a:translate-y-0 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none">
-                            <AnswerCopyButton text={answerPlain} />
+                        {/* Timestamp — bottom-left, revealed on hover/focus-within. Same row
+                            as the question's (USAGE_TIME_ROW). */}
+                        <div className={`${USAGE_TIME_ROW} [@media(hover:hover)]:group-hover/a:opacity-100 [@media(hover:hover)]:group-hover/a:translate-y-0 group-focus-within/a:opacity-100 group-focus-within/a:translate-y-0`}>
                             <span className="text-[11px] text-text-tertiary cursor-default">{formatTime(interaction.timestamp)}</span>
                         </div>
                     </div>
@@ -708,66 +773,333 @@ const UsageInteraction: React.FC<{
     );
 };
 
-// Tone dropdown for the follow-up draft regeneration toolbar.
+/**
+ * A Usage screenshot preview, full size: the window dims and the image scales up
+ * from 96%; a click outside it, the close button or Esc puts it away. With more
+ * than one, ← → (keys or buttons) step through them. role="dialog" also makes the
+ * page's own Esc-to-go-back stand down while this is open.
+ */
+const UsageImageViewer: React.FC<{
+    images: string[];
+    index: number;
+    onIndex: (index: number) => void;
+    onClose: () => void;
+}> = ({ images, index, onIndex, onClose }) => {
+    const t = useT();
+    const reduce = useReducedMotion();
+    const closeRef = useRef<HTMLButtonElement>(null);
+    const count = images.length;
+    const step = (d: number) => onIndex((index + d + count) % count);
+    useEffect(() => {
+        closeRef.current?.focus({ preventScroll: true });
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
+            else if (count > 1 && e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+            else if (count > 1 && e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [index, count]);
+    const navBtn = 'absolute top-1/2 -translate-y-1/2 w-9 h-9 rounded-full inline-flex items-center justify-center bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors';
+    return (
+        <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('Screenshot')}
+            className="fixed inset-0 z-[320] flex items-center justify-center px-16 py-14 bg-black/75"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: CROSSFADE_EASE }}
+            onClick={onClose}
+        >
+            <AnimatePresence initial={false} mode="popLayout">
+                <motion.img
+                    key={index}
+                    src={images[index]}
+                    alt=""
+                    draggable={false}
+                    onClick={(e) => e.stopPropagation()}
+                    className="max-w-full max-h-full object-contain rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+                    initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.22, ease: CROSSFADE_EASE }}
+                />
+            </AnimatePresence>
+            <button
+                ref={closeRef}
+                type="button"
+                aria-label={t('Close')}
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full inline-flex items-center justify-center bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors"
+            >
+                <X className="w-4 h-4" strokeWidth={2} />
+            </button>
+            {count > 1 && (
+                <>
+                    <button type="button" aria-label={t('Previous')} onClick={(e) => { e.stopPropagation(); step(-1); }} className={`${navBtn} left-4`}>
+                        <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+                    </button>
+                    <button type="button" aria-label={t('Next')} onClick={(e) => { e.stopPropagation(); step(1); }} className={`${navBtn} right-4`}>
+                        <ChevronRight className="w-4 h-4" strokeWidth={2} />
+                    </button>
+                    <span className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[12px] font-medium text-white/70 tabular-nums select-none">{index + 1} / {count}</span>
+                </>
+            )}
+        </motion.div>
+    );
+};
+
+type FollowUpTone = 'professional' | 'warm' | 'concise' | 'friendly';
+
+/** The dropdown snippet's --dropdown-close-dur (index.css, .mn-followup). */
+const TONE_MENU_CLOSE_MS = 150;
+
+/**
+ * The notes' actions, in the app's Liquid Glass (ui-components/design.md):
+ * Regenerate and Show evidence as small clear-glass buttons — the material the
+ * Modes Manager's "New Mode" uses, rim only, the page showing through — and,
+ * when the meeting looks like another template, a third of the same at the end
+ * of the row: "Regenerate notes as …". Show evidence stays clear glass when
+ * on; its label and icon turn the Settings toggle's blue. No template name: the
+ * suggestion says what would change, and nothing else here needs it.
+ *
+ * It replaced a row of flat buttons, a pull-down, and a bordered bar. The
+ * suggestion was a solid toggle-blue glass button until 2026-09-29; it now
+ * matches its neighbours.
+ */
+const NotesActions: React.FC<{
+    isRegenerating: boolean;
+    showEvidence: boolean;
+    /** The template the meeting looks like, when it differs from the one used. */
+    suggestion: { name: string; needsPro: boolean } | null;
+    onRegenerate: () => void;
+    onRegenerateAsSuggested: () => void;
+    onToggleEvidence: () => void;
+}> = ({ isRegenerating, showEvidence, suggestion, onRegenerate, onRegenerateAsSuggested, onToggleEvidence }) => {
+    const t = useT();
+    const reduce = useReducedMotion();
+    const isLight = useResolvedTheme() === 'light';
+    // The blue here is the Settings on/off switch's, --toggle-on (#6688F5, both
+    // themes), not the glass's default action blue. As text on a light page it is
+    // darkened a little for contrast, the way Phone Mirror's toggle ink is.
+    const toggleInk = isLight ? 'color-mix(in srgb, var(--toggle-on) 80%, #000)' : 'var(--toggle-on)';
+    // The Regenerate icon finishes the turn it is on when regenerating ends, rather
+    // than snapping back upright mid-rotation: the spin class is dropped at the next
+    // iteration boundary (animate-spin is one 1s linear turn per iteration).
+    const [spinning, setSpinning] = useState(isRegenerating);
+    const regeneratingRef = useRef(isRegenerating);
+    regeneratingRef.current = isRegenerating;
+    useEffect(() => { if (isRegenerating) setSpinning(true); }, [isRegenerating]);
+    const evidenceLabel = showEvidence ? t('Hide evidence') : t('Show evidence');
+    return (
+        // .mn-notes-actions: the disabled dim eases instead of snapping (index.css).
+        <div className="mn-notes-actions w-full flex flex-wrap items-center gap-2 min-w-0">
+            <LiquidGlassButton
+                variant="clear"
+                className="lg-sm"
+                onClick={onRegenerate}
+                disabled={isRegenerating}
+                icon={
+                    <RefreshCw
+                        className={`w-3.5 h-3.5 ${spinning && !reduce ? 'animate-spin' : ''}`}
+                        strokeWidth={2.2}
+                        onAnimationIteration={() => { if (!regeneratingRef.current) setSpinning(false); }}
+                    />
+                }
+            >
+                {t('Regenerate')}
+            </LiquidGlassButton>
+            <LiquidGlassButton
+                variant="clear"
+                // mn-evidence: the toggle-blue ink fades in and out (index.css).
+                className="lg-sm mn-evidence"
+                // Inline, not a utility class: .lg-button's own `color: inherit` comes
+                // later in the cascade and would win over text-accent-primary.
+                style={showEvidence ? { color: toggleInk } : undefined}
+                onClick={onToggleEvidence}
+                aria-pressed={showEvidence}
+                // Eye ⇄ crossed eye is the icon swap Copy → Check uses (.t-icon-swap), and the
+                // label the text swap its label uses, with the width held on the longer label.
+                icon={
+                    <span className="t-icon-swap w-3.5 h-3.5" data-state={showEvidence ? 'b' : 'a'} aria-hidden="true">
+                        <EyeOff className="t-icon w-3.5 h-3.5" data-icon="a" strokeWidth={2.2} />
+                        <Eye className="t-icon w-3.5 h-3.5" data-icon="b" strokeWidth={2.2} />
+                    </span>
+                }
+            >
+                <SwapText value={showEvidence ? 'hide' : 'show'} sizers={[t('Show evidence'), t('Hide evidence')]}>
+                    {evidenceLabel}
+                </SwapText>
+            </LiquidGlassButton>
+            {/* The suggestion settles in (fade, 2px blur, 250ms) when detection offers one
+                and fades out quicker (150ms) once it has been taken. Not on the page's
+                first paint: the notes' own reveal is already playing then. */}
+            <AnimatePresence initial={false}>
+                {suggestion && (
+                    <motion.div
+                        key="suggestion"
+                        className="ml-auto max-w-full flex"
+                        initial={reduce ? { opacity: 0 } : { opacity: 0, filter: 'blur(2px)' }}
+                        animate={{ opacity: 1, filter: 'blur(0px)', transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] }, transitionEnd: { filter: 'none' } }}
+                        exit={{ opacity: 0, transition: { duration: 0.15, ease: [0.22, 1, 0.36, 1] } }}
+                    >
+                        <LiquidGlassButton
+                            variant="clear"
+                            // Clear glass like its neighbours; on hover a soft ice-blue wash (.mn-suggest, index.css).
+                            className="lg-sm mn-suggest max-w-full"
+                            onClick={onRegenerateAsSuggested}
+                            disabled={isRegenerating || suggestion.needsPro}
+                        >
+                            {suggestion.needsPro ? `${suggestion.name} ${t('notes need Natively Pro')}` : `${t('Regenerate notes as')} ${suggestion.name}`}
+                        </LiquidGlassButton>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+// Tone picker for the follow-up draft. Picking a tone rewrites the draft in it.
 // Must be a named component (not an IIFE) so React can track its hooks stably.
+// Motion is transitions.dev's menu dropdown: the menu grows from the trigger's
+// top-right corner (it sits at the page's right edge) and closes quicker and
+// quieter than it opens, with .is-closing held for the close duration.
 const ToneDropdown: React.FC<{
-    followUpTone: 'professional' | 'warm' | 'concise' | 'friendly';
+    followUpTone: FollowUpTone;
     isRegeneratingFollowUp: boolean;
-    onSelect: (tone: 'professional' | 'warm' | 'concise' | 'friendly') => void;
+    onSelect: (tone: FollowUpTone) => void;
 }> = ({ followUpTone, isRegeneratingFollowUp, onSelect }) => {
     const t = useT();
-    const toneOptions: { value: 'professional' | 'warm' | 'concise' | 'friendly'; label: string }[] = [
+    const isLight = useResolvedTheme() === 'light';
+    const toneOptions: { value: FollowUpTone; label: string }[] = [
         { value: 'professional', label: t('Professional') },
         { value: 'warm',         label: t('Warm')         },
         { value: 'concise',      label: t('Concise')      },
         { value: 'friendly',     label: t('Friendly')     },
     ];
-    const [toneOpen, setToneOpen] = useState(false);
-    const toneRef = useRef<HTMLDivElement>(null);
+    const [open, setOpen] = useState(false);
+    const [closing, setClosing] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+    // LiquidGlassButton keeps its own ref (the lens), so the trigger is found in the wrapper.
+    const trigger = () => rootRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? null;
+    const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const menuId = useId();
+
+    const openMenu = () => {
+        clearTimeout(closeTimer.current);
+        setClosing(false);
+        setOpen(true);
+    };
+    // `refocus`: hand focus back to the trigger (Escape, a pick) rather than
+    // letting it fall to <body> when the menu goes inert.
+    const close = (refocus: boolean) => {
+        setOpen(false);
+        setClosing(true);
+        clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => setClosing(false), TONE_MENU_CLOSE_MS);
+        if (refocus) trigger()?.focus({ preventScroll: true });
+    };
+    useEffect(() => () => clearTimeout(closeTimer.current), []);
+    // Opening moves focus onto the current tone, so the arrow keys work at once and
+    // the trigger's focus ring does not sit around it while the menu is up.
     useEffect(() => {
-        if (!toneOpen) return;
-        const handler = (e: MouseEvent) => {
-            if (toneRef.current && !toneRef.current.contains(e.target as Node)) setToneOpen(false);
+        if (!open) return;
+        const selected = toneOptions.findIndex(o => o.value === followUpTone);
+        itemRefs.current[Math.max(0, selected)]?.focus({ preventScroll: true });
+        const onDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false);
         };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [toneOpen]);
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const onMenuKeyDown = (e: React.KeyboardEvent) => {
+        const items = itemRefs.current.filter(Boolean) as HTMLButtonElement[];
+        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+        const go = (i: number) => { e.preventDefault(); items[(i + items.length) % items.length]?.focus(); };
+        if (e.key === 'ArrowDown') go(at + 1);
+        else if (e.key === 'ArrowUp') go(at - 1);
+        else if (e.key === 'Home') go(0);
+        else if (e.key === 'End') go(items.length - 1);
+        else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+        else if (e.key === 'Tab') close(false);
+    };
+
     return (
-        <div ref={toneRef} className="relative w-fit">
-            <button
-                type="button"
+        <div ref={rootRef} className="relative">
+            {/* The notes' clear Liquid Glass pill (ui-components/LiquidGlassButton), like
+                Regenerate and Show evidence; it holds its hover wash while the menu is
+                open (.mn-tone, index.css). */}
+            <LiquidGlassButton
+                variant="clear"
+                className="lg-sm mn-tone"
                 disabled={isRegeneratingFollowUp}
-                onClick={() => setToneOpen(v => !v)}
-                className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium pl-2.5 pr-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
+                onClick={() => (open ? close(false) : openMenu())}
+                onKeyDown={(e) => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); openMenu(); } }}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-controls={menuId}
             >
-                <span>{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
-                <ChevronDown className={`w-3 h-3 text-text-tertiary transition-transform duration-150 ${toneOpen ? 'rotate-180' : ''}`} strokeWidth={2.5} />
-            </button>
-            <AnimatePresence>
-                {toneOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.96, y: -2 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.96, y: -2 }}
-                        transition={{ duration: 0.1, ease: [0.23, 1, 0.32, 1] }}
-                        className="absolute left-0 top-full mt-1 z-50 w-full rounded-lg border border-border-subtle bg-[#121214] overflow-hidden py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
-                    >
-                        {toneOptions.map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => { onSelect(opt.value); setToneOpen(false); }}
-                                className={`w-full text-left flex items-center justify-between px-2.5 py-1.5 text-[11px] font-medium transition-colors ${followUpTone === opt.value ? 'text-text-primary bg-white/[0.06]' : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.04]'}`}
-                            >
-                                <span>{opt.label}</span>
-                                {followUpTone === opt.value && (
-                                    <Check className="w-3 h-3 text-text-tertiary shrink-0" strokeWidth={2.5} />
-                                )}
-                            </button>
+                <span className="inline-flex items-center gap-1">
+                    {/* Every tone stacked invisibly in one cell: the trigger is always as wide
+                        as the longest label, so it never jumps on a pick and the menu under
+                        it can be exactly its width. */}
+                    <span className="grid text-center">
+                        {toneOptions.map(o => (
+                            <span key={o.value} aria-hidden="true" className="invisible col-start-1 row-start-1">{o.label}</span>
                         ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                        <span className="col-start-1 row-start-1">{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
+                    </span>
+                    {/* Flips (scaleY) rather than turns, so the "v" becomes a "^" in place:
+                        with the menu's open (250ms), and its quicker close (150ms). */}
+                    <ChevronDown
+                        className="w-3 h-3 opacity-60"
+                        strokeWidth={2.5}
+                        style={{ transform: `scaleY(${open ? -1 : 1})`, transition: `transform ${open ? 'var(--dropdown-open-dur)' : 'var(--dropdown-close-dur)'} var(--dropdown-ease)` }}
+                    />
+                </span>
+            </LiquidGlassButton>
+            {/* Exactly the trigger's width (left-0 right-0 of its wrapper). Tone names are
+                centred, and each row's centre sits under the trigger's label, not the
+                menu's middle: the trigger's chevron (12px + 4px gap) pushes its label
+                8px left, so the rows pad 16px more on the right (pl-3 / pr-7). */}
+            <div
+                id={menuId}
+                role="menu"
+                data-origin="top-center"
+                inert={!open}
+                onKeyDown={onMenuKeyDown}
+                className={`t-dropdown${open ? ' is-open' : closing ? ' is-closing' : ''} absolute left-0 right-0 top-full mt-1 z-50 p-[3px] rounded-lg border ${isLight
+                    ? 'bg-white border-black/[0.08] shadow-[0_6px_20px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.06)]'
+                    : 'bg-[#1C1C1F] border-white/[0.08] shadow-[0_6px_20px_rgba(0,0,0,0.5),0_1px_2px_rgba(0,0,0,0.3)]'}`}
+            >
+                {toneOptions.map((opt, i) => {
+                    const selected = followUpTone === opt.value;
+                    return (
+                        <button
+                            key={opt.value}
+                            ref={(el) => { itemRefs.current[i] = el; }}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={selected}
+                            tabIndex={-1}
+                            onClick={() => { close(true); if (!selected) onSelect(opt.value); }}
+                            className={`w-full h-[26px] flex items-center justify-center pl-3 pr-7 rounded-[5px] text-center text-[12px] font-medium focus-visible:outline-none transition-colors ${selected
+                                ? 'text-text-primary'
+                                : 'text-text-secondary hover:text-text-primary focus-visible:text-text-primary'} ${isLight
+                                ? 'hover:bg-black/[0.05] focus-visible:bg-black/[0.05]'
+                                : 'hover:bg-white/[0.06] focus-visible:bg-white/[0.06]'}`}
+                        >
+                            <span>{opt.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 };
@@ -778,12 +1110,30 @@ const ToneDropdown: React.FC<{
 // cross-meeting recall) but are NOT rendered as the primary layout. Set true to surface them.
 const SHOW_STRUCTURED_BLOCKS = false;
 
-// Not every "quality warning" is a real problem. A note like "Removed 1 empty,
-// duplicate, or interim transcript segment." is a benign cleanup log and should
-// read as low-key info — not an alarming amber warning. Anything about speaker
-// labels, coverage, or that asks the reader to verify is a genuine concern.
-const isBenignQualityNote = (warning: string): boolean =>
-    /removed|cleaned|interim|duplicate|empty/i.test(warning);
+// The labelled "Next steps" block is switched off (2026-08-24 product decision): it
+// restated the action items the notes already carry, so every set of notes and every
+// follow-up mail ended with the same list twice. The generator-side switches live in
+// electron/services/meeting/MeetingSummaryReducer.ts (INCLUDE_NEXT_STEPS),
+// FollowUpDraftGenerator.ts and post-call/PostCallWorkflow.ts — flip all four together.
+// This renderer-side one also hides the section on meetings that were ALREADY generated
+// and saved with it, which the generator-side switches cannot reach.
+const SHOW_NEXT_STEPS = false;
+
+// Matches the next-steps note section across built-in templates and user-authored
+// sections: "Next steps", "Owners and next steps", "Asks / next steps",
+// "What happens next", "Recommended next step". Mirrors isNextStepsSectionTitle()
+// in MeetingSummaryReducer.ts (duplicated, not imported — this is renderer code).
+/** "Priya, Rob and 3 others": the call's people for the date line. */
+const participantsSummary = (names: string[]): string => {
+    if (names.length <= 3) return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    return `${names.slice(0, 2).join(', ')} and ${names.length - 2} others`;
+};
+
+const isNextStepsSectionTitle = (title?: string | null): boolean => {
+    const t = (title || '').trim();
+    if (!t) return false;
+    return /next\s*steps?\b/i.test(t) || /^what\s+happens\s+next\b/i.test(t);
+};
 
 interface Evidence { speakerId?: string; speakerName?: string; speaker?: string; timestampMs?: number; timestamp?: number; quote?: string; segmentId?: string }
 interface FollowUpDraftObj { type?: string; subject?: string; body: string; tone?: string }
@@ -813,6 +1163,8 @@ interface Meeting {
         mode?: { selectedModeId?: string; selectedModeName?: string; selectedTemplateType?: string; detectedModeId?: string; detectedModeName?: string; detectedConfidence?: number; summaryModeUsed?: string };
         generation?: { strategy?: string; chunkCount?: number; durationMs?: number; warnings?: string[] };
         speakerLabels?: Record<string, string>;
+        /** Who was in the call (the Meet page's participant list), first to join first. */
+        callParticipants?: string[];
         crossMeeting?: { stillOpen?: string[] };
         recipes?: Record<string, string>;
         // Phase 7 — PostCallWorkflow enhancements (schema v2). Backend writes
@@ -840,32 +1192,639 @@ interface Meeting {
         speaker: string;
         text: string;
         timestamp: number;
+        /** Which of the other side's voices said it (speaker_2…), named in speakerLabels; from the call's speaking record. */
+        speakerId?: string;
     }>;
+    /** The calendar event this meeting was linked to, as kept at the time (attendees, title, times). */
+    calendarEventId?: string | null;
+    calendarEvent?: CalendarEventSnapshot;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
         timestamp: number;
         question?: string;
         answer?: string;
         items?: string[];
+        /** JPEG data-URL previews of the screenshots the answer used (electron usagePreviews.ts). */
+        images?: string[];
     }>;
+    summaryStatus?: MeetingSummaryStatus;
 }
+
+// Mirrors SummaryStatus in electron/services/meeting/MeetingSummaryV3.ts. The
+// renderer can't import from electron/, so this copy has to move with it; the
+// allow-list below is validated against the same set in
+// DatabaseManager.updateSummaryStatus.
+type MeetingSummaryStatus =
+    | 'queued'
+    | 'chunking'
+    | 'summarizing_chunks'
+    | 'reducing'
+    | 'validating'
+    | 'completed'
+    | 'failed';
+
+// Gate the skeleton on the status ALLOW-LIST, never on "the summary is empty".
+// Three separate states persist an empty detailedSummary and must not shimmer:
+// a failed generation, the zero-eligible "Chat session" path (which is written
+// straight to 'completed'), and pre-column rows whose status is undefined.
+const SUMMARY_IN_PROGRESS: ReadonlySet<string> = new Set<MeetingSummaryStatus>([
+    'queued',
+    'chunking',
+    'summarizing_chunks',
+    'reducing',
+    'validating',
+]);
+
+/** Matches the Texts-reveal snippet's fixed 200ms `.is-hiding` fade (index.css). */
+const FOLLOW_UP_HIDE_MS = 200;
+
+/** The text-swap snippet's --text-swap-dur (index.css, .mn-followup). */
+const SWAP_MS = 150;
+
+/**
+ * A label that swaps in place (transitions.dev text states swap, as keyframes on
+ * keyed spans — see .mn-swap in index.css): the old label exits up and blurs,
+ * then the new one rises in. `value` keys the swap; `sizers` are every label the
+ * slot can show, stacked invisibly so the button holds one width throughout.
+ * The first paint never animates.
+ */
+const SwapText: React.FC<{ value: string; sizers: React.ReactNode[]; children: React.ReactNode }> = ({ value, sizers, children }) => {
+    const nodeRef = useRef<React.ReactNode>(children);
+    const valueRef = useRef(value);
+    const [leaving, setLeaving] = useState<{ key: string; node: React.ReactNode } | null>(null);
+    const [swapped, setSwapped] = useState(false);
+    useLayoutEffect(() => {
+        if (valueRef.current === value) return;
+        // nodeRef still holds the previous commit's label (it is updated after paint).
+        setLeaving({ key: valueRef.current, node: nodeRef.current });
+        valueRef.current = value;
+        setSwapped(true);
+        const id = setTimeout(() => setLeaving(null), SWAP_MS * 2);
+        return () => clearTimeout(id);
+    }, [value]);
+    useEffect(() => { nodeRef.current = children; });
+    return (
+        <span className="mn-swap">
+            {sizers.map((node, i) => <span key={`z${i}`} aria-hidden="true" className="mn-swap-sizer">{node}</span>)}
+            {leaving && <span key={`o${leaving.key}`} aria-hidden="true" className="mn-swap-out">{leaving.node}</span>}
+            <span key={`i${value}`} className={swapped ? 'mn-swap-in' : undefined}>{children}</span>
+        </span>
+    );
+};
+
+/**
+ * A width that follows its content with an ease instead of a jump: the inner
+ * span is measured (ResizeObserver) and the outer one transitions to it
+ * (.mn-autow in index.css — a resize: 250ms, --ease-smooth-out). Used where a
+ * label changes length and the pill around it should grow into the new one,
+ * rather than holding the longest label's width all the time. The first
+ * measure lands without a transition, so nothing animates on first paint.
+ */
+const AutoWidth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const innerRef = useRef<HTMLSpanElement>(null);
+    const [width, setWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        const el = innerRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => setWidth(el.offsetWidth));
+        ro.observe(el);
+        setWidth(el.offsetWidth);
+        return () => ro.disconnect();
+    }, []);
+    return (
+        <span className="mn-autow" style={width === null ? undefined : { width }}>
+            <span ref={innerRef} className="mn-autow-in">{children}</span>
+        </span>
+    );
+};
+
+/** The widest the speaker rename field grows before its text scrolls. */
+const SPEAKER_INPUT_MAX_W = 200;
+
+/** The speaker chip ⇄ rename-field morph (--mn-chip-morph-dur in index.css). */
+const CHIP_MORPH_MS = 720;
+
+/**
+ * The speaker rename field. It is as wide as its text — or, while empty, as the
+ * name it replaces, which it shows as the placeholder — so the pill grows and
+ * shrinks as you type, easing between widths (.mn-chip-input--animate). It used
+ * to be a fixed 112px, which made the pill about four times the chip it opened
+ * from. The width is measured off a hidden copy of the text in the same type.
+ * The ease is switched on only after the first paint, so the field does not
+ * visibly shrink from the browser's default input width as it opens.
+ */
+const SpeakerNameInput: React.FC<{
+    value: string;
+    placeholder: string;
+    onChange: (value: string) => void;
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}> = ({ value, placeholder, onChange, onKeyDown }) => {
+    const mirrorRef = useRef<HTMLSpanElement>(null);
+    const [width, setWidth] = useState<number | null>(null);
+    const [animate, setAnimate] = useState(false);
+    useLayoutEffect(() => {
+        const el = mirrorRef.current;
+        if (!el) return;
+        // +2: room for the caret after the last character (and offsetWidth's
+        // rounding). offsetWidth, not a rect: layout px, the unit `width` takes,
+        // whatever zoom or transform an ancestor applies.
+        setWidth(Math.min(SPEAKER_INPUT_MAX_W, el.offsetWidth + 2));
+    }, [value, placeholder]);
+    useEffect(() => {
+        const id = requestAnimationFrame(() => setAnimate(true));
+        return () => cancelAnimationFrame(id);
+    }, []);
+    return (
+        <span className="relative inline-flex">
+            <span ref={mirrorRef} aria-hidden="true" className="absolute left-0 top-0 invisible whitespace-pre pointer-events-none text-[11px] font-medium">
+                {value || placeholder}
+            </span>
+            <input
+                autoFocus
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder}
+                style={width != null ? { width } : undefined}
+                // font-medium: the chip's own weight, so the name does not change as
+                // the chip becomes the field. focus-visible:outline-none, not just
+                // outline-none: index.css's app-wide `*:focus-visible` ring comes later
+                // and ties on specificity, and a text input is :focus-visible even when
+                // clicked — it drew an accent rectangle inside the pill, whose own
+                // accent border already says "editing".
+                className={`min-w-0 text-[11px] font-medium bg-transparent text-text-primary placeholder:text-text-tertiary outline-none focus-visible:outline-none${animate ? ' mn-chip-input--animate' : ''}`}
+            />
+        </span>
+    );
+};
+
+/** Copy for the follow-up card: Copy → Check is transitions.dev's icon swap. */
+// The notes header's Copy, exactly: quiet text that brightens on hover, no card
+// behind it, Copy → Check icon swap and a Copy → Copied label swap.
+const FollowUpCopyButton: React.FC<{ copied: boolean; onCopy: () => void }> = ({ copied, onCopy }) => {
+    const t = useT();
+    return (
+        <button
+            type="button"
+            onClick={onCopy}
+            aria-label={copied ? t('Copied') : t('Copy follow-up email')}
+            className="shrink-0 flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-[color,opacity]"
+        >
+            <span className="t-icon-swap w-3.5 h-3.5" data-state={copied ? 'b' : 'a'} aria-hidden="true">
+                <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
+                <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
+            </span>
+            <SwapText value={copied ? 'copied' : 'copy'} sizers={[t('Copy'), t('Copied')]}>
+                {copied ? t('Copied') : t('Copy')}
+            </SwapText>
+        </button>
+    );
+};
+
+/**
+ * The follow-up draft as a mail card: a header strip with the subject and Copy,
+ * then the message. It enters as a Transitions.dev "Texts reveal" (the same
+ * wiring as UpcomingCalendarCard's heading): at rest it carries `.is-shown`
+ * from the first paint, so a saved draft never animates; with `reveal` (a draft
+ * that just came back from Generate) it mounts without it, commits that start
+ * state with one reflow, then adds it, and the card rises in. While the draft is
+ * rewritten (`busy`) the message dims; the rewrite then settles in by `bodyKey`.
+ */
+const FollowUpDraftCard: React.FC<{
+    reveal: boolean;
+    subjectLabel?: React.ReactNode;
+    subject?: React.ReactNode;
+    subjectText?: string;
+    body: React.ReactNode;
+    bodyKey: number;
+    busy: boolean;
+    copied: boolean;
+    onCopy: () => void;
+    isLight: boolean;
+    /** Everyone on the meeting's calendar invite (followUpRecipients): the To line. */
+    recipients?: Array<{ email: string; name?: string }>;
+    /** Opens the draft in Gmail, addressed to them. */
+    onEmail?: () => void;
+}> = ({ reveal, subjectLabel, subject, subjectText, body, bodyKey, busy, copied, onCopy, isLight, recipients, onEmail }) => {
+    const t = useT();
+    const ref = useRef<HTMLDivElement>(null);
+    const [shown, setShown] = useState(!reveal);
+    // The room at the end of the text is the button's real width (labels differ by
+    // language), measured, plus a 16px gap; 156px is only the first-paint guess.
+    const gmailRef = useRef<HTMLDivElement>(null);
+    const [gmailWidth, setGmailWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        const el = gmailRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => setGmailWidth(el.offsetWidth));
+        ro.observe(el);
+        setGmailWidth(el.offsetWidth);
+        return () => ro.disconnect();
+    }, [!!onEmail]);
+    useLayoutEffect(() => {
+        if (shown) return;
+        void ref.current?.offsetHeight;
+        setShown(true);
+    }, [shown]);
+    return (
+        <div ref={ref} className={`t-stagger${shown ? ' is-shown' : ''}`}>
+            {/* Mail rows: To (the invite, as Fathom's recap does) and Subject + Copy,
+                then the message, roomier than the rows; "Open in Gmail" is the one
+                send-like action, so it sits at the foot of the draft as a glass button. */}
+            <div className={`t-stagger-line t-stagger-line--1 rounded-2xl border overflow-hidden ${isLight ? 'border-black/[0.08] bg-white/70' : 'border-white/[0.08] bg-white/[0.025]'}`}>
+                {recipients && recipients.length > 0 && (
+                    <div className={`flex items-center gap-2.5 min-h-10 px-4 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
+                        <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={recipients.map((r) => r.email).join(', ')}>
+                            <span className="text-text-tertiary mr-1">{t('To:')}</span>{' '}
+                            <span className="text-text-primary">{recipientSummary(recipients)}</span>
+                        </p>
+                    </div>
+                )}
+                <div className={`flex items-center gap-2.5 min-h-10 px-4 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
+                    {subject && (
+                        <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={subjectText}>
+                            {/* mr-1 on top of the literal space: a clear gap after the label that
+                                still reads "Subject: …" when the line is selected or copied. */}
+                            <span className="text-text-tertiary mr-1">{subjectLabel}</span>{' '}
+                            <span className="font-medium text-text-primary">{subject}</span>
+                        </p>
+                    )}
+                    <div className="ml-auto shrink-0">
+                        <FollowUpCopyButton copied={copied} onCopy={onCopy} />
+                    </div>
+                </div>
+                {/* "Open in Gmail" sits on the sign-off's line, at the right: the text ends
+                    with an invisible space the button's width (it wraps to a line of its
+                    own if the last line is long), and the button is pinned over that
+                    line, centred on it. Copying uses the draft text, not this DOM. */}
+                <div className="relative" style={gmailWidth ? { '--mn-fu-gmail-room': `${gmailWidth + 16}px` } as React.CSSProperties : undefined}>
+                    <pre
+                        aria-busy={busy}
+                        className={`px-4 py-4 text-[13px] text-text-secondary leading-[1.65] whitespace-pre-wrap font-sans select-text cursor-text transition-opacity duration-[250ms] ease-in-out ${busy ? 'opacity-50' : ''}`}
+                    >
+                        <span key={bodyKey} className={`block${bodyKey > 0 ? ' mn-fu-body-in' : ''}`}>
+                            {body}
+                            {onEmail && <span aria-hidden="true" className="mn-fu-gmail-room" />}
+                        </span>
+                    </pre>
+                    {onEmail && (
+                        <div ref={gmailRef} className="mn-fu-gmail">
+                            <LiquidGlassButton
+                                variant="clear"
+                                className="lg-sm"
+                                onClick={onEmail}
+                                aria-label={t('Open the email in Gmail')}
+                                icon={<Mail className="w-3.5 h-3.5" strokeWidth={2.2} />}
+                            >
+                                {t('Open in Gmail')}
+                            </LiquidGlassButton>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// One placeholder line. Height is the type's cap height, not its line box, and
+// the radius is a full pill — it should read as a stroke of text waiting to be
+// set, not as a wireframe block. The tone carries the note's own typographic
+// hierarchy (see --mn-skel-* in index.css); the breath lives in `.mn-skel`.
+const SkeletonLine: React.FC<{
+    w: number | string;
+    h?: number;
+    tone?: 'strong' | 'base' | 'soft';
+    className?: string;
+}> = ({ w, h = 10, tone = 'base', className = '' }) => (
+    <div
+        aria-hidden="true"
+        className={`mn-skel ${className}`}
+        style={{ width: w, height: h, borderRadius: h / 2, background: `var(--mn-skel-${tone})` }}
+    />
+);
+
+// Ragged line lengths — an even column of identical bars reads as a loading
+// widget; prose has a short last line and sentences that don't end together.
+const SKELETON_SECTIONS: ReadonlyArray<ReadonlyArray<string>> = [
+    ['94%', '77%', '86%'],
+    ['90%', '71%', '83%', '62%'],
+    ['88%', '58%'],
+];
+
+// Document-order text cascade, paced by VISUAL LINE.
+//
+// It used to be paced per word, with headings costing a fixed block weight, and
+// the whole thing normalised into a 620ms cap. Measured on a representative V3
+// note (28 visual lines, 153 animated nodes) that produced a 4ms median step
+// against a 160ms fade — a 2.5% stagger, which the eye cannot resolve. Every
+// word of a bullet therefore arrived together and the note read as it was
+// reported: block by block. The cap had silently crushed the cascade it was
+// meant to bound.
+//
+// The unit is now the visual line, measured after layout (see the cadence
+// effect), because that is the unit a reader's eye actually moves in. Words
+// sharing a line share one delay; the sweep travels DOWN the note rather than
+// along it, which is what iOS/macOS text materialisation reads like.
+//
+// STEP is the natural line-to-line beat. FLOOR is the reason the old pacing
+// failed: normalising into a cap with no lower bound lets the step collapse to
+// nothing on a long note. Below ~20ms consecutive lines are indistinguishable,
+// so the cap yields to the floor and a very long note simply runs a little past
+// it — most of that note is off-screen anyway on the fixed 732px panel.
+//
+// The step also sets the BAND — how many lines are mid-fade at any instant, which
+// is FADE / STEP. That ratio, not the step alone, is what decides whether the
+// reveal reads as a continuous sweep or as lines popping one after another:
+//
+//   step 40 / fade 220  →  ~5 lines   a hard edge stepping down the note
+//   step 28 / fade 220  →  ~8 lines   a soft gradient
+//   step 36 / fade 320  →  ~9 lines   slower, and softer still  ← current
+//
+// So slowing the reveal down is done by lengthening BOTH together. Raising the
+// step alone would make it slower and MORE stepped, which is the opposite of
+// seamless. A 22-line note now settles at ~1.4s (was ~1.1s).
+const REVEAL_LINE_STEP_MS = 36;
+const REVEAL_LINE_STEP_MIN_MS = 20;
+const REVEAL_CASCADE_CAP_MS = 1400;
+
+// The longer leg of the per-line animation. MUST stay in step with
+// `mn-line-blur` in src/index.css: the teardown timer is derived from it,
+// and a timer that fires early snaps the un-revealed tail to full opacity.
+const REVEAL_LINE_FADE_MS = 320;
+
+// Lines are ~20px apart at the tightest text size on this panel (measured on the
+// follow-up <pre>), so 5px separates real lines while still absorbing the couple
+// of pixels a differently-sized inline (<code>, <strong>) can sit off by. It is
+// deliberately NOT large enough to need to absorb a bullet dot's `mt-2` offset —
+// dots are excluded from measurement and inherit their bullet's first line.
+const REVEAL_LINE_TOLERANCE_PX = 5;
+
+// The cascade cannot start at t=0. This component mounts INSIDE Launcher's
+// list → notes transition, whose content layer fades in over 340ms after a 150ms
+// delay — so a cascade starting immediately runs, and finishes, behind a panel
+// the reader cannot see yet. Measured: the first word animated at panel opacity
+// 0.00, and every word of a 30-word note had already settled by the time the
+// panel reached full opacity at 533ms. The reveal was real and completely
+// invisible.
+//
+// 300ms is the panel's own delay plus roughly half its fade: the first words land
+// as the surface becomes legible and the bulk of the wave plays against a fully
+// opaque panel, without ever leaving a visible-but-empty note on screen. It also
+// suits the other trigger — the placeholder's 260ms defocus finishes just as the
+// words begin.
+const REVEAL_START_DELAY_MS = 300;
+
+/** Delay for a unit sitting on visual line `lineIndex`. */
+const revealDelayMs = (lineIndex: number, stepMs: number) =>
+    Math.round(REVEAL_START_DELAY_MS + lineIndex * stepMs);
+
+/** Line-to-line beat for a note of `lineCount` visual lines. The cap bounds the
+ *  envelope on ordinary notes; the floor stops it collapsing on long ones. */
+const revealStepFor = (lineCount: number) => Math.round(Math.min(
+    REVEAL_LINE_STEP_MS,
+    Math.max(REVEAL_LINE_STEP_MIN_MS, REVEAL_CASCADE_CAP_MS / Math.max(1, lineCount - 1)),
+));
+
+/** What the cadence effect measures: which visual line each animated unit landed
+ *  on, plus the beat that spacing implies. `null` until the first layout pass. */
+type RevealCadence = { lineOf: number[]; step: number; lineCount: number };
+
+const HANDOFF_EASE = [0.23, 1, 0.32, 1] as [number, number, number, number];
+
+// The pipeline's real stages, in order. The note is never 0% done (work started
+// the moment the meeting ended) and never 100% (it isn't saved yet), so the rail
+// is scaled across n+1 slots and can only ever move forward.
+const SUMMARY_STAGES: ReadonlyArray<MeetingSummaryStatus> = [
+    'queued', 'chunking', 'summarizing_chunks', 'reducing', 'validating',
+];
+
+/**
+ * The Summary tab while the note is still being written. Deliberately shaped
+ * like the finished note rather than like a spinner: same overview block, same
+ * "Summary" heading, same bullet rhythm, same follow-up card, same line boxes.
+ *
+ * One intentional divergence from the Company Intel skeleton it's modelled on:
+ * that panel prints its section headers as real text because its sections are
+ * fixed. A meeting's come from the mode template in `sectionsV3` and are unknown
+ * until generation finishes, so every header below "Summary" is a bar rather
+ * than a guessed title.
+ */
+const MeetingNotesSkeleton: React.FC<{
+    status: MeetingSummaryStatus | undefined;
+    still: boolean;
+    t: (text: string) => string;
+}> = ({ status, still, t }) => {
+    const statusLabel =
+        status === 'chunking' ? t('Reading the transcript')
+        : status === 'summarizing_chunks' ? t('Summarizing')
+        : status === 'reducing' ? t('Pulling it together')
+        : status === 'validating' ? t('Checking it against the transcript')
+        : t('Writing your notes');
+
+    const stage = SUMMARY_STAGES.indexOf(status as MeetingSummaryStatus);
+    const progress = ((stage < 0 ? 0 : stage) + 1) / (SUMMARY_STAGES.length + 1);
+
+    // Sections lift in on a short ease-out stagger, the same beat the real
+    // note's cards use. Reduced motion keeps the fade and drops the travel.
+    const enter = (i: number) => (still
+        ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } }
+        : {
+            initial: { opacity: 0, y: 8 },
+            animate: { opacity: 1, y: 0 },
+            transition: { duration: 0.28, ease: [0.23, 1, 0.32, 1] as [number, number, number, number], delay: 0.05 * i },
+        });
+
+    // h-[23px] is the real bullet's line box (text-sm x leading-relaxed), so the
+    // list keeps its exact height when the sentences arrive — the rows swap in
+    // place instead of the page growing under the reader.
+    const bullet = (dot: { className?: string; style?: React.CSSProperties }, w: string, key: React.Key) => (
+        <li key={key} className="flex items-start gap-3">
+            <div className={`mn-skel shrink-0 mt-2 w-1.5 h-1.5 rounded-full ${dot.className ?? ''}`} style={dot.style} />
+            <div className="h-[23px] flex items-center min-w-0 flex-1">
+                <SkeletonLine w={w} />
+            </div>
+        </li>
+    );
+
+    return (
+        // No aria-busy here: it tells assistive tech to hold announcements until
+        // it flips to false, and this whole region unmounts the moment the notes
+        // land — it would never flip, so the progress label would never be read.
+        <div role="status" aria-live="polite" data-generating="true">
+            <span className="sr-only">{statusLabel}</span>
+
+            {/* Overview prose + its rule. The real note opens with this block, so
+                leaving it out floats everything below it ~240px up the page and
+                drops it again the moment the notes land. */}
+            <motion.div {...enter(0)} className="pb-5 border-b border-border-subtle" aria-hidden="true">
+                {['97%', '99%', '93%', '46%'].map((w, i) => (
+                    <div key={i} className="h-[23px] flex items-center">
+                        <SkeletonLine w={w} />
+                    </div>
+                ))}
+            </motion.div>
+
+            {/* Sits where the real note's toolbar sits, so nothing jumps when the
+                toolbar replaces it. The rail is the honest part: the pipeline
+                reports five real stages, so show which one you're on instead of
+                a dot that pulses and says nothing. */}
+            <motion.div {...enter(1)} className="mt-6 mb-6 flex items-center gap-2.5" aria-hidden="true">
+                <div className="h-[3px] w-11 rounded-full overflow-hidden shrink-0" style={{ background: 'var(--mn-skel-base)' }}>
+                    <motion.div
+                        className="h-full w-full rounded-full bg-accent-primary"
+                        style={{ transformOrigin: 'left center' }}
+                        initial={{ scaleX: still ? progress : 0 }}
+                        animate={{ scaleX: progress }}
+                        // Apple's move/reposition spring: critically damped,
+                        // response 0.4. No bounce — nothing was flicked, and a
+                        // progress rail that overshoots is lying twice.
+                        transition={still ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.4 }}
+                    />
+                </div>
+                <AnimatePresence initial={false} mode="wait">
+                    <motion.span
+                        key={statusLabel}
+                        initial={still ? { opacity: 0 } : { opacity: 0, y: 3 }}
+                        animate={still ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                        exit={still ? { opacity: 0 } : { opacity: 0, y: -3 }}
+                        transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                        className="text-[11px] font-medium text-text-tertiary"
+                    >
+                        {statusLabel}
+                    </motion.span>
+                </AnimatePresence>
+            </motion.div>
+
+            {/* "Summary" is the one heading the note always has, so it's real text. */}
+            <motion.section {...enter(2)} className="mb-8">
+                <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Summary')}</h2>
+                <ul className="space-y-3">
+                    {SKELETON_SECTIONS[0].map((w, i) => bullet({ className: 'bg-blue-400/70' }, w, i))}
+                </ul>
+            </motion.section>
+
+            {SKELETON_SECTIONS.slice(1).map((widths, si) => (
+                <motion.section key={si} {...enter(3 + si)} className="mb-8">
+                    {/* h-7 matches the text-lg heading's line box, so the real title
+                        lands without shifting the bullets under it. */}
+                    <div className="h-7 flex items-center mb-4">
+                        <SkeletonLine w={si === 0 ? 168 : 132} h={13} tone="strong" />
+                    </div>
+                    <ul className="space-y-3">
+                        {widths.map((w, i) => bullet({ style: { background: 'var(--text-secondary)', opacity: 0.5 } }, w, i))}
+                    </ul>
+                </motion.section>
+            ))}
+
+            {/* Follow-up draft — header bar plus the one-line Generate hint. The draft
+                itself is written on demand, so the notes never arrive with its card. */}
+            <motion.section {...enter(5)} className="mb-8">
+                <div className="h-7 flex items-center mb-3">
+                    <SkeletonLine w={118} h={13} tone="strong" />
+                </div>
+                {/* h-5 is the hint's own line box (text-[12.5px] x leading-relaxed). */}
+                <div className="h-5 flex items-center">
+                    <SkeletonLine w={236} h={9} tone="soft" />
+                </div>
+            </motion.section>
+        </div>
+    );
+};
+
+/** The tabs, in the order they sit in the tab row — the swap travels by it. */
+const NOTES_TABS = ['summary', 'transcript', 'usage'] as const;
+type NotesTab = typeof NOTES_TABS[number];
+
+/** How long a transcript line stays marked after an evidence jump lands on it,
+ *  before its highlight fades (--mn-hl-out in index.css). Counted from when the
+ *  scroll settles: timing it from the click, as before, spent most of it on the
+ *  scroll itself. */
+const JUMP_HIGHLIGHT_HOLD_MS = 1500;
+
+/** The Summary cards' stagger (--duration-stagger). */
+const CARD_STAGGER_MS = 40;
 
 interface MeetingDetailsProps {
     meeting: Meeting;
     onBack: () => void;
     onOpenSettings: () => void;
+    /** Open on the Transcript tab, scrolled to the line nearest this timestamp. */
+    initialMomentMs?: number;
+    /**
+     * The "ask about this meeting" chat opened or closed. The host raises this
+     * page above its header while it is open, so the chat's dim covers the whole
+     * window the way the dim behind Settings and the toasters does.
+     */
+    onChatOpenChange?: (open: boolean) => void;
+    // The Home list reads titles from the DB; tell it to re-read after a rename.
+    onTitleSaved?: () => void;
 }
 
-const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting }) => {
+const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting, initialMomentMs, onChatOpenChange, onBack, onTitleSaved }) => {
     const t = useT();
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
     const [meeting, setMeeting] = useState<Meeting>(initialMeeting);
-    const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'usage'>('summary');
+    const [activeTab, setActiveTab] = useState<NotesTab>('summary');
+    // How the tab panel arrives after the reader switches tabs (see switchTab):
+    // from the side of travel, or a plain fade. null until the first switch, so
+    // neither the first paint nor a jump that opens straight onto a tab
+    // (initialMomentMs) animates underneath Launcher's own page transition.
+    const [tabSwap, setTabSwap] = useState<{ dir: -1 | 1; fadeOnly: boolean } | null>(null);
+    // Whether the Summary cards rise in with the note's reveal. True for the
+    // first render of the notes in this open; a tab switch turns it off, so a
+    // return to Summary never replays it — unless the notes are still being
+    // written, in which case they mount fresh when they land and should.
+    const [cardsEntrance, setCardsEntrance] = useState(true);
+    const mainRef = useRef<HTMLElement | null>(null);
+    const transcriptListRef = useRef<HTMLDivElement | null>(null);
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
+    // Usage tab: the screenshot preview being viewed full size (UsageImageViewer).
+    const [imageViewer, setImageViewer] = useState<{ images: string[]; index: number } | null>(null);
+    // The connected calendar account's first name: what the transcript calls the
+    // user when the meeting has no saved `me` label (resolveSpeakerName). Null = "Me".
+    // Same cleanup as the main process's calendarSpeakerLabels (never an address).
+    const [calendarUserName, setCalendarUserName] = useState<string | null>(null);
+    useEffect(() => {
+        let live = true;
+        window.electronAPI?.getCalendarStatus?.()
+            .then((s) => {
+                // First name only, like the main process's labels (firstNameOf):
+                // "Evin", not the account's "Evin John Ignatious".
+                const name = (s?.connected ? s.name ?? '' : '').replace(/\s+/g, ' ').trim();
+                if (live) setCalendarUserName(name && !name.includes('@') ? name.split(' ')[0].slice(0, 80) : null);
+            })
+            .catch(() => { if (live) setCalendarUserName(null); });
+        return () => { live = false; };
+    }, []);
+    // Tell the host, and take it back on the way out: the page unmounts with
+    // the chat still open when the user goes back to the list.
+    // The screenshot viewer rides the same lift: its dim covers the whole window,
+    // header included, exactly like the chat's.
+    useEffect(() => {
+        onChatOpenChange?.(isChatOpen || imageViewer != null);
+    }, [isChatOpen, imageViewer, onChatOpenChange]);
+    useEffect(() => () => onChatOpenChange?.(false), [onChatOpenChange]);
     const [submittedQuery, setSubmittedQuery] = useState('');
+
+    // Esc goes back to the meeting list (no visible hint). It yields to anything
+    // else Esc should close first: the meeting chat, a field being edited, an open
+    // dialog, and — checked after this tick, since Settings and the search pill
+    // register their listeners later — any handler that already claimed the key.
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || e.defaultPrevented || isChatOpen) return;
+            const el = e.target as HTMLElement | null;
+            if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
+            if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+            timer = setTimeout(() => { if (!e.defaultPrevented) onBack(); }, 0);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => { window.removeEventListener('keydown', onKeyDown); clearTimeout(timer); };
+    }, [isChatOpen, onBack]);
 
     // Stable client-side keys for the action-item and key-point lists. The
     // persisted shape is string[], so React keyed the rows by index, but the
@@ -890,13 +1849,28 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const v3Tldr = meeting.detailedSummary?.tldr || [];
     const v3WhatChanged = meeting.detailedSummary?.whatChanged || [];
     const v3Mode = meeting.detailedSummary?.mode;
-    const v3SummaryStatus = (meeting as any).summaryStatus as string | undefined;
+    const v3SummaryStatus = meeting.summaryStatus;
+
+    // Post-meeting generation state. `isSummaryGenerating` drives the skeleton;
+    // `hasRenderableNotes` keeps the failure card off a meeting whose V3 pass
+    // failed but whose V2 fallback still produced something worth showing.
+    const isSummaryGenerating = SUMMARY_IN_PROGRESS.has(v3SummaryStatus ?? '');
+    const hasRenderableNotes = Boolean(
+        isV3Summary
+        || meeting.detailedSummary?.overview?.trim()
+        || (meeting.detailedSummary?.actionItems?.length ?? 0) > 0
+        || (meeting.detailedSummary?.keyPoints?.length ?? 0) > 0,
+    );
+    const showSummaryFailure = v3SummaryStatus === 'failed' && !hasRenderableNotes;
+
 
     // Normalize follow-up draft (object in V3, legacy string).
     const rawFollowUp = meeting.detailedSummary?.followUpDraft;
-    const followUpBody = typeof rawFollowUp === 'string' ? rawFollowUp : (rawFollowUp?.body || '');
+    // An email: plain text on screen, in Copy and in the Gmail link, so model markdown (**Problem:**) is stripped once, here.
+    const followUpBody = plainEmailText(typeof rawFollowUp === 'string' ? rawFollowUp : (rawFollowUp?.body || ''));
     const followUpSubject = typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.subject;
     const followUpDraftTone = (typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.tone) as 'professional' | 'warm' | 'concise' | 'friendly' | undefined;
+    const hasFollowUpDraft = followUpBody.trim().length > 0;
 
     // Regenerate / evidence-jump / speaker-rename UI state.
     const [isRegenerating, setIsRegenerating] = useState(false);
@@ -905,11 +1879,319 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [followUpTone, setFollowUpTone] = useState<'professional' | 'warm' | 'concise' | 'friendly'>(followUpDraftTone || 'professional');
     // Local "Copied!" confirmation for the follow-up copy button.
     const [followUpCopied, setFollowUpCopied] = useState(false);
+    // The last Generate / Regenerate of the draft came back without one.
+    const [followUpFailed, setFollowUpFailed] = useState(false);
+    // The first draft's entrance. 'armed' by a Generate click on a meeting with no
+    // draft: once the draft lands, the hint fades out in place (FOLLOW_UP_HIDE_MS),
+    // then 'reveal' mounts the draft to play its staggered rise. A draft already
+    // saved when the notes open never arms, so it never animates.
+    const [followUpEntrance, setFollowUpEntrance] = useState<'none' | 'armed' | 'reveal'>('none');
+    // Bumped when a Regenerate / tone change rewrites an existing draft, so the new
+    // text settles in (FollowUpDraftCard's bodyKey) instead of snapping.
+    const [followUpBodyKey, setFollowUpBodyKey] = useState(0);
+    const followUpRegenTipId = useId();
+    useEffect(() => {
+        if (followUpEntrance !== 'armed' || !hasFollowUpDraft) return;
+        const id = setTimeout(() => setFollowUpEntrance('reveal'), FOLLOW_UP_HIDE_MS);
+        return () => clearTimeout(id);
+    }, [followUpEntrance, hasFollowUpDraft]);
     const [showEvidence, setShowEvidence] = useState(false);
     const [pendingScrollTs, setPendingScrollTs] = useState<number | null>(null);
+    // "Search past meetings" opens a meeting AT the line that matched: land on the
+    // Transcript tab and reuse the evidence jump (scroll + highlight the nearest
+    // line). Keyed on the meeting too, so a second hit in another meeting re-jumps.
+    useEffect(() => {
+        if (typeof initialMomentMs !== 'number') return;
+        // Not a swap: this lands during Launcher's page transition.
+        setTabSwap(null);
+        setActiveTab('transcript');
+        setPendingScrollTs(initialMomentMs);
+    }, [initialMeeting.id, initialMomentMs]);
     const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
     const [speakerDraft, setSpeakerDraft] = useState('');
+    // A chip ⇄ rename-field swap morphs one pill in place: whichever arrives
+    // starts at the width the other had on screen (@starting-style,
+    // .mn-chip-morph-in / -out) and eases to its own. Cleared once the morph is
+    // done, so a later remount (a tab switch back) does not replay it.
+    const [chipMorph, setChipMorph] = useState<{ id: string; from: number } | null>(null);
+    useEffect(() => {
+        if (!chipMorph) return;
+        const t = setTimeout(() => setChipMorph(null), CHIP_MORPH_MS + 150);
+        return () => clearTimeout(t);
+    }, [chipMorph]);
+    // Armed for exactly one materialisation: on mount when the notes are already
+    // there, and again the moment generation finishes. Dropped when the cascade
+    // ends, after which React renders plain strings — so no span survives into
+    // selection, copy, or a later re-render.
+    const [revealing, setRevealing] = useState(false);
+    // Measured in a layout pass, not derivable at render time — which line each
+    // animated unit landed on once the text had actually wrapped. `null` means
+    // "not measured yet": the first pass renders the units held invisible and
+    // this effect supplies the delays before the browser ever paints them.
+    const [cadence, setCadence] = useState<RevealCadence | null>(null);
+    const notesRef = useRef<HTMLDivElement | null>(null);
     const prefersReducedMotion = useReducedMotion();
+
+    useEffect(() => {
+        if (isSummaryGenerating || !hasRenderableNotes) { setRevealing(false); setCadence(null); return; }
+        setRevealing(true);
+        setCadence(null);
+    }, [isSummaryGenerating, hasRenderableNotes]);
+
+    // The placeholder defocuses out on this Framer exit, on a layer that unmounts
+    // straight after — so it can leave no filter behind — while the note itself
+    // materialises word by word underneath (see revealWords / index.css). The
+    // words carry the focus work: an additional 6px blur on the whole layer would
+    // nest under each word's own 2px blur and compound both.
+    //
+    // AnimatePresence runs in popLayout mode so the outgoing layer leaves flow on
+    // the same frame the exit starts — animating `position` by hand left one frame
+    // with BOTH layers in flow, and that momentary reflow was enough to send the
+    // tab row's shared-layout indicator flying across the header.
+    const handoffExit = prefersReducedMotion
+        ? { opacity: 0, transition: { duration: 0.16 } }
+        : { opacity: 0, filter: 'blur(6px)', transition: { duration: 0.26, ease: HANDOFF_EASE } };
+    const revealOn = revealing && !prefersReducedMotion;
+
+    // ── Cadence measurement ────────────────────────────────────────────────
+    // Runs BEFORE paint, so the two passes are invisible: pass 1 renders every
+    // animated unit carrying `data-rw` and held at opacity 0 (`.mn-line-hold`),
+    // this reads where each one actually landed, and the setState re-render
+    // supplies the delays. React owns the spans throughout — nothing is written
+    // into the DOM behind its back, so an unrelated re-render mid-cascade cannot
+    // strip the delays off again.
+    //
+    // Measurement is scoped to the NOTES FLOW, and the title is placed ahead of it
+    // by construction rather than by geometry. That is not a shortcut — measuring
+    // across the two boxes is unsound, in both available coordinate systems:
+    //
+    //   • Viewport rects: the title lives in a `position: sticky` header. The notes
+    //     also land under a reader already watching the placeholder — the other
+    //     trigger REVEAL_START_DELAY_MS was tuned for — and by then <main> may be
+    //     scrolled. A stuck title does not scroll away, so its rect top lands BELOW
+    //     content that precedes it in document order, the monotonic grouping never
+    //     advances, and the whole prefix collapses onto one line. Measured at
+    //     scrollTop 260: title + both overview lines all arrived together.
+    //   • offsetTop: no better. Chrome reports a sticky element's STUCK offset, so
+    //     the title measured 352 against the overview's 232 — same collapse, and
+    //     the chain walk needed to compare depths buys nothing.
+    //
+    // Within the notes flow nothing is sticky, so a plain rect delta is exact, and
+    // it is a DIFFERENCE — immune to the translate/scale Launcher's page transition
+    // may still be applying while this runs. The title is always the line above
+    // that flow, which needs no measuring at all.
+    useLayoutEffect(() => {
+        if (!revealOn) { setCadence(null); return; }
+        if (cadence) return;
+        const root = notesRef.current;
+        if (!root) return;
+        const units = root.querySelectorAll<HTMLElement>('[data-rw]');
+        if (!units.length) { setCadence({ lineOf: [], step: REVEAL_LINE_STEP_MS, lineCount: 1 }); return; }
+
+        const originTop = root.getBoundingClientRect().top;
+        const lineOf: number[] = [];
+        // Line 0 is the title, which sits above this flow and is not measured, so
+        // the first measured line is line 1.
+        let lineIndex = 0;
+        let lineTop = -Infinity;
+        // Document order is also visual order here, so a top that has moved further
+        // down than the tolerance starts a new line and nothing needs sorting.
+        for (const unit of units) {
+            const top = unit.getBoundingClientRect().top - originTop;
+            if (top > lineTop + REVEAL_LINE_TOLERANCE_PX) { lineIndex += 1; lineTop = top; }
+            lineOf[Number(unit.dataset.rw)] = lineIndex;
+        }
+        const lineCount = lineIndex + 1;
+        setCadence({ lineOf, step: revealStepFor(lineCount), lineCount });
+    }, [revealOn, cadence]);
+
+    // Teardown, derived from the cadence that was actually assigned rather than
+    // from a cap — the floor lets a long note run past CAP, and a timer that
+    // fires early would drop `revealing`, re-render plain strings, and snap the
+    // un-revealed tail to full opacity mid-sweep.
+    useEffect(() => {
+        if (!revealing || !cadence) return;
+        const settles = revealDelayMs(Math.max(0, cadence.lineCount - 1), cadence.step) + REVEAL_LINE_FADE_MS;
+        const id = setTimeout(() => setRevealing(false), settles + 80);
+        return () => clearTimeout(id);
+    }, [revealing, cadence]);
+
+    // The cascade allocator. A plain `let` in the render body: recomputed from
+    // scratch on every render, so it needs no ref and is StrictMode-safe. The JSX
+    // below is built in document order, so the counter walks the note the way a
+    // reader does, and the index it hands out is the key the measured `lineOf`
+    // table is read back with.
+    let revealSlot = 0;
+
+    /** Props for one animated unit at reveal index `idx`: invisible while the
+     *  cadence is being measured, then animating on its measured line. */
+    const revealAt = (idx: number): { className: string; style?: React.CSSProperties; 'data-rw'?: number } => {
+        if (!cadence) return { className: 'mn-line-hold', 'data-rw': idx };
+        return {
+            className: 'mn-line-cascade',
+            style: { animationDelay: `${revealDelayMs(cadence.lineOf[idx] ?? 0, cadence.step)}ms` },
+            'data-rw': idx,
+        };
+    };
+
+    /** Body text, materialising line by line. The two passes render DIFFERENT
+     *  shapes, on purpose:
+     *
+     *  Pass 1 gives every word its own span, because that is the only way to see
+     *  where the text wrapped — the measurement reads one box per word.
+     *
+     *  Pass 2 emits ONE span per visual line. Once the grouping is known the
+     *  per-word spans have no job left, and collapsing them is what makes the
+     *  cascade cheap: a representative note goes from 188 animated nodes and 376
+     *  running animations to 29 and 58. Measured: the cascade's own frame cost at
+     *  the start of the sweep roughly halves. It also looks better — the blur now
+     *  covers a whole line as one surface instead of leaving a per-word island at
+     *  every space.
+     *
+     *  Line breaks are preserved because the concatenated text is byte-identical
+     *  and inline elements do not affect line breaking; the whitespace a break
+     *  falls on is kept with the line before it. */
+    const revealWords = (text: string): React.ReactNode => {
+        if (!revealOn) return text;
+        const runs = splitIntoWordRuns(text);
+        if (!cadence) {
+            return runs.map((run, i) => (run.isWord
+                ? <span key={i} {...revealAt(revealSlot++)}>{run.text}</span>
+                : <React.Fragment key={i}>{run.text}</React.Fragment>));
+        }
+        const out: React.ReactNode[] = [];
+        let buf = '';
+        let line: number | null = null;
+        const flush = () => {
+            if (!buf) return;
+            out.push(
+                <span
+                    key={out.length}
+                    className="mn-line-cascade"
+                    style={{ animationDelay: `${revealDelayMs(line ?? 0, cadence.step)}ms` }}
+                >{buf}</span>,
+            );
+            buf = '';
+        };
+        for (const run of runs) {
+            if (run.isWord) {
+                const at = cadence.lineOf[revealSlot++] ?? 0;
+                if (line !== null && at !== line) flush();
+                line = at;
+            }
+            buf += run.text;
+        }
+        flush();
+        return out;
+    };
+
+    /** The title. It leads the cascade on line 0 by construction: it lives in the
+     *  sticky header, a box that cannot be soundly measured against the notes flow
+     *  (see the cadence effect), and it is unconditionally the line above it. Takes
+     *  no reveal index, because it is never measured. */
+    const revealLead = (): { cls: string; style?: React.CSSProperties } => {
+        if (!revealOn) return { cls: '' };
+        if (!cadence) return { cls: ' mn-line-hold' };
+        return { cls: ' mn-line-cascade', style: { animationDelay: `${revealDelayMs(0, cadence.step)}ms` } };
+    };
+
+    /** A unit that is measured as a whole — a heading whose words must not be
+     *  split. Occupies one line of the cascade. */
+    const revealBlock = (): { cls: string; style?: React.CSSProperties; 'data-rw'?: number } => {
+        if (!revealOn) return { cls: '' };
+        const { className, style, ...rest } = revealAt(revealSlot++);
+        return { cls: ` ${className}`, style, ...rest };
+    };
+
+    /** A unit that must NOT be measured, because its own box does not sit on the
+     *  line it belongs to — the bullet dots carry `mt-2`, which would otherwise
+     *  either split a line or force the grouping tolerance wide enough to merge
+     *  two real ones. `idx` is the reveal index of the first word of the bullet
+     *  text the dot introduces, so the dot lands exactly with it. */
+    const revealWith = (idx: number): { cls: string; style?: React.CSSProperties } => {
+        if (!revealOn) return { cls: '' };
+        if (!cadence) return { cls: ' mn-line-hold' };
+        return {
+            cls: ' mn-line-cascade',
+            style: { animationDelay: `${revealDelayMs(cadence.lineOf[idx] ?? 0, cadence.step)}ms` },
+        };
+    };
+
+    /** An opacity-only floor under a subtree whose text is wrapped word by word.
+     *  It is MEASURED like any other unit — its own box top is the top of its first
+     *  line of text, so it clusters onto that line and can only ever hide text that
+     *  would otherwise have popped in at t=0.
+     *
+     *  It deliberately does NOT read `lineOf[revealSlot]`. ReactMarkdown renders in
+     *  a child pass, so the word spans inside this container are allocated their
+     *  indices long AFTER this function runs — the slot counter here points at an
+     *  unrelated later unit, which would hold the overview hidden past its own
+     *  words' delays. Measuring the container sidesteps the ordering entirely. */
+    const revealGuard = (): { cls: string; style?: React.CSSProperties; 'data-rw'?: number } => {
+        if (!revealOn) return { cls: '' };
+        const { className, style, ...rest } = revealAt(revealSlot++);
+        return { cls: className === 'mn-line-hold' ? ' mn-line-hold' : ' mn-line-guard', style, ...rest };
+    };
+
+    /** ReactMarkdown renders the overview, so its text never passed through
+     *  `revealWords` and the whole paragraph — the largest slab of prose in the
+     *  note — arrived as one block. This maps the string children of every
+     *  text-bearing element through the cascade. Elements are visited in render
+     *  order, which is document order, so the slot counter stays coherent. */
+    const revealMarkdownChildren = (children: React.ReactNode): React.ReactNode => {
+        if (!revealOn) return children;
+        return React.Children.map(children, (child) =>
+            (typeof child === 'string' ? revealWords(child) : child));
+    };
+
+    // Keep the view live while the note is still being written. The meeting row
+    // changes underneath us — the status advances queued → … → completed and the
+    // notes land in one write — but this component seeds from a prop and never
+    // re-reads it, and Launcher's `meetings-updated` handler refreshes only the
+    // list, not the open meeting. Without this the placeholder would never resolve.
+    //
+    // Both signals are needed. `meetings-updated` now fires on completion AND on
+    // hard failure, which makes both swaps immediate — but the stage advances
+    // (queued → chunking → reducing → …) are written straight to SQLite and never
+    // broadcast, so on the listener alone the progress rail would sit frozen for
+    // the whole generation. The poll reads those, and backstops any notification
+    // that never arrives. Both are torn down the moment generation ends.
+    useEffect(() => {
+        if (!isSummaryGenerating) return;
+        let cancelled = false;
+        const refresh = async () => {
+            try {
+                const fresh = await window.electronAPI?.getMeetingDetails?.(meeting.id) as Meeting | undefined;
+                if (cancelled || !fresh) return;
+                // Re-seed the row-key arrays alongside the notes: they were built
+                // from the empty placeholder, so the legacy lists would otherwise
+                // render with undefined keys the first time real items arrive.
+                if (!SUMMARY_IN_PROGRESS.has(fresh.summaryStatus ?? '')) {
+                    setActionItemKeys((fresh.detailedSummary?.actionItems ?? []).map(() => genMessageId()));
+                    setKeyPointKeys((fresh.detailedSummary?.keyPoints ?? []).map(() => genMessageId()));
+                }
+                setMeeting(fresh);
+            } catch { /* swallow — the next tick retries */ }
+        };
+        // Back off rather than stop. A generation still going after ten minutes is
+        // almost certainly hung — recoverUnprocessedMeetings only retries such a
+        // row at the NEXT app start — but "almost certainly" is not certain, and a
+        // poll that simply retired would leave the placeholder breathing at a view
+        // that has quietly stopped listening. Widening to 30s costs nothing (a
+        // local sqlite read) and keeps a late completion able to land.
+        const startedMs = Date.now();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const schedule = () => {
+            const delay = Date.now() - startedMs < 600_000 ? 2_000 : 30_000;
+            timer = setTimeout(async () => {
+                await refresh();
+                if (!cancelled) schedule();
+            }, delay);
+        };
+        schedule();
+        const off = window.electronAPI?.onMeetingsUpdated?.(() => { void refresh(); });
+        return () => { cancelled = true; if (timer) clearTimeout(timer); off?.(); };
+    }, [isSummaryGenerating, meeting.id]);
 
     const copyRecipe = (text: string) => {
         navigator.clipboard?.writeText(text || '').catch(() => { /* swallow */ });
@@ -928,22 +2210,61 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         } catch { /* swallow */ }
     };
 
-    const handleRegenerate = async (templateType?: string) => {
+    // Set when regenerating AS the auto-detected mode was refused because that mode
+    // needs Pro (the same gate as switching to it) — the suggestion then says so
+    // instead of spinning and silently doing nothing.
+    const [detectedNeedsPro, setDetectedNeedsPro] = useState(false);
+
+    const handleRegenerate = async (target?: string | { templateType?: string; modeId?: string }) => {
         if (isRegenerating || !window.electronAPI?.regenerateMeetingSummary) return;
+        const opts = typeof target === 'string' ? { templateType: target } : target;
         setIsRegenerating(true);
         try {
-            const res = await window.electronAPI.regenerateMeetingSummary(meeting.id, templateType ? { templateType } : undefined);
+            const res = await window.electronAPI.regenerateMeetingSummary(
+                meeting.id,
+                opts && (opts.templateType || opts.modeId) ? opts : undefined,
+            );
             if (res?.success) await reloadMeeting();
+            else if (res?.error === 'pro_required') setDetectedNeedsPro(true);
         } catch { /* swallow */ } finally { setIsRegenerating(false); }
+    };
+
+    const copyFollowUp = () => {
+        copyRecipe((followUpSubject ? `Subject: ${followUpSubject}\n\n` : '') + followUpBody);
+        setFollowUpCopied(true);
+        setTimeout(() => setFollowUpCopied(false), 1500);
+    };
+
+    // The follow-up's recipients: everyone on the meeting's calendar invite.
+    const followUpTo = followUpRecipients(meeting?.calendarEvent?.attendees);
+    // Gmail's compose window, addressed and filled in, in the calendar's own
+    // Google account (followUpRecipients.mjs says why Gmail over mailto).
+    const emailFollowUp = async () => {
+        const status = await window.electronAPI?.getCalendarStatus?.().catch(() => null);
+        const url = gmailComposeUrl({
+            to: followUpTo.map((r) => r.email),
+            subject: followUpSubject || '',
+            body: followUpBody,
+            account: status?.connected ? status.email : undefined,
+        });
+        await window.electronAPI?.openExternal?.(url);
     };
 
     const handleRegenerateFollowUp = async (tone?: 'professional' | 'warm' | 'concise' | 'friendly') => {
         if (isRegeneratingFollowUp || !window.electronAPI?.regenerateMeetingFollowUp) return;
         setIsRegeneratingFollowUp(true);
+        setFollowUpFailed(false);
+        // Only a FIRST draft gets the entrance; a Regenerate rewrites the card in place.
+        const rewriting = hasFollowUpDraft;
+        if (!rewriting && !prefersReducedMotion) setFollowUpEntrance('armed');
         try {
             const res = await window.electronAPI.regenerateMeetingFollowUp(meeting.id, tone);
-            if (res?.success) await reloadMeeting();
-        } catch { /* swallow */ } finally { setIsRegeneratingFollowUp(false); }
+            if (res?.success) {
+                await reloadMeeting();
+                if (rewriting) setFollowUpBodyKey(k => k + 1);
+            }
+            else { setFollowUpFailed(true); setFollowUpEntrance('none'); }
+        } catch { setFollowUpFailed(true); setFollowUpEntrance('none'); } finally { setIsRegeneratingFollowUp(false); }
     };
 
     const handleSaveSpeakerLabel = async (speakerId: string, name: string) => {
@@ -952,17 +2273,27 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         if (!name.trim()) delete next[speakerId];
         setMeeting(prev => ({ ...prev, detailedSummary: { ...(prev.detailedSummary as any), speakerLabels: next } }));
         setEditingSpeaker(null);
-        try { await window.electronAPI?.updateMeetingSpeakerLabels?.(meeting.id, next); } catch { /* swallow */ }
+        try {
+            const res = await window.electronAPI?.updateMeetingSpeakerLabels?.(meeting.id, next);
+            // With "Speaker labels" on, the backend has rewritten the saved notes
+            // and action items with the new name — reload so they show it now.
+            if (res?.notesUpdated) await reloadMeeting();
+        } catch { /* swallow */ }
     };
 
     // Resolve a transcript segment's display name using saved speaker labels.
+    // The mic is always the user: without a saved `me` label (a rename, or the
+    // name a newer meeting saved with), it shows the connected calendar
+    // account's name, and "Me" when no calendar is connected.
     const resolveSpeakerName = (rawSpeaker: string): string => {
         const labels = meeting.detailedSummary?.speakerLabels || {};
         const lower = (rawSpeaker || '').toLowerCase();
         const id = /^(user|me)$/.test(lower) ? 'me' : (/^(interviewer|them|other|system|assistant)$/.test(lower) ? 'speaker_1' : lower.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unknown');
         if (labels[id]) return labels[id];
-        if (id === 'me') return 'Me';
+        if (id === 'me') return calendarUserName || 'Me';
         if (id === 'speaker_1') return 'Speaker 1';
+        const voice = /^speaker_(\d+)$/.exec(id);
+        if (voice) return `Speaker ${voice[1]}`;
         return rawSpeaker || 'Speaker';
     };
 
@@ -991,16 +2322,96 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         const first = evidence?.[0];
         if (!first) return '';
         const time = formatEvidenceTime(evidenceTimestamp(evidence));
-        const who = first.speakerName || first.speaker || '';
+        const rawWho = first.speakerName || first.speaker || '';
+        // Evidence saved before the user was named says "Me": show it the way the transcript does.
+        const who = /^(me|user)$/i.test(rawWho.trim()) ? resolveSpeakerName('me') : rawWho;
         const quote = first.quote ? `“${first.quote}”` : '';
         return [time, who, quote].filter(Boolean).join(' · ');
     };
+
+    // A tab switch the reader asked for. The new tab eases in from the side of
+    // travel — a tab to the right comes in from the right — and the Summary
+    // cards stand down until the notes next arrive for real.
+    const switchTab = (next: NotesTab) => {
+        if (next === activeTab) return;
+        const dir = NOTES_TABS.indexOf(next) > NOTES_TABS.indexOf(activeTab) ? 1 : -1;
+        const fadeOnly = next === 'usage'
+            && (meeting.usage ?? []).some((u, i) => !seenInteractionIds.has(`${u.timestamp}-${i}`));
+        const swap = () => {
+            setTabSwap({ dir, fadeOnly });
+            setCardsEntrance(isSummaryGenerating);
+            setActiveTab(next);
+        };
+        // Leaving Transcript mid-jump drops the jump: its effect's cleanup only
+        // cancels the hold, so a still-pending line would skip the next tab's
+        // scroll-to-top and be scrolled to and re-marked on the way back.
+        const main = mainRef.current;
+        if (next !== 'transcript' && pendingScrollTs != null && main) {
+            setPendingScrollTs(null);
+            // And stop its glide first. A smooth scroll outlives the tab swap and
+            // the scroll-to-top: the new tab read 0 for a frame, then the glide
+            // carried it to its bottom (measured: Usage at 78px, its max). Any
+            // instant scroll stops it, but only if that stop reaches the
+            // compositor BEFORE the content changes — issued in the same frame as
+            // the swap it is lost. So stop now and swap on the next frame (0px).
+            main.scrollBy({ top: 0, behavior: 'instant' });
+            requestAnimationFrame(swap);
+            return;
+        }
+        swap();
+    };
+
+    // Each tab opens at its top: a scrolled Summary used to open Transcript part
+    // way down. A layout effect, so it lands before the new tab paints. Skipped
+    // for an evidence jump, which scrolls to its line instead. (A jump still
+    // gliding when the reader leaves is stopped in switchTab, not here.)
+    useLayoutEffect(() => {
+        if (pendingScrollTs == null && mainRef.current) mainRef.current.scrollTop = 0;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
+    // Evidence jump: bring the matched line to the middle of the view, then hold
+    // its highlight for JUMP_HIGHLIGHT_HOLD_MS once the scroll has settled. An
+    // effect rather than the callback ref it used to be — a new ref function on
+    // every render re-ran scrollIntoView and queued another timer each time.
+    //
+    // "Settled" is read off the scroll position, frame by frame, not off
+    // `scrollend`: that event can be stale — queued by a scroll that ended just
+    // before the click — and one arriving before the smooth scroll had begun cut
+    // the hold short (measured: the highlight left ~150ms after landing). A
+    // position still for 4 frames and 100ms has landed; that also covers a line
+    // already in the middle, which never scrolls at all.
+    useEffect(() => {
+        if (pendingScrollTs == null || activeTab !== 'transcript') return;
+        const main = mainRef.current;
+        const row = transcriptListRef.current?.querySelector<HTMLElement>('[data-jump-target]');
+        if (!main || !row) return;
+        let hold: ReturnType<typeof setTimeout> | undefined;
+        let raf = 0;
+        const startedAt = performance.now();
+        let lastTop = main.scrollTop;
+        let stillSince = startedAt;
+        let stillFrames = 0;
+        const watch = (now: number) => {
+            const top = main.scrollTop;
+            if (top !== lastTop) { lastTop = top; stillSince = now; stillFrames = 0; }
+            else stillFrames += 1;
+            if ((stillFrames >= 4 && now - stillSince >= 100) || now - startedAt > 3000) {
+                hold = setTimeout(() => setPendingScrollTs(null), JUMP_HIGHLIGHT_HOLD_MS);
+                return;
+            }
+            raf = requestAnimationFrame(watch);
+        };
+        row.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+        raf = requestAnimationFrame(watch);
+        return () => { cancelAnimationFrame(raf); clearTimeout(hold); };
+    }, [pendingScrollTs, activeTab, prefersReducedMotion]);
 
     // Jump to the transcript tab and scroll to the segment nearest an evidence timestamp.
     const jumpToEvidence = (evidence?: Evidence[]) => {
         const ts = evidenceTimestamp(evidence);
         if (typeof ts !== 'number') return;
-        setActiveTab('transcript');
+        switchTab('transcript');
         setPendingScrollTs(ts);
     };
 
@@ -1027,7 +2438,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         if (activeTab === 'summary' && meeting.detailedSummary) {
             if (meeting.detailedSummary.schemaVersion === 3) {
                 textToCopy = `
-Meeting: ${meeting.title}
+Meeting: ${plainMeetingTitle(meeting.title)}
 Date: ${new Date(meeting.date).toLocaleDateString()}
 
 TLDR:
@@ -1054,7 +2465,7 @@ ${followUpBody.trim() ? `\nFOLLOW-UP DRAFT:\n${followUpSubject ? `Subject: ${fol
                 `.trim();
             } else {
                 textToCopy = `
-Meeting: ${meeting.title}
+Meeting: ${plainMeetingTitle(meeting.title)}
 Date: ${new Date(meeting.date).toLocaleDateString()}
 
 OVERVIEW:
@@ -1068,9 +2479,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                 `.trim();
             }
         } else if (activeTab === 'transcript' && meeting.transcript) {
-            textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${resolveSpeakerName(t.speaker)}: ${t.text}`).join('\n');
+            textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${resolveSpeakerName(t.speakerId || t.speaker)}: ${t.text}`).join('\n');
         } else if (activeTab === 'usage' && meeting.usage) {
-            textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${u.answer || ''}`).join('\n\n');
+            // Without the overlay's [[GIST]] line, as the tab shows it.
+            textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${usageAnswerText(u.answer)}`).join('\n\n');
         }
 
         if (!textToCopy) return;
@@ -1089,6 +2501,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
         setMeeting(prev => ({ ...prev, title: newTitle }));
         if (window.electronAPI?.updateMeetingTitle) {
             await window.electronAPI.updateMeetingTitle(meeting.id, newTitle);
+            onTitleSaved?.();
         }
     };
 
@@ -1143,32 +2556,98 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
     };
 
 
+    // The Summary cards' entrance: rides the note's reveal (REVEAL_START_DELAY_MS)
+    // on a short stagger, only while `cardsEntrance` holds (see its declaration).
+    let cardSlot = 0;
+    const cardIn = (): { className: string; style?: React.CSSProperties } => {
+        if (!cardsEntrance || prefersReducedMotion) return { className: '' };
+        return { className: ' mn-card-in', style: { animationDelay: `${REVEAL_START_DELAY_MS + CARD_STAGGER_MS * cardSlot++}ms` } };
+    };
+
+    // Dark theme sits on the elevated grey (#151515) rather than the near-black
+    // --bg-secondary, matching the Launcher hero section. Light theme is unchanged.
+    // mn-root carries the page's motion variables (index.css).
     return (
-        <div className="h-full w-full flex flex-col bg-bg-secondary text-text-secondary font-sans overflow-hidden">
-            {/* Main Content */}
-            <main className="flex-1 overflow-y-auto custom-scrollbar">
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1, duration: 0.3 }}
-                    className="max-w-4xl mx-auto px-8 py-8 pb-32" // Added pb-32 for floating footer clearance
-                >
+        <div className={`mn-root relative h-full w-full flex flex-col ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'} text-text-secondary font-sans overflow-hidden`}>
+            {/* Back sits on the root, outside the scroll box, so nothing that moves <main>'s
+                contents can carry it: a sticky header still travels with the content while a
+                macOS trackpad rubber-bands the scroller at either end (the launcher window runs
+                with scrollBounce). Left-anchored, so it lands on the same pixels it had inside
+                the header whatever the scrollbar width. z-30 clears the header's z-20; the chat
+                overlay's z-[300] still covers it. */}
+            <button
+                type="button"
+                onClick={onBack}
+                aria-label={t("Back")}
+                title={t("Back")}
+                className="absolute left-3 top-3 z-30 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors focus-visible:outline-none"
+            >
+                <ArrowLeft size={19} />
+            </button>
+            {/* Main Content. overscroll-y-contain: a scroll that runs past the top or bottom
+                stops here instead of chaining into the window-level bounce, which would move
+                the whole launcher, pinned header included. */}
+            <main ref={mainRef} className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain custom-scrollbar">
+                {/* Pinned header — date, title and the tab row stay put; only tab content scrolls.
+                    Kept inside <main> (rather than hoisted above it) so it shares the scroll box's
+                    content width: a two-container split would offset this column from the one below
+                    by the scrollbar width on platforms with classic (non-overlay) scrollbars. */}
+                <div className={`sticky top-0 z-20 ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'}`}>
+                    {/* No entrance of its own (nor on the body below): Launcher's page
+                        transition brings the whole page in, and a second fade + 10px lift
+                        under it multiplied the two opacities, so the page arrived dimmer
+                        and later than that transition — and the note's reveal timed
+                        against it — were tuned for. */}
+                    <div className="max-w-4xl mx-auto px-8 pt-8 pb-8">
                     {/* Meta Info & Actions Row */}
                     <div className="flex items-start justify-between mb-6">
                         <div className="w-full pr-4">
                             {/* Date formatting could be improved to use meeting.date if it's an ISO string */}
                             <div className="text-xs text-text-tertiary font-medium mb-1">
                                 {new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                                {/* Who was in the call, from the Meet page (meetingDetection/callRoster). */}
+                                {meeting.detailedSummary?.callParticipants && meeting.detailedSummary.callParticipants.length > 0 && (
+                                    <span title={meeting.detailedSummary.callParticipants.join(', ')}>
+                                        {' · '}{t('With')} {participantsSummary(meeting.detailedSummary.callParticipants)}
+                                    </span>
+                                )}
                             </div>
 
-                            {/* Editable Title */}
-                            <EditableTextBlock
-                                initialValue={meeting.title}
-                                onSave={handleTitleSave}
-                                tagName="h1"
-                                className="text-3xl font-bold text-text-primary tracking-tight -ml-2 px-2 py-1 rounded-md transition-colors"
-                                multiline={false}
-                            />
+                            {/* Editable Title — a bar while the note is being written. The
+                                placeholder row's title is the literal "Processing...", and
+                                regeneration overwrites the title on completion anyway, so an
+                                editable field here would only invite an edit that gets thrown
+                                away. h-11 is the field's own height (36px line box + py-1),
+                                so the real title lands without moving the tabs. */}
+                            {/* The title rides the same handoff as the body (see
+                                handoffExit/handoffEnter) rather than snapping from bar to
+                                text. Only the OUTGOING layer is taken out of flow, so a
+                                long title still sizes this box for itself — a fixed height
+                                here would clip the two-line case. */}
+                            <div className="relative">
+                                <AnimatePresence initial={false} mode="popLayout">
+                                    {isSummaryGenerating ? (
+                                        <motion.div
+                                            key="title-generating"
+                                            className="h-11 flex items-center"
+                                            aria-hidden="true"
+                                            exit={handoffExit}
+                                        >
+                                            <SkeletonLine w={260} h={22} tone="strong" />
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div key="title" {...(() => { const r = revealLead(); return { className: r.cls.trim() || undefined, style: r.style }; })()}>
+                                            <EditableTextBlock
+                                                initialValue={plainMeetingTitle(meeting.title)}
+                                                onSave={handleTitleSave}
+                                                tagName="h1"
+                                                className="text-3xl font-bold text-text-primary tracking-tight -ml-2 px-2 py-1 rounded-md transition-colors"
+                                                multiline={false}
+                                            />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
                         </div>
 
                         {/* Moved Actions: Follow-up & Share (REMOVED per user request) */}
@@ -1177,12 +2656,18 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                     {/* Tabs */}
                     {/* Designing Tabs to match reference 1:1 (Dark Pill Container) */}
-                    <div className="flex items-center justify-between mb-8">
-                        <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 ${isLight ? 'bg-[#E5E5EA] border border-black/[0.04]' : 'bg-[#121214] border border-white/[0.08]'}`}>
-                            {['summary', 'transcript', 'usage'].map((tab) => (
+                    {/* Spacing below the tab row lives on the sticky wrapper's pb-8, not a margin
+                        here — a trailing child margin collapses out of the sticky box and would
+                        leave a 32px strip the header background doesn't paint. */}
+                    <div className="flex items-center justify-between">
+                        {/* Dark well deepened from #121214 to #0D0D0F: against the old near-black
+                            surface it read as a raised container, but on the elevated grey it was
+                            within ~3 levels of the page and the control lost its shape. */}
+                        <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 ${isLight ? 'bg-[#E5E5EA] border border-black/[0.04]' : 'bg-[#0D0D0F] border border-white/[0.08]'}`}>
+                            {NOTES_TABS.map((tab) => (
                                 <button
                                     key={tab}
-                                    onClick={() => setActiveTab(tab as any)}
+                                    onClick={() => switchTab(tab)}
                                     className={`
                                         relative px-3 py-1 text-[13px] font-medium rounded-lg transition-all duration-200 z-10
                                         ${activeTab === tab ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : `${isLight ? 'text-text-secondary' : 'text-text-tertiary'} hover:text-text-primary`}
@@ -1202,59 +2687,157 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         </div>
 
                         {/* Copy Button - Inline with Tabs (Always visible) */}
-                        <button
-                            onClick={handleCopy}
-                            className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
-                        >
-                            {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                            {isCopied ? t('Copied') : activeTab === 'summary' ? t('Copy full summary') : activeTab === 'transcript' ? t('Copy full transcript') : t('Copy usage')}
-                        </button>
+                        {/* handleCopy's summary branch reads detailedSummary, which is a
+                            truthy-but-empty placeholder during generation — copying would
+                            silently yield a header and nothing else.
+                            Copy → Check is the icon swap; the label is a text swap whose width
+                            holds on "Copied" (it used to shrink, jumping the icon ~60px under
+                            the pointer) and which swaps in place when the tab changes. opacity
+                            joins the transition so the disabled dim fades out as notes land. */}
+                        {(() => {
+                            // One label on every tab: what it copies is the tab you are on.
+                            const copyLabel = t('Copy');
+                            return (
+                                <div className="flex items-center gap-5 min-w-0">
+                                    {/* Which calendar event this was: linked, or offered when a calendar
+                                        is connected. A meeting-level action, so it sits with Copy rather
+                                        than on the date line. See meeting/CalendarLinkChip. */}
+                                    <CalendarLinkChip meetingId={meeting.id} meetingTitle={meeting.title} event={meeting.calendarEvent} isLight={isLight} onChanged={reloadMeeting} />
+                                    <button
+                                        onClick={handleCopy}
+                                        disabled={activeTab === 'summary' && isSummaryGenerating}
+                                        className="shrink-0 flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-[color,opacity] disabled:opacity-40 disabled:cursor-default disabled:hover:text-text-secondary"
+                                    >
+                                        <span className="t-icon-swap w-3.5 h-3.5" data-state={isCopied ? 'b' : 'a'} aria-hidden="true">
+                                            <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
+                                            <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
+                                        </span>
+                                        <SwapText value={isCopied ? 'copied' : 'copy'} sizers={[copyLabel, t('Copied')]}>
+                                            {isCopied ? t('Copied') : copyLabel}
+                                        </SwapText>
+                                    </button>
+                                </div>
+                            );
+                        })()}
                     </div>
+                    </div>
+                </div>
 
-                    {/* Tab Content */}
-                    <div className="space-y-8">
+                <div className="max-w-4xl mx-auto px-8 pb-32">{/* pb-32 for floating footer clearance */}
+                    {/* Tab Content — keyed by tab, so a switch remounts it and the swap
+                        (.mn-tab-in, index.css) plays on the incoming tab only. */}
+                    <div
+                        key={activeTab}
+                        className={`space-y-8${tabSwap ? (tabSwap.fadeOnly ? ' mn-tab-in--fade' : ' mn-tab-in') : ''}`}
+                        style={tabSwap && !tabSwap.fadeOnly
+                            ? { '--mn-tab-from': `calc(var(--mn-tab-distance) * ${tabSwap.dir})` } as React.CSSProperties
+                            : undefined}
+                    >
                         {/* Using standard divs for content, framer motion for layout */}
                         {activeTab === 'summary' && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                                {/* Overview - Rendered as Markdown */}
-                                {meeting.detailedSummary?.overview && (
-                                <div className="mb-6 pb-6 border-b border-border-subtle prose prose-sm max-w-none">
+                        <div className="relative">
+                        <AnimatePresence initial={false} mode="popLayout">
+                        {isSummaryGenerating ? (
+                            <motion.div
+                                key="generating"
+                                exit={handoffExit}
+                            >
+                                <MeetingNotesSkeleton
+                                    status={v3SummaryStatus}
+                                    still={Boolean(prefersReducedMotion)}
+                                    t={t}
+                                />
+                            </motion.div>
+                        ) : showSummaryFailure ? (
+                            /* Generation failed with nothing to fall back on. The transcript
+                               is already saved, and regenerateSavedMeeting only needs that —
+                               so the retry is real, not a dead-end message. */
+                            <motion.div
+                                key="failed"
+                                initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                                className={`px-4 py-5 rounded-[10px] border ${isLight ? 'border-black/[0.08] bg-black/[0.015]' : 'border-white/10 bg-white/[0.02]'}`}
+                            >
+                                <p className="text-sm font-semibold text-text-primary mb-1">{t("Notes couldn't be generated")}</p>
+                                <p className="text-[12.5px] text-text-secondary leading-relaxed mb-4">
+                                    {t('The full transcript is saved — you can generate the notes again.')}
+                                </p>
+                                <motion.button
+                                    type="button"
+                                    onClick={() => handleRegenerate()}
+                                    disabled={isRegenerating}
+                                    whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.97 }}
+                                    transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                                    className={`h-8 inline-flex items-center gap-1.5 text-[12px] font-medium px-3 rounded-md text-text-primary disabled:opacity-50 transition-[color,background-color,opacity] ${isLight ? 'bg-black/[0.05] hover:bg-black/[0.09]' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
+                                >
+                                    <RefreshCw
+                                        className={`w-3.5 h-3.5 shrink-0 ${isRegenerating && !prefersReducedMotion ? 'animate-spin' : ''}`}
+                                        strokeWidth={2}
+                                    />
+                                    <SwapText value={isRegenerating ? 'busy' : 'idle'} sizers={[t('Try again'), t('Generating…')]}>
+                                        {isRegenerating ? t('Generating…') : t('Try again')}
+                                    </SwapText>
+                                </motion.button>
+                            </motion.div>
+                        ) : (
+                            <motion.div
+                                key="notes"
+                                ref={notesRef}
+                                className={revealing && prefersReducedMotion ? 'mn-reveal-reduced' : undefined}
+                            >
+                                {/* Overview — the largest slab of prose in the note, and the one that made
+                                    the old cascade read as "block by block": it renders through ReactMarkdown,
+                                    so its text never passed through revealWords and the whole paragraph
+                                    arrived on a single delay. The overrides below route every element's string
+                                    children through the cascade, so it now sweeps line by line like the rest.
+
+                                    The container keeps an OPACITY-ONLY guard on the first of those lines. It is
+                                    not decoration: react-markdown can emit text this component does not override
+                                    (a table cell, a code span), and anything unwrapped would otherwise sit at
+                                    full opacity from the very first frame while the prose around it swept in —
+                                    which reads worse than the block reveal being replaced. Opacity only, because
+                                    a blur here would nest under each word's own blur and compound both. */}
+                                {meeting.detailedSummary?.overview && (() => { const g = revealGuard(); return (
+                                <div className={`pb-5 prose prose-sm max-w-none${g.cls}`} style={g.style} data-rw={g['data-rw']}>
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
                                         components={{
-                                            h1: ({ node, ...props }) => <h1 className="text-xl font-bold text-text-primary mt-4 mb-2" {...props} />,
-                                            h2: ({ node, ...props }) => <h2 className="text-lg font-semibold text-text-primary mt-4 mb-2" {...props} />,
-                                            h3: ({ node, ...props }) => <h3 className="text-base font-semibold text-text-primary mt-3 mb-1" {...props} />,
-                                            p: ({ node, ...props }) => <p className="text-sm text-text-secondary leading-relaxed mb-2" {...props} />,
+                                            h1: ({ node, children, ...props }) => <h1 className="text-xl font-bold text-text-primary mt-4 mb-2" {...props}>{revealMarkdownChildren(children)}</h1>,
+                                            h2: ({ node, children, ...props }) => <h2 className="text-lg font-semibold text-text-primary mt-4 mb-2" {...props}>{revealMarkdownChildren(children)}</h2>,
+                                            h3: ({ node, children, ...props }) => <h3 className="text-base font-semibold text-text-primary mt-3 mb-1" {...props}>{revealMarkdownChildren(children)}</h3>,
+                                            p: ({ node, children, ...props }) => <p className="text-sm text-text-secondary leading-relaxed mb-2" {...props}>{revealMarkdownChildren(children)}</p>,
                                             ul: ({ node, ...props }) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                                             ol: ({ node, ...props }) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
-                                            li: ({ node, ...props }) => <li className="text-sm text-text-secondary" {...props} />,
-                                            strong: ({ node, ...props }) => <strong className="font-semibold text-text-primary" {...props} />,
-                                            a: ({ node, ...props }) => <a className="text-blue-500 hover:underline" {...props} />,
+                                            li: ({ node, children, ...props }) => <li className="text-sm text-text-secondary" {...props}>{revealMarkdownChildren(children)}</li>,
+                                            em: ({ node, children, ...props }) => <em {...props}>{revealMarkdownChildren(children)}</em>,
+                                            strong: ({ node, children, ...props }) => <strong className="font-semibold text-text-primary" {...props}>{revealMarkdownChildren(children)}</strong>,
+                                            a: ({ node, children, ...props }) => <a className="text-accent-primary hover:underline" {...props}>{revealMarkdownChildren(children)}</a>,
+                                            ...makeTableComponents('text-sm leading-relaxed'),
                                         }}
                                     >
                                         {meeting.detailedSummary?.overview || ''}
                                     </ReactMarkdown>
                                 </div>
-                                )}
+                                ); })()}
 
                                 {/* V3 — product-grade structured notes: fast skim, decisions, actions, open questions, risks, quality.
                                     The four callout cards below form one coherent family: same radius, padding, icon
-                                    treatment and type scale. They fade + lift in with a short ease-out stagger. */}
+                                    treatment and type scale. They rise in with the note's reveal on a short stagger
+                                    (cardIn / .mn-card-in), and only then — never on a return to this tab. */}
 
                                 {/* 1. Source quality — severity-aware. Benign cleanup notes (segments removed/cleaned)
                                     read as quiet info; genuine concerns (speaker labels, coverage, "verify") stay amber. */}
                                 {/* 1. Source quality warning */}
                                 {isV3Summary && (() => {
                                     const sqWarnings = meeting.detailedSummary?.sourceQuality?.warnings ?? [];
-                                    const realIssues = sqWarnings.filter(w => !isBenignQualityNote(w));
+                                    const realIssues = sqWarnings.filter(w => !isHiddenQualityNote(w));
                                     if (realIssues.length === 0) return null;
+                                    const c = cardIn();
                                     return (
-                                        <motion.div
-                                            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                                            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                                            transition={{ duration: 0.24, ease: [0.25, 0.46, 0.45, 0.94] }}
-                                            className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-lg bg-white/[0.08]"
+                                        <div
+                                            className={`mb-4 flex items-start gap-2.5 px-4 py-3 rounded-lg bg-white/[0.08]${c.className}`}
+                                            style={c.style}
                                         >
                                             <Info className="w-3.5 h-3.5 text-text-tertiary shrink-0 mt-[1px]" strokeWidth={2} />
                                             <div className="space-y-0.5">
@@ -1262,114 +2845,53 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                     <p key={i} className="text-[12.5px] text-text-secondary leading-snug">{w}</p>
                                                 ))}
                                             </div>
-                                        </motion.div>
+                                        </div>
                                     );
                                 })()}
 
                                 {/* 2. Toolbar */}
-                                {isV3Summary && (
-                                    <motion.div
-                                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
-                                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1], delay: prefersReducedMotion ? 0 : 0.05 }}
-                                        className="mb-6 flex flex-wrap items-center gap-2"
+                                {isV3Summary && (() => { const c = cardIn(); return (
+                                    <div
+                                        className={`mb-6 flex flex-wrap items-center gap-2${c.className}`}
+                                        style={c.style}
                                     >
-                                        <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
-                                            <motion.button
-                                                type="button"
-                                                onClick={() => handleRegenerate()}
-                                                disabled={isRegenerating}
-                                                initial="rest"
-                                                whileHover={prefersReducedMotion || isRegenerating ? undefined : 'hover'}
-                                                whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.96 }}
-                                                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
-                                            >
-                                                <motion.span
-                                                    className="w-3.5 h-3.5 shrink-0 inline-flex"
-                                                    variants={prefersReducedMotion ? undefined : { rest: { rotate: 0 }, hover: { rotate: -180 } }}
-                                                    transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-                                                >
-                                                    <RefreshCw
-                                                        className={`w-3.5 h-3.5 ${isRegenerating && !prefersReducedMotion ? 'animate-spin' : ''}`}
-                                                        strokeWidth={2}
-                                                    />
-                                                </motion.span>
-                                                <span>{isRegenerating ? t('Regenerating…') : t('Regenerate notes')}</span>
-                                            </motion.button>
-
-                                            <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
-
-                                            <motion.button
-                                                type="button"
-                                                onClick={() => setShowEvidence(v => !v)}
-                                                whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
-                                                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                aria-pressed={showEvidence}
-                                                className={`h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md transition-colors ${showEvidence ? 'text-accent-primary bg-accent-primary/10' : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.06]'}`}
-                                            >
-                                                <span className="relative w-3.5 h-3.5 shrink-0">
-                                                    <AnimatePresence initial={false} mode="wait">
-                                                        <motion.span
-                                                            key={showEvidence ? 'eye' : 'eyeoff'}
-                                                            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
-                                                            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-                                                            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
-                                                            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                            className="absolute inset-0 flex items-center justify-center"
-                                                        >
-                                                            {showEvidence
-                                                                ? <Eye className="w-3.5 h-3.5" strokeWidth={2} />
-                                                                : <EyeOff className="w-3.5 h-3.5" strokeWidth={2} />}
-                                                        </motion.span>
-                                                    </AnimatePresence>
-                                                </span>
-                                                <span>{showEvidence ? t('Hide evidence') : t('Show evidence')}</span>
-                                            </motion.button>
-                                        </div>
+                                        {/* The notes' actions (NotesActions): regenerate, show the evidence, and
+                                            write them again as the template the meeting looks like.
+                                            The suggestion regenerates in the DETECTED mode, by id when the
+                                            detector matched one (it always does for the built-ins); passing
+                                            `undefined` in that case once rebuilt the notes in the ORIGINAL template. */}
+                                        {(() => {
+                                            const suggested = v3Mode?.detectedModeName && v3Mode?.detectedConfidence != null && v3Mode.detectedConfidence >= 0.5
+                                                && v3Mode.detectedModeName !== v3Mode.selectedModeName;
+                                            return (
+                                                <NotesActions
+                                                    isRegenerating={isRegenerating}
+                                                    showEvidence={showEvidence}
+                                                    suggestion={suggested ? { name: v3Mode!.detectedModeName!, needsPro: detectedNeedsPro } : null}
+                                                    onRegenerate={() => handleRegenerate()}
+                                                    onRegenerateAsSuggested={() => handleRegenerate(v3Mode?.detectedModeId
+                                                        ? { modeId: v3Mode.detectedModeId }
+                                                        : { templateType: (v3Mode?.detectedModeName || '').toLowerCase() })}
+                                                    onToggleEvidence={() => setShowEvidence(v => !v)}
+                                                />
+                                            );
+                                        })()}
                                         {v3SummaryStatus && v3SummaryStatus !== 'completed' && (
                                             <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-400">
                                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                                                 {v3SummaryStatus.replace(/_/g, ' ')}
                                             </span>
                                         )}
-                                    </motion.div>
-                                )}
+                                    </div>
+                                ); })()}
 
-                                {/* 3. Mode auto-detect suggestion */}
-                                {isV3Summary && v3Mode?.detectedModeName && v3Mode?.detectedConfidence != null && v3Mode.detectedConfidence >= 0.5 &&
-                                  v3Mode.detectedModeName !== v3Mode.selectedModeName && (
-                                    <motion.button
-                                        type="button"
-                                        onClick={() => handleRegenerate(v3Mode.detectedModeId ? undefined : (v3Mode.detectedModeName || '').toLowerCase())}
-                                        disabled={isRegenerating}
-                                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                                        whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.99, transition: { duration: 0.1 } }}
-                                        transition={{ duration: 0.24, ease: [0.25, 0.46, 0.45, 0.94], delay: prefersReducedMotion ? 0 : 0.06 }}
-                                        className="mb-5 w-full text-left flex items-center justify-between gap-3 px-4 py-3.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.11] active:bg-white/[0.06] disabled:opacity-40 transition-colors duration-150 group"
-                                    >
-                                        <div className="min-w-0">
-                                            <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-text-tertiary mb-1">
-                                                {v3Mode.selectedModeName ? `${t('This looks like a')} ${v3Mode.detectedModeName}` : t('Better template available')}
-                                            </p>
-                                            <p className="text-[14px] font-semibold text-text-primary tracking-[-0.01em] truncate leading-tight">
-                                                {isRegenerating
-                                                    ? t('Regenerating…')
-                                                    : <>{t('Regenerate notes as')} <span className="text-accent-primary">{v3Mode.detectedModeName}</span></>}
-                                            </p>
-                                        </div>
-                                        <ChevronRight className="shrink-0 w-4 h-4 text-text-tertiary group-hover:text-accent-primary group-hover:translate-x-0.5 transition-all duration-150" strokeWidth={2} />
-                                    </motion.button>
-                                )}
+                                {/* 3. Mode auto-detect suggestion: now the blue glass button at the end of the actions row above. */}
 
                                 {/* 4. Cross-meeting recall — still-open carryover from prior meetings (Phase 13). */}
-                                {isV3Summary && meeting.detailedSummary?.crossMeeting?.stillOpen && meeting.detailedSummary.crossMeeting.stillOpen.length > 0 && (
-                                    <motion.section
-                                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.24, ease: [0.25, 0.46, 0.45, 0.94], delay: prefersReducedMotion ? 0 : 0.12 }}
-                                        className="mb-6 px-4 py-3.5 rounded-lg bg-white/[0.08]"
+                                {isV3Summary && meeting.detailedSummary?.crossMeeting?.stillOpen && meeting.detailedSummary.crossMeeting.stillOpen.length > 0 && (() => { const c = cardIn(); return (
+                                    <section
+                                        className={`mb-6 px-4 py-3.5 rounded-lg bg-white/[0.08]${c.className}`}
+                                        style={c.style}
                                     >
                                         <div className="flex items-center gap-2 mb-2.5">
                                             <History className="w-3.5 h-3.5 text-text-tertiary shrink-0" strokeWidth={2} />
@@ -1383,47 +2905,85 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 </li>
                                             ))}
                                         </ul>
-                                    </motion.section>
-                                )}
+                                    </section>
+                                ); })()}
 
                                 {/* Summary on top — outcome-first, grounded. Then the mode's template sections below. */}
-                                {isV3Summary && v3Tldr.length > 0 && (
+                                {isV3Summary && v3Tldr.length > 0 && (() => { const h = revealBlock(); return (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Summary')}</h2>
+                                        <h2 className={`text-lg font-semibold text-text-primary mb-4${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Summary')}</h2>
                                         <ul className="space-y-3">
-                                            {v3Tldr.map((item, i) => (
+                                            {v3Tldr.map((item, i) => {
+                                                // The dot rides the first word of its own bullet (see revealWith):
+                                                // its `mt-2` box would otherwise measure as a line of its own.
+                                                const dot = revealWith(revealSlot);
+                                                return (
                                                 <li key={i} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-blue-400/70 shrink-0" />
-                                                    <p className="text-sm text-text-secondary leading-relaxed">{item}</p>
+                                                    <div
+                                                        className={`mt-2 w-1.5 h-1.5 rounded-full bg-blue-400/70 shrink-0${dot.cls}`}
+                                                        style={dot.style}
+                                                    />
+                                                    <p className="text-sm text-text-secondary leading-relaxed">{revealWords(item)}</p>
                                                 </li>
-                                            ))}
+                                                );
+                                            })}
                                         </ul>
                                     </section>
-                                )}
+                                ); })()}
 
                                 {/* The mode's note-section TEMPLATE — the primary notes layout (e.g. Questions and
                                     responses, Discovery, Action items). Rendered right under Summary, in template order.
                                     Empty sections are dropped server-side. */}
                                 {isV3Summary && meeting.detailedSummary?.sectionsV3 && meeting.detailedSummary.sectionsV3.length > 0 && (
                                     <>
-                                        {meeting.detailedSummary.sectionsV3.map((section) => (
+                                        {meeting.detailedSummary.sectionsV3
+                                            .filter(section => SHOW_NEXT_STEPS || !isNextStepsSectionTitle(section.title))
+                                            .map((section) => {
+                                            const h = revealBlock();
+                                            return (
                                             <section key={section.id} className="mb-8">
-                                                <h2 className="text-lg font-semibold text-text-primary mb-4">{section.title}</h2>
+                                                <h2 className={`text-lg font-semibold text-text-primary mb-4${h.cls}`} style={h.style} data-rw={h['data-rw']}>{section.title}</h2>
                                                 <ul className="space-y-3">
-                                                    {section.bullets.map((bullet, i) => (
+                                                    {section.bullets.map((bullet, i) => {
+                                                        const dot = revealWith(revealSlot);
+                                                        return (
                                                         <li key={bullet.id || i} className="flex items-start gap-3">
-                                                            <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary/60 shrink-0" />
+                                                            {/* The colour rides a style object, not `bg-text-secondary/60`:
+                                                                `text-secondary` is a bare var() reference, so Tailwind cannot
+                                                                recompute its alpha and that utility compiled to NOTHING —
+                                                                every bullet in the mode's note sections rendered with an
+                                                                invisible dot. Same token, alpha applied where it works. */}
+                                                            <div
+                                                                className={`mt-2 w-1.5 h-1.5 rounded-full shrink-0${dot.cls}`}
+                                                                // The alpha rides IN the colour rather than on `opacity`: the
+                                                                // reveal animates opacity 0 → 1 with fill-mode `both`, so an
+                                                                // `opacity: 0.6` here would be overridden to 1 for as long as the
+                                                                // animation is applied and then snap back when the class drops.
+                                                                style={{ background: 'color-mix(in srgb, var(--text-secondary) 60%, transparent)', ...dot.style }}
+                                                            />
                                                             <div className="min-w-0 flex-1">
-                                                                <p className="text-sm text-text-secondary leading-relaxed">{bullet.text}</p>
-                                                                {showEvidence && evidenceLabel(bullet.evidence) && (
-                                                                    <button type="button" onClick={() => jumpToEvidence(bullet.evidence)} className="text-[11px] text-blue-400/80 hover:text-blue-300 mt-1 text-left">↳ {evidenceLabel(bullet.evidence)}</button>
+                                                                <p className="text-sm text-text-secondary leading-relaxed">{revealWords(bullet.text)}</p>
+                                                                {/* Always mounted, grown open by Show evidence (.mn-ev), so the
+                                                                    note opens up rather than every bullet jumping a line in one
+                                                                    frame; inert while closed keeps it out of the tab order. The
+                                                                    old mt-1 is padding inside the clip, and the focus ring is
+                                                                    drawn inside the button where the clip cannot cut it. */}
+                                                                {evidenceLabel(bullet.evidence) && (
+                                                                    <div className="mn-ev" data-open={showEvidence} inert={!showEvidence}>
+                                                                        <div className="mn-ev-inner">
+                                                                            <div className="pt-1">
+                                                                                <button type="button" onClick={() => jumpToEvidence(bullet.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover transition-colors text-left focus-visible:[outline-offset:-2px]">↳ {evidenceLabel(bullet.evidence)}</button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                         </li>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </ul>
                                             </section>
-                                        ))}
+                                            ); })}
                                     </>
                                 )}
 
@@ -1460,7 +3020,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                 <span>{item.confidence} {t('confidence')}</span>
                                                             </p>
                                                             {showEvidence && evidenceLabel(item.evidence) && (
-                                                                <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-blue-400/80 hover:text-blue-300 mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
+                                                                <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
                                                             )}
                                                         </div>
                                                     </div>
@@ -1487,7 +3047,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                 <span>{item.confidence} {t('confidence')}</span>
                                                             </p>
                                                             {showEvidence && evidenceLabel(item.evidence) && (
-                                                                <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-blue-400/80 hover:text-blue-300 mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
+                                                                <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
                                                             )}
                                                         </div>
                                                     </div>
@@ -1528,87 +3088,106 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     </section>
                                 )}
 
-                                {/* V3 follow-up draft — human prose, copy + regenerate + tone. */}
-                                {isV3Summary && followUpBody.trim() && (
-                                    <section className="mb-8">
+                                {/* V3 follow-up draft — written on demand: notes save without one and
+                                    offer Generate. Once written: a mail card with Copy, plus tone and
+                                    Regenerate in the header. Motion: .mn-followup in index.css. */}
+                                {isV3Summary && (() => { const h = revealBlock(); const hasFollowUp = hasFollowUpDraft; return (
+                                    <section className="mb-8 mn-followup">
                                         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                                            <h2 className="text-lg font-semibold text-text-primary">{t('Follow-up draft')}</h2>
-                                            <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
-                                                {/* Copy — with a real copied-confirmation state. */}
-                                                <motion.button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        copyRecipe((followUpSubject ? `Subject: ${followUpSubject}\n\n` : '') + followUpBody);
-                                                        setFollowUpCopied(true);
-                                                        setTimeout(() => setFollowUpCopied(false), 1500);
-                                                    }}
-                                                    whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
-                                                    transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                    aria-label={followUpCopied ? t('Copied') : t('Copy follow-up draft')}
-                                                    className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-colors"
-                                                >
-                                                    <span className="relative w-3.5 h-3.5 shrink-0">
-                                                        <AnimatePresence initial={false} mode="wait">
-                                                            {followUpCopied ? (
-                                                                <motion.span
-                                                                    key="check"
-                                                                    initial={prefersReducedMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-                                                                    animate={prefersReducedMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
-                                                                    exit={prefersReducedMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-                                                                    transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                                                                    className="absolute inset-0 flex items-center justify-center text-accent-primary"
-                                                                >
-                                                                    <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
-                                                                </motion.span>
-                                                            ) : (
-                                                                <motion.span
-                                                                    key="copy"
-                                                                    initial={prefersReducedMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-                                                                    animate={prefersReducedMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
-                                                                    exit={prefersReducedMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-                                                                    transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                                                                    className="absolute inset-0 flex items-center justify-center"
-                                                                >
-                                                                    <Copy className="w-3.5 h-3.5" strokeWidth={2} />
-                                                                </motion.span>
-                                                            )}
-                                                        </AnimatePresence>
-                                                    </span>
-                                                    <span className="min-w-[30px] text-left">{followUpCopied ? t('Copied') : t('Copy')}</span>
-                                                </motion.button>
-
-                                                <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
-
-                                                {/* Regenerate — icon spins while regenerating. */}
-                                                <motion.button
-                                                    type="button"
-                                                    onClick={() => handleRegenerateFollowUp()}
-                                                    disabled={isRegeneratingFollowUp}
-                                                    whileTap={prefersReducedMotion || isRegeneratingFollowUp ? undefined : { scale: 0.96 }}
-                                                    transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                    className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
-                                                >
-                                                    <RefreshCw
-                                                        className={`w-3.5 h-3.5 shrink-0 ${isRegeneratingFollowUp && !prefersReducedMotion ? 'animate-spin' : ''}`}
-                                                        strokeWidth={2}
+                                            <h2 className={`text-lg font-semibold text-text-primary${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Follow-up email')}</h2>
+                                            {/* One slot, two states that cross-fade in place: Generate before a
+                                                draft exists, the tone + Regenerate group after. */}
+                                            <div className="mn-fu-actions">
+                                                <div data-active={!hasFollowUp} inert={hasFollowUp}>
+                                                    {/* Generate — the only thing that writes a first draft. No tone
+                                                        argument: the mode's natural tone, changeable once it exists.
+                                                        Liquid Glass, the clear pill of the notes' action row with its
+                                                        ice-blue hover (.mn-generate, index.css); press feedback is the
+                                                        glass's own. While writing it stays lit and shimmers
+                                                        "Generating…" rather than dimming (aria-disabled, not disabled). */}
+                                                    <LiquidGlassButton
+                                                        variant="clear"
+                                                        className="lg-sm mn-generate"
+                                                        onClick={() => { if (!isRegeneratingFollowUp) handleRegenerateFollowUp(); }}
+                                                        aria-disabled={isRegeneratingFollowUp || undefined}
+                                                        aria-busy={isRegeneratingFollowUp}
+                                                        icon={<SquarePen className="w-3.5 h-3.5" strokeWidth={2.2} />}
+                                                    >
+                                                        {/* Sized to the label on screen: "Generate" at rest, and the pill
+                                                            grows into "Generating…" as the text swaps (AutoWidth), rather
+                                                            than reserving that width after "Generate" all the time. */}
+                                                        <AutoWidth>
+                                                            <SwapText value={isRegeneratingFollowUp ? 'busy' : 'idle'} sizers={[isRegeneratingFollowUp ? t('Generating…') : t('Generate')]}>
+                                                                {isRegeneratingFollowUp
+                                                                    ? <span className="t-shimmer" data-text={t('Generating…')}>{t('Generating…')}</span>
+                                                                    : t('Generate')}
+                                                            </SwapText>
+                                                        </AutoWidth>
+                                                    </LiquidGlassButton>
+                                                </div>
+                                                <div data-active={hasFollowUp} inert={!hasFollowUp} className="flex items-center gap-2">
+                                                    <ToneDropdown
+                                                        followUpTone={followUpTone}
+                                                        isRegeneratingFollowUp={isRegeneratingFollowUp}
+                                                        onSelect={(tone) => { setFollowUpTone(tone); handleRegenerateFollowUp(tone); }}
                                                     />
-                                                    <span>{isRegeneratingFollowUp ? t('Regenerating…') : t('Regenerate')}</span>
-                                                </motion.button>
-
-                                                <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
-
-                                                {/* Tone — custom dropdown */}
-                                                <ToneDropdown
-                                                    followUpTone={followUpTone}
-                                                    isRegeneratingFollowUp={isRegeneratingFollowUp}
-                                                    onSelect={(tone) => { setFollowUpTone(tone); handleRegenerateFollowUp(tone); }}
-                                                />
+                                                    {/* Regenerate — a round clear-glass button with the committed .t-tt
+                                                        tooltip; the arrows turn on hover and spin while rewriting. While
+                                                        rewriting it stays lit (aria-disabled, not disabled), like Generate
+                                                        (.mn-fu-regen, index.css). */}
+                                                    <span className="t-tt-wrap">
+                                                        <LiquidGlassButton
+                                                            variant="clear"
+                                                            className="lg-sm mn-fu-regen t-tt-trigger"
+                                                            onClick={() => { if (!isRegeneratingFollowUp) handleRegenerateFollowUp(); }}
+                                                            aria-disabled={isRegeneratingFollowUp || undefined}
+                                                            aria-busy={isRegeneratingFollowUp}
+                                                            aria-label={isRegeneratingFollowUp ? t('Regenerating…') : t('Regenerate')}
+                                                            aria-describedby={followUpRegenTipId}
+                                                        >
+                                                            <span className="mn-fu-regen-turn flex" aria-hidden="true">
+                                                                <RefreshCw
+                                                                    className={`w-3.5 h-3.5 ${isRegeneratingFollowUp && !prefersReducedMotion ? 'animate-spin' : ''}`}
+                                                                    strokeWidth={2.2}
+                                                                />
+                                                            </span>
+                                                        </LiquidGlassButton>
+                                                        <span className="t-tt" id={followUpRegenTipId} role="tooltip">{t('Regenerate')}</span>
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                        {followUpSubject && <p className="text-[12.5px] text-text-tertiary mb-1">{t('Subject:')} {followUpSubject}</p>}
-                                        <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{followUpBody}</pre>
+                                        {/* Transitions.dev "Texts reveal" (.t-stagger). Nothing moves while the
+                                            draft is being written — only the button says so. When a first draft
+                                            lands, the hint fades out in place, then the card rises in
+                                            (FollowUpDraftCard). Only the visible block takes part in the notes'
+                                            reveal cascade. */}
+                                        {(() => {
+                                            const hintHiding = hasFollowUp && followUpEntrance === 'armed';
+                                            const hintText = followUpFailed ? t("Couldn't write the email. Try again.") : t('Write a follow-up email from these notes when you need one.');
+                                            return !hasFollowUp || hintHiding ? (
+                                                <div className={`t-stagger${hintHiding ? ' is-hiding' : ' is-shown'}`}>
+                                                    <p className="t-stagger-line text-[12.5px] text-text-tertiary leading-relaxed">{revealWords(hintText)}</p>
+                                                </div>
+                                            ) : (
+                                                <FollowUpDraftCard
+                                                    reveal={followUpEntrance === 'reveal'}
+                                                    subjectLabel={followUpSubject ? revealWords(t('Subject:')) : undefined}
+                                                    subject={followUpSubject ? revealWords(followUpSubject) : undefined}
+                                                    subjectText={followUpSubject}
+                                                    body={revealWords(followUpBody)}
+                                                    bodyKey={followUpBodyKey}
+                                                    busy={isRegeneratingFollowUp}
+                                                    copied={followUpCopied}
+                                                    onCopy={copyFollowUp}
+                                                    isLight={isLight}
+                                                    recipients={followUpTo}
+                                                    onEmail={followUpTo.length > 0 ? emailFollowUp : undefined}
+                                                />
+                                            );
+                                        })()}
                                     </section>
-                                )}
+                                ); })()}
 
                                 {/* Action Items - Only show if there are items */}
                                 {!isV3Summary && meeting.detailedSummary?.actionItems && meeting.detailedSummary.actionItems.length > 0 && (
@@ -1631,7 +3210,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         <ul className="space-y-3">
                                             {meeting.detailedSummary.actionItems.map((item, i) => (
                                                 <li key={actionItemKeys[i] ?? i} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary group-hover:bg-blue-500 transition-colors shrink-0" />
+                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary group-hover:bg-accent-primary transition-colors shrink-0" />
                                                     <div className="flex-1">
                                                         <EditableTextBlock
                                                             initialValue={item}
@@ -1714,7 +3293,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     Rendered ONLY when PostCallWorkflow has produced them
                                     (schemaVersion === 2). Falls through silently otherwise so
                                     pre-Phase-7 meetings still look the same. */}
-                                {!isV3Summary && meeting.detailedSummary?.actionItemsStructured && meeting.detailedSummary.actionItemsStructured.length > 0 && (
+                                {SHOW_NEXT_STEPS && !isV3Summary && meeting.detailedSummary?.actionItemsStructured && meeting.detailedSummary.actionItemsStructured.length > 0 && (
                                     <section className="mb-8">
                                         <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Next Steps')}</h2>
                                         <ul className="space-y-2">
@@ -1737,30 +3316,12 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     </section>
                                 )}
 
-                                {/* Phase 7 — Coaching insights (mode-specific opportunities). */}
-                                {meeting.detailedSummary?.coachingInsights && meeting.detailedSummary.coachingInsights.length > 0 && (
-                                    <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Coaching')}</h2>
-                                        <ul className="space-y-3">
-                                            {meeting.detailedSummary.coachingInsights.map(insight => {
-                                                const tone = insight.severity === 'warning'
-                                                    ? 'border-amber-400/40 bg-amber-500/5'
-                                                    : insight.severity === 'opportunity'
-                                                        ? 'border-blue-400/40 bg-blue-500/5'
-                                                        : 'border-text-tertiary/30 bg-transparent';
-                                                return (
-                                                    <li key={insight.id} className={`p-3 rounded-[10px] border ${tone}`}>
-                                                        <p className="text-sm font-semibold text-text-primary">{insight.title}</p>
-                                                        <p className="text-[12.5px] text-text-secondary mt-1 leading-relaxed">{insight.detail}</p>
-                                                        {insight.evidence && (
-                                                            <p className="text-[11px] text-text-tertiary mt-1.5 italic">"{insight.evidence}"</p>
-                                                        )}
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    </section>
-                                )}
+                                {/* The "Coaching" section was removed on 2026-08-26 (product decision);
+                                    generation is switched off at INCLUDE_COACHING_INSIGHTS in
+                                    electron/services/post-call/PostCallWorkflow.ts. The
+                                    `coachingInsights` type above is kept so already-saved notes
+                                    still parse; restore this <section> from git history if the
+                                    flag is ever flipped back on. */}
 
                                 {/* Phase 7 — Follow-up email draft (legacy V2: string). V3 renders its own above. */}
                                 {!isV3Summary && typeof meeting.detailedSummary?.followUpDraft === 'string' && meeting.detailedSummary.followUpDraft.trim() && (
@@ -1806,89 +3367,124 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 )}
                             </motion.div>
                         )}
+                        </AnimatePresence>
+                        </div>
+                        )}
 
                         {activeTab === 'transcript' && (
-                            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                            // No fade of its own: the tab swap (.mn-tab-in) brings it in.
+                            <section>
                                 {/* Speaker rename row: distinct speakers + inline rename (Phase 9). */}
                                 {(() => {
                                     const speakers = Array.from(new Set((meeting.transcript || [])
                                         .filter(e => !['system', 'ai', 'assistant', 'model'].includes((e.speaker || '').toLowerCase()))
                                         .map(e => e.speaker)));
                                     if (speakers.length === 0) return null;
+                                    // Leaving the field (Save, Cancel, Enter, Esc) hands its on-screen
+                                    // width to the chip that replaces it, so the pill eases back down
+                                    // rather than snapping. offsetWidth, not a rect: layout width,
+                                    // unaffected by the press scale a button may be holding.
+                                    const endSpeakerEdit = (id: string, save: boolean, from: Element) => {
+                                        const field = from.closest<HTMLElement>('[data-speaker-editor]');
+                                        if (field) setChipMorph({ id, from: field.offsetWidth });
+                                        if (save) handleSaveSpeakerLabel(id, speakerDraft);
+                                        else setEditingSpeaker(null);
+                                    };
                                     return (
                                         <div className="mb-5 flex flex-wrap items-center gap-2">
                                             <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wide mr-0.5">{t('Speakers')}</span>
-                                            <AnimatePresence initial={false} mode="popLayout">
+                                            {/* Chip ⇄ rename field is ONE pill morphing: the arriving element
+                                                starts at the leaving one's width and look (.mn-chip-morph-in /
+                                                -out, index.css) and eases to its own, and the chips after it are
+                                                pushed along by that width in normal flow. It used to swap in a
+                                                single frame to a pill about four times the chip's width. */}
                                             {speakers.map((sp) => {
                                                 const display = resolveSpeakerName(sp);
                                                 const id = (sp || '').toLowerCase().replace(/^(user|me)$/, 'me').replace(/^(interviewer|them|other|system|assistant)$/, 'speaker_1').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unknown';
+                                                const morphFrom = chipMorph?.id === id ? chipMorph.from : null;
+                                                const morphStyle = morphFrom != null ? { '--mn-chip-from-w': `${morphFrom}px` } as React.CSSProperties : undefined;
                                                 if (editingSpeaker === id) {
                                                     return (
-                                                        <motion.span
-                                                            key={id}
-                                                            layout
-                                                            initial={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.96 }}
-                                                            animate={prefersReducedMotion ? undefined : { opacity: 1, scale: 1 }}
-                                                            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                            className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-full bg-bg-secondary border border-accent-primary/50 ring-1 ring-accent-primary/20"
+                                                        <span
+                                                            key={`${id}:edit`}
+                                                            data-speaker-editor=""
+                                                            style={morphStyle}
+                                                            // pl-2.5 and the field's font-medium match the chip, so the
+                                                            // name stays exactly where it was as the chip becomes the field.
+                                                            // A soft accent tint and no border (Evin picked it from four
+                                                            // mocks over the near-black fill + accent ring it had); the
+                                                            // transparent border keeps the chip's exact box.
+                                                            className={`inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-full bg-accent-subtle border border-transparent${morphFrom != null ? ' mn-chip-morph-in' : ''}`}
                                                         >
-                                                            <input
-                                                                autoFocus
+                                                            <SpeakerNameInput
                                                                 value={speakerDraft}
-                                                                onChange={e => setSpeakerDraft(e.target.value)}
-                                                                onKeyDown={e => { if (e.key === 'Enter') handleSaveSpeakerLabel(id, speakerDraft); if (e.key === 'Escape') setEditingSpeaker(null); }}
                                                                 placeholder={display}
-                                                                className="text-[11px] bg-transparent text-text-primary placeholder:text-text-tertiary outline-none w-28"
+                                                                onChange={setSpeakerDraft}
+                                                                onKeyDown={e => {
+                                                                    if (e.key === 'Enter') endSpeakerEdit(id, true, e.currentTarget);
+                                                                    if (e.key === 'Escape') endSpeakerEdit(id, false, e.currentTarget);
+                                                                }}
                                                             />
-                                                            <motion.button
-                                                                type="button"
-                                                                onMouseDown={e => e.preventDefault()}
-                                                                onClick={() => handleSaveSpeakerLabel(id, speakerDraft)}
-                                                                whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
-                                                                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-accent-primary hover:bg-accent-primary/15 transition-colors"
-                                                                title={t("Save")}
-                                                            >
-                                                                <Check className="w-3 h-3" strokeWidth={2.5} />
-                                                            </motion.button>
-                                                            <motion.button
-                                                                type="button"
-                                                                onMouseDown={e => e.preventDefault()}
-                                                                onClick={() => setEditingSpeaker(null)}
-                                                                whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
-                                                                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-white/[0.08] transition-colors"
-                                                                title={t("Cancel")}
-                                                            >
-                                                                <X className="w-3 h-3" strokeWidth={2.5} />
-                                                            </motion.button>
-                                                        </motion.span>
+                                                            <span className="mn-chip-editor-actions inline-flex items-center gap-1">
+                                                                <motion.button
+                                                                    type="button"
+                                                                    onMouseDown={e => e.preventDefault()}
+                                                                    onClick={e => endSpeakerEdit(id, true, e.currentTarget)}
+                                                                    whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
+                                                                    className="inline-flex items-center justify-center w-5 h-5 rounded-full text-accent-primary hover:bg-accent-muted transition-colors"
+                                                                    title={t("Save")}
+                                                                >
+                                                                    <Check className="w-3 h-3" strokeWidth={2.5} />
+                                                                </motion.button>
+                                                                <motion.button
+                                                                    type="button"
+                                                                    onMouseDown={e => e.preventDefault()}
+                                                                    onClick={e => endSpeakerEdit(id, false, e.currentTarget)}
+                                                                    whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
+                                                                    className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-white/[0.08] transition-colors"
+                                                                    title={t("Cancel")}
+                                                                >
+                                                                    <X className="w-3 h-3" strokeWidth={2.5} />
+                                                                </motion.button>
+                                                            </span>
+                                                        </span>
                                                     );
                                                 }
                                                 return (
                                                     <motion.button
                                                         key={id}
-                                                        layout
                                                         type="button"
-                                                        onClick={() => { setEditingSpeaker(id); setSpeakerDraft(display); }}
+                                                        onClick={e => {
+                                                            setChipMorph({ id, from: e.currentTarget.offsetWidth });
+                                                            setEditingSpeaker(id);
+                                                            setSpeakerDraft(display);
+                                                        }}
                                                         whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
                                                         transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                        className="group inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-text-secondary hover:text-text-primary border border-border-subtle transition-colors"
+                                                        style={morphStyle}
+                                                        className={`mn-chip inline-flex items-center h-7 px-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-text-secondary hover:text-text-primary border border-border-subtle transition-colors${morphFrom != null ? ' mn-chip-morph-out' : ''}`}
                                                         title={t("Rename speaker")}
                                                     >
                                                         <span className="text-[11px] font-medium">{display}</span>
-                                                        <Pencil className="w-2.5 h-2.5 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity shrink-0" strokeWidth={2} />
+                                                        {/* No room at rest; the chip grows to fit it on hover (.mn-chip-pencil). */}
+                                                        <span className="mn-chip-pencil" aria-hidden="true">
+                                                            <Pencil className="w-2.5 h-2.5 text-text-tertiary" strokeWidth={2} />
+                                                        </span>
                                                     </motion.button>
                                                 );
                                             })}
-                                            </AnimatePresence>
                                         </div>
                                     );
                                 })()}
-                                <div className="space-y-6">
+                                <div ref={transcriptListRef} className="space-y-6">
                                     {(() => {
-                                        const filteredTranscript = meeting.transcript?.filter(entry => {
+                                        const filteredTranscript = (meeting.transcript?.filter(entry => {
                                             const isHidden = ['system', 'ai', 'assistant', 'model'].includes(entry.speaker?.toLowerCase());
                                             return !isHidden;
-                                        }) || [];
+                                        }) || [])
+                                            // A line the call attributed to one of the other side's voices
+                                            // shows (and renames) as that person, and turns break between people.
+                                            .map(entry => entry.speakerId ? { ...entry, speaker: entry.speakerId } : entry);
 
                                         if (filteredTranscript.length === 0) {
                                             return <p className="text-text-tertiary">{t('No transcript available.')}</p>;
@@ -1900,24 +3496,34 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             return d < best.d ? { d, idx } : best;
                                         }, { d: Infinity, idx: -1 }).idx;
 
-                                        return filteredTranscript.map((entry, i) => (
+                                        // One row per TURN, not per saved line: speech-to-text saves a line
+                                        // every few seconds, so a sentence arrived as several rows, each
+                                        // repeating the name and time (groupTranscriptTurns). Copy full
+                                        // transcript still copies every line with its own time.
+                                        const turns = groupTranscriptTurns(filteredTranscript);
+                                        // The matched line's turn is marked by .mn-ts-row's layer (index.css),
+                                        // and scrolled to by the evidence-jump effect, which finds it by
+                                        // data-jump-target.
+                                        const jumpTurn = scrollIndex < 0 ? -1 : turns.findIndex(turn => scrollIndex >= turn.first && scrollIndex <= turn.last);
+                                        return turns.map((turn, k) => (
                                             <div
-                                                key={i}
-                                                className={`group rounded-md transition-colors ${i === scrollIndex ? 'bg-blue-500/10 ring-1 ring-blue-400/30 -mx-2 px-2 py-1' : ''}`}
-                                                ref={i === scrollIndex ? (el) => { if (el && pendingScrollTs != null) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => setPendingScrollTs(null), 1500); } } : undefined}
+                                                key={turn.first}
+                                                className="group mn-ts-row"
+                                                data-highlight={k === jumpTurn ? 'true' : undefined}
+                                                data-jump-target={k === jumpTurn ? '' : undefined}
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-xs font-semibold text-text-secondary">
-                                                        {resolveSpeakerName(entry.speaker)}
+                                                        {resolveSpeakerName(turn.speaker)}
                                                     </span>
-                                                    <span className="text-xs text-text-tertiary font-mono">{entry.timestamp ? formatTime(entry.timestamp) : '0:00'}</span>
+                                                    <span className="text-xs text-text-tertiary font-mono">{turn.timestamp ? formatTime(turn.timestamp) : '0:00'}</span>
                                                 </div>
-                                                <p className="text-text-secondary text-[15px] leading-relaxed transition-colors select-text cursor-text">{entry.text}</p>
+                                                <p className="text-text-secondary text-[15px] leading-relaxed transition-colors select-text cursor-text">{turn.text}</p>
                                             </div>
                                         ));
                                     })()}
                                 </div>
-                            </motion.section>
+                            </section>
                         )}
 
                         {activeTab === 'usage' && (
@@ -1937,6 +3543,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 id={id}
                                                 interaction={interaction}
                                                 staggerDelay={staggerDelay}
+                                                onOpenImage={(index) => setImageViewer({ images: interaction.images ?? [], index })}
                                             />
                                         );
                                     });
@@ -1945,29 +3552,93 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             </section>
                         )}
                     </div>
-                </motion.div>
+                </div>
             </main>
 
-            {/* Floating Footer (Ask Bar) */}
-            <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none ${isChatOpen ? 'z-50' : 'z-20'}`}>
-                <div className="w-full max-w-[440px] relative group pointer-events-auto">
-                    {/* Dark Glass Effect Input (Matching Reference) */}
+            {/* Usage tab: a screenshot preview, full size. */}
+            <AnimatePresence>
+                {imageViewer && imageViewer.images.length > 0 && (
+                    <UsageImageViewer
+                        key="usage-image-viewer"
+                        images={imageViewer.images}
+                        index={Math.min(imageViewer.index, imageViewer.images.length - 1)}
+                        onIndex={(index) => setImageViewer(v => (v ? { ...v, index } : v))}
+                        onClose={() => setImageViewer(null)}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* Floating Footer (Ask Bar). While the chat is open this bar is the chat's
+                input — follow-ups go through it (MeetingChatOverlay has none of its own and
+                leaves pb-32 for it) — so it must sit ABOVE the overlay. The overlay became
+                `fixed inset-0 z-[300]` in a8c1ac82 (the sheet-style dimming); at the old
+                z-50 the bar vanished under it the moment a chat opened. z-[310] clears it.
+                Same stacking context: neither is portaled. */}
+            <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none ${isChatOpen ? 'z-[310]' : 'z-20'}`}>
+                {/* Refractive glass, not a blurred pane. The pill floats over the
+                    scrolling notes, so the material is only readable as glass if
+                    what passes behind it BENDS — a plain backdrop-blur reads as
+                    frosted plastic, which is what this was.
+
+                    The tuning is deliberately below the component's defaults,
+                    which are shaped for a ~200x80 card:
+                      • ASK_BAR_EDGE (borderWidth) sets the refracting band to
+                        min(w,h) x edge/2 = 6px on this 48px pill. At the default
+                        0.07 the band is 1.7px, narrower than its own blur, and
+                        the edge gradient washes out to nothing.
+                      • The channel offsets are ZERO — see ASK_BAR_DISTORTION.
+                      • yChannel is 'B', not the component's upstream 'G'. G is
+                        flat in the map, so it pushes the backdrop DOWN by a
+                        constant instead of bending it, and a constant push on
+                        body text is a visible second copy of it.
+                      • distortionScale is pulled in hard — the band samples the
+                        backdrop ~12px away rather than ~90px, so notes bend past
+                        the rim instead of smearing across it.
+                    See GlassSurface.tsx for what each one drives. */}
+                <GlassSurface
+                    width="100%"
+                    height={ASK_BAR_HEIGHT}
+                    borderRadius={ASK_BAR_HEIGHT / 2}
+                    borderWidth={ASK_BAR_EDGE}
+                    blur={ASK_BAR_MAP_BLUR}
+                    brightness={60}
+                    opacity={0.9}
+                    distortionScale={isLight ? ASK_BAR_DISTORTION_LIGHT : ASK_BAR_DISTORTION_DARK}
+                    redOffset={0}
+                    greenOffset={0}
+                    blueOffset={0}
+                    yChannel="B"
+                    displace={0.5}
+                    tint={isLight ? ASK_BAR_TINT_LIGHT : ASK_BAR_TINT_DARK}
+                    saturation={isLight ? ASK_BAR_SATURATION_LIGHT : ASK_BAR_SATURATION_DARK}
+                    className="w-full max-w-[440px] pointer-events-auto"
+                    contentClassName="glass-surface__content--bare"
+                >
                     <input
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleInputKeyDown}
                         placeholder={t("Ask about this meeting...")}
-                        className="w-full pl-5 pr-12 py-3 bg-transparent backdrop-blur-[24px] backdrop-saturate-[140%] shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-white/20 rounded-full text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none transition-shadow duration-200"
+                        className="w-full h-full pl-5 pr-12 bg-transparent border-0 text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none"
                     />
+                    {/* Positioned at 9px rather than with a translate, so the
+                        transform channel stays free for the press. */}
                     <button
+                        type="button"
                         onClick={handleSubmitQuestion}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all duration-200 border border-white/5 ${query.trim() ? 'bg-text-primary text-bg-primary hover:scale-105' : 'bg-bg-item-active text-text-primary hover:bg-bg-item-hover'
-                            }`}
+                        aria-label={t('Ask about this meeting...')}
+                        className="absolute right-2 top-[9px] inline-flex items-center justify-center rounded-full border-0 p-0 appearance-none cursor-pointer transition-transform duration-150 ease-out active:scale-[0.94]"
+                        style={{
+                            width: ASK_ORB_SIZE,
+                            height: ASK_ORB_SIZE,
+                            background: ASK_ORB_FILL[isLight ? 'light' : 'dark'],
+                            color: ASK_ORB_GLYPH[isLight ? 'light' : 'dark'],
+                        }}
                     >
-                        <ArrowUp size={16} className="transform rotate-45" />
+                        <ArrowUp size={14} className="rotate-45" />
                     </button>
-                </div>
+                </GlassSurface>
             </div>
 
             {/* Chat Overlay */}

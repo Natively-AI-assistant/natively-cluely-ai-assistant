@@ -1,0 +1,505 @@
+/* Transitions.dev — Banner stacking */
+
+/*
+  Usage:
+    <div class="t-stack">
+      <div class="t-stack-banner" data-depth="0">…</div>
+    </div>
+
+  Sonner-style. Append a new banner with .is-enter + data-depth
+  0, step every older banner's data-depth one back, force one
+  reflow, then remove .is-enter in the same task (a rAF hop is
+  skipped when the frame clock is throttled). A fourth banner
+  gets .is-leaving; remove it after --stack-close. Hover spread
+  is geometry in JS: pointer inside the collapsed stack box adds
+  .is-spread, and it holds until the pointer leaves the taller
+  spread column ((stack height + gap) * 2 above).
+*/
+
+:root {
+  --stack-open: 350ms;
+  --stack-close: 250ms;
+  --stack-rise: 60px;
+  --stack-blur: 2px;
+  --stack-scale: 0.97;
+  --stack-peek: 12px;
+  --stack-spread-gap: 8px;
+  --stack-depth-scale: 0.06;
+  --stack-depth-fade: 0.4;
+  --stack-depth1-blur: 1px;
+  --stack-depth2-blur: 2px;
+  --stack-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-stack { position: relative; }
+.t-stack-banner {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  /* Centre origin so an arriving banner scales like a toast; the
+     push-back depths switch to the bottom edge, which they can do
+     freely because the swap happens at identity. */
+  transform-origin: 50% 50%;
+  /* Explicit blur(0) rather than an unset filter — blur → none is
+     not reliably interpolated, and the cross-blur would snap. */
+  filter: blur(0);
+  will-change: transform, opacity, filter;
+  transition:
+    transform var(--stack-open) var(--stack-ease),
+    opacity var(--stack-open) var(--stack-ease),
+    filter var(--stack-open) var(--stack-ease);
+}
+.t-stack-banner[data-depth="0"] {
+  z-index: 3;
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+.t-stack-banner[data-depth="1"] {
+  z-index: 2;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -1))
+             scale(calc(1 - var(--stack-depth-scale)));
+  opacity: calc(1 - var(--stack-depth-fade));
+  filter: blur(var(--stack-depth1-blur));
+}
+.t-stack-banner[data-depth="2"] {
+  z-index: 1;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -2))
+             scale(calc(1 - var(--stack-depth-scale) * 2));
+  opacity: calc(1 - var(--stack-depth-fade) * 1.6);
+  filter: blur(var(--stack-depth2-blur));
+}
+/* Spread: newest stays put, older ones climb one banner height
+   each (100% = the banner's own height). Driven by a class, not
+   :hover — the gaps between spread banners belong to no element. */
+.t-stack.is-spread .t-stack-banner[data-depth="1"],
+.t-stack.is-spread .t-stack-banner[data-depth="2"] { opacity: 1; filter: blur(0); }
+.t-stack.is-spread .t-stack-banner[data-depth="1"] {
+  transform: translateY(calc((100% + var(--stack-spread-gap)) * -1)) scale(1);
+}
+.t-stack.is-spread .t-stack-banner[data-depth="2"] {
+  transform: translateY(calc((100% + var(--stack-spread-gap)) * -2)) scale(1);
+}
+.t-stack-banner.is-enter {
+  transition: none;
+  transform: translateY(var(--stack-rise)) scale(var(--stack-scale));
+  opacity: 0;
+  filter: blur(var(--stack-blur));
+}
+.t-stack-banner.is-leaving {
+  z-index: 0;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -3))
+             scale(calc(1 - var(--stack-depth-scale) * 3));
+  opacity: 0;
+  filter: blur(var(--stack-blur));
+  transition:
+    transform var(--stack-close) var(--stack-ease),
+    opacity var(--stack-close) var(--stack-ease),
+    filter var(--stack-close) var(--stack-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-stack-banner { transition: none !important; transform: none !important; filter: none !important; }
+}
+
+/* ─── Host: the Launcher calendar card (UpcomingCalendarCard.tsx) ────────────
+   Everything above is the Transitions.dev snippet, verbatim. Everything below
+   fits it to this card. */
+
+/* The snippet's depth tuning, adjusted for this card. At the defaults (12px
+   peek, 40% fade, 1-2px blur) dark banners over the indigo backdrop blur
+   into one soft shadow, and the stack reads as a single card. These keep
+   the three edges visible. Scoped to the stack, not :root. */
+/* The rise matches the Transitions.dev toast the pills are shaped after:
+   16px, not the snippet's 60px, which is sized for toasts entering from the
+   bottom of a screen rather than inside a 198px card. Open/close timing,
+   blur, scale and curve already equal the toast's. */
+.cal-stack {
+  --stack-peek: 14px;
+  --stack-depth-fade: 0.22;
+  --stack-depth1-blur: 0.5px;
+  --stack-depth2-blur: 1px;
+  --stack-rise: 16px;
+}
+
+/* The snippet pins banners to the left edge only; here they span the stack. */
+.cal-stack .t-stack-banner { right: 0; height: 100%; }
+
+/* The banner is Liquid Glass 2.0 (src/ui-components/liquidglas2.0): a
+   tinted, translucent lens (BannerGlass: GlassSurface refracting the curtain
+   behind the card) with the 2.0 CTA's bevel, sheen and directional edge,
+   which read the tokens below. The tint is a deep indigo at 30%. */
+.cal-banner {
+  position: relative;
+  isolation: isolate;
+  /* Thin, so the frosted, bent curtain reads through it. Measured with the
+     text hidden, at rest: title 6.3:1, the 70% time line 5.3:1, or better. */
+  --cal-glass-tint: rgba(30, 24, 112, 0.30);
+  /* The rim, well under the CTA's (.95 / .55): a 44px pill in a stack of
+     three, where the CTA's full-strength edge outlined every card. */
+  --cta-edge-hi: rgba(255, 255, 255, 0.22);
+  --cta-edge-mid: rgba(255, 255, 255, 0.08);
+  --cta-edge-lo: rgba(255, 255, 255, 0.03);
+  --cta-bevel-a: rgba(255, 255, 255, 0.12);
+  --cta-bevel-b: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 10px 24px -12px rgba(6, 3, 40, 0.75);
+}
+/* GlassSurface brings a drop shadow and a themed rim of its own; the banner
+   has both, so they go, and it takes the banner's tint. */
+.cal-banner .cal-glass.glass-surface--svg,
+[data-theme='light'] .cal-banner .cal-glass.glass-surface--svg,
+.cal-banner .cal-glass.glass-surface--fallback {
+  position: absolute;
+  inset: 0;
+  background: var(--cal-glass-tint);
+  border: 0;
+  box-shadow: none;
+  /* A card pushed back by an arrival changes tint as it moves (the stack's
+     own 350ms curve); while picking, the pop's quick 180ms. */
+  transition: background-color var(--stack-open) var(--stack-ease);
+}
+.cal-stack.is-picking .t-stack-banner .cal-banner .cal-glass { transition-duration: 180ms; transition-timing-function: ease-out; }
+/* Above the glass layers. */
+.cal-banner-body {
+  position: relative;
+  z-index: 2;
+  text-shadow: 0 1px 2px rgba(20, 10, 70, 0.35);
+}
+/* The edge ring, a touch quieter at rest; a popped card catches the light. */
+.cal-banner .glass-cta__edge { opacity: 0.8; }
+/* The corner sheen, softer than the CTA's too. */
+.cal-banner .glass-cta__sheen { opacity: 0.6; }
+/* Every card is whole: the ones behind show faintly through the glass of the
+   ones in front, as stacked glass does. (They were once clipped to the part
+   left uncovered; Evin wanted the full banners.) */
+.cal-banner > .glass-cta__edge { transition: opacity var(--stack-open) var(--stack-ease); }
+/* Lift for the front card's hover: a deeper shadow that fades in. Opacity on
+   a pseudo-element, so no box-shadow is interpolated frame by frame. (A card
+   further back pops behind the front one, which would hide this, so its lift
+   reads from the move and the brighter rim.) */
+.cal-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: 0 14px 26px -10px rgba(6, 3, 40, 0.9);
+  opacity: 0;
+  transition: opacity var(--stack-open) var(--stack-ease);
+  pointer-events: none;
+}
+.cal-stack .t-stack-banner.is-popped .cal-banner .glass-cta__edge,
+.cal-stack .t-stack-banner.is-popped .cal-banner::after { opacity: 1; }
+.cal-stack.is-picking .t-stack-banner .cal-banner::after { transition-duration: 180ms; }
+.cal-stack.is-picking .t-stack-banner .cal-banner > .glass-cta__edge { transition-duration: 180ms; }
+
+/* A lens only sees what is behind it up to its nearest ancestor with a
+   filter, opacity below 1, or will-change naming either (a backdrop root).
+   The stack puts `filter: blur(0)` and `will-change: filter` on every card
+   and fades and blurs the ones behind, so at rest every card drops the filter
+   and the fade, and each one is a working lens; an arriving or leaving card
+   keeps them for its animation. will-change names transform ONLY:
+   `will-change: opacity` is a backdrop root too, and it left the front card's
+   lens seeing nothing behind its own card. */
+.cal-stack .t-stack-banner { will-change: transform; }
+.cal-stack .t-stack-banner:not(.is-enter):not(.is-leaving) { filter: none; opacity: 1; }
+/* Without the fade, the cards behind step back by a denser tint and a
+   quieter rim. A popped back card's tint is a step denser than the front's
+   resting glass: its text sits over the brighter curtain higher up (the time
+   line measured 4.4:1 at .30, 4.5:1 is the floor). The front card keeps its
+   own glass when hovered: it lifts, it doesn't darken. */
+.cal-stack .t-stack-banner[data-depth="1"] .cal-banner { --cal-glass-tint: rgba(30, 24, 112, 0.40); }
+.cal-stack .t-stack-banner[data-depth="2"] .cal-banner { --cal-glass-tint: rgba(30, 24, 112, 0.50); }
+.cal-stack .t-stack-banner[data-depth="1"]:not(.is-popped) .cal-banner .glass-cta__edge { opacity: 0.6; }
+.cal-stack .t-stack-banner[data-depth="2"]:not(.is-popped) .cal-banner .glass-cta__edge { opacity: 0.45; }
+.cal-stack .t-stack-banner.is-popped:not([data-depth="0"]) .cal-banner { --cal-glass-tint: rgba(30, 24, 112, 0.38); }
+
+/* ─── Tile, the deck's left column (MeetingTile, UpcomingCalendarCard.tsx) ──
+   28px, 8px in from the pill's top, bottom and left, so it shares a centre
+   with the rounded end. A shallow well in the pill: faintly lighter, a hairline
+   ring, a brighter top edge. */
+.cal-tile {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+/* A calendar leaf: the weekday in small caps over the day of the month. */
+.cal-tile-weekday {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(165 243 252 / 0.9);
+}
+.cal-tile-day {
+  margin-top: 1.5px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+/* The countdown: minutes left over the unit, in a ring that runs out as the
+   start comes (the ring is drawn full at an hour out, empty at the start).
+   Each 30s tick eases the arc on rather than stepping it. */
+.cal-tile-ring {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+.cal-tile-arc {
+  fill: none;
+  stroke: #67e8f9;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  transition: stroke-dashoffset 600ms var(--stack-ease), stroke 250ms ease;
+}
+.cal-tile-num {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.cal-tile-unit {
+  margin-top: 1px;
+  font-size: 6.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.7);
+}
+.cal-tile-now {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fde68a;
+}
+.cal-tile.is-soon .cal-tile-arc { stroke: #fcd34d; }
+.cal-tile.is-soon .cal-tile-num,
+.cal-tile.is-soon .cal-tile-unit { color: #fde68a; }
+/* A free slot: an open, dashed tile. */
+.cal-tile.is-open {
+  background: none;
+  box-shadow: none;
+  border: 1px dashed rgba(255, 255, 255, 0.28);
+}
+.cal-tile.is-skeleton {
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: none;
+}
+
+/* The linked heading carries data now ("Next tomorrow at 9:00 am"), and a
+   longer language must not wrap it into a third line, down into the space the
+   deck pops up into: each line keeps to one, with an ellipsis. */
+.cal-stack-header .t-stagger { min-width: 0; max-width: 100%; }
+.cal-stack-header .t-stagger-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ─── Sample meeting (not linked: DemoMeetingStack) ──────────────────────────
+   One banner of the linked deck, at rest, in the front banner's place: 14px
+   in (px-3.5), 12px off the bottom (pb-3). It never pops, so it takes no
+   pointer. */
+.cal-demo {
+  position: absolute;
+  z-index: 0;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  pointer-events: none;
+  text-align: left;
+}
+
+/* ─── Faces (AttendeeAvatar) ─────────────────────────────────────────────────
+   20px, ringed in the pill's own colour so overlapping faces read as separate.
+   Without a photo, one of six deep tones (top-lit) with white initials: each
+   measures 4.65–5.6:1 at its lighter stop. The Gravatar fades in over them. */
+.cal-face {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1.5px #211c6c;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.cal-face-0 { background: linear-gradient(160deg, #6552e0, #4a38c4); }
+.cal-face-1 { background: linear-gradient(160deg, #2f74cf, #2259ab); }
+.cal-face-2 { background: linear-gradient(160deg, #16807f, #0f6468); }
+.cal-face-3 { background: linear-gradient(160deg, #bf3f72, #9c2e5a); }
+.cal-face-4 { background: linear-gradient(160deg, #bd4f36, #983d27); }
+.cal-face-5 { background: linear-gradient(160deg, #9044bd, #70309a); }
+.cal-face-more {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgb(255 255 255 / 0.85);
+}
+
+/* A peeking banner shows only its top edge. Its text would read through the
+   gap and the blur as noise, so it stays hidden until it is picked.
+   In and out are not mirror images. Coming to the front, the text fades up
+   with the stack's own 350ms move. Popped, it resolves just behind the card
+   (see the pop, below). Going out of view, it just gets out of the way:
+   100ms, no delay. */
+.cal-stack .t-stack-banner .cal-banner-body {
+  transition:
+    opacity var(--stack-open) var(--stack-ease),
+    transform var(--stack-open) var(--stack-ease),
+    filter var(--stack-open) var(--stack-ease);
+}
+.cal-stack .t-stack-banner[data-depth="1"] .cal-banner-body,
+.cal-stack .t-stack-banner[data-depth="2"] .cal-banner-body,
+.cal-stack .t-stack-banner.is-leaving .cal-banner-body {
+  opacity: 0;
+  transform: translateY(0);
+  filter: blur(2px);
+  transition-duration: 100ms;
+  transition-timing-function: ease-out;
+}
+
+/* ─── Pop a card up from the deck ───────────────────────────────────────────
+   Hover replaces the snippet's spread-everything: the card whose edge is
+   under the pointer pops up from its own place, at full size and clear, far
+   enough that its title and time read above the card in front of it. It
+   keeps its place in the deck's layering (the snippet's z-index), so it never
+   covers the edge of a card in front of it. The component hit-tests this same
+   geometry, so change them together.
+
+   The deck parts rather than one card jumping. The popped card rises
+   --pop-lift-N; the cards in front of it sink --pop-sink to make room
+   (`.is-parted`); the cards behind rise with it (`.is-raised`), keeping their
+   edges in reach. The card rises far enough to show its whole content, still
+   centred in the pill: the tile and two lines end 36px down a 44px card, and
+   the strip it opens above the card in front is ~38px. (Its content used to
+   ride 4px up the card to fit a shorter lift, which set it off-centre.)
+
+   Motion is springs, not the stack's ease-out, which put half the travel into
+   one frame: a snap, then a crawl. The pop is a light spring (half-way at
+   ~70ms, 90% at ~130ms, ~0.7px past its mark before it settles); the card
+   behind follows 35ms later, so the deck moves in layers, not as one block;
+   the text resolves 40ms behind the card. Letting go is a critically damped
+   settle, no bounce, no delay. The front card, hovered, lifts 2px. */
+/* Per depth: the second meeting lifts 20px, the third 17.5px. Each then shows
+   its whole tile and both lines, centred in the pill, 2px clear of the card in
+   front of it. The third waits 2.8px lower when raised behind a popped second
+   meeting (20 - 44 * 0.12 = 14.7), so moving the pointer up onto it lifts it
+   the last bit; it never sinks. Cards behind a popped card rise by its lift
+   (--raise, set per popped depth). */
+.cal-stack {
+  --pop-lift-1: 20px;
+  --pop-lift-2: 17.5px;
+  --pop-sink: 4px;
+  /* Damped springs (zeta 0.72 and 1, omega 21 and 24 rad/s), sampled. */
+  --pop-spring: linear(0, 0.043, 0.147, 0.281, 0.423, 0.559, 0.681, 0.783, 0.866, 0.929, 0.974, 1.005, 1.024, 1.035, 1.038, 1.038, 1.034, 1.029, 1.024, 1.018, 1.014, 1.009, 1.006, 1.003, 1);
+  --pop-spring-dur: 362ms;
+  --pop-settle: linear(0, 0.053, 0.167, 0.3, 0.43, 0.546, 0.644, 0.725, 0.79, 0.841, 0.88, 0.91, 0.933, 0.951, 0.964, 0.973, 0.98, 0.986, 0.99, 0.992, 0.994, 0.996, 0.997, 0.998, 1);
+  --pop-settle-dur: 366ms;
+}
+.cal-stack.pop-1 { --raise: var(--pop-lift-1); }
+/* While picking, and for the settle after (the component keeps .is-picking
+   that long), cards move on the springs rather than the stack's own curve.
+   The snippet lists transform, opacity, filter, in that order. */
+.cal-stack.is-picking .t-stack-banner {
+  transition-duration: var(--pop-settle-dur), 180ms, 180ms;
+  transition-timing-function: var(--pop-settle), ease-out, ease-out;
+  transition-delay: 0ms;
+}
+.cal-stack .t-stack-banner.is-popped,
+.cal-stack .t-stack-banner.is-raised {
+  transition-duration: var(--pop-spring-dur), 180ms, 180ms;
+  transition-timing-function: var(--pop-spring), ease-out, ease-out;
+}
+.cal-stack .t-stack-banner.is-raised { transition-delay: 35ms; }
+.cal-stack .t-stack-banner.is-popped {
+  opacity: 1;
+  filter: none;
+}
+.cal-stack .t-stack-banner.is-popped[data-depth="0"] { transform: translateY(-2px) scale(1); }
+.cal-stack .t-stack-banner.is-popped[data-depth="1"] {
+  transform: translateY(calc(var(--stack-peek) * -1 - var(--pop-lift-1))) scale(1);
+}
+.cal-stack .t-stack-banner.is-popped[data-depth="2"] {
+  transform: translateY(calc(var(--stack-peek) * -2 - var(--pop-lift-2))) scale(1);
+}
+/* Behind a popped card, rising by its lift. */
+.cal-stack .t-stack-banner.is-raised[data-depth="2"] {
+  transform: translateY(calc(var(--stack-peek) * -2 - var(--raise))) scale(calc(1 - var(--stack-depth-scale) * 2));
+}
+/* In front of a popped card, sinking to make room. */
+.cal-stack .t-stack-banner.is-parted[data-depth="0"] {
+  transform: translateY(var(--pop-sink)) scale(1);
+}
+.cal-stack .t-stack-banner.is-parted[data-depth="1"] {
+  transform: translateY(calc(var(--stack-peek) * -1 + var(--pop-sink))) scale(calc(1 - var(--stack-depth-scale)));
+}
+
+
+/* If a popped deck ever rises into the heading, the heading gives way. At the
+   current sizes it doesn't (the highest a card goes, the popped third meeting,
+   is ~32px below the heading's last line); the component still checks, so a
+   size change can't bury it. */
+.cal-stack-header { transition: opacity 200ms ease; }
+.cal-stack-header.is-covered { opacity: 0; }
+.cal-stack .t-stack-banner.is-popped[data-depth] .cal-banner-body {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+/* The body lists opacity, transform, filter, in that order. */
+.cal-stack .t-stack-banner.is-popped[data-depth="1"] .cal-banner-body,
+.cal-stack .t-stack-banner.is-popped[data-depth="2"] .cal-banner-body {
+  transition-duration: 200ms, var(--pop-spring-dur), 200ms;
+  transition-timing-function: ease-out, var(--pop-spring), ease-out;
+  transition-delay: 40ms;
+}
+
+/* Reduced motion means gentler, not absent (src/ui-components/design.md). The
+   snippet's guard drops every transform, which would stack all three banners
+   on one spot and hide two meetings. Keep the resting geometry and the pop, with no
+   transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .cal-stack .t-stack-banner[data-depth="1"] {
+    transform: translateY(calc(var(--stack-peek) * -1)) scale(calc(1 - var(--stack-depth-scale))) !important;
+  }
+  .cal-stack .t-stack-banner[data-depth="2"] {
+    transform: translateY(calc(var(--stack-peek) * -2)) scale(calc(1 - var(--stack-depth-scale) * 2)) !important;
+  }
+  .cal-stack .t-stack-banner.is-popped[data-depth="0"] { transform: none !important; }
+  .cal-stack .t-stack-banner.is-popped[data-depth="1"] {
+    transform: translateY(calc(var(--stack-peek) * -1 - var(--pop-lift-1))) scale(1) !important;
+  }
+  .cal-stack .t-stack-banner.is-popped[data-depth="2"] {
+    transform: translateY(calc(var(--stack-peek) * -2 - var(--pop-lift-2))) scale(1) !important;
+  }
+  .cal-stack .t-stack-banner.is-raised[data-depth="2"] {
+    transform: translateY(calc(var(--stack-peek) * -2 - var(--raise))) scale(calc(1 - var(--stack-depth-scale) * 2)) !important;
+  }
+  .cal-stack .t-stack-banner.is-parted[data-depth="0"] { transform: translateY(var(--pop-sink)) !important; }
+  .cal-stack .t-stack-banner.is-parted[data-depth="1"] {
+    transform: translateY(calc(var(--stack-peek) * -1 + var(--pop-sink))) scale(calc(1 - var(--stack-depth-scale))) !important;
+  }
+  .cal-stack .t-stack-banner { transition-delay: 0ms !important; }
+  .cal-stack-header { transition: none; }
+  .cal-stack .t-stack-banner .cal-banner-body { transition: none !important; transform: none !important; filter: none !important; }
+  .cal-banner > .glass-cta__edge, .cal-banner::after, .cal-banner .cal-glass { transition: none !important; }
+  .cal-tile-arc { transition: none !important; }
+}

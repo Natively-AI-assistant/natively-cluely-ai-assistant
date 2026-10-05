@@ -87,7 +87,11 @@ export interface DecideProfileInput {
 }
 
 const MODE_TEMPLATE_TYPES: ReadonlySet<string> = new Set([
-  'general', 'looking-for-work', 'sales', 'recruiting', 'team-meet', 'lecture', 'technical-interview',
+  // F-505: 'seminar' is the 8th member of the template union (see
+  // modeProfiles.ts). Omitting it here made toActiveModeInfo return null
+  // for a seminar mode, so planAnswer ran mode-blind and applyModeFallback
+  // never rewrote the fallthrough to lecture_answer.
+  'general', 'looking-for-work', 'sales', 'recruiting', 'team-meet', 'lecture', 'technical-interview', 'seminar',
 ]);
 
 /** Normalize the legacy string form into ActiveModeInfo (unknown ids → null). */

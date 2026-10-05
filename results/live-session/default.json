@@ -1,0 +1,467 @@
+{
+  "model_id": "default",
+  "userData": "/private/tmp/claude-501/-Users-evin-natively-cluely-ai-assistant/b3ab9bfb-d83e-4197-b747-4671dbdb2b7a/upgrade-small",
+  "uploads": [],
+  "queries": [
+    {
+      "query": "Where do we stop a plan the customer already asked to end from being charged again?",
+      "ms": 10,
+      "ok": true,
+      "invokeError": null,
+      "retrievalConfidence": 0,
+      "blockLength": 9045,
+      "snippetCount": 9,
+      "denseScoredSnippets": 9,
+      "top1Correct": true,
+      "firstCorrectRank": 1,
+      "ranked": [
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 2,
+          "score": 0.5655056855996684,
+          "ftsScore": 0.15309310892394865,
+          "vectorScore": 0.8404474033834816,
+          "preview": "[context: Revocation] ## Revocation The subscription reconciler runs every fifteen minutes. It walks every account whose"
+        },
+        {
+          "fileName": "billing-notes.txt",
+          "chunkIndex": 0,
+          "score": 0.5342937334347991,
+          "ftsScore": 0.1013606067599229,
+          "vectorScore": 0.8229158178847167,
+          "preview": "Meridian billing Billing model Every workspace has exactly one subscription. Seats are billed monthly in arrears. A work"
+        },
+        {
+          "fileName": "subscriptions.ts",
+          "chunkIndex": 0,
+          "score": 0.520611967914486,
+          "ftsScore": 0.05892556509887897,
+          "vectorScore": 0.8284029031248907,
+          "preview": "// Guards a cancelled plan against renewal. export function shouldRenew(sub: Subscription, now: Date): boolean { if (sub"
+        },
+        {
+          "fileName": "plans.csv",
+          "chunkIndex": 0,
+          "score": 0.5187407112767876,
+          "ftsScore": 0.08703882797784893,
+          "vectorScore": 0.8065419668094133,
+          "preview": "[Table rows 1-2] plan,projects,documents free,3,250 pro,unlimited,unlimited"
+        },
+        {
+          "fileName": "limits.json",
+          "chunkIndex": 0,
+          "score": 0.48958395128785187,
+          "ftsScore": 0,
+          "vectorScore": 0.8159732521464198,
+          "preview": "{ &quot;freeTier&quot;: { &quot;projects&quot;: 3, &quot;documents&quot;: 250 }, &quot;entitlementCacheTtlSeconds&quot;:"
+        },
+        {
+          "fileName": "overview.html",
+          "chunkIndex": 0,
+          "score": 0.47560113579330343,
+          "ftsScore": 0,
+          "vectorScore": 0.7926685596555058,
+          "preview": "Billing Free tier projects | 3 Free tier documents | 250"
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 1,
+          "score": 0.5242100862461222,
+          "ftsScore": 0.09759000729485333,
+          "vectorScore": 0.8086234722136348,
+          "preview": "[context: Billing model] ## Billing model Every workspace has exactly one subscription. Seats are billed monthly in arre"
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 0,
+          "score": 0.4754920746135323,
+          "ftsScore": 0,
+          "vectorScore": 0.7924867910225539,
+          "preview": "# Meridian billing "
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 3,
+          "score": 0.4670319628963624,
+          "ftsScore": 0,
+          "vectorScore": 0.7783866048272707,
+          "preview": "[context: Caching] ## Caching Entitlement cache entries are held for 90 seconds, which is why a downgrade can take up to"
+        }
+      ]
+    },
+    {
+      "query": "What are the project and document caps on the free tier?",
+      "ms": 1,
+      "ok": true,
+      "invokeError": null,
+      "retrievalConfidence": 0,
+      "blockLength": 9061,
+      "snippetCount": 9,
+      "denseScoredSnippets": 9,
+      "top1Correct": true,
+      "firstCorrectRank": 1,
+      "ranked": [
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 1,
+          "score": 0.6379710319082603,
+          "ftsScore": 0.3380617018914066,
+          "vectorScore": 0.8379105852528295,
+          "preview": "[context: Billing model] ## Billing model Every workspace has exactly one subscription. Seats are billed monthly in arre"
+        },
+        {
+          "fileName": "billing-notes.txt",
+          "chunkIndex": 0,
+          "score": 0.5937528282638973,
+          "ftsScore": 0.23408229439226114,
+          "vectorScore": 0.8335331841783215,
+          "preview": "Meridian billing Billing model Every workspace has exactly one subscription. Seats are billed monthly in arrears. A work"
+        },
+        {
+          "fileName": "overview.html",
+          "chunkIndex": 0,
+          "score": 0.6415219050349543,
+          "ftsScore": 0.2721655269759087,
+          "vectorScore": 0.8877594904076513,
+          "preview": "Billing Free tier projects | 3 Free tier documents | 250"
+        },
+        {
+          "fileName": "limits.json",
+          "chunkIndex": 0,
+          "score": 0.5165023480039129,
+          "ftsScore": 0,
+          "vectorScore": 0.8608372466731882,
+          "preview": "{ &quot;freeTier&quot;: { &quot;projects&quot;: 3, &quot;documents&quot;: 250 }, &quot;entitlementCacheTtlSeconds&quot;:"
+        },
+        {
+          "fileName": "plans.csv",
+          "chunkIndex": 0,
+          "score": 0.5518584644515042,
+          "ftsScore": 0.10050378152592121,
+          "vectorScore": 0.8527615864018929,
+          "preview": "[Table rows 1-2] plan,projects,documents free,3,250 pro,unlimited,unlimited"
+        },
+        {
+          "fileName": "subscriptions.ts",
+          "chunkIndex": 0,
+          "score": 0.4641205643177803,
+          "ftsScore": 0,
+          "vectorScore": 0.7735342738629672,
+          "preview": "// Guards a cancelled plan against renewal. export function shouldRenew(sub: Subscription, now: Date): boolean { if (sub"
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 3,
+          "score": 0.5216896987385394,
+          "ftsScore": 0.14907119849998599,
+          "vectorScore": 0.7701020322309083,
+          "preview": "[context: Caching] ## Caching Entitlement cache entries are held for 90 seconds, which is why a downgrade can take up to"
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 2,
+          "score": 0.5126726326468259,
+          "ftsScore": 0.11785113019775793,
+          "vectorScore": 0.7758869676128713,
+          "preview": "[context: Revocation] ## Revocation The subscription reconciler runs every fifteen minutes. It walks every account whose"
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 0,
+          "score": 0.4615795942171114,
+          "ftsScore": 0,
+          "vectorScore": 0.7692993236951857,
+          "preview": "# Meridian billing "
+        }
+      ]
+    },
+    {
+      "query": "How long are entitlement cache entries held?",
+      "ms": 6,
+      "ok": true,
+      "invokeError": null,
+      "retrievalConfidence": 0,
+      "blockLength": 9042,
+      "snippetCount": 9,
+      "denseScoredSnippets": 9,
+      "top1Correct": true,
+      "firstCorrectRank": 1,
+      "ranked": [
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 3,
+          "score": 0.7039654558797381,
+          "ftsScore": 0.4225771273642583,
+          "vectorScore": 0.891557674890058,
+          "preview": "[context: Caching] ## Caching Entitlement cache entries are held for 90 seconds, which is why a downgrade can take up to"
+        },
+        {
+          "fileName": "billing-notes.txt",
+          "chunkIndex": 0,
+          "score": 0.5960503505851784,
+          "ftsScore": 0.22118697760190442,
+          "vectorScore": 0.8459592659073609,
+          "preview": "Meridian billing Billing model Every workspace has exactly one subscription. Seats are billed monthly in arrears. A work"
+        },
+        {
+          "fileName": "subscriptions.ts",
+          "chunkIndex": 0,
+          "score": 0.5543595453930001,
+          "ftsScore": 0.1543033499620919,
+          "vectorScore": 0.8210636756802724,
+          "preview": "// Guards a cancelled plan against renewal. export function shouldRenew(sub: Subscription, now: Date): boolean { if (sub"
+        },
+        {
+          "fileName": "limits.json",
+          "chunkIndex": 0,
+          "score": 0.5079914634696814,
+          "ftsScore": 0,
+          "vectorScore": 0.8466524391161356,
+          "preview": "{ &quot;freeTier&quot;: { &quot;projects&quot;: 3, &quot;documents&quot;: 250 }, &quot;entitlementCacheTtlSeconds&quot;:"
+        },
+        {
+          "fileName": "plans.csv",
+          "chunkIndex": 0,
+          "score": 0.4678480165709792,
+          "ftsScore": 0,
+          "vectorScore": 0.7797466942849653,
+          "preview": "[Table rows 1-2] plan,projects,documents free,3,250 pro,unlimited,unlimited"
+        },
+        {
+          "fileName": "overview.html",
+          "chunkIndex": 0,
+          "score": 0.46733037389163684,
+          "ftsScore": 0,
+          "vectorScore": 0.7788839564860615,
+          "preview": "Billing Free tier projects | 3 Free tier documents | 250"
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 2,
+          "score": 0.5316689202357107,
+          "ftsScore": 0.0668153104781061,
+          "vectorScore": 0.8415713267407804,
+          "preview": "[context: Revocation] ## Revocation The subscription reconciler runs every fifteen minutes. It walks every account whose"
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 1,
+          "score": 0.4930773794376846,
+          "ftsScore": 0.06388765649999399,
+          "vectorScore": 0.7792038613961451,
+          "preview": "[context: Billing model] ## Billing model Every workspace has exactly one subscription. Seats are billed monthly in arre"
+        },
+        {
+          "fileName": "billing-notes.md",
+          "chunkIndex": 0,
+          "score": 0.4523959471936317,
+          "ftsScore": 0,
+          "vectorScore": 0.7539932453227195,
+          "preview": "# Meridian billing "
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "proEnabled": true,
+  "embeddingConfig": {
+    "skipped": true
+  },
+  "providerWarmup": {
+    "ok": false,
+    "error": "not_configured",
+    "message": "No usable local provider. Check that the model is installed and any required API key is set."
+  },
+  "reusedMode": {
+    "name": "EmbBench upgrade",
+    "referenceFileCount": 6
+  },
+  "modeId": "mode_6840ae26-306f-4383-91c1-321e62b86ead",
+  "embeddingStatusAtStart": {
+    "active": {
+      "configured": true,
+      "provider": "local",
+      "model": "Xenova/multilingual-e5-small",
+      "dimensions": 384,
+      "space": "local:xenova/multilingual-e5-small:384",
+      "location": "on-device",
+      "lightweight": false
+    },
+    "configured": {
+      "mode": "manual",
+      "provider": "local",
+      "model": "Xenova/all-MiniLM-L6-v2"
+    },
+    "acknowledged": false,
+    "scopeAllowsCloud": true,
+    "shouldWarn": false
+  },
+  "indexStatusAtStart": [
+    {
+      "fileId": "ref_cae899ce-1b26-4e0c-930c-22a8987060f6",
+      "fileName": "billing-notes.md",
+      "status": "pending",
+      "chunkCount": 4,
+      "embeddedChunkCount": 0
+    },
+    {
+      "fileId": "ref_6fef3354-c386-48bd-8565-6a9704f3cdde",
+      "fileName": "billing-notes.txt",
+      "status": "pending",
+      "chunkCount": 1,
+      "embeddedChunkCount": 0
+    },
+    {
+      "fileId": "ref_db0af930-3789-45b6-ae9b-88a6500d3bcc",
+      "fileName": "subscriptions.ts",
+      "status": "pending",
+      "chunkCount": 1,
+      "embeddedChunkCount": 0
+    },
+    {
+      "fileId": "ref_b60a6e35-788a-48bf-85e1-ea5e552b486f",
+      "fileName": "limits.json",
+      "status": "pending",
+      "chunkCount": 1,
+      "embeddedChunkCount": 0
+    },
+    {
+      "fileId": "ref_c0ed0a03-2187-405f-b801-6bb34f8eff16",
+      "fileName": "plans.csv",
+      "status": "pending",
+      "chunkCount": 1,
+      "embeddedChunkCount": 0
+    },
+    {
+      "fileId": "ref_029782db-8c2e-408d-81a2-0b2dd9f76bc3",
+      "fileName": "overview.html",
+      "status": "pending",
+      "chunkCount": 1,
+      "embeddedChunkCount": 0
+    }
+  ],
+  "prewarmMs": 658,
+  "reindex": {
+    "success": true,
+    "statuses": [
+      {
+        "fileId": "ref_cae899ce-1b26-4e0c-930c-22a8987060f6",
+        "fileName": "billing-notes.md",
+        "status": "ready",
+        "chunkCount": 4,
+        "embeddedChunkCount": 4
+      },
+      {
+        "fileId": "ref_6fef3354-c386-48bd-8565-6a9704f3cdde",
+        "fileName": "billing-notes.txt",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      },
+      {
+        "fileId": "ref_db0af930-3789-45b6-ae9b-88a6500d3bcc",
+        "fileName": "subscriptions.ts",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      },
+      {
+        "fileId": "ref_b60a6e35-788a-48bf-85e1-ea5e552b486f",
+        "fileName": "limits.json",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      },
+      {
+        "fileId": "ref_c0ed0a03-2187-405f-b801-6bb34f8eff16",
+        "fileName": "plans.csv",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      },
+      {
+        "fileId": "ref_029782db-8c2e-408d-81a2-0b2dd9f76bc3",
+        "fileName": "overview.html",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      }
+    ]
+  },
+  "duringIndexing": {
+    "query": "What are the project and document caps on the free tier?",
+    "ms": 17,
+    "snippetCount": 9,
+    "denseScoredSnippets": 9,
+    "top1Correct": true,
+    "statusesAtProbe": [
+      "ready:4/4",
+      "ready:1/1",
+      "ready:1/1",
+      "ready:1/1",
+      "ready:1/1",
+      "ready:1/1"
+    ]
+  },
+  "indexSettled": true,
+  "indexSettleMs": 1,
+  "indexStatus": {
+    "success": true,
+    "statuses": [
+      {
+        "fileId": "ref_cae899ce-1b26-4e0c-930c-22a8987060f6",
+        "fileName": "billing-notes.md",
+        "status": "ready",
+        "chunkCount": 4,
+        "embeddedChunkCount": 4
+      },
+      {
+        "fileId": "ref_6fef3354-c386-48bd-8565-6a9704f3cdde",
+        "fileName": "billing-notes.txt",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      },
+      {
+        "fileId": "ref_db0af930-3789-45b6-ae9b-88a6500d3bcc",
+        "fileName": "subscriptions.ts",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      },
+      {
+        "fileId": "ref_b60a6e35-788a-48bf-85e1-ea5e552b486f",
+        "fileName": "limits.json",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      },
+      {
+        "fileId": "ref_c0ed0a03-2187-405f-b801-6bb34f8eff16",
+        "fileName": "plans.csv",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      },
+      {
+        "fileId": "ref_029782db-8c2e-408d-81a2-0b2dd9f76bc3",
+        "fileName": "overview.html",
+        "status": "ready",
+        "chunkCount": 1,
+        "embeddedChunkCount": 1
+      }
+    ]
+  },
+  "embeddedChunkTotal": 9,
+  "chunkTotal": 9,
+  "vectorsActuallyWritten": true,
+  "modelLoadedInApp": "Xenova/multilingual-e5-small",
+  "cdpErrors": [],
+  "expectedModelId": null,
+  "appLogEvidence": [
+    "[ProviderStatus] ollama missing_optional_dependency Ollama not selected; startup skipped",
+    "[LocalEmbeddingWorker] Loading feature-extraction model (Xenova/multilingual-e5-small, pooling=mean)...",
+    "[LocalEmbeddingWorker] Feature-extraction model loaded successfully.",
+    "[ProviderStatus] local-embedding ready Local embedding fallback ready"
+  ]
+}

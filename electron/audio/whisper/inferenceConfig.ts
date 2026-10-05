@@ -46,6 +46,12 @@ const WHISPER_SAFE_DTYPE: Record<string, string> = {
     decoder_model: 'q8',
     decoder_model_merged: 'q8',
     decoder_with_past_model: 'q8',
+    // Single-session CTC models (Parakeet) load one module named `model`. The
+    // lookup falls back to fp32 for any key it does not find, and for Parakeet
+    // that means the 2.4 GB fp32 weights instead of the 583 MB q8 — a 4x
+    // download for a model whose q8 WER is within noise. Whisper-family models
+    // have no `model` session, so this key is inert for them.
+    model: 'q8',
 };
 
 /**
@@ -115,15 +121,81 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
     } catch {
         useExternalDataFormat = undefined;
     }
+    // Routes the worker to raw-ONNX engines (Nemotron, Parakeet TDT) instead of
+    // the transformers.js pipeline() path. Best-effort like the lookups above —
+    // a failure here must never prevent the worker from starting; it just
+    // means the worker falls back to the default pipeline() path.
+    let sessionLayout: 'encoder-decoder' | 'single' | 'nemotron-rnnt' | 'parakeet-tdt' | undefined;
+    try {
+        const { MODEL_CATALOG } = require('./modelManager');
+        sessionLayout = MODEL_CATALOG.find((m: any) => m.id === modelId)?.sessionLayout;
+    } catch {
+        sessionLayout = undefined;
+    }
     return {
         type: 'init',
         modelId,
         cacheDir: getModelsDir(),
-        executionProviders,
+        // Nemotron and Parakeet TDT opt OUT of the platform accelerator — see
+        // resolveNemotronExecutionProviders() / resolveParakeetExecutionProviders()
+        // for the measurements.
+        executionProviders: sessionLayout === 'nemotron-rnnt'
+            ? resolveNemotronExecutionProviders(executionProviders)
+            : sessionLayout === 'parakeet-tdt'
+                ? resolveParakeetExecutionProviders(executionProviders)
+                : executionProviders,
         dtype,
         expectedBytes,
         useExternalDataFormat,
+        sessionLayout,
     };
+}
+
+/**
+ * Nemotron (sessionLayout 'nemotron-rnnt') runs CPU-only, ignoring the
+ * platform accelerator every other model uses.
+ *
+ * The ['coreml','cpu'] default was tuned for Whisper/Distil — single
+ * encoder-decoder transformer graphs. Nemotron is a three-session RNN-T, and
+ * CoreML is a straight loss on it in BOTH directions. Measured on an M-series
+ * (10 cores / 4 performance), int4 export, 2.46s fixture, median of 3 after a
+ * warmup run, identical transcript in every configuration:
+ *
+ *   coreml+cpu   load 6436ms   infer 1158ms   RTF 0.470
+ *   cpu          load  363ms   infer  936ms   RTF 0.380
+ *
+ * CoreML costs ~6.1s of graph compilation at load and still runs inference
+ * ~24% slower. The reason is visible in the app's own startup log: CoreML
+ * partitions the encoder into 369 fragments (971 of 1891 nodes supported) and
+ * the 13-node decoder/joint graphs into 3 fragments each. Every fragment
+ * boundary is a CPU<->CoreML copy, and the RNN-T decode loop crosses them
+ * per symbol rather than once per chunk. This is the documented ORT failure
+ * mode for heavily-partitioned graphs, and it is why the upstream reference
+ * implementation of this exact export ships CPU-only ("no GPU required").
+ *
+ * `platformProviders` is accepted (not just ignored) so a platform that never
+ * offered an accelerator still gets its own list rather than a hardcoded one.
+ */
+export function resolveNemotronExecutionProviders(platformProviders: string[]): string[] {
+    const cpuOnly = platformProviders.filter(p => p === 'cpu');
+    return cpuOnly.length > 0 ? cpuOnly : ['cpu'];
+}
+
+/**
+ * Parakeet TDT (sessionLayout 'parakeet-tdt') runs CPU-only for the same
+ * reason as Nemotron: a three-session transducer whose decode loop crosses
+ * every CoreML fragment boundary per symbol. Measured on an M4 (int8 export,
+ * two fresh processes per config, warm = median of 5, identical transcripts):
+ *
+ *   coreml+cpu   load 3.6s    warm 280ms (5.7s clip)   657ms (13.2s clip)
+ *   cpu          load 0.76s   warm 144ms               379ms
+ *
+ * CoreML partitions the int8 encoder into 344 fragments (1404 of 3249 nodes).
+ * DirectML was never measured for this export, so Windows takes the measured
+ * CPU path too rather than an untested accelerator.
+ */
+export function resolveParakeetExecutionProviders(platformProviders: string[]): string[] {
+    return resolveNemotronExecutionProviders(platformProviders);
 }
 
 /**

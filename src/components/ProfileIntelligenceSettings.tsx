@@ -1,17 +1,61 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
-    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
-    User, CheckCircle, ArrowUpRight, Paperclip, Plus, FileText,
-    GraduationCap, FolderKanban, Layers, Mail,
+    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
+    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
+    GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
-import { PremiumUpgradeModal } from '../premium';
+import { ThinkingOrb } from 'thinking-orbs';
+import { useToggleInit } from './settings/useToggleInit';
+import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
+import { CHECKOUT_URLS } from '../config/urls';
+import { useConfirmDialog } from './ui/ConfirmDialog';
+
+const openExternal = (url: string) => {
+    if ((window as any).electronAPI?.openExternal) {
+        (window as any).electronAPI.openExternal(url, { surface: 'profile_intelligence' });
+    } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+};
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
+    /*
+      Registered so the press-tighten can interpolate the lens size. An
+      unregistered custom property is a token, not a length, and a transition on
+      it is silently a no-op. @property is global by spec, so its own names are
+      prefixed to stay clear of LiquidGlassButton.css's --lg-lens-*.
+    */
+    @property --pi-lens-w { syntax: '<length>'; inherits: true; initial-value: 90px; }
+    @property --pi-lens-h { syntax: '<length>'; inherits: true; initial-value: 40px; }
+
     .pi-root {
+        /*
+          Which face the specular rim lives on. Not a style choice — it falls
+          out of the body and the surround, and the two themes here need
+          opposite answers (see src/ui-components/design.md, and .lg-sky):
+
+            both    a mid-to-dark body on a dark stage. It catches the key light
+                    from above AND a bounce from below, so the rim is symmetric.
+            top     a dark body on a white card. No bounce to catch; the pill
+                    sits ON the card, so the specular stays up top and a contact
+                    shadow does the work the bottom rim used to do.
+            bottom  a LIGHT body, where a bright rim has nothing to do because
+                    the fill already out-shines anything it could catch. The rim
+                    inverts: it becomes the shadow on the underside.
+
+          Percentages of a 36px pill, so the 4%/30% pair is 1.4px/10.8px — the
+          1px ring sits entirely inside the opaque stretch and the fade beyond
+          it is what keeps the mask from clipping the ring's own antialiasing.
+        */
+        --pi-mask-both: linear-gradient(180deg, #000 0%, #000 8%, transparent 30%, transparent 70%, #000 92%, #000 100%);
+        --pi-mask-top: linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%);
+        --pi-mask-bottom: linear-gradient(180deg, transparent 0%, transparent 70%, #000 96%, #000 100%);
+
         --pi-bg: #111111;
         --pi-sidebar-bg: #0a0a0a;
         --pi-border: rgba(255,255,255,0.07);
@@ -19,6 +63,18 @@ const PI_CSS = `
         --pi-primary: rgba(255,255,255,0.85);
         --pi-secondary: rgba(255,255,255,0.55);
         --pi-tertiary: rgba(255,255,255,0.35);
+        /*
+          The sidebar nav has its own four ink tokens rather than borrowing the
+          panel's --pi-secondary / --pi-primary directly. Those two are spent in
+          75 places across body copy, labels and hints, so tuning the nav
+          through them would repaint the whole panel. Here they are the same
+          values the nav has always resolved to; the light theme is where they
+          diverge.
+        */
+        --pi-nav-text: var(--pi-secondary);
+        --pi-nav-text-active: var(--pi-primary);
+        --pi-nav-icon: var(--pi-tertiary);
+        --pi-nav-icon-active: var(--pi-secondary);
         --pi-btn-bg: rgba(255,255,255,0.06);
         --pi-btn-bg-hover: rgba(255,255,255,0.10);
         --pi-btn-border: rgba(255,255,255,0.10);
@@ -28,14 +84,71 @@ const PI_CSS = `
         --pi-input-border: rgba(255,255,255,0.10);
         --pi-danger: #ef4444;
         --pi-danger-bg: rgba(239,68,68,0.12);
-        --pi-accent: #818cf8;
+        --pi-accent: var(--periwinkle-300);
+        --pi-on-accent: var(--periwinkle-on-accent-dark);
+        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-300) 8%, transparent);
+        /* Smoked variant of --pi-accent-subtle, for the cover-letter sheet. The
+           25% black scrim takes the composited sheet from rgb(30,29,35) to
+           rgb(23,22,27) over the #111 panel — ~0.76x, i.e. 25% darker, while
+           staying ~6 levels above the panel so the sheet still reads as a
+           distinct surface. Own token, not a change to --pi-accent-subtle,
+           which badges and other cards still use at full brightness. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-300) 6%, rgba(0,0,0,0.25));
+        --pi-accent-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
+        --pi-accent-icon: var(--periwinkle-400);
+        --pi-badge-text: var(--pi-accent);
+        --pi-badge-border: var(--pi-accent-border);
+        --pi-cta-accent-text: var(--periwinkle-400);
+        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-300) 30%, transparent);
         --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
         --pi-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-        --pi-input-border-focus: rgba(129,140,248,0.40);
-        --pi-input-bg-focus: rgba(129,140,248,0.04);
+        /* Expo-out. Almost all of the distance is covered in the first third,
+           then it glides for a long time — which is what buys a slow animation
+           the right to be slow: it reads as settling, not as waiting. This is
+           the curve for anything that travels far or lands late. */
+        --pi-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-300) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-300) 4%, transparent);
+        /*
+          Liquid Glass on a WHITE pill — the light-body case, which inverts the
+          lighting model everywhere. See .lg-sky in src/ui-components, which is
+          the same inversion for a light blue fill.
+
+          On a light body a white specular has nothing to do: the fill is
+          already brighter than any light it could catch. #ffffff is the
+          extreme of that — there is no headroom left at all, so this pill gets
+          no bright rim, no sheen and no hover lift in luminance. The form comes
+          from the other direction entirely: the UNDERSIDE darkens, the caps sit
+          in shadow, and a real contact shadow separates the pill from the
+          panel. Same four layers as any other body, opposite polarity.
+        */
         --pi-cta-bg: #ffffff;
+        /* Held at the body colour, and it has no choice: #ffffff is the
+           ceiling. The lift, the contact shadow and the lens carry this state,
+           which is what the white pill has always done. */
+        --pi-cta-hover: #ffffff;
         --pi-cta-text: #141414;
         --pi-cta-ring: rgba(0,0,0,0.08);
+        /* A DARK rim, on the bottom face. Inverted from the measured material,
+           because on this body the rim is the shadow rather than the specular.
+           One hairline, not the reference's three rings — see .pi-cta::before. */
+        --pi-cta-rim: rgba(0,0,0,0.17);
+        --pi-cta-rim-mask: var(--pi-mask-bottom);
+        /* No sheen: white over white is invisible, and a DARK sheen would ramp
+           the body, which is the one thing this material never does. */
+        --pi-cta-sheen: none;
+        /* The lens cannot brighten a white body either, so the refraction reads
+           as the dark surround being bent into view — a faint local darkening
+           with a darker rim pickup under the pointer. */
+        --pi-cta-lens-tint: rgba(0,0,0,0.030);
+        --pi-cta-lens-rim: rgba(0,0,0,0.10);
+        --pi-cta-lens-rim-soft: rgba(0,0,0,0.045);
+        /* Visible on white, where it does real work turning the caps. .lg-sky
+           runs .30 on a mid-light fill; pure white needs less or it smudges. */
+        --pi-cta-cap-opacity: 0.22;
+        --pi-cta-shadow: 0 1px 2px rgba(0,0,0,0.22), 0 4px 10px rgba(0,0,0,0.16);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(0,0,0,0.26), 0 8px 18px rgba(0,0,0,0.28);
+        --pi-cta-hc-border: rgba(0,0,0,0.92);
         --pi-close-bg: rgba(255,255,255,0.06);
         --pi-close-hover: rgba(255,255,255,0.12);
         --pi-card-bg: rgba(255,255,255,0.015);
@@ -53,18 +166,94 @@ const PI_CSS = `
         --pi-primary: #374151;
         --pi-secondary: #6b7280;
         --pi-tertiary: #9ca3af;
+        /*
+          The nav rows sit on #f5f5f5, a step off the page rather than a step
+          toward it, and grey-500 text on grey-100 lands at 4.8:1 — legal, but
+          it reads as a disabled list rather than a set of destinations. Each
+          rung moves down one stop: rest grey-500 -> grey-600 (7.6:1), selected
+          grey-700 -> grey-800. The gap between them widens rather than closing,
+          so the selected row is still the darkest thing in the column.
+        */
+        --pi-nav-text: #4b5563;
+        --pi-nav-text-active: #1f2937;
+        /*
+          The glyphs move with their labels. Dark mode runs the icon at 0.35
+          against a 0.55 label — a little under two thirds of the text's weight.
+          Left at grey-400 beside grey-600 text the light nav lands nowhere near
+          that (2.3:1 against the row, versus the label's 6.9:1) and the icons
+          read as washed out rather than as quieter. One stop each restores the
+          dark theme's proportion.
+        */
+        --pi-nav-icon: #6b7280;
+        --pi-nav-icon-active: #4b5563;
         --pi-btn-bg: rgba(0,0,0,0.04);
         --pi-btn-bg-hover: rgba(0,0,0,0.08);
         --pi-btn-border: rgba(0,0,0,0.05);
         --pi-item-hover: rgba(0,0,0,0.03);
         --pi-item-active: rgba(0,0,0,0.06);
         --pi-input-border: rgba(0,0,0,0.10);
-        --pi-accent: #6366f1;
-        --pi-input-border-focus: rgba(99,102,241,0.40);
-        --pi-input-bg-focus: rgba(99,102,241,0.04);
-        --pi-cta-bg: #000000;
-        --pi-cta-text: #ffffff;
+        --pi-accent: var(--periwinkle-600);
+        --pi-on-accent: var(--periwinkle-on-accent-light);
+        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+        /* NO black scrim here. Dark mode's 25% smoke, applied over white, lands
+           on rgb(187,185,192) — a muddy grey slab, which is what it looked like
+           when it shipped. A light theme expresses "deeper surface" by taking
+           the tint up, not the luminance down, so this deepens the periwinkle
+           wash from 8% to 14%: rgb(237,230,249), ~18 levels under the page, and
+           still unmistakably lavender rather than grey. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-600) 14%, transparent);
+        --pi-accent-border: color-mix(in srgb, var(--periwinkle-600) 16%, transparent);
+        --pi-accent-icon: var(--periwinkle-700);
+        --pi-badge-text: var(--pi-accent);
+        --pi-badge-border: var(--pi-accent-border);
+        --pi-cta-accent-text: var(--periwinkle-700);
+        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
+        /*
+          Dark grey, not black. This pill was #000000, and black has no headroom
+          BELOW it in the same way white has none above: every gram of specular
+          could only lift it, so the body started reading as dark grey anyway
+          while the rim had to be trimmed away to stop it. Naming the grey is
+          what lets the material work — #222222 takes the measured rim without
+          the body drifting, and it is .lg-neutral's #555555 brought down for a
+          brighter surround (the reference stage was #242424; this card is
+          #f5f5f5, so the pill has to hold its own against white instead of
+          lifting off black). Label #fafafa on it is 11.2:1.
+        */
+        --pi-cta-bg: #222222;
+        /* Achromatic body, so brightness is the only hover lever — a faint cool
+           cast to fake saturation reads as a blue-grey button, not a lit one.
+           x1.32 luminance, the same step .lg-neutral takes (#555 -> #707070). */
+        --pi-cta-hover: #2d2d2d;
+        --pi-cta-text: #fafafa;
         --pi-cta-ring: rgba(255,255,255,0.10);
+        /* Alpha is .lg-neutral's --lg-rim-1. One hairline, not three rings. */
+        --pi-cta-rim: rgba(255,255,255,0.148);
+        /*
+          Top face only. On a dark stage the pill catches a bounce from below
+          and the rim is bright top AND bottom; on a white card there is no
+          bounce — the button sits ON the card, so the specular stays up top,
+          the underside darkens, and a real contact shadow does the work the
+          bottom rim used to do. design.md derives this; it is not measured.
+        */
+        --pi-cta-rim-mask: var(--pi-mask-top);
+        --pi-cta-sheen: linear-gradient(180deg,
+            rgba(255,255,255,0.055) 0%, rgba(255,255,255,0) 14%,
+            rgba(255,255,255,0) 100%);
+        --pi-cta-lens-tint: rgba(255,255,255,0.055);
+        --pi-cta-lens-rim: rgba(255,255,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(255,255,255,0.13);
+        --pi-cta-cap-opacity: 0.5;
+        --pi-cta-shadow:
+            inset 0 -1px 0 rgba(0,0,0,0.28),
+            0 1px 2px rgba(16,24,40,0.16),
+            0 4px 10px rgba(16,24,40,0.10);
+        --pi-cta-shadow-hover:
+            inset 0 -1px 0 rgba(0,0,0,0.28),
+            0 2px 4px rgba(16,24,40,0.18),
+            0 8px 18px rgba(16,24,40,0.16);
+        --pi-cta-hc-border: rgba(255,255,255,0.92);
         --pi-close-bg: rgba(0,0,0,0.05);
         --pi-close-hover: rgba(0,0,0,0.10);
         --pi-card-bg: rgba(0,0,0,0.015);
@@ -72,12 +261,38 @@ const PI_CSS = `
 
     /* ── Keyframes ── */
     @keyframes pi-list-in {
-        from { opacity: 0; transform: translateY(4px); }
+        from { opacity: 0; transform: translateY(8px); }
         to   { opacity: 1; transform: translateY(0); }
     }
-    @keyframes pi-panel-fade {
-        from { opacity: 0; transform: translateY(4px); }
-        to   { opacity: 1; transform: translateY(0); }
+    /* Section swap. The panel enters from the direction the user travelled in
+       the nav — pick something lower down and the new panel rises from below —
+       so the sidebar keeps reading as a place rather than a set of buttons.
+       The blur is doing the same job it does in any crossfade: without it you
+       see two distinct slabs overlapping, with it the eye reads one shape
+       resolving into focus. 4px is enough; blur gets expensive fast. */
+    @keyframes pi-panel-in-down {
+        from { opacity: 0; transform: translateY(16px); filter: blur(6px); }
+        45%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    @keyframes pi-panel-in-up {
+        from { opacity: 0; transform: translateY(-16px); filter: blur(6px); }
+        45%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    /* The section's own blocks then arrive one at a time. Each one rises and
+       comes forward at once — the scale is what turns "it faded in" into "it
+       arrived", and it is the reason the cascade can run this long without
+       reading as lag: at any moment something is still landing. Opacity
+       finishes at 60% so a block is legible well before it stops moving. */
+    @keyframes pi-section-in {
+        from { opacity: 0; transform: translateY(16px) scale(0.985); }
+        60%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes pi-fade-only {
+        from { opacity: 0; }
+        to   { opacity: 1; }
     }
     @keyframes pi-check-in {
         from { opacity: 0; transform: scale(0.5); }
@@ -97,13 +312,192 @@ const PI_CSS = `
         0%, 100% { opacity: 0.55; }
         50%       { opacity: 1; }
     }
-    .pi-panel-fade { animation: pi-panel-fade 180ms var(--pi-ease-out) both; }
-    .pi-list-item  { animation: pi-list-in 280ms var(--pi-ease-out) both; }
+    /* Indexing → indexed handoff. The orb settles rather than vanishing (it
+       shrinks INTO the result instead of being cut), then the extracted card
+       rises the same way every other section in this panel arrives, so the
+       finish reads as one motion instead of two unrelated ones. */
+    @keyframes pi-handoff-out {
+        from { opacity: 1; transform: scale(1);    filter: blur(0px); }
+        to   { opacity: 0; transform: scale(0.94); filter: blur(2px); }
+    }
+    @keyframes pi-handoff-in {
+        from { opacity: 0; transform: translateY(10px) scale(0.985); }
+        60%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    /* fill-mode backwards, never both. A finished "both" animation keeps its
+       transform applied forever, which leaves every animated block a permanent
+       stacking context — that is exactly how the Settings cards ended up
+       burying their own dropdowns. "backwards" holds the from-state only
+       during the delay and hands the element back to its own (identical)
+       style the moment it finishes. */
+    .pi-panel-fade { animation: pi-panel-in-down 420ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade[data-dir='up'] { animation-name: pi-panel-in-up; }
+
+    /* Blocks arrive one by one. 55ms apart is the sweet spot: wide enough to
+       read as a sequence rather than a wave, tight enough that the whole
+       column is in motion at once instead of queueing. The steps shrink as
+       they go — a constant delay makes the tail feel like it stalled, while a
+       decelerating one lets the section close itself out. Nothing here blocks
+       input: the panel is clickable from the first frame. */
+    .pi-panel-fade > * { animation: pi-section-in 520ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade > *:nth-child(1)     { animation-delay: 40ms; }
+    .pi-panel-fade > *:nth-child(2)     { animation-delay: 95ms; }
+    .pi-panel-fade > *:nth-child(3)     { animation-delay: 150ms; }
+    .pi-panel-fade > *:nth-child(4)     { animation-delay: 205ms; }
+    .pi-panel-fade > *:nth-child(5)     { animation-delay: 255ms; }
+    .pi-panel-fade > *:nth-child(6)     { animation-delay: 300ms; }
+    .pi-panel-fade > *:nth-child(7)     { animation-delay: 340ms; }
+    .pi-panel-fade > *:nth-child(8)     { animation-delay: 375ms; }
+    .pi-panel-fade > *:nth-child(9)     { animation-delay: 405ms; }
+    .pi-panel-fade > *:nth-child(n+10)  { animation-delay: 430ms; }
+
+    /* Some sections (Company Intel) render their blocks inside one flex column
+       instead of returning them flat. The cascade only reaches direct children,
+       so that whole column used to arrive as a single slab while Identity and
+       Profile came in one card at a time. Marking the column pi-cascade hands
+       the beat down to its children and takes the wrapper itself out of the
+       sequence — without that the two transforms would compound and the lower
+       cards would travel twice as far as they should.
+       The ramp picks up one step in, since the section header above it has
+       already taken the first beat. */
+    .pi-panel-fade > .pi-cascade { animation: none; }
+    .pi-panel-fade > .pi-cascade > * { animation: pi-section-in 520ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(1)     { animation-delay: 95ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(2)     { animation-delay: 150ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(3)     { animation-delay: 205ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(4)     { animation-delay: 255ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(5)     { animation-delay: 300ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(6)     { animation-delay: 340ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(7)     { animation-delay: 375ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(8)     { animation-delay: 405ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(9)     { animation-delay: 430ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(10)    { animation-delay: 450ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(n+11)  { animation-delay: 465ms; }
+
+    .pi-list-item  { animation: pi-list-in 420ms var(--pi-ease-expo) backwards; }
+    /* fill-mode "forwards" is the deliberate exception to the backwards-only
+       rule above: this element is unmounted the instant the animation ends, so
+       it can never persist a transform (and therefore never becomes a lingering
+       stacking context). Holding the end state stops it flashing back to full
+       opacity if React's unmount lands a frame late. */
+    .pi-handoff-out { animation: pi-handoff-out 240ms var(--pi-ease-out) forwards; }
+    /* -self animates the block itself (the empty slot, which owns its own
+       border and background); the child form staggers the file row and the
+       snapshot card, matching .pi-cascade's beat. */
+    .pi-handoff-in-self,
+    .pi-handoff-in > * { animation: pi-handoff-in 560ms var(--pi-ease-expo) backwards; }
+    .pi-handoff-in > *:nth-child(2) { animation-delay: 110ms; }
     .pi-spinner    { animation: pi-spin 0.8s linear infinite; }
     .pi-save-pulse { animation: pi-save-pulse 360ms var(--pi-ease-spring); }
     .pi-skeleton   {
         background: var(--pi-btn-bg);
         animation: pi-shimmer-pulse 1.4s ease-in-out infinite;
+    }
+
+    /* ── Thinking states (transitions.dev) ──────────────────────────────────
+       The ingest label names the stage it is on and moves through them, rather
+       than sitting on one frozen "Reading your resume…" for the length of a
+       real extraction — a line that never changes is exactly what reads as a
+       hang. Two signals, deliberately separate: the shimmer is liveness and
+       never stops; the label sequence is progress and STOPS on its last state
+       instead of looping, because a loop reads as "it started over". That last
+       state is therefore always the genuinely long-running one (indexing), and
+       no state ever claims a finish the ingest can't confirm.
+
+       Scoped under .pi-root like .t-toggle above: this panel is the only thing
+       that defines t-think, so it must not leak a generic t-* name globally.
+
+       The hidden sizer holds the longest state and is what gives the box its
+       width — lines are absolutely positioned across it, so every state centres
+       in a box that never resizes mid-swap. font-size lives on .t-think, not on
+       the line: the sizer only reports the right width if it is set in the same
+       font as the text it is standing in for.
+
+       The whole widget is aria-hidden; FileUploadIndexing's role="status"
+       announces one stable line instead. See the note there. */
+    .pi-root .t-think {
+        --think-swap: 150ms;
+        --think-gap: 50ms;
+        --think-distance: 8px;
+        --think-blur: 2px;
+        --think-shimmer: 2000ms;
+        --think-base: var(--pi-secondary);
+        --think-highlight: var(--pi-hero);
+        --think-ease: ease-in-out;
+        position: relative;
+        display: inline-block;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+    .pi-root .t-think-sizer { display: block; visibility: hidden; white-space: nowrap; }
+    .pi-root .t-think-text {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: block;
+        color: var(--think-base);
+        white-space: nowrap;
+        transform: translateY(0);
+        filter: blur(0);
+        opacity: 1;
+        transition:
+            transform var(--think-swap) var(--think-ease),
+            filter var(--think-swap) var(--think-ease),
+            opacity var(--think-swap) var(--think-ease);
+        will-change: transform, filter, opacity;
+    }
+    /* Shimmer sweeps the glyphs only (background-clip: text). --think-highlight
+       inverts with the theme — white over the 55% white base in dark, near-black
+       over grey-500 in light — so the sweep is a highlight either way rather
+       than a near-white band washing out on a white panel. */
+    .pi-root .t-think-text::before {
+        content: attr(data-text);
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: linear-gradient(90deg,
+            transparent 0%, transparent 40%,
+            var(--think-highlight) 50%,
+            transparent 60%, transparent 100%);
+        background-size: 400% 100%;
+        background-repeat: no-repeat;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        animation: t-think-shimmer var(--think-shimmer) linear infinite;
+    }
+    @keyframes t-think-shimmer {
+        0%   { background-position: 100% 0; }
+        100% { background-position: 0% 0; }
+    }
+    /* The outgoing line floats over the box so both halves animate. */
+    .pi-root .t-think-text.is-exit {
+        transform: translateY(calc(var(--think-distance) * -1));
+        filter: blur(var(--think-blur));
+        opacity: 0;
+    }
+    .pi-root .t-think-text.is-enter-start {
+        transition: none;
+        transform: translateY(var(--think-distance));
+        filter: blur(var(--think-blur));
+        opacity: 0;
+    }
+
+    /* Visually hidden, still announced. Used for the one stable line the
+       indexing slot's live region reads out. */
+    .pi-sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        margin: -1px; padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
     }
 
     /* ── Press feedback ── */
@@ -119,18 +513,25 @@ const PI_CSS = `
     .pi-press-soft:active { transform: scale(0.92); }
 
     /* ── Sliding selection indicator ── */
+    /* Travels on transform, not top. Animating "top" relayouts the nav on
+       every frame; translateY runs on the compositor and the pill is the one
+       thing on this screen the eye actually follows. */
     .pi-sel-indicator {
         position: absolute;
-        left: 8px; right: 8px;
+        top: 0; left: 8px; right: 8px;
         background: var(--pi-item-active);
         border-radius: 6px;
         pointer-events: none;
         z-index: 0;
+        will-change: transform;
+        /* Expo covers most of the gap in the first ~120ms, so the pill still
+           answers the click instantly and then takes its time arriving. That
+           is what lets it run at 380ms without feeling laggy. */
         transition:
-            top 280ms cubic-bezier(0.23, 1, 0.32, 1),
-            height 280ms cubic-bezier(0.23, 1, 0.32, 1),
-            opacity 200ms ease;
+            transform 380ms var(--pi-ease-expo),
+            opacity 240ms ease;
     }
+    /* First paint: land on the active item, don't slide down from the top. */
     .pi-sel-indicator[data-instant='true'] { transition: opacity 160ms ease; }
 
     /* ── Nav items ── */
@@ -138,27 +539,41 @@ const PI_CSS = `
         display: flex; align-items: center; gap: 12px;
         padding: 8px 10px; border-radius: 6px;
         cursor: pointer; font-size: 13px; font-weight: 500;
-        color: var(--pi-secondary); background: transparent;
+        color: var(--pi-nav-text); background: transparent;
         user-select: none; margin-bottom: 2px;
         position: relative; z-index: 1;
         transition: background 180ms cubic-bezier(0.23, 1, 0.32, 1), color 180ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
-        animation: pi-list-in 280ms var(--pi-ease-out) both;
+        /* backwards, not both. A finished "both" animation keeps applying its
+           to-state transform from the animation origin, which sits above
+           declared styles in the cascade — so :active below could never take
+           effect and the rows had no press feedback at all once they had
+           settled. */
+        animation: pi-list-in 420ms var(--pi-ease-expo) backwards;
     }
     .pi-nav-item:hover { background: var(--pi-item-hover); }
-    .pi-nav-item.active { color: var(--pi-primary); }
+    .pi-nav-item.active { color: var(--pi-nav-text-active); }
     .pi-nav-item:active { transform: scale(0.97); }
 
-    /* Staggered nav entry */
-    .pi-nav-item:nth-child(2) { animation-delay: 0ms; }
-    .pi-nav-item:nth-child(3) { animation-delay: 30ms; }
-    .pi-nav-item:nth-child(4) { animation-delay: 60ms; }
-    .pi-nav-item:nth-child(5) { animation-delay: 90ms; }
-    .pi-nav-item:nth-child(6) { animation-delay: 120ms; }
-    .pi-nav-item:nth-child(n+7) { animation-delay: 150ms; }
+    /* Staggered nav entry, on the same 55ms beat as the panel's blocks so the
+       two columns read as one entrance rather than two animations that
+       happened to fire together. nth-child starts at 2 — child 1 is the
+       selection indicator. */
+    .pi-nav-item:nth-child(2)   { animation-delay: 0ms; }
+    .pi-nav-item:nth-child(3)   { animation-delay: 55ms; }
+    .pi-nav-item:nth-child(4)   { animation-delay: 110ms; }
+    .pi-nav-item:nth-child(5)   { animation-delay: 160ms; }
+    .pi-nav-item:nth-child(6)   { animation-delay: 205ms; }
+    .pi-nav-item:nth-child(7)   { animation-delay: 245ms; }
+    .pi-nav-item:nth-child(n+8) { animation-delay: 280ms; }
 
     /* Nav icon */
-    .pi-nav-item svg { color: var(--pi-tertiary); flex-shrink: 0; }
-    .pi-nav-item.active svg { color: var(--pi-secondary); }
+    .pi-nav-item svg {
+        color: var(--pi-nav-icon); flex-shrink: 0;
+        transition: color 180ms ease, transform 260ms var(--pi-ease-spring);
+    }
+    /* A hair of scale on the active icon. Nobody will name it; it is the
+       difference between the row looking selected and looking alive. */
+    .pi-nav-item.active svg { color: var(--pi-nav-icon-active); transform: scale(1.08); }
 
     /* ── Content boxes ── */
     .pi-content-box {
@@ -172,10 +587,10 @@ const PI_CSS = `
     .pi-content-box:focus-within {
         border-color: var(--pi-input-border-focus);
         background: var(--pi-input-bg-focus);
-        box-shadow: 0 0 0 3px rgba(129,140,248,0.12);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
     }
     .pi-root[data-theme='light'] .pi-content-box:focus-within {
-        box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--periwinkle-600) 12%, transparent);
     }
 
     /* ── Textarea / Input ── */
@@ -192,23 +607,13 @@ const PI_CSS = `
     }
     .pi-input::placeholder { color: var(--pi-tertiary); }
 
-    /* ── Toggle track/thumb ── */
-    .pi-toggle-track {
-        width: 44px; height: 24px; border-radius: 12px; position: relative;
-        cursor: pointer; flex-shrink: 0;
-        background: rgba(255,255,255,0.12);
-        transition: background 220ms var(--pi-ease-out);
-    }
-    .pi-toggle-track[data-checked='true'] { background: var(--pi-accent); }
-    .pi-toggle-track[data-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
-    .pi-root[data-theme='light'] .pi-toggle-track { background: rgba(0,0,0,0.12); }
-    .pi-toggle-thumb {
-        position: absolute; top: 3px; left: 3px;
-        width: 18px; height: 18px; border-radius: 50%;
-        background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-        transition: transform 260ms var(--pi-ease-spring);
-    }
-    .pi-toggle-track[data-checked='true'] .pi-toggle-thumb { transform: translateX(20px); }
+    /* ── Toggle (shared .t-toggle primitive) ── */
+    /* Colors now come from the shared Apple-style palette in index.css
+       (--toggle-off/--toggle-on) rather than the panel's own accent, so this
+       block only needs to beat the shared rule's specificity, not repaint it. */
+    .pi-root .t-toggle { background: var(--toggle-off); }
+    .pi-root .t-toggle[aria-checked='true'] { background: var(--toggle-on); }
+    .pi-root .t-toggle[aria-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
 
     /* ── Toggle card (neutral — no accent tint when on; the toggle itself signals state) ── */
     .pi-toggle-card {
@@ -220,37 +625,321 @@ const PI_CSS = `
     .pi-root[data-theme='light'] .pi-toggle-card { background: rgba(0,0,0,0.015); }
 
     /* ── CTA pill ── */
+    /*
+      Liquid Glass — the material documented in src/ui-components/design.md,
+      rebuilt at this pill's scale. Four layers, because no single one can be
+      both flat and directional:
+
+        background      the flat tint plus a soft inner sheen
+        ::before        the specular rim, aimed by two composited mask layers
+        ::after         a ring mask that drops the caps into shadow
+        .pi-cta-lens    the pointer-tracked highlight and its local rim pickup
+
+      The instinct is a top-lit vertical gradient, because that is what a glossy
+      button has looked like since Aqua. This material does the opposite: the
+      body does NOT ramp at all, and every gram of depth lives in a rim that is
+      symmetric top and bottom (the pill catches a bounce off the dark stage as
+      well as the key light from above) and dies away across the caps, whose
+      normals turn away from the light. A uniform ring around the whole
+      perimeter is what makes a pill read as a plastic capsule instead of glass.
+
+      Values come from .lg-neutral rather than being re-derived, with two
+      documented departures for scale — see ::before and ::after.
+    */
     .pi-cta {
-        padding: 5px 5px 5px 16px; height: 36px; border-radius: 18px;
-        background: var(--pi-cta-bg); color: var(--pi-cta-text);
+        /*
+          The cap fade, expressed against the cap radius as a LENGTH rather
+          than as a percentage of width. design.md's reference stops are
+          percentages tuned on a 535px pill whose caps were 12.7% of it; on a
+          196px sidebar button the caps are 9% and a percentage fade ends up
+          INSIDE the flat top face, spending the rim's brightest stretch fading
+          across something that is not curved. The ratios below are the
+          reference's own (24/62/142px over a 68px cap radius), so the profile
+          is the measured one and is now width-invariant.
+        */
+        --pi-cta-cap-r: 18px;
+        --pi-cta-cap-mask: linear-gradient(90deg,
+            transparent calc(var(--pi-cta-cap-r) * 0.353),
+            rgba(0,0,0,0.82) calc(var(--pi-cta-cap-r) * 0.912),
+            #000 calc(var(--pi-cta-cap-r) * 2.088),
+            #000 calc(100% - var(--pi-cta-cap-r) * 2.088),
+            rgba(0,0,0,0.82) calc(100% - var(--pi-cta-cap-r) * 0.912),
+            transparent calc(100% - var(--pi-cta-cap-r) * 0.353));
+
+        /* Pointer position, written once per frame by useLensTracking. The
+           names are the shared ones so there is one implementation of the
+           tracking, not two. */
+        --lg-mx: 50%;
+        --lg-my: 50%;
+
+        /*
+          The resting bloom, DECLARED rather than left to the @property initial
+          value. The hero pill's 200x150 covers a 36px button entirely and stops
+          reading as a local highlight; this is .lg-sm's 90x40. Declaring it here
+          rather than on .pi-cta-lens is what gives the press-tighten below a
+          value to return to when the pointer comes up — an initial value is not
+          an author declaration, so the transition would only run one way.
+        */
+        --pi-lens-w: 90px;
+        --pi-lens-h: 40px;
+
+        /*
+          One clock for the whole hover state. The tint and the lens were on
+          separate durations in an earlier build of this material and it read as
+          the surface changing in two overlapping stages. easeInOutSine because
+          velocity starts AND ends at zero, which is what "smooth" means for a
+          cross-fade with no spatial motion — and it is its own mirror, so
+          leaving traces the same path as arriving.
+        */
+        --pi-cta-dur: 300ms;
+        --pi-cta-ease: cubic-bezier(.37, 0, .63, 1);
+
+        /*
+          The label is centred on the PILL, not on the space left over beside
+          the ring. Centring it inside a flex:1 that stops short of the ring
+          puts it (ring + gap) / 2 = 18px left of where the eye expects it, and
+          on a 196px button that is visible. Leading the row with the ring's own
+          footprint makes the flex track symmetric about the pill's centre, so
+          text-align: center is exact — and the label stays in flow, which an
+          absolutely-centred one would not, so a long translation still
+          truncates against the ring instead of running under it.
+        */
+        --pi-cta-pad: 5px;
+        --pi-cta-gap: 10px;
+        --pi-cta-ring-size: 26px;
+        padding: var(--pi-cta-pad);
+        padding-left: calc(var(--pi-cta-pad) + var(--pi-cta-ring-size) + var(--pi-cta-gap));
+        height: 36px; border-radius: 18px;
+        /*
+          Two layers: the inner sheen carries the rim's light a few px inward,
+          and the flat tint sits behind it as background-color, which is what
+          keeps the hover tint animatable. A background shorthand on a hover
+          rule would have to restate the gradient and could not transition.
+        */
+        background: var(--pi-cta-sheen, none), var(--pi-cta-bg);
+        color: var(--pi-cta-text);
         font-size: 13px; font-weight: 600; letter-spacing: -0.01em;
         border: none; cursor: pointer;
-        display: flex; align-items: center; gap: 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-        transition: transform 200ms var(--pi-ease-out), box-shadow 200ms ease;
+        display: flex; align-items: center; gap: var(--pi-cta-gap);
+        /*
+          Two-stage contact shadow, per theme: a 1px seat and a 4px spread. One
+          8px blur alone reads as a glow on a pill this small — the tight stage
+          is what makes it look like it is resting on the panel rather than
+          floating over it. The light theme adds an inset underside here too,
+          which is the half of its rim the mask deliberately does not carry.
+        */
+        box-shadow: var(--pi-cta-shadow);
+        transition:
+            transform 200ms var(--pi-ease-out),
+            box-shadow 200ms ease,
+            background-color var(--pi-cta-dur) var(--pi-cta-ease);
         white-space: nowrap; position: relative; overflow: hidden;
     }
-    .pi-cta:hover { transform: translateY(-1px) scale(1.01); box-shadow: 0 6px 16px rgba(0,0,0,0.28); }
-    .pi-cta:active { transform: scale(0.96); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
-    .pi-cta-ring {
-        width: 26px; height: 26px; border-radius: 50%;
-        background: var(--pi-cta-ring);
-        display: flex; align-items: center; justify-content: center;
-        transition: transform 280ms var(--pi-ease-out);
-        position: relative; z-index: 1;
-    }
-    .pi-cta:hover .pi-cta-ring { transform: translateX(1px) scale(1.05); }
-    .pi-cta--trial { background: linear-gradient(135deg,#8b5cf6,#7c3aed); color:#fff; box-shadow:0 2px 8px rgba(124,58,237,0.30); }
-    .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
-    .pi-cta--shimmer::after {
+
+    /*
+      ::before — the specular rim. ONE hairline ring, not the reference's three.
+      The rim does not scale with the pill: at 136px a 3px rim is 2% of the
+      height, at 36px it is 8%, and three stacked rings read as a bevel rather
+      than as light. This is .lg-sm's collapse, for the same reason.
+
+      Two mask layers composited with mask-composite:intersect aim it: the
+      vertical one keeps the light on the top and bottom faces, the horizontal
+      one lets it die away across the caps.
+
+      z-index 0, not -1. .pi-cta is position:relative with z-index:auto, so it
+      does NOT create a stacking context — a -1 pseudo paints BEHIND the
+      element's own background and the opaque fill hides it completely. The
+      content sits at 2 and the lens at 1, so 0 is the slot just above the fill.
+    */
+    .pi-cta::before {
         content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        z-index: 0;
+        pointer-events: none;
+        box-shadow: inset 0 0 0 1px var(--pi-cta-rim);
+        -webkit-mask-image: var(--pi-cta-rim-mask), var(--pi-cta-cap-mask);
+        -webkit-mask-composite: source-in;
+        mask-image: var(--pi-cta-rim-mask), var(--pi-cta-cap-mask);
+        mask-composite: intersect;
+    }
+
+    /*
+      ::after — the caps sit in shadow. The padding-box ring mask confines it to
+      the perimeter and the vertical gradient keeps it clear of the lit faces.
+      1px and half strength, because the side edges of a 36px pill have far less
+      run than the reference's 136px caps.
+    */
+    .pi-cta::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1px;
+        background: linear-gradient(180deg,
+            rgba(0,0,0,0) 0%, rgba(0,0,0,0) 6%,
+            rgba(0,0,0,0.90) 50%,
+            rgba(0,0,0,0) 94%, rgba(0,0,0,0) 100%);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+                mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+                mask-composite: exclude;
+        opacity: var(--pi-cta-cap-opacity);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    /*
+      The lens. Glass does not brighten uniformly when you point at it — it
+      refracts toward whatever is nearest, so the highlight tracks the pointer
+      and the rim picks up light only on the edge closest to it. Both effects
+      come from this one element: a flat tint plus an inset ring, shaped by a
+      radial mask parked under the cursor.
+
+      A real element because ::before and ::after are both spoken for.
+    */
+    .pi-cta-lens {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: var(--pi-cta-lens-tint);
+        box-shadow:
+            inset 0 0 0 1px var(--pi-cta-lens-rim),
+            inset 0 0 0 2px var(--pi-cta-lens-rim-soft);
+        -webkit-mask-image: radial-gradient(var(--pi-lens-w) var(--pi-lens-h) at var(--lg-mx) var(--lg-my),
+            #000 0%, rgba(0,0,0,0.5) 40%, transparent 74%);
+                mask-image: radial-gradient(var(--pi-lens-w) var(--pi-lens-h) at var(--lg-mx) var(--lg-my),
+            #000 0%, rgba(0,0,0,0.5) 40%, transparent 74%);
+        opacity: 0;
+        /* Opacity and the press-tighten may ease; POSITION MAY NOT. Ease
+           --lg-mx/--lg-my and the highlight trails the cursor, which reads as a
+           delayed glow rather than as refraction. */
+        transition:
+            opacity var(--pi-cta-dur) var(--pi-cta-ease),
+            --pi-lens-w 150ms ease,
+            --pi-lens-h 150ms ease;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    /*
+      The shimmer sweep, which used to be ::after. Both pseudos belong to the
+      material now, so this gets an element of its own — and it is rendered only
+      for the state that uses it, rather than being a pseudo that every state
+      carries and only one fills in.
+    */
+    .pi-cta-shimmer {
         position: absolute; top: 0; bottom: 0; left: 0; width: 45%;
         background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.09) 50%, transparent 100%);
         animation: pi-shimmer 3.2s cubic-bezier(0.4, 0, 0.6, 1) 2.0s infinite;
         pointer-events: none;
+        z-index: 1;
     }
-    .pi-cta--trial::after {
+    .pi-cta--trial .pi-cta-shimmer {
         background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.14) 50%, transparent 100%);
+    }
+
+    /*
+      Hover gated to a real pointer — on touch, :hover sticks after the tap and
+      the lens would stay parked where the finger left it. :not(:disabled)
+      because :hover matches disabled form controls in Chrome, which would tint
+      a dead button while the lens correctly stayed off.
+    */
+    @media (hover: hover) and (pointer: fine) {
+        .pi-cta:not(:disabled):hover { background-color: var(--pi-cta-hover); }
+        .pi-cta:not(:disabled):hover .pi-cta-lens { opacity: 1; }
+    }
+    /* The lift grows the contact shadow; the press puts it back on the panel.
+       Both read the theme's own shadow so a white pill and a grey one are not
+       sharing one value tuned for the other's surround. */
+    .pi-cta:hover { transform: translateY(-1px) scale(1.01); box-shadow: var(--pi-cta-shadow-hover); }
+    /* :active fires on pointer-down, so the feedback lands on the press rather
+       than the release, and the lens tightens — the material compressing. */
+    .pi-cta:active { transform: scale(0.96); box-shadow: var(--pi-cta-shadow); }
+    .pi-cta:active .pi-cta-lens { --pi-lens-w: 66px; --pi-lens-h: 30px; }
+    /* A keyboard focus has no pointer position, so useLensTracking clears the
+       last hover and the bloom opens from the centre. */
+    .pi-cta:focus-visible .pi-cta-lens { opacity: 1; }
+    /* min-width: 0 is what lets the ellipsis engage inside a flex row — without
+       it the label refuses to shrink below its content and overflows instead. */
+    .pi-cta-label {
+        flex: 1; min-width: 0; text-align: center;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        position: relative; z-index: 2;
+    }
+    .pi-cta-ring {
+        width: var(--pi-cta-ring-size); height: var(--pi-cta-ring-size); border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--pi-cta-ring);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 280ms var(--pi-ease-out);
+        position: relative; z-index: 2;
+    }
+    .pi-cta:hover .pi-cta-ring { transform: translateX(1px) scale(1.05); }
+    /*
+      The trial pill keeps its own body, and needs its own hover tint: the
+      neutral rule above is (0,3,0) and .pi-cta--trial is (0,1,0), so without
+      this the blue would cross-fade to grey under the pointer. The tint gains
+      a little luminance while HOLDING its hue, so it reads as the same colour
+      lit better rather than as a different colour.
+
+      2026-09: violet (#8455ef / #9468ff) moved to the toggle blue's hue with the
+      app accent, by owner request. Each value keeps the violet's OKLCH
+      lightness, hue 268.5, chroma x0.873, then goes a hair darker so white text
+      holds the violet's contrast: body 4.68:1 (was 4.64), hover 3.71 (was 3.70).
+    */
+    .pi-cta--trial {
+        --pi-cta-bg: #496ae6;
+        --pi-cta-hover: #5a7cf7;
+        color: #fff;
+        --pi-cta-rim: rgba(232,238,255,0.24);
+        --pi-cta-lens-tint: rgba(232,238,255,0.06);
+        --pi-cta-lens-rim: rgba(238,243,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(238,243,255,0.13);
+        /* A mid-dark body, so unlike either neutral pill it takes the measured
+           symmetric rim — and it keeps it in both themes, because the body is
+           its own colour rather than the theme's. */
+        --pi-cta-rim-mask: var(--pi-mask-both);
+        --pi-cta-sheen: linear-gradient(180deg,
+            rgba(255,255,255,0.090) 0%, rgba(255,255,255,0) 11%,
+            rgba(255,255,255,0) 89%, rgba(255,255,255,0.090) 100%);
+        --pi-cta-cap-opacity: 0.5;
+        --pi-cta-shadow: 0 1px 2px rgba(61,92,234,0.26), 0 4px 10px rgba(61,92,234,0.20);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(61,92,234,0.28), 0 8px 18px rgba(61,92,234,0.30);
+    }
+    .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
+    /*
+      The trial "Upgrade" button is now the shared LiquidGlassButton
+      (src/ui-components, variant="action" + .lg-sm .lg-wide) rather than this
+      pill, so the .pi-cta--trial rules above no longer paint anything live.
+      This sizes it to the box it replaced (36px tall, full width, 13px label)
+      and feeds .lg-action the same blue in both themes: white on #496ae6 is
+      4.68:1. (0,3,0) so it beats .lg-button.lg-sm's own 30px.
+    */
+    .lg-button.lg-sm.pi-upgrade-lg {
+        width: 100%;
+        --lg-pill-h: 36px;
+        --lg-label-size: 13px;
+        --legacy-action-bg: #496ae6;
+        --legacy-action-hover: #5a7cf7;
+        --legacy-action-fg: #ffffff;
+    }
+
+    /*
+      prefers-contrast: more — the whole premise of this material is a rim so
+      subtle it reads as light rather than as an edge, which is precisely what a
+      high-contrast user has asked not to depend on. In that mode the design
+      gives up its own premise: a defined border, and the directional layers off.
+    */
+    @media (prefers-contrast: more) {
+        .pi-cta::before {
+            box-shadow: inset 0 0 0 2px var(--pi-cta-hc-border);
+            -webkit-mask-image: none;
+                    mask-image: none;
+        }
+        .pi-cta::after { opacity: 0; }
+        .pi-cta-lens { display: none; }
     }
 
     /* ── Util buttons ── */
@@ -275,7 +964,7 @@ const PI_CSS = `
     .pi-pill-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); color: var(--pi-primary); }
     .pi-pill-btn:active:not(:disabled) { transform: scale(0.97); }
     .pi-pill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .pi-pill-btn--primary { background: var(--pi-accent); color: #fff; border-color: transparent; }
+    .pi-pill-btn--primary { background: var(--pi-accent); color: var(--pi-on-accent); border-color: transparent; }
     .pi-pill-btn--primary:hover:not(:disabled) { filter: brightness(1.1); }
     .pi-pill-btn--danger { color: var(--pi-danger); }
     .pi-pill-btn--danger:hover:not(:disabled) { background: var(--pi-danger-bg); color: var(--pi-danger); border-color: var(--pi-danger-bg); }
@@ -340,7 +1029,7 @@ const PI_CSS = `
         border-radius: var(--pi-r-md); margin-bottom: 6px;
     }
     .pi-upload-btn {
-        display: flex; align-items: center; gap: 7;
+        display: flex; align-items: center; gap: 7px;
         padding: 7px 18px; background: var(--pi-btn-bg);
         border: 1px solid var(--pi-btn-border); border-radius: 20px;
         color: var(--pi-primary); font-size: 12px; font-weight: 500;
@@ -350,15 +1039,6 @@ const PI_CSS = `
     .pi-upload-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); }
     .pi-upload-btn:active:not(:disabled) { transform: scale(0.97); }
     .pi-upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .pi-add-file-btn {
-        display: flex; align-items: center; gap: 6;
-        background: none; border: none; cursor: pointer;
-        color: var(--pi-tertiary); font-size: 12px; font-family: inherit;
-        padding: 6px 2px; margin-top: 2px;
-        transition: color 180ms var(--pi-ease-out), transform 140ms var(--pi-ease-out);
-    }
-    .pi-add-file-btn:hover { color: var(--pi-primary); }
-    .pi-add-file-btn:active { transform: scale(0.97); }
 
     /* ── Sub-list staggered reveal ── */
     .pi-stagger > .pi-list-item:nth-child(1) { animation-delay: 0ms; }
@@ -395,12 +1075,49 @@ const PI_CSS = `
     .pi-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
     /* ── Reduced motion ── */
+    /* Reduced motion means less movement, not no feedback: the opacity change
+       is what tells you the panel actually swapped, so it stays. */
     @media (prefers-reduced-motion: reduce) {
-        .pi-panel-fade { animation: none; }
-        .pi-list-item  { animation-duration: 100ms; animation-delay: 0ms !important; }
+        .pi-panel-fade,
+        .pi-panel-fade[data-dir='up'] { animation: pi-fade-only 200ms ease backwards; }
+        .pi-panel-fade > *,
+        .pi-panel-fade > .pi-cascade > * { animation: none; }
+        .pi-sel-indicator { transition: opacity 160ms ease; }
+        .pi-nav-item svg, .pi-nav-item.active svg { transition: color 180ms ease; transform: none; }
+        .pi-nav-item { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
+        .pi-list-item  { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
         .pi-press:active, .pi-press-soft:active { transform: none; }
-        .pi-cta--shimmer::after { animation: none; }
+        .pi-cta-shimmer { animation: none; }
+        /* The tint still cross-fades — a hue shift is not vestibular — but the
+           lift, the press and the pointer tracking go. The !important is what
+           makes useLensTracking's inline writes inert, so the setting takes
+           effect live instead of needing the listener torn down. */
+        .pi-cta:hover, .pi-cta:active { transform: none; }
+        .pi-cta-lens {
+            transition: opacity var(--pi-cta-dur) var(--pi-cta-ease);
+            --lg-mx: 50% !important;
+            --lg-my: 50% !important;
+            --pi-lens-w: 150px;
+            --pi-lens-h: 65px;
+        }
         .pi-skeleton { animation: none; opacity: 0.5; }
+        /* The handoff keeps its crossfade — that opacity change is the only
+           signal that indexing finished — but loses the travel, the scale and
+           the blur, and the stagger collapses to a single beat. */
+        .pi-handoff-out { animation: pi-fade-only 160ms ease reverse forwards; }
+        .pi-handoff-in-self,
+        .pi-handoff-in > * { animation: pi-fade-only 200ms ease backwards; }
+        .pi-handoff-in > *:nth-child(2) { animation-delay: 0ms; }
+        /* The ingest label still CHANGES — which stage the ingest is on is
+           information, not decoration, and it is the whole reason the line
+           exists. What goes is the travel, the blur and the shimmer sweep, so
+           the states hard-cut instead of sliding. */
+        .pi-root .t-think-text {
+            transition: none !important;
+            transform: none !important;
+            filter: none !important;
+        }
+        .pi-root .t-think-text::before { display: none !important; }
     }
 `;
 
@@ -494,6 +1211,63 @@ function useDisplayedStatus(rawStatus: string | undefined): string | undefined {
     return displayed;
 }
 
+// ─── Indexing → indexed handoff ───────────────────────────────────────────────
+// React swaps the orb for the extracted card in a single frame, which reads as a
+// glitch rather than a finish. This sequences it: the orb holds one extra beat
+// to play its exit, then the result arrives.
+//
+// Both phases come out of ONE state deliberately. With two independent flags the
+// frame that drops the orb and the frame that adds the result's entrance class
+// are different frames, so the result paints once at full opacity before
+// snapping back to the animation's 0% — a visible flicker at exactly the moment
+// this is supposed to smooth over.
+const HANDOFF_OUT_MS = 240;
+// 560ms entrance + the 110ms stagger on the second child. Keep in sync with
+// .pi-handoff-in and its nth-child(2) delay above — retuning either there
+// without updating this leaves the block stranded on 'arriving' early or late.
+const HANDOFF_IN_MS = 670;
+function useIndexHandoff(indexing: boolean): { settling: boolean; arriving: boolean } {
+    const [phase, setPhase] = useState<'idle' | 'settling' | 'arriving'>('idle');
+    // The previous value is STATE, not a ref, and that distinction is load-
+    // bearing under React 19 + StrictMode (see src/main.tsx): a render can be
+    // double-invoked or thrown away, and React rolls back the state updates of
+    // a discarded render but NOT a ref written during one. With a ref, a
+    // discarded pass could record `indexing` and the committed pass would then
+    // see no edge and skip the handoff entirely — the orb snapping straight to
+    // the result, which is the exact glitch this hook exists to remove. This is
+    // React's documented "adjusting state when a prop changes" form.
+    const [prevIndexing, setPrevIndexing] = useState(indexing);
+
+    // The falling edge is handled DURING render, not in an effect. Effects run
+    // after paint, so reacting there lets the browser paint one frame of the
+    // finished result at full opacity before the orb has even begun its exit —
+    // measured, not theorised: a reduced-motion frame sampler caught the result
+    // at opacity 1 two milliseconds in. Setting state during render re-renders
+    // before paint, so that frame never reaches the screen. A fresh upload
+    // landing mid-handoff resets to idle: the orb is coming back, and finishing
+    // the previous exit would fight the new entrance.
+    if (prevIndexing !== indexing) {
+        setPrevIndexing(indexing);
+        setPhase(indexing ? 'idle' : 'settling');
+    }
+
+    // One timer per phase, each cancelled by its own cleanup. Scheduling both
+    // hops up front instead would mean the settling → arriving re-render tore
+    // down the timer that ends the handoff, stranding it on 'arriving'.
+    useEffect(() => {
+        if (phase === 'settling') {
+            const t = setTimeout(() => setPhase('arriving'), HANDOFF_OUT_MS);
+            return () => clearTimeout(t);
+        }
+        if (phase === 'arriving') {
+            const t = setTimeout(() => setPhase('idle'), HANDOFF_IN_MS);
+            return () => clearTimeout(t);
+        }
+    }, [phase]);
+
+    return { settling: phase === 'settling', arriving: phase === 'arriving' };
+}
+
 const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
     const displayedStatus = useDisplayedStatus(status);
     const badge = displayedStatus ? PI_INDEX_BADGES[displayedStatus] : undefined;
@@ -510,17 +1284,10 @@ const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
         return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
     }, [badge?.label]);
     if (!badge) return <span style={{ width: 100, flexShrink: 0 }} />;
-    const isInProgress = displayedStatus === 'uploading' || displayedStatus === 'processing';
     return (
-        <span style={{ display: 'grid', gridTemplateColumns: '14px 6px 80px', alignItems: 'center', width: 100, flexShrink: 0 }}>
-            <span aria-hidden="true" style={{ gridColumn: 1, display: 'flex', alignItems: 'center', opacity: isInProgress ? 1 : 0, transition: 'opacity 180ms ease-out', flexShrink: 0 }}>
-                <svg className="pi-spinner" width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
-                    <path d="M7 1.5 A5.5 5.5 0 0 1 12.5 7" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-            </span>
+        <span style={{ display: 'grid', gridTemplateColumns: '20px 80px', alignItems: 'center', width: 100, flexShrink: 0 }}>
             <span title={badge.title} style={{
-                gridColumn: 3, justifySelf: 'start' as const,
+                gridColumn: 2, justifySelf: 'start' as const,
                 fontSize: 9.5, fontWeight: 600, letterSpacing: 0.2, padding: '2px 6px',
                 borderRadius: 999, color: badge.color, background: badge.bg, flexShrink: 0,
                 textTransform: 'uppercase' as const,
@@ -535,25 +1302,229 @@ const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
 };
 
 // ─── FileUploadEmpty — Modes-style empty state ────────────────────────────────
+// No `uploading` state: the caller swaps this whole block for FileUploadIndexing
+// while an ingest is in flight, so a "Processing…" button here would be dead.
 interface FileUploadEmptyProps {
     hint: string;
-    uploading: boolean;
     hasAccess: boolean;
     onBrowse: () => void;
     onNeedUpgrade: () => void;
+    /** Entrance class when this slot is what a finished indexing run landed on
+        (i.e. the ingest failed and dropped the user back to the upload CTA). */
+    enterClass?: string;
 }
-const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }: FileUploadEmptyProps) => (
-    <div className="pi-file-empty" style={{ gap: 12 }}>
+const FileUploadEmpty = ({ hint, hasAccess, onBrowse, onNeedUpgrade, enterClass }: FileUploadEmptyProps) => (
+    <div className={`pi-file-empty${enterClass ? ` ${enterClass}` : ''}`} style={{ gap: 12 }}>
         <p style={{ fontSize: 12, color: 'var(--pi-tertiary)', margin: 0 }}>{hint}{!hasAccess ? ' Requires Pro.' : ''}</p>
         <button
             className="pi-upload-btn"
-            disabled={uploading}
             onClick={() => { if (!hasAccess) { onNeedUpgrade(); return; } onBrowse(); }}
         >
-            {uploading
-                ? <><RefreshCw size={13} className="pi-spinner" /> Processing…</>
-                : <><Paperclip size={13} /> Upload file</>}
+            <Paperclip size={13} /> Upload file
         </button>
+    </div>
+);
+
+// ─── ThinkingStates — cycling shimmer label ───────────────────────────────────
+// transitions.dev's thinking-states recipe. Two copies of the line live in the
+// box during a swap: the outgoing one exits upward while the incoming one rises
+// from below, held back by --think-gap so the two halves read as one motion
+// instead of a crossfade.
+//
+// Both copies are driven imperatively (classList in a layout effect) rather than
+// through className, because the class has to be applied, forced through a
+// reflow and released within a single frame — React cannot express that. The
+// price is that `className` on those two nodes MUST stay a constant string:
+// this panel re-renders from unrelated state constantly (the adopt-poll, status
+// polling, adoptTick), and a state-derived className would let reconciliation
+// wipe .is-enter-start / .is-exit mid-transition. That failure only shows up
+// under load, so keep the props constant.
+const THINK_SWAP_MS  = 150;   // keep in sync with --think-swap
+const THINK_GAP_MS   = 50;    // keep in sync with --think-gap
+
+/** One stage of a sequence. `hold` is how long this line stays before the swap
+ *  to the next one starts; the LAST stage's hold is never read. */
+interface ThinkStage { text: string; hold: number }
+
+const ThinkingStates = ({ stages, sizer, paused }: { stages: ThinkStage[]; sizer?: string; paused?: boolean }) => {
+    const [index, setIndex] = useState(0);
+    const [outgoing, setOutgoing] = useState<{ id: number; text: string } | null>(null);
+    const lineRef = useRef<HTMLSpanElement | null>(null);
+    const outRef = useRef<HTMLSpanElement | null>(null);
+    const seqRef = useRef(0);
+    const last = stages.length - 1;
+
+    // Advance one state at a time, and STOP on the last one — see the CSS note.
+    // `paused` is the handoff: a label swap firing during the 240ms
+    // pi-handoff-out fade reads as a glitch on the way out.
+    useEffect(() => {
+        if (paused || index >= last) return;
+        const t = setTimeout(() => {
+            setOutgoing({ id: seqRef.current++, text: stages[index].text });
+            setIndex(i => i + 1);
+        }, stages[index].hold);
+        return () => clearTimeout(t);
+    }, [index, last, paused, stages]);
+
+    // Incoming copy: React has already swapped this node's text, so jump it
+    // below the line with no transition, reflow, then release it after the gap.
+    useLayoutEffect(() => {
+        const el = lineRef.current;
+        if (!el || index === 0) return;
+        el.classList.add('is-enter-start');
+        void el.offsetHeight; // force reflow so removing the class transitions
+        const t = setTimeout(() => el.classList.remove('is-enter-start'), THINK_GAP_MS);
+        return () => { clearTimeout(t); el.classList.remove('is-enter-start'); };
+    }, [index]);
+
+    // Outgoing copy: mounted at rest this commit, so read layout to lock the
+    // from-state in before adding .is-exit — mounting it with the class already
+    // on would land it at the end state with nothing to transition from. Keyed
+    // by id so a swap that arrives before the previous exit finishes gets a
+    // fresh node instead of reusing one that already carries .is-exit.
+    useLayoutEffect(() => {
+        if (!outgoing) return;
+        const el = outRef.current;
+        if (!el) return;
+        void el.offsetHeight;
+        el.classList.add('is-exit');
+        const t = setTimeout(() => setOutgoing(null), THINK_SWAP_MS + 60);
+        return () => clearTimeout(t);
+    }, [outgoing]);
+
+    // `sizer` overrides the widest line of THIS list. The JD slot passes one so
+    // the two JD variants report the same width: which variant renders is keyed
+    // on profileStatus.hasProfile, which can flip mid-ingest when a resume and a
+    // JD are uploaded together, and the two lists' own longest lines differ by
+    // ~43px — a visible box jump long after the entrance animation could hide
+    // it. Not reproduced live (the flip window is narrow and profileDelete hung
+    // the harness), so this removes the dependency rather than fixing a seen bug.
+    const widest = sizer ?? stages.reduce((a, b) => (b.text.length > a.length ? b.text : a), '');
+    const current = stages[Math.min(index, last)].text;
+
+    return (
+        <span className="t-think" aria-hidden="true">
+            <span className="t-think-sizer">{widest}</span>
+            {/* textContent and data-text must stay in sync — data-text is what
+                the shimmer ::before copy paints. */}
+            <span ref={lineRef} className="t-think-text" data-text={current}>{current}</span>
+            {outgoing && (
+                <span key={outgoing.id} ref={outRef} className="t-think-text" data-text={outgoing.text}>
+                    {outgoing.text}
+                </span>
+            )}
+        </span>
+    );
+};
+
+// ─── Ingest stages ────────────────────────────────────────────────────────────
+// Timed, not wired to real progress: 'uploading' and 'processing' are both set
+// back-to-back by the renderer before it even invokes main (doResumeUpload), so
+// neither carries stage information. What keeps these honest is that every line
+// names work KnowledgeOrchestrator.ingestDocument actually performs, in the
+// order it performs it. Don't add a state for work the pipeline doesn't do, and
+// don't add a terminal "Almost done" — nothing here knows that.
+//
+// ── Where the hold values come from ──────────────────────────────────────────
+// Measured, not guessed. 20 real ingests (10 résumés + 10 JDs, the
+// test-fixtures/profiles corpus, driven through the live app; 0 failures, 0
+// heuristic-extractor fallbacks, company research healthy):
+//
+//   résumé  min 4.5s · p25 7.2s · median 23.9s · mean 23.5s · p75 25.0s · max 64.5s
+//   JD      min 28.9s · p25 63.9s · median 69.3s · mean 64.8s · p75 70.6s · max 92.7s
+//
+// A JD is ~3x a résumé because `atomicJdProfilePackGeneration` (shipped ON,
+// 2026-08-30) makes ingestDocument AWAIT the whole AOT pipeline — company
+// research, then gap analysis + negotiation + intro, then mock questions, then
+// culture mapping — all real LLM calls in the critical path. So the two types
+// get different sequences AND different pacing; one schedule cannot serve both.
+//
+// The holds RAMP rather than sitting flat. The two failure modes are
+// asymmetric: parking on the last line is visible and is exactly the "is it
+// stuck?" complaint, while running out of lines early is invisible. A ramp
+// spans a wide duration range with one schedule — a fast ingest still shows the
+// early lines, a slow one keeps receiving new ones deep into the tail — and it
+// matches how waiting is perceived, since a longer gap is tolerable later on.
+// Each sequence is paced to reach its LAST line at roughly its measured median,
+// so the typical upload parks for a second or two rather than a minute.
+//
+// If ingest latency moves (a faster extraction model, an AOT phase dropped),
+// re-measure and re-pace — don't leave these at numbers the pipeline outgrew.
+
+// Sums to 22.7s at the last line vs a 23.9s median — parks ~1s typically.
+// Step 8 of the ingest generates STAR stories (an LLM call) and is the résumé
+// tail, so it gets the terminal line rather than indexing.
+const RESUME_INGEST_STAGES: ThinkStage[] = [
+    { text: 'Reading your resume…',           hold: 1200 },
+    { text: 'Pulling out your experience…',   hold: 2500 },
+    { text: 'Mapping your skills…',           hold: 4000 },
+    { text: 'Noting projects and education…', hold: 6000 },
+    { text: 'Indexing it for recall…',        hold: 9000 },
+    { text: 'Writing up your best stories…',  hold: 0 },
+];
+
+// Sums to 65.7s at the last line vs a 69.3s median. Lines 6-10 are the AOT
+// pipeline's four awaited phases in the order AOTPipeline.runForJD runs them.
+// Phase 2 (gap analysis / negotiation / intro) is internally parallel — naming
+// two of its outputs in sequence describes work that IS running in that window,
+// which is what a progress line is for.
+const JD_INGEST_STAGES: ThinkStage[] = [
+    { text: 'Reading the job description…',        hold: 1200 },
+    { text: 'Pulling out the requirements…',       hold: 2500 },
+    { text: 'Noting the responsibilities…',        hold: 4000 },
+    { text: 'Picking up the tech stack…',          hold: 6000 },
+    { text: 'Indexing it for recall…',             hold: 8000 },
+    { text: 'Researching the company…',            hold: 12000 },
+    { text: 'Matching it against your resume…',    hold: 11000 },
+    { text: 'Sketching your negotiation angle…',   hold: 11000 },
+    { text: 'Drafting the questions they’ll ask…', hold: 10000 },
+    { text: 'Mapping your stories to their values…', hold: 0 },
+];
+
+// AOT phases 2-4 are all gated on `resumeDoc` — with no résumé on file the JD
+// ingest stops after company research, so promising gap analysis and talking
+// points would be describing work that will not run. That also makes this path
+// an order of magnitude faster, so it needs its own (much tighter) pacing, not
+// a prefix of the schedule above: measured over 5 ingests with the profile
+// wiped between each, on both a warm and a fresh user-data dir —
+// min 6.1s · median 6.8s · mean 7.4s · max 8.8s. Four lines summing to 6.8s
+// rather than six, so the swaps don't strobe inside a seven-second wait.
+// Both JD variants size to the longest line of the LONGER list, so the box is
+// the same width whichever one is showing — see the `sizer` note in
+// ThinkingStates for why that matters.
+const JD_SIZER = JD_INGEST_STAGES.reduce((a, b) => (b.text.length > a.length ? b.text : a), '');
+
+const JD_INGEST_STAGES_NO_RESUME: ThinkStage[] = [
+    { text: 'Reading the job description…',  hold: 1200 },
+    { text: 'Pulling out the requirements…', hold: 2000 },
+    { text: 'Indexing it for recall…',       hold: 3600 },
+    { text: 'Researching the company…',      hold: 0 },
+];
+
+// ─── FileUploadIndexing — in-flight ingest ────────────────────────────────────
+// Reuses the empty slot's container so the empty → indexing → filled sequence
+// keeps one silhouette and the panel doesn't jump as the state advances.
+// The orb ships two tuned size presets (64 / 20); 64 is the one that reads as a
+// deliberate "working" surface rather than a button spinner, so it gets the
+// block the empty slot was already occupying. `theme` stays on its default
+// `auto` — it walks up to .pi-root's data-theme, which is the same signal the
+// panel's own light/dark tokens key off.
+// The orb is aria-hidden and one hidden line carries the announcement:
+// labelling more than one makes a screen reader read the state twice.
+// role="status" (implicitly polite) is the whole announcement contract here —
+// the badge no longer has an in-progress branch to carry it.
+//
+// That announcement is deliberately NOT the cycling line. Pushing six-to-ten
+// states through a live region — times the two copies that overlap during every
+// swap — makes a screen reader read the entire sequence out. The rotation exists to
+// stop a sighted user concluding the panel has hung; it carries no information
+// a non-sighted user is otherwise missing. So the visible widget is aria-hidden
+// and the sr-only line states the work once and never changes.
+const FileUploadIndexing = ({ stages, sizer, settling }: { stages: ThinkStage[]; sizer?: string; settling?: boolean }) => (
+    <div className={`pi-file-empty${settling ? ' pi-handoff-out' : ''}`} style={{ gap: 14 }} role="status">
+        <ThinkingOrb state="composing" size={64} speed={1.10} aria-hidden="true" />
+        <span className="pi-sr-only">{stages[0].text}</span>
+        <ThinkingStates stages={stages} sizer={sizer} paused={settling} />
     </div>
 );
 
@@ -561,27 +1532,465 @@ const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }
 const NAV_ITEMS = [
     { id: 'identity',    label: 'Identity',           Icon: User },
     { id: 'insights',    label: 'Profile',            Icon: FileText },
+    // Role Insight reads the résumé and JD that Profile owns, so it sits
+    // directly after it — ahead of the outbound artifacts (Company Intel,
+    // Cover Letter) that come later in the user's actual sequence.
+    { id: 'roleinsight', label: 'Role Insight',       Icon: Target },
     { id: 'company',     label: 'Company Intel',      Icon: Building2 },
     { id: 'coverletter', label: 'Cover Letter',       Icon: Mail },
-    { id: 'negotiation', label: 'Negotiation Script', Icon: Gift },
     { id: 'tavily',      label: 'Tavily Search',      Icon: Globe },
 ];
+
+// ─── Pro Gate ─────────────────────────────────────────────────────────────────
+// Mirrors the Modes Manager's Pro gate (same Apple-style hero + bento grid
+// language) so the two premium surfaces feel like one product, not two.
+const PI_GATE_FEATURES: Array<{
+    key: string;
+    label: string;
+    desc?: string;
+    hex: string;
+    Icon: typeof User;
+    col: string;
+    row: string;
+    type: 'hero' | 'wide' | 'small';
+}> = [
+    { key: 'identity', label: 'Identity', desc: 'Who you are, extracted from your resume.', hex: '#a78bfa', Icon: User, col: '1 / 3', row: '1 / 3', type: 'hero' },
+    // NOTE: wide-card descriptions must reliably render as ONE line at 11px in
+    // the ~170px text column (see ModesProGate reference, which uses the same
+    // single-line rule). Row 1 and row 3 are now sized to that one-line content
+    // (see PI_GATE_ROW_PX below), not a fixed budget copied from Modes — a
+    // wrapped second line is now guarded by WebkitLineClamp: 1 (it will
+    // ellipsize instead of crowding the card). Keep these short; verify with
+    // the pi-gate screenshot/measurement script before lengthening any of them
+    // again.
+    { key: 'profile', label: 'Profile', desc: 'Every skill and role mapped.', hex: '#34d399', Icon: FileText, col: '3 / 5', row: '1 / 2', type: 'wide' },
+    { key: 'company', label: 'Company Intel', hex: '#fbbf24', Icon: Building2, col: '3 / 4', row: '2 / 3', type: 'small' },
+    { key: 'cover', label: 'Cover Letter', hex: '#fb7185', Icon: Mail, col: '4 / 5', row: '2 / 3', type: 'small' },
+    { key: 'talking', label: 'Talking Points', desc: 'Every fit gap answered.', hex: '#f472b6', Icon: MessageSquare, col: '1 / 3', row: '3 / 4', type: 'wide' },
+    { key: 'search', label: 'Web Search', desc: 'Live research, on demand.', hex: '#38bdf8', Icon: Globe, col: '3 / 5', row: '3 / 4', type: 'wide' },
+];
+
+// Row heights are content-sized (measured against real rendered card content
+// via the getBoundingClientRect verification harness), NOT copy-pasted from
+// ModesProGate's fixed 258px/3-equal-rows grid — PI's card copy has a
+// different length profile than Modes', so an equal-thirds split leaves the
+// wide cards' single-line descriptions swimming in empty vertical space.
+//
+// Derivation (re-derive with the harness before changing — do not eyeball):
+//   row(core) = ink + 2*padding; row(track) = core + 14
+//   (the "+14" is .pig-bento-shell's 6px padding + 1px border, both sides)
+// Row 1 & row 3 both hold a wide card (Profile / Talking Points & Web Search)
+// and are kept EQUAL so the top and bottom wide rows read as symmetric, not
+// like a layout bug. Measured wide-card ink (icon + title + 1-line desc) is
+// ~32.5px; with the card's own 13px vertical padding, core ≈ 58.5 → row ≈ 73.
+//
+// Row 2 (the two small cards, Company Intel / Cover Letter) is NOT free —
+// the hero spans rows 1+2, so heroCore = row1 + row2 + gap(12) - 14. Measured
+// hero ink (icon + title + 2-line desc) is ~117px; with the hero's own 16px
+// padding, its target core is ~150 (unchanged from the pre-existing,
+// never-complained-about hero). That fixes row2 = 150 - row1 - 12 + 14 = 83,
+// independent of what the small cards themselves would otherwise need — they
+// simply inherit whatever room row2 ends up with and center within it.
+const PI_GATE_ROW_PX = { row1: 73, row2: 83, row3: 73 } as const;
+const PI_GATE_GAP_PX = 12;
+const PI_GATE_GRID_HEIGHT_PX =
+    PI_GATE_ROW_PX.row1 + PI_GATE_ROW_PX.row2 + PI_GATE_ROW_PX.row3 + PI_GATE_GAP_PX * 2;
+
+const PI_GATE_CSS = `
+    .pi-pro-gate {
+        --pig-bg: #141414;
+        --pig-hero: #ffffff;
+        --pig-sub: rgba(255,255,255,0.5);
+        --pig-sub-low: rgba(255,255,255,0.4);
+        --pig-border: rgba(255,255,255,0.05);
+        --pig-shell-bg: rgba(255,255,255,0.02);
+        --pig-shell-border: rgba(255,255,255,0.04);
+        --pig-shell-hover: rgba(255,255,255,0.08);
+        --pig-core-bg1: rgba(255,255,255,0.05);
+        --pig-core-bg2: rgba(255,255,255,0.01);
+        --pig-core-shadow1: rgba(255,255,255,0.12);
+        --pig-core-shadow2: rgba(255,255,255,0.04);
+        --pig-cta-bg: #ffffff;
+        --pig-cta-text: #141414;
+        --pig-cta-ring: rgba(0,0,0,0.08);
+        --pig-close-bg: rgba(255,255,255,0.06);
+        --pig-close-hover: rgba(255,255,255,0.12);
+        --pig-glow-op: 0.15;
+        --pig-glow-hover: 0.25;
+        --pig-noise: 0.04;
+    }
+    .pi-pro-gate[data-theme='light'] {
+        --pig-bg: #fbfbfd;
+        --pig-hero: #1d1d1f;
+        --pig-sub: #86868b;
+        --pig-sub-low: #6e6e73;
+        --pig-border: rgba(0,0,0,0.08);
+        --pig-shell-bg: #f5f5f7;
+        --pig-shell-border: rgba(0,0,0,0.05);
+        --pig-shell-hover: rgba(0,0,0,0.1);
+        --pig-core-bg1: #ffffff;
+        --pig-core-bg2: #fdfdfd;
+        --pig-core-shadow1: rgba(0,0,0,0.02);
+        --pig-core-shadow2: #ffffff;
+        --pig-cta-bg: #000000;
+        --pig-cta-text: #ffffff;
+        --pig-cta-ring: rgba(255,255,255,0.1);
+        --pig-close-bg: rgba(0,0,0,0.05);
+        --pig-close-hover: rgba(0,0,0,0.1);
+        --pig-glow-op: 0.05;
+        --pig-glow-hover: 0.1;
+        --pig-noise: 0;
+    }
+
+    @keyframes pig-fade-up {
+        from { opacity: 0; transform: translateY(8px) scale(0.99); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes pig-fade-in {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+    .pig-hero { animation: pig-fade-up 800ms cubic-bezier(0.16, 1, 0.3, 1) 0ms both; }
+    .pig-sub  { animation: pig-fade-up 800ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both; }
+    .pig-grid { animation: pig-fade-up 900ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both; }
+    .pig-foot { animation: pig-fade-in 800ms cubic-bezier(0.16, 1, 0.3, 1) 500ms both; }
+
+    .pig-bento-shell {
+        padding: 6px;
+        background: var(--pig-shell-bg);
+        border-radius: 24px;
+        border: 1px solid var(--pig-shell-border);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 300ms cubic-bezier(0.23, 1, 0.32, 1), border 300ms ease;
+        cursor: default;
+    }
+    .pig-bento-shell:hover {
+        transform: scale(1.02);
+        box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+        border: 1px solid var(--pig-shell-hover);
+    }
+    .pig-bento-core {
+        background: linear-gradient(135deg, var(--pig-core-bg1) 0%, var(--pig-core-bg2) 100%);
+        box-shadow: inset 0 1px 1px var(--pig-core-shadow1), inset 0 0 0 1px var(--pig-core-shadow2);
+        border-radius: calc(24px - 6px);
+        overflow: hidden;
+        position: relative;
+        height: 100%;
+        width: 100%;
+    }
+    .pig-bento-core::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: var(--pig-noise);
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        z-index: 10;
+    }
+    .pig-glow {
+        position: absolute;
+        width: 120px; height: 120px;
+        border-radius: 50%;
+        filter: blur(40px);
+        opacity: var(--pig-glow-op);
+        pointer-events: none;
+        transition: opacity 300ms ease;
+        z-index: 0;
+    }
+    .pig-bento-shell:hover .pig-glow { opacity: var(--pig-glow-hover); }
+    .pig-bento-content { position: relative; z-index: 1; height: 100%; }
+
+    .pig-cta-group {
+        padding: 6px 6px 6px 20px;
+        height: 44px;
+        border-radius: 22px;
+        background: var(--pig-cta-bg);
+        color: var(--pig-cta-text);
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        border: none;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease;
+    }
+    .pig-cta-group:hover { transform: scale(0.97); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+    .pig-cta-group:active { transform: scale(0.94); }
+    .pig-cta-icon-ring {
+        width: 32px; height: 32px;
+        border-radius: 16px;
+        background: var(--pig-cta-ring);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .pig-cta-group:hover .pig-cta-icon-ring { transform: translateX(2px) scale(1.05); }
+
+    .pig-close-btn {
+        display: flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; border-radius: 50%; border: none;
+        background: var(--pig-close-bg);
+        color: var(--pig-sub);
+        cursor: pointer; transition: background 150ms ease, transform 150ms ease, color 150ms ease;
+    }
+    .pig-close-btn:hover { background: var(--pig-close-hover); color: var(--pig-hero); }
+    .pig-close-btn:active { transform: scale(0.9); }
+
+    .pig-text-btn {
+        background: transparent; border: none; padding: 0; cursor: pointer;
+        font-size: 12px; color: var(--pig-sub-low); text-align: left;
+        display: flex; align-items: center; gap: 4px; transition: color 200ms ease;
+    }
+    .pig-text-btn:hover { color: var(--pig-sub); }
+
+    @media (prefers-reduced-motion: reduce) {
+        .pig-hero, .pig-sub, .pig-grid, .pig-foot { animation-duration: 200ms; animation-timing-function: ease; }
+        .pig-bento-shell { transition-duration: 0ms; }
+        .pig-bento-shell:hover { transform: none; }
+    }
+`;
+
+function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
+    onOpenNativelyAPI?: () => void;
+    onClose?: () => void;
+}) {
+    const theme = useResolvedTheme();
+    // Funnel: someone without Pro opened Profile Intelligence and met this gate.
+    useEffect(() => {
+        (window as any).electronAPI?.funnelTrack?.('paywall_hit', { feature: 'profile_intelligence' })?.catch?.(() => {});
+    }, []);
+
+    return (
+        <div className="pi-pro-gate" data-theme={theme} style={{
+            position: 'relative',
+            display: 'flex', flexDirection: 'column', height: '100%',
+            background: 'var(--pig-bg)', overflow: 'hidden',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif',
+            WebkitFontSmoothing: 'antialiased',
+        } as React.CSSProperties}>
+            <style>{PI_GATE_CSS}</style>
+
+            {/* ── Header ──────────────────────────────────────────────────────── */}
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                padding: '16px 20px', flexShrink: 0,
+            }}>
+                {onClose && (
+                    <button className="pig-close-btn" onClick={onClose}>
+                        <X size={14} strokeWidth={2.5} />
+                    </button>
+                )}
+            </div>
+
+            {/* ── Main content ────────────────────────────────────────────────── */}
+            <div style={{
+                flex: 1, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                padding: '0 32px',
+            }}>
+                <div style={{ textAlign: 'center', marginBottom: 36, maxWidth: 400 }}>
+                    <h1 className="pig-hero" style={{
+                        margin: '0 0 10px', fontSize: 34, fontWeight: 700,
+                        letterSpacing: '-0.04em', lineHeight: 1.1,
+                        color: 'var(--pig-hero)',
+                    }}>
+                        Every answer.<br/>Grounded in you.
+                    </h1>
+                    <p className="pig-sub" style={{
+                        margin: 0, fontSize: 15, lineHeight: 1.4, fontWeight: 400,
+                        color: 'var(--pig-sub)', letterSpacing: '-0.01em',
+                    }}>
+                        Six intelligence layers turn your background into evidence-backed, personalized answers. Designed for professionals.
+                    </p>
+                </div>
+
+                <div className="pig-grid" style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gridTemplateRows: `${PI_GATE_ROW_PX.row1}px ${PI_GATE_ROW_PX.row2}px ${PI_GATE_ROW_PX.row3}px`,
+                    gap: PI_GATE_GAP_PX,
+                    width: '100%',
+                    maxWidth: 520,
+                    height: PI_GATE_GRID_HEIGHT_PX,
+                    marginBottom: 24,
+                }}>
+                    {PI_GATE_FEATURES.map(f => {
+                        const isHero = f.type === 'hero';
+                        const isSmall = f.type === 'small';
+                        return (
+                            <div key={f.key} className="pig-bento-shell" style={{ gridColumn: f.col, gridRow: f.row }}>
+                                <div className="pig-bento-core">
+                                    <div className="pig-glow" style={{
+                                        background: f.hex,
+                                        ...(isHero ? { top: -20, left: -20 } : isSmall ? { bottom: -20, right: -20 } : { top: -30, left: '42%' }),
+                                    }} />
+                                    {isHero ? (
+                                        // Hero card: normal top-down flow, no push-to-bottom — the same
+                                        // pixels that read as a dead gap in the middle read as intentional
+                                        // framing once they sit as trailing space below the text instead.
+                                        <div className="pig-bento-content" style={{
+                                            padding: 16,
+                                            display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                                            gap: 14,
+                                            height: '100%',
+                                        }}>
+                                            <div style={{
+                                                width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                                                background: `color-mix(in srgb, ${f.hex} 15%, var(--pig-core-bg1))`,
+                                                border: `1px solid color-mix(in srgb, ${f.hex} 30%, transparent)`,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                color: 'var(--pig-hero)',
+                                            }}>
+                                                <f.Icon size={20} strokeWidth={1.5} />
+                                            </div>
+                                            <div>
+                                                <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: 'var(--pig-hero)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                                                    {f.label}
+                                                </h3>
+                                                {f.desc && (
+                                                    <p style={{ margin: 0, fontSize: 12, color: 'var(--pig-sub)', lineHeight: 1.4 }}>
+                                                        {f.desc}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="pig-bento-content" style={{
+                                            padding: isSmall ? 0 : '13px 16px',
+                                            display: 'flex',
+                                            flexDirection: isSmall ? 'column' : 'row',
+                                            alignItems: 'center',
+                                            justifyContent: isSmall ? 'center' : 'flex-start',
+                                            gap: isSmall ? 6 : 12,
+                                            height: '100%',
+                                        }}>
+                                            <div style={{
+                                                width: isSmall ? 'auto' : 28,
+                                                height: isSmall ? 'auto' : 28,
+                                                borderRadius: isSmall ? 0 : 10, flexShrink: 0,
+                                                background: isSmall ? 'transparent' : `color-mix(in srgb, ${f.hex} 15%, var(--pig-core-bg1))`,
+                                                border: isSmall ? 'none' : `1px solid color-mix(in srgb, ${f.hex} 30%, transparent)`,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                color: isSmall ? f.hex : 'var(--pig-hero)',
+                                            }}>
+                                                <f.Icon size={isSmall ? 18 : 16} color={isSmall ? f.hex : 'currentColor'} strokeWidth={1.5} />
+                                            </div>
+                                            <div style={{
+                                                display: 'flex', flexDirection: 'column',
+                                                alignItems: isSmall ? 'center' : 'flex-start',
+                                                minWidth: isSmall ? undefined : 0,
+                                            }}>
+                                                {/* lineHeight is explicit (not inherited) so this card's fit is a
+                                                    self-contained calculation against its own content-sized row
+                                                    (PI_GATE_ROW_PX), not dependent on an ancestor's line-height.
+                                                    WebkitLineClamp is 1 (not 2): the row is sized for exactly one
+                                                    line of description, so a future longer string should ellipsize
+                                                    instead of crowding the card's padding. */}
+                                                <h3 style={{ margin: 0, fontSize: isSmall ? 11 : 14, lineHeight: 1.2, fontWeight: 600, color: 'var(--pig-hero)', letterSpacing: '-0.02em', marginBottom: isSmall ? 0 : 2 }}>
+                                                    {f.label}
+                                                </h3>
+                                                {f.desc && (
+                                                    <p style={{
+                                                        margin: 0, fontSize: 11, color: 'var(--pig-sub)', lineHeight: 1.25,
+                                                        display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                                                    } as React.CSSProperties}>
+                                                        {f.desc}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* ── Footer ──────────────────────────────────────────────────────── */}
+            <div className="pig-foot" style={{
+                padding: '24px 32px',
+                borderTop: '1px solid var(--pig-border)',
+                display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
+                flexShrink: 0, background: 'var(--pig-bg)',
+            }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                    {onOpenNativelyAPI && (
+                        <button className="pig-text-btn" onClick={onOpenNativelyAPI}>
+                            I have a license <ChevronRight size={12} />
+                        </button>
+                    )}
+                </div>
+
+                <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--pig-sub-low)', letterSpacing: '-0.01em', lineHeight: 1.4 }}>
+                    Currently your answers carry no personal context.<br/>
+                    <span style={{ color: '#fbbf24' }}>Unlock Pro to ground every answer in your identity, experience, and research.</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button className="pig-cta-group" onClick={() => openExternal(CHECKOUT_URLS.apiMax)}>
+                        Unlock Pro
+                        <div className="pig-cta-icon-ring">
+                            <ArrowUpRight size={14} strokeWidth={2.5} />
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function ProfileIntelligenceSettings({
     onClose,
+    isTrialActive = false,
+    onOpenNativelyAPI,
 }: {
     onClose: () => void;
+    /** An unexpired free trial grants the same access a Pro licence does. Owned by
+     *  App (the `trial-started` / `trial-ended` events), exactly as ModesSettings
+     *  receives it — this panel used to hardcode it to false, so a trial user was
+     *  shown the Unlock-Pro gate on every Profile Intelligence surface even though
+     *  main's own `isProOrTrialActive()` would have served every one of them. */
+    isTrialActive?: boolean;
+    onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
+    // In-window confirms only: see ConfirmDialog.tsx for why never confirm().
+    const { confirm: askConfirm, dialog: confirmDialog } = useConfirmDialog();
+    // Safe as a panel-level call ONLY because this panel renders exactly one
+    // switch. Add a second and it must move into a per-switch component.
+    const piToggleInit = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
-    const [isTrialActive] = useState(false);
-    const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+    // Upgrading, entering a licence key and managing Pro all live in Settings →
+    // Plans & Billing. The manager hands over to it (App's openSettingsExclusive
+    // closes this panel), and the licence is read again on the next mount.
+    const openPlans = () => onOpenNativelyAPI?.();
+    const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
+    /* The CTA's Liquid Glass lens. Shared with LiquidGlassButton so the rAF
+       gate and the focus-clears-the-pointer rule have one implementation. */
+    const ctaLens = useLensTracking<HTMLButtonElement>();
 
     const [activeSection, setActiveSection] = useState('identity');
+    // Which way the user just travelled through the nav. The incoming panel
+    // enters from that side, so moving down the list pulls content up from
+    // below and moving back up drops it in from above — the sidebar stays a
+    // place you move through rather than a row of buttons that swap a screen.
+    const [navDir, setNavDir] = useState<'down' | 'up'>('down');
+    const panelScrollRef = useRef<HTMLDivElement | null>(null);
+
+    // Single entry point for section changes so direction is never computed in
+    // one call site and forgotten in the next (Role Insight jumps here too).
+    const goToSection = (id: string) => {
+        if (id === activeSection) return;
+        const from = NAV_ITEMS.findIndex(n => n.id === activeSection);
+        const to = NAV_ITEMS.findIndex(n => n.id === id);
+        setNavDir(from >= 0 && to >= 0 && to < from ? 'up' : 'down');
+        setActiveSection(id);
+    };
 
     // ── Sliding indicator refs ─────────────────────────────────────────────────
     const navItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -596,10 +2005,44 @@ export function ProfileIntelligenceSettings({
         extractionMode?: 'llm' | 'heuristic' | 'none';
     }>({ hasProfile: false, profileMode: false });
     const [profileUploading, setProfileUploading] = useState(false);
+    // The genie keeps a picture of this card to pour out on the next open
+    // (genieSnapshots.ts); it must never picture it half-loaded.
+    const [statusLoaded, setStatusLoaded] = useState(false);
     const [profileUploadStatus, setProfileUploadStatus] = useState<string | undefined>(undefined);
     const [profileError, setProfileError] = useState('');
+    // Nothing sets `cancelled` any more — the X button used to, but that only
+    // silenced this renderer while main finished the ingest anyway. Retained as
+    // a no-op guard so the upload paths keep their shape; don't go hunting for
+    // the writer.
     const profileAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
     const [profileData, setProfileData] = useState<any>(null);
+    // Set when this mount ADOPTED an ingest that was already running in main —
+    // i.e. the user uploaded, closed the panel, and reopened it. There is no
+    // local promise to resume from (the old one's continuation died with the
+    // previous mount), so the poll below is the only thing that can finalize it.
+    const profileDetachedRef = useRef(false);
+    // Bumped whenever a detached ref is set. The refs themselves cannot start the
+    // poll below — ref writes do not re-render — and relying on the accompanying
+    // setUploading(true) to do it only works while `uploading` happens to be
+    // false at that moment. This makes adoption an explicit render signal.
+    const [adoptTick, setAdoptTick] = useState(0);
+
+    // Every finished upload schedules a 3s "clear the ready/failed badge" timer.
+    // It deliberately OUTLIVES the effect that armed it — clearing `uploading`
+    // re-runs the adopt-poll effect below and tears it down, so cancelling on
+    // that teardown would pin the badge on ready/failed forever. Unmount is a
+    // different matter: nothing cancelled these, so closing the panel inside the
+    // 3s window left a timer running to setState on a dead component. They are
+    // collected here and cleared once, on unmount only.
+    const statusResetTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+    const scheduleStatusReset = (clear: () => void) => {
+        const t = setTimeout(() => { statusResetTimersRef.current.delete(t); clear(); }, 3000);
+        statusResetTimersRef.current.add(t);
+    };
+    useEffect(() => () => {
+        statusResetTimersRef.current.forEach(clearTimeout);
+        statusResetTimersRef.current.clear();
+    }, []);
 
     // ── Hero stat (static rounded value, no count-up) ────────────────────────
     const heroYearsRounded = (profileStatus.totalExperienceYears != null && Number.isFinite(profileStatus.totalExperienceYears))
@@ -611,6 +2054,23 @@ export function ProfileIntelligenceSettings({
     const [jdUploadStatus, setJdUploadStatus] = useState<string | undefined>(undefined);
     const [jdError, setJdError] = useState('');
     const jdAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+    const jdDetachedRef = useRef(false);
+
+    // Which slot shows the orb. Gated on the DISPLAYED status, not `uploading`:
+    // useDisplayedStatus holds an in-progress state for MIN_INDEXING_MS so a
+    // sub-second ingest still reads as work rather than a flicker, and the floor
+    // outlives `uploading` by up to that long. Gating on `uploading` would drop
+    // the orb early and hand the tail back to the badge. Both flags move
+    // together on every path (local upload, adopted ingest, failure), so this is
+    // a strict superset of `uploading` — including the window the adopt-poll
+    // comment below guards, where clearing `uploading` first would flash the
+    // empty upload slot.
+    const displayedProfileStatus = useDisplayedStatus(profileUploadStatus);
+    const displayedJdStatus = useDisplayedStatus(jdUploadStatus);
+    const profileIndexing = displayedProfileStatus === 'uploading' || displayedProfileStatus === 'processing';
+    const jdIndexing = displayedJdStatus === 'uploading' || displayedJdStatus === 'processing';
+    const profileHandoff = useIndexHandoff(profileIndexing);
+    const jdHandoff = useIndexHandoff(jdIndexing);
 
     // Tavily
     const [tavilyApiKey, setTavilyApiKey] = useState('');
@@ -623,10 +2083,15 @@ export function ProfileIntelligenceSettings({
     const [companyDossier, setCompanyDossier] = useState<any>(null);
     const [companySearchQuotaExhausted, setCompanySearchQuotaExhausted] = useState(false);
 
-    // Negotiation
-    const [negotiationScript, setNegotiationScript] = useState<any>(null);
-    const [negotiationGenerating, setNegotiationGenerating] = useState(false);
-    const [negotiationError, setNegotiationError] = useState('');
+    // Apply the dossier carried by a getProfileData() payload (2026-09-21).
+    // getProfileData returns the wrapper { dossier, sources, last_checked } from
+    // some paths and the inner dossier from others, so unwrap once here instead
+    // of at each call site. Setting null is CORRECT and load-bearing: a new JD
+    // means a new company, and the previous company's dossier must not linger.
+    const applyCompanyDossier = (data: any) => {
+        const cd = data?.companyDossier;
+        setCompanyDossier(cd ? (cd.dossier ?? cd) : null);
+    };
 
     // Cover Letter
     const [coverLetter, setCoverLetter] = useState<any>(null);
@@ -635,6 +2100,10 @@ export function ProfileIntelligenceSettings({
 
     // ── Measure & update indicator on section change ───────────────────────────
     useLayoutEffect(() => {
+        // Land every section at its own top. Inheriting the previous section's
+        // scroll offset makes the entrance animation start mid-content, which
+        // reads as a glitch rather than a transition.
+        if (panelScrollRef.current) panelScrollRef.current.scrollTop = 0;
         const el = navItemRefs.current.get(activeSection);
         if (!el) { setIndicatorState(prev => ({ ...prev, visible: false })); return; }
         setIndicatorState(prev => ({
@@ -654,17 +2123,35 @@ export function ProfileIntelligenceSettings({
                 if (plan) setPremiumPlan(plan);
                 else if (!live) setPremiumPlan('');
                 writePremiumCache(live, plan);
-            }).catch(() => {});
+            }).catch(() => {}).finally(() => setLicenseLoaded(true));
         } else {
             window.electronAPI?.licenseCheckPremium?.().then((live: boolean) => {
                 setIsPremium(!!live);
                 writePremiumCache(!!live, premiumPlan);
-            }).catch(() => {});
+            }).catch(() => {}).finally(() => setLicenseLoaded(true));
         }
-        window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => {});
+        // Adopt any ingest still running in main. Closing the panel unmounts this
+        // component but does NOT cancel the upload — main runs it to completion —
+        // so on reopen we re-derive the indexing state instead of rendering the
+        // empty upload slot (which invited a duplicate upload of the same file).
+        window.electronAPI?.profileGetStatus?.().then((status: any) => {
+            setProfileStatus(status);
+            if (status?.resume_indexing_in_flight) {
+                profileDetachedRef.current = true;
+                setProfileUploading(true);
+                setProfileUploadStatus('processing');
+            }
+            if (status?.jd_indexing_in_flight) {
+                jdDetachedRef.current = true;
+                setJdUploading(true);
+                setJdUploadStatus('processing');
+            }
+            if (status?.resume_indexing_in_flight || status?.jd_indexing_in_flight) {
+                setAdoptTick(t => t + 1);
+            }
+        }).catch(() => {}).finally(() => setStatusLoaded(true));
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
-            if (data?.negotiationScript) setNegotiationScript(data.negotiationScript);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
             // Rehydrate the cached company-research dossier on mount so it persists
             // across app restarts (engine saves every successful research to the
@@ -674,8 +2161,7 @@ export function ProfileIntelligenceSettings({
             // dossier directly. Unwrap so the Company Intel panel always sees the
             // inner dossier shape — required by the live-search vs LLM-only branch.
             if (data?.companyDossier) {
-                const cd = data.companyDossier;
-                setCompanyDossier(cd?.dossier ?? cd);
+                applyCompanyDossier(data);
             }
             // Fallback path — if the full profile payload's companyDossier is
             // missing for any reason (cache race, schema mismatch), fetch it
@@ -691,25 +2177,147 @@ export function ProfileIntelligenceSettings({
         }).catch(() => {});
     }, []);
 
+    // Finalize an ADOPTED ingest. Only runs for uploads this mount inherited —
+    // when doResumeUpload/doJdUpload own the request their awaited promise
+    // already reports the outcome, so polling would double-handle it.
+    useEffect(() => {
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        // One cleanup, returned on EVERY path including the nothing-to-adopt
+        // guard below. The guard used to `return` bare, which left a path out of
+        // an effect that arms a polling timer — safe only for as long as the
+        // guard stays above every schedule site, which is not an invariant worth
+        // trusting to a future edit.
+        const cleanup = () => { stopped = true; if (timer) clearTimeout(timer); };
+        if (!profileDetachedRef.current && !jdDetachedRef.current) return cleanup;
+        const finish = (
+            setUploading: (v: boolean) => void,
+            setStatus: (v: string | undefined) => void,
+            ok: boolean,
+        ) => {
+            setUploading(false);
+            setStatus(ok ? 'ready' : 'failed');
+            // NOT guarded by `stopped`: clearing `uploading` re-runs this effect
+            // and tears it down, so a stopped-guard here would leave the badge
+            // pinned on ready/failed forever. Matches the local-upload path,
+            // which fires the same unguarded reset. Registered so the ONE
+            // thing that must cancel it — unmount — still can.
+            scheduleStatusReset(() => setStatus(undefined));
+        };
+        const tick = async () => {
+            try {
+                const st: any = await window.electronAPI?.profileGetStatus?.();
+                if (stopped || !st) return;
+                const resumeSettled = profileDetachedRef.current && !st.resume_indexing_in_flight;
+                const jdSettled = jdDetachedRef.current && !st.jd_indexing_in_flight;
+
+                // Load the profile BEFORE clearing `uploading`. Both empty-slot
+                // guards are `!<has data> && !<uploading>`, and the JD one reads
+                // profileData.hasActiveJD — a different source than the status
+                // flags. Clearing `uploading` first leaves a render where neither
+                // holds and the panel flashes the empty upload slot: exactly the
+                // symptom this whole change removes.
+                const data = (resumeSettled || jdSettled)
+                    ? await window.electronAPI?.profileGetProfile?.()
+                    : null;
+                if (stopped) return;
+                if (data) setProfileData(data);
+                setProfileStatus(st);
+                // An ADOPTED JD ingest lands here instead of in doJdUpload, so it
+                // needs the same dossier hydration — otherwise a JD uploaded just
+                // before this panel mounted keeps showing the CTA.
+                if (data && jdSettled) applyCompanyDossier(data);
+
+                if (resumeSettled) {
+                    profileDetachedRef.current = false;
+                    const ok = Boolean(st.hasProfile);
+                    // A background ingest that failed would otherwise land the
+                    // user on a bare empty slot with no explanation — the local
+                    // upload path sets profileError here, so this one must too.
+                    if (!ok) setProfileError('Indexing failed. Please upload the file again.');
+                    finish(setProfileUploading, setProfileUploadStatus, ok);
+                }
+                if (jdSettled) {
+                    jdDetachedRef.current = false;
+                    // Judge by the same field the JD empty-slot guard renders on.
+                    const ok = Boolean(data?.hasActiveJD ?? st.jd_structured_extraction_complete);
+                    if (!ok) setJdError('Indexing failed. Please upload the file again.');
+                    finish(setJdUploading, setJdUploadStatus, ok);
+                }
+            } catch { /* transient IPC failure — keep polling */ }
+            if (!stopped && (profileDetachedRef.current || jdDetachedRef.current)) {
+                timer = setTimeout(tick, 1500);
+            }
+        };
+        timer = setTimeout(tick, 1500);
+        return cleanup;
+    }, [profileUploading, jdUploading, adoptTick]);
+
+    // Wait out the fire-and-forget AOT run (2026-09-21).
+    //
+    // Uploading a JD automatically researches the company — ingest step 9 calls
+    // aotPipeline.runForJD(), whose Phase 1 spends 7-10 Tavily queries and writes
+    // the dossier to company_dossiers. But runForJD is NOT awaited in production,
+    // so profileUploadJD acks long before the dossier exists, and ingest pushes no
+    // event when it lands. The panel therefore sat on null and offered to research
+    // a company it had just researched — and that CTA used to force-refresh, so
+    // accepting the offer bought the same dossier a second time.
+    //
+    // getProfileData already publishes aotStatus.companyResearch; runForJD sets it
+    // to 'running' synchronously, before its first await, so it is reliably visible
+    // by the time the upload ack returns. Poll until it settles, then hydrate.
+    // Keyed on the status value itself, so this also covers mounting mid-research.
+    useEffect(() => {
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        // Declared ABOVE the guard and returned on every path, for the reason
+        // spelled out on the adopted-ingest effect above: a bare `return` out of
+        // an effect that arms a polling timer is safe only while the guard stays
+        // above every schedule site, which is not an invariant to leave to a
+        // future edit.
+        const cleanup = () => { stopped = true; if (timer) clearTimeout(timer); };
+        if (profileData?.aotStatus?.companyResearch !== 'running') return cleanup;
+        // Bound the poll. Company research is ~10 sequential queries behind a 2s
+        // rate limiter plus an LLM summarise, so it can legitimately run past a
+        // minute — but a pipeline that died without setting 'done' or 'failed'
+        // must not leave a timer ticking for the life of the window.
+        let remaining = 90; // 90 x 2s = 3 minutes
+        const tick = async () => {
+            try {
+                const data: any = await window.electronAPI?.profileGetProfile?.();
+                if (stopped) return;
+                if (data) {
+                    setProfileData(data);
+                    if (data.aotStatus?.companyResearch !== 'running') {
+                        // Settled — 'done' hydrates the dossier, 'failed' clears to
+                        // null and the CTA legitimately reappears (and is now free
+                        // to click, since nothing was cached).
+                        applyCompanyDossier(data);
+                        return;
+                    }
+                }
+            } catch { /* transient IPC failure — keep polling */ }
+            if (!stopped && --remaining > 0) timer = setTimeout(tick, 2000);
+        };
+        timer = setTimeout(tick, 2000);
+        return cleanup;
+    }, [profileData?.aotStatus?.companyResearch]);
+
     const handleRemoveTavilyKey = async () => {
-        if (!confirm('Remove your Tavily API key?')) return;
+        if (!(await askConfirm({ title: 'Remove your Tavily API key?' }))) return;
         try {
             const res = await window.electronAPI?.setTavilyApiKey?.('');
             if (res?.success) { setHasStoredTavilyKey(false); setTavilyApiKey(''); }
         } catch { /**/ }
     };
 
-    const visibleNav = NAV_ITEMS.filter(n => {
-        // Cover Letter & Company Intel: always visible — the panel's empty state
-        // explains what's missing instead of hiding the tab.
-        if (n.id === 'negotiation') return !!(profileData?.hasActiveJD);
-        return true;
-    });
+    const visibleNav = NAV_ITEMS;
 
     // ── Upload helpers ────────────────────────────────────────────────────────
     const doResumeUpload = async (filePath: string) => {
         const token = { cancelled: false };
         profileAbortRef.current = token;
+        profileDetachedRef.current = false; // this mount owns the request
         setProfileError(''); setProfileUploading(true); setProfileUploadStatus('uploading');
         try {
             setProfileUploadStatus('processing');
@@ -735,7 +2343,7 @@ export function ProfileIntelligenceSettings({
         } finally {
             if (!token.cancelled) {
                 setProfileUploading(false);
-                setTimeout(() => setProfileUploadStatus(undefined), 3000);
+                scheduleStatusReset(() => setProfileUploadStatus(undefined));
             }
         }
     };
@@ -743,6 +2351,7 @@ export function ProfileIntelligenceSettings({
     const doJdUpload = async (filePath: string) => {
         const token = { cancelled: false };
         jdAbortRef.current = token;
+        jdDetachedRef.current = false; // this mount owns the request
         setJdError(''); setJdUploading(true); setJdUploadStatus('uploading');
         try {
             setJdUploadStatus('processing');
@@ -752,6 +2361,12 @@ export function ProfileIntelligenceSettings({
                 const data = await window.electronAPI?.profileGetProfile?.();
                 if (token.cancelled) return;
                 if (data) setProfileData(data);
+                // Clear the previous company's dossier and pick up the new one if
+                // it somehow already exists (cached from an earlier session at the
+                // same company). Usually it does NOT: ingest fires the AOT pipeline
+                // fire-and-forget, so this ack lands ~20-60s before company research
+                // finishes. The aotStatus poll below is what catches that.
+                applyCompanyDossier(data);
                 setJdUploadStatus('ready');
             } else {
                 setJdError(result?.error || 'JD upload failed');
@@ -764,29 +2379,47 @@ export function ProfileIntelligenceSettings({
         } finally {
             if (!token.cancelled) {
                 setJdUploading(false);
-                setTimeout(() => setJdUploadStatus(undefined), 3000);
+                scheduleStatusReset(() => setJdUploadStatus(undefined));
             }
         }
     };
 
+    // The Pro gate lives HERE, not only on the buttons. FileUploadEmpty already
+    // checks `hasAccess` before calling onBrowse, so the empty-state path was
+    // covered — but the "Re-upload" button in the heuristic-extraction notice
+    // wires `onClick={browseResume}` directly, with no check. That button renders
+    // whenever `hasProfile && extractionMode === 'heuristic'`, which a user whose
+    // Pro/trial has LAPSED still satisfies (the stored profile outlives the
+    // entitlement), so it was a live bypass straight to the file picker.
+    //
+    // Gating at the shared entry point instead of at each call site makes the
+    // invariant hold for every present and future button. The check in
+    // FileUploadEmpty stays: it also decides the "Requires Pro." hint, so it is
+    // doing UI work, not just guarding — and a double gate here is idempotent.
     const browseResume = async () => {
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doResumeUpload(fileResult.filePath);
     };
 
     const browseJD = async () => {
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doJdUpload(fileResult.filePath);
     };
 
-    const doCompanyResearch = async () => {
+    // forceRefresh MUST be passed explicitly by each call site. Never wire this
+    // as onClick={doCompanyResearch} — React hands the MouseEvent to the first
+    // parameter, and a truthy object would silently force-refresh every click,
+    // re-buying 14-20 Tavily credits of dossier that is already cached.
+    const doCompanyResearch = async (forceRefresh: boolean) => {
         const company = profileData?.activeJD?.company;
         if (!company) return;
         setCompanyResearching(true); setCompanySearchQuotaExhausted(false);
         try {
-            const result = await window.electronAPI?.profileResearchCompany?.(company);
+            const result = await window.electronAPI?.profileResearchCompany?.(company, forceRefresh);
             if (result?.success && result.dossier) setCompanyDossier(result.dossier);
             if (result?.searchQuotaExhausted) setCompanySearchQuotaExhausted(true);
         } catch { /**/ }
@@ -797,12 +2430,25 @@ export function ProfileIntelligenceSettings({
     // Section renderers
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Context Intelligence V3: source authority replaces the Persona Engine
+    // global override (§6) — same gate SettingsPopup applies to Profile Mode.
+    // Under V3 this toggle changed nothing on the wired surfaces; a control
+    // that implies control it doesn't have is worse than none.
+    const [ciV3Enabled, setCiV3Enabled] = React.useState(false);
+    React.useEffect(() => {
+        (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+            .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+            .catch(() => setCiV3Enabled(false));
+    }, []);
+
     const renderIdentity = () => {
         const isActive = profileStatus.profileMode && hasProfileAccess;
         const isDisabled = !profileStatus.hasProfile || !hasProfileAccess;
         return (
         <>
-            {/* Persona Engine toggle card */}
+            {/* Persona Engine toggle card — hidden under Context Intelligence
+                V3 (source authority replaces the global override, §6). */}
+            {!ciV3Enabled && (
             <div
                 className="pi-toggle-card"
                 data-on={isActive ? 'true' : 'false'}
@@ -816,35 +2462,60 @@ export function ProfileIntelligenceSettings({
                             : 'Dormant. Your profile is loaded but not shaping answers yet.'}
                     </p>
                 </div>
-                <div
-                    className="pi-toggle-track"
-                    data-checked={profileStatus.profileMode && hasProfileAccess ? 'true' : 'false'}
-                    data-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? 'true' : 'false'}
+                <button
+                    type="button"
+                    role="switch"
+                    data-on={String(!!(profileStatus.profileMode && hasProfileAccess))}
+                    aria-checked={!!(profileStatus.profileMode && hasProfileAccess)}
+                    aria-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? true : undefined}
+                    aria-label="Persona Engine"
                     onClick={async () => {
                         if (!profileStatus.hasProfile || !hasProfileAccess) return;
                         const newState = !profileStatus.profileMode;
                         try {
                             await window.electronAPI?.profileSetMode?.(newState);
+                            // Armed next to the state change, not before the
+                            // await: data-on only flips when this resolves, and
+                            // is-init must not land in an earlier render.
+                            piToggleInit.arm();
                             setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                         } catch { /**/ }
                     }}
+                    className={`t-toggle t-toggle-lg w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${piToggleInit.className}`}
                 >
-                    <div className="pi-toggle-thumb" />
-                </div>
+                    <span className="t-toggle-thumb" aria-hidden="true" />
+                </button>
             </div>
+            )}
 
-            {/* Resume */}
-            <h3 className="pi-section-label">Resume</h3>
-            {!profileStatus.hasProfile && !profileUploading ? (
+            {/* Resume — header + descriptor, same shape as Company Intel's so the
+                two sections read as one product. The descriptor says what the file
+                *powers*; the faint hint inside the dropzone stays the CTA. Three
+                type levels (hero / secondary / tertiary) keep them from colliding.
+                It deliberately does NOT enumerate "roles, projects, skills" — in the
+                filled state the snapshot card directly below renders exactly those,
+                and the line would read as that card's caption instead of the
+                section's descriptor. Kept to a single line: at 12px the content
+                column is wide enough that one sentence never wraps, so the header
+                block stays a tight two-line unit above the card. */}
+            <div style={{ marginBottom: 10 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Resume</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Grounds every answer in what you've actually done, instead of generic advice.
+                </p>
+            </div>
+            {profileIndexing || profileHandoff.settling ? (
+                <FileUploadIndexing stages={RESUME_INGEST_STAGES} settling={profileHandoff.settling} />
+            ) : !profileStatus.hasProfile ? (
                 <FileUploadEmpty
                     hint="Add your resume as real-time context."
-                    uploading={profileUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
+                    enterClass={profileHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                <div className={profileHandoff.arriving ? 'pi-handoff-in' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '13px 1fr 100px 20px', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', borderRadius: 'var(--pi-r-md)' }}>
                         <FileText size={13} style={{ color: 'var(--pi-secondary)', flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -853,20 +2524,22 @@ export function ProfileIntelligenceSettings({
                         <PIIndexBadge status={profileUploadStatus} />
                         <button
                             className="pi-press-soft"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-danger)')}
+                            disabled={profileUploading}
+                            title={profileUploading
+                                ? 'Indexing — this finishes in the background and cannot be stopped. Delete it once it completes.'
+                                : 'Delete resume'}
+                            style={{ background: 'none', border: 'none', cursor: profileUploading ? 'not-allowed' : 'pointer', opacity: profileUploading ? 0.4 : 1, color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
+                            onMouseEnter={e => { if (!profileUploading) e.currentTarget.style.color = 'var(--pi-danger)'; }}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                             onClick={async () => {
-                                if (profileUploading) {
-                                    profileAbortRef.current.cancelled = true;
-                                    setProfileUploading(false);
-                                    setProfileUploadStatus(undefined);
-                                    setProfileStatus({ hasProfile: false, profileMode: false });
-                                    const cancelData = await window.electronAPI?.profileGetProfile?.();
-                                    setProfileData(cancelData ?? null);
-                                    return;
-                                }
-                                if (!confirm('Delete your resume and its extracted data?')) return;
+                                // Previously this set profileAbortRef.cancelled and rendered
+                                // { hasProfile: false } — but that flag only silences this
+                                // renderer. Main runs ingestDocument to completion and then
+                                // enables knowledge mode, so "cancel" produced a UI claiming
+                                // no profile while the resume was in fact saved and live.
+                                // The button is disabled mid-ingest rather than lying.
+                                if (profileUploading) return;
+                                if (!(await askConfirm({ title: 'Delete your resume and its extracted data?', confirmLabel: 'Delete' }))) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
                                     setProfileStatus({ hasProfile: false, profileMode: false });
@@ -926,11 +2599,6 @@ export function ProfileIntelligenceSettings({
                             </div>
                         );
                     })()}
-                    {!profileUploading && (
-                        <button className="pi-add-file-btn" onClick={browseResume}>
-                            <Plus size={12} /> Replace file
-                        </button>
-                    )}
                 </div>
             )}
             {profileError && (
@@ -939,18 +2607,27 @@ export function ProfileIntelligenceSettings({
                 </div>
             )}
 
-            {/* Job Description */}
-            <h3 className="pi-section-label">Job Description</h3>
-            {!profileData?.hasActiveJD && !jdUploading ? (
+            {/* Job Description — same header + descriptor pattern. Company Intel
+                keys off this JD's extracted company name, so the descriptor names
+                that downstream payoff rather than restating the upload CTA. */}
+            <div style={{ marginBottom: 10 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Job Description</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Frames answers around what this specific role asks for, and powers Company Intel.
+                </p>
+            </div>
+            {jdIndexing || jdHandoff.settling ? (
+                <FileUploadIndexing stages={profileStatus.hasProfile ? JD_INGEST_STAGES : JD_INGEST_STAGES_NO_RESUME} sizer={JD_SIZER} settling={jdHandoff.settling} />
+            ) : !profileData?.hasActiveJD ? (
                 <FileUploadEmpty
                     hint="Add a job description as real-time context."
-                    uploading={jdUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
+                    enterClass={jdHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                <div className={jdHandoff.arriving ? 'pi-handoff-in' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '13px 1fr 100px 20px', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', borderRadius: 'var(--pi-r-md)' }}>
                         <FileText size={13} style={{ color: 'var(--pi-secondary)', flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -961,16 +2638,17 @@ export function ProfileIntelligenceSettings({
                         <PIIndexBadge status={jdUploadStatus} />
                         <button
                             className="pi-press-soft"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-danger)')}
+                            disabled={jdUploading}
+                            title={jdUploading
+                                ? 'Indexing — this finishes in the background and cannot be stopped. Delete it once it completes.'
+                                : 'Delete job description'}
+                            style={{ background: 'none', border: 'none', cursor: jdUploading ? 'not-allowed' : 'pointer', opacity: jdUploading ? 0.4 : 1, color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
+                            onMouseEnter={e => { if (!jdUploading) e.currentTarget.style.color = 'var(--pi-danger)'; }}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                             onClick={async () => {
-                                if (jdUploading) {
-                                    jdAbortRef.current.cancelled = true;
-                                    setJdUploading(false);
-                                    setJdUploadStatus(undefined);
-                                    return;
-                                }
+                                // Same lie as the resume X — the abort flag only silenced
+                                // this renderer while main finished the JD ingest.
+                                if (jdUploading) return;
                                 try {
                                     await window.electronAPI?.profileDeleteJD?.();
                                     const data = await window.electronAPI?.profileGetProfile?.();
@@ -1000,7 +2678,7 @@ export function ProfileIntelligenceSettings({
                                     )}
                                 </div>
                                 {jd.compensation_hint && (
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#34d399' }}>{jd.compensation_hint}</div>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--pi-hero)' }}>{jd.compensation_hint}</div>
                                 )}
                                 {reqs.length > 0 && (
                                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1022,11 +2700,6 @@ export function ProfileIntelligenceSettings({
                             </div>
                         );
                     })()}
-                    {!jdUploading && (
-                        <button className="pi-add-file-btn" onClick={browseJD}>
-                            <Plus size={12} /> Replace file
-                        </button>
-                    )}
                 </div>
             )}
             {jdError && (
@@ -1035,27 +2708,41 @@ export function ProfileIntelligenceSettings({
                 </div>
             )}
 
+            {/* Scope note — applies to BOTH files above, so it closes the section
+                rather than sitting under either card. Deliberately borderless: a
+                third bordered box after two would read as another upload target.
+                11px/tertiary puts it below the cards' own hint text in the type
+                hierarchy, which is what a footnote should be.
+
+                The two named modes are the ONLY ones whose policy opts into
+                profile hydration — MODE_POLICIES.profileSources is non-empty for
+                'looking-for-work' and 'technical-interview' and [] for general,
+                sales, recruiting, team-meet, lecture and seminar (see
+                electron/context-intelligence/policies/mode-policy-registry.ts).
+                Custom modes fall back to 'general', so they get nothing either.
+                If that registry gains a profile-aware mode, this line must move
+                with it. */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 2 }}>
+                <Info size={12} style={{ color: 'var(--pi-tertiary)', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 11, color: 'var(--pi-tertiary)', margin: 0, lineHeight: 1.5 }}>
+                    Used only in{' '}
+                    <span style={{ color: 'var(--pi-secondary)', fontWeight: 500 }}>Looking for work</span>{' '}
+                    and{' '}
+                    <span style={{ color: 'var(--pi-secondary)', fontWeight: 500 }}>Technical Interview</span>{' '}
+                    modes. Other modes never receive them.
+                </p>
+            </div>
+
         </>
         );
     };
 
     const renderInsights = () => {
-        // Empty state — no resume yet.
-        if (!profileStatus.hasProfile) {
-            return (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <FileText size={18} style={{ color: 'var(--pi-accent)' }} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
-                        <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                            Add your resume in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> and I'll summarize it here.
-                        </div>
-                    </div>
-                </div>
-            );
-        }
+        // Header is always shown (Cover Letter / Company Intel parity) — empty-
+        // state card renders below it instead of replacing it. This way the
+        // "Your profile" section is visible (and explainable) the moment the
+        // user opens the tab, even before a resume is uploaded.
+        const hasProfile = profileStatus.hasProfile;
 
         // ── Data (all optional; guard every access) ──
         const experienceCount: number = profileData?.experienceCount ?? 0;
@@ -1141,6 +2828,29 @@ export function ProfileIntelligenceSettings({
                     </p>
                 </div>
 
+                {/* No resume yet — surface as a card below the header so the
+                    "Your profile" title still reads (Cover Letter parity) and
+                    the user gets a clear next step. */}
+                {!hasProfile && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <FileText size={18} style={{ color: 'var(--pi-accent-icon)' }} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
+                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
+                                Add your resume in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> and I'll summarize it here.
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Profile body — gated on hasProfile so the empty-state card
+                    above stays the only thing shown when there's no resume yet.
+                    Mirrors how Cover Letter / Company Intel hide their content
+                    cards while still rendering the section header. */}
+                {hasProfile && (
+                <>
                 {/* Quiet notice — only when the resume was read without AI */}
                 {profileStatus.extractionMode === 'heuristic' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24, padding: '10px 12px', borderRadius: 'var(--pi-r-md)', border: '1px solid rgba(245,158,11,0.20)', background: 'rgba(245,158,11,0.06)' }}>
@@ -1307,6 +3017,8 @@ export function ProfileIntelligenceSettings({
                         </div>
                     </div>
                 )}
+                </>
+            )}
             </>
         );
     };
@@ -1376,39 +3088,19 @@ export function ProfileIntelligenceSettings({
         const hasJD = !!profileData?.hasActiveJD;
         const companyName = profileData?.activeJD?.company?.trim();
 
-        // Empty-state branches — this tab is always visible (Cover Letter parity).
-        // Company research keys off the active JD's company, not the resume.
-        if (!hasJD) {
-            return (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Building2 size={18} style={{ color: '#D9A7E8' }} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
-                        <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                            Upload a job description in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> so I can research the target company.
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        if (!companyName) {
-            return (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Building2 size={18} style={{ color: '#D9A7E8' }} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Company name not detected</div>
-                        <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                            Your JD didn't name a company clearly. Re-upload a JD with the company in the first few lines, or ask for company research directly.
-                        </div>
-                    </div>
-                </div>
-            );
-        }
+        // Header is always shown (Cover Letter parity) — empty-state cards
+        // render below it instead of replacing it. Company research keys off
+        // the active JD's company, not the resume.
         const loaded = !!companyDossier;
+        // The JD upload's automatic research is ALREADY spending (2026-09-21).
+        // Without this, the 20-60s AOT window renders "Ready to research →
+        // Research Now" — the exact screen that trained the habit of clicking it
+        // — and a click there fires a SECOND query set concurrently with the run
+        // in flight. It also re-resolves the provider on the shared singleton
+        // engine mid-run, minting a new session UUID, so the server bills the
+        // remainder of the AOT run as another research run too. Show the skeleton
+        // that already exists instead: the work is genuinely underway.
+        const aotResearching = profileData?.aotStatus?.companyResearch === 'running';
         return (
             <>
                 {/* Header — Refresh pill sits next to the title once the dossier is
@@ -1418,16 +3110,50 @@ export function ProfileIntelligenceSettings({
                     <div>
                         <h3 className="pi-section-label" style={{ margin: 0 }}>Company Intel</h3>
                         <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
-                            Culture, salary, hiring signal and interview difficulty for {companyName}.
+                            {companyName
+                                ? <>Culture, salary, hiring signal and interview difficulty for {companyName}.</>
+                                : <>Culture, salary, hiring signal and interview difficulty for the target company.</>}
                         </p>
                     </div>
                     {loaded && (
-                        <button className="pi-pill-btn pi-press" disabled={companyResearching} onClick={doCompanyResearch}>
+                        <button className="pi-pill-btn pi-press" disabled={companyResearching} onClick={() => doCompanyResearch(true)}>
                             <RefreshCw size={12} className={companyResearching ? 'pi-spinner' : ''} />
                             {companyResearching ? 'Refreshing' : 'Refresh'}
                         </button>
                     )}
                 </div>
+
+                {/* No JD — surface this as its own card so the header still reads
+                    (Cover Letter parity), but the user gets a clear next step. */}
+                {!hasJD && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
+                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
+                                Upload a job description in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> so I can research the target company.
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* JD present but no company name extracted — same pattern: header
+                    stays, the missing-name card explains the gap. */}
+                {hasJD && !companyName && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Company name not detected</div>
+                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
+                                Your JD didn't name a company clearly. Re-upload a JD with the company in the first few lines, or ask for company research directly.
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {companySearchQuotaExhausted && (
                     <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', marginBottom: 12, fontSize: 11, color: '#f59e0b', lineHeight: 1.5 }}>
@@ -1435,10 +3161,10 @@ export function ProfileIntelligenceSettings({
                         Web search credits exhausted — showing AI-only research.
                     </div>
                 )}
-                {!companyDossier && !companyResearching && (
+                {!companyDossier && !companyResearching && !aotResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to research</div>
@@ -1448,15 +3174,15 @@ export function ProfileIntelligenceSettings({
                         </div>
                         <button
                             className="pi-pill-btn pi-press"
-                            style={{ color: '#D9A7E8', borderColor: 'rgba(217,167,232,0.25)', background: 'rgba(217,167,232,0.08)', fontWeight: 600, padding: '8px 20px' }}
-                            onClick={doCompanyResearch}
+                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
+                            onClick={() => doCompanyResearch(false)}
                         >
                             Research Now
                         </button>
                     </div>
                 )}
-                {companyResearching && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {(companyResearching || aotResearching) && companyName && (
+                    <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {/* Work Culture skeleton — overall rating + 4 sub-ratings grid.
                             Card shell is solid (no pulse); only the inner text placeholders breathe. */}
                         <div>
@@ -1578,27 +3304,22 @@ export function ProfileIntelligenceSettings({
 
                         {/* Source-of-truth disclaimer — green "Scraped / Live Web Data" when
                             Tavily ran, amber "LLM-Generated / Training Data Only" otherwise. */}
-                        <div style={{ border: '1px solid rgba(217,167,232,0.14)', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ border: '1px solid var(--pi-badge-border)', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div className="pi-skeleton" style={{ height: 11, width: 11, borderRadius: '50%', flexShrink: 0 }} />
                             <div className="pi-skeleton" style={{ height: 9, width: '70%', borderRadius: 3 }} />
                         </div>
                     </div>
                 )}
-                {companyDossier && !companyResearching && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {companyDossier && !companyResearching && companyName && (
+                    <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {companyDossier.culture_ratings && (
                             <div>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Work Culture</div>
                                 <div style={{ border: '1px solid var(--pi-border)', borderRadius: 8, padding: '12px 14px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--pi-border)' }}>
-                                        <div>
-                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                                                <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{companyDossier.culture_ratings.overall?.toFixed(1)}</span>
-                                                <span style={{ fontSize: 14, color: 'var(--pi-tertiary)' }}> / 5</span>
-                                            </div>
-                                            {companyDossier.culture_ratings.review_count && (
-                                                <div style={{ fontSize: 10, color: 'var(--pi-tertiary)', marginTop: 4 }}>{companyDossier.culture_ratings.review_count}</div>
-                                            )}
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                            <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{companyDossier.culture_ratings.overall?.toFixed(1)}</span>
+                                            <span style={{ fontSize: 14, color: 'var(--pi-tertiary)' }}> / 5</span>
                                         </div>
                                         <StarRating value={companyDossier.culture_ratings.overall} size={14} />
                                     </div>
@@ -1721,7 +3442,7 @@ export function ProfileIntelligenceSettings({
                                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Core Values</div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                     {companyDossier.core_values.map((v: string, i: number) => (
-                                        <span key={i} style={{ fontSize: 11, color: '#D9A7E8', padding: '3px 10px', borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.18)' }}>{v}</span>
+                                        <span key={i} style={{ fontSize: 11, color: 'var(--pi-badge-text)', padding: '3px 10px', borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)' }}>{v}</span>
                                     ))}
                                 </div>
                             </div>
@@ -1808,137 +3529,6 @@ export function ProfileIntelligenceSettings({
         );
     };
 
-    const renderNegotiation = () => {
-        const doGenerate = async (regen: boolean) => {
-            setNegotiationGenerating(true); setNegotiationError('');
-            try {
-                const result = await window.electronAPI?.profileGenerateNegotiation?.(regen);
-                if (result?.success && result.script) setNegotiationScript(result.script);
-                else setNegotiationError(result?.error || 'Generation failed');
-            } catch { setNegotiationError('Generation failed'); }
-            finally { setNegotiationGenerating(false); }
-        };
-
-        const STEPS = [
-            { step: '01', label: 'Opening',        hint: 'When asked about salary',      field: 'opening_line',          accent: '#10b981', bg: 'rgba(16,185,129,0.06)',  border: 'rgba(16,185,129,0.16)'  },
-            { step: '02', label: 'Justify',         hint: 'Link your record to the ask',  field: 'justification',          accent: '#818cf8', bg: 'rgba(129,140,248,0.06)', border: 'rgba(129,140,248,0.16)' },
-            { step: '03', label: 'Counter & Hold',  hint: 'If they push back',            field: 'counter_offer_fallback', accent: '#fb923c', bg: 'rgba(251,146,60,0.06)',  border: 'rgba(251,146,60,0.16)'  },
-        ];
-
-        return (
-            <>
-                {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                    <div>
-                        <h3 className="pi-section-label" style={{ margin: 0 }}>Negotiation Script</h3>
-                        <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
-                            AI-crafted salary negotiation based on your resume & JD.
-                        </p>
-                    </div>
-                    {negotiationScript && (
-                        <button className="pi-pill-btn pi-press" disabled={negotiationGenerating} onClick={() => doGenerate(true)}>
-                            <RefreshCw size={12} className={negotiationGenerating ? 'pi-spinner' : ''} />
-                            Regenerate
-                        </button>
-                    )}
-                </div>
-
-                {/* Error */}
-                {negotiationError && (
-                    <div style={{ fontSize: 11, color: 'var(--pi-danger)', padding: '8px 12px', borderRadius: 8, background: 'var(--pi-danger-bg)', border: '1px solid rgba(239,68,68,0.2)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <AlertCircle size={12} style={{ flexShrink: 0 }} /> {negotiationError}
-                    </div>
-                )}
-
-                {/* Skeleton while generating fresh */}
-                {negotiationGenerating && !negotiationScript && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {/* salary skeleton */}
-                        <div className="pi-skeleton" style={{ height: 72, borderRadius: 10, background: 'var(--pi-btn-bg)' }} />
-                        {/* step skeletons */}
-                        {[1,2,3].map(i => (
-                            <div key={i} className="pi-skeleton" style={{ height: 88, borderRadius: 10, background: 'var(--pi-btn-bg)', opacity: 1 - i * 0.12 }} />
-                        ))}
-                    </div>
-                )}
-
-                {/* Empty state */}
-                {!negotiationScript && !negotiationGenerating && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Gift size={18} style={{ color: '#34d399' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to negotiate</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Generate a personalised salary script with opening line, justification, and counter-offer phrasing.
-                            </div>
-                        </div>
-                        <button
-                            className="pi-pill-btn pi-press"
-                            style={{ color: '#34d399', borderColor: 'rgba(52,211,153,0.25)', background: 'rgba(52,211,153,0.08)', fontWeight: 600, padding: '8px 20px' }}
-                            onClick={() => doGenerate(false)}
-                        >
-                            Generate Script
-                        </button>
-                    </div>
-                )}
-
-                {/* Script output */}
-                {negotiationScript && (
-                    <div style={{ opacity: negotiationGenerating ? 0.45 : 1, transition: 'opacity 0.3s', pointerEvents: negotiationGenerating ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-                        {/* Salary range card */}
-                        {negotiationScript.salary_range && (() => {
-                            const { currency, min, max } = negotiationScript.salary_range;
-                            const prefix = currency ? `${currency} ` : '';
-                            const range = `${prefix}${min?.toLocaleString()} – ${max?.toLocaleString()}`;
-                            return (
-                                <div style={{ borderRadius: 12, padding: '14px 18px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', marginBottom: 2 }}>
-                                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'var(--pi-tertiary)', marginBottom: 6 }}>Target Compensation</div>
-                                    <div style={{ fontSize: 22, fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1, whiteSpace: 'nowrap' }}>
-                                        {range}
-                                    </div>
-                                </div>
-                            );
-                        })()}
-
-                        {/* Step cards */}
-                        {STEPS.filter(s => negotiationScript[s.field]).map(s => {
-                            const text = (negotiationScript[s.field] as string).replace(/^["'"']+|["'"']+$/g, '').trim();
-                            return (
-                                <div key={s.step} style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${s.border}`, background: s.bg }}>
-                                    {/* Card header */}
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: `1px solid ${s.border}` }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', color: s.accent, background: `${s.accent}18`, padding: '2px 7px', borderRadius: 20 }}>
-                                                {s.step}
-                                            </span>
-                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)' }}>{s.label}</span>
-                                            <span style={{ fontSize: 11, color: 'var(--pi-tertiary)' }}>· {s.hint}</span>
-                                        </div>
-                                        <button
-                                            onClick={() => navigator.clipboard?.writeText(text)}
-                                            className="pi-press-soft"
-                                            style={{ fontSize: 11, color: 'var(--pi-tertiary)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px', borderRadius: 6 }}
-                                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-primary)')}
-                                            onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
-                                        >
-                                            <Check size={11} /> Copy
-                                        </button>
-                                    </div>
-                                    {/* Quote body */}
-                                    <p style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--pi-primary)', padding: '12px 14px', margin: 0, fontStyle: s.step !== '02' ? 'italic' : 'normal' }}>
-                                        {text}
-                                    </p>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </>
-        );
-    };
 
     const renderCoverLetter = () => {
         const doGenerate = async (regen: boolean) => {
@@ -2002,9 +3592,9 @@ export function ProfileIntelligenceSettings({
                     Each placeholder rect breathes; the card shell stays solid. */}
                 {showSkeleton && (
                     <div>
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(96,165,250,0.18)', background: 'rgba(96,165,250,0.04)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-letter-bg)' }}>
                             {/* Header row */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid rgba(96,165,250,0.18)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <div className="pi-skeleton" style={{ height: 12, width: 50, borderRadius: 20 }} />
                                     <div className="pi-skeleton" style={{ height: 13, width: 110, borderRadius: 3 }} />
@@ -2029,8 +3619,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: no resume yet — always wins over any cached letter */}
                 {!hasResume && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
@@ -2044,8 +3634,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: resume present, no active JD yet */}
                 {hasResume && !hasJD && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
@@ -2059,8 +3649,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: resume + JD present, no letter generated yet */}
                 {showGenerateCTA && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to write</div>
@@ -2070,7 +3660,7 @@ export function ProfileIntelligenceSettings({
                         </div>
                         <button
                             className="pi-pill-btn pi-press"
-                            style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.25)', background: 'rgba(96,165,250,0.08)', fontWeight: 600, padding: '8px 20px' }}
+                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
                             onClick={() => doGenerate(false)}
                         >
                             Generate Letter
@@ -2083,11 +3673,11 @@ export function ProfileIntelligenceSettings({
                 {showOutput && (
                     <div style={{ opacity: coverLetterGenerating ? 0.45 : 1, transition: 'opacity 0.3s', pointerEvents: coverLetterGenerating ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {/* Single continuous letter card — prose, not discrete step-cards like negotiation */}
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(96,165,250,0.18)', background: 'rgba(96,165,250,0.04)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-letter-bg)' }}>
                             {/* Card header */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid rgba(96,165,250,0.18)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', color: '#60a5fa', background: 'rgba(96,165,250,0.12)', padding: '2px 7px', borderRadius: 20 }}>
+                                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', color: 'var(--pi-badge-text)', background: 'var(--pi-accent-subtle)', padding: '2px 7px', borderRadius: 20 }}>
                                         COVER
                                     </span>
                                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)' }}>Tailored Letter</span>
@@ -2139,26 +3729,52 @@ export function ProfileIntelligenceSettings({
         );
     };
 
+    // Role Insight owns all of its own state; the panel only needs to know
+    // whether the user has access and how to jump to the sections that supply
+    // its sources. That keeps this already-large component from growing another
+    // dozen useState hooks.
+    const renderRoleInsight = () => (
+        <RoleInsightPanel
+            hasAccess={hasProfileAccess}
+            onNeedUpgrade={() => openPlans()}
+            onGoToProfile={() => goToSection('identity')}
+        />
+    );
+
     const SECTION_RENDERERS: Record<string, () => React.ReactNode> = {
         identity: renderIdentity,
         insights: renderInsights,
+        roleinsight: renderRoleInsight,
         tavily: renderTavily,
         company: renderCompany,
-        negotiation: renderNegotiation,
         coverletter: renderCoverLetter,
     };
 
     // ── CTA class ─────────────────────────────────────────────────────────────
+    // The trial state renders LiquidGlassButton instead (see the CTA footer),
+    // so this pill is only ever Manage Pro or Unlock Pro.
     const ctaClass = [
         'pi-cta',
-        isTrialActive && !isPremium  ? 'pi-cta--trial'   : '',
-        !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
+        !isPremium ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
+
+    // ── Non-pro users see the gate (wait for license verification) ────────────
+    if (!hasProfileAccess) {
+        // Busy, not empty: an empty card would read as settled to the genie.
+        if (!licenseLoaded) return <div aria-busy="true" style={{ height: '100%' }} />;
+        return (
+            <ProfileIntelligenceProGate
+                onOpenNativelyAPI={onOpenNativelyAPI}
+                onClose={onClose}
+            />
+        );
+    }
 
     return (
         <div
             className="pi-root"
             data-theme={theme}
+            aria-busy={!statusLoaded || profileUploading || jdUploading}
             style={{
                 display: 'flex', height: '100%', background: 'var(--pi-bg)',
                 borderRadius: 16, overflow: 'hidden',
@@ -2167,6 +3783,7 @@ export function ProfileIntelligenceSettings({
             } as React.CSSProperties}
         >
             <style>{PI_CSS}</style>
+            {confirmDialog}
 
             {/* ── Sidebar ── */}
             <div style={{
@@ -2192,7 +3809,7 @@ export function ProfileIntelligenceSettings({
                         className="pi-sel-indicator"
                         data-instant={!indicatorState.ready}
                         style={{
-                            top: indicatorState.top,
+                            transform: `translateY(${indicatorState.top}px)`,
                             height: indicatorState.height,
                             opacity: indicatorState.visible ? 1 : 0,
                         }}
@@ -2206,7 +3823,7 @@ export function ProfileIntelligenceSettings({
                                 else navItemRefs.current.delete(id);
                             }}
                             className={`pi-nav-item${activeSection === id ? ' active' : ''}`}
-                            onClick={() => setActiveSection(id)}
+                            onClick={() => goToSection(id)}
                         >
                             <Icon size={15} />
                             <span>{label}</span>
@@ -2216,57 +3833,56 @@ export function ProfileIntelligenceSettings({
 
                 {/* CTA footer */}
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
+                    {isTrialActive && !isPremium ? (
+                        /* During a free trial: the shared Liquid Glass button
+                           (src/ui-components), label only. Colour and size come
+                           from .pi-upgrade-lg in the style block above. */
+                        <LiquidGlassButton
+                            variant="action"
+                            className="lg-sm lg-wide pi-upgrade-lg"
+                            onClick={() => openPlans()}
+                        >
+                            Upgrade
+                        </LiquidGlassButton>
+                    ) : (
                     <button
-                        onClick={() => setIsPremiumModalOpen(true)}
+                        ref={ctaLens.ref}
+                        onClick={() => openPlans()}
+                        onPointerMove={ctaLens.onPointerMove}
+                        onFocus={ctaLens.onFocus}
                         className={ctaClass}
                         style={{ width: '100%' }}
                         aria-label={isPremium ? 'Manage Pro' : 'Unlock Pro'}
                     >
-                        <span style={{ flex: 1, textAlign: 'left', position: 'relative', zIndex: 1 }}>
-                            {isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}
+                        {/* Painted above the flat fill and the rim, below the
+                            content. Both pseudos are the material's already. */}
+                        <span className="pi-cta-lens" aria-hidden="true" />
+                        {!isPremium
+                            ? <span className="pi-cta-shimmer" aria-hidden="true" />
+                            : null}
+                        <span className="pi-cta-label">
+                            {isPremium ? 'Manage Pro' : 'Unlock Pro'}
                         </span>
                         <div className="pi-cta-ring">
                             {isPremium
                                 ? <CheckCircle size={13} strokeWidth={2.5} />
-                                : isTrialActive
-                                    ? <Sparkles size={13} strokeWidth={2.5} />
-                                    : <ArrowUpRight size={13} strokeWidth={2.5} />}
+                                : <ArrowUpRight size={13} strokeWidth={2.5} />}
                         </div>
                     </button>
+                    )}
                 </div>
             </div>
 
             {/* ── Right panel ── */}
             <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                {/* Scrollable content — key triggers blur-fade animation on each switch */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', boxSizing: 'border-box' }}>
-                    <div key={activeSection} className="pi-panel-fade">
+                {/* Scrollable content — key remounts the block on each switch, which
+                    is what re-fires the directional blur-in below it. */}
+                <div ref={panelScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 32px', boxSizing: 'border-box' }}>
+                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir} data-genie-view={activeSection}>
                         {(SECTION_RENDERERS[activeSection] ?? renderIdentity)()}
                     </div>
                 </div>
             </div>
-
-            <PremiumUpgradeModal
-                isOpen={isPremiumModalOpen}
-                onClose={() => setIsPremiumModalOpen(false)}
-                isPremium={isPremium}
-                onActivated={async () => {
-                    setIsPremium(true);
-                    try {
-                        const details = await window.electronAPI?.licenseGetDetails?.();
-                        const plan = details?.plan ?? '';
-                        if (plan) setPremiumPlan(plan);
-                        writePremiumCache(true, plan);
-                    } catch { writePremiumCache(true, premiumPlan); }
-                    const status = await window.electronAPI?.profileGetStatus?.();
-                    if (status) setProfileStatus(status);
-                }}
-                onDeactivated={() => {
-                    setIsPremium(false); setPremiumPlan('');
-                    writePremiumCache(false, '');
-                    setProfileStatus(prev => ({ ...prev, profileMode: false }));
-                }}
-            />
         </div>
     );
 }

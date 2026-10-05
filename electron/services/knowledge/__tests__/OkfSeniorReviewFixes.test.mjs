@@ -345,13 +345,32 @@ test('KnowledgeIndexQueue: jobs Map has bounded eviction (was previously unbound
 // 6. EvidenceAssembler wired into the false-refusal repair gate
 // ---------------------------------------------------------------------------
 
-test('ipcHandlers: assembleEvidence is called and its tier feeds hasStrongEvidence as an additional OR condition', () => {
+test('ipcHandlers: assembleEvidence is called and its tier is reported but NOT used to gate the repair', () => {
   const src = read('electron/ipcHandlers.ts');
   assert.match(src, /const \{ assembleEvidence \} = require\('\.\/services\/knowledge\/EvidenceAssembler'\);/);
   assert.match(src, /isTier1Or2Evidence = bestTier <= 2;/);
-  // Updated 2026-07-02: the gate uses OKF entity/title overlap (hasRealEvidence)
-  // as the primary signal; isTier1Or2Evidence remains an additional OR signal.
-  assert.match(src, /hasStrongEvidence = hasRealEvidence \|\| Boolean\(matchedHighSignalEntity\) \|\| isTier1Or2Evidence;/);
+  // CONTRACT CHANGED 2026-08-18 (audit F-412). Was:
+  //   hasStrongEvidence = hasRealEvidence || Boolean(matchedHighSignalEntity) || isTier1Or2Evidence
+  //
+  // EvidenceAssembler.computeTier is TOPIC-BLIND: it returns tier 2 for ANY
+  // synthesis-classified question as soon as the pack yields >=1 card, and
+  // OkfRetriever admits cards on a question-TYPE match with zero query-word
+  // overlap. As an independent disjunct the tier therefore made the off-topic
+  // veto above unable to veto anything — an off-topic synthesis question
+  // ("What is the key takeaway for the Kyoto Protocol?" against a robotics
+  // thesis) produced hasEntityEvidence=false yet still repaired, discarding an
+  // honest "not in the document" refusal and re-prompting the model to
+  // synthesize harder. That is the hallucination pressure this gate exists to
+  // prevent, so the tier was removed from the gate deliberately.
+  //
+  // It is still COMPUTED and still reported in the decision diagnostics, which
+  // is where a topic-blind signal belongs. This test now pins that contract so
+  // the disjunct cannot be reintroduced silently.
+  assert.match(src, /hasStrongEvidence =\s*hasRealEvidence \|\| Boolean\(matchedHighSignalEntity\);/);
+  assert.ok(
+    !/hasStrongEvidence =[^;]*isTier1Or2Evidence/.test(src),
+    'the topic-blind tier signal must not gate the false-refusal repair',
+  );
 });
 
 // ---------------------------------------------------------------------------

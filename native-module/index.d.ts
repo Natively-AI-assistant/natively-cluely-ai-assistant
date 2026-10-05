@@ -12,7 +12,7 @@ export declare class MicrophoneCapture {
    * diagnostics and HFP/Bluetooth-degradation detection only.
    */
   getNativeSampleRate(): number
-  start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
+  start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null, onSpeechEdge?: (((err: Error | null, arg: SpeechEdgeEvent) => any)) | undefined | null): void
   stop(): void
 }
 
@@ -30,7 +30,7 @@ export declare class StealthKeyboardTap {
    *
    * Idempotent: repeated `start()` calls while active are no-ops.
    */
-  start(callback: ((err: Error | null, arg: CapturedKey) => any), overlayBounds?: OverlayBoundsInput | undefined | null): boolean
+  start(callback: ((err: Error | null, arg: CapturedKey) => any), appChords: Array<AppChordInput>, shortcutOnly: boolean, overlayBounds?: OverlayBoundsInput | undefined | null): boolean
   /**
    * Push fresh overlay bounds into the live tap. Required when the
    * OS window moves or resizes mid-session: without this, the start()
@@ -59,6 +59,8 @@ export declare class StealthKeyboardTap {
 
 export declare class SystemAudioCapture {
   constructor(deviceId?: string | undefined | null)
+  /** "sck" | "coreaudio" | "wasapi", or "" until the background init finished. */
+  getActiveBackend(): string
   /**
    * EMITTED sample rate — the rate of the PCM handed to STT (16000 when the
    * resampler is active). This is what callers must declare to STT providers.
@@ -69,8 +71,22 @@ export declare class SystemAudioCapture {
    * HFP/Bluetooth-degradation detection only. NOT the rate of emitted bytes.
    */
   getNativeSampleRate(): number
-  start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
+  start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null, onSpeechEdge?: (((err: Error | null, arg: SpeechEdgeEvent) => any)) | undefined | null): void
   stop(): void
+}
+
+/**
+ * napi input mirror of `AppChord`, passed from JS into `start()`. Defined here
+ * (unconditionally compiled) so BOTH the macOS `keyboard_tap` and the Windows
+ * `keyboard_hook_windows` modules — which each expose the identical
+ * `StealthKeyboardTap.start` surface — can reference one napi object with a
+ * single generated TS type. `vk`/`mods` come from
+ * `electron/services/winChord.ts` (which owns the accelerator→VK translation).
+ */
+export interface AppChordInput {
+  vk: number
+  mods: number
+  id: string
 }
 
 /**
@@ -124,6 +140,13 @@ export interface CapturedKey {
   isKeyDown: boolean
   /** True for a pass-through mouse down outside the overlay bounds. */
   isOutsideMouseDown: boolean
+  /**
+   * Non-empty ⟹ an app hotkey chord fired (Windows hook only). Always empty
+   * on macOS, where the app's shortcuts are consumed by Carbon/IOKit before
+   * the tap; present here only to keep the CapturedKey napi shape identical
+   * across platforms.
+   */
+  appChordId: string
 }
 
 /**
@@ -159,7 +182,13 @@ export declare function getHardwareId(): string
 
 export declare function getInputDevices(): Array<AudioDeviceInfo>
 
+/** Who is capturing from a microphone right now; null where the OS can't say. */
+export declare function getMicUsers(): Array<MicUser> | null
+
 export declare function getOutputDevices(): Array<AudioDeviceInfo>
+
+/** The visible top-level windows; null where the OS can't say. */
+export declare function getVisibleWindows(): Array<WindowInfo> | null
 
 /**
  * True if this process has Accessibility trust (required for CGEventTap).
@@ -167,11 +196,48 @@ export declare function getOutputDevices(): Array<AudioDeviceInfo>
  */
 export declare function isAccessibilityGranted(): boolean
 
+export interface MicUser {
+  /** macOS: the capturing process. Windows: unknown (the consent store is per app). */
+  pid?: number
+  /** macOS: the process's bundle id. Windows: a packaged app's family name. */
+  bundleId?: string
+  /** The executable: macOS proc_pidpath; Windows a NonPackaged entry's path. */
+  path?: string
+}
+
 export interface OverlayBoundsInput {
   x: number
   y: number
   width: number
   height: number
+}
+
+/**
+ * macOS: whether ScreenCaptureKit can currently enumerate a display (false
+ * while every display is asleep — the state in which an SCK stream stops
+ * with -3815 and a rebuild would fail "No displays found"). Always true on
+ * other platforms, whose backends are not display-bound.
+ */
+export declare function screenCaptureDisplaysAvailable(): boolean
+
+export declare function setForeignWindowsCaptureExcluded(excluded: boolean, ownHandles: Array<Buffer>): number
+
+/**
+ * One joint-state transition from the dual-channel tracker
+ * (`channel_state.rs`), delivered to JS through the optional third `start()`
+ * callback of both captures. `atMs` is epoch ms (Date.now() timeline).
+ */
+export interface SpeechEdgeEvent {
+  /** "interviewer" | "user" */
+  channel: string
+  speaking: boolean
+  /** "neither" | "interviewer_speaking" | "user_speaking" | "both" */
+  joint: string
+  atMs: number
+  /** ms since the OTHER channel's last edge; -1 when it has none yet. */
+  msSinceOtherEdge: number
+  /** false on Windows (mic is RMS-only, PR #497): user edges are weak evidence. */
+  userEdgesVadBacked: boolean
 }
 
 /**
@@ -200,3 +266,12 @@ export declare function verifyDodoKey(licenseKey: string, deviceLabel: string): 
  * The HTTP call runs on a libuv worker thread to prevent blocking the Node.js event loop.
  */
 export declare function verifyGumroadKey(licenseKey: string): Promise<unknown>
+
+export interface WindowInfo {
+  pid: number
+  /** The owning app's name (macOS kCGWindowOwnerName; Windows the exe's file name). */
+  owner: string
+  /** Empty when unknown (macOS without Screen Recording permission). */
+  title: string
+  path?: string
+}

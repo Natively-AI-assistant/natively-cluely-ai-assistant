@@ -161,6 +161,61 @@ function checkNativeModuleUnpacked(): { ok: boolean; message: string } {
   return { ok: false, message: `Native module binary missing under resources/app.asar.unpacked/native-module/` };
 }
 
+/** Fallback only — the real value comes from LocalReranker. See its use below. */
+const BUILT_IN_RERANKER_MODEL_ID = 'Xenova/ms-marco-MiniLM-L-6-v2';
+
+/**
+ * A human-readable name for the bundled reranker, derived rather than written.
+ *
+ * `Xenova/ms-marco-MiniLM-L-6-v2` -> `ms-marco-MiniLM-L-6-v2`. Two strings in
+ * this file named the model; both went stale when it changed, and one of them
+ * is the line users read in the startup diagnostics.
+ */
+function bundledRerankerName(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getBundledRerankerModelId } = require('../rag/LocalReranker') as typeof import('../rag/LocalReranker');
+    const id = getBundledRerankerModelId?.();
+    if (typeof id === 'string' && id) return id.split('/').pop() as string;
+  } catch { /* fall through */ }
+  return 'local reranker';
+}
+
+/**
+ * Like checkUnpackedNativeDir, but satisfied by ANY entry under `dirRel` whose
+ * name starts with `prefix`.
+ *
+ * Used for the platform-specific native packages (sharp, sqlite-vec) whose
+ * directory name embeds the CPU arch — `sharp-win32-x64` vs `sharp-win32-ia32`
+ * vs `sharp-win32-arm64`. Windows ships both x64 and ia32 installers, so
+ * pinning one arch would fail the other. Matching on the platform prefix
+ * verifies "a native binary for this OS was packaged" without hardcoding an
+ * arch that may legitimately not be the one installed.
+ */
+function checkUnpackedNativePrefix(
+  dirRel: string,
+  prefix: string,
+  label: string,
+): { ok: boolean; message: string } {
+  if (!isPackagedSafe()) {
+    return { ok: true, message: `Dev mode: skipping unpacked check (${dirRel}/${prefix}*)` };
+  }
+  if (!process.resourcesPath) {
+    return {
+      ok: false,
+      message: `Cannot validate packaged path: process.resourcesPath is undefined (rel=${dirRel})`,
+    };
+  }
+  const dir = path.join(process.resourcesPath, 'app.asar.unpacked', dirRel);
+  try {
+    const hit = fs.readdirSync(dir).find((entry) => entry.startsWith(prefix));
+    if (hit) return { ok: true, message: `Found app.asar.unpacked/${dirRel}/${hit}` };
+    return { ok: false, message: `Missing ${label}: no ${dirRel}/${prefix}* in app.asar.unpacked` };
+  } catch {
+    return { ok: false, message: `Missing ${label}: cannot read app.asar.unpacked/${dirRel}` };
+  }
+}
+
 function checkUnpackedNativeDir(rel: string): { ok: boolean; message: string } {
   if (!isPackagedSafe()) {
     return { ok: true, message: `Dev mode: skipping unpacked check (${rel})` };
@@ -226,26 +281,67 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
         rerankerCandidates.push(pathCheck.default.join(appPath, 'resources', 'models'));
         rerankerCandidates.push(pathCheck.default.join(appPath, '..', 'resources', 'models'));
       }
+      // The model id comes from LocalReranker, never a literal.
+      //
+      // This check hard-required `Xenova/bge-reranker-base`, and on 2026-09-04
+      // that model stopped being bundled — it measured WORSE than no reranker
+      // at all. Every packaged launch would then have reported the bundled
+      // reranker missing, because the check was still looking for the previous
+      // one. Deriving the id means the next swap cannot reintroduce that.
+      // Last-resort literal, used only if the require below throws. Kept in
+      // step by BundledRerankerFirstRunCrossPlatform, which pins it against
+      // DEFAULT_RERANKER_MODEL — a stale value here would look for the wrong
+      // file and report the bundled reranker missing on every packaged launch,
+      // which is exactly what happened when the model changed.
+      let bundledModelId = BUILT_IN_RERANKER_MODEL_ID;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { getBundledRerankerModelId } = require('../rag/LocalReranker') as typeof import('../rag/LocalReranker');
+        const resolved = getBundledRerankerModelId?.();
+        if (typeof resolved === 'string' && resolved) bundledModelId = resolved;
+      } catch { /* fall back to the literal above rather than failing the preflight */ }
+
+      const segments = bundledModelId.split('/');
       for (const root of rerankerCandidates) {
-        const tok = pathCheck.default.join(root, 'Xenova', 'bge-reranker-base', 'tokenizer.json');
-        const onnx = pathCheck.default.join(root, 'Xenova', 'bge-reranker-base', 'onnx', 'model_quantized.onnx');
+        const tok = pathCheck.default.join(root, ...segments, 'tokenizer.json');
+        const onnx = pathCheck.default.join(root, ...segments, 'onnx', 'model_quantized.onnx');
         try {
           if (fsCheck.existsSync(tok) && fsCheck.existsSync(onnx) && fsCheck.statSync(onnx).size > 0) {
             return { ok: true, message: `Found ${onnx}` };
           }
         } catch { /* keep trying */ }
       }
-      return { ok: false, message: 'Xenova/bge-reranker-base model files missing from packaged resources/models/' };
+      return { ok: false, message: `${bundledModelId} model files missing from packaged resources/models/` };
     }));
 
     // 3. Packaged native binaries (Rust audio module, sqlite-vec, sharp, better-sqlite3, keytar).
     checks.push(await timedCheck('rust native audio module', async () => checkNativeModuleUnpacked()));
     checks.push(await timedCheck('rust native audio module loadable', async () => tryRequireNativeModule()));
     checks.push(await timedCheck('better-sqlite3 native', async () => checkUnpackedNativeDir('node_modules/better-sqlite3/build/Release/better_sqlite3.node')));
-    checks.push(await timedCheck('sharp darwin-arm64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-arm64/lib')));
-    checks.push(await timedCheck('sharp darwin-x64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-x64/lib')));
-    checks.push(await timedCheck('sqlite-vec darwin-arm64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-arm64/vec0.dylib')));
-    checks.push(await timedCheck('sqlite-vec darwin-x64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-x64/vec0.dylib')));
+    // sharp / sqlite-vec ship as per-OS packages, so these checks MUST be
+    // platform-scoped. They used to be darwin-only paths run unconditionally,
+    // which meant every packaged WINDOWS build failed four checks for binaries
+    // that are never installed there — flipping `nativeOk` false and telling the
+    // user "Please reinstall Natively" on a perfectly good install. (Dev mode
+    // short-circuits checkUnpacked*, which is why it never showed up locally.)
+    //
+    // The darwin branch is byte-for-byte what shipped before; only the win32
+    // branch is new. Linux gets neither (as before) rather than a guess.
+    if (process.platform === 'darwin') {
+      checks.push(await timedCheck('sharp darwin-arm64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-arm64/lib')));
+      checks.push(await timedCheck('sharp darwin-x64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-x64/lib')));
+      checks.push(await timedCheck('sqlite-vec darwin-arm64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-arm64/vec0.dylib')));
+      checks.push(await timedCheck('sqlite-vec darwin-x64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-x64/vec0.dylib')));
+    } else if (process.platform === 'win32') {
+      // Prefix-matched: Windows ships x64 AND ia32 installers (and arm64 is
+      // possible), so the arch suffix cannot be hardcoded. Both directories are
+      // covered by asarUnpack (`**/node_modules/@img/**`,
+      // `**/node_modules/sqlite-vec-*/**`).
+      // The 'sharp ' / 'sqlite-vec ' id prefixes are load-bearing — `nativeOk`
+      // below selects these checks by exactly those prefixes.
+      checks.push(await timedCheck('sharp win32 native', async () => checkUnpackedNativePrefix('node_modules/@img', 'sharp-win32-', 'sharp Windows binary')));
+      checks.push(await timedCheck('sqlite-vec windows extension', async () => checkUnpackedNativePrefix('node_modules', 'sqlite-vec-windows-', 'sqlite-vec Windows extension')));
+    }
 
     // 4. Ollama optional path.
     if (options.ollamaSelected) {
@@ -272,12 +368,10 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     // Publish provider statuses for the local fallback stack.
     const importOk = checks.filter(c => c.id.includes('import')).every(c => c.ok);
     const minilmOk = checks.filter(c => c.id.includes('minilm')).every(c => c.ok);
-    const mobilebertOk = checks.filter(c => c.id.includes('mobilebert')).every(c => c.ok);
     const rerankerOk = checks.filter(c => c.id === 'reranker model assets').every(c => c.ok);
     const nativeOk = checks.filter(c => c.id.startsWith('rust native') || c.id.includes('better-sqlite3') || c.id.startsWith('sharp ') || c.id.startsWith('sqlite-vec ')).every(c => c.ok);
 
     const localEmbeddingOk = importOk && minilmOk && nativeOk;
-    const intentOk = importOk && mobilebertOk;
 
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-embedding',
@@ -291,23 +385,19 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       },
     ));
 
-    ProviderStatusRegistry.getInstance().setStatus(statusFor(
-      'intent-classifier',
-      'packaged_local',
-      intentOk ? 'ready' : 'missing_required_asset',
-      intentOk
-        ? 'Packaged zero-shot intent classifier assets are ready'
-        : 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
-      { checks: checks.filter(c => c.id.includes('mobilebert') || c.id.includes('import')) },
-    ));
+    // 'intent-classifier' status removed 2026-09-05 with the MobileBERT classifier.
 
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-reranker',
       'packaged_local',
       rerankerOk ? 'ready' : 'missing_required_asset',
+      // The model's NAME, not a hardcoded one. This said "BGE reranker (q8)"
+      // after the bundled model changed, so the startup diagnostics reported a
+      // model that is no longer in the app — the same drift that made the path
+      // check above look for the wrong file.
       rerankerOk
-        ? 'Packaged BGE reranker (q8) is ready for offline smart-retrieval'
-        : 'Natively packaged BGE reranker model is missing. Please reinstall Natively.',
+        ? `Packaged ${bundledRerankerName()} is ready for offline smart-retrieval`
+        : `Natively's packaged ${bundledRerankerName()} is missing. Please reinstall Natively.`,
       { checks: checks.filter(c => c.id === 'reranker model assets') },
     ));
 

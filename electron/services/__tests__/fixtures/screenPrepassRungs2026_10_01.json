@@ -1,0 +1,720 @@
+{
+ "written": "2026-10-01",
+ "note": "eligible pre-pass rungs, in order, before phase 5b",
+ "rungs": {
+  "vision_first | keys: none | gemini-3.8-flash": [],
+  "private_vision | keys: none | gemini-3.8-flash": [],
+  "vision_first | keys: none | gpt-3.5-turbo": [],
+  "private_vision | keys: none | gpt-3.5-turbo": [],
+  "vision_first | keys: none | gpt-5.5": [],
+  "private_vision | keys: none | gpt-5.5": [],
+  "vision_first | keys: none | claude-opus-5": [],
+  "private_vision | keys: none | claude-opus-5": [],
+  "vision_first | keys: none | natively": [],
+  "private_vision | keys: none | natively": [],
+  "vision_first | keys: none | deepseek-v4-flash": [],
+  "private_vision | keys: none | deepseek-v4-flash": [],
+  "vision_first | keys: none | deepseek-v4-pro": [],
+  "private_vision | keys: none | deepseek-v4-pro": [],
+  "vision_first | keys: none | openrouter/openai/gpt-4o": [],
+  "private_vision | keys: none | openrouter/openai/gpt-4o": [],
+  "vision_first | keys: none | litellm/internal": [],
+  "private_vision | keys: none | litellm/internal": [],
+  "vision_first | keys: none | fluxion/claude-opus-5": [],
+  "private_vision | keys: none | fluxion/claude-opus-5": [],
+  "vision_first | keys: none | agentrouter/claude-opus-5": [],
+  "private_vision | keys: none | agentrouter/claude-opus-5": [],
+  "vision_first | keys: none | ninerouter/openai/gpt-5": [],
+  "private_vision | keys: none | ninerouter/openai/gpt-5": [],
+  "vision_first | keys: none | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [],
+  "private_vision | keys: none | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [],
+  "vision_first | keys: none | ollama selected": [],
+  "private_vision | keys: none | ollama selected": [],
+  "vision_first | keys: none | custom local, reads images": [
+   "custom= (local)"
+  ],
+  "private_vision | keys: none | custom local, reads images": [
+   "custom= (local)"
+  ],
+  "vision_first | keys: none | custom local, text only": [],
+  "private_vision | keys: none | custom local, text only": [],
+  "vision_first | keys: none | custom hosted, reads images": [
+   "custom="
+  ],
+  "private_vision | keys: none | custom hosted, reads images": [],
+  "vision_first | keys: none | curl local, reads images": [],
+  "private_vision | keys: none | curl local, reads images": [],
+  "vision_first | keys: none | curl hosted, reads images": [],
+  "private_vision | keys: none | curl hosted, reads images": [],
+  "vision_first | keys: none | curl local, text only": [],
+  "private_vision | keys: none | curl local, text only": [],
+  "vision_first | keys: gemini | gemini-3.8-flash": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | gemini-3.8-flash": [],
+  "vision_first | keys: gemini | gpt-3.5-turbo": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | gpt-3.5-turbo": [],
+  "vision_first | keys: gemini | gpt-5.5": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | gpt-5.5": [],
+  "vision_first | keys: gemini | claude-opus-5": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | claude-opus-5": [],
+  "vision_first | keys: gemini | natively": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | natively": [],
+  "vision_first | keys: gemini | deepseek-v4-flash": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | deepseek-v4-flash": [],
+  "vision_first | keys: gemini | deepseek-v4-pro": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | deepseek-v4-pro": [],
+  "vision_first | keys: gemini | openrouter/openai/gpt-4o": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | openrouter/openai/gpt-4o": [],
+  "vision_first | keys: gemini | litellm/internal": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | litellm/internal": [],
+  "vision_first | keys: gemini | fluxion/claude-opus-5": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | fluxion/claude-opus-5": [],
+  "vision_first | keys: gemini | agentrouter/claude-opus-5": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | agentrouter/claude-opus-5": [],
+  "vision_first | keys: gemini | ninerouter/openai/gpt-5": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | ninerouter/openai/gpt-5": [],
+  "vision_first | keys: gemini | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [],
+  "vision_first | keys: gemini | ollama selected": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | ollama selected": [],
+  "vision_first | keys: gemini | custom local, reads images": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "custom= (local)"
+  ],
+  "private_vision | keys: gemini | custom local, reads images": [
+   "custom= (local)"
+  ],
+  "vision_first | keys: gemini | custom local, text only": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | custom local, text only": [],
+  "vision_first | keys: gemini | custom hosted, reads images": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "custom="
+  ],
+  "private_vision | keys: gemini | custom hosted, reads images": [],
+  "vision_first | keys: gemini | curl local, reads images": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | curl local, reads images": [],
+  "vision_first | keys: gemini | curl hosted, reads images": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | curl hosted, reads images": [],
+  "vision_first | keys: gemini | curl local, text only": [
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "gemini_pro=gemini-3.1-pro-preview"
+  ],
+  "private_vision | keys: gemini | curl local, text only": [],
+  "vision_first | keys: openai | gemini-3.8-flash": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | gemini-3.8-flash": [],
+  "vision_first | keys: openai | gpt-3.5-turbo": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | gpt-3.5-turbo": [],
+  "vision_first | keys: openai | gpt-5.5": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | gpt-5.5": [],
+  "vision_first | keys: openai | claude-opus-5": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | claude-opus-5": [],
+  "vision_first | keys: openai | natively": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | natively": [],
+  "vision_first | keys: openai | deepseek-v4-flash": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | deepseek-v4-flash": [],
+  "vision_first | keys: openai | deepseek-v4-pro": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | deepseek-v4-pro": [],
+  "vision_first | keys: openai | openrouter/openai/gpt-4o": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | openrouter/openai/gpt-4o": [],
+  "vision_first | keys: openai | litellm/internal": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | litellm/internal": [],
+  "vision_first | keys: openai | fluxion/claude-opus-5": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | fluxion/claude-opus-5": [],
+  "vision_first | keys: openai | agentrouter/claude-opus-5": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | agentrouter/claude-opus-5": [],
+  "vision_first | keys: openai | ninerouter/openai/gpt-5": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | ninerouter/openai/gpt-5": [],
+  "vision_first | keys: openai | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [],
+  "vision_first | keys: openai | ollama selected": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | ollama selected": [],
+  "vision_first | keys: openai | custom local, reads images": [
+   "openai=gpt-4o",
+   "custom= (local)"
+  ],
+  "private_vision | keys: openai | custom local, reads images": [
+   "custom= (local)"
+  ],
+  "vision_first | keys: openai | custom local, text only": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | custom local, text only": [],
+  "vision_first | keys: openai | custom hosted, reads images": [
+   "openai=gpt-4o",
+   "custom="
+  ],
+  "private_vision | keys: openai | custom hosted, reads images": [],
+  "vision_first | keys: openai | curl local, reads images": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | curl local, reads images": [],
+  "vision_first | keys: openai | curl hosted, reads images": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | curl hosted, reads images": [],
+  "vision_first | keys: openai | curl local, text only": [
+   "openai=gpt-4o"
+  ],
+  "private_vision | keys: openai | curl local, text only": [],
+  "vision_first | keys: deepseek | gemini-3.8-flash": [],
+  "private_vision | keys: deepseek | gemini-3.8-flash": [],
+  "vision_first | keys: deepseek | gpt-3.5-turbo": [],
+  "private_vision | keys: deepseek | gpt-3.5-turbo": [],
+  "vision_first | keys: deepseek | gpt-5.5": [],
+  "private_vision | keys: deepseek | gpt-5.5": [],
+  "vision_first | keys: deepseek | claude-opus-5": [],
+  "private_vision | keys: deepseek | claude-opus-5": [],
+  "vision_first | keys: deepseek | natively": [],
+  "private_vision | keys: deepseek | natively": [],
+  "vision_first | keys: deepseek | deepseek-v4-flash": [],
+  "private_vision | keys: deepseek | deepseek-v4-flash": [],
+  "vision_first | keys: deepseek | deepseek-v4-pro": [],
+  "private_vision | keys: deepseek | deepseek-v4-pro": [],
+  "vision_first | keys: deepseek | openrouter/openai/gpt-4o": [],
+  "private_vision | keys: deepseek | openrouter/openai/gpt-4o": [],
+  "vision_first | keys: deepseek | litellm/internal": [],
+  "private_vision | keys: deepseek | litellm/internal": [],
+  "vision_first | keys: deepseek | fluxion/claude-opus-5": [],
+  "private_vision | keys: deepseek | fluxion/claude-opus-5": [],
+  "vision_first | keys: deepseek | agentrouter/claude-opus-5": [],
+  "private_vision | keys: deepseek | agentrouter/claude-opus-5": [],
+  "vision_first | keys: deepseek | ninerouter/openai/gpt-5": [],
+  "private_vision | keys: deepseek | ninerouter/openai/gpt-5": [],
+  "vision_first | keys: deepseek | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [],
+  "private_vision | keys: deepseek | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [],
+  "vision_first | keys: deepseek | ollama selected": [],
+  "private_vision | keys: deepseek | ollama selected": [],
+  "vision_first | keys: deepseek | custom local, reads images": [
+   "custom= (local)"
+  ],
+  "private_vision | keys: deepseek | custom local, reads images": [
+   "custom= (local)"
+  ],
+  "vision_first | keys: deepseek | custom local, text only": [],
+  "private_vision | keys: deepseek | custom local, text only": [],
+  "vision_first | keys: deepseek | custom hosted, reads images": [
+   "custom="
+  ],
+  "private_vision | keys: deepseek | custom hosted, reads images": [],
+  "vision_first | keys: deepseek | curl local, reads images": [],
+  "private_vision | keys: deepseek | curl local, reads images": [],
+  "vision_first | keys: deepseek | curl hosted, reads images": [],
+  "private_vision | keys: deepseek | curl hosted, reads images": [],
+  "vision_first | keys: deepseek | curl local, text only": [],
+  "private_vision | keys: deepseek | curl local, text only": [],
+  "vision_first | keys: vendors | gemini-3.8-flash": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | gemini-3.8-flash": [],
+  "vision_first | keys: vendors | gpt-3.5-turbo": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | gpt-3.5-turbo": [],
+  "vision_first | keys: vendors | gpt-5.5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | gpt-5.5": [],
+  "vision_first | keys: vendors | claude-opus-5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | claude-opus-5": [],
+  "vision_first | keys: vendors | natively": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | natively": [],
+  "vision_first | keys: vendors | deepseek-v4-flash": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | deepseek-v4-flash": [],
+  "vision_first | keys: vendors | deepseek-v4-pro": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | deepseek-v4-pro": [],
+  "vision_first | keys: vendors | openrouter/openai/gpt-4o": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | openrouter/openai/gpt-4o": [],
+  "vision_first | keys: vendors | litellm/internal": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | litellm/internal": [],
+  "vision_first | keys: vendors | fluxion/claude-opus-5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | fluxion/claude-opus-5": [],
+  "vision_first | keys: vendors | agentrouter/claude-opus-5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | agentrouter/claude-opus-5": [],
+  "vision_first | keys: vendors | ninerouter/openai/gpt-5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | ninerouter/openai/gpt-5": [],
+  "vision_first | keys: vendors | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [],
+  "vision_first | keys: vendors | ollama selected": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | ollama selected": [],
+  "vision_first | keys: vendors | custom local, reads images": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "custom= (local)"
+  ],
+  "private_vision | keys: vendors | custom local, reads images": [
+   "custom= (local)"
+  ],
+  "vision_first | keys: vendors | custom local, text only": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | custom local, text only": [],
+  "vision_first | keys: vendors | custom hosted, reads images": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "custom="
+  ],
+  "private_vision | keys: vendors | custom hosted, reads images": [],
+  "vision_first | keys: vendors | curl local, reads images": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | curl local, reads images": [],
+  "vision_first | keys: vendors | curl hosted, reads images": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | curl hosted, reads images": [],
+  "vision_first | keys: vendors | curl local, text only": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: vendors | curl local, text only": [],
+  "vision_first | keys: everything | gemini-3.8-flash": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | gemini-3.8-flash": [],
+  "vision_first | keys: everything | gpt-3.5-turbo": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | gpt-3.5-turbo": [],
+  "vision_first | keys: everything | gpt-5.5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | gpt-5.5": [],
+  "vision_first | keys: everything | claude-opus-5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | claude-opus-5": [],
+  "vision_first | keys: everything | natively": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | natively": [],
+  "vision_first | keys: everything | deepseek-v4-flash": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | deepseek-v4-flash": [],
+  "vision_first | keys: everything | deepseek-v4-pro": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | deepseek-v4-pro": [],
+  "vision_first | keys: everything | openrouter/openai/gpt-4o": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "openrouter=openrouter/openai/gpt-4o"
+  ],
+  "private_vision | keys: everything | openrouter/openai/gpt-4o": [],
+  "vision_first | keys: everything | litellm/internal": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "litellm=litellm/internal"
+  ],
+  "private_vision | keys: everything | litellm/internal": [],
+  "vision_first | keys: everything | fluxion/claude-opus-5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "fluxion=fluxion/claude-opus-5"
+  ],
+  "private_vision | keys: everything | fluxion/claude-opus-5": [],
+  "vision_first | keys: everything | agentrouter/claude-opus-5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "agentrouter=agentrouter/claude-opus-5"
+  ],
+  "private_vision | keys: everything | agentrouter/claude-opus-5": [],
+  "vision_first | keys: everything | ninerouter/openai/gpt-5": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "ninerouter=ninerouter/openai/gpt-5"
+  ],
+  "private_vision | keys: everything | ninerouter/openai/gpt-5": [],
+  "vision_first | keys: everything | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "nvidia_nim=nvidia_nim/meta/llama-3.2-90b-vision-instruct"
+  ],
+  "private_vision | keys: everything | nvidia_nim/meta/llama-3.2-90b-vision-instruct": [],
+  "vision_first | keys: everything | ollama selected": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | ollama selected": [],
+  "vision_first | keys: everything | custom local, reads images": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "custom= (local)"
+  ],
+  "private_vision | keys: everything | custom local, reads images": [
+   "custom= (local)"
+  ],
+  "vision_first | keys: everything | custom local, text only": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | custom local, text only": [],
+  "vision_first | keys: everything | custom hosted, reads images": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b",
+   "custom="
+  ],
+  "private_vision | keys: everything | custom hosted, reads images": [],
+  "vision_first | keys: everything | curl local, reads images": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | curl local, reads images": [],
+  "vision_first | keys: everything | curl hosted, reads images": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | curl hosted, reads images": [],
+  "vision_first | keys: everything | curl local, text only": [
+   "natively=natively",
+   "openai=gpt-4o",
+   "gemini_flash_lite=gemini-3.1-flash-lite",
+   "gemini_flash=gemini-3.8-flash",
+   "claude=claude-sonnet-4-6",
+   "gemini_pro=gemini-3.1-pro-preview",
+   "groq_scout=qwen/qwen3.8-27b"
+  ],
+  "private_vision | keys: everything | curl local, text only": []
+ }
+}

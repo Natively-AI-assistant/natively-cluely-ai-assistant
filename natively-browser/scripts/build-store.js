@@ -30,6 +30,20 @@ try {
     console.log('ℹ No "key" field found in manifest.json.');
   }
 
+  // Strip the DEV-ONLY broad host permissions (injected by esbuild.config.mjs
+  // for unpacked builds, where Chrome auto-grants them). The STORE build must
+  // stay loopback-only required + optional broad grants — shipping required
+  // <all sites> would trigger the in-depth review and the install-time
+  // "read and change all your data on all websites" warning.
+  const DEV_BROAD_HOSTS = ['https://*/*', 'http://*/*'];
+  const before = (manifest.host_permissions ?? []).length;
+  manifest.host_permissions = (manifest.host_permissions ?? []).filter(
+    (h) => !DEV_BROAD_HOSTS.includes(h),
+  );
+  if (manifest.host_permissions.length !== before) {
+    console.log('✔ Stripped dev-only broad host_permissions for the store package.');
+  }
+
   // Write the key-stripped manifest into dist/ just for the zip.
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
 

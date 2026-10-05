@@ -11,32 +11,9 @@ import React from 'react';
 // ─── No-op fallbacks ────────────────────────────────────────────────
 const NullComponent: React.FC<any> = () => null;
 
-const nullAdCampaigns = (
-  _planDetails: { isPremium: boolean; plan?: string; provider?: string },
-  _hasProfile: boolean,
-  _isAppReady: boolean,
-  _appStartTime?: number,
-  _lastMeetingEndTime?: number | null,
-  _isProcessingMeeting?: boolean,
-  _hasNativelyApi?: boolean,
-  _enabled?: boolean,
-) => ({
-  activeAd: null as string | null,
-  dismissAd: (_campaignId?: string) => {},
-  previewAd: (_ad: any) => {},
-});
-
 // ─── Glob-import premium modules (empty {} when premium/ is absent) ──
-const _premiumModal = import.meta.glob<any>(
-  '../../premium/src/PremiumUpgradeModal.tsx',
-  { eager: true }
-);
 const _profileVis = import.meta.glob<any>(
   '../../premium/src/ProfileVisualizer.tsx',
-  { eager: true }
-);
-const _promoToaster = import.meta.glob<any>(
-  '../../premium/src/PremiumPromoToaster.tsx',
   { eager: true }
 );
 const _profileToaster = import.meta.glob<any>(
@@ -51,10 +28,6 @@ const _remoteCampaignToaster = import.meta.glob<any>(
   '../../premium/src/RemoteCampaignToaster.tsx',
   { eager: true }
 );
-const _adHook = import.meta.glob<any>(
-  '../../premium/src/useAdCampaigns.ts',
-  { eager: true }
-);
 const _negotiationCard = import.meta.glob<any>(
   '../../premium/src/NegotiationCoachingCard.tsx',
   { eager: true }
@@ -67,8 +40,23 @@ const _maxUltraUpgradeToaster = import.meta.glob<any>(
   '../../premium/src/MaxUltraUpgradeToaster.tsx',
   { eager: true }
 );
+
+/**
+ * Every ad card's component is in this build. The card scheduler only
+ * schedules ad stages when this is true: a stage whose component is a no-op
+ * would hold the single card slot for the session while rendering nothing.
+ */
+export const PREMIUM_ADS_AVAILABLE =
+  Object.keys(_nativelyApiPromo).length > 0
+  && Object.keys(_profileToaster).length > 0
+  && Object.keys(_jdToaster).length > 0
+  && Object.keys(_maxUltraUpgradeToaster).length > 0;
 const _modesSettings = import.meta.glob<any>(
   '../../premium/src/ModesSettings.tsx',
+  { eager: true }
+);
+const _roleInsight = import.meta.glob<any>(
+  '../../premium/src/RoleInsightPanel.tsx',
   { eager: true }
 );
 
@@ -79,14 +67,8 @@ function get<T>(mods: Record<string, any>, name: string, fallback: T): T {
 }
 
 // ─── Exports (always safe to import) ─────────────────────────────────
-export const PremiumUpgradeModal: React.FC<any> =
-  get(_premiumModal, 'PremiumUpgradeModal', NullComponent);
-
 export const ProfileVisualizer: React.FC<any> =
   get(_profileVis, 'ProfileVisualizer', NullComponent);
-
-export const PremiumPromoToaster: React.FC<any> =
-  get(_promoToaster, 'PremiumPromoToaster', NullComponent);
 
 export const ProfileFeatureToaster: React.FC<any> =
   get(_profileToaster, 'ProfileFeatureToaster', NullComponent);
@@ -96,9 +78,6 @@ export const JDAwarenessToaster: React.FC<any> =
 
 export const RemoteCampaignToaster: React.FC<any> =
   get(_remoteCampaignToaster, 'RemoteCampaignToaster', NullComponent);
-
-export const useAdCampaigns: typeof nullAdCampaigns =
-  get(_adHook, 'useAdCampaigns', nullAdCampaigns);
 
 export const NegotiationCoachingCard: React.FC<any> =
   get(_negotiationCard, 'NegotiationCoachingCard', NullComponent);
@@ -111,3 +90,6 @@ export const MaxUltraUpgradeToaster: React.FC<any> =
 
 export const ModesSettings: React.FC<any> =
   get(_modesSettings, 'default', NullComponent);
+
+export const RoleInsightPanel: React.FC<any> =
+  get(_roleInsight, 'RoleInsightPanel', NullComponent);

@@ -73,10 +73,17 @@
  /**
   * Dangerous patterns that indicate a user-controlled string is attempting
   * to override system prompts or instructions.
+  *
+  * Security fix (campaign2, longsession, 2026-07-17): the original `\s*` between
+  * the verb and "previous/all" tolerated only whitespace, so "Ignore YOUR previous
+  * instructions" — the single most natural real-world phrasing of this attack,
+  * and the exact literal text used in this campaign's own adversarial benchmark
+  * fixture — silently bypassed detection. `(?:\s+(?:my|your|our|the|his|her|
+  * their)\b)?` tolerates one optional intervening possessive pronoun.
   */
  export const DANGEROUS_PATTERNS: RegExp[] = [
-     /ignore\s*(previous|all)\s*instructions/i,
-     /disregard\s*(previous|all)\s*(instructions|prompts)/i,
+     /ignore(?:\s+(?:my|your|our|the|his|her|their)\b)?\s*(previous|all)\s*instructions/i,
+     /disregard(?:\s+(?:my|your|our|the|his|her|their)\b)?\s*(previous|all)\s*(instructions|prompts)/i,
      /you\s*(are\s*now|should)\s*act\s+as/i,
      /system\s*prompt:/i,
      /\[INST\]\[INST\]/i,

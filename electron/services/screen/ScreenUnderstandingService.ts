@@ -32,9 +32,12 @@ import {
   VisionProviderConfig,
   VisionMode,
   VisionFailureReason,
+  VisionRungHealth,
 } from './VisionProviderFallbackChain';
 import { getImageOptimizer, ImageOptimizer } from './ImageOptimizer';
-import { buildVisionProviders, VisionProviderBuildInputs } from './VisionProviderRegistry';
+import { buildVisionProviders, selectionRung, VisionProviderBuildInputs } from './VisionProviderRegistry';
+import { forgetBreakersOfOtherSelections } from '../../llm/visionOrdering';
+import { resolveOllamaRecordTarget } from '../../llm/activeCustomProvider';
 
 export type UserAction =
   | 'manual_use_screen'
@@ -42,7 +45,20 @@ export type UserAction =
   | 'shortcut'
   | 'code_hint'
   | 'brainstorm'
-  | 'what_to_say';
+  | 'what_to_say'
+  /**
+   * Transcribe the screen for MEMORY, not to answer this turn.
+   *
+   * Every other action routes to a prompt that asks the model to "answer
+   * concisely", which is right for the turn in front of the user and useless as
+   * a record: verified live, the text stored for a build-failure screenshot was
+   * "Your build failed because you've run out of disk quota" — second person,
+   * paraphrased, with the error code and ticket reference the user later asked
+   * about nowhere in it. Before this, STRUCTURED_EXTRACTION_SYSTEM_PROMPT had NO
+   * caller at all: every call site passed `manual_use_screen` or `what_to_say`,
+   * both of which take the direct-answer branch.
+   */
+  | 'transcribe';
 
 export type QualityMode = 'fast' | 'balanced' | 'best' | 'private';
 
@@ -117,13 +133,67 @@ export interface ScreenUnderstandingResult {
   timestamp?: number;
   // Marker so PromptAssembler knows this came from vision, not OCR.
   source_kind?: 'vision' | 'ocr_legacy';
+  /**
+   * Read while "Keep screenshots on this device" was on (2026-10-01). The text
+   * composed from this result is marked, and from then on is shown only to a
+   * model on this device — see on-device-screen.ts. Sticky: turning the
+   * setting off later does not release text that was read under it.
+   */
+  keptOnDevice?: boolean;
 }
+
+/**
+ * Wall-clock ceiling on the ENTIRE screen-understanding pre-pass — every rung
+ * the fallback chain walks, not one attempt. See the call site in understand()
+ * for why a best-effort enrichment step on the critical path needs a total
+ * bound rather than a per-provider one.
+ *
+ * 6000, below the chain's 12s per-provider default: the per-attempt timeout is
+ * clamped to whatever is left of this, so this is the number that decides how
+ * long a user waits before their answer starts.
+ */
+export const SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS = 6000;
+
+/**
+ * The time a LOCAL model gets to write the after-the-answer screen record
+ * (2026-10-01). Far longer than the budget above: the record runs after the
+ * answer has been delivered, and a local vision model needs tens of seconds
+ * where a cloud one needs two. Not measured against a real Ollama (none on the
+ * development machine); an answer starting on the same daemon cancels the
+ * record (LLMHelper.cancelOllamaRecordFor), so this bounds only idle time.
+ */
+export const OLLAMA_RECORD_BUDGET_MS = 45_000;
 
 export class ScreenUnderstandingService {
   private imageHashService: ImageHashService;
   private optimizer: ImageOptimizer;
   private lastResult: ScreenUnderstandingResult | null = null;
+  /**
+   * What was ASKED of the cached image, not just which image it was.
+   *
+   * cacheLookup keyed on the image alone, and the prompt varies by userAction:
+   * 'what_to_say' produces a concise ANSWER, 'transcribe' produces a full
+   * transcription. Same screen, deliberately different results. Verified live:
+   * the transcription request that follows an answer on the same screenshot got
+   * handed the ANSWER back, so the conversation record stored "Your build failed
+   * because you've run out of disk quota" instead of the screen's text, and a
+   * follow-up asking for the error code could never be answered.
+   */
+  private lastResultKind: string | null = null;
   private readonly STALE_THRESHOLD_MS = 5 * 60 * 1000;
+  /**
+   * Per-rung failure memory, held on the singleton so it survives across turns
+   * (the chain itself is a pure function called once per screenshot).
+   *
+   * This is what stops a dead rung from charging the user its share of the
+   * pre-pass budget on every single press. Note the boundary: it helps from the
+   * SECOND failing turn onward — the first turn after an app start, or after a
+   * cooldown lapses, still pays. That is deliberate; a provider that recovers
+   * has to be allowed to prove it.
+   */
+  private readonly rungHealth = new Map<string, VisionRungHealth>();
+  /** Which selection each selection-carrying rung last ran for (see understand()). */
+  private readonly rungLedFor = new Map<string, string>();
 
   constructor(optimizer?: ImageOptimizer) {
     this.imageHashService = new ImageHashService();
@@ -200,9 +270,10 @@ export class ScreenUnderstandingService {
       }
     }
 
-    // Cache lookup — same image within 5 min → reuse.
+    // Cache lookup — same image AND same question-kind within 5 min → reuse.
+    const resultKind = request.userAction === 'transcribe' ? 'transcribe' : 'answer';
     if (imageHash) {
-      const cached = this.cacheLookup(imageHash);
+      const cached = this.cacheLookup(imageHash, resultKind);
       if (cached) return cached;
     }
 
@@ -210,6 +281,13 @@ export class ScreenUnderstandingService {
     // buildVisionProviders(); tests can substitute their own list via the
     // optional `request.providerPolicy.__providersOverride` hook (untyped to
     // keep the public contract clean).
+    // The record may be written by the selected Ollama's vision model. Finding
+    // that model is asynchronous (/api/tags + /api/show, bounded and cached in
+    // the helper) and the registry is not, so it is resolved here first. Record
+    // calls only: the pre-pass never uses Ollama and must not wait for this.
+    const isRecord = request.userAction === 'transcribe';
+    if (isRecord) await resolveOllamaRecordTarget();
+
     const providers: VisionProviderConfig[] = (request.providerPolicy as any)?.__providersOverride
       || buildVisionProviders(this.collectBuildInputs(request, mode, policy));
 
@@ -223,7 +301,7 @@ export class ScreenUnderstandingService {
         imagePaths: validPaths,
         imageHash,
         unavailableReason: mode === 'private_vision'
-          ? 'No local vision provider is available. Configure Ollama with a vision-capable model (llava, qwen2.5-vl, llama3.2-vision, etc.) or enable Codex CLI vision.'
+          ? 'No local vision provider is available for the screen pre-pass. A local custom endpoint that reads images can run it; with Ollama, the screenshot is read in the answer itself.'
           : 'No vision-capable provider is configured. Add an API key for OpenAI, Claude, Gemini, Groq, or Natively, or configure a local Ollama vision model.',
       });
     }
@@ -234,17 +312,88 @@ export class ScreenUnderstandingService {
     // System & user prompts come from the prompts module (Phase 6).
     const { systemPrompt, userPrompt, isTechnical } = await this.buildPrompts(request);
 
+    // A breaker opened for a DIFFERENT selection says nothing about this one:
+    // the `openrouter` rung is `openrouter` for every model, so a model whose
+    // upstream was failing kept the rung skipped after the user picked another.
+    const carrying = selectionRung();
+    if (carrying) forgetBreakersOfOtherSelections(this.rungLedFor, this.rungHealth, [carrying.id], carrying.key);
+
     // Run the chain.
     const latestPath = validPaths[validPaths.length - 1];
-    const result = await runVisionFallback({
+    // The Ollama record rung runs as a SECOND stage with its own time limit
+    // (below), so everything else — the pre-pass, and the cloud record — keeps
+    // the 6 s envelope it always had.
+    const ollamaRecordRung = isRecord ? providers.find(p => p.id === 'ollama') : undefined;
+    const firstStage = ollamaRecordRung ? providers.filter(p => p !== ollamaRecordRung) : providers;
+    let result = await runVisionFallback({
       imagePath: latestPath,
       cacheKey: imageHash,
       mode,
-      providers,
+      providers: firstStage,
       systemPrompt,
       userPrompt,
       optimizer: this.optimizer,
       optimizationProfile: profile,
+      // Screen understanding is BEST-EFFORT ENRICHMENT sitting on the critical
+      // path: `generate-what-to-say` awaits it before the answer stream opens,
+      // and the answer itself already receives the screenshot through
+      // streamVisionWithFallback. Every millisecond spent here is added to
+      // time-to-first-token for a structured extraction the turn can do without.
+      //
+      // It had no total bound at all. In natively_debug (3).log that cost the
+      // user 8.0s on 31 of 33 turns — the Natively rung's inner timeout, which
+      // happened to be the only thing stopping the chain because their build
+      // then skipped every remaining rung. On a build that walks the whole chain
+      // (post-3e29a67f) the same failure would have cost 8s PLUS a real call to
+      // their own provider, so fixing the skip makes the latency worse unless
+      // this bound exists. A provider that cannot describe a screenshot inside
+      // the budget is not worth delaying the answer for; failing fast to "no
+      // screen context" is the cheaper outcome, and the healthy case (a cloud
+      // vision rung returning in 2-4s) never reaches this ceiling.
+      totalDeadlineMs: SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS,
+      health: this.rungHealth,
+    });
+
+    // "Send it to cloud if available, else send it to the Ollama model" (Evin,
+    // 2026-10-01): nothing above produced a record — no cloud provider, every
+    // one failed, or "Keep screenshots on this device" allows none — so the
+    // selected Ollama's vision model writes it. The chain applies the same
+    // eligibility rules (a remote Ollama is skipped in that mode).
+    if (!result.ok && ollamaRecordRung) {
+      const local = await runVisionFallback({
+        imagePath: latestPath,
+        cacheKey: imageHash,
+        mode,
+        providers: [ollamaRecordRung],
+        systemPrompt,
+        userPrompt,
+        optimizer: this.optimizer,
+        optimizationProfile: profile,
+        perProviderTimeoutMs: OLLAMA_RECORD_BUDGET_MS,
+        totalDeadlineMs: OLLAMA_RECORD_BUDGET_MS,
+        health: this.rungHealth,
+      });
+      result = { ...local, attempts: [...result.attempts, ...local.attempts], durationMs: result.durationMs + local.durationMs };
+    }
+
+    // The chain's attempt ledger is otherwise WRITE-ONLY: runVisionFallback
+    // reports through `params.telemetry?.()`, this call site passed no callback,
+    // and `result.attempts` only ever reached the IPC response — never a log.
+    // A user debug log therefore showed a bare "[NativelyAPI] JSON pre-response
+    // failure" and then nothing, with no way to tell a rung that was SKIPPED
+    // (not configured / not vision-capable) from one that was tried and failed.
+    // Diagnosing natively_debug (3).log needed source archaeology and a build-
+    // dating exercise to answer "did it even try the user's own provider?".
+    // One line, every turn, answers it.
+    console.log('[ScreenUnderstanding] vision chain', {
+      ok: result.ok,
+      providerUsed: result.providerUsed,
+      failureReason: result.failureReason,
+      durationMs: result.durationMs,
+      attempts: result.attempts.map(a =>
+        a.skipped
+          ? `${a.provider}:skipped(${a.skipReason})`
+          : `${a.provider}:${a.ok ? 'ok' : (a.errorClass || 'error')}(${a.durationMs}ms)`),
     });
 
     const out = this.assembleResult(result, {
@@ -255,7 +404,9 @@ export class ScreenUnderstandingService {
       imageHash,
       isTechnical,
     });
+    if (mode === 'private_vision' && out.status === 'available') out.keptOnDevice = true;
     this.lastResult = out;
+    this.lastResultKind = resultKind;
     return out;
   }
 
@@ -270,6 +421,9 @@ export class ScreenUnderstandingService {
       mode,
       localOnly: policy.localOnly === true || mode === 'private_vision',
       scopeAllowsScreenshots: policy.allowScreenshots !== false,
+      // `transcribe` is the after-the-answer record (screenTranscription.ts);
+      // every other action describes the screen for the answer being built.
+      purpose: request.userAction === 'transcribe' ? 'record' : 'prepass',
     };
   }
 
@@ -297,17 +451,27 @@ export class ScreenUnderstandingService {
     return helper.takeScreenshot();
   }
 
-  private cacheLookup(imageHash: string): ScreenUnderstandingResult | null {
+  private cacheLookup(imageHash: string, resultKind: string): ScreenUnderstandingResult | null {
     if (!this.lastResult || this.lastResult.imageHash !== imageHash) return null;
+    // An answer is not a transcription. Serving one for the other is what made
+    // the conversation record a paraphrase of the screen instead of its text.
+    if (this.lastResultKind !== resultKind) return null;
+    // A record that FAILED is not an answer to remember (2026-10-01). Remembering
+    // it meant a screen whose record was cancelled — which any Ollama answer
+    // does to a record in flight — was never recorded, however often the same
+    // screen was captured again. The pre-pass still remembers a failure:
+    // retrying it would add its wait to every answer about that screen.
+    if (resultKind === 'transcribe' && this.lastResult.status !== 'available') return null;
     const age = Date.now() - this.lastResult.capturedAt;
     if (age < this.STALE_THRESHOLD_MS) return { ...this.lastResult };
     return null;
   }
 
   private isTechnicalMode(modeTemplateType?: string): boolean {
-    if (!modeTemplateType) return false;
-    const technical = ['technical-interview', 'coding', 'debug', 'code-review'];
-    return technical.some(m => modeTemplateType.toLowerCase().includes(m));
+    // Shared with the adaptive image-quality exemption (technicalMode.ts).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { isTechnicalModeTemplate } = require('./technicalMode') as typeof import('./technicalMode');
+    return isTechnicalModeTemplate(modeTemplateType);
   }
 
   private classifyScreenType(text: string, transcript?: string): ScreenType {
@@ -343,7 +507,11 @@ export class ScreenUnderstandingService {
     taskDetected?: string;
     confidence?: number;
   } {
-    const trimmed = rawOutput.trim();
+    // A reply that is ONE fenced block holding JSON is that JSON (2026-10-01):
+    // small local vision models often wrap the structured answer in ```json,
+    // and the raw markup would otherwise be stored as the screen's text.
+    const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(rawOutput.trim());
+    const trimmed = (fenced && fenced[1].trim().startsWith('{') ? fenced[1] : rawOutput).trim();
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
       try {
         const parsed = JSON.parse(trimmed);

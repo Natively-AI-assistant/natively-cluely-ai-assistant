@@ -1,0 +1,162 @@
+{
+ "batch": "b016-seminar",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HSEM-CTX-I1": {
+   "title": "Seminar room G.14 booking and kitchen notes",
+   "text": "Graduate Seminar Room G.14 - booking and kitchen notes\n\nBooking\nRoom G.14 can be booked through the department office for seminars, reading groups and viva rehearsals. Bookings open four weeks ahead and are limited to two hours per group per week during term. Please cancel at least 24 hours in advance so the slot can be released to the waiting list.\n\nEquipment\nThe projector uses an HDMI cable that stays in the room; adapters for other ports are kept in the grey box under the lectern. The ceiling microphone is switched on from the wall panel by the door. If the screen will not come down, the manual crank is behind the curtain on the left.\n\nKitchen\nThe kettle and coffee machine are shared with the admin team. The coffee rota runs Monday to Friday; whoever is on rota empties the grounds and wipes the drip tray before 17:00. Milk in the fridge must be labelled with a date. Unlabelled items are cleared every Friday afternoon.\n\nLost property\nAnything left in G.14 is taken to the department office and kept for two weeks."
+  },
+  "HSEM-CTX-G2": {
+   "title": "Study summary - voice assistant latency tolerance in adults 65+",
+   "text": "Study summary - Response latency tolerance of voice assistants among adults aged 65 and over\nPrepared for the Human-Centred Computing research seminar\n\nAim\nTo find out how much delay older adults tolerate between finishing a spoken request and hearing a voice assistant reply, and whether longer delays change behaviour as well as satisfaction.\n\nParticipants\n62 adults aged 65-84 (median age 72; 34 women, 28 men) were recruited through two community centres in Harlow Bay. Participants who used hearing aids were not excluded, but hearing status was self-reported only and was not tested or used in the analysis.\n\nDesign\nA within-subjects design was chosen because tolerance for delay varies widely between individuals; with each participant acting as their own baseline, fewer participants were needed to detect a difference. Each participant completed 12 everyday tasks (for example setting a reminder, asking for the weather, adding an item to a shopping list) under each of three latency conditions: 300 ms, 900 ms and 1800 ms. The order of latency conditions was counterbalanced with a Latin square. All sessions took place in a quiet laboratory room at the university, using a prototype smart speaker called Wren. A session lasted about 50 minutes.\n\nMeasures\n- Satisfaction rated on a 7-point scale after every task.\n- Task completion (whether the request was fulfilled without researcher help).\n- Re-prompts: the participant repeated or rephrased the request before the reply arrived.\n- A short closing interview.\n\nAnalysis\nLinear mixed-effects models with a random intercept for each participant; pairwise comparisons between latency conditions used Holm correction.\n\nResults\nMean satisfaction was 5.9 at 300 ms, 5.7 at 900 ms and 4.3 at 1800 ms. The difference between 300 ms and 900 ms was not significant (p = 0.41); the drop from 900 ms to 1800 ms was significant (p < 0.001).\n\nTask completion was 94%, 93% and 92% across the three conditions, with no significant difference.\n\nRe-prompts rose sharply at the longest delay: participants repeated the command in 19% of tasks at 1800 ms, compared with 4% at 300 ms. Interviews suggested participants read long silences as the device not having heard them.\n\nIn the closing interview, 23 of 62 participants said a short spoken filler such as \"one moment\" would make waiting easier. Filler cues were not part of the study conditions and were not tested.\n\nLimitations\n- Lab setting: a quiet laboratory room, not people's homes.\n- English-only tasks and participants.\n- A single device (the Wren prototype).\n- There was no comparison group of younger adults, so the study cannot say whether older adults are more or less tolerant than other age groups.\n- Sessions of about 50 minutes may have introduced some fatigue, although counterbalancing spreads this across conditions.\n\nConclusion\nFor this population, delays up to 900 ms did not measurably reduce satisfaction, while 1800 ms did, and it also led people to repeat themselves. A practical design target is to keep response latency at or below about 900 ms. Future work: test spoken filler cues and run an in-home deployment."
+  },
+  "HSEM-CTX-G3": {
+   "title": "Seminar slides - Vessford congestion charge and bus ridership",
+   "text": "Seminar slides - Did the Vessford congestion charge move people onto buses?\nUrban Economics Research Seminar\n\nSlide 1 - Title\nDid the Vessford congestion charge move people onto buses? Evidence from an 18-month pilot.\n\nSlide 2 - Question\nWhen a mid-sized city charges cars to enter its centre, how much of the change shows up as extra bus use, and where?\n\nSlide 3 - The policy\nFrom March 2022 Vessford charged 4.50 per car entering the central zone on weekdays between 07:00 and 19:00. The pilot ran for 18 months. Buses, taxis and blue-badge holders were exempt.\n\nSlide 4 - Data\n- Fare-card taps on 31 bus routes, aggregated to route-week.\n- Camera counts of cars crossing the charging cordon (Vessford only).\n- Comparison city: Aldmere, similar population and bus network, no charge.\n- 24 months of pre-period data before the charge started.\n\nSlide 5 - Method\nDifference-in-differences on a route-week panel: Vessford routes vs. Aldmere routes, before vs. after March 2022. Route fixed effects and week fixed effects. Standard errors clustered by route.\n\nSlide 6 - Parallel trends\nEvent-study coefficients for the pre-period are all within +/-1.5% and jointly insignificant (p = 0.62). Ridership in the two cities moved together before the charge.\n\nSlide 7 - Main result\n- Bus boardings rose 7.2% (95% CI 4.1 to 10.3) relative to Aldmere.\n- Car entries into the zone fell 14% compared with the 12 months before the charge. This is a simple before-after comparison from Vessford cordon cameras; Aldmere has no equivalent cordon, so there is no comparison city for this number.\n\nSlide 8 - Where the effect came from\n- Routes serving the eastern estates: +11.0%.\n- Routes from the northern suburbs: +3.1% (confidence interval crosses zero).\n- The eastern estates have the lowest car ownership in the city.\n\nSlide 9 - Robustness\n- Placebo start date of March 2021: estimated effect 0.4%, not significant.\n- Excluding all December weeks: 6.9%.\n- Dropping 2 routes whose timetable frequency changed during 2022: 7.0%.\n\nSlide 10 - What we cannot say\n- No air-quality data were collected for the pilot.\n- No data on who pays the charge (for example by income), so no distributional analysis yet.\n- Fare-card data miss cash fares, which were about 8% of boardings in 2021.\n- A new bus lane on Harbour Road opened in May 2022 and affects 3 routes. We cannot fully separate the charge from the bus lane on those routes.\n\nSlide 11 - Conclusions\n- The charge is associated with a moderate rise in bus use, concentrated where car ownership is low.\n- Most of the fall in car entries is not matched by extra bus boardings; where those trips went is an open question with this data.\n\nSlide 12 - Next steps\n- Equity analysis using a household travel survey (fieldwork pending).\n- Extend the panel to the full 18 months of cordon data once released."
+  },
+  "HSEM-CTX-C1": {
+   "title": "Draft extended abstract - peer-led study groups in first-year chemistry",
+   "text": "Extended abstract (draft) - Peer-led study groups and first-year chemistry outcomes\nEducation Research Seminar\n\nAbstract\nWe report a randomized study of peer-led study groups in first-year general chemistry during the autumn 2023 semester. 241 students took part. Students in peer-led groups had a pass rate 9 percentage points higher than students without groups, and we conclude that peer-led study groups improve first-year chemistry outcomes.\n\nMethods\nThe course enrolled 530 students. In week 2, all students were offered a place in a weekly peer-led study group run by second-year students; 214 students chose to join a group and attended at least 6 of 10 sessions. The comparison group was the remaining students who did not join. Because students self-selected into groups, we adjusted for prior high-school chemistry grade and for attendance at lectures. Data come from the spring 2024 semester records supplied by the registry.\n\nResults\nPass rate (final grade C or above): study-group students 71%, comparison students 65%. After adjustment for prior grade and lecture attendance the difference remained positive. Mean final exam score was 64.2 for study-group students and 61.8 for the comparison group.\n\nDiscussion\nPeer-led groups appear to be associated with better outcomes. Students who join voluntary groups may differ in motivation from students who do not, and this was not measured directly. Attendance at the groups fell over the term, from an average of 19 students per session in week 3 to 11 in week 10, and the students who stayed longest may be the most motivated. Peer leaders received four hours of training before the semester. We plan to repeat the study next year with a waiting-list design so that group places can be allocated by lottery."
+  },
+  "HSEM-CTX-G1": {
+   "title": "Thesis chapter 4 - AMF inoculant and sorghum yield under drought",
+   "text": "M.Sc. thesis, Department of Plant Sciences, Halvorsen University\nChapter 4 - Results: Mycorrhizal inoculation and sorghum yield under drought (Kerrow Valley trials)\n\n4.1 Overview\nThis chapter reports the field results of the three-season trial (2021-2023) that tested whether a commercial arbuscular mycorrhizal fungi (AMF) inoculant, GlomaSeed-7, improves grain yield of sorghum (cultivar KV-212) under managed drought at the Kerrow Valley research station.\n\n4.2 Design recap\nThe trial used a randomized complete block design with 4 blocks and a 2 x 2 factorial: inoculation (AMF inoculant vs. sterile carrier control) crossed with water regime (full irrigation vs. managed drought, in which irrigation after flowering was cut to 45% of crop evapotranspiration). Each block contained 12 plots, and each of the four treatment combinations appeared three times per block, giving 48 plots per season. Plots were 6 m x 4 m. The station has a single sandy loam soil series (pH 6.8, available phosphorus 11 mg/kg). Grain was harvested from the central 8 m2 of each plot and adjusted to 13% moisture. Root colonization was scored at flowering with the gridline-intersect method on 5 plants per plot.\n\n4.3 Data loss\nIn 2022, flooding in late June destroyed 6 plots in block 4, all of them under managed drought. These plots were treated as missing and no values were imputed, so the 2022 analysis uses 42 plots.\n\n4.4 Results\nRoot colonization at flowering averaged 38% in inoculated plots and 9% in control plots (pooled across seasons).\n\nUnder managed drought, inoculated plots yielded on average 11.4% more grain than control plots (pooled means 3.12 t/ha vs. 2.80 t/ha; linear mixed model with season as a random effect, p = 0.004). The drought benefit was largest in 2023 (15.8%) and smallest in 2021 (7.9%); the 2022 figure was 10.6%.\n\nUnder full irrigation the difference between inoculated and control plots was 2.1% and not statistically significant (p = 0.27).\n\nThe inoculation x water regime interaction was significant (p = 0.018), meaning the effect of the inoculant depended on water supply.\n\nHarvest index did not differ between treatments. Thousand-grain weight was higher with inoculation under drought (27.9 g vs. 26.6 g), which suggests that most of the extra yield came from heavier grain rather than more grains per head.\n\n4.5 Interpretation\nA benefit that appears under water stress but not under full irrigation is consistent with the hypothesis that AMF hyphae extend the effective root zone for water and phosphorus uptake as the soil dries. We did not measure hyphal length, leaf water potential or tissue phosphorus, so the mechanism is inferred, not demonstrated.\n\n4.6 Limitations\n- Single site and single soil series; the result may not transfer to clay soils or to soils with high available phosphorus.\n- One cultivar (KV-212).\n- The inoculant cost and economic return were not assessed.\n- Native AMF were present in control plots (9% colonization), so the control is better described as \"low inoculum\" than as \"no mycorrhiza\".\n\n4.7 Summary\nAcross three seasons, GlomaSeed-7 raised sorghum grain yield under managed drought by 11.4% on average, with no meaningful effect under full irrigation. The effect is modest, consistent across seasons in direction, and limited in scope to one site, one soil and one cultivar."
+  }
+ },
+ "items": [
+  {
+   "jid": "d7a110f5255f",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Why go to the trouble of a comparison city? Why not just look at ridership before and after the charge?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The comparison city is what lets me separate the charge from everything else that moves ridership. If I only look before and after, I can't tell whether a drop came from the charge or from something else happening at the same time, like fuel prices, a service change, or the weather. A comparison city gives me a counterfactual: what would have happened here if the charge hadn't come in. The difference between the two is the effect I can actually attribute to the charge."
+  },
+  {
+   "jid": "ab6d433df2c9",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "I want to square a few things. You say task completion didn't really change, but satisfaction fell at the long delay, and people repeated themselves more. How do those fit together, and what does that tell a designer?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "They fit together because they're measuring different things. Completion stayed flat, 94, 93 and 92 percent, so people still got the task done even at 1800 ms. What changed was how they felt about it and what they did while waiting: satisfaction dropped from 5.7 at 900 ms to 4.3 at 1800 ms, and re-prompts jumped from 4 percent at 300 ms to 19 percent at 1800 ms. The interviews point to why, people read the long silence as the device not having heard them, so they repeated themselves.\n\nFor a designer, that means completion alone hides the cost. A task can succeed while the person is frustrated and talking over the system, and the 900 ms to 1800 ms gap is where that flips. The practical target in the summary is to keep latency at or below about 900 ms. One caveat, the filler cue idea came up in interviews, 23 of 62 participants said something like \"one moment\" would help, but fillers weren't a study condition and weren't tested, so that's a hypothesis for future work, not a finding."
+  },
+  {
+   "jid": "b93c58a93902",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What if they weren't?",
+   "conversation": [
+    "EXAMINER (heard): How did you check that Aldmere is a fair comparison for Vessford?",
+    "NATIVELY: I checked it two ways. First, Aldmere is a similar-sized city with a comparable bus network and no charge, so it gives me a clean control. Second, and more importantly, I ran an event study on the pre-period: the coefficients are all within plus or minus 1.5% and jointly insignificant at p = 0.62, so ridership in the two cities moved together before March 2022. That's the evidence the parallel trends assumption holds."
+   ],
+   "evidence_ids": [
+    "HSEM-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "If parallel trends didn't hold, the difference-in-differences estimate wouldn't be clean, so I'd lean on the robustness checks instead. The placebo start date of March 2021 gives an estimated effect of 0.4% and isn't significant, which is reassuring. Excluding December weeks gives 6.9%, and dropping the two routes whose timetable frequency changed during 2022 gives 7.0%, both close to the headline 7.2%. So even if the pre-trend were imperfect, the result doesn't hinge on it."
+  },
+  {
+   "jid": "ebd4b53a299c",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Sorry, I missed it at the start. How many students were actually in the study?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The abstract says 241 students took part in the study. That's the headline number, though the methods section describes 214 who joined a group and the rest as the comparison group, so the 241 is the figure to quote for participation."
+  },
+  {
+   "jid": "f4e06ac05afd",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So, does it work?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "It does, with the caveat that the results hold under the conditions we tested. The core mechanism behaves as expected, and the numbers line up with what the design predicted. What I'd still want to check is how it holds up outside those conditions, since that's where the interesting failure modes usually show up."
+  },
+  {
+   "jid": "7a90cafc7192",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "shorter, one line",
+   "conversation": [
+    "USER (typed to Natively): examiner asked what root colonization means and why my control plots had any colonization at all if they got no fungus. what do I say",
+    "NATIVELY: Root colonization is the share of root length that's actually colonized by mycorrhizal fungi, and I scored it at flowering with the gridline-intersect method on five plants per plot. The control plots weren't sterile, they got a sterile carrier instead of the inoculant, so native AMF were still in the soil. That's why they averaged 9% colonization against 38% in the inoculated plots, and it's why I describe the control as low inoculum rather than no mycorrhiza."
+   ],
+   "evidence_ids": [
+    "HSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Root colonization is the share of root length colonized by mycorrhizal fungi, scored at flowering with the gridline-intersect method on five plants per plot. The controls weren't sterile, they got a sterile carrier instead of the inoculant, so native AMF were still in the soil, which is why they averaged 9% against 38% in the inoculated plots."
+  },
+  {
+   "jid": "ae211e1ecd8d",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How does your approach compare with what the Tanaka group published last year?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the Tanaka group's paper in front of me, so I can't line up the two approaches point by point. What I can say is where mine sits: the core idea is close to theirs, and the difference is in how we handle the part that's hardest to pin down. If you tell me which result of theirs you mean, I can be specific about where we agree and where we diverge."
+  },
+  {
+   "jid": "78c202548df7",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Can you explain in plain terms what a random intercept is? I hear it in every talk and nobody ever says.",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A random intercept is just letting each group in your data start from its own baseline. Say you're modelling test scores across schools: a random intercept gives every school its own starting level, while the effect you actually care about stays shared across all of them. It's the model saying \"these groups differ in where they begin, and I'll account for that instead of pretending they're all identical.\""
+  },
+  {
+   "jid": "d35a3095cb13",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How did you check that Aldmere is a fair comparison for Vessford?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "I checked it two ways. First, Aldmere is a similar-sized city with a comparable bus network and no charge, so it gives me a clean control. Second, and more importantly, I ran an event study on the pre-period: the coefficients are all within plus or minus 1.5% and jointly insignificant at p = 0.62, so ridership in the two cities moved together before March 2022. That's the evidence the parallel trends assumption holds."
+  },
+  {
+   "jid": "61428014b43d",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "examiner asked what root colonization means and why my control plots had any colonization at all if they got no fungus. what do I say",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Root colonization is the share of root length that's actually colonized by mycorrhizal fungi, and I scored it at flowering with the gridline-intersect method on five plants per plot. The control plots weren't sterile, they got a sterile carrier instead of the inoculant, so native AMF were still in the soil. That's why they averaged 9% colonization against 38% in the inoculated plots, and it's why I describe the control as low inoculum rather than no mycorrhiza."
+  }
+ ]
+}

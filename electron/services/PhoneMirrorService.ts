@@ -10,6 +10,8 @@ import { CredentialsManager } from './CredentialsManager';
 import { PHONE_MIRROR_HTML } from './phoneMirrorClient';
 import { DOM_CONTEXT_MAX_CHARS } from '../config/constants';
 import { sanitizeContextEnvelope } from './browser-context/sanitize';
+import { isPhoneImagePath } from '../utils/phoneImage';
+import { splitGistLine, stripGistTrailer } from '../../src/lib/displayMarkup';
 
 export interface PhoneMirrorInfo {
   running: boolean;
@@ -27,6 +29,13 @@ export interface PhoneMirrorInfo {
   clients: number;
   /** True when a companion browser extension is connected over /ws (capture-ready). */
   extensionConnected: boolean;
+  /**
+   * Epoch ms of the last successful one-click /pair this session (0 = none).
+   * A Re-pair while the extension is already connected changes nothing else —
+   * same persisted token, same open socket — so this is the only way Settings
+   * can tell the pairing window it opened has been used.
+   */
+  extPairedAt: number;
   /** Resolved bind host ('127.0.0.1' or '0.0.0.0') so the UI can show "loopback only" / "LAN". */
   bindAddress: string;
 }
@@ -46,18 +55,64 @@ export class LANBindConfirmationRequired extends Error {
 
 export type StreamEvent =
   | { type: 'history'; messages: PersistedMessage[] }
-  | { type: 'user'; id: string; content: string; createdAt: string }
+  | { type: 'user'; id: string; content: string; createdAt: string; awaiting?: boolean }
   | { type: 'token'; streamId: string; token: string }
-  | { type: 'done'; streamId: string; content: string; createdAt: string }
+  | { type: 'done'; streamId: string; content: string; createdAt: string; html?: string; gist?: string | null }
   | { type: 'error'; streamId: string; message: string }
-  | { type: 'assistant'; id: string; content: string; label: string; createdAt: string }
-  | { type: 'ack'; action: string; message: string };
+  | { type: 'assistant'; id: string; content: string; label: string; createdAt: string; html?: string; gist?: string | null }
+  | { type: 'render'; streamId: string; html: string; gist: string | null }
+  // A diagram the desktop finished drawing after its answer was already sent
+  // (PhoneDiagramBroker). `src` is an image data URL; absent means it could not
+  // be drawn and the phone keeps the Mermaid source view.
+  | { type: 'diagram'; key: string; src?: string }
+  | { type: 'ack'; action: string; message: string }
+  | { type: 'transcript'; speaker: string; text: string; final: boolean; ts: number }
+  | {
+      type: 'transcript-history';
+      segments: PhoneTranscriptSegment[];
+      partial: PhoneTranscriptSegment | null;
+      meetingActive: boolean;
+      /** The last meeting ended and no new one has started (the phone says so). */
+      meetingEnded: boolean;
+    }
+  | { type: 'meeting'; active: boolean; reset: boolean }
+  | { type: 'attachments'; items: PhoneAttachment[] }
+  | { type: 'images'; id: string; images: PhoneAttachment[]; createdAt: string };
+
+/**
+ * A desktop screenshot as the phone sees it: an opaque id and a small JPEG/PNG
+ * data URL (the overlay's own thumbnail). Never a local path.
+ */
+export interface PhoneAttachment {
+  id: string;
+  thumb: string;
+}
+
+/**
+ * An image the phone sent (a photo, or a screenshot from its library), already
+ * checked to BE an image by its leading bytes. The type is what the bytes say,
+ * never what the request claimed.
+ */
+export interface PhoneImage {
+  data: Buffer;
+  mime: 'image/jpeg' | 'image/png' | 'image/webp';
+  ext: 'jpg' | 'png' | 'webp';
+}
+
+/** One line of live transcript as the phone receives it. */
+export interface PhoneTranscriptSegment {
+  speaker: string;
+  text: string;
+  ts: number;
+}
 
 /** Command sent from the phone browser to the desktop. */
 export type PhoneCommand =
   | { type: 'chat'; message: string }
   | { type: 'action'; action: string }
-  | { type: 'screenshot' };
+  | { type: 'screenshot' }
+  /** Take a screenshot or photo off the overlay's tray (the phone names it by id; listeners get its path). */
+  | { type: 'detach'; path: string };
 
 /**
  * Metadata the companion extension sends alongside a captured DOM (drives the
@@ -84,11 +139,45 @@ interface PersistedMessage {
   content: string;
   createdAt: string;
   label?: string;
+  /** The answer as the phone shows it, from the answer renderer (absent without one). */
+  html?: string;
+  gist?: string | null;
+  /** Screenshots a question was sent with (content is empty on these). */
+  images?: PhoneAttachment[];
+  /** Replay only: a desktop question whose answer has not started yet. */
+  awaiting?: boolean;
 }
+
+/** Markdown → the page's HTML (+ the [[GIST]] line split off). See phoneMirrorMarkdown.ts. */
+export type PhoneAnswerRenderer = (markdown: string, opts?: { streaming?: boolean }) => { html: string; gist: string | null };
 
 const DEFAULT_PORT = 4123;
 const PORT_PROBE_RANGE = 12;
 const HISTORY_LIMIT = 40;
+// Live transcript kept for a phone that joins mid-meeting. Bounded by both
+// segment count and characters so a long meeting stays flat in memory.
+const TRANSCRIPT_SEGMENT_LIMIT = 80;
+const TRANSCRIPT_CHAR_LIMIT = 12_000;
+// Speakers the phone shows. Matches the overlay's rolling bar, which shows the
+// interviewer (system audio) only; the user's own mic never leaves the desktop.
+const PHONE_TRANSCRIPT_SPEAKERS = new Set(['interviewer']);
+// Phone image uploads: the page downscales to 2048 px JPEG (~0.3-1.5 MB), so
+// this cap only has to stop abuse, not fit an original 48 MP photo.
+const PHONE_IMAGE_MAX_BYTES = 12 * 1024 * 1024;
+const PHONE_IMAGE_HANDLER_TIMEOUT_MS = 20_000;
+// Desktop screenshots on the phone: the overlay's thumbnails (480 px JPEG,
+// ~30-60 kB). Main downscales anything bigger before it gets here; this cap is
+// the backstop. The overlay keeps its last 5, so does the phone's tray.
+export const PHONE_THUMB_MAX_CHARS = 400_000;
+const PHONE_THUMB_DATA_URL = /^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/;
+const PHONE_TRAY_LIMIT = 5;
+// Screenshots remembered by path, so a sent question can name them by path.
+const PHONE_SHOTS_REMEMBERED = 24;
+// Sent screenshots replayed to a phone that (re)connects: older ones leave the
+// history so the history frame stays small. The newest is always kept.
+const PHONE_IMAGE_HISTORY_CHARS = 1_200_000;
+// A phone question's answer is re-rendered at most this often while it streams.
+const LIVE_RENDER_INTERVAL_MS = 120;
 const RATE_WINDOW_MS = 60_000;
 const RATE_HTTP_LIMIT = 120;
 const TOKEN_BYTES = 24;
@@ -136,6 +225,10 @@ const PINNED_EXTENSION_ORIGINS = new Set(
 
 type StatusListener = (info: PhoneMirrorInfo) => void;
 
+function isPhoneThumb(thumb: string): boolean {
+  return thumb.length <= PHONE_THUMB_MAX_CHARS && PHONE_THUMB_DATA_URL.test(thumb);
+}
+
 export class PhoneMirrorService {
   private static _instance: PhoneMirrorService | null = null;
 
@@ -160,9 +253,27 @@ export class PhoneMirrorService {
   private history: PersistedMessage[] = [];
   // Single string instead of token array: O(1) append, O(1) replay (one WS frame).
   private livePartial: { streamId: string; content: string } | null = null;
+  private transcriptFinals: PhoneTranscriptSegment[] = [];
+  private transcriptPartial: PhoneTranscriptSegment | null = null;
+  private meetingActive = false;
+  private meetingEnded = false;
+  // The overlay's attached-screenshot tray, mirrored (see setAttachments), and
+  // every screenshot seen in it lately, by path.
+  private attachments: PhoneAttachment[] = [];
+  private attachmentPaths: string[] = [];
+  private shots = new Map<string, PhoneAttachment & { fromPhone: boolean }>();
   private rateBuckets = new Map<string, { count: number; resetAt: number }>();
   private statusListeners = new Set<StatusListener>();
   private phoneCommandListeners = new Set<(cmd: PhoneCommand) => void>();
+  private phoneImageHandler: ((image: PhoneImage) => Promise<unknown>) | null = null;
+  private answerRenderer: PhoneAnswerRenderer | null = null;
+  // Phone answers still streaming when a new meeting started. They belong to
+  // the old session: their late tokens / done / error are not sent or kept.
+  private droppedStreams = new Set<string>();
+  // Desktop questions whose answer will stream under the same id and has not
+  // started: the phone shows Thinking under them (one that connects too).
+  private awaitingAnswers = new Set<string>();
+  private liveRenderTimer: ReturnType<typeof setTimeout> | null = null;
   private cachedInfo: PhoneMirrorInfo | null = null;
   private cachedQrUrl: string | null = null;
   private cachedQrDataUrl: string | null = null;
@@ -174,6 +285,8 @@ export class PhoneMirrorService {
   // Epoch (ms) until which the one-click /pair endpoint accepts a handshake.
   // Set by armExtensionPairing(); burned to 0 on the first successful /pair.
   private armedUntil = 0;
+  // When /pair last succeeded (see PhoneMirrorInfo.extPairedAt).
+  private extPairedAt = 0;
   // WebSocket clients that announced `{type:'hello', role:'extension'}`. Tracked
   // separately from phone clients so capture frames go only to the extension and
   // StreamEvents (phone chat) never reach it.
@@ -184,6 +297,17 @@ export class PhoneMirrorService {
   // Timestamp the extension socket announced `hello` — the tie-break for picking a
   // target when no browser has reported activity yet (most-recently-connected wins).
   private extConnectedAt = new WeakMap<WebSocket, number>();
+  // Sockets that authenticated with the EXTENSION token at upgrade. A `hello`
+  // only self-declares its role, and the phone token travels in the LAN QR code,
+  // so meeting tabs (and larger frames) are trusted from these alone.
+  private extTokenSockets = new WeakSet<WebSocket>();
+  // Whether the app wants each browser's meeting tabs (meetingDetection); told
+  // to every extension on its `hello`. The listener gets a socket's latest tabs,
+  // or null when that socket closes (null socket: clear every browser).
+  private meetingTabsWanted = false;
+  private meetingTabsListener: ((socket: object | null, tabs: unknown) => void) | null = null;
+  // Who is in a meeting page's call and who is speaking (the Meet reader).
+  private meetingPeopleListener: ((socket: object, report: Record<string, unknown>) => void) | null = null;
   // In-flight desktop→extension requests keyed by reqId, resolved by the
   // matching `capture-ack`/`tabs` control frame (or a timeout).
   private pendingCaptures = new Map<string, { resolve: (r: { ok: boolean; reason?: string; category?: string }) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -293,6 +417,22 @@ export class PhoneMirrorService {
     this.hasShownLanBindDialog = true;
   }
 
+  /**
+   * Whether phone-mirror:enable binding with `exposeOnLan` needs the "Allow
+   * LAN access?" consent first: the same per-session rule setExposeOnLan()
+   * enforces. A saved phoneMirrorExposeOnLan does not satisfy it, because
+   * _start() persists whatever it was given and enable used to bind 0.0.0.0
+   * without asking. (The boot-time restore still binds from the saved value
+   * without a prompt, as it always has; that path is not an IPC request.)
+   */
+  needsLanBindConfirmation(exposeOnLan: boolean): boolean {
+    if (exposeOnLan !== true || this.hasShownLanBindDialog) return false;
+    // Already on the LAN, or starting there (_start sets exposeOnLan first):
+    // start() returns that server, so this call binds nothing new, and a
+    // decline could not stop the bind already under way.
+    return !((this.isRunning() || this.starting !== null) && this.exposeOnLan);
+  }
+
   async rotateToken(): Promise<PhoneMirrorInfo> {
     // Rotate BOTH secrets — the "Rotate token" button is the single deliberate
     // reset for every paired surface. The phone token is per-session anyway; the
@@ -320,42 +460,76 @@ export class PhoneMirrorService {
 
   // ----- public publishing API (called from ipcHandlers) -----
 
-  publishUserMessage(id: string, content: string): void {
+  /**
+   * A question asked on the desktop (or the phone's own, echoed back). The
+   * desktop publishes it as soon as it has it, before any answer work, so
+   * the phone shows it at once; `awaitingAnswer` means an answer will stream
+   * under the same id, and the phone shows Thinking until it starts.
+   * Published once per id: a fallback path may publish the same question again.
+   */
+  publishUserMessage(id: string, content: string, opts?: { awaitingAnswer?: boolean }): void {
     if (!this.isRunning() || !content?.trim()) return;
+    const msgId = 'u:' + id;
+    if (this.history.some((m) => m.id === msgId)) return;
     const msg: PersistedMessage = {
-      id: 'u:' + id,
+      id: msgId,
       role: 'user',
       content,
       createdAt: new Date().toISOString(),
     };
+    const awaiting = opts?.awaitingAnswer === true;
+    if (awaiting) {
+      this.awaitingAnswers.add(id);
+      if (this.awaitingAnswers.size > 16) this.awaitingAnswers.delete(this.awaitingAnswers.values().next().value as string);
+    }
     this.recordHistory(msg);
-    this.broadcast({ type: 'user', id: msg.id, content: msg.content, createdAt: msg.createdAt });
+    this.broadcast({ type: 'user', id: msg.id, content: msg.content, createdAt: msg.createdAt, ...(awaiting ? { awaiting: true } : {}) });
   }
 
   publishToken(streamId: string, token: string): void {
-    if (!this.isRunning() || !token) return;
+    if (!this.isRunning() || !token || this.droppedStreams.has(streamId)) return;
+    this.awaitingAnswers.delete(streamId);
     if (!this.livePartial || this.livePartial.streamId !== streamId) {
       this.livePartial = { streamId, content: '' };
     }
     this.livePartial.content += token;
     this.broadcast({ type: 'token', streamId, token });
+    this.scheduleLiveRender();
   }
 
   publishDone(streamId: string, fullContent: string): void {
     if (!this.isRunning()) return;
+    if (this.droppedStreams.delete(streamId)) return;
+    this.awaitingAnswers.delete(streamId);
     const createdAt = new Date().toISOString();
-    const content =
+    let content =
       fullContent || (this.livePartial?.streamId === streamId ? this.livePartial.content : '');
+    // Prompt System v2 no-action sentinel: never display or record on the
+    // phone surface (a second live sink parallel to the renderer).
+    try {
+      const { shouldSuppressModelOutput, stripLeadingNoActionSentinel } = require('../llm/promptSystemV2') as typeof import('../llm/promptSystemV2');
+      if (shouldSuppressModelOutput(content)) content = '';
+      else content = stripLeadingNoActionSentinel(content) || content;
+    } catch { /* non-fatal */ }
+    if (this.livePartial?.streamId === streamId) this.cancelLiveRender();
     if (content.trim()) {
-      const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', content, createdAt };
+      const payload = this.answerPayload(content);
+      const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', createdAt, ...payload };
       this.recordHistory(msg);
-      this.broadcast({ type: 'done', streamId, content, createdAt });
+      this.broadcast({ type: 'done', streamId, createdAt, ...payload });
+    } else {
+      // Nothing to show (suppressed, or no words came): still end it, so the
+      // phone clears the Thinking it shows for this answer.
+      this.broadcast({ type: 'done', streamId, content: '', createdAt });
     }
     if (this.livePartial?.streamId === streamId) this.livePartial = null;
   }
 
   publishError(streamId: string, message: string): void {
     if (!this.isRunning()) return;
+    if (this.droppedStreams.delete(streamId)) return;
+    this.awaitingAnswers.delete(streamId);
+    if (this.livePartial?.streamId === streamId) this.cancelLiveRender();
     this.broadcast({ type: 'error', streamId, message: String(message || 'Stream error') });
     if (this.livePartial?.streamId === streamId) this.livePartial = null;
   }
@@ -367,16 +541,22 @@ export class PhoneMirrorService {
    */
   publishAssistantMessage(id: string, content: string, label: string): void {
     if (!this.isRunning() || !content?.trim()) return;
+    // Prompt System v2 no-action sentinel: suppress on the phone surface.
+    try {
+      const { shouldSuppressModelOutput } = require('../llm/promptSystemV2') as typeof import('../llm/promptSystemV2');
+      if (shouldSuppressModelOutput(content)) return;
+    } catch { /* non-fatal */ }
     const createdAt = new Date().toISOString();
+    const payload = this.answerPayload(content);
     const msg: PersistedMessage = {
       id: 'a:' + id,
       role: 'assistant',
-      content,
       createdAt,
       label,
+      ...payload,
     };
     this.recordHistory(msg);
-    this.broadcast({ type: 'assistant', id: msg.id, content: msg.content, label, createdAt });
+    this.broadcast({ type: 'assistant', id: msg.id, label, createdAt, ...payload });
   }
 
   /**
@@ -387,6 +567,164 @@ export class PhoneMirrorService {
   publishAck(action: string, message: string): void {
     if (!this.isRunning()) return;
     this.broadcast({ type: 'ack', action, message });
+  }
+
+  /**
+   * Mirror one STT segment to the phone's live transcript. Called from the same
+   * display-only send that feeds the overlay's rolling bar, so partials arrive
+   * already throttled. Finals are kept (bounded) so a phone that connects
+   * mid-meeting can replay them; the latest partial is kept for the same reason.
+   */
+  publishTranscript(payload: { speaker: string; text: string; final: boolean; timestamp?: number }): void {
+    if (!this.isRunning()) return;
+    if (!PHONE_TRANSCRIPT_SPEAKERS.has(payload.speaker)) return;
+    const text = String(payload.text || '').trim();
+    if (!text) return;
+    const segment: PhoneTranscriptSegment = {
+      speaker: payload.speaker,
+      text,
+      ts: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
+    };
+    if (payload.final) {
+      this.transcriptFinals.push(segment);
+      this.trimTranscript();
+      if (this.transcriptPartial?.speaker === segment.speaker) this.transcriptPartial = null;
+    } else {
+      this.transcriptPartial = segment;
+    }
+    this.broadcast({ type: 'transcript', speaker: segment.speaker, text, final: !!payload.final, ts: segment.ts });
+  }
+
+  /**
+   * Follow the desktop meeting lifecycle. Both edges start the phone over: a
+   * meeting START is a new session (the overlay resets on the same boundary),
+   * and a meeting END leaves a clean canvas that says the meeting is over, its
+   * summary being on the desktop. Tracked even while stopped, so enabling the
+   * mirror mid-meeting (or after one) reports it.
+   */
+  publishMeetingState(active: boolean): void {
+    const starting = active && !this.meetingActive;
+    const ending = !active && this.meetingActive;
+    this.meetingActive = active;
+    if (starting || ending) {
+      this.meetingEnded = ending;
+      // The last meeting's answers and transcript must not greet a phone that
+      // connects (or is already open) now.
+      this.transcriptFinals = [];
+      this.transcriptPartial = null;
+      this.history = [];
+      this.awaitingAnswers.clear();
+      if (this.livePartial) {
+        this.droppedStreams.add(this.livePartial.streamId);
+        // Bounded: a stream that never finishes must not pin memory.
+        if (this.droppedStreams.size > 32) this.droppedStreams.delete(this.droppedStreams.values().next().value as string);
+      }
+      this.livePartial = null;
+      this.cancelLiveRender();
+    }
+    if (!this.isRunning()) return;
+    this.broadcast({ type: 'meeting', active, reset: starting || ending });
+  }
+
+  /**
+   * Mirror the overlay's attached-screenshot tray: what its next answer will be
+   * sent with. The overlay owns the tray, so it reports the whole list on every
+   * change (add, remove, clear, send) and this only mirrors it. Tracked while
+   * stopped too, so a phone that connects later sees the current tray.
+   */
+  setAttachments(items: Array<{ path: string; thumb: string }>): void {
+    const next: PhoneAttachment[] = [];
+    const paths: string[] = [];
+    for (const item of Array.isArray(items) ? items.slice(-PHONE_TRAY_LIMIT) : []) {
+      const path = typeof item?.path === 'string' ? item.path : '';
+      const thumb = typeof item?.thumb === 'string' ? item.thumb : '';
+      if (!path || !isPhoneThumb(thumb)) continue;
+      const known = this.shots.get(path);
+      const shot = { id: known?.id || crypto.randomUUID(), thumb, fromPhone: isPhoneImagePath(path) };
+      // Re-inserted so the map drops the least recently seen first.
+      this.shots.delete(path);
+      this.shots.set(path, shot);
+      if (next.some((a) => a.id === shot.id)) continue;
+      next.push({ id: shot.id, thumb });
+      paths.push(path);
+    }
+    while (this.shots.size > PHONE_SHOTS_REMEMBERED) this.shots.delete(this.shots.keys().next().value as string);
+    const same =
+      next.length === this.attachments.length &&
+      next.every((a, i) => a.id === this.attachments[i].id && a.thumb === this.attachments[i].thumb);
+    this.attachmentPaths = paths;
+    if (same) return;
+    this.attachments = next;
+    this.broadcast({ type: 'attachments', items: next });
+  }
+
+  /** The screenshots in the overlay's tray, for a question typed on the phone (the overlay then clears it). */
+  getAttachmentPaths(): string[] {
+    return [...this.attachmentPaths];
+  }
+
+  /** The id a screenshot is known by on the phone (made up now if the tray has not listed it yet). */
+  private shotIdFor(path: string): string {
+    const known = this.shots.get(path);
+    if (known) return known.id;
+    const id = crypto.randomUUID();
+    this.shots.set(path, { id, thumb: '', fromPhone: isPhoneImagePath(path) });
+    while (this.shots.size > PHONE_SHOTS_REMEMBERED) this.shots.delete(this.shots.keys().next().value as string);
+    return id;
+  }
+
+  private shotPath(id: string): string | null {
+    for (const [path, shot] of this.shots) if (shot.id === id) return path;
+    return null;
+  }
+
+  /**
+   * The screenshots a question was just sent with (the overlay's question card
+   * shows them). Only screenshots the tray held count, so a card from before an
+   * overlay reload is never sent again. The phone's own photos are skipped: it
+   * already shows each one where it sent it.
+   */
+  publishSentImages(id: string, paths: string[]): void {
+    if (!this.isRunning() || !id) return;
+    const images: PhoneAttachment[] = [];
+    for (const path of Array.isArray(paths) ? paths : []) {
+      const shot = typeof path === 'string' ? this.shots.get(path) : undefined;
+      if (!shot || shot.fromPhone || !shot.thumb || images.some((i) => i.id === shot.id)) continue;
+      images.push({ id: shot.id, thumb: shot.thumb });
+    }
+    const msgId = 'i:' + id;
+    if (!images.length || this.history.some((m) => m.id === msgId)) return;
+    const createdAt = new Date().toISOString();
+    this.recordHistory({ id: msgId, role: 'user', content: '', createdAt, images });
+    this.trimImageHistory();
+    this.broadcast({ type: 'images', id: msgId, images, createdAt });
+  }
+
+  private trimImageHistory(): void {
+    let chars = 0;
+    let newest = true;
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      const images = this.history[i].images;
+      if (!images) continue;
+      for (const image of images) chars += image.thumb.length;
+      if (!newest && chars > PHONE_IMAGE_HISTORY_CHARS) this.history.splice(i, 1);
+      newest = false;
+    }
+  }
+
+  private trimTranscript(): void {
+    if (this.transcriptFinals.length > TRANSCRIPT_SEGMENT_LIMIT) {
+      this.transcriptFinals = this.transcriptFinals.slice(-TRANSCRIPT_SEGMENT_LIMIT);
+    }
+    let chars = 0;
+    for (const s of this.transcriptFinals) chars += s.text.length;
+    // Drop whole segments from the front; always keep the newest one.
+    let drop = 0;
+    while (chars > TRANSCRIPT_CHAR_LIMIT && drop < this.transcriptFinals.length - 1) {
+      chars -= this.transcriptFinals[drop].text.length;
+      drop++;
+    }
+    if (drop > 0) this.transcriptFinals = this.transcriptFinals.slice(drop);
   }
 
   /** Returns true when at least one phone browser is connected. */
@@ -401,6 +739,92 @@ export class PhoneMirrorService {
   onPhoneCommand(listener: (cmd: PhoneCommand) => void): () => void {
     this.phoneCommandListeners.add(listener);
     return () => this.phoneCommandListeners.delete(listener);
+  }
+
+  /**
+   * Where images the phone sends (POST /image) go. The service stores nothing:
+   * it checks the upload, hands the bytes here, and answers the phone with how
+   * that went. One handler (main.ts owns the screenshot queue); a later call
+   * replaces it, and the returned function clears it if it is still current.
+   */
+  /**
+   * How answers become the phone's HTML. main.ts registers the desktop-side
+   * renderer (marked + the overlay's math and gist rules); it lives outside
+   * this service so marked and KaTeX are bundled once, not into every bundle
+   * that imports the service. Without one, the page renders answers itself.
+   */
+  setAnswerRenderer(renderer: PhoneAnswerRenderer | null): void {
+    this.answerRenderer = renderer;
+  }
+
+  /**
+   * A finished answer as the phone receives and stores it. `content` is the
+   * answer TEXT (what "Copy conversation" and replays use), without the
+   * trailing [[GIST]] line; the gist rides separately in `gist` for the chip.
+   * Rendered from the RAW answer first, so the desktop renderer still sees
+   * the marker it splits.
+   */
+  private answerPayload(raw: string): { content: string; html?: string; gist?: string | null } {
+    const rendered = this.renderAnswer(raw);
+    const content = stripGistTrailer(raw);
+    if (rendered) return { content, html: rendered.html, gist: rendered.gist };
+    const gist = content === raw ? null : splitGistLine(raw).gist;
+    return gist ? { content, gist } : { content };
+  }
+
+  private renderAnswer(markdown: string, streaming = false): { html: string; gist: string | null } | null {
+    if (!this.answerRenderer || !markdown) return null;
+    try {
+      return this.answerRenderer(markdown, { streaming });
+    } catch (err: any) {
+      console.warn('[PhoneMirror] answer render failed, the page will render it:', err?.message || err);
+      return null;
+    }
+  }
+
+  /**
+   * A diagram finished drawing (or failed) after answers containing it were
+   * already rendered. Tell connected phones, and re-render the stored history
+   * entries that hold it so a phone joining later gets the picture too.
+   * `dataUrl` null = it could not be drawn.
+   */
+  publishDiagram(key: string, dataUrl: string | null): void {
+    if (!key) return;
+    const marker = `data-diagram="${key}"`;
+    for (const msg of this.history) {
+      if (msg.role !== 'assistant' || !msg.html || !msg.html.includes(marker)) continue;
+      const rendered = this.renderAnswer(msg.content);
+      if (rendered) msg.html = rendered.html;
+    }
+    if (!this.isRunning()) return;
+    this.broadcast(dataUrl ? { type: 'diagram', key, src: dataUrl } : { type: 'diagram', key });
+    // An answer still streaming re-renders on its own timer; nudge it so the
+    // picture does not wait for the next token.
+    if (this.livePartial) this.scheduleLiveRender();
+  }
+
+  /** While a phone question streams, send its rendered HTML at most every LIVE_RENDER_INTERVAL_MS. */
+  private scheduleLiveRender(): void {
+    if (this.liveRenderTimer || !this.answerRenderer) return;
+    this.liveRenderTimer = setTimeout(() => {
+      this.liveRenderTimer = null;
+      const live = this.livePartial;
+      if (!live || !this.hasClients()) return;
+      const rendered = this.renderAnswer(live.content, true);
+      if (rendered) this.broadcast({ type: 'render', streamId: live.streamId, html: rendered.html, gist: rendered.gist });
+    }, LIVE_RENDER_INTERVAL_MS);
+  }
+
+  private cancelLiveRender(): void {
+    if (this.liveRenderTimer) clearTimeout(this.liveRenderTimer);
+    this.liveRenderTimer = null;
+  }
+
+  setPhoneImageHandler(handler: (image: PhoneImage) => Promise<unknown>): () => void {
+    this.phoneImageHandler = handler;
+    return () => {
+      if (this.phoneImageHandler === handler) this.phoneImageHandler = null;
+    };
   }
 
   // ----- companion browser extension (v2) public API -----
@@ -419,6 +843,36 @@ export class PhoneMirrorService {
   /** True while the /pair window is open (set by armExtensionPairing). */
   private isArmed(): boolean {
     return Date.now() < this.armedUntil;
+  }
+
+  /**
+   * Ask the connected extensions to report their open meeting tabs (keys and
+   * titles only) or to stop. Each extension also hears it on connect.
+   */
+  setMeetingTabsWanted(on: boolean): void {
+    this.meetingTabsWanted = on;
+    for (const c of this.extClients) {
+      if (this.extTokenSockets.has(c)) this.sendMeetingTabsSubscribe(c, on);
+    }
+    if (!on) this.meetingTabsListener?.(null, null);
+  }
+
+  /** Where each browser's meeting tabs go (see meetingDetection/extensionMeetingTabs.ts). */
+  onMeetingTabs(listener: ((socket: object | null, tabs: unknown) => void) | null): void {
+    this.meetingTabsListener = listener;
+  }
+
+  /** Where a meeting page's participants and speaking reports go (meetingDetection/extensionMeetingTabs.ts). */
+  onMeetingPeople(listener: ((socket: object, report: Record<string, unknown>) => void) | null): void {
+    this.meetingPeopleListener = listener;
+  }
+
+  private sendMeetingTabsSubscribe(ws: WebSocket, on: boolean): void {
+    try {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'meeting-tabs-subscribe', on }));
+    } catch (_) {
+      /* the close handler clears this socket */
+    }
   }
 
   /** True when at least one companion extension is connected over /ws. */
@@ -743,9 +1197,20 @@ export class PhoneMirrorService {
           // until an unrelated status event (a phone joining, or reopening
           // Settings) happens to refresh it.
           this.emitStatusClientCount();
+          if (this.meetingTabsWanted && this.extTokenSockets.has(ws)) this.sendMeetingTabsSubscribe(ws, true);
           return true;
         }
         return false;
+      case 'meeting-tabs':
+        // A browser's open meeting tabs, which calendar linking reads. Only from
+        // an extension-token socket, and only while the app asked for them.
+        if (this.meetingTabsWanted && this.extTokenSockets.has(ws)) this.meetingTabsListener?.(ws, msg.tabs);
+        return true;
+      case 'meeting-people':
+        // A meeting page's participants and who is speaking, for names on the
+        // transcript. Same gate as the tabs.
+        if (this.meetingTabsWanted && this.extTokenSockets.has(ws)) this.meetingPeopleListener?.(ws, msg);
+        return true;
       case 'active':
         if (this.extClients.has(ws)) this.extActiveAt.set(ws, Date.now());
         return true;
@@ -836,6 +1301,7 @@ export class PhoneMirrorService {
         qrDataUrl: null,
         clients: 0,
         extensionConnected: false,
+        extPairedAt: this.extPairedAt,
         bindAddress: this.exposeOnLan ? '0.0.0.0' : '127.0.0.1',
       };
       this.cachedInfo = info;
@@ -874,6 +1340,7 @@ export class PhoneMirrorService {
       qrDataUrl,
       clients: this.phoneClientCount(),
       extensionConnected: this.hasExtensionClient(),
+      extPairedAt: this.extPairedAt,
       bindAddress: this.bindAddress,
     };
     this.cachedInfo = info;
@@ -948,9 +1415,11 @@ export class PhoneMirrorService {
     this.token = '';
     this.extToken = '';
     this.livePartial = null;
+    this.cancelLiveRender();
     this.rateBuckets.clear();
     this.armedUntil = 0;
     this.extClients.clear();
+    this.meetingTabsListener?.(null, null);
     this.openCaptureReqIds.clear();
     this.stopExtensionKeepalive();
     // Release any waitForExtension() callers so the capture path doesn't hang on
@@ -1248,10 +1717,33 @@ export class PhoneMirrorService {
       }
       // Burn the window — single-use.
       this.armedUntil = 0;
+      this.extPairedAt = Date.now();
       console.log('[PhoneMirror] extension paired via one-click /pair');
+      // Tell Settings now. On a first pair the extension's socket follows in a
+      // few ms (its hello flips extensionConnected); on a Re-pair while already
+      // connected nothing else will ever change, and the countdown would run
+      // out its whole window.
+      // Counts are read live, not from cachedInfo: that is only refreshed while
+      // someone is listening, and would otherwise report a connected extension
+      // as disconnected.
+      if (this.cachedInfo) {
+        const info = {
+          ...this.cachedInfo,
+          clients: this.phoneClientCount(),
+          extensionConnected: this.hasExtensionClient(),
+          extPairedAt: this.extPairedAt,
+        };
+        this.cachedInfo = info;
+        this.emitStatusNow(info);
+      }
       res.writeHead(200, jsonHeaders);
       // Hand out the EXTENSION token (loopback-scoped), not the phone token.
       res.end(JSON.stringify({ token: this.extToken, port: this.port }));
+      return;
+    }
+
+    if (fullUrl.pathname === '/image') {
+      this.handleImageUpload(req, res, provided || '');
       return;
     }
 
@@ -1261,11 +1753,12 @@ export class PhoneMirrorService {
       return;
     }
 
-    if (!provided || !timingSafeEqualStr(provided, this.token)) {
-      res.writeHead(401, { 'Content-Type': 'text/plain' });
-      res.end('Pairing token missing or invalid.');
-      return;
-    }
+    // No token, or a stale one (a reload after Rotate token): still 401, but
+    // with the page itself, marked refused, so it opens on its own lock screen
+    // ("needs a pairing link" / "has expired") instead of a bare line of text.
+    // The page holds no secrets; the socket and every endpoint still need the
+    // token. HEAD stays bodiless (the page probes it to tell an expired link).
+    const refused = !provided || !timingSafeEqualStr(provided, this.token);
 
     const csp = [
       "default-src 'self'",
@@ -1277,14 +1770,99 @@ export class PhoneMirrorService {
       "base-uri 'none'",
     ].join('; ');
 
-    res.writeHead(200, {
+    res.writeHead(refused ? 401 : 200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
       'Content-Security-Policy': csp,
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
     });
-    res.end(PHONE_MIRROR_HTML);
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    res.end(refused ? PHONE_MIRROR_HTML.replace('<html lang="en">', '<html lang="en" data-link="refused">') : PHONE_MIRROR_HTML);
+  }
+
+  /**
+   * POST /image?t=<phone token>, body = the image bytes. Phone token only: the
+   * loopback extension token must never be able to put files on this machine.
+   * Answers 200 {ok:true} once the handler has taken the image, or an error
+   * status the page shows as "Not delivered".
+   */
+  private handleImageUpload(req: http.IncomingMessage, res: http.ServerResponse, provided: string): void {
+    const reply = (status: number, body: Record<string, unknown>, extra?: Record<string, string>) => {
+      if (res.headersSent) return;
+      res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...extra });
+      res.end(JSON.stringify(body));
+    };
+    if (req.method !== 'POST') {
+      reply(405, { ok: false, error: 'method' }, { Allow: 'POST' });
+      return;
+    }
+    if (!provided || !this.token || !timingSafeEqualStr(provided, this.token)) {
+      reply(401, { ok: false, error: 'token' });
+      req.resume();
+      return;
+    }
+    const handler = this.phoneImageHandler;
+    if (!handler) {
+      reply(503, { ok: false, error: 'unavailable' });
+      req.resume();
+      return;
+    }
+    const declared = Number(req.headers['content-length']);
+    if (Number.isFinite(declared) && declared > PHONE_IMAGE_MAX_BYTES) {
+      reply(413, { ok: false, error: 'too-large' });
+      req.socket.destroy();
+      return;
+    }
+
+    // Binary-safe: collect Buffers (a string accumulator corrupts image bytes).
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let aborted = false;
+    req.on('data', (chunk: Buffer) => {
+      if (aborted) return;
+      total += chunk.length;
+      if (total > PHONE_IMAGE_MAX_BYTES) {
+        aborted = true;
+        reply(413, { ok: false, error: 'too-large' });
+        req.socket.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('error', () => {
+      aborted = true;
+    });
+    req.on('end', () => {
+      if (aborted) return;
+      const data = Buffer.concat(chunks, total);
+      const kind = sniffImage(data);
+      if (!kind) {
+        reply(415, { ok: false, error: 'not-an-image' });
+        return;
+      }
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timed out')), PHONE_IMAGE_HANDLER_TIMEOUT_MS);
+      });
+      Promise.race([Promise.resolve().then(() => handler({ data, ...kind })), timeout])
+        .then((saved) => {
+          console.log(`[PhoneMirror] phone image received (${kind.mime}, ${data.length} bytes)`);
+          // The id the tray will list it under, so the page can offer Remove
+          // on the photo it sent. The handler resolves with the saved path.
+          reply(200, typeof saved === 'string' && saved ? { ok: true, id: this.shotIdFor(saved) } : { ok: true });
+        })
+        .catch((err: any) => {
+          console.warn('[PhoneMirror] phone image not delivered:', err?.message || err);
+          reply(500, { ok: false, error: 'not-delivered' });
+        })
+        .finally(() => {
+          if (timer) clearTimeout(timer);
+        });
+    });
   }
 
   private handleUpgrade(req: http.IncomingMessage, socket: any, head: Buffer): void {
@@ -1322,6 +1900,7 @@ export class PhoneMirrorService {
       return;
     }
 
+    const viaExtToken = !!(this.extToken && timingSafeEqualStr(provided, this.extToken));
     const wss = this.wss;
     if (!wss) {
       socket.destroy();
@@ -1336,6 +1915,7 @@ export class PhoneMirrorService {
     wss.handleUpgrade(req, socket, head, (ws) => {
       upgraded = true;
       clearTimeout(handshakeTimer);
+      if (viaExtToken) this.extTokenSockets.add(ws);
       wss.emit('connection', ws, req);
     });
   }
@@ -1343,7 +1923,10 @@ export class PhoneMirrorService {
   private handleWsConnection(ws: WebSocket, req: http.IncomingMessage): void {
     // Send recent history immediately so a phone joining mid-session has context.
     try {
-      ws.send(JSON.stringify({ type: 'history', messages: this.history.slice(-HISTORY_LIMIT) }));
+      const replay = this.history
+        .slice(-HISTORY_LIMIT)
+        .map((m) => (m.role === 'user' && this.awaitingAnswers.has(m.id.slice(2)) ? { ...m, awaiting: true } : m));
+      ws.send(JSON.stringify({ type: 'history', messages: replay }));
       // Replay in-flight partial as a SINGLE token frame containing the full
       // accumulated content so far.  Previously this sent one frame per token
       // (up to 500+ frames for a long response) — now it's always 1 frame.
@@ -1355,7 +1938,24 @@ export class PhoneMirrorService {
             token: this.livePartial.content,
           }),
         );
+        const rendered = this.renderAnswer(this.livePartial.content, true);
+        if (rendered) {
+          ws.send(JSON.stringify({ type: 'render', streamId: this.livePartial.streamId, html: rendered.html, gist: rendered.gist }));
+        }
       }
+      // Extension sockets also land here before their `hello`; broadcast() never
+      // sends them phone events, and this frame is ignored by the extension.
+      ws.send(
+        JSON.stringify({
+          type: 'transcript-history',
+          segments: this.transcriptFinals,
+          partial: this.transcriptPartial,
+          meetingActive: this.meetingActive,
+          meetingEnded: this.meetingEnded,
+        }),
+      );
+      // Always sent, so a phone coming back never keeps a tray the desktop has since cleared.
+      ws.send(JSON.stringify({ type: 'attachments', items: this.attachments }));
     } catch (_) {
       /* client may be gone already */
     }
@@ -1382,6 +1982,7 @@ export class PhoneMirrorService {
       clearInterval(ping);
       // Drop any extension bookkeeping for this socket (no-op for phones).
       const wasExtension = this.extClients.delete(ws);
+      if (this.extTokenSockets.has(ws)) this.meetingTabsListener?.(ws, null);
       // Stop the keepalive once the last extension is gone (it restarts on the next
       // `hello`). With no extension connected, any in-flight capture can't be served
       // here — let it time out to the screenshot fallback as designed.
@@ -1397,7 +1998,9 @@ export class PhoneMirrorService {
     ws.on('message', (data: any) => {
       try {
         const raw = typeof data === 'string' ? data : (data as Buffer).toString('utf8');
-        if (raw.length > 4096) return; // guard oversized payloads
+        // Guard oversized payloads. An extension's `tabs` reply lists every open
+        // tab, which passes 4 KB at about 20 tabs, so its sockets get more room.
+        if (raw.length > (this.extTokenSockets.has(ws) ? 65_536 : 4096)) return;
         const cmd = JSON.parse(raw) as unknown;
         if (!cmd || typeof cmd !== 'object') return;
         const c = cmd as Record<string, unknown>;
@@ -1418,11 +2021,17 @@ export class PhoneMirrorService {
         } else if (
           c.type === 'action' &&
           typeof c.action === 'string' &&
-          /^[a-zA-Z:_-]{1,64}$/.test(c.action)
+          // Digits allowed: shortcut ids like dynamicAction4 have them, and a
+          // letters-only pattern silently dropped the phone's Recap button.
+          /^[a-zA-Z0-9:_-]{1,64}$/.test(c.action)
         ) {
           validated = { type: 'action', action: c.action };
         } else if (c.type === 'screenshot') {
           validated = { type: 'screenshot' };
+        } else if (c.type === 'detach' && typeof c.id === 'string' && /^[0-9a-f-]{36}$/.test(c.id)) {
+          // The phone only ever knows ids; the path stays on this side.
+          const path = this.shotPath(c.id);
+          if (path) validated = { type: 'detach', path };
         }
 
         if (validated) {
@@ -1500,6 +2109,13 @@ export class PhoneMirrorService {
 
   private emitStatusClientCount(): void {
     if (this.statusListeners.size === 0) return;
+    // A socket can close after _teardown() (stop, restart), when cachedInfo still
+    // describes the server that just went away. Report a fresh snapshot instead
+    // of laying these counts over it.
+    if (!this.wss) {
+      this.emitStatus();
+      return;
+    }
     const clients = this.phoneClientCount();
     const extensionConnected = this.hasExtensionClient();
     // Emit on a change to EITHER the phone-client count OR the extension-connected
@@ -1509,12 +2125,39 @@ export class PhoneMirrorService {
       this.cachedInfo &&
       (clients !== this.cachedInfo.clients || extensionConnected !== this.cachedInfo.extensionConnected)
     ) {
+      const extensionFlipped = extensionConnected !== this.cachedInfo.extensionConnected;
       const info = { ...this.cachedInfo, clients, extensionConnected };
       this.cachedInfo = info;
-      this.emitStatus(info);
+      // The extension flag is what Settings' pairing countdown and the launcher's
+      // extension toaster wait on, so it goes out now instead of 150 ms later.
+      // A phone-count change stays debounced: the extension's raw socket counts
+      // as a phone for the 1-3 ms before its hello, and the debounce is what
+      // keeps that from flashing "1 phone connected".
+      if (extensionFlipped) this.emitStatusNow(info);
+      else this.emitStatus(info);
       return;
     }
     this.emitStatus();
+  }
+
+  /**
+   * Emit at once, superseding any debounced emit still waiting. Only called
+   * while the server runs, when everything a pending emit could carry is
+   * already folded into cachedInfo, which `info` is built from.
+   */
+  private emitStatusNow(info: PhoneMirrorInfo): void {
+    if (this.statusListeners.size === 0) return;
+    if (this.statusDebounceTimer !== null) {
+      clearTimeout(this.statusDebounceTimer);
+      this.statusDebounceTimer = null;
+    }
+    for (const l of this.statusListeners) {
+      try {
+        l(info);
+      } catch (_) {
+        /* noop */
+      }
+    }
   }
 
   private emitStatus(prebuilt?: PhoneMirrorInfo): void {
@@ -1645,6 +2288,20 @@ function sanitizeCaptureMeta(raw: unknown): DomCaptureMeta | undefined {
   };
   // Drop the object entirely if nothing useful survived.
   return Object.values(out).some((v) => v !== undefined) ? out : undefined;
+}
+
+/** What an upload really is, from its leading bytes; null when not an image we take. */
+function sniffImage(data: Buffer): Pick<PhoneImage, 'mime' | 'ext'> | null {
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
+    return { mime: 'image/jpeg', ext: 'jpg' };
+  }
+  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return { mime: 'image/png', ext: 'png' };
+  }
+  if (data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP') {
+    return { mime: 'image/webp', ext: 'webp' };
+  }
+  return null;
 }
 
 function timingSafeEqualStr(a: string, b: string): boolean {

@@ -1,0 +1,175 @@
+{
+  "model_id": "e5-large-v2",
+  "userData": "/var/folders/rr/s6z6gxfx68g48sbfn5g8_x2w0000gn/T/natively-emb-live-e5-large-v2-1790008515828",
+  "uploads": [
+    {
+      "file": "billing-notes.md",
+      "category": "markdown",
+      "ok": true,
+      "error": null,
+      "ms": 12,
+      "extractedChars": 760
+    },
+    {
+      "file": "billing-notes.txt",
+      "category": "plain text",
+      "ok": true,
+      "error": null,
+      "ms": 4,
+      "extractedChars": 749
+    },
+    {
+      "file": "subscriptions.ts",
+      "category": "code",
+      "ok": true,
+      "error": null,
+      "ms": 2,
+      "extractedChars": 272
+    },
+    {
+      "file": "limits.json",
+      "category": "json",
+      "ok": true,
+      "error": null,
+      "ms": 1,
+      "extractedChars": 99
+    },
+    {
+      "file": "plans.csv",
+      "category": "csv",
+      "ok": true,
+      "error": null,
+      "ms": 1,
+      "extractedChars": 59
+    },
+    {
+      "file": "overview.html",
+      "category": "html",
+      "ok": true,
+      "error": null,
+      "ms": 2,
+      "extractedChars": 58
+    }
+  ],
+  "queries": [
+    {
+      "query": "Where do we stop a plan the customer already asked to end from being charged again?",
+      "ms": 1001,
+      "ok": false,
+      "retrievalConfidence": null,
+      "blockLength": 0,
+      "snippetCount": 0,
+      "denseScoredSnippets": 0,
+      "top1Correct": false,
+      "firstCorrectRank": null,
+      "ranked": []
+    },
+    {
+      "query": "What are the project and document caps on the free tier?",
+      "ms": 1004,
+      "ok": false,
+      "retrievalConfidence": null,
+      "blockLength": 0,
+      "snippetCount": 0,
+      "denseScoredSnippets": 0,
+      "top1Correct": false,
+      "firstCorrectRank": null,
+      "ranked": []
+    },
+    {
+      "query": "How long are entitlement cache entries held?",
+      "ms": 1006,
+      "ok": false,
+      "retrievalConfidence": null,
+      "blockLength": 0,
+      "snippetCount": 0,
+      "denseScoredSnippets": 0,
+      "top1Correct": false,
+      "firstCorrectRank": null,
+      "ranked": []
+    }
+  ],
+  "errors": [],
+  "proEnabled": true,
+  "embeddingConfig": {
+    "success": true,
+    "activeSpace": "local:xenova/e5-large-v2@q8@mean@v1:1024",
+    "reindexRequired": false
+  },
+  "providerWarmup": {
+    "ok": false,
+    "error": "not_configured",
+    "message": "No usable local provider. Check that the model is installed and any required API key is set."
+  },
+  "modeId": "mode_158c2dd6-2d0a-40f1-8ec5-9729a60ae4f2",
+  "prewarmMs": 683,
+  "indexStatus": {
+    "success": true,
+    "statuses": [
+      {
+        "fileId": "ref_40f9c8f2-6352-430e-b495-538457e943ca",
+        "fileName": "billing-notes.md",
+        "status": "indexing",
+        "chunkCount": 4,
+        "embeddedChunkCount": 0
+      },
+      {
+        "fileId": "ref_6cc05796-ffc9-44cc-8f9e-da9877f36291",
+        "fileName": "billing-notes.txt",
+        "status": "indexing",
+        "chunkCount": 1,
+        "embeddedChunkCount": 0
+      },
+      {
+        "fileId": "ref_82d5e8fe-6abe-4872-8fd6-404e24086983",
+        "fileName": "subscriptions.ts",
+        "status": "pending",
+        "chunkCount": 0,
+        "embeddedChunkCount": 0
+      },
+      {
+        "fileId": "ref_d45f5e9a-93ee-4117-9f18-c39c9fcd8878",
+        "fileName": "limits.json",
+        "status": "pending",
+        "chunkCount": 0,
+        "embeddedChunkCount": 0
+      },
+      {
+        "fileId": "ref_58896759-0fcc-4722-aab3-dd1e180e3133",
+        "fileName": "plans.csv",
+        "status": "pending",
+        "chunkCount": 0,
+        "embeddedChunkCount": 0
+      },
+      {
+        "fileId": "ref_9c50e63c-cb27-4ec0-acc3-43081dff08e7",
+        "fileName": "overview.html",
+        "status": "pending",
+        "chunkCount": 0,
+        "embeddedChunkCount": 0
+      }
+    ]
+  },
+  "embeddedChunkTotal": 0,
+  "chunkTotal": 5,
+  "vectorsActuallyWritten": false,
+  "modelLoadedInApp": "Xenova/e5-large-v2",
+  "expectedModelId": null,
+  "appLogEvidence": [
+    "[DatabaseManager] Ensured vec0 tables for dim=768",
+    "[DatabaseManager] Ensured vec0 tables for dim=1536",
+    "[DatabaseManager] Ensured vec0 tables for dim=3072",
+    "[DatabaseManager] Applying migration v15 → v16: Add embedding_space column + backfill",
+    "[DatabaseManager] v16 migration: embedding_space backfilled + indexed ✓",
+    "[DatabaseManager] Ensured vec0 tables for dim=768",
+    "[DatabaseManager] Ensured vec0 tables for dim=1536",
+    "[DatabaseManager] Ensured vec0 tables for dim=3072",
+    "[ProviderStatus] ollama missing_optional_dependency Ollama not selected; startup skipped",
+    "[LocalEmbeddingWorker] Loading feature-extraction model (Xenova/e5-large-v2, pooling=mean)...",
+    "[LocalEmbeddingWorker] Feature-extraction model loaded successfully.",
+    "[ProviderStatus] local-embedding ready Local embedding fallback ready",
+    "[ProviderStatus] local-embedding ready Packaged local embedding fallback assets are ready",
+    "[ProviderStatus] local-reranker ready Packaged ms-marco-MiniLM-L-6-v2 is ready for offline smart-retrieval",
+    "[ProviderStatus] native-audio ready Packaged native audio + DB + image processing assets are ready"
+  ]
+}

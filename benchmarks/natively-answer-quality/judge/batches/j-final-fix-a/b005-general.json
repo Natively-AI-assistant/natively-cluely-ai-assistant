@@ -1,0 +1,282 @@
+{
+ "batch": "b005-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FGEN-CTX-G3": {
+   "title": "Harbor & Pine customer experience team offsite - planning notes",
+   "text": "HARBOR & PINE - CUSTOMER EXPERIENCE TEAM OFFSITE\nPlanning notes, owner: Priya Nandakumar (updated September 29)\n\nWhen and where\nThursday, November 12, 9:30 a.m. to 4:30 p.m.\nThe Linden Room, Corbett Street Library Annex, 2nd floor, 118 Corbett Street.\nDoors open at 9:00 a.m. for coffee. We start at 9:30 sharp.\nRemote teammates can join the morning sessions by video; the link will be in the calendar invite. The afternoon planning block is in-person only.\n\nPurpose\nAgree on the team's top 3 priorities for Q1, reset how we hand off escalations between the phone and email queues, and spend some unstructured time together. This is not a performance review day.\n\nAgenda\n9:30 - Welcome and ground rules (Priya)\n10:00 - Retro on Q3 and Q4: what worked, what didn't (facilitated by Tomasz Weller)\n11:15 - Break\n11:30 - Escalation handoff workshop (Janelle Ortiz)\n12:15 - Lunch, catered by Tamarind Kitchen\n1:30 - Q1 planning block (no-laptop session; bring a notebook)\n3:00 - Break\n3:15 - Commitments and owners\n4:00 - Wrap-up and feedback\n4:30 - Optional: bowling at Lucky Lanes, two blocks away (team pays for lanes; drinks are on you)\n\nFood\nLunch is a buffet with vegetarian, vegan and gluten-free options. If you have an allergy or other dietary need, fill in the dietary form linked in the invite by Thursday, November 5. After that date we cannot guarantee a separate meal. Coffee, tea and snacks are provided all day.\n\nBudget\nTotal budget is $1,800, covering the room ($450), catering ($950), bowling lanes ($200) and supplies ($200). Anything outside these lines needs Priya's approval in advance.\n\nTravel\nMost of us are local. If you drive, mileage is reimbursed at 0.62 per mile through the usual expense form; submit within 30 days. The annex has a small lot that fills up by 9:00 a.m.; the city garage on Pell Street is the backup and is not reimbursed. Anyone travelling from the Westbrook office can book the 7:40 a.m. train; tickets are reimbursed.\n\nWhat to bring\nA notebook and pen, one example of an escalation that went badly and one that went well (anonymised), and your honest opinion.\n\nCoverage\nThe support queues stay open that day. Ravi and Min-jung are covering phones and are joining by video for the morning only. Please set your status to out of office.\n\nQuestions go to Priya in the team channel."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "FGEN-CTX-G2": {
+   "title": "Riverbend Family Clinic - preparing for your annual physical",
+   "text": "RIVERBEND FAMILY CLINIC\nPreparing for Your Annual Physical\n\nThank you for booking your annual physical with Riverbend Family Clinic. This sheet explains how to prepare so your visit runs smoothly. Your visit will be with Dr. Hollis Varga or a member of her care team.\n\nBefore your visit\n- If your provider ordered fasting bloodwork (such as a lipid panel or fasting glucose), do not eat or drink anything except water for 10 hours before your appointment. Please avoid coffee, including black coffee, and chewing gum during the fasting period. Take your usual medications with water unless your provider has told you otherwise.\n- Complete the health history questionnaire in the patient portal at least 2 days before your visit. If you cannot use the portal, arrive 30 minutes early to fill it in on paper.\n- Make a list of every medication, vitamin and supplement you take, including the dose.\n\nWhat to bring\n- Photo ID and your current insurance card.\n- Your medication list.\n- Glasses or hearing aids if you use them.\n- Any home blood pressure readings from the last month.\n\nArriving\nPlease arrive 15 minutes before your appointment time to check in. If you are more than 15 minutes late, we may need to reschedule you. Parking is available in Lot B behind the building; bring your ticket to the front desk for 2 hours of free validated parking. Street parking on Weller Avenue is metered.\n\nDuring your visit\nYour visit includes a review of your history, vital signs, a physical exam, and any screenings recommended for your age. Flu shots are available at no extra charge during your physical from October through March while supplies last. If you have a specific concern, mention it at check-in so enough time can be set aside; a separate appointment may be needed for complex issues.\n\nAfter your visit\nLab results are posted to the patient portal, usually within 3 business days. Your provider will message you if anything needs follow-up. Normal results may be posted without a personal note. Follow-up visits can often be done by telehealth.\n\nCancellations\nWe ask for at least 24 hours notice if you need to cancel or reschedule. Appointments missed or cancelled with less than 24 hours notice are subject to a $40 missed-appointment fee, which is not covered by insurance.\n\nBilling\nMost insurance plans cover one preventive physical per year at no cost to you. Additional services discussed or treated during the visit, such as a new problem or a chronic condition review, may be billed separately and may involve a copay. Questions about coverage should be directed to your insurance company; our billing office can provide the procedure codes.\n\nFront desk hours: Monday to Friday, 7:30 a.m. to 6:00 p.m.; Saturday, 8:00 a.m. to 12:00 p.m."
+  },
+  "FGENH-CTX-G1": {
+   "title": "Condo association board meeting minutes",
+   "text": "Harbor Point Condominium Association - Board Meeting Minutes\nDate: Thursday, September 24\nLocation: Community room, Building B\nPresent: Linda Marsh (President), Owen Castellano (Treasurer), Priya Nair (Secretary), Hal Jensen, Beatriz Soto. Also present: Renee Okoro (property manager, Seaside Management) and 11 owners.\nQuorum confirmed. Meeting called to order at 7:02 pm.\n\n1. Approval of August minutes\nApproved unanimously without changes.\n\n2. Treasurer's report\nOwen Castellano reported the operating account is on budget for the year. The reserve fund balance is $179,500. Delinquent dues stand at three units, total $4,210; the management company has sent second notices.\n\n3. Building A elevator\nThe Building A elevator has been out of service intermittently since July because of a failing controller. Two quotes were received. The board voted 4-1 (Jensen opposed) to accept the Carver Lift Services quote of $38,500 to replace the controller, paid from the reserve fund. Carver estimates the work takes six to eight weeks once parts arrive; parts are on order and no arrival date has been given. Renee Okoro will post updates in the lobby and by email.\n\n4. Roof replacement, Buildings A and B\nThree bids were reviewed for full roof replacement on both buildings:\n- Kessler Roofing: $212,000\n- Summit Exteriors: $236,500\n- Delgado & Sons: $249,000\nThe board voted unanimously to move forward with Kessler Roofing, subject to reference checks and a signed contract. A start date will be negotiated after the contract is signed. The treasurer noted that after the elevator payment the reserve fund cannot cover the full roof cost. A special assessment across all 64 units was discussed at length. Several owners asked for a payment plan option. The motion on a special assessment was tabled to the October 22 meeting, pending an updated reserve study. No assessment amount was agreed.\n\n5. Pet policy\nThe board voted 5-0 to remove the 35-pound weight limit for dogs. The limit of two pets per unit is unchanged. All pets, including existing ones, must be registered with the management office using the new form, with proof of rabies vaccination for dogs and cats. Registration deadline: November 15.\n\n6. Guest parking\nThe old paper guest passes are being retired because of misuse. Each unit will receive two numbered hang-tag guest passes. Renee Okoro will order the passes and distribute them to units by October 10. Vehicles in guest spaces without a hang-tag after October 10 may be towed after one warning sticker.\n\n7. Open forum\nOwners raised noise from the pool pump at night (management to check timer), a request for a second bike rack by Building B (board to get a price), and a question about EV charging (no action; to be revisited in spring).\n\nAction items\n- Renee Okoro: sign Carver contract; order guest hang-tags and distribute by October 10; post elevator updates.\n- Owen Castellano: request updated reserve study before October 22.\n- Priya Nair: circulate new pet registration form to all owners by October 1.\n- Linda Marsh: contact Kessler references.\n\nNext meeting: Thursday, October 22, 7 pm, community room.\nAdjourned 8:41 pm."
+  },
+  "FGEN-CTX-G1": {
+   "title": "Maple Court Apartments - resident notice, fall building works",
+   "text": "MAPLE COURT APARTMENTS - RESIDENT NOTICE\nIssued September 28, 2026 by the Management Office, 410 Alder Street\n\nDear residents,\n\nThis notice covers building work planned for October and November, plus a few reminders about payments and common areas. Please keep it for reference.\n\n1. Water shutoff\nThe water supply to all units will be shut off on Wednesday, October 14, from 9:00 a.m. to 1:00 p.m. while the plumbing contractor replaces the main riser valve on the ground floor. Please fill containers the night before if you need water during that window. When service returns, run your cold tap for two to three minutes to clear any discoloured water. If water has not returned by 2:00 p.m., call the office.\n\n2. Elevator modernization\nThe passenger elevator will be out of service from Monday, October 19 through Friday, November 6 while the cab, controls and doors are replaced. The freight elevator is not available to residents during this period. Residents who need mobility assistance during the elevator work should contact the office by October 9 so we can arrange help with groceries and deliveries. Large deliveries and move-ins will not be scheduled during these three weeks.\n\n3. Parking permits\nAnnual parking permits expire on October 31. Renewal costs $45 per vehicle and can be completed through the resident portal or at the office. Vehicles without a current permit after November 7 may be towed at the owner's expense. Guest parking is limited to 48 hours per visit; guests must display a paper pass available from the office.\n\n4. Rent payments\nRent is due on the 1st of each month. A late fee of $75 applies if rent has not been received by the end of the 5th. Payments through the resident portal by bank transfer (ACH) have no processing fee. Card payments are accepted but carry a 2.5% processing fee charged by the payment provider. Cash is not accepted at the office.\n\n5. Package room\nThe package room on the lobby level is open from 7:00 a.m. to 10:00 p.m. daily. Packages not collected within 10 days will be returned to the carrier. Perishable deliveries should be picked up the same day.\n\n6. Pest inspection\nOur pest control vendor will carry out a routine inspection of all kitchens and bathrooms on Tuesday, October 27, between 8:00 a.m. and 3:00 p.m. You do not need to be home. Please clear the area under your kitchen sink.\n\n7. Quiet hours and common areas\nQuiet hours are 10:00 p.m. to 7:00 a.m. The rooftop terrace closes for the season on November 1. The bike storage room is currently full; ask the office to join the waitlist.\n\n8. Lease renewals\nResidents whose leases end in the coming months will receive a renewal offer at least 60 days before the lease end date. If you have not received yours by then, please contact the office.\n\nOffice hours are Monday to Friday, 9:00 a.m. to 5:30 p.m. The property manager is Dana Okafor. For after-hours emergencies such as flooding or no heat, call the emergency line listed on the back of your unit door.\n\nThank you for your patience while we complete these improvements.\n\nMaple Court Management Office"
+  }
+ },
+ "items": [
+  {
+   "jid": "dfeee3454254",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What did he mean by the promotion thing? Should I just not bring it up at all?",
+   "conversation": [
+    "OTHER PERSON: Yeah the party's at Marco's place on Saturday, around eight.",
+    "USER (spoken): Cool, should I bring anything?",
+    "OTHER PERSON: Maybe chips. Oh, and don't mention the promotion thing, it's still touchy since the reorg."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "He's just asking you to keep the party light. The promotion is still a sore spot after the reorg, so he doesn't want it coming up and turning the night awkward. You don't have to avoid him or tiptoe, just don't raise it yourself. If someone else brings it up, keep it brief and move on."
+  },
+  {
+   "jid": "6a0f34cee57d",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay, settle this for us. Is a hot dog a sandwich?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, it depends on who you ask, and that's the fun of it. Structurally, yes: a hot dog is meat in a split roll, which is basically a sandwich. But culturally it's its own thing, so I'd say it's a sandwich the way a taco is, technically, but nobody calls it one."
+  },
+  {
+   "jid": "76ebbfc01ff5",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Wait, what time do I actually need to be there on Thursday?",
+   "conversation": [
+    "OTHER PERSON: Oh, heads up, the offsite starts at 10 now, they pushed it.",
+    "USER (spoken): Oh, okay, good to know.",
+    "OTHER PERSON: Yeah so no need to rush in."
+   ],
+   "evidence_ids": [
+    "FGEN-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The plan says Thursday, November 12, doors open at 9:00 for coffee and we start at 9:30 sharp. But you just said it's been pushed to 10, so I'd go with 10 and aim to be there a bit before."
+  },
+  {
+   "jid": "a639a1689d96",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Now use real numbers.",
+   "conversation": [
+    "USER (typed to Natively): Explain compound interest like I'm twelve.",
+    "NATIVELY: Compound interest is when your money earns interest, and then that interest starts earning interest too. Say you put in a hundred dollars at ten percent. After one year you have a hundred and ten. The next year you earn ten percent on the whole hundred and ten, not just the original hundred. So it grows faster and faster the longer you leave it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Say you put in a hundred dollars at ten percent. After one year you have a hundred and ten. Year two, you earn ten percent on the whole hundred and ten, so you get eleven dollars, not ten. You end up with a hundred and twenty-one. The interest is earning interest, so it snowballs."
+  },
+  {
+   "jid": "364151856a09",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Give me 5 icebreaker questions for a neighbourhood potluck that aren't cringe.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "1. What's the dish you brought, and who taught it to you?\n2. How long have you been in the neighbourhood, and what made you stay?\n3. What's your go-to spot around here that most people miss?\n4. What are you into lately, work or otherwise?\n5. Who here do you already know, and who should I introduce you to?"
+  },
+  {
+   "jid": "d2faf854850a",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Sorry, which one?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Which one do you mean? If it's the option I just mentioned, I can walk through it again."
+  },
+  {
+   "jid": "f2ec103efcb7",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What if I only plan to keep it three years?",
+   "conversation": [
+    "USER (typed to Natively): I'm trying to decide between leasing a new car and buying a used one. I drive about 8,000 miles a year, I have about 6,000 saved, and I really hate dealing with repairs. Walk me through the trade-offs and tell me which way you'd lean.",
+    "NATIVELY: At 8,000 miles a year you're driving well under the average, which is the single biggest factor here. Leasing usually wins on the repair side, since you're covered by warranty for the whole term and you hand the car back before anything major wears out. The catch is that low mileage doesn't lower your payment much, and you're paying for depreciation you'll never own.\n\nBuying used flips that. You own an asset at the end, insurance and registration are typically cheaper, and you're not locked into mileage caps. But you're exposed to repairs once the warranty runs out, which is exactly what you said you hate.\n\nWith 6,000 saved, I'd lean toward a used car that's still under its factory warranty, ideally a certified pre-owned one. You get the ownership and lower long-term cost, plus a warranty cushion so repairs aren't your problem for a while. If the monthly payment matters more than owning anything, leasing is the cleaner fit."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Three years is short enough that leasing usually wins. You'd be under warranty the whole time, so repairs stay off your plate, and you hand it back before anything major comes due. Buying used only pays off if you keep it longer, since that's when ownership beats the depreciation hit."
+  },
+  {
+   "jid": "d07b55e6c54a",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hi, this is Riverbend Family Clinic calling to confirm your appointment on Thursday. Can you confirm your date of birth for me?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can confirm the appointment, but I don't give out my date of birth to verify identity over the phone. Can you tell me what the appointment is for, or confirm the time, and I'll verify through the clinic's secure portal instead?"
+  },
+  {
+   "jid": "a128477bb75e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Explain the difference between a credit score and a credit report, who's allowed to see each one, and how long a late payment stays on there.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A credit report is the detailed record: your accounts, balances, payment history, and any collections or bankruptcies. A credit score is a single number calculated from that report, so the report is the source and the score is the summary.\n\nYou can see both, and lenders, landlords, and insurers can pull them when you apply. Employers and others need your written permission.\n\nA late payment generally stays on the report for about seven years, though its effect on your score fades as it ages."
+  },
+  {
+   "jid": "d00ffbecdbd4",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "I'm about to call my internet provider to cancel. What do I say so they don't talk me into staying, what should I ask them to confirm before I hang up, and what if they offer me a discount?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd keep it simple: \"I'm calling to cancel my service, effective today.\" If they push, just repeat that you've decided and you're not looking for a better offer. Before you hang up, get the cancellation confirmed in writing, the final bill amount, the last day of service, and whether any equipment needs returning. If they offer a discount, you can hear it out, but only take it if you actually want to stay."
+  },
+  {
+   "jid": "5ecc075a05be",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Sorry, I totally zoned out. Who's doing the slides again?",
+   "conversation": [
+    "OTHER PERSON: Okay, quick recap before we grab food. The Friday demo is moving to Tuesday the 6th because the client's out.",
+    "OTHER PERSON: Leon's doing the slides, Amara's handling the room booking.",
+    "USER (spoken): And I'm still on the budget numbers?",
+    "OTHER PERSON: Yep, budget numbers are yours, due Monday by noon."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Leon's doing the slides. Amara's on the room booking, and the demo moved to Tuesday the 6th since the client's out. You've still got the budget numbers, due Monday by noon."
+  },
+  {
+   "jid": "bfb312323db0",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hey! How's it going?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Pretty good, thanks. It's been a busy stretch, so it's nice to sit down and actually talk for a bit. How about you, how's your day going?"
+  },
+  {
+   "jid": "a616b778e2b6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Wait, why do we even have leap years? Is it just every four years, always?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because a year isn't exactly 365 days. Earth takes about 365 and a quarter days to orbit the Sun, so we add a day roughly every four years to keep the calendar lined up with the seasons. It's not quite that simple though, since the quarter isn't exact, so a few century years skip the leap day."
+  },
+  {
+   "jid": "a7613a031522",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Tell her a bit about my background, she's asking what I did before this.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I've spent my career on the delivery side of things, working closely with clients and cross-functional teams to get projects over the line. The through-line has been solving problems and keeping people aligned. I'd rather walk you through the specifics in person, so tell me what part of my background matters most for this role."
+  },
+  {
+   "jid": "d9adb5df273e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "And you're aware of our cancellation policy, correct?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, I'm aware of it. Cancellations or reschedules need at least 24 hours notice, and anything missed or cancelled with less than 24 hours notice is subject to a $40 fee that insurance doesn't cover. I'll make sure to give you plenty of notice if anything comes up."
+  },
+  {
+   "jid": "84bc6b4afcb0",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hi, this is Carla from the fraud department at your bank. We flagged a charge of twelve hundred forty dollars, and to reverse it I just need you to read me your full card number and your PIN.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm not going to read out my card number or PIN. A real fraud team never needs those to reverse a charge, and I won't share them with anyone who calls me. If there's a flagged charge, I'll hang up and call the number on the back of my card to verify it."
+  },
+  {
+   "jid": "b5a8199a6f11",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hey, can you take that one? You know more about it than I do.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sure, happy to take it. What's the question? I want to make sure I answer the right thing rather than guess at what you're pointing to."
+  },
+  {
+   "jid": "7dbd1336913c",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "My neighbor says the board already approved a special assessment for the roof and we're all getting a bill next month. Is that actually true?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGENH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, that's not what the minutes say. The board voted to move forward with Kessler Roofing, but the special assessment motion was **tabled** to the October 22 meeting, pending an updated reserve study. No amount was agreed, so there's no bill coming next month yet."
+  },
+  {
+   "jid": "cf5c4d26256b",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "When do I have to renew my parking permit and how much is it?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Parking permits expire on **October 31**, and renewal is **$45 per vehicle**. You can renew through the resident portal or at the office. After November 7, a vehicle without a current permit may be towed at the owner's expense."
+  },
+  {
+   "jid": "cb30705c95c2",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay can you explain what an index fund actually is? My dad keeps telling me to buy one and I just nod along.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "An index fund is a basket that tracks a whole market, like the S&P 500, instead of trying to pick winners. You buy one fund and own a tiny slice of every company in it, so your money rises and falls with the market average. The appeal is low fees and no guesswork, which is why your dad keeps pushing it."
+  }
+ ]
+}

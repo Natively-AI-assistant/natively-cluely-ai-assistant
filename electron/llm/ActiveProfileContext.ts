@@ -30,6 +30,9 @@ interface StructuredDocumentLike<T> {
   created_at?: string;
   updated_at?: string;
   structured_data?: MaybeStructured<T>;
+  /** Raw parsed text persisted at ingest (2026-08-01, deep-test D1). NULL on
+   *  rows written before the raw_text column existed. */
+  raw_text?: string | null;
 }
 
 export interface ActiveProfileContextOrchestratorLike {
@@ -47,6 +50,8 @@ export interface ActiveDocumentContext<T> {
   createdAt?: string;
   sourceUri?: string;
   structured: T;
+  /** Raw parsed document text when the store has it (lossless retrieval path). */
+  rawText?: string | null;
 }
 
 export interface ActiveTextContext {
@@ -90,6 +95,7 @@ function buildDocContext<T>(
     createdAt: doc.created_at,
     sourceUri: doc.source_uri,
     structured: structured as T,
+    rawText: typeof doc.raw_text === 'string' && doc.raw_text.trim() ? doc.raw_text : null,
   };
 }
 

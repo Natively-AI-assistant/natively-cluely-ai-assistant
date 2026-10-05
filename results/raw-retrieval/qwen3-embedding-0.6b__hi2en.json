@@ -1,0 +1,2337 @@
+{
+ "model_id": "qwen3-embedding-0.6b",
+ "repo": "onnx-community/Qwen3-Embedding-0.6B-ONNX",
+ "revision": "c25a394dd583836952667c12f008335071b3f43d",
+ "license": "apache-2.0",
+ "dimensions": 1024,
+ "pooling": "last",
+ "query_prefix": "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:",
+ "document_prefix": "",
+ "space": "local:onnx-community/qwen3-embedding-0.6b-onnx@q8@last@v1:1024",
+ "runtime": "transformers.js 3.8.1 / onnxruntime-node (worker_threads)",
+ "quantization": "q8",
+ "index": {
+  "file": "natively_refs__qwen3-embedding-0.6b__1024d__v1__hi2en.sqlite",
+  "backend": "sqlite-vec vec0",
+  "distance_metric": "cosine",
+  "rows": 872,
+  "native": true
+ },
+ "corpus": {
+  "chunks": 872,
+  "queries": 120,
+  "sha256": "41e7b76b1f69c81bc699ee2da3c052a6cc23f35acacad52b434fa309d9f2a24c",
+  "chunkerVersion": 4
+ },
+ "indexing": {
+  "totalMs": 324493,
+  "chunksPerSec": 2.69,
+  "batchP50Ms": 894,
+  "batchP95Ms": 6096
+ },
+ "query_latency": {
+  "p50Ms": 262,
+  "p95Ms": 353
+ },
+ "memory_peak_rss_mb": 716.3,
+ "overall": {
+  "n": 120,
+  "r1": 0.0167,
+  "r5": 0.05,
+  "r10": 0.0917,
+  "mrr": 0.0311,
+  "ndcg": 0.038
+ },
+ "candidate_recall_at_pool": 0.2833,
+ "reranked": null,
+ "rerank": {
+  "attempted": 0,
+  "succeeded": 0,
+  "poolSize": 50
+ },
+ "by_track": {
+  "text": {
+   "n": 120,
+   "r1": 0.0167,
+   "r5": 0.05,
+   "r10": 0.0917,
+   "mrr": 0.0311,
+   "ndcg": 0.038
+  }
+ },
+ "code_r10": 0.1304,
+ "cross_project_r10": null,
+ "perQuery": [
+  {
+   "query_id": "q0001-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 219,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0002-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 260,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0003-hi",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "lang": "hi",
+   "embedMs": 242,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0004-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 131,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0005-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 285,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0006-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 122,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0007-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 310,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0008-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 196,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0009-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 584,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0010-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 176,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.16666666666666666,
+    "ndcg": 0.21840743681816419
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0011-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 127,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0012-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 278,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0013-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 148,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0014-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 344,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0015-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 268,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.125,
+    "ndcg": 0.31546487678572877
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0016-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 187,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0017-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 369,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0018-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 269,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0019-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 272,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0020-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 126,
+   "base": {
+    "r1": 1,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 1,
+    "ndcg": 1
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0021-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 223,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0022-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 333,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0023-hi",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "lang": "hi",
+   "embedMs": 184,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0024-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 147,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0025-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 253,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0026-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 145,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0027-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 289,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0028-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 189,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0029-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 123,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0030-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 134,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0031-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 231,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0032-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 225,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0033-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 248,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0034-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 178,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0035-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 253,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0036-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 281,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0037-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 299,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0038-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 203,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0039-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 168,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0040-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 252,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0041-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 297,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0042-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 284,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0043-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 275,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0044-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 244,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0045-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 242,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0046-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 318,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0047-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 345,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0048-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 279,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0049-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 245,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0050-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 351,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0051-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 318,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0052-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 350,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0053-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 293,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0054-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 260,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0055-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 256,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0056-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 396,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0057-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 398,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0058-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 302,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0059-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 270,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0060-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 326,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0061-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 276,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0062-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 271,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0063-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 359,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0064-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 280,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0065-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 271,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0066-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 266,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0067-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 307,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0068-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 239,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0069-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 319,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0070-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 287,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0071-hi",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 272,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0072-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 296,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0073-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 322,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0074-hi",
+   "track": "text",
+   "categories": [
+    "debugging",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 277,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0075-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "semantic"
+   ],
+   "lang": "hi",
+   "embedMs": 332,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0126-hi",
+   "track": "text",
+   "categories": [
+    "configuration"
+   ],
+   "lang": "hi",
+   "embedMs": 261,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0127-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "configuration"
+   ],
+   "lang": "hi",
+   "embedMs": 296,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0128-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "configuration"
+   ],
+   "lang": "hi",
+   "embedMs": 267,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0129-hi",
+   "track": "text",
+   "categories": [
+    "configuration"
+   ],
+   "lang": "hi",
+   "embedMs": 188,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0130-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 281,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0131-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 293,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0132-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 304,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0133-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 307,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0134-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 337,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0135-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 303,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0136-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 283,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0137-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 308,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0138-hi",
+   "track": "text",
+   "categories": [
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 344,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0139-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 291,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0140-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "debugging"
+   ],
+   "lang": "hi",
+   "embedMs": 263,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0394-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 113,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0395-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 112,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0396-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 131,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0397-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 97,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0398-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 320,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0399-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 143,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0400-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 153,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0401-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 216,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0402-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 110,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0403-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 113,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.17723928678404774
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0404-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 110,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0405-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 264,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0406-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 97,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.2,
+    "ndcg": 0.23719771276929622
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0407-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 125,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.14285714285714285,
+    "ndcg": 0.15642624200758548
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0408-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 126,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0409-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 93,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0410-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 226,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0411-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 123,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0412-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 129,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0413-hi",
+   "track": "text",
+   "categories": [
+    "configuration",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 159,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0414-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 109,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 1,
+    "mrr": 0.1,
+    "ndcg": 0.2890648263178879
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0415-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 120,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0416-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 235,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0417-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 121,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0418-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 121,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0419-hi",
+   "track": "text",
+   "categories": [
+    "code",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 264,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0420-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 125,
+   "base": {
+    "r1": 0,
+    "r5": 1,
+    "r10": 1,
+    "mrr": 0.5,
+    "ndcg": 0.38685280723454163
+   },
+   "poolHit": 1,
+   "reranked": null
+  },
+  {
+   "query_id": "q0421-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 109,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0422-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 116,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 0,
+   "reranked": null
+  },
+  {
+   "query_id": "q0423-hi",
+   "track": "text",
+   "categories": [
+    "architecture",
+    "exact"
+   ],
+   "lang": "hi",
+   "embedMs": 85,
+   "base": {
+    "r1": 0,
+    "r5": 0,
+    "r10": 0,
+    "mrr": 0,
+    "ndcg": 0
+   },
+   "poolHit": 1,
+   "reranked": null
+  }
+ ]
+}

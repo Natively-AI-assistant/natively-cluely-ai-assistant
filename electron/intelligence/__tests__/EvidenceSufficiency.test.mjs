@@ -127,11 +127,12 @@ describe('EvidenceSufficiency', () => {
     assert.equal(comparison.length, 6);
   });
 
-  test('raw retrieval remains primary while answer-aware features break close scores', () => {
-    // The value chunk has a slightly lower raw score, but its direct answer term
-    // and answer-shaped value should settle a near-tie. A large raw-score gap is
-    // intentionally NOT overturned by coincidental literal overlap.
-    const topical = item({ id: 'topical', entity: 'Mercury', text: 'The Mercury robot is an advanced manipulation platform used in the lab.', property: 'unknown', score: 0.55 });
+  test('property-aware ranking pulls the value-bearing chunk above a higher-score topical chunk', () => {
+    // The topical chunk has the HIGHER raw retrieval score but only names the
+    // subject; the value chunk has a LOWER score but carries the distinctive
+    // answer term + an answer-shaped value. Answer-aware selection must rank the
+    // value chunk first.
+    const topical = item({ id: 'topical', entity: 'Mercury', text: 'The Mercury robot is an advanced manipulation platform used in the lab.', property: 'unknown', score: 0.92 });
     const valueChunk = item({ id: 'value', entity: 'Mercury', text: 'The Mercury main controller is an NVIDIA Jetson Xavier NX board.', property: 'unknown', score: 0.55 });
     const selected = selectSmallestSufficientEvidence({
       items: [topical, valueChunk],
@@ -140,14 +141,15 @@ describe('EvidenceSufficiency', () => {
       targetEntities: ['Mercury'],
       distinctiveTerms: ['controller'],
     });
-    assert.equal(selected[0].evidenceId, 'value', 'answer-aware features must resolve close retrieval scores');
+    assert.equal(selected[0].evidenceId, 'value', 'the controller-bearing chunk must rank first');
   });
 
-  test('THESIS-079: stronger raw hardware evidence beats camera-view term-overlap decoys', () => {
-    // The real failure had a top raw-retrieved answer chunk naming Logitech C920,
-    // while model-architecture chunks repeated every literal question term
-    // (camera/model/views). Ranking must not discard the higher-confidence
-    // answer just because it uses different wording.
+  test('THESIS-079: an explicit hardware-value statement beats unrelated camera-view model prose', () => {
+    // The real retrieval pool has a camera hardware fact expressed as a subject
+    // and value ("cameras are Logitech C920") plus lower-confidence OpenVLA-OFT
+    // prose that repeats camera/model/views without stating a camera model. The
+    // property-specific binding distinguishes those meanings without turning raw
+    // retrieval into the global primary rank and reopening the Mercury regression.
     const answer = item({
       id: 'logitech',
       text: 'The two USB cameras are both Logitech C920 HD Webcams.',

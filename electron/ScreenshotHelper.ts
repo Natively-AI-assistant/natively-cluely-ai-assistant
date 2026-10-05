@@ -30,9 +30,14 @@ const shellExecAsync = util.promisify(execShell);
  */
 function assertScreenRecordingPermission(): void {
   if (process.platform !== 'darwin') return;
-  // In development mode, bypass the permission check so screenshots work without
-  // needing the app to be in the TCC whitelist (same policy as the startup check in main.ts).
-  if (!app.isPackaged) return;
+  // Opt-in dev bypass ONLY — matches main.ts's isDevTccBypassEnabled() (see its
+  // B5 comment: an unconditional !app.isPackaged bypass here meant screenshot
+  // capture in every dev build silently skipped the real TCC check, so a dev
+  // could never observe the "permission denied" failure a packaged,
+  // unauthorized user actually hits). Requires BOTH !app.isPackaged and the
+  // explicit env var — set NATIVELY_DEV_BYPASS_SCREEN_TCC=1 to restore the
+  // legacy bypass for local screenshot testing.
+  if (!app.isPackaged && process.env.NATIVELY_DEV_BYPASS_SCREEN_TCC === '1') return;
   const status = systemPreferences.getMediaAccessStatus('screen');
   switch (status) {
     case 'granted':
@@ -673,49 +678,39 @@ export class ScreenshotHelper {
       if (this.view === "queue") {
         screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using queue directory: ${screenshotPath}`);
-        if (process.platform === 'darwin') {
+        // Both desktop platforms capture via desktopCapturer, and BOTH must
+        // forward preferredDisplay. main.ts already resolves the display the
+        // overlay / meeting is on (getTargetDisplayForFullScreenshot) and passes
+        // it in; the old win32 branch dropped the argument, so the capture fell
+        // through to screen.getPrimaryDisplay() and a multi-monitor Windows user
+        // silently sent the model their PRIMARY screen instead of the one the
+        // meeting was on. (Selective/cropper capture was unaffected — it passes
+        // an explicit area, which routes through getDisplayContainingRect.)
+        if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
-        } else if (process.platform === 'win32') {
-          await this.captureWithDesktopCapturer(screenshotPath);
         } else {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
 
-        this.screenshotQueue.push(screenshotPath)
-        if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
-          const removedPath = this.screenshotQueue.shift()
-          if (removedPath) {
-            try {
-              await fs.promises.unlink(removedPath)
-              console.log(`[ScreenshotHelper] Removed old screenshot: ${removedPath}`);
-            } catch (error) {
-              console.warn(`[ScreenshotHelper] Failed to remove old screenshot: ${removedPath}`, error)
-            }
-          }
-        }
+        await this.enqueue(screenshotPath, 'queue')
       } else {
         screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using extra screenshots directory: ${screenshotPath}`);
-        if (process.platform === 'darwin') {
+        // Both desktop platforms capture via desktopCapturer, and BOTH must
+        // forward preferredDisplay. main.ts already resolves the display the
+        // overlay / meeting is on (getTargetDisplayForFullScreenshot) and passes
+        // it in; the old win32 branch dropped the argument, so the capture fell
+        // through to screen.getPrimaryDisplay() and a multi-monitor Windows user
+        // silently sent the model their PRIMARY screen instead of the one the
+        // meeting was on. (Selective/cropper capture was unaffected — it passes
+        // an explicit area, which routes through getDisplayContainingRect.)
+        if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
-        } else if (process.platform === 'win32') {
-          await this.captureWithDesktopCapturer(screenshotPath);
         } else {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
 
-        this.extraScreenshotQueue.push(screenshotPath)
-        if (this.extraScreenshotQueue.length > this.MAX_SCREENSHOTS) {
-          const removedPath = this.extraScreenshotQueue.shift()
-          if (removedPath) {
-            try {
-              await fs.promises.unlink(removedPath)
-              console.log(`[ScreenshotHelper] Removed old extra screenshot: ${removedPath}`);
-            } catch (error) {
-              console.warn(`[ScreenshotHelper] Failed to remove old extra screenshot: ${removedPath}`, error)
-            }
-          }
-        }
+        await this.enqueue(screenshotPath, 'extra')
       }
 
       console.log(`[ScreenshotHelper] Screenshot successful: ${screenshotPath}`);
@@ -766,23 +761,56 @@ export class ScreenshotHelper {
       console.log(`[ScreenshotHelper] Selective screenshot successful: ${screenshotPath}`);
 
       // Add to queue so it appears in getScreenshots() and respects the cap
-      this.screenshotQueue.push(screenshotPath);
-      if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
-        const removedPath = this.screenshotQueue.shift();
-        if (removedPath) {
-          try {
-            await fs.promises.unlink(removedPath);
-          } catch {
-            // best-effort cleanup
-          }
-        }
-      }
+      await this.enqueue(screenshotPath, 'queue')
 
       return screenshotPath
     } catch (error) {
       console.error('[ScreenshotHelper] Failed to take selective screenshot:', error);
       throw error
     }
+  }
+
+  /**
+   * Add a saved image to its queue, dropping (and deleting) the oldest past
+   * MAX_SCREENSHOTS. The one place the cap lives, for captures and for images
+   * that arrive from elsewhere (addExternalImage).
+   */
+  private async enqueue(imagePath: string, which: 'queue' | 'extra'): Promise<void> {
+    const queue = which === 'queue' ? this.screenshotQueue : this.extraScreenshotQueue
+    queue.push(imagePath)
+    if (queue.length <= this.MAX_SCREENSHOTS) return
+    const removedPath = queue.shift()
+    if (!removedPath) return
+    try {
+      await fs.promises.unlink(removedPath)
+      console.log(`[ScreenshotHelper] Removed old ${which === 'queue' ? '' : 'extra '}screenshot: ${removedPath}`)
+    } catch (error) {
+      console.warn(`[ScreenshotHelper] Failed to remove old ${which === 'queue' ? '' : 'extra '}screenshot: ${removedPath}`, error)
+    }
+  }
+
+  /**
+   * Save an image that did not come from this machine's screen (a photo or
+   * screenshot sent from the Phone Mirror page) into the same queue a capture
+   * would join, so every path that reads screenshots can use it. The caller
+   * has already checked it is an image; the name is ours, never the sender's.
+   */
+  public async addExternalImage(
+    data: Buffer,
+    ext: 'jpg' | 'png' | 'webp',
+    opts: { namePrefix?: string } = {},
+  ): Promise<string> {
+    // A prefix marks where the image came from (e.g. PHONE_IMAGE_PREFIX, which
+    // the vision path reads). Letters, digits and dashes only: it is part of a
+    // file name, never a path.
+    const prefix = opts.namePrefix ?? ''
+    if (!/^[a-z0-9-]*$/i.test(prefix)) throw new Error(`Invalid image name prefix: ${prefix}`)
+    const which = this.view === 'queue' ? 'queue' : 'extra'
+    const dir = which === 'queue' ? this.screenshotDir : this.extraScreenshotDir
+    const imagePath = path.join(dir, `${prefix}${uuidv4()}.${ext}`)
+    await fs.promises.writeFile(imagePath, data)
+    await this.enqueue(imagePath, which)
+    return imagePath
   }
 
   public getView(): "queue" | "solutions" {
@@ -826,9 +854,28 @@ export class ScreenshotHelper {
     this.extraScreenshotQueue = []
   }
 
+  /**
+   * THUMBNAIL for on-screen display only (code review 2026-08-19).
+   *
+   * This used to return the full-resolution PNG as a base64 data URL. A retina
+   * capture is several MB, base64 adds ~33%, the overlay keeps up to 5 per
+   * message, and `messages` is an uncapped, unvirtualized list whose <img>
+   * elements all stay mounted — so a long session accumulated hundreds of MB of
+   * data-URL strings in the crash-sensitive overlay renderer for pixels nobody
+   * views at more than a couple hundred CSS px.
+   *
+   * The model is NEVER fed this string: every send path passes the file PATH
+   * (`currentAttachments.map(s => s.path)`), so downscaling here costs no answer
+   * quality. Bounded long edge + JPEG, matching ImageOptimizer's conventions.
+   * If sharp is unavailable (packaged-build native-module edge cases), falls
+   * back to the original full-resolution encoding rather than losing the
+   * preview.
+   */
   public async getImagePreview(filepath: string): Promise<string> {
     const maxRetries = 20
     const delay = 250 // 5s total wait time
+    const PREVIEW_MAX_LONG_EDGE_PX = 480
+    const PREVIEW_QUALITY = 70
 
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -837,7 +884,24 @@ export class ScreenshotHelper {
           const stats = await fs.promises.stat(filepath)
           if (stats.size > 0) {
             const data = await fs.promises.readFile(filepath)
-            return `data:image/png;base64,${data.toString("base64")}`
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              const sharp = require('sharp')
+              const thumb = await sharp(data)
+                .rotate()
+                .resize({
+                  width: PREVIEW_MAX_LONG_EDGE_PX,
+                  height: PREVIEW_MAX_LONG_EDGE_PX,
+                  fit: 'inside',
+                  withoutEnlargement: true,
+                })
+                .jpeg({ quality: PREVIEW_QUALITY })
+                .toBuffer()
+              return `data:image/jpeg;base64,${thumb.toString("base64")}`
+            } catch (thumbErr: any) {
+              console.warn('[ScreenshotHelper] preview downscale unavailable, using full-resolution preview:', thumbErr?.message)
+              return `data:image/png;base64,${data.toString("base64")}`
+            }
           }
         }
       } catch (error) {

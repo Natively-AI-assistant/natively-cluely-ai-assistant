@@ -21,6 +21,9 @@ const EXPECTED_MODE_TYPES = [
   'looking-for-work',
   'technical-interview',
   'lecture',
+  'seminar',
+  // 9th built-in, added 2026-08-23. UI order, so it goes last.
+  'call-center',
 ];
 
 const BASE_TIME = '2026-05-14T00:00:00.000Z';
@@ -122,9 +125,9 @@ beforeEach(() => {
   installDb(makeDb());
 });
 
-test('MODE_TEMPLATES enumerates exactly the seven production modes in UI order', () => {
+test('MODE_TEMPLATES enumerates every production mode in UI order', () => {
   assert.deepEqual(MODE_TEMPLATES.map(mode => mode.type), EXPECTED_MODE_TYPES);
-  assert.equal(new Set(MODE_TEMPLATES.map(mode => mode.type)).size, 7);
+  assert.equal(new Set(MODE_TEMPLATES.map(mode => mode.type)).size, EXPECTED_MODE_TYPES.length);
   for (const mode of MODE_TEMPLATES) {
     assert.equal(typeof mode.label, 'string');
     assert.ok(mode.label.length > 0);
@@ -361,6 +364,30 @@ test('active mode context JSON-encodes user-controlled strings', () => {
   assert.doesNotMatch(block, /<\/reference_file><active_mode_custom_instructions>/);
 });
 
+test('getModeSnapshot captures an immutable mode record by id', () => {
+  installDb(makeDb({
+    modes: [
+      modeRow({ id: 'sales-mode', template_type: 'sales', name: 'Sales snapshot', custom_context: 'Original instruction.', is_active: 1 }),
+      modeRow({ id: 'team-mode', template_type: 'team-meet', name: 'Team replacement', custom_context: 'Other instruction.', is_active: 0 }),
+    ],
+  }));
+
+  const snapshot = ModesManager.getInstance().getModeSnapshot('sales-mode');
+
+  assert.ok(snapshot);
+  assert.equal(snapshot.id, 'sales-mode');
+  assert.equal(snapshot.name, 'Sales snapshot');
+  assert.equal(snapshot.templateType, 'sales');
+  assert.equal(snapshot.customContext, 'Original instruction.');
+  assert.equal(Object.isFrozen(snapshot), true);
+  assert.equal(ModesManager.getInstance().getModeSnapshot('missing-mode'), null);
+  assert.throws(() => { snapshot.name = 'mutated'; }, TypeError);
+
+  db.setActiveMode('team-mode');
+  assert.equal(snapshot.id, 'sales-mode', 'a later active-mode switch must not mutate an existing snapshot');
+  assert.equal(snapshot.templateType, 'sales');
+});
+
 test('switching active mode immediately changes context and prevents stale reference leakage', () => {
   installDb(makeDb({
     modes: [
@@ -403,20 +430,22 @@ test('reference context skips empty files and truncates large files with complet
   assert.ok(block.length < longContent.length);
 });
 
-test('isPremiumKnowledgeInterceptAllowed gates the whole premium intercept by active mode (issue #272)', () => {
-  // No active mode — default to allowed so we never regress modes that
-  // legitimately use the intercept (looking-for-work, sales, recruiting,
-  // general). The source-available side cannot inspect the premium tracker, so
-  // we fail open when nothing is selected.
+test('isPremiumKnowledgeInterceptAllowed gates the whole premium intercept by active mode (issue #272, PI 2026-09-30)', () => {
+  // Everything the intercept injects is built from the résumé/JD, so it is
+  // bounded by Profile Intelligence eligibility (2026-09-30). It used to be a
+  // blocklist that defaulted OPEN — no mode, General, Sales and Recruiting got
+  // the candidate persona. No active mode is now CLOSED.
   installDb(makeDb());
   assert.equal(
     ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed(),
-    true,
-    'with no active mode the gate must default open',
+    false,
+    'with no active mode there is no Profile Intelligence, so no intercept',
   );
 
-  const INTERCEPT_ALLOWED = new Set(['general', 'sales', 'recruiting', 'looking-for-work']);
-  const INTERCEPT_BLOCKED = new Set(['technical-interview', 'team-meet', 'lecture']);
+  const INTERCEPT_ALLOWED = new Set(['looking-for-work']);
+  // technical-interview: PI-eligible, but blocked by issue #272 (coding answers).
+  // Everything else: no Profile Intelligence at all.
+  const INTERCEPT_BLOCKED = new Set(['general', 'sales', 'recruiting', 'technical-interview', 'team-meet', 'lecture', 'seminar', 'call-center']);
 
   // Every production mode must land on one side of the gate — guards against
   // a future template silently inheriting the wrong default.
@@ -440,8 +469,41 @@ test('isPremiumKnowledgeInterceptAllowed gates the whole premium intercept by ac
     assert.equal(
       ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed(),
       false,
-      `${templateType} must NOT allow the premium intercept — would overwrite the user's expected answer with off-topic content (issue #272)`,
+      `${templateType} must NOT allow the premium intercept`,
     );
+  }
+});
+
+test('isProfileIntelligenceAllowedForMode: only LFW/TI templates, pinned mode wins, no mode is closed (2026-09-30)', () => {
+  installDb(makeDb());
+  assert.equal(ModesManager.getInstance().isProfileIntelligenceAllowedForMode(), false, 'no active mode → no PI');
+
+  const PI = new Set(['looking-for-work', 'technical-interview']);
+  for (const templateType of EXPECTED_MODE_TYPES) {
+    installDb(makeDb({ modes: [modeRow({ id: `${templateType}-mode`, template_type: templateType, is_active: 1 })] }));
+    assert.equal(ModesManager.getInstance().isProfileIntelligenceAllowedForMode(), PI.has(templateType), templateType);
+  }
+
+  // Custom modes inherit by TEMPLATE, not by name.
+  installDb(makeDb({ modes: [modeRow({ id: 'custom-lfw', template_type: 'looking-for-work', name: 'Sales pitch practice', is_active: 1 })] }));
+  assert.equal(ModesManager.getInstance().isProfileIntelligenceAllowedForMode(), true, 'custom mode built from LFW');
+  installDb(makeDb({ modes: [modeRow({ id: 'custom-gen', template_type: 'general', name: 'My Interview Prep', is_active: 1 })] }));
+  assert.equal(ModesManager.getInstance().isProfileIntelligenceAllowedForMode(), false, 'custom mode built from General');
+
+  // The pinned (t0) mode decides, not whatever became active mid-request.
+  installDb(makeDb({ modes: [
+    modeRow({ id: 'gen', template_type: 'general', is_active: 1 }),
+    modeRow({ id: 'lfw', template_type: 'looking-for-work', is_active: 0 }),
+  ] }));
+  const manager = ModesManager.getInstance();
+  const hadOwnGetModes = Object.prototype.hasOwnProperty.call(manager, 'getModes');
+  const priorGetModes = manager.getModes;
+  manager.getModes = () => db.getModes().map((row) => ({ id: row.id, name: row.name, templateType: row.template_type }));
+  try {
+    assert.equal(manager.isProfileIntelligenceAllowedForMode('lfw'), true, 'pinned LFW wins over active General');
+    assert.equal(manager.isProfileIntelligenceAllowedForMode(), false, 'unpinned reads the active General mode');
+  } finally {
+    if (hadOwnGetModes) manager.getModes = priorGetModes; else delete manager.getModes;
   }
 });
 

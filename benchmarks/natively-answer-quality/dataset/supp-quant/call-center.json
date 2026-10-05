@@ -1,0 +1,221 @@
+{
+  "mode": "call-center",
+  "partition": "supp-quant",
+  "contexts": [
+    {
+      "id": "SQCC-CTX-1",
+      "kind": "grounded",
+      "title": "Ridgeway Car Rental rate card and fee policy",
+      "file_name": "ridgeway-rate-card-2026-08.txt",
+      "text": "RIDGEWAY CAR RENTAL - RATE CARD AND FEE POLICY\nDowntown and Airport branches. Effective 1 August 2026. All amounts include sales tax and airport concession recovery; nothing is added at checkout except the items listed here.\n\nDAILY AND WEEKLY RATES\n- Economy: $44 per day, $265 per week\n- Compact: $48 per day, $289 per week\n- Midsize: $57 per day, $342 per week\n- Minivan: $83 per day, $498 per week\nA rental day is 24 hours from the pickup time. Weekly rates apply to rentals of 5 to 7 days.\n\nEXTENSIONS AND LATE RETURNS\n- Extensions arranged by phone or app before the original return time are billed at the contract's daily rate for each extra day, plus any per-day extras on the contract for those days.\n- Returns up to 29 minutes past the end of a rental day are free. After 29 minutes, a full additional day is billed.\n- Unarranged late return (no extension requested): a one-time $35 late-return fee in addition to the extra day or days.\n\nPER-DAY EXTRAS\n- Additional driver: $13 per day\n- Driver aged 21 to 24: $27 per day\n- GPS unit: $11 per day, capped at $66 per rental\n- Child seat: $9 per day, capped at $54 per rental\n\nFUEL\nCars leave full. If a car comes back with less fuel than at pickup, we refill it at $4.10 per gallon needed. Alternatively, customers can buy a prepaid full tank at pickup for $3.60 per gallon of tank capacity, with no refund for unused fuel. Electric vehicles returned under 70% charge: $25 flat.\n\nDAMAGE, TOLLS AND CLEANING\nToll transponder use is billed at cost plus $3.95 per toll day. Excessive cleaning (sand, pet hair, smoke): $150. Lost key: $275. Damage is handled under the damage section of the rental agreement and is never charged to a card without a signed damage report.\n\nREFUNDS AND ADJUSTMENTS\nAgents may reverse an extension or late-return charge that was billed in error after checking the contract's actual return time. Refunds reach the card in 5 to 10 business days.",
+      "notes": "SQCC-001 (discrepancy): compact $48 + additional driver $13 = $61/day; a 2-day phone extension = $122 (arranged, so no $35 late fee; even with it the maximum is $157). Rates include tax and concession recovery, so 'plus taxes' is not an explanation. The stated $244 = 4 days x $61: does not reconcile. SQCC-005 (lookup): refuel $4.10 per gallon needed; prepaid $3.60 per gallon of tank capacity is the neighbouring-row trap."
+    },
+    {
+      "id": "SQCC-CTX-2",
+      "kind": "grounded",
+      "title": "Brightline Fibre residential billing guide v4.2",
+      "file_name": "brightline-billing-guide-v4-2.txt",
+      "text": "BRIGHTLINE FIBRE - RESIDENTIAL BILLING GUIDE\nVersion 4.2, updated June 2026. For customer-care agents and customers.\n\n1. How bills work\nBills are issued on the 1st of each month and cover the coming month in advance. Payment is due on the 5th of that month (the due date). For billing purposes every month is treated as 30 days long, whatever the calendar says.\n\n2. Plans (monthly, taxes included)\n- Fibre 300: $57\n- Fibre 900: $84\n- Fibre 2G: $112\n- Voice line add-on: $9\nRouter rental is included in every plan.\n\n3. Changing plans mid-month\nUpgrades take effect the same day. The next bill includes (a) the new plan for the coming month and (b) a one-off adjustment for the rest of the current month: the difference between the new and old monthly price x (days remaining / 30). The day of the change counts as a day on the new plan, so a change on the 21st leaves 10 days (the 21st through the 30th). Downgrades take effect on the 1st of the next month with no adjustment.\n\n4. Equipment\n- Wi-Fi extender rental: $6 per extender per month. Maximum of 3 extenders per account.\n- Replacement router (lost or damaged): $95 one-off.\n- Unreturned equipment after cancellation: $95 per router, $40 per extender.\n\n5. Late payment\n- If any balance is still unpaid 21 days after the due date, a $10 late fee is added.\n- At the same point, a late payment charge of 5% of the overdue balance is added.\n- Neither applies if the balance is paid within 21 days of the due date. Agents may waive the $10 late fee once per 12 months as a goodwill gesture; the 5% charge cannot be waived.\n\n6. Moving home\nMoves within our network are free with 14 days' notice. Moves outside our network count as cancellation.\n\n7. Cancelling\n30 days' notice. The final bill is prorated to the cancellation date using the 30-day rule above. No early-termination fee on monthly plans; 18-month contract plans pay $15 for each remaining month.\n\n8. Service credits\nOutages over 24 hours earn a credit of 1/30 of the monthly plan price per full day, applied on request.",
+      "notes": "SQCC-002 (consistent): upgrade 300 -> 900 on the 11th: 20 days on the new plan (11th-30th, 30-day month); (84 - 57) x 20/30 = 18; bill = 84 + 18 = 102, correct. The worked example in section 3 deliberately uses the 21st, not the 11th. SQCC-003 (discrepancy): 2 extenders x $6 = $12; maximum 3 per account = $18; the stated $30 implies 5 extenders: does not reconcile; router is included, so no router fee explains it. SQCC-004 (consistent): paid 25 days after the due date (> 21) so the $10 late fee and 5% x 84 = 4.20 both apply; the customer's '30 days' is wrong; waiving the $10 once is optional goodwill, not an admission of error."
+    },
+    {
+      "id": "SQCC-CTX-3",
+      "kind": "grounded",
+      "title": "Saltmarsh Harbour Hotel guest folio guide",
+      "file_name": "saltmarsh-folio-guide-2026-05.txt",
+      "text": "SALTMARSH HARBOUR HOTEL - GUEST FOLIO GUIDE\nFor front desk and reservations staff. Revised May 2026.\n\nROOM RATES (per night, before tax)\n- Standard Queen: $149\n- Standard King: $165\n- Harbour View King: $210\n- Two-Bedroom Suite: $340\nRates are per room, not per person, for up to two adults.\n\nNIGHTLY FEES\n- Resort fee: $28 per room per night. Covers Wi-Fi, pool, gym and the evening shuttle. Charged for every night of the stay.\n- Self-parking: $22 per night; valet: $36 per night. Parking is charged per night the vehicle is registered.\n- Pets: $45 per stay (not per night), maximum two pets.\n\nTAXES\nRoom rate and resort fee are taxed at 13% combined (state and city occupancy tax). Parking, pet fees and food and beverage are not subject to occupancy tax. Food and beverage tax is applied at the outlet.\n\nCHECK-IN AND CHECK-OUT\nCheck-in 4 pm; check-out 11 am. Late check-out until 2 pm: $40, subject to availability. Departures after 2 pm are charged one extra night at the booked rate, plus the resort fee and any parking for that night.\n\nDEPOSITS\nA pre-authorisation of one night's room, fees and tax plus $100 for incidentals is placed at check-in and released within 3 business days after departure. Guests sometimes see the hold and the final charge together; the hold is not a charge.\n\nFOLIO CORRECTIONS\nFront desk and reservations agents may reverse any night posted after the guest's recorded check-out date, together with its resort fee, tax and parking, without manager approval. Reversals of more than one night, or of charges already disputed with the card issuer, go to the duty manager.\n\nMINIBAR AND DINING\nMinibar items are posted the morning after consumption. Room service carries an 18% service charge and a $4 tray fee.\n\nLOYALTY\nHarbour Circle members earn 10 points per dollar on the room rate only.",
+      "notes": "Chain c01 (discrepancy): 2 nights Standard King: (165 + 28) x 2 = 386 x 1.13 = 436.18 + self-parking 2 x 22 = 44 -> 480.18. The stated 720.27 = 3 nights ((579 x 1.13 = 654.27) + 66): an extra night was posted. Check-out 10:30 is before 11 am, so no late-departure night; the hold has dropped off and hold + folio would not equal 720.27 anyway. Turn 2: reversal of one night = 193 x 1.13 = 218.09 + 22 parking (untaxed) = 240.09; agents may reverse one night after check-out date without a manager. Traps: taxing parking (242.95), room-only reversal (186.45)."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "SQCC-001",
+      "category": "billing",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Hi, yeah, I extended my rental two days over the phone, it's the compact, and my wife's on it as an additional driver. Now there's a charge of two hundred forty-four dollars for the extension. The compact is forty-eight a day. How is that two days?",
+      "context_condition": "grounded",
+      "context_ref": "SQCC-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "discrepancy",
+        "billing_dispute"
+      ],
+      "expected_answer_type": "agent response checking the charge against the rate card",
+      "claim_trap": "support_policy",
+      "needles": [
+        "Compact: $48 per day",
+        "Additional driver: $13 per day"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQCC-002",
+      "category": "billing",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "I upgraded from the three hundred plan to the nine hundred on the eleventh of last month, and now my bill's a hundred and two dollars. The nine hundred plan is eighty-four. Why am I paying a hundred and two?",
+      "context_condition": "grounded",
+      "context_ref": "SQCC-CTX-2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "consistent",
+        "proration",
+        "billing_dispute"
+      ],
+      "expected_answer_type": "agent explanation of the bill amount",
+      "claim_trap": "support_policy",
+      "needles": [
+        "Fibre 900: $84",
+        "Fibre 300: $57",
+        "days remaining / 30"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQCC-003",
+      "category": "billing",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "My bill has thirty dollars for Wi-Fi extenders. I've got two of them. I never asked for more. What's going on?",
+      "context_condition": "grounded",
+      "context_ref": "SQCC-CTX-2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "discrepancy",
+        "capacity",
+        "billing_dispute"
+      ],
+      "expected_answer_type": "agent response checking the equipment charge",
+      "claim_trap": "support_policy",
+      "needles": [
+        "$6 per extender per month",
+        "Maximum of 3 extenders"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQCC-004",
+      "category": "policy_restriction",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "customer says the $10 late fee is wrong because we give 30 days. bill was 84, due the 5th, they paid on the 30th, and there's also a 4.20 charge. who's right?",
+      "context_condition": "grounded",
+      "context_ref": "SQCC-CTX-2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "consistent",
+        "percent",
+        "policy"
+      ],
+      "expected_answer_type": "private verdict for the agent with the policy basis",
+      "claim_trap": "support_policy",
+      "needles": [
+        "21 days after the due date",
+        "5% of the overdue balance"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQCC-005",
+      "category": "policy_restriction",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "If I bring the car back and it's not full, what do you charge for the gas?",
+      "context_condition": "grounded",
+      "context_ref": "SQCC-CTX-1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "lookup"
+      ],
+      "expected_answer_type": "single fee from the rate card, speakable",
+      "claim_trap": "support_policy",
+      "needles": [
+        "$4.10 per gallon"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQCC-006",
+      "category": "billing",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Hi, I stayed with you two nights, checked in on the twelfth and out on the fourteenth around ten thirty. Standard king at one sixty-five, and I had my car in self-parking both nights. My card's been charged seven hundred twenty dollars and twenty-seven cents, and the hold's already gone. Can you tell me why it's that much?",
+      "context_condition": "grounded",
+      "context_ref": "SQCC-CTX-3",
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "arithmetic",
+        "discrepancy",
+        "tax",
+        "chain",
+        "billing_dispute"
+      ],
+      "expected_answer_type": "agent response checking the folio total",
+      "claim_trap": "support_policy",
+      "needles": [
+        "Standard King: $165",
+        "$28 per room per night",
+        "taxed at 13%"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "SQCC-007",
+      "category": "refund",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Okay. So how much am I getting back?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "arithmetic",
+        "discrepancy",
+        "tax",
+        "refund",
+        "follow_up",
+        "chain"
+      ],
+      "expected_answer_type": "refund amount with its makeup, speakable",
+      "claim_trap": "support_policy",
+      "needles": [
+        "Self-parking: $22 per night",
+        "taxed at 13%"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

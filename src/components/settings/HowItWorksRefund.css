@@ -1,0 +1,48 @@
+/* ── Learn more hover (transitions.dev 24) ────────────────────────────────
+   Verbatim from .claude/skills/transitions-dev/24-learn-more-hover.md.
+   Used by HowItWorksRefund's "Watch demo", "Open" and "Email" actions: the
+   chevron slides toward the reading direction and its arms spread into an
+   arrow. Hover-only; focus and touch keep the resting chevron, so nothing is
+   communicated by the motion alone. About's and Setup & Help's Go buttons
+   ("Modes →") use the slide too, importing this file; their lucide arrow has
+   no .t-learn-arm paths, so only the slide applies. */
+:root {
+  --learn-shift: 2px;
+  --learn-spread: 8deg;
+  --learn-in: 350ms;
+  --learn-out: 350ms;
+  --learn-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-learn-chevron {
+  display: inline-flex;
+  transform: translateX(0);
+  transition: transform var(--learn-out) var(--learn-ease);
+}
+.t-learn-arm {
+  transform-box: view-box;
+  transform-origin: 10px 8px;
+  vector-effect: non-scaling-stroke;
+  transition: transform var(--learn-out) var(--learn-ease);
+}
+.t-learn:hover .t-learn-chevron { transform: translateX(var(--learn-shift)); transition-duration: var(--learn-in); }
+.t-learn:hover .t-learn-arm { transition-duration: var(--learn-in); }
+.t-learn:hover .t-learn-arm-top { transform: rotate(var(--learn-spread)); }
+.t-learn:hover .t-learn-arm-bot { transform: rotate(calc(var(--learn-spread) * -1)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .t-learn-chevron, .t-learn-arm { transition: none !important; }
+}
+
+/* ── Indigo for this section's controls ──────────────────────────────────
+   The tab pill, "Watch the demo" and "Manage" share the Settings toggle's ON
+   colour, --toggle-on #6688F5 (owner's call, 2026-09-27; it was sky blue,
+   then a deeper Tailwind indigo that read too dark). Fed through .lg-sky's
+   --lg-sky-bg, so the material is unchanged and only the hue moves. One value
+   for both themes, as the toggles have; hover lifts to the accent scale's
+   -400 step. White text on it reads 3.28:1, under AA's 4.5:1 for small text, as
+   the earlier sky (2.80:1) was; lightness was the owner's ask. */
+:root {
+  --hiw-indigo: var(--toggle-on);
+  --hiw-indigo-hover: var(--periwinkle-400);
+}

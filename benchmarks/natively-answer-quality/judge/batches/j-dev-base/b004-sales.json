@@ -1,0 +1,288 @@
+{
+ "batch": "b004-sales",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DSALES-CTX-G1": {
+   "title": "Routewise product one-pager: pricing and packaging (July 2026)",
+   "text": "Routewise by Brightwell Labs - Product One-Pager\nPricing and Packaging, effective July 1, 2026. Supersedes all earlier price sheets and partner sheets.\n\nWhat Routewise does\nRoutewise is scheduling and dispatch software for field service teams of 10 to 2,000 technicians. Dispatchers build the day on a drag-and-drop board, Routewise suggests the technician with the right skills who is closest to the job, and technicians receive jobs, customer history, checklists and parts lists in the Routewise mobile app for iOS and Android. End customers get an arrival window by SMS and a live \"technician on the way\" link.\n\nCore capabilities (every plan)\n- Drag-and-drop dispatch board with skills and territory matching\n- Mobile app with offline mode; jobs, photos and signatures sync when the device reconnects\n- Customer SMS notifications with arrival windows\n- Digital checklists and standard job forms\n- Standard reports: first-time fix rate, jobs per technician per day, drive time per job\n\nPlans and pricing (per technician seat, per month, billed annually)\n- Starter - $29 per seat. Up to 25 seats. Dispatch board, mobile app, SMS notifications, standard reports. Email support. Monthly billing is available on Starter only, at $35 per seat.\n- Growth - $49 per seat. 10 seat minimum. Everything in Starter plus route optimization that re-plans the rest of the day when a job runs long, inventory and parts tracking, QuickBooks Online and Xero integrations, custom job forms, and the REST API (read and write, 120 requests per minute).\n- Enterprise - custom pricing, 100 seat minimum. Everything in Growth plus the Salesforce Field Service connector, SAML single sign-on, audit logs, a sandbox environment, and a named Customer Success Manager.\nDispatcher and admin seats are free on every plan. Only technicians who receive jobs are billed.\n\nAdd-ons\n- Customer Portal (self-service booking and online invoice payment): $400 per month flat, Growth and Enterprise only.\n- Additional API capacity: blocks of 60 requests per minute at $150 per month each.\n\nImplementation\n- Starter: self-serve onboarding with guided setup videos. Most teams go live in 1 to 2 weeks.\n- Growth: standard onboarding package, $2,500 one-time. Typical go-live is 4 to 6 weeks from contract signature, provided the customer delivers clean technician, customer and asset data within the first 10 business days.\n- Enterprise: scoped implementation with a fee quoted separately. Typical go-live is 8 to 12 weeks. Setting up the Salesforce Field Service connector adds 2 to 3 weeks.\nGo-live dates depend on data readiness and are estimates, not contractual commitments.\n\nContract terms\n- Standard term is 12 months, auto-renewing for another 12 months unless either party gives 60 days' written notice before renewal.\n- Payment terms are net 30 from invoice.\n- Multi-year: a 24-month prepaid agreement receives 10% off the per-seat price. No other multi-year discount is published.\n- Seats can be added at any time, prorated to the renewal date. Seats cannot be reduced until renewal.\n- Any discount or payment term beyond the published terms requires Deal Desk approval. Account executives cannot approve non-standard discounts or payment terms on a call.\n- 14-day free trial on Starter and Growth, up to 10 seats, no credit card required.\n\nWhat Routewise does not do\n- Routewise does not issue invoices or run accounting. It syncs completed jobs and parts used to QuickBooks Online or Xero, and those systems issue the invoices.\n- There is no on-premises or private-cloud deployment option.\n- Routewise does not include GPS vehicle tracking hardware; technician location comes from the mobile app while a job is active.\n\nQuestions about anything not listed here go to your account executive, who will confirm with Product before committing."
+  },
+  "DSALES-CTX-I1": {
+   "title": "Brightwell Labs Denver office move FAQ",
+   "text": "Brightwell Labs - Denver Office Move FAQ (internal)\n\nWhen do we move?\nThe new office at the Larimer building opens Monday, November 2. The old Blake Street office closes Friday, October 30. Pack your desk by 3pm on the 30th; movers take labelled crates that evening.\n\nWhat happens to my equipment?\nIT will collect docking stations and monitors on October 29. Laptops stay with you. Expect up to 3 business days for badge access to be activated at the new building; the front desk will issue a temporary pass until then.\n\nParking?\nThe Larimer garage offers 30 days of free parking for all staff. After that, parking is $95 per month, or use the transit pass benefit.\n\nMeeting rooms?\nThere are 14 bookable rooms, named after Colorado peaks. Book through the usual calendar system; the old room names will stop working on November 2.\n\nWho do I ask?\nOffice move questions go to Dana Whitlock in Workplace Operations. Please do not contact the building management company directly."
+  },
+  "DSALES-CTX-C1": {
+   "title": "Routewise partner price sheet 2025 (outdated)",
+   "text": "Routewise Partner Price Sheet 2025\nValid through December 31, 2025. For reseller and referral partners.\n\nHow to use this sheet\nShare this sheet with qualified prospects after a first discovery call. Quote only the list prices below. Every deal is billed by Brightwell Labs directly; partners earn a referral fee on the first year of subscription revenue. Prospects who ask about features that are not listed here should be referred to a Brightwell Labs account executive.\n\nPlans (per technician, per month)\n- Starter: $29. Up to 25 technicians.\n- Growth: $44. Includes route optimization, parts tracking, QuickBooks Online and Xero integrations, and the Salesforce connector.\n- Enterprise: contact sales.\nNo seat minimum on any plan.\n\nOnboarding\n- Growth onboarding is free for all new customers.\n- Go-live guaranteed within 30 days of signature.*\n\nMulti-year\n- 3-year prepaid agreements receive 15% off.\n- 2-year prepaid agreements receive 8% off.\n\nService levels\n- 99.95% monthly uptime on Growth and Enterprise.\n- 24/7 support on Growth and Enterprise.\n\nAdd-ons\n- Salesforce connector: $300 per month.\n- Customer Portal: $350 per month.\n\nSeat rules\n- Growth requires a minimum of 5 technicians.\n- Seats may be reduced at any time with 30 days' notice.\n- Dispatcher seats are billed at the technician rate.\n\nContract and payment\n- Annual agreements, invoiced upfront, net 45 payment terms.\n- Monthly billing is available on Starter and Growth.\n\nPartner notes\nPartners may offer up to 12% off list price without approval to close a deal in the current quarter. Partners must not quote any price not shown on this sheet.\n\n* Timelines are estimates and depend on customer data readiness.\n\nPrices effective until superseded by a newer sheet."
+  },
+  "DSALES-CTX-G2": {
+   "title": "Routewise security, support and SLA overview (August 2026)",
+   "text": "Routewise Security, Support and SLA Overview\nBrightwell Labs, revised August 2026. For prospects and customers.\n\n1. Security and compliance\n- Brightwell Labs completed a SOC 2 Type II examination covering the Security and Availability criteria for the period April 1, 2025 to March 31, 2026. The report is shared with prospects under a mutual NDA through our Trust Center. Allow 2 business days after the NDA is signed.\n- An independent firm performs a penetration test once a year. The executive summary is available under the same NDA. Full findings are not shared.\n- Encryption: AES-256 at rest; TLS 1.2 or higher in transit.\n- Hosting: Amazon Web Services. North American customers are hosted in us-east-2 (Ohio); EU customers in eu-central-1 (Frankfurt). The data region is chosen at contract signature and cannot be changed later without a paid migration project.\n- Architecture: multi-tenant with logical separation of customer data. Dedicated single-tenant hosting is not offered.\n- Authentication: two-factor authentication on every plan. SAML single sign-on with Okta, Microsoft Entra ID or Google Workspace on Enterprise only.\n- Data retention: customer data is kept for the life of the contract. After termination, customers can export their data for 30 days; it is then deleted within 90 days.\n- A GDPR Data Processing Addendum is available on request.\n\n2. Uptime SLA\n- Growth and Enterprise: 99.9% monthly uptime for the web app and API, excluding scheduled maintenance. Scheduled maintenance runs Sundays 02:00 to 04:00 US Eastern and is announced at least 72 hours ahead.\n- Service credits: 10% of that month's subscription fee if uptime falls below 99.9%; 25% if uptime falls below 99.0%. Credits must be requested within 30 days of the end of the affected month. Service credits are the sole and exclusive remedy for downtime.\n- Starter: no uptime SLA.\n- During an outage the mobile app keeps working in offline mode, and data syncs once service is restored.\n- Current status and incident history are published on the public Routewise status page.\n\n3. Support\n- Starter: email support, Monday to Friday, 8am to 6pm US Eastern. First response within 1 business day.\n- Growth: email and in-app chat, Monday to Friday, 8am to 8pm US Eastern. First response for P1 incidents within 2 business hours; all other tickets within 8 business hours.\n- Enterprise: everything in Growth plus 24/7 phone support for P1 incidents with a 1-hour first response, a named Customer Success Manager assigned after signature, and quarterly business reviews.\n- A P1 incident means the dispatch board or the mobile app is unavailable for all users of an account.\n- Response times are first-response targets, not resolution commitments.\n- Support is provided in English.\n- Escalation path: the assigned support engineer, then the Support Manager on duty, then the VP of Customer Success.\n\n4. What to route elsewhere\nRequests for a custom security questionnaire, a signed security addendum, or any compliance framework not named in this document go to the Brightwell Labs security team through your account executive. Do not confirm them on a call."
+  }
+ },
+ "items": [
+  {
+   "jid": "f7729740e32b",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Have you actually worked with HVAC companies before, or is this pretty new for you?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "HVAC is newer for me, so I'd rather be straight about that than pretend otherwise. What I do bring is the same approach I use in any industry: learn how your jobs actually run, where the time and money leak, and only then talk about whether we're a fit. What does a typical job look like for you, start to finish?"
+  },
+  {
+   "jid": "8cda979e9d5a",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "they asked about my background, give me two lines to say about myself",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "I'd keep it to two lines: what I do and how I do it, then one thing that shows it. Something like, \"I work on the front end of the business, talking with customers and turning what they tell me into what we build next. What I care about most is being straight with people, even when the answer isn't the one they want.\""
+  },
+  {
+   "jid": "f1003178e8be",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "So no invoicing?",
+   "conversation": [
+    "PROSPECT (heard): FieldPilot came in about thirty percent cheaper and they've got invoicing built in. Why would we pay more for you?",
+    "NATIVELY: That's a fair comparison, and I won't pretend price doesn't matter. What I'd want to understand is what the invoicing piece is actually worth to you day to day, because that's usually where the real cost sits. If FieldPilot covers what you need, I'd rather you know that than overpay for us. Where I'd push back is on what happens when something breaks or you need a change, and that's the part worth pricing out together. Can we put both side by side on your actual workflow this week?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't want to guess at what's in our build, so let me confirm exactly where invoicing sits for you and come back today. If it's not native, I'll show you how it works alongside what you already use. Either way, the real question is what it costs you when something breaks. Can we put both side by side this week?"
+  },
+  {
+   "jid": "7d79ec2795c7",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "they're comparing us with FieldPilot and just staying on spreadsheets. give me 3 discovery questions, a one line positioning statement, and what to say when they say we'll just keep the spreadsheets",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Three discovery questions: what does a typical week look like when the spreadsheet breaks down, and who feels it first? When you compare us with FieldPilot, what's the one thing that matters most in that decision? And if nothing changes for the next six months, what does that cost you?\n\nPositioning: we're the option that gets your field data into one place without the spreadsheet gymnastics or the FieldPilot learning curve.\n\nWhen they say they'll just keep the spreadsheets: that's fair, and if it's working, don't fix it. What I'd ask is what happens when someone leaves and takes the spreadsheet logic with them, or when you need a number you can't get from a cell. If that day comes, we're a quick conversation. Can I check back in a month?"
+  },
+  {
+   "jid": "3845dccebc95",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Okay, so what would Enterprise run us for our forty techs?",
+   "conversation": [
+    "PROSPECT (heard): We run Salesforce for the office team and QuickBooks Online for billing. On the Growth plan, do both of those connect?",
+    "NATIVELY: QuickBooks Online connects on Growth, so your billing side is covered. Salesforce is the one that doesn't, the Field Service connector sits on Enterprise. If Salesforce is the piece you need, that's the plan to look at. How central is Salesforce to your office workflow today?"
+   ],
+   "evidence_ids": [
+    "DSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Enterprise runs **$79 per tech per month**, so forty techs comes to **$3,160 a month**. That's the plan that gets you the Salesforce Field Service connector, and QuickBooks Online is included at that level too. Want me to put the Enterprise quote together with those forty seats so you can see it side by side with Growth?"
+  },
+  {
+   "jid": "dacec267dbf7",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "FieldPilot came in about thirty percent cheaper and they've got invoicing built in. Why would we pay more for you?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a fair comparison, and I won't pretend price doesn't matter. What I'd want to understand is what the invoicing piece is actually worth to you day to day, because that's usually where the real cost sits. If FieldPilot covers what you need, I'd rather you know that than overpay for us. Where I'd push back is on what happens when something breaks or you need a change, and that's the part worth pricing out together. Can we put both side by side on your actual workflow this week?"
+  },
+  {
+   "jid": "11b4f42fc12c",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "My guys are mostly fifty-plus. They will not use an app, they barely answer texts. I don't see this working.",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's fair, and honestly it's the most common thing I hear from crews like yours. So let's not build this around an app. The way it works for teams that won't touch one is a single text or a phone call, and if a guy does nothing, nothing changes for him. He still gets paid the same way he always has.\n\nCan I ask what they use today to know where they're supposed to be tomorrow morning?"
+  },
+  {
+   "jid": "907b78b2f06c",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Look, if I sign by Friday I need three things. Lock the price for three years, let us cancel anytime with thirty days notice, and give me net sixty on the invoice instead of whatever you normally do. Can you do all three?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Three years is a long lock, so let me be straight with you. I can hold the price for the term we sign, and thirty days' notice on cancellation is workable. Net sixty I'd have to take back to my team, since that's not our standard terms. If I get you a yes on all three, are you signing Friday?"
+  },
+  {
+   "jid": "40892c599081",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "We run Salesforce for the office team and QuickBooks Online for billing. On the Growth plan, do both of those connect?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "QuickBooks Online connects on Growth, so your billing side is covered. Salesforce is the one that doesn't, the Field Service connector sits on Enterprise. If Salesforce is the piece you need, that's the plan to look at. How central is Salesforce to your office workflow today?"
+  },
+  {
+   "jid": "529977b61798",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Your sheet says three years prepaid gets fifteen percent off, and your partner told us they can do twelve on top without approval. Can we stack those and call it done?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The 15% multi-year discount and the 12% partner discount are separate things, and I can't stack them. What I can do is the 3-year prepaid at 15% off, which is the better of the two. If you want, I'll put that in writing today so you have the number locked in."
+  },
+  {
+   "jid": "debc945cf8a0",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Honestly the owner hates change. What's the best way to get him on board with this?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The owner's not wrong to be cautious, so I'd start there rather than pitching him on change. What usually gets a resistant owner on board is showing him the cost of staying put, not the upside of moving. Can I ask what's actually driving this on your side, so I can frame it around his concerns instead of ours?"
+  },
+  {
+   "jid": "1e722cd36032",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "what should I ask next to qualify budget and timeline",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Budget first: \"What range have you set aside for this, and is it already approved for this quarter?\" Then timeline: \"When do you need this live, and what's driving that date?\" If they dodge the number, ask who signs off and what the approval step looks like."
+  },
+  {
+   "jid": "68898994ac38",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "So some of our jobs are servicing home medical equipment, and the techs write notes that can include patient stuff. Are you HIPAA compliant, will you sign a BAA, and where does the data actually live?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "We're SOC 2 Type II audited, with AES-256 encryption at rest and TLS 1.2 or higher in transit, and North American customer data is hosted in AWS us-east-2 in Ohio. On the BAA, that's a signed security addendum, so I'll route it to our security team through your account executive rather than confirm it on this call. Can I get that request started for you today?"
+  },
+  {
+   "jid": "c3f62f7b4240",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "I've got your price sheet right here. Growth is forty-four a seat and it includes the Salesforce connector. So we're good at forty-four with Salesforce, right?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Growth at forty-four a seat does include the Salesforce connector, so you're right on that. One thing to flag: Growth has a five-technician minimum, and the connector is listed as a $300 a month add-on, so I want to make sure we're reading the same line before I confirm the number. How many technicians are we covering?"
+  },
+  {
+   "jid": "f8ed5ff94d91",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "We need this live by November first, full stop. Just promise me it'll be live by the first and I'll sign today.",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can't promise a date I don't control, and I won't put you in a spot where a promise like that becomes the reason the deal sours. Here's what I can do: **Growth** onboarding typically runs **4 to 6 weeks** from signature, and that clock starts once your technician, customer and asset data is in clean within the first ten business days. So November first is realistic if we start now and the data lands on time. What I can commit to in writing is the onboarding plan, the data deadline, and a named resource on my side. Can we get your data owner on a 30-minute call this week so we can lock the schedule before you sign?"
+  },
+  {
+   "jid": "b42d8892d054",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "another one, less pushy",
+   "conversation": [
+    "USER (typed to Natively): what should I ask next to qualify budget and timeline",
+    "NATIVELY: Budget first: \"What range have you set aside for this, and is it already approved for this quarter?\" Then timeline: \"When do you need this live, and what's driving that date?\" If they dodge the number, ask who signs off and what the approval step looks like."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Softer version: \"What have you set aside for something like this, and does that need sign-off before we go further?\" Then, \"What's your ideal go-live, and what's driving that date?\" If they stay vague on money, ask who owns the budget and what the approval step looks like."
+  },
+  {
+   "jid": "4c82ec40d57d",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Come on. Give me your best price right now. I have budget sign-off until Friday and then it goes back into the pool.",
+   "conversation": [
+    "PROSPECT (heard): What's the lowest you can go on the mid tier if we're serious?",
+    "NATIVELY: I can't go below list on the mid tier, but if you're serious I can put together a package that makes the number work for you. What volume are we talking about, and when would you want it live?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I hear you on the Friday deadline, and I want to get you a real number, not a stall. Mid tier stays at list, but I can build the package around volume and start date so the total lands where you need it. Give me those two things and I'll have it to you today."
+  },
+  {
+   "jid": "009da4208057",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "closing line?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Thanks for the time today. I'll send over the summary and the next steps this afternoon, and let's get that follow-up on the calendar for early next week. Does Tuesday or Wednesday work better on your end?"
+  },
+  {
+   "jid": "f947dcefae3c",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "she wants to know what support hours and uptime guarantee we give on the mid tier. what do I say",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't want to quote you a number I can't stand behind, so let me pull the exact support hours and uptime commitment for the mid tier and confirm it in writing today. What I can say is that uptime and response times are spelled out in the agreement, so you'll have it in black and white. Does that work, or do you need it before your next review?"
+  },
+  {
+   "jid": "47c9717d9753",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "give me a good discovery question about how they handle emergency calls",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "What does an emergency call look like on your side today, from the moment it comes in to the moment someone's dispatched?"
+  }
+ ]
+}

@@ -12,8 +12,10 @@
 // otherwise be invisible until the user opens Settings.
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { GenieModal } from './ui/GenieModal';
 import { AlertTriangle, ExternalLink, X } from 'lucide-react';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import '../ui-components/LiquidGlassButton.css';
 
 type HindsightStatus =
   | { state: 'spawning'; reason?: string; logPath?: string }
@@ -30,12 +32,20 @@ const STATUS_BODY: Record<'spawn-failed' | 'unreachable' | 'spawning' | 'auth-fa
   'auth-failed':    { title: 'Hindsight Cloud key was rejected',       body: 'The endpoint answered but your Cloud account key is invalid. Update the key below.' },
 };
 
+/** A short, stable tag for a string (djb2), so a picture key names a reason without holding it. */
+function hashOf(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return text ? (h >>> 0).toString(36) : '';
+}
+
 export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating-card' }> = ({ variant = 'top-strip' }) => {
   const [status, setStatus] = useState<HindsightStatus | null>(null);
   // Per-session dismissal — once the user clicks X the banner stays hidden until a NEW
   // failure occurs (state goes null → failure again). Avoids re-showing the same nudge
   // for every poll cycle.
   const [dismissed, setDismissed] = useState(false);
+  const isLight = useResolvedTheme() === 'light';
 
   useEffect(() => {
     const handler = (data: HindsightStatus) => {
@@ -64,92 +74,72 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
     }
   }, []);
 
-  // Don't render anything on success states or when dismissed.
-  if (!status || status.state === 'ready' || dismissed) return null;
-  const copy = STATUS_BODY[status.state];
-  if (!copy) return null;
-
-  // Bug 3: the overlay/meeting window (top-strip variant) must NEVER surface
-  // Hindsight lifecycle failures during a meeting — the floating-card belongs
-  // exclusively to the launcher. Settings chip + post-call floating card are
-  // the launcher-resident surfaces; the overlay mount returns null here so
-  // the line-802 mount in App.tsx becomes a no-op for any non-ready state.
-  if (variant === 'top-strip') return null;
+  const copy = status && status.state !== 'ready' ? STATUS_BODY[status.state] : undefined;
 
   // Spawning: neutral (working) — smaller, less alarming. Failures: amber, with action.
-  const isFailing = status.state === 'spawn-failed' || status.state === 'unreachable' || status.state === 'auth-failed';
+  const isFailing = status?.state === 'spawn-failed' || status?.state === 'unreachable' || status?.state === 'auth-failed';
 
-  // Floating card (launcher window only). Translucent liquid-glass surface — one
-  // notch more glass than the opaque onboarding toaster family (TrialPromoToaster,
-  // PermissionsToaster) but not as far as the `backdrop-blur-[40px] saturate-[180%]`
-  // top-right pills in Launcher.tsx:516-520 (those are smaller popovers, not
-  // anchored toasters). Anchored on Launcher.tsx:1269 — bottom-right pill,
-  // translucency ratio, inner top-highlight ring + wide soft drop shadow.
-  //   - Surface: rgba(26,26,30,0.55) + backdropFilter blur(28px) saturate(180%)
-  //   - Inner top highlight: inset 0 1px 0 rgba(255,255,255,0.18) — the "glass" cue
-  //   - 1px hairline border rgba(255,255,255,0.08) with brighter top edge
-  //   - 24px border-radius, softened layered shadow (translucent surfaces don't
-  //     need as much lift as opaque ones)
-  //   - Spring entrance with blur-filter: stiffness 290, damping 25, mass 0.82
-  //   - Fine SVG fractalNoise grain overlay — works on translucent surfaces too
-  //     (mixBlendMode: overlay blends against whatever's behind)
-  //   - Position: fixed bottom-7 right-7 z-9999 width: 360px
-  // Amber failure cue: tinted glow + icon recolor; the chrome stays in family
-  // with the rest of the launcher onboarding toasters.
+  // Floating card (launcher window only): the Liquid Glass kit's clear pane,
+  // .lg-notice (ui-components/LiquidGlassButton.css), shared with the
+  // provider-change and quota notices — a light backdrop blur with the
+  // saturation on the backdrop, the kit's specular rim (top-lit in dark, a
+  // diagonal ring in light), and an amber hairline (.lg-notice-warn) while
+  // failing. Its text follows the theme through the text tokens. The rim
+  // replaces the old grain overlay and uniform 1px ring (design.md: a uniform
+  // perimeter ring reads as a plastic capsule).
+  //
+  // It opens and closes with the genie, as a notice rather than a modal: no
+  // dim, the launcher stays usable around it. It stays mounted so the close
+  // can play. It keeps NO picture: a picture of a see-through pane bakes in
+  // whatever was behind it when it was taken, so a kept one would pour out a
+  // stale launcher and then jump to the live one as it lands. The view key
+  // (state + hashed reason) still names what it shows.
   if (variant === 'floating-card') {
+    const open = !!status && !!copy && !dismissed;
+    const view = status ? `${status.state}|${hashOf(status.reason ?? '')}` : undefined;
+    // The stand-in for .lg-notice's lift while the genie runs.
+    const shadow = isLight ? '0 16px 36px -14px rgba(0,0,0,0.22)' : '0 22px 44px -18px rgba(0,0,0,0.7)';
+    const amber = isLight ? '#D97706' : '#FBBF24';
+    const hoverTint = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)';
     return (
-      <AnimatePresence>
-        {!dismissed && (
-          <motion.div
-            key="hindsight-floating-card"
-            role="status"
-            aria-live="polite"
-            initial={{ opacity: 0, scale: 0.93, y: 22, filter: 'blur(10px)' }}
-            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, scale: 0.95, y: 14, filter: 'blur(4px)' }}
-            transition={{ type: 'spring', stiffness: 290, damping: 25, mass: 0.82 }}
-            style={{
-              position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
-              width: 360,
-              borderRadius: 24,
-              background: 'rgba(26, 26, 30, 0.55)',
-              backdropFilter: 'blur(28px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-              boxShadow: isFailing
-                ? '0 24px 80px -16px rgba(0,0,0,0.55), 0 0 80px rgba(245,158,11,0.14), inset 0 1px 0 rgba(255,255,255,0.18)'
-                : '0 24px 80px -16px rgba(0,0,0,0.55), 0 0 80px rgba(255,255,255,0.02), inset 0 1px 0 rgba(255,255,255,0.18)',
-              padding: 20,
-              pointerEvents: 'auto',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-            } as React.CSSProperties}
-          >
-            {/* Fine organic grain — verbatim from TrialPromoToaster */}
-            <div aria-hidden style={{
-              position: 'absolute', inset: 0, borderRadius: 24, pointerEvents: 'none', zIndex: 0,
-              opacity: 0.024, mixBlendMode: 'overlay',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E")`,
-              backgroundSize: '180px 180px',
-            }} />
-            {/* Top inner-ring highlight — the "glass" feel from TrialPromoToaster */}
-            <div aria-hidden style={{
-              position: 'absolute', inset: 0, borderRadius: 24, pointerEvents: 'none', zIndex: 0,
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderTopColor: 'rgba(255,255,255,0.16)',
-            }} />
-
+      <GenieModal
+        open={open}
+        label="HindsightStatusBanner"
+        modal={false}
+        placement="bottom-right"
+        openingView={view}
+        keepPictures={false}
+        zIndex={9999}
+        padding={28}
+        wrapStyle={{ width: 360 }}
+        cardProps={{ role: 'status', 'aria-live': 'polite', 'data-genie-view': view }}
+        cardClassName={`lg-notice${isFailing ? ' lg-notice-warn' : ''}`}
+        cardStyle={{
+          padding: 20,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+          // The rim's corner fade, pinned to this card's 24px radius.
+          ['--lg-cap-2' as string]: '24px',
+        }}
+        shadow={shadow}
+        radius={24}
+      >
+        {open && status && copy ? (
+          <>
             <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <AlertTriangle
                   size={18}
-                  style={{ marginTop: 2, flexShrink: 0, color: isFailing ? '#FBBF24' : 'rgba(255,255,255,0.5)' }}
+                  style={{ marginTop: 2, flexShrink: 0, color: isFailing ? amber : 'var(--text-tertiary)' }}
                 />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', margin: 0 }}>
+                  <h3 style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', margin: 0 }}>
                     {copy.title}
                   </h3>
-                  <p style={{ color: 'rgba(230,230,235,0.78)', fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>
                     {copy.body}
-                    {status.reason ? <> — <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace', opacity: 0.85 }}>{status.reason}</span></> : null}
+                    {/* A reason is often a path with no spaces; let it break anywhere
+                        rather than run past the card's edge. */}
+                    {status.reason ? <> — <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace', opacity: 0.85, overflowWrap: 'anywhere' }}>{status.reason}</span></> : null}
                   </p>
                 </div>
                 <button
@@ -159,12 +149,12 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
                   style={{
                     flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
                     width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: '50%', opacity: 0.4, padding: 0, color: '#FFFFFF',
+                    borderRadius: '50%', opacity: 0.4, padding: 0, color: 'var(--text-primary)',
                     transition: 'opacity 150ms, background 150ms',
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.opacity = '0.85';
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                    e.currentTarget.style.background = hoverTint;
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.opacity = '0.4';
@@ -183,19 +173,19 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
                     style={{
                       padding: '6px 12px', borderRadius: 10,
                       fontSize: 12, fontWeight: 500,
-                      color: 'rgba(255,255,255,0.7)',
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.12)',
+                      color: 'var(--text-secondary)',
+                      background: isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.06)',
+                      border: `1px solid ${isLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)'}`,
                       cursor: 'pointer',
                       transition: 'background 150ms, color 150ms',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
-                      e.currentTarget.style.color = '#FFFFFF';
+                      e.currentTarget.style.background = isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)';
+                      e.currentTarget.style.color = 'var(--text-primary)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                      e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+                      e.currentTarget.style.background = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.06)';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
                     }}
                   >
                     View log
@@ -203,11 +193,22 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
                 </div>
               ) : null}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </>
+        ) : null}
+      </GenieModal>
     );
   }
+
+  // Don't render anything on success states or when dismissed.
+  if (!status || status.state === 'ready' || dismissed) return null;
+  if (!copy) return null;
+
+  // Bug 3: the overlay/meeting window (top-strip variant) must NEVER surface
+  // Hindsight lifecycle failures during a meeting — the floating-card belongs
+  // exclusively to the launcher. Settings chip + post-call floating card are
+  // the launcher-resident surfaces; the overlay mount returns null here so
+  // the line-802 mount in App.tsx becomes a no-op for any non-ready state.
+  if (variant === 'top-strip') return null;
 
   const borderClass = isFailing ? 'border-amber-500/40' : 'border-border-subtle';
   const bgClass = isFailing ? 'bg-amber-500/10' : 'bg-bg-item-surface';

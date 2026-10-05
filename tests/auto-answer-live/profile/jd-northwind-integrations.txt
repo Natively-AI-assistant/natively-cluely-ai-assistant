@@ -1,0 +1,16 @@
+Northwind — Senior Backend Engineer, Integrations (Remote, US)
+
+Northwind builds logistics software for mid-size retailers. The Integrations team owns every connector between Northwind and carriers, warehouse systems and marketplaces.
+
+What you'll do
+- Design and build reliable, idempotent integrations with carrier and warehouse APIs.
+- Own the event pipeline (Kafka) that syncs orders and shipments.
+- Improve observability and on-call health for integration services.
+
+What we're looking for
+- 4+ years of backend experience, ideally Go or Node.js.
+- Experience with third-party API integrations, webhooks and retries.
+- Event-driven systems (Kafka or similar), PostgreSQL.
+- Comfortable with on-call.
+
+Compensation: $150,000 – $175,000 base. Fully remote. Interview process: recruiter screen, technical screen, system design, hiring manager.

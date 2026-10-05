@@ -1,0 +1,428 @@
+[
+ {
+  "jid": "3f79a6143e1e",
+  "scores": {
+   "correctness": 9,
+   "grounding": 7.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Strong résumé-grounded story of the triage rule with correct numbers and a natural walk-through.",
+  "specific_problem": "The insight that delays were in items sitting before a decision is an embellishment not in the résumé.",
+  "minimal_improvement": "Keep the causal insight hedged or drop it, sticking to shadowing, pilot, rollout and the 6.4-to-4.4 result."
+ },
+ {
+  "jid": "b6bcd5af231f",
+  "scores": {
+   "correctness": 8,
+   "grounding": 8,
+   "role_fidelity": 9,
+   "direct_usefulness": 5,
+   "relevance": 7,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Safe, non-fabricated answer but generic; no role or company specifics available and none attempted conditionally.",
+  "specific_problem": "Vague 'close to the core of the business' could apply to any job; says 'from what I've seen' with nothing concrete.",
+  "minimal_improvement": "Tie to a concrete aspect of the role the user can fill in, or ask a brief clarifying question about the team's focus."
+ },
+ {
+  "jid": "114e8d1c4661",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 8.5,
+   "continuity": 9,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Correct team of nine with breakdown and $2.4M over 16 months, directly answering both parts.",
+  "specific_problem": "Markdown bold in a spoken line; repeats the team breakdown already given.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "a9010390be15",
+  "scores": {
+   "correctness": 8,
+   "grounding": 7.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 6,
+   "relevance": 7.5,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Reasonable non-fabricated pitch, but generic traits with no concrete proof; the closing question is a good pivot.",
+  "specific_problem": "Asserts work habits without evidence and no differentiator; feels template-like.",
+  "minimal_improvement": "Keep the habits as how-I-work and anchor to one concrete, verifiable strength or ask what the role most needs."
+ },
+ {
+  "jid": "f40c976befa6",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 7.5,
+   "relevance": 7.5,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Mature approach to an underperforming teammate without inventing a story.",
+  "specific_problem": "A 'tell me about a time' prompt gets a method; acceptable absent evidence.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "6dd5c8b6c11d",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 9,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Clear, practical prioritisation method that fits the interviewer's shifting-priorities context.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "dc91a38702e1",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 5.5,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 5,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Sensible deflect-to-band strategy, but the first line says 'what range I've set' instead of 'you've set', breaking the spoken line.",
+  "specific_problem": "Pronoun slip makes the opener nonsensical to say aloud; 'confident we can make the numbers work' slightly over-commits.",
+  "minimal_improvement": "Fix to 'the range you've set' and keep the rest."
+ },
+ {
+  "jid": "266f621331cb",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Correctly asks the user privately what was asked, with a sensible fallback for an opener.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "88fb231e2613",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 9.5,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Accurate role and team composition from the résumé, natural and concise.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "ce7270a2b6cc",
+  "scores": {
+   "correctness": 7,
+   "grounding": 3,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 5.5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "Direct and speakable, but invents the leaving reason and claims 'leaving on good terms' and invites reference checks with no evidence.",
+  "specific_problem": "Fabricated motivation and reference-safe status in a high-stakes honesty question.",
+  "minimal_improvement": "Use conditional framing or prompt the user privately; avoid asserting facts a reference check could contradict."
+ },
+ {
+  "jid": "3f4c0d90ffc6",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 9,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Balanced, speakable answer on public pushback consistent with the earlier respect answer.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "a5b421ffb9c1",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Accurate, résumé-grounded hardest project with the miss, the fix and the outcome.",
+  "specific_problem": "Could briefly say what made it hard beyond the slip (14 sites, vendor coordination).",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "877b19f8b8be",
+  "scores": {
+   "correctness": 8,
+   "grounding": 8.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 5.5,
+   "relevance": 8,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 9,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Non-fabricated but generic career-direction answer with no concrete direction.",
+  "specific_problem": "'The direction I'm already headed' is vague; nothing distinctive.",
+  "minimal_improvement": "Name one concrete growth direction conditionally, or tie to the role's scope."
+ },
+ {
+  "jid": "2ca81151b3ff",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Concrete, grounded differentiator backed by the shadowing and triage result; crisp and speakable.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "5c6c141628e1",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 8,
+   "direct_usefulness": 4.5,
+   "relevance": 5,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 5.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4.5,
+  "one_sentence_reason": "Evasive reply to a direct tenure question; avoids fabrication but sounds defensive.",
+  "specific_problem": "'I'd rather not frame it as only a year' pushes back and never gives a reason.",
+  "minimal_improvement": "Give a brief honest-sounding reason in conditional terms or ask the user privately for the real reason."
+ },
+ {
+  "jid": "ca5a9da07c72",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Gives usable first-person words for the difficult-teammates question without invented stories.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "39927e6335da",
+  "scores": {
+   "correctness": 8,
+   "grounding": 10,
+   "role_fidelity": 6,
+   "direct_usefulness": 4,
+   "relevance": 5,
+   "speakability_usability": 2,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 8,
+   "mode_fit": 4
+  },
+  "hard_flags": [
+   "visible_internal_reasoning"
+  ],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "On a heard surface it returns a meta note to the user instead of something the candidate could say.",
+  "specific_problem": "'I need the previous question or topic' is not speakable and exposes machinery.",
+  "minimal_improvement": "Give a short speakable clarifier, e.g. 'Why what, specifically, do you mean the move or the approach?'"
+ },
+ {
+  "jid": "12626a0d9842",
+  "scores": {
+   "correctness": 8,
+   "grounding": 4,
+   "role_fidelity": 9,
+   "direct_usefulness": 7,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Well-shaped weakness answer, but the weakness, the manager's view and the checkpoint fix are invented.",
+  "specific_problem": "Fabricated personal characterisation and improvement story.",
+  "minimal_improvement": "Frame as a genuine area the user identifies, or keep conditional; prompt user to confirm."
+ },
+ {
+  "jid": "f5236faa5862",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 8.5,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Accurately explains the 2021 career break, relocation, parent care, certificate and slotting simulation.",
+  "specific_problem": "'Planned' career break is a minor embellishment.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "ea7401ab6c4e",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 9.5,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Practical, process-first handling of cross-time-zone handoffs, tied to the async context.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ }
+]

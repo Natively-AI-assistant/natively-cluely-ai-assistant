@@ -29,6 +29,17 @@ export const MODE_REFERENCE_FILE_MAX_BYTES = SAFE_DOCUMENT_MAX_BYTES;
 export interface ModeReferenceFileIngestResult {
   id: string;
   fileName: string;
+  /**
+   * Extracted text content. Bug fix (2026-07-26): this was previously
+   * omitted from the returned result, even though it was fully available
+   * (`extracted.content`) — the renderer pushes this result straight into
+   * its `referenceFiles` list (ModesSettings.tsx's `uploadFile`) and then
+   * renders `file.content.length` unconditionally, so every successful
+   * upload crashed the Modes settings panel until the next full reload
+   * (which re-fetches via `modes:get-reference-files`, whose `rowToFile`
+   * mapping always included `content`).
+   */
+  content: string;
   pageCount?: number;
   extractedPageCount?: number;
   binarySha256: string;
@@ -79,6 +90,7 @@ export const ingestModeReferenceFile = async (
   return {
     id: file.id,
     fileName: extracted.fileName,
+    content: extracted.content,
     pageCount: extracted.pageCount,
     extractedPageCount: extracted.extractedPageCount,
     binarySha256: extracted.binarySha256,

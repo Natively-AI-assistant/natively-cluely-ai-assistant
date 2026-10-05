@@ -1,0 +1,161 @@
+/* src/components/ui/AccordionSection.css
+ *
+ * Motion for AccordionSection (Plans & Billing's "Change plan" and "How it
+ * works & refund policy" cards): transitions.dev #21, accordion expand, tuned
+ * to move like Apple's own disclosures.
+ *
+ * The body grows through grid-template-rows 0fr -> 1fr, so nothing measures
+ * the content, and the header chevron flips its "v" into a "^" instead of
+ * turning sideways.
+ *
+ * The snippet's variables are scoped to .acc-section rather than :root, as
+ * ProviderChangeNotice.css scopes its own to .lg-notice, so tuning here cannot
+ * leak. The .t-acc rules are the snippet verbatim. ProviderChangeNotice.css
+ * carries the same verbatim rules, and both copies are global, so keep them
+ * identical: tune through the variables, never the rules. The only additions
+ * are marked ADDED and are scoped to .acc-section.
+ */
+
+.acc-section,
+.acc-spring-turn {
+  /* Apple's default UI spring (SwiftUI .smooth: response 0.5, damping 1.0,
+     no overshoot) as a CSS curve. It starts from rest and settles softly:
+     half the height at ~130ms, 90% at ~300ms, still by ~450ms. The snippet's
+     smooth-out cubic covered 67% in the first 50ms, so the card snapped open
+     and then crawled. Sampled from x(t) = 1 - (1 + wt)e^(-wt), 40 steps. */
+  --acc-spring: linear(0, 0.0229, 0.0789, 0.1534, 0.2363, 0.3211, 0.4034, 0.4807, 0.5515, 0.6152, 0.6717, 0.7214, 0.7645, 0.8018, 0.8337, 0.861, 0.8841, 0.9036, 0.9201, 0.9339, 0.9454, 0.9551, 0.9631, 0.9698, 0.9753, 0.9799, 0.9837, 0.9868, 0.9894, 0.9915, 0.9932, 0.9946, 0.9958, 0.9968, 0.9975, 0.9982, 0.9987, 0.9991, 0.9995, 0.9998, 1);
+  /* The spring's full settle, the same both ways: one reversible motion. */
+  --acc-expand: 720ms;
+  --acc-collapse: 720ms;
+  /* A small glyph settles sooner: the same spring at response 0.4. */
+  --acc-chevron: 600ms;
+  --acc-ease: var(--acc-spring);
+  /* ADDED: the content's own clock (see the ADDED rules below). It arrives a
+     beat after the space opens and leaves before the space closes on it. */
+  --acc-content-in: 600ms;
+  --acc-content-fade-in: 350ms;
+  --acc-content-delay: 80ms;
+  /* Leaving rides the same spring, a little shorter than the collapse, so the
+     content dims just ahead of the edge closing on it. At 150ms smooth-out
+     it was at 28% within 36ms: the close popped. */
+  --acc-content-out: 400ms;
+  /* The fade-in starts fast: on the spring's slow start plus the delay, the
+     content read as late (20% visible at 145ms). */
+  --acc-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --acc-content-distance: 8px;
+  --acc-content-blur: 2px;
+}
+
+/* grid-template-rows 0fr → 1fr gives a clean height animation
+   with no JS measurement; the inner element clips overflow. */
+.t-acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] .t-acc-panel {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+.t-acc-panel-inner {
+  overflow: hidden;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] .t-acc-panel-inner {
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter var(--acc-expand) var(--acc-ease);
+}
+/* Flip the chevron vertically to turn the "v" into a "^".
+   scaleY(-1) about the centre passes through a flat line at
+   the midpoint (same look as a `d:` path morph) but animates
+   in every browser, unlike CSS `d:` morphing (Chromium only).
+   The chevron path is symmetric about the 16x16 viewBox
+   centre, so the flip lands exactly on the "^"; non-scaling
+   -stroke keeps the stroke width constant through the flip. */
+.t-acc-chevron {
+  display: inline-flex;
+  transform: scaleY(1);
+  transform-origin: center;
+  transition: transform var(--acc-chevron) var(--acc-ease);
+}
+.t-acc-chevron path { vector-effect: non-scaling-stroke; }
+.t-acc[data-open="true"] .t-acc-chevron {
+  transform: scaleY(-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-acc-panel, .t-acc-panel-inner, .t-acc-chevron {
+    transition: none !important;
+  }
+}
+
+/* ── ADDED: the content moves on its own clock ──────────────────────────────
+   In the snippet the clip box itself fades, on the height's clock, so opening
+   wipes still content into view and closing squashes rows that are still
+   70% visible. Here the clip box only clips, and the body inside it moves:
+
+   open   the space starts opening, then 80ms later the content settles in:
+          down 8px from under the header and sharpening from a 2px blur on
+          the same spring, while its fade starts fast so it never reads late
+   close  the content dims and drifts up on the spring, a little ahead of
+          the edge closing on it: still ~70% there at 50ms, gone by the time
+          about a quarter of the height is left, never a pop
+
+   The resting state is `none` for filter and transform, not blur(0) and
+   translateY(0): any filter or transform at rest makes this box the
+   containing block for position:fixed descendants.
+
+   The inner's override has to outrank the verbatim open rule in either
+   stylesheet order, so it is written at four classes. */
+.acc-section.t-acc .t-acc-panel-inner,
+.acc-section.t-acc[data-open="true"] .t-acc-panel-inner {
+  opacity: 1;
+  filter: none;
+  transition: none;
+}
+.acc-section-body {
+  opacity: 0;
+  filter: blur(var(--acc-content-blur));
+  transform: translateY(calc(var(--acc-content-distance) * -1));
+  transition:
+    opacity var(--acc-content-out) var(--acc-spring),
+    filter var(--acc-content-out) var(--acc-spring),
+    transform var(--acc-content-out) var(--acc-spring);
+}
+.acc-section[data-open="true"] .acc-section-body {
+  opacity: 1;
+  filter: none;
+  transform: none;
+  transition:
+    opacity var(--acc-content-fade-in) var(--acc-fade-ease) var(--acc-content-delay),
+    filter var(--acc-content-in) var(--acc-spring) var(--acc-content-delay),
+    transform var(--acc-content-in) var(--acc-spring) var(--acc-content-delay);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acc-section-body {
+    transition: none !important;
+  }
+}
+
+/* ── ADDED: a trigger's chevron that TURNS rather than flips ────────────────
+   The Pro teaser's "See pricing" pill turns its arrow a quarter (> to v)
+   instead of flipping it, but on the same spring and clock as the panel it
+   opens, so the two land together. The rotation itself stays on the element
+   (Tailwind's rotate utilities); this only times it. */
+.acc-spring-turn {
+  transition: transform var(--acc-chevron) var(--acc-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acc-spring-turn {
+    transition: none !important;
+  }
+}

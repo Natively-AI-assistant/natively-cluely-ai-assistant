@@ -1,11 +1,18 @@
 import { BrowserWindow, screen, app } from "electron"
 import { WindowHelper } from "./WindowHelper"
 import path from "node:path"
+import { attachNoActivate } from "./utils/windowsFocusPolicy"
+import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
+import { DEV_SERVER_URL } from './devServerUrl';
 
-const isDev = process.env.NODE_ENV === "development"
+// Force production mode if running as packaged app — matches WindowHelper.ts's
+// isDev predicate. A stray NODE_ENV=development in a packaged launch's
+// environment must not point this window at a dev server that doesn't exist
+// in a shipped build.
+const isDev = process.env.NODE_ENV === "development" && !app.isPackaged
 
 const startUrl = isDev
-    ? "http://localhost:5180"
+    ? DEV_SERVER_URL
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 type WindowActivationOptions = {
@@ -21,19 +28,35 @@ export class SettingsWindowHelper {
         return this.settingsWindow
     }
 
+    // The popup reports its panel size (update-content-dimensions) and the
+    // window hugs it. Applied while hidden too: the window is pre-warmed
+    // offscreen and only shown later, so ignoring hidden reports left the
+    // first open at the createWindow size until something inside happened to
+    // resize. Only a visible window is pulled back onto the screen; the
+    // offscreen pre-warm position must stay offscreen.
     public setWindowDimensions(win: BrowserWindow, width: number, height: number): void {
-        if (!win || win.isDestroyed() || !win.isVisible()) return
+        if (!win || win.isDestroyed()) return
 
         const currentBounds = win.getBounds()
         // Only update if dimensions actually change (avoid infinite loops)
         if (currentBounds.width === width && currentBounds.height === height) return
 
         win.setSize(width, height)
+        if (win.isVisible()) this.ensureVisibleOnScreen()
     }
 
     // Store offsets relative to main window
     private offsetX: number = 0
     private offsetY: number = 0
+
+    // When opened from the MEETING OVERLAY, the anchor is stored relative to
+    // the PANEL (offsetXFromPanel is measured from the panel's left edge =
+    // overlay.x + live left margin), not the raw window — the panel animates
+    // 600↔732 centered inside the fixed overlay window, so a window-relative
+    // offset would leave the dropdown behind when the width spring runs.
+    // WindowHelper.repositionOverlayPopovers() drives repositionForOverlay()
+    // on every overlay move/resize and panel-width anchor update.
+    private overlayAnchor: { offsetXFromPanel: number; offsetY: number } | null = null
 
     private lastBlurTime: number = 0
     private ignoreBlur: boolean = false;
@@ -64,6 +87,19 @@ export class SettingsWindowHelper {
             const bounds = mainWindow.getBounds();
             this.offsetX = x - bounds.x;
             this.offsetY = y - (bounds.y + bounds.height);
+            // Overlay-anchored open: remember the panel-relative offset so the
+            // dropdown follows the panel through width springs, drags, and
+            // content-height growth.
+            const overlayWin = this.windowHelper?.getOverlayWindow?.();
+            if (overlayWin && mainWindow === overlayWin) {
+                const margin = this.windowHelper?.getOverlayPanelLeftMargin?.() ?? 0;
+                this.overlayAnchor = {
+                    offsetXFromPanel: x - bounds.x - margin,
+                    offsetY: y - (bounds.y + bounds.height),
+                };
+            } else {
+                this.overlayAnchor = null;
+            }
         }
 
         if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
@@ -122,6 +158,16 @@ export class SettingsWindowHelper {
         }
 
         this.emitVisibilityChange(true);
+
+        // Settings staleness fix (2026-08-21): this window is created once at
+        // app start and only hidden/shown afterwards, so its React tree's
+        // mount-time fetches (credentials, profile/premium, toggle initial
+        // states) go stale across shows. The renderer's focus-refresh never
+        // fires on the overlay-anchored popover path (showInactive). Tell the
+        // renderer it was just shown so it can re-pull main-process state.
+        try {
+            this.settingsWindow.webContents.send('settings-window-shown');
+        } catch { /* renderer not ready — mount fetch covers first open */ }
     }
 
     public reposition(mainBounds: Electron.Rectangle): void {
@@ -133,6 +179,18 @@ export class SettingsWindowHelper {
         this.settingsWindow.setPosition(Math.round(newX), Math.round(newY));
     }
 
+    // Overlay-anchored variant: x tracks the PANEL's left edge (overlay.x +
+    // live margin), y tracks the overlay's bottom edge. Only applies when the
+    // dropdown was opened from the overlay.
+    public repositionForOverlay(overlayBounds: Electron.Rectangle, panelLeftMargin: number): void {
+        if (!this.overlayAnchor) return;
+        if (!this.settingsWindow || !this.settingsWindow.isVisible() || this.settingsWindow.isDestroyed()) return;
+        this.settingsWindow.setPosition(
+            Math.round(overlayBounds.x + panelLeftMargin + this.overlayAnchor.offsetXFromPanel),
+            Math.round(overlayBounds.y + overlayBounds.height + this.overlayAnchor.offsetY),
+        );
+    }
+
     public closeWindow(): void {
         if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
             this.settingsWindow.hide()
@@ -141,6 +199,9 @@ export class SettingsWindowHelper {
     }
 
     private emitVisibilityChange(isVisible: boolean): void {
+        // Drive the overlay click-catcher: an overlay-anchored settings
+        // dropdown must be dismissible by clicking anywhere outside Natively.
+        this.windowHelper?.notifyOverlayPopover?.('settings', isVisible && this.overlayAnchor !== null);
         const mainWindow = this.windowHelper?.getMainWindow() ?? null;
         if (!mainWindow) {
             console.warn('[SettingsWindowHelper] settings-visibility-changed dropped — no main window bound yet.');
@@ -158,7 +219,7 @@ export class SettingsWindowHelper {
         const isMac = process.platform === 'darwin';
         const windowSettings: Electron.BrowserWindowConstructorOptions = {
             width: 180, // Match React component width (SettingsPopup.tsx)
-            height: 200, // Trimmed; ResizeObserver in renderer pins exact height
+            height: 232, // Starting size only; the renderer reports the panel's real size
             frame: false,
             transparent: true,
             resizable: false,
@@ -191,9 +252,17 @@ export class SettingsWindowHelper {
         }
 
         this.settingsWindow = new BrowserWindow(windowSettings)
+        // Windows counterpart of the NSPanel stealth attributes applied below
+        // on macOS: WS_EX_NOACTIVATE so opening/clicking the settings popover
+        // mid-meeting never steals foreground focus from the meeting app.
+        // Typing in its fields is granted transiently by the preload focusin
+        // bridge (see windowsFocusPolicy). Dismissal does not rely on 'blur'
+        // for the never-focused case — the overlay popover click-catcher
+        // handles outside clicks on all platforms. No-op on macOS/Linux.
+        attachNoActivate(this.settingsWindow)
 
         if (process.platform === "darwin") {
-            this.settingsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+            setVisibleOnAllWorkspacesKeepingDock(this.settingsWindow, true, true)
             this.settingsWindow.setHiddenInMissionControl(true)
             this.settingsWindow.setAlwaysOnTop(true, "floating")
         }

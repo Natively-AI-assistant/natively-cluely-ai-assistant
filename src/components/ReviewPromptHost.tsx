@@ -24,24 +24,12 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import ReviewModal from "./ReviewModal"
-import { isMac } from "../utils/platformUtils"
 
-const PLATFORM = (() => {
-    const p = (typeof navigator !== "undefined" ? navigator.platform : "")?.toLowerCase() || ""
-    if (p.includes("mac")) return "macos" as const
-    if (p.includes("win")) return "windows" as const
-    if (p.includes("linux")) return "linux" as const
-    return "other" as const
-})()
-
-const APP_VERSION = (() => {
-    // Pull from window.electronAPI.getAppVersion if available; otherwise empty.
-    try {
-        return (window.electronAPI as any)?.appVersion || ""
-    } catch {
-        return ""
-    }
-})()
+// Provenance (platform, app version, hardware id) is derived in the MAIN
+// process by `review:submit` — see ipcHandlers.ts. This host used to sniff
+// navigator.platform and read a non-existent `electronAPI.appVersion` (always
+// "") and pass both down, but neither ever reached the API. Removed rather
+// than left as decoration.
 
 const FIRST_CHECK_DELAY_MS = 15_000
 const SUBSEQUENT_CHECK_DELAY_MS = 60_000  // re-check every minute in case the user lingers
@@ -75,6 +63,11 @@ const DEV_FIRST_CHECK_DELAY_MS = IS_DEV_BUILD
 function isDevForceShow(): boolean {
     try {
         if (typeof window === "undefined") return false
+        // Never in a packaged (production) build, whatever the URL or window
+        // flags say (toaster policy spec §10).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dev: boolean = !!(import.meta as any)?.env?.DEV
+        if (!dev) return false
         const params = new URLSearchParams(window.location?.search || "")
         const explicit = params.get("review")
         if (explicit === "force") return true
@@ -82,11 +75,7 @@ function isDevForceShow(): boolean {
         const w = window as any
         if (w.__reviewForceShow === true) return true
         if (w.__reviewForceShow === false) return false
-        // No explicit override — fall through to the build-time default.
-        // Vite sets `import.meta.env.DEV` per build. In Electron's prod build
-        // the renderer code is bundled without DEV; in dev it stays true.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const dev: boolean = !!(import.meta as any)?.env?.DEV
+        // No explicit override: the dev default.
         return dev
     } catch {
         return false
@@ -101,9 +90,15 @@ interface ReviewPromptHostProps {
     // pre-orchestrator behavior (check backend eligibility + dev hooks).
     isOpen?: boolean
     onClose?: () => void
+    /**
+     * What the user decided (toaster policy card ledger): a submitted rating
+     * is 'acted', "Maybe later" is 'later', "Never ask" is 'never'. Fired
+     * before onClose; the host records only the first one of a showing.
+     */
+    onOutcome?: (outcome: 'acted' | 'later' | 'never') => void
 }
 
-const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isOpenProp, onClose: onCloseProp }) => {
+const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isOpenProp, onClose: onCloseProp, onOutcome }) => {
     const [isOpenInternal, setIsOpen] = useState(false)
     const [forceTick, setForceTick] = useState(0)
     const checkedRef = useRef(false)
@@ -115,7 +110,7 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
     // Expose dev helpers on `window` so we can re-show / reset state from devtools
     // without re-launching the app. These are no-ops in production.
     useEffect(() => {
-        if (typeof window === "undefined") return
+        if (typeof window === "undefined" || !import.meta.env.DEV) return
         const w = window as any
         // Programmatic force-show (re-opens the modal even if backend says no).
         w.reviewForceShow = () => {
@@ -210,6 +205,7 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
     }, [isOrchestratorControlled, onCloseProp])
 
     const handleDismissLater = useCallback(() => {
+        onOutcome?.('later')
         void window.electronAPI?.reviewDismissLater?.()
         // Dev mode: keep showing after a soft dismiss so you can iterate.
         if (isDevForceShow()) {
@@ -219,9 +215,10 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
                 setIsOpen(true)
             }, 1500)
         }
-    }, [])
+    }, [onOutcome])
 
     const handleDismissForever = useCallback(() => {
+        onOutcome?.('never')
         void window.electronAPI?.reviewDismissForever?.()
         if (isDevForceShow()) {
             setTimeout(() => {
@@ -229,10 +226,12 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
                 setIsOpen(true)
             }, 1500)
         }
-    }, [])
+    }, [onOutcome])
 
     const handleSubmit = useCallback(async (payload: { rating: number; review_text: string | null }) => {
         const res = await window.electronAPI?.reviewSubmit?.(payload)
+        // A saved rating retires the prompt for good; a failed one is not a decision.
+        if (res?.ok) onOutcome?.('acted')
         // Dev mode: re-arm so you can run the funnel again without restart.
         if (isDevForceShow()) {
             setTimeout(() => {
@@ -241,7 +240,7 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
             }, 1500)
         }
         return res || { ok: false, error: "no_api" }
-    }, [])
+    }, [onOutcome])
 
     const handleTestimonial = useCallback(async (reviewId: string, payload: any) => {
         const res = await window.electronAPI?.reviewUpdateTestimonial?.({
@@ -263,9 +262,6 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
             onClose={onClose}
             onDismissLater={handleDismissLater}
             onDismissForever={handleDismissForever}
-            platform={PLATFORM}
-            appVersion={APP_VERSION}
-            hardwareId={undefined}
             submitReview={handleSubmit}
             updateTestimonial={handleTestimonial}
         />

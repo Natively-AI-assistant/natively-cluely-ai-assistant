@@ -1,0 +1,280 @@
+{
+ "batch": "b022-team-meet",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FTEAM-CTX-G1": {
+   "title": "Quillmark mobile Release 4.12 decision log",
+   "text": "Quillmark mobile - Release 4.12 decision log\nMaintained by: Nadia Petrov (release captain)\nTeam: Olu Bankole (engineering manager), Kwame Asante (iOS), Selin Aydin (Android), Mireille Laurent (QA lead), Farid Haddad (product manager)\n\n2 Sept - Rollout plan\nDecided: staged rollout at 1 percent, 10 percent, 50 percent, then 100 percent. Each step requires crash-free sessions at or above 99.6 percent over the previous 48 hours before moving on. Nadia makes the call at each step; no weekend promotions.\nDecided: halt the rollout and consider a rollback if crash-free sessions drop below 99.3 percent or the sync error rate goes above 0.5 percent.\n\n2 Sept - Platform order\nDecided: iOS ships first. Android follows one week later, because the WorkManager migration (Selin) needs an extra week of soak on low-memory devices. Farid asked to revisit if Android is ready early; Olu said no, one week gap regardless.\n\n4 Sept - Offline sync conflict UI\nDecided: the conflict-resolution UI for offline edits is deferred to 4.13. Reason: in the usability test, 5 of 8 participants misread the merge banner and thought their edits had been deleted. Design to rework the banner. 4.12 keeps the current last-write-wins behaviour.\n\n4 Sept - Home screen widget\nDecided: the dark-mode home screen widget is descoped entirely (not moved to 4.13). Usage of the existing light widget is under 2 percent of weekly actives, which did not justify the work.\n\n9 Sept - Push notifications\nDecided: migrate push delivery from Relaypost to the in-house Beacon service in 4.12. Owner: Kwame Asante. Target code-complete: 23 September. The Relaypost contract stays live until 31 December as a fallback.\n\n9 Sept - Consent screen\nLegal review of the new analytics consent screen copy was requested by Farid. Outcome: pending. Do not ship copy changes to the consent screen until Legal responds.\n\n11 Sept - Code freeze\nDecided: the 4.12 code freeze is Wednesday 16 September at 18:00 UTC. After freeze, only release-blocker fixes approved by Nadia.\n\n11 Sept - Accessibility audit\nDiscussed commissioning an external accessibility audit before 4.13. Shortlist: Brightline Access and Northfold. No vendor chosen. Budget: TBD, Olu to raise with finance. Nothing is to be promised to either vendor yet.\n\n14 Sept - Go/no-go\nThe go/no-go meeting for 4.12 is Friday 18 September. Approvers: Nadia Petrov, Olu Bankole, Mireille Laurent. Farid attends but is not an approver.\n\nOpen items\n- Legal response on consent copy (Farid chasing).\n- Android date depends on WorkManager soak results.\n- Accessibility audit budget (Olu)."
+  }
+ },
+ "items": [
+  {
+   "jid": "3a81f96cf7d3",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "what limits should I state up front?",
+   "conversation": [
+    "COLLEAGUE: For the offsite, the lakeside venue is 30 percent cheaper but it's a two hour drive.",
+    "USER (spoken): People on the Tuesday shift can't do a two hour drive.",
+    "COLLEAGUE: Fair. Let's ask HR for the headcount by Friday and decide then.",
+    "USER (typed to Natively): how do I volunteer to own the incident postmortem without overcommitting?",
+    "NATIVELY: I'd put it simply: say I'm happy to own the postmortem and the write-up, and that I'll need one person to help pull the timeline. That way I'm taking the part I can actually do, and flagging the piece I can't do alone before I'm on the hook for it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd keep it to two things: that I'll own the write-up and the follow-through on the action items, and that I need one person to help pull the timeline. That way I'm clear about what I'm taking on and what I need, before anyone assumes I'm covering all of it."
+  },
+  {
+   "jid": "3bdb1127dad8",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Farid wants to tell customers that Beacon supports silent background pushes on Android in 4.12. Can I confirm that in this meeting?",
+   "conversation": [],
+   "evidence_ids": [
+    "FTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can't confirm that from what's here. The decision log doesn't say anything about silent background pushes on Android, and the Android date is still open because it depends on the WorkManager soak results. What it does say is that iOS ships first and Android follows a week later, and Olu ruled out closing that gap even if Android is ready early. So I'd hold off telling customers that until the soak clears and the go/no-go on Friday 18 September."
+  },
+  {
+   "jid": "e077984a047b",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Who needs to know about this?",
+   "conversation": [
+    "COLLEAGUE: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "COLLEAGUE: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The people who need to know are whoever's downstream of the integration date, plus the vendor contact so we can pin down what changed and when. I'd flag it to the project lead first, then let the affected teams know the date moves by about two weeks."
+  },
+  {
+   "jid": "2ebd98ff5966",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Who owns this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have an owner on this yet. Let me check who picked it up and confirm with them, then I'll come back with a name and a date."
+  },
+  {
+   "jid": "651bf75edf45",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Why did that happen?",
+   "conversation": [
+    "COLLEAGUE: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "COLLEAGUE: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The vendor changed their API without telling us, so the integration slipped by about two weeks. That's the whole reason. The original date was already tight, so there wasn't much slack to absorb it."
+  },
+  {
+   "jid": "01fe4dca1a0e",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Give me the decisions so far as bullets, and mark any that sound unconfirmed.",
+   "conversation": [
+    "COLLEAGUE: We're going with weekly release trains starting October 12.",
+    "COLLEAGUE: Hotfixes bypass the train but need Priya's approval.",
+    "COLLEAGUE: Let's tentatively drop the Thursday deploy window and revisit if Support complains."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "1. Weekly release trains start October 12.\n2. Hotfixes bypass the train but need Priya's approval.\n3. Tentative: drop the Thursday deploy window, revisit if Support complains."
+  },
+  {
+   "jid": "ca716e707a1e",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "My manager is going to ask why a two-day task took two weeks. Give me an honest answer without excuses and without blaming QA, and tell me what I should offer to change so it doesn't happen again.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd own it straight: the task itself was two days of work, but I let it sit behind other things and didn't flag early that it was slipping. That's on me, not on QA. What I'd change is raising a blocker the day it appears instead of the day it's due, and breaking the work into smaller checkpoints so you can see progress before the deadline. Going forward I'll give you a heads-up the moment something's at risk, with a revised date, so there are no surprises."
+  },
+  {
+   "jid": "559cd74824cd",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Look, I need a straight answer. Will the checkout redesign be ready before the holiday code freeze, yes or no?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't give you a yes or no on that yet. I don't have a confirmed date for the redesign landing, and I don't want to promise something I can't back up. What I can do is check where it stands against the freeze date and come back to you with a real answer today."
+  },
+  {
+   "jid": "21b82fdb3361",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "What are the next steps?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the next steps in front of me, so I'll confirm them and send them over today. If you tell me which piece you need first, I'll make sure that's the one I come back on."
+  },
+  {
+   "jid": "619a2a6ffde0",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Do you want to send a follow-up note after this, or should I?",
+   "conversation": [
+    "COLLEAGUE: Before we start, are we doing the Thai place or the sandwich place for Thursday?",
+    "USER (spoken): Thai. Last time the sandwich place forgot half the order.",
+    "COLLEAGUE: Okay, Thai it is. I'll put the order in at eleven."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'll send it. I'll get a note out after we wrap, and I'll confirm the Thai order for Thursday at eleven."
+  },
+  {
+   "jid": "1ee9ea57c2cf",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Shorter. No blaming anyone.",
+   "conversation": [
+    "USER (typed to Natively): what should I say about the delay?",
+    "NATIVELY: I'd own it straight: say what slipped, what caused it, and what I'm doing to get back on track. No long excuses. If I don't have the new date yet, I'd say I'm confirming it and will follow up today."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd keep it short and neutral: say what slipped and where things stand now, without pointing at anyone. Something like \"we hit a delay on this, here's where it is and what I'm doing to get it back on track.\" If I don't have the new date yet, I'd say I'm confirming it and will follow up today."
+  },
+  {
+   "jid": "7a334cb9b78d",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "So what's the plan?",
+   "conversation": [
+    "COLLEAGUE: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "COLLEAGUE: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two weeks is real, but the API change is on the vendor, so let's not absorb it silently. I'll get a revised date and a written change notice from them, then we decide what to cut."
+  },
+  {
+   "jid": "3747bc875ab9",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Are we on the same page?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, we're on the same page. Let me confirm the next step and who's taking it, and I'll flag anything that still looks open before we wrap."
+  },
+  {
+   "jid": "022db3719a1c",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "ok draft the action items from that",
+   "conversation": [
+    "USER (typed to Natively): what have we decided so far?",
+    "NATIVELY: Nothing's been decided yet in this meeting. Once we land on something concrete, I'll note it down with the owner and any deadline so we can track it. If there's a specific decision you're thinking of, tell me which one and I'll confirm where it stands."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nothing's been decided yet in this meeting, so there are no action items to capture. Once we land on something concrete, I'll note it with the owner and any deadline so we can track it. If you have a specific action in mind, tell me which one and I'll log it."
+  },
+  {
+   "jid": "39ca33ecfe22",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "How do I steer this back on topic? We've spent ten minutes on logo colors and the release is the actual agenda.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let's park the logo colors for now and come back to them at the end if there's time. The release is what we need to land today, so I'd like to spend the rest of the meeting on that. Can we pick up from where the release stands?"
+  },
+  {
+   "jid": "8c6f437128d5",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "By when?",
+   "conversation": [
+    "COLLEAGUE (heard): Wait, did we actually decide anything about the pricing page, or did we just talk about it?",
+    "NATIVELY: Nothing's been decided on the pricing page yet. We talked it through, but there's no decision on record, so it's still open. If we want to close it, let's put a clear owner and a date on it before we move on.",
+    "COLLEAGUE (heard): If nothing was decided, who is supposed to decide?",
+    "NATIVELY: That's the gap. Nobody's been named as the owner, so right now it's undecided by default. My suggestion is we pick one person here and give them a date to bring the pricing page decision back."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let's put a date on it now rather than leave it floating. I'd say whoever takes it brings the pricing page decision back by **end of this week**, so we're not carrying it into the next one. Does that work for everyone, or do we need a bit more room?"
+  },
+  {
+   "jid": "dfff64e9b814",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Who should own this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd own it, unless someone closer to the work is already set up to drive it. What I'd want to confirm is who has the context and the time, then agree on one name and a date so it doesn't sit with everyone."
+  },
+  {
+   "jid": "02a0c5a5da2a",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Yellow based on what, though? Give me the actual reason.",
+   "conversation": [
+    "COLLEAGUE (heard): So where do we stand overall? Green, yellow, or red?",
+    "NATIVELY: I'd call it **yellow**. The core work is on track, but there are a couple of open items I want to close before I'd say green. Let me confirm the exact status and blockers, and I'll send a short update right after this."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The reason is that the core work is on track, but I've still got a couple of open items I want closed before I'd call it green. I don't have the specifics in front of me right now, so let me confirm the exact status and blockers and send you a short update right after this."
+  },
+  {
+   "jid": "09f45994ae87",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Another one, firmer.",
+   "conversation": [
+    "USER (typed to Natively): give me a pushback line on adding more scope this sprint",
+    "NATIVELY: I'd push back on adding scope mid-sprint. We committed to this set, and pulling in more now puts the current work at risk. If it's urgent, let's look at what we'd drop or move to next sprint, and decide that together."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd push back harder on adding scope mid-sprint. We committed to this set, and pulling in more now puts the current work at risk. If it's truly urgent, then something comes out, or it moves to next sprint. I'd rather protect what we've already committed to than take on more and deliver none of it well."
+  },
+  {
+   "jid": "18fc4dff90bb",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "If nothing was decided, who is supposed to decide?",
+   "conversation": [
+    "COLLEAGUE (heard): Wait, did we actually decide anything about the pricing page, or did we just talk about it?",
+    "NATIVELY: Nothing's been decided on the pricing page yet. We talked it through, but there's no decision on record, so it's still open. If we want to close it, let's put a clear owner and a date on it before we move on."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the gap. Nobody's been named as the owner, so right now it's undecided by default. My suggestion is we pick one person here and give them a date to bring the pricing page decision back."
+  }
+ ]
+}

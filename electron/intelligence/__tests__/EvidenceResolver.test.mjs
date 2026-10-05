@@ -181,6 +181,42 @@ describe('EvidenceResolver: falls through to hybrid RAG when OKF has no pack', (
     assert.equal(result.pack.items[0].sourceKind, 'mode_reference_chunk');
   });
 
+  test('a physical-weight question falls through past topical robot cards to a value-bearing raw chunk', async () => {
+    const contract = referenceFilesContract('What is the total weight of Robot X?');
+    let hybridCalled = false;
+    const resolver = new EvidenceResolver(fakeDeps({
+      classifyQuestion: () => ({ type: 'entity_lookup', isSynthesis: false, targetEntities: ['Robot X'] }),
+      knowledgeManager: {
+        getPackForFile: () => ({
+          packId: 'pack-weight', packVersion: 1,
+          cards: [
+            { id: 'parent', title: 'Robot X', body: 'Robot X is a dual-arm robot with a lightweight carbon fiber shell.', sourcePages: [16], sourceSections: ['2.3 Robot X'], entities: ['Robot X'], confidence: 'high', approvalStatus: 'approved' },
+          ],
+        }),
+      },
+      queryOkfCards: (pack) => pack.cards.map((card) => ({ card, score: 0.9 })),
+      hybridRetriever: {
+        retrieveHybrid: async () => {
+          hybridCalled = true;
+          return {
+            chunks: [{ sourceId: 'file-1', fileName: 'thesis.pdf', text: '[Section 2.3.2 | p17] Technical Specifications\nTotal weight: 55 kg.', chunkIndex: 0, score: 0.9, ftsScore: 0.6, vectorScore: 0.8 }],
+            formattedContext: '', usedFallback: false, usedHybrid: true,
+          };
+        },
+      },
+    }));
+    const result = await resolver.resolve({
+      turnId: 'turn-weight',
+      question: 'What is the total weight of Robot X?',
+      sourceContract: contract,
+      activeMode: { modeId: 'mode-test' },
+      requestedProperty: 'physical_weight',
+    });
+    assert.equal(hybridCalled, true, 'a topical robot card must not short-circuit a requested physical value');
+    assert.equal(result.strategy, 'hybrid_rag');
+    assert.match(result.pack.items[0].text, /55 kg/);
+  });
+
   test('a main control-system question falls through past ROS/agent-controller OKF decoys to the labeled spec row', async () => {
     const contract = referenceFilesContract('What main control system is listed for Robot X?');
     let hybridCalled = false;

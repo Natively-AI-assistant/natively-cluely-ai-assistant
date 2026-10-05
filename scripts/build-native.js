@@ -4,7 +4,20 @@ const os = require('os');
 const path = require('path');
 
 const nativeModulePath = path.join(__dirname, '..', 'native-module');
+// Suffix marking a moved-aside artifact the developer still needs. The stale
+// sweep skips these; everything else matching '.node.stale-' is swept freely.
+const RESCUE_MARKER = '.rescue-last-good';
 const buildAllMacTargets = process.env.NATIVELY_BUILD_ALL_MAC_ARCHES === '1';
+
+// Ensure Cargo binary directory (~/.cargo/bin) is in PATH if cargo is installed there
+const cargoBinDir = path.join(os.homedir(), '.cargo', 'bin');
+if (fs.existsSync(cargoBinDir)) {
+  const pathDelimiter = os.platform() === 'win32' ? ';' : ':';
+  const currentPath = process.env.PATH || '';
+  if (!currentPath.split(pathDelimiter).includes(cargoBinDir)) {
+    process.env.PATH = `${cargoBinDir}${pathDelimiter}${currentPath}`;
+  }
+}
 
 function verifyArtifacts(expectedArtifacts) {
   const missing = expectedArtifacts.filter((file) => !fs.existsSync(path.join(nativeModulePath, file)));
@@ -129,7 +142,6 @@ if (os.platform() === 'darwin') {
 
 } else {
   console.log(`Building for current platform: ${os.platform()}`);
-  runCommand('npx napi build --platform --release');
 
   const artifactMap = {
     win32: {
@@ -145,7 +157,128 @@ if (os.platform() === 'darwin') {
   };
 
   const expectedArtifacts = artifactMap[os.platform()]?.[os.arch()];
-  if (expectedArtifacts) {
-    verifyArtifacts(expectedArtifacts);
+
+  // Windows only: unblock the artifact copy when the app is running.
+  //
+  // Windows locks a loaded DLL against being written or deleted, so if Natively
+  // (or an electron dev instance) has the .node loaded, `napi build` dies at the
+  // very end with an opaque "Internal Error: Failed to copy artifact" — after a
+  // successful compile, which makes it look like a Rust failure. It is not; it
+  // is file locking.
+  //
+  // A loaded DLL CAN still be renamed, though (the running process keeps using
+  // it through its open handle — this is how self-updaters work). So move the
+  // old artifact aside and let napi write a fresh one. The stale copy is deleted
+  // when nothing holds it any more, which is usually the next build.
+  //
+  // macOS/Linux never hit this (they permit unlinking an in-use dylib), so this
+  // whole step is win32-gated and their behaviour is unchanged.
+  // Artifacts moved aside above, so a FAILED build can put them back. These are
+  // gitignored (.gitignore: native-module/*.node), so once the last-good binary
+  // is gone there is nothing to restore it from — losing it to a compile error
+  // costs a full working native module (WASAPI capture + the stealth keyboard
+  // hook) and trips LocalFallbackPreflight into telling the user to reinstall.
+  const movedAside = [];
+
+  if (os.platform() === 'win32' && expectedArtifacts) {
+    for (const file of fs.readdirSync(nativeModulePath)) {
+      if (!file.includes('.node.stale-')) continue;
+      // Preserve a rescue copy: when a restore fails, the catch below tells the
+      // developer the last-good binary "is still on disk at <path>". Sweeping
+      // every stale copy unconditionally deleted exactly that file on the next
+      // run, so the advice pointed at something this line had already removed.
+      // Anything renamed with the rescue marker is left alone; the developer
+      // moves or deletes it themselves.
+      if (file.includes(RESCUE_MARKER)) continue;
+      try {
+        fs.unlinkSync(path.join(nativeModulePath, file));
+      } catch {
+        // Still loaded by a live process — a later run will get it.
+      }
+    }
+    for (const artifact of expectedArtifacts) {
+      const artifactPath = path.join(nativeModulePath, artifact);
+      if (!fs.existsSync(artifactPath)) continue;
+      const stalePath = `${artifactPath}.stale-${Date.now()}`;
+      try {
+        fs.renameSync(artifactPath, stalePath);
+      } catch (err) {
+        console.warn(
+          `Warning: could not move the previous ${artifact} aside (${err.code || err.message}).\n` +
+            '         If the build fails with "Failed to copy artifact", close Natively and retry.'
+        );
+        continue;
+      }
+      // NOT deleted here. The previous revision unlinked the copy immediately,
+      // which in the ordinary case (app not running, so the unlink succeeds)
+      // destroyed the last-good binary BEFORE a build that might fail — and
+      // runCommand uses execSync, which throws and aborts the script. The
+      // rename alone is enough to unblock napi's copy; deletion can wait until
+      // the build has actually produced a replacement.
+      movedAside.push({ artifact, artifactPath, stalePath });
+    }
+  }
+
+  try {
+    runCommand('npx napi build --platform --release');
+    // Verified INSIDE the try, before the stale copies are swept. napi can exit
+    // 0 and still not leave the artifact this platform/arch expects — a
+    // toolchain that silently falls back to ia32, or a target-triple rename,
+    // both produce a differently-named .node. Sweeping first and verifying
+    // afterwards deleted the last-good binary and only then reported the
+    // failure, with the restore path already behind us.
+    if (expectedArtifacts) {
+      verifyArtifacts(expectedArtifacts);
+    }
+  } catch (err) {
+    // Put the last-good artifacts back so a failed build leaves the tree no
+    // worse than it found it. Skip any the build already replaced.
+    for (const { artifact, artifactPath, stalePath } of movedAside) {
+      if (fs.existsSync(artifactPath)) continue;
+      if (!fs.existsSync(stalePath)) continue;
+      try {
+        fs.renameSync(stalePath, artifactPath);
+        console.warn(`Build failed; restored the previous ${artifact}.`);
+      } catch (restoreErr) {
+        // The rename back failed (usually: the DLL is mapped by a running
+        // Natively). Mark the copy as a rescue file so the sweep at the top of
+        // the NEXT run leaves it alone — otherwise this message would point the
+        // developer at a path that the next build deletes before they get to it.
+        // Keep the '.node.stale-' segment so the file still looks like what it
+        // is, and APPEND the marker. The sweep matches on '.node.stale-' and
+        // then skips anything carrying the marker — if the rescue name dropped
+        // that segment it would fall outside the sweep's filter entirely, the
+        // marker check would be dead code, and any test of it would pass
+        // vacuously.
+        let rescuePath = stalePath;
+        try {
+          rescuePath = `${stalePath}${RESCUE_MARKER}`;
+          fs.renameSync(stalePath, rescuePath);
+        } catch {
+          rescuePath = stalePath; // could not even mark it; report where it is
+        }
+        console.error(
+          `Build failed AND the previous ${artifact} could not be restored ` +
+            `(${restoreErr.code || restoreErr.message}).\n` +
+            `         The last-good binary is at:\n           ${rescuePath}\n` +
+            `         Close Natively and rename it back to ${artifact} to recover.`
+        );
+      }
+    }
+    throw err;
+  }
+
+  // Build succeeded AND the expected artifact was verified present, so the
+  // copies are now genuinely stale. An unlink that fails here means the DLL is
+  // still mapped by a running Natively; it is out of the way, gitignored, and
+  // swept by the next build.
+  for (const { artifact, stalePath } of movedAside) {
+    try {
+      fs.unlinkSync(stalePath);
+    } catch {
+      console.log(
+        `Note: ${artifact} is in use (Natively is running); moved it aside so the build can proceed.`
+      );
+    }
   }
 }

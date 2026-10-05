@@ -1,0 +1,83 @@
+{
+ "model": "e5-small-v2",
+ "userData": "/var/folders/rr/s6z6gxfx68g48sbfn5g8_x2w0000gn/T/natively-live-corpus-e5-small-v2-1790022262658",
+ "uploads": {
+  "ok": 59,
+  "failed": [],
+  "ms": 179
+ },
+ "queries": [
+  {
+   "query_id": "q0001",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "ms": 764,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 1
+  },
+  {
+   "query_id": "q0002",
+   "track": "text",
+   "categories": [
+    "documentation",
+    "exact"
+   ],
+   "ms": 717,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 6
+  },
+  {
+   "query_id": "q0003",
+   "track": "text",
+   "categories": [
+    "exact",
+    "keyword"
+   ],
+   "ms": 692,
+   "ok": true,
+   "err": null,
+   "returned": 12,
+   "dense": 12,
+   "firstHitRank": 1
+  }
+ ],
+ "setConfig": {
+  "success": true,
+  "activeSpace": "local:xenova/e5-small-v2@q8@mean@v1:384",
+  "reindexRequired": false
+ },
+ "embeddingStatus": {
+  "configured": true,
+  "provider": "local",
+  "model": "Xenova/e5-small-v2@q8@mean@v1",
+  "dimensions": 384,
+  "space": "local:xenova/e5-small-v2@q8@mean@v1:384",
+  "location": "on-device",
+  "lightweight": false
+ },
+ "index": {
+  "ms": 105008,
+  "files": 59,
+  "byStatus": {
+   "ready": 59
+  },
+  "chunks": 900,
+  "embedded": 900
+ },
+ "matchedSnippetRate": 0.9722,
+ "modelLoadedInApp": "Xenova/e5-small-v2",
+ "expectedModel": "Xenova/e5-small-v2",
+ "selfPoison": 0,
+ "cloudProviderSelected": [
+  "Selected provider: gemini"
+ ]
+}

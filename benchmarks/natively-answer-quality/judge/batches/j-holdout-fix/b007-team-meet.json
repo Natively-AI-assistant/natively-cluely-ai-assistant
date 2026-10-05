@@ -1,0 +1,285 @@
+{
+ "batch": "b007-team-meet",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HTEAM-CTX-G1": {
+   "title": "Juniper weekly sync notes, 8 September",
+   "text": "Juniper weekly sync - notes\nDate: Tuesday 8 September 2026, 10:00-10:45\nChair: Marcus Oyelaran (engineering manager)\nAttendees: Hana Kobayashi (backend), Tomas Reyes (data engineering), Leila Farrokh (QA), Dev Anand (product), Siobhan Walsh (Finance Ops)\nNotes taken by: Leila Farrokh\n\n1. Shadow run results\nThe shadow run has been comparing new-pipeline invoices against Ledgerd output since 7 Sept. Reconciliation diff rate is 0.4 percent against the 0.1 percent target agreed with Finance Ops. Hana traced most of the diff to currency rounding in the proration path (mid-cycle plan changes on non-USD accounts). The remaining diffs look like timezone boundary issues on usage events stamped near midnight UTC.\nDecision: extend the shadow run by one week. The shadow run now ends Friday 25 September instead of 18 September.\n\n2. Cutover approach\nDiscussed big-bang versus staged. Siobhan and Leila both preferred staged, because Finance Ops cannot manually review more than about 300 invoices per day if something goes wrong.\nDecision: cutover will be done by customer cohort, not all at once. Cohort A is internal accounts plus 40 friendly customers, then Cohort B (roughly 2,000 accounts on monthly plans), then everyone else. Dates per the plan, adjusted for the shadow-run extension - Marcus to update the plan.\n\n3. Scope\nDev raised that Design has been mocking up a new invoice PDF layout.\nDecision: the invoice PDF redesign is out of scope for Juniper and moves to the Q1 backlog. Dev to tell Design.\n\n4. Rollback\nDecision: keep Ledgerd running in read-only mode for 30 days after the final cohort is cut over, so any invoice can be regenerated from the old system if needed.\n\n5. Pricing-table freeze\nSiobhan asked whether pricing-table changes should be frozen during cutover. Not decided. Siobhan to check with Revenue and bring an answer to the next sync (15 Sept).\n\n6. Go/no-go sign-off\nOpen question: who signs off on the Cohort A go/no-go. Marcus suggested Dev; Dev suggested Finance Ops should, since they own the reconciliation tolerance. Left open.\n\nRisks raised\n- Stream bus consumer lag spikes at month end. Tomas saw 11 minutes of lag on 31 August with the current 12 partitions.\n- The tax provider API is rate limited to 50 requests per second; the historical backfill may get throttled if it runs alongside live traffic.\n- Leila is on PTO 28 Sept - 2 Oct, which overlaps the planned Cohort A window. No QA backup named yet.\n\nAction items\n- Hana: fix currency rounding in the proration path. Due Thursday 17 Sept.\n- Tomas: backfill script for March-August usage events; dry run on staging by 22 Sept.\n- Leila: reconciliation dashboard showing diff rate by cohort. Due 21 Sept.\n- Dev: tell Design the PDF redesign moved to Q1; update the roadmap page.\n- Siobhan: ask Revenue about a pricing-table freeze; answer at the 15 Sept sync.\n- Marcus: confirm on-call coverage for cutover weekend with the SRE lead (Ines Duarte); update plan dates.\n\nNext sync: Tuesday 15 September."
+  },
+  "HTEAM-CTX-I1": {
+   "title": "Facilities update, Harbor Street office",
+   "text": "Facilities update - Harbor Street office\nFrom: Workplace team, 3 September 2026\n\nKitchen: the fourth-floor kitchen will be closed for renovation from 14 September to 2 October. During that time, coffee and snacks move to the third-floor lounge. The fourth-floor fridge will be emptied on Friday 11 September at 4 p.m.; anything left will be donated or thrown away, so please label containers you want moved.\n\nParking: the east lot is being resurfaced on the weekend of 19-20 September. Badge access to the garage on Pike Lane is extended to all staff for that weekend. Bicycle racks near the east entrance will move to the loading dock temporarily.\n\nMeeting rooms: rooms 4A and 4B will be noisier than usual on weekdays between 9 a.m. and 1 p.m. while contractors work. If you have customer calls, book rooms on the second floor instead; the booking system now shows a \"quiet room\" label.\n\nLost and found now lives at the front desk on the ground floor. Umbrellas unclaimed after 30 days will be donated.\n\nQuestions about the renovation go to the Workplace team channel. Thanks for your patience while we make the space better."
+  },
+  "HTEAM-CTX-G2": {
+   "title": "Project Juniper plan v3",
+   "text": "Project Juniper - plan v3\nOwner: Marcus Oyelaran. Last updated: 1 September 2026.\n\nGoal\nReplace the nightly Ledgerd batch invoicing job with an event-driven pipeline on the Stream bus, so usage shows up on a customer's draft invoice within 5 minutes instead of the next morning, with zero double-billing.\n\nIn scope\n- Usage event consumers for metered products (API calls, seats, storage).\n- Proration and plan-change handling for monthly and annual plans.\n- Historical backfill of March-August usage events into the new store.\n- Reconciliation tooling against Ledgerd during shadow mode.\n- Cutover runbook and rollback procedure.\n\nOut of scope\n- Invoice PDF template redesign.\n- Multi-currency discount rules (tracked separately by Revenue Engineering).\n- Changes to the customer-facing billing page.\n- Tax calculation logic (we call the existing tax provider as-is).\n\nMilestones\nM1 Event schema frozen - 21 Aug (done)\nM2 Shadow run - 7 Sept to 18 Sept\nM3 Cohort A cutover - 29 Sept\nM4 Cohort B cutover - 13 Oct\nM5 General cutover - 27 Oct\nM6 Ledgerd decommission - 30 days after M5\n\nDependencies\n- SRE (Ines Duarte): increase Stream bus partitions for the billing topic from 12 to 24 before M3. Requested 25 Aug, not yet scheduled.\n- Tax team (Rafael Lindqvist): refresh tax provider sandbox credentials before the backfill dry run. Current credentials expire 20 Sept.\n- Finance Ops (Siobhan Walsh): sign-off that the reconciliation diff is within the 0.1 percent tolerance before each cohort.\n- Data Platform: no schema migrations on the usage warehouse during the week of each cutover.\n\nRACI\nAccountable: Marcus Oyelaran\nResponsible: Hana Kobayashi (pipeline and proration), Tomas Reyes (backfill), Leila Farrokh (QA and reconciliation)\nConsulted: Siobhan Walsh (Finance Ops), Rafael Lindqvist (Tax)\nInformed: Grace Mbeki (Support lead), Dev Anand (Product)\n\nRisks\nR1 Month-end traffic spike overwhelms consumers. Likelihood medium, impact high. Mitigation: partition increase (SRE dependency); avoid any cutover in the last 3 days of a month.\nR2 Backfill throttled by the tax provider rate limit. Likelihood medium, impact medium. Mitigation: run the backfill overnight, capped at 40 requests per second.\nR3 Reconciliation diff does not reach tolerance. Likelihood low, impact high. Mitigation: extend the shadow run; do not cut over any cohort while the diff is above tolerance.\nR4 Support unprepared for invoice questions. Likelihood medium, impact low. Mitigation: support briefing one week before each cohort.\n\nSuccess measures\n- Usage event to draft invoice line in under 5 minutes (p95).\n- Reconciliation diff at or below 0.1 percent for two consecutive weeks before general cutover.\n- Zero double-billed invoices.\n\nNot covered in this plan\nBudget, vendor costs and headcount are tracked by Marcus separately and are not part of this document."
+  },
+  "HTEAM-CTX-C1": {
+   "title": "Juniper leadership status snapshot (draft)",
+   "text": "Juniper - status snapshot for leadership (DRAFT, forwarded by Dev Anand, 14 Sept)\n\nSummary: GREEN. The shadow run is going well and the diff rate is now 0.1 percent, within target. Cohort A cutover is locked for 22 September.\n\nDetail\n\nShadow run: started 7 Sept. The latest daily reconciliation shows a diff of 0.3 percent, mostly rounding on non-USD accounts; a fix is in progress with Hana.\n\nCutover sequence: Cohort A (internal plus friendly customers), then Cohort B, then general availability for everyone else. Cohort A target: 29 Sept. Cohort B and general dates to be confirmed once Cohort A has run for a full billing cycle.\n\nScope: the invoice PDF redesign ships with Cohort B, so customers see the new layout on their first event-driven invoice. Design has final mocks.\n\nOwners: Hana - pipeline. Tomas owns the reconciliation dashboard. Leila - QA.\n\nOwner table\nWorkstream | Owner\nPipeline and proration | Hana Kobayashi\nBackfill | Tomas Reyes\nReconciliation dashboard | Leila Farrokh\nQA | Leila Farrokh\n\nRollback: Ledgerd stays available for two weeks after the final cutover, then it is switched off.\n\nInfrastructure: the SRE partition change for the billing topic is done.\n\nAsks for leadership: none at this time.\n\nRisks: none blocking. Month-end volume is being watched, and Support has been told to expect a few questions from Cohort A customers about the new invoice timing.\n\nNext milestone: Cohort A go/no-go, sign-off by Marcus.\n\nNote from Dev: I pulled this together from Slack and the plan doc, so some of it may be a bit out of date - shout if anything is wrong before I send it up on Thursday."
+  }
+ },
+ "items": [
+  {
+   "jid": "e92580804254",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Okay, so while we're in the pipeline anyway, can we sneak the multi-currency discounts in? It's maybe two days of work, customers keep asking for it, and if we don't do it now we'll have to reopen the whole thing in Q1. Can we just agree to that now?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I get the appeal, but I don't want to fold it in just because we're already in there. Two days is an estimate, and scope added mid-pipeline is how timelines slip. Let's size it properly and decide on its own merits, not on the fear of reopening it in Q1."
+  },
+  {
+   "jid": "4ce02de08cf4",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Shorter, just action items.",
+   "conversation": [
+    "USER (typed to Natively): Using last week's notes, write me a recap I can read at the start of today's sync: what we decided, what's still open, and anything that changed dates.",
+    "NATIVELY: Here's the recap from last week's sync on 8 September.\n\nDecisions: the shadow run extends a week, now ending Friday 25 September. Cutover goes by cohort, not big-bang, starting with Cohort A. The invoice PDF redesign is out of scope and moves to the Q1 backlog. Ledgerd stays read-only for 30 days after the final cohort.\n\nStill open: who signs off on the Cohort A go/no-go, and whether pricing-table changes get frozen during cutover, with Siobhan bringing an answer today.\n\nDate change: the shadow run moved from 18 September to 25 September, and Marcus is updating the plan dates to match."
+   ],
+   "evidence_ids": [
+    "HTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Action items from last week's sync:\n\nHana: fix currency rounding in the proration path, due Thursday 17 September.\nTomas: backfill script for March to August usage events, dry run on staging by 22 September.\nLeila: reconciliation dashboard showing diff rate by cohort, due 21 September.\nDev: tell Design the PDF redesign moved to Q1 and update the roadmap page.\nSiobhan: ask Revenue about a pricing-table freeze, answer at today's sync.\nMarcus: confirm on-call coverage for cutover weekend with the SRE lead, Ines Duarte, and update plan dates."
+  },
+  {
+   "jid": "ec0cf5f14bbb",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Just, like, fewer surprises.",
+   "conversation": [
+    "COLLEAGUE (heard): I just feel like we need to make the whole thing more robust before launch, you know what I mean?",
+    "NATIVELY: That makes sense. Before we lock the launch, what does robust mean to you here, is it stability under load, edge cases, or something in the flow that's been bugging you? If you tell me the specific worry, I can say what we'd need to shore up and what that does to the timeline."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Got it, fewer surprises. So the goal is that nothing catches us off guard after launch. What I'd want to pin down is where the surprises would come from: things we haven't tested, or things we know are shaky. If you name the two or three spots that worry you most, I can say what it takes to close them and what that does to the date."
+  },
+  {
+   "jid": "8951481b6999",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "I just don't think we should ship the retry change this sprint. It touches too much of the pipeline.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a fair concern, and I don't want to push something through that puts the pipeline at risk. Can we scope it down to the smallest piece that's safe to ship, or hold it and pick it up next sprint? I'd rather agree on that now than leave it open."
+  },
+  {
+   "jid": "3f14931b659c",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Using last week's notes, write me a recap I can read at the start of today's sync: what we decided, what's still open, and anything that changed dates.",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Here's the recap from last week's sync on 8 September.\n\nDecisions: the shadow run extends a week, now ending Friday 25 September. Cutover goes by cohort, not big-bang, starting with Cohort A. The invoice PDF redesign is out of scope and moves to the Q1 backlog. Ledgerd stays read-only for 30 days after the final cohort.\n\nStill open: who signs off on the Cohort A go/no-go, and whether pricing-table changes get frozen during cutover, with Siobhan bringing an answer today.\n\nDate change: the shadow run moved from 18 September to 25 September, and Marcus is updating the plan dates to match."
+  },
+  {
+   "jid": "96b4e85200ee",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Nobody volunteered to write the cutover runbook. Give me a line to ask for an owner without dumping it on the new hire.",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Nobody's picked up the cutover runbook yet, and I don't want to hand it to someone who's still finding their footing. Who's got the most context on the cutover steps and can take the first draft? I'll pair with whoever raises a hand so it's not a solo lift."
+  },
+  {
+   "jid": "a9112082747d",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Is the invoice PDF redesign part of Juniper or not? Design keeps pinging me about it.",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, the invoice PDF redesign isn't part of Juniper. It's listed as out of scope in the plan, along with the multi-currency discount rules, the customer-facing billing page changes, and the tax calculation logic. Juniper is the Ledgerd batch invoicing replacement, so Design should route that one elsewhere."
+  },
+  {
+   "jid": "91964094c31a",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Why not fix forward?",
+   "conversation": [
+    "COLLEAGUE (heard): I just don't think we should ship the retry change this sprint. It touches too much of the pipeline.",
+    "NATIVELY: That's a fair concern, and I don't want to push something through that puts the pipeline at risk. Can we scope it down to the smallest piece that's safe to ship, or hold it and pick it up next sprint? I'd rather agree on that now than leave it open."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fix forward works when the blast radius is small and we can watch it in production. Here the retry change touches too much of the pipeline, so a bad deploy could take down more than the retry path itself. I'd rather ship the smallest safe slice now and fix forward on that, or hold the rest for next sprint. Which do you want to commit to?"
+  },
+  {
+   "jid": "f3bab6d0c221",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Sorry, who's got the backfill script again? I lost track.",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Tomas has the backfill script. He's doing a dry run on staging by 22 September."
+  },
+  {
+   "jid": "603d7d988d74",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Leadership is asking whether Juniper is green, yellow, or red right now. What are you telling them?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd give it a **yellow** right now. The work is moving, but I want to confirm where the open items and any blockers actually stand before I call it green. Let me pull that together and send leadership a short update right after this."
+  },
+  {
+   "jid": "e732b0aa08a4",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Marcus just asked me to also pick up the tax sandbox credentials work. I'm already on the consumer rewrite and I'm on call next week. Give me words to push back without sounding like I'm refusing, offer what could slip instead, and ask him to choose.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I want to help with the tax sandbox credentials, and I don't think I can take it on without something moving. I'm already carrying the consumer rewrite, and I'm on call next week, so adding a third thread means one of them gets less attention than it needs. The rewrite is the one I'd protect, but I could hand off part of it, or we could push the credentials work to the week after. Which of those works better for you?"
+  },
+  {
+   "jid": "73cb79e4fce1",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "It also says the PDF redesign ships with Cohort B. I thought that got pushed out. Which is it?",
+   "conversation": [
+    "COLLEAGUE (heard): The leadership snapshot Dev forwarded says Cohort A is locked for the 22nd. So we pulled it in a week? When did that happen?",
+    "NATIVELY: The snapshot's a draft Dev put together from Slack and the plan doc, and he flagged it may be out of date. It says Cohort A is locked for the 22nd, but the detail section still has the target at 29 September. So I wouldn't treat the 22nd as a pulled-in date yet. I'll confirm with Dev before it goes up."
+   ],
+   "evidence_ids": [
+    "HTEAM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The snapshot does say the PDF redesign ships with Cohort B, but it also says Cohort B's date is still to be confirmed, so nothing there has it pushed out. If you've heard it moved, that's not in this draft. I'll check with Dev and confirm before it goes up."
+  },
+  {
+   "jid": "58ee4db381e4",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "The leadership snapshot Dev forwarded says Cohort A is locked for the 22nd. So we pulled it in a week? When did that happen?",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The snapshot's a draft Dev put together from Slack and the plan doc, and he flagged it may be out of date. It says Cohort A is locked for the 22nd, but the detail section still has the target at 29 September. So I wouldn't treat the 22nd as a pulled-in date yet. I'll confirm with Dev before it goes up."
+  },
+  {
+   "jid": "aa8b5b023e2c",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Did we decide last week whether pricing-table changes are frozen during cutover? If we did, who made the call, and give me the one line I should say to the group about it.",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, that one wasn't decided. Siobhan raised the pricing-table freeze question at the 8 September sync, and the notes record it as not decided, with Siobhan checking with Revenue and bringing an answer to the next sync on 15 September. So there's no call and no owner to name yet.\n\nWhat you can say to the group: \"Pricing-table freeze is still open, Siobhan is checking with Revenue and we'll have an answer at the 15 September sync.\""
+  },
+  {
+   "jid": "df31b266f7ed",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "When's Hana's fix due?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the date in front of me. Let me check where Hana's fix stands and when it's landing, and I'll confirm the due date right after this."
+  },
+  {
+   "jid": "4245d6e99ee8",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Hold on, I thought we agreed last week to cut everyone over at once and drop the cohort idea. Why are we still talking about cohorts?",
+   "conversation": [],
+   "evidence_ids": [
+    "HTEAM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes from the 8 September sync actually went the other way. Siobhan and Leila both preferred staged, since Finance Ops can't manually review more than about 300 invoices a day if something goes wrong, so the decision was cutover by customer cohort, not all at once: Cohort A is internal accounts plus 40 friendly customers, then Cohort B at roughly 2,000 monthly-plan accounts, then everyone else. If you remember agreeing to big-bang, that's worth flagging, because the plan Marcus is updating has the cohort dates in it."
+  },
+  {
+   "jid": "980c7ce3e23f",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Sum up what we just decided in two sentences so I can say it back to the group.",
+   "conversation": [
+    "COLLEAGUE: Okay, proposal. We don't freeze pricing changes for the whole month, just the cutover weekend, so Friday six p.m. to Monday nine a.m.",
+    "COLLEAGUE: Revenue can live with that as long as they get a heads-up by the Wednesday before.",
+    "COLLEAGUE: Fine by me. And Ledgerd stays read-only for the thirty days, no change there.",
+    "COLLEAGUE: Great, that's settled then. Leila, can you send the heads-up to Revenue? Actually no, you're out that week. Siobhan, you own it, it's your contact anyway.",
+    "COLLEAGUE: Yep, I'll send it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "We're freezing pricing changes only for the cutover weekend, Friday six p.m. to Monday nine a.m., and Revenue gets a heads-up by the Wednesday before. Ledgerd stays read-only for the thirty days, and Siobhan owns sending that heads-up to Revenue."
+  },
+  {
+   "jid": "c708b78b8417",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "I need a yes or no. Can you have the consumer rewrite done by Friday? I'm telling leadership in an hour.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't give you a straight yes or no on that yet. Let me check where the rewrite actually stands and what's left, and I'll come back to you before you talk to leadership."
+  },
+  {
+   "jid": "61fba754d6e9",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "I just feel like we need to make the whole thing more robust before launch, you know what I mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That makes sense. Before we lock the launch, what does robust mean to you here, is it stability under load, edge cases, or something in the flow that's been bugging you? If you tell me the specific worry, I can say what we'd need to shore up and what that does to the timeline."
+  },
+  {
+   "jid": "2ae42518b17e",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Okay, so what's the action item, and whose is it?",
+   "conversation": [
+    "COLLEAGUE (heard): I just feel like we need to make the whole thing more robust before launch, you know what I mean?",
+    "NATIVELY: That makes sense. Before we lock the launch, what does robust mean to you here, is it stability under load, edge cases, or something in the flow that's been bugging you? If you tell me the specific worry, I can say what we'd need to shore up and what that does to the timeline.",
+    "COLLEAGUE (heard): Just, like, fewer surprises.",
+    "NATIVELY: Got it, fewer surprises. So the goal is that nothing catches us off guard after launch. What I'd want to pin down is where the surprises would come from: things we haven't tested, or things we know are shaky. If you name the two or three spots that worry you most, I can say what it takes to close them and what that does to the date."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The action item is on me: I'll come back with the two or three spots most likely to surprise us after launch, and what closing each one takes. Once I have your list, I'll say what it does to the date."
+  }
+ ]
+}

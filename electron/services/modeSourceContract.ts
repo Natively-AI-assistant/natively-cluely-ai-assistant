@@ -53,7 +53,14 @@ export type ContractTemplateType =
   | 'recruiting'
   | 'team-meet'
   | 'lecture'
-  | 'technical-interview';
+  | 'technical-interview'
+  // Campaign-3 (fix/answer-policy-engine, 2026-07-19): the 8th built-in mode.
+  // "Seminar Mode" enforces the strictest answer policy — evidence required,
+  // off-document Qs answered general-labeled with a visible "not from your
+  // reference files" preamble (NEVER a refusal in this built-in mode).
+  | 'seminar'
+  // 9th built-in (2026-08-23): support / call-center.
+  | 'call-center';
 
 export type ModeConflictPolicy =
   | 'reference_files_win'
@@ -75,6 +82,34 @@ export interface ModeSourceContract {
     allowHindsight: boolean;
   };
   /**
+   * Campaign-3 (2026-07-19, fix/answer-policy-engine): per-mode grounding
+   * strictness profile. Drives the Answer Policy Engine's behavior matrix
+   * (TurnPlanner.ts §2.3): `evidencePreference` controls how strongly the
+   * model is steered to use uploaded/reference evidence; `onNoEvidence`
+   * controls what happens when the evidence probe returns NONE — including
+   * the Seminar Mode's "not in your reference files — from general
+   * knowledge: ..." preamble. Defaults to `preferred` / `answer_general_labeled`
+   * for the 7 existing built-in modes when absent (read side uses `??`).
+   *
+   * Migration: legacy contracts without this field keep working — readers
+   * must default to `preferred` / `answer_general_labeled` on absence, and
+   * writers may set it only for Seminar Mode (or future strict modes).
+   * When `templateType === 'seminar'` and this field is absent, the
+   * reader should fall back to `required` / `say_not_found_then_answer_general`.
+   */
+  groundingProfile?: GroundingProfile;
+  /**
+   * Campaign-3 (2026-07-19): the strictness selector the user picked in
+   * the Modes Manager UI (Campaign 3 §3 step 2). One of three: Flexible
+   * (= `preferred` / `answer_general_labeled`), Prefer my files (= the
+   * same defaults but the probe is loaded more aggressively), Files only
+   * (= Seminar = `required` / `say_not_found_then_answer_general`).
+   * Persisted on the contract so a future read can recover the user's
+   * explicit choice. UI-side enum; not consulted by the kernel today
+   * (the kernel reads `groundingProfile` directly).
+   */
+  strictness?: 'flexible' | 'prefer_my_files' | 'files_only';
+  /**
    * How this contract came to exist. Surfaced in the UI/telemetry so a
    * silently-migrated legacy mode is visibly distinguishable from a user's
    * explicit, confirmed choice. Never used as a security boundary itself.
@@ -93,6 +128,16 @@ export interface ModeSourceContract {
    */
   migrationRevision?: number;
   /**
+   * Revision of the DEFAULT SEED rules this contract was built under, for
+   * `origin: 'default_new_mode'` only (T8, 2026-08-28).
+   *
+   * Separate from `migrationRevision` on purpose: that one versions the
+   * prompt-heuristic migration, and re-using it to ship a seed change would
+   * re-run the prompt migration over every migrated contract in every user's
+   * database. See CURRENT_SEED_REVISION.
+   */
+  seedRevision?: number;
+  /**
    * Which `templateType` this contract was SEEDED for, for
    * `origin: 'default_new_mode'` only. Defense-in-depth self-heal field
    * (Knowledge Source canonical-gate repair, 2026-07-16): if a mode's
@@ -105,6 +150,53 @@ export interface ModeSourceContract {
    * of template).
    */
   seededForTemplateType?: ContractTemplateType;
+}
+
+/**
+ * Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.3 + §3 step 2):
+ * the strictness profile carried on a {@link ModeSourceContract}. Mirrors
+ * `GroundingProfile` in `electron/llm/TurnPlanner.ts` but defined here too
+ * so the contract type is self-contained for lightweight contexts that
+ * don't import TurnPlanner. Drift is guarded by a TurnPlanner unit test
+ * (electron/llm/__tests__/TurnPlanner.test.mjs).
+ *
+ * Resolution order in TurnPlanner.groundingProfileFor() (iter12):
+ *   1. Explicit `sourceContract.groundingProfile` (per-mode override)
+ *   2. `sourceContract.templateType === 'seminar'` (per-mode signal)
+ *   3. `NATIVELY_SEMINAR_MODE` env flag (legacy / migration window)
+ *   4. `DEFAULT_GROUNDING_PROFILE` (the 7 built-in modes)
+ *
+ * @see {@link SEMINAR_GROUNDING_PROFILE} — the strictest preset (founder spec)
+ * @see {@link DEFAULT_GROUNDING_PROFILE} — the preferred/labeled preset (default)
+ * @see {@link SourceBadge.computeSourceBadge} — consumer that emits the
+ *      visible "Not in your reference files — from general knowledge:"
+ *      preamble when this profile is `required` + `say_not_found_then_answer_general`
+ * @see traces3/SEMINAR.md — the Seminar Mode user guide
+ */
+export interface GroundingProfile {
+  /**
+   * How strongly the model is steered toward using uploaded/reference
+   * evidence. `required` (Seminar) means off-evidence answers require
+   * the explicit preamble; `optional` (custom compliance modes) means
+   * evidence is used if available but not required.
+   */
+  evidencePreference: 'required' | 'preferred' | 'optional';
+  /**
+   * Behavior when the evidence probe returns NONE on a given turn.
+   * `answer_general_labeled` — the default; the model answers and
+   * the answer carries the "General knowledge" badge.
+   * `say_not_found_then_answer_general` — Seminar Mode; the answer
+   * is prefixed with "Not in your reference files — from general
+   * knowledge:" so the audience can tell.
+   * `refuse` — only for compliance custom modes; NEVER for built-ins.
+   */
+  onNoEvidence: 'answer_general_labeled' | 'say_not_found_then_answer_general' | 'refuse';
+  /**
+   * Visual style for the source badge in the overlay.
+   * Currently both styles render as a small pill; future work may
+   * add per-style colors / icons.
+   */
+  labelStyle: 'badge' | 'paragraph';
 }
 
 /**
@@ -122,6 +214,29 @@ export interface ModeSourceContract {
  *           repair).
  */
 export const CURRENT_MIGRATION_REVISION = 2;
+
+/**
+ * Revision of the DEFAULT SEED rules, for `origin: 'default_new_mode'` only.
+ *
+ * DELIBERATELY SEPARATE from CURRENT_MIGRATION_REVISION, which versions the
+ * prompt-heuristic migration. Bumping that one to ship a seed change would
+ * re-run the prompt migration over every `migrated_from_prompt` contract in
+ * every user's database — a far wider blast radius than the change warrants,
+ * and it breaks the standing invariant that a prompt-migrated contract is never
+ * overwritten by anything but a newer PROMPT migration. Seed semantics and
+ * migration semantics change independently, so they get independent counters.
+ *
+ *   seed rev 1 — everything before 2026-08-28 (contracts with no stamp).
+ *   seed rev 2 — interview-prep seeds gain `reference_files` in
+ *                allowedExplicitSwitches (T8), so the "Primary knowledge
+ *                source" control can grant it. Without a seed revision an
+ *                EXISTING Technical Interview mode would keep the old
+ *                permission set forever and the fix would reach only modes
+ *                created after it shipped. A seed carries no user intent by
+ *                definition (see `isTemplateAwareSeed` in ModesManager), so
+ *                re-seeding loses nothing; `user_selected` is never touched.
+ */
+export const CURRENT_SEED_REVISION = 2;
 
 const CONFLICT_POLICY_FOR_AUTHORITY: Record<ModeSourceAuthority, ModeConflictPolicy> = {
   reference_files_only: 'reference_files_win',
@@ -162,8 +277,24 @@ export function defaultSourceContractForNewMode(
 ): ModeSourceContract {
   const isInterviewPrep = templateType === 'looking-for-work'
     || templateType === 'technical-interview';
+  // `reference_files` added to the interview-prep switch list 2026-08-28 (T8).
+  //
+  // Technical Interview and Looking-for-Work are seeded `profile_only`, so
+  // `documentGroundedFromContract` returns false, `forceDocumentGrounding` is
+  // false, and everything gated on it is skipped: half the retrieval window
+  // (topK 6 / 1800 tokens instead of 12 / 3600), no per-file floor, no
+  // answerability scoring, no section-target or positional restore, no identity
+  // block, no query normalization. A user attaching reference files to
+  // Technical Interview got a materially weaker retrieval than the same files in
+  // General -- which is exactly the mode inversion the beta tester reported.
+  //
+  // The seed itself is NOT changed: the authority stays `profile_only`, so
+  // uploading a file still cannot silently widen what the mode may read. What
+  // changes is that the existing "Primary knowledge source" control can now
+  // OFFER reference files here, so the user can say so explicitly. An upload is
+  // not consent; a switch is.
   const allowedExplicitSwitches: ModeSourceSwitch[] = isInterviewPrep
-    ? ['profile', 'job_description']
+    ? ['profile', 'job_description', 'reference_files']
     : ['reference_files'];
   const defaultOwner: ModeSourceOwner = isInterviewPrep ? 'profile' : 'reference_files';
   const sourceAuthority: ModeSourceAuthority = (isInterviewPrep
@@ -196,6 +327,10 @@ export function defaultSourceContractForNewMode(
     // `migrated_from_prompt` carry undefined (they're authoritative
     // regardless of template).
     seededForTemplateType: isContractTemplateType(templateType) ? templateType : undefined,
+    // Stamped as of seed rev 2 (T8, 2026-08-28). Seeds carried no revision
+    // before, so `?? 1` makes every pre-existing one look stale exactly once,
+    // it re-seeds, and the new stamp makes the check idempotent.
+    seedRevision: CURRENT_SEED_REVISION,
   };
 }
 
@@ -207,7 +342,11 @@ function isContractTemplateType(s: string | undefined): s is ContractTemplateTyp
     || s === 'recruiting'
     || s === 'team-meet'
     || s === 'lecture'
-    || s === 'technical-interview';
+    || s === 'technical-interview'
+    // Campaign-3 (2026-07-19): add 'seminar' to the template-type whitelist
+    // so seededForTemplateType round-trips for the 8th mode.
+    || s === 'seminar'
+    || s === 'call-center';
 }
 
 /**
@@ -649,4 +788,25 @@ export function documentGroundedFromContract(contract: ModeSourceContract, hasRe
   return contract.sourceAuthority === 'reference_files_only'
     || contract.sourceAuthority === 'reference_files_primary'
     || contract.sourceAuthority === 'reference_files_plus_transcript';
+}
+
+/**
+ * EXPLICIT strictness (Defect C, 2026-08-01) — see the doc comment on
+ * ActiveModeDocumentGroundingInfo.strictDocumentGroundedActive.
+ *
+ * `reference_files_only` is strict on its own: that authority is only ever
+ * reached by explicit user selection or prompt migration, never by the
+ * template seed. A reference-files-FIRST authority is strict only when the
+ * contract's origin shows a deliberate choice (not 'default_new_mode') AND a
+ * real reference file exists — attaching a file to a default mode must not
+ * flip its knowledge policy, and a default mode must not flip it by merely
+ * existing (the template seed stamps `reference_files_primary` on every
+ * non-interview mode, which is how stock Team Meet/Lecture sessions logged
+ * "Generic bypass disabled: document-grounded custom mode active").
+ */
+export function strictDocumentGroundedFromContract(contract: ModeSourceContract, hasReferenceFiles: boolean): boolean {
+  if (contract.sourceAuthority === 'reference_files_only') return true;
+  const docAuthority = contract.sourceAuthority === 'reference_files_primary'
+    || contract.sourceAuthority === 'reference_files_plus_transcript';
+  return docAuthority && contract.origin !== 'default_new_mode' && hasReferenceFiles;
 }

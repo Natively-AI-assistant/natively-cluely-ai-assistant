@@ -1,0 +1,23 @@
+{
+  "model_id": "multilingual-e5-base",
+  "dimensions": 768,
+  "index": "natively_refs__multilingual-e5-base__768d__v1.sqlite",
+  "n": 74,
+  "perK": {
+    "10": {
+      "anyFile": 0.6216,
+      "allFiles": 0.1892,
+      "fileRecall": 0.384
+    },
+    "20": {
+      "anyFile": 0.7703,
+      "allFiles": 0.2973,
+      "fileRecall": 0.5236
+    },
+    "50": {
+      "anyFile": 0.9054,
+      "allFiles": 0.5,
+      "fileRecall": 0.7185
+    }
+  }
+}

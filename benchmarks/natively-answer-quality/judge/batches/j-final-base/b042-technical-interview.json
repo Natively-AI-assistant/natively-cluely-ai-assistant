@@ -1,0 +1,270 @@
+{
+ "batch": "b042-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FTECH-CTX-G2": {
+   "title": "Tallowmarket Partner Payouts API v0.3 draft (design exercise)",
+   "text": "TALLOWMARKET PARTNER PAYOUTS API - v0.3 DRAFT\nOwner: Payments & Ledger | Status: draft for interview design exercise\n\nOverview\nPartners (logistics co-ops that aggregate many growers) use this API to request payouts to growers once deliveries are confirmed. All amounts are integers in minor units. v0.3 supports USD only.\n\nAuthentication\nOAuth 2.0 client credentials. Tokens last 60 minutes. Every request must carry a bearer token scoped to payouts:write or payouts:read.\n\nPOST /v1/payouts\nCreates a payout request.\nBody fields:\n- grower_id (string, required)\n- amount_minor (integer, required, 1 to 25,000,000)\n- currency (string, required, must be \"USD\")\n- order_ids (array of strings, 1 to 50 items)\n- memo (string, optional, up to 140 characters)\nHeaders:\n- Idempotency-Key (required, UUID v4)\n\nIdempotency rules\n- Keys are retained for 24 hours after the first request that used them.\n- Same key and identical body: the original response is returned again with the header Idempotent-Replayed: true. No second payout is created.\n- Same key and a different body: 422 with error code idempotency_key_reused.\n- Same key while the first request is still being processed: 409 with error code request_in_progress. The client should retry after a short delay.\n\nPayout statuses\npending -> held -> released, or pending -> held -> reversed.\n- pending: accepted, not yet funded from escrow.\n- held: funds reserved in escrow.\n- released: sent in the nightly settlement batch.\n- reversed: cancelled while held. Once released, a payout cannot be reversed through this API.\n\nPOST /v1/payouts/{id}/reverse\nAllowed only while status is held. Returns 409 with error code not_reversible otherwise.\n\nGET /v1/payouts/{id}\nReturns the payout and its status history with timestamps.\n\nRate limits\n50 requests per second per partner, with bursts up to 100. Over the limit the API returns 429 with a Retry-After header in seconds.\n\nWebhooks\nEvents: payout.released and payout.reversed. Delivery is at-least-once; each event carries an event_id that partners should use to deduplicate. Failed deliveries (any non-2xx or no response within 10 seconds) are retried up to 8 times with exponential backoff over about 24 hours. Payloads are signed with HMAC-SHA256 in the Tallow-Signature header.\n\nErrors\nErrors return JSON with code, message and request_id. Error codes are stable; messages may change.\n\nOut of scope for v0.3\nRefunds, chargebacks, multi-currency payouts, and payout scheduling. These will be designed separately.\n\nOpen questions for the exercise\n- How should the idempotency store be built so the 409 and 422 cases behave correctly under concurrent retries?\n- Should GET support listing payouts by grower with cursor pagination?"
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "TECH-CTX-G3": {
+   "title": "Candidate's own code file: session_cache.py",
+   "text": "session_cache.py\nSubmission for the Kestrel gateway coding exercise. Author: Marta Ilves.\n\n---- File header ----\n\"\"\"\nIn-memory session cache for the Kestrel gateway.\n\nDesign notes\n- get and put are O(1). One dict holds values and another dict holds expiry times.\n  A list keeps recency order so I can find the least recently used key.\n- Entries expire ttl_seconds after they are written. Expired entries are removed\n  lazily, only when someone calls get on them.\n- Capacity is bounded. When the cache is full, the least recently used key is evicted.\n- I have not tried it with more than one process.\n\nKnown limitations\n- No locking. The gateway runs one worker thread per connection in dev, and I have\n  not added a lock yet.\n- No metrics.\n\"\"\"\n\n---- Code ----\nimport time\n\n\nclass SessionCache:\n    def __init__(self, capacity, ttl_seconds):\n        self.capacity = capacity\n        self.ttl = ttl_seconds\n        self.values = {}\n        self.expires = {}\n        self.order = []  # least recently used first\n\n    def get(self, key):\n        if key not in self.values:\n            return None\n        if self.expires[key] <= time.time():\n            self._drop(key)\n            return None\n        self.order.remove(key)\n        self.order.append(key)\n        return self.values[key]\n\n    def put(self, key, value):\n        if key in self.values:\n            self.values[key] = value\n            self.order.remove(key)\n            self.order.append(key)\n            return\n        if len(self.values) >= self.capacity:\n            oldest = self.order[0]\n            self._drop(oldest)\n        self.values[key] = value\n        self.expires[key] = time.time() + self.ttl\n        self.order.append(key)\n\n    def _drop(self, key):\n        self.values.pop(key, None)\n        self.expires.pop(key, None)\n        if key in self.order:\n            self.order.remove(key)\n\n    def size(self):\n        return len(self.values)\n\n---- Test notes ----\nI wrote three tests with a capacity of 3 and a ttl of 1 second:\n1. put then get returns the stored value.\n2. Adding a fourth key evicts the key that was read least recently.\n3. After sleeping 1.1 seconds, get returns None.\nI did not write a test for updating a key that already exists.\n\n---- Decisions ----\nI chose a plain list for recency because it was the quickest thing to write in the time limit, and the capacities I tried were small. I considered the standard library's OrderedDict but wanted to show that I understood the mechanics. If the gateway were to hold hundreds of thousands of sessions I would revisit this. I would also add a background sweep so expired entries do not sit in memory forever."
+  },
+  "TECH-CTX-G4": {
+   "title": "System design brief: Shortlinks service",
+   "text": "Orbit Mail - System Design Round Brief\nTopic: Shortlinks service\n\nShared with the candidate 24 hours before the interview. Please read it, but you are not expected to prepare slides. The interviewer will start from this brief and ask follow-up questions.\n\nProduct context\nOrbit Mail is a fictional email marketing tool. Customers paste long tracking URLs into campaigns, and Orbit turns them into short links such as orb.it/k3Fz9a. Recipients click the short link, are redirected to the original URL, and the customer sees click counts.\n\nFunctional requirements\n- Create a short link from a long URL through an API call.\n- Optional custom alias, up to 30 characters, if it is not already taken.\n- Redirect from the short link to the long URL.\n- Optional expiry date set by the customer.\n- Daily click counts per link, visible in a dashboard within a few minutes of the click.\n- Block links that point to domains on the abuse list.\n\nNon-functional requirements\n- Redirect latency: p99 under 80 ms.\n- Availability: 99.95 percent for redirects. Link creation may be slightly less available.\n- Links are kept for five years.\n- Traffic comes from the US, the EU and India.\n\nNumbers we use internally\n- About 30 million new links per month.\n- Reads to writes: roughly 100 to 1.\n- Peak traffic is about five times the daily average.\n- Average long URL: 200 bytes. Average stored record with metadata: 500 bytes.\n- Click events must not be lost, but they may be counted a little late.\n\nExplicitly out of scope\n- Link previews.\n- QR code generation.\n- User accounts and billing.\n\nOpen questions the interviewer may raise\n- How are short codes generated, and how long should they be?\n- What if two customers shorten the same long URL?\n- Where do click counts live, and how do they get there?\n- What changes if link creation grows ten times?\n- How do you keep redirects fast when a link is suddenly very popular?\n\nNotes for the candidate\nNumbers above are estimates and can be challenged. You may make your own assumptions as long as you state them. The interviewer cares more about the reasoning behind each choice than about naming a specific database."
+  },
+  "FTECH-CTX-G1": {
+   "title": "Candidate's take-home write-up: etcd cluster debug (Nimbuscrest)",
+   "text": "TAKE-HOME WRITE-UP: FLEET RELIABILITY CLUSTER DEBUG\nCandidate: Dashiell Marrow | Submitted to Nimbuscrest Cloud | Time used: 84 of 90 minutes\n\nEnvironment as given\nThree control-plane nodes (fr-cp-1, fr-cp-2, fr-cp-3), Kubernetes 1.30 with stacked etcd 3.5 on each node. Each node has local NVMe and a shared volume mounted at /mnt/shared.\n\nSymptoms\n- kubectl calls failed intermittently with \"etcdserver: request timed out\".\n- etcd logged 14 leader elections in the first 20 minutes I watched.\n- API server latency for LIST calls jumped from about 80 ms to several seconds during each election.\n\nStep 1: clocks\nchronyc tracking on fr-cp-3 showed an offset of 1.8 s from the other two nodes. I corrected it by restarting chronyd against the internal NTP pool. The election rate did not change (13 elections in the next 20 minutes), so I recorded the skew as a secondary finding, not the root cause. Raft elections in etcd are driven by heartbeat and election timeouts measured locally, not by wall-clock agreement between nodes.\n\nStep 2: disk\nI pulled etcd_disk_wal_fsync_duration_seconds from each member. p99 on fr-cp-1 was 480 ms; on fr-cp-2 and fr-cp-3 it was 6 ms. The etcd guidance we follow wants WAL fsync p99 under 10 ms. On fr-cp-1, /var/lib/etcd was a symlink into /mnt/shared, which is an NFS export. Every time fr-cp-1 was leader it stalled on fsync, missed heartbeats (heartbeat-interval 100 ms, election-timeout 1000 ms), and the followers started a new election.\n\nStep 3: fix\nI removed fr-cp-1 from the cluster with etcdctl member remove, wiped its data directory, pointed it at /var/lib/etcd on local NVMe, and added it back with etcdctl member add. It then caught up from the leader's snapshot. I chose remove and re-add over copying the files because a copy would have carried over a WAL written during the fsync stalls, and the member had to go down either way. During the change the cluster ran on the two healthy members, so writes continued, but it could not have survived another failure until fr-cp-1 caught up.\n\nResult: fsync p99 on fr-cp-1 dropped to 7 ms, and there were 0 leader elections in the following 60 minutes of observation.\n\nStep 4: certificates\nWhile checking member health I noticed the peer TLS certificate on fr-cp-2 expires on 2026-10-03. I renewed it with kubeadm certs renew etcd-peer and restarted that member. This was not causing the outage but would have caused one.\n\nNot finished\n- I wrote a Prometheus alert for WAL fsync p99 above 25 ms for 10 minutes, but did not have time to test that it fires.\n- I did not check whether other workloads also write to /mnt/shared from fr-cp-1.\n\nWhat I would monitor\n- WAL fsync and backend commit durations per member.\n- Leader changes per hour, alerting above 3.\n- Certificate expiry, alerting 30 days out."
+  },
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  }
+ },
+ "items": [
+  {
+   "jid": "0c62cc051459",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Using the payouts spec I sent over: if a partner retries the create payout call with the same idempotency key but a different amount, what should they get back? Then sketch how you'd store idempotency keys so that works under concurrent retries, including what happens while the first request is still in flight.",
+   "conversation": [],
+   "evidence_ids": [
+    "FTECH-CTX-G2",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Same key with a different body gets a 422 with error code idempotency_key_reused. The key is bound to the original request, so the amount mismatch is rejected rather than creating a second payout.\n\nFor storage, I'd key on the idempotency key with a unique constraint, and store a hash of the request body plus the response. On a retry I insert a row in a pending state first, so a concurrent retry hits that row and gets a 409 request_in_progress while the first is still running. Once it finishes, I write the response and status, and identical retries replay it with Idempotent-Replayed: true. Keys expire after 24 hours."
+  },
+  {
+   "jid": "76fc57cbc4a3",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What should we do next?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let's take the smallest next step that gives us real information. I'd pick the one open question that's blocking the most, decide who owns it, and set a time to check back. If you tell me which part matters most right now, I'll start there."
+  },
+  {
+   "jid": "4c8419ecf7b1",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Your README says get and put are both constant time. Is that actually true for this cache?",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, that's not accurate, and the README overstates it. The dict lookups are O(1), but the recency list isn't: `self.order.remove(key)` is a linear scan, so get and put are O(n) in the worst case. I used a plain list because it was quick to write and the capacities I tested were small. If this held hundreds of thousands of sessions, I'd switch to an OrderedDict or a doubly linked list."
+  },
+  {
+   "jid": "d5a1cef07396",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "array vs linked list, when would I actually pick the linked list?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A linked list wins when you need **O(1) insertions and deletions** at a position you already hold a reference to, and you don't need random access. Arrays give you O(1) indexing but shifting elements on insert or delete is O(n), so if you're doing a lot of splicing in the middle of a structure, a linked list avoids that cost.\n\nThe tradeoff is cache behavior and memory overhead. Arrays are contiguous, so iteration is fast and cache-friendly. Linked lists scatter nodes across the heap, each with a pointer, so traversal is slower in practice and you pay extra memory per node. In most real workloads the array still wins because of that locality.\n\nSo I'd reach for a linked list when the access pattern is genuinely insert-heavy or delete-heavy at known positions, like an LRU cache with a doubly linked list, or a queue where you're only touching the ends. Otherwise the array or a dynamic array is the safer default."
+  },
+  {
+   "jid": "1289df8a600f",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Okay, warm-up. Write a function that returns the factorial of a number.",
+   "conversation": [
+    "INTERVIEWER: Thanks for coming in. Did you find the building okay?",
+    "USER (spoken): Yes, the directions were clear and parking was easy.",
+    "INTERVIEWER: Good. We moved onto this floor last month and the coffee machine still confuses everybody.",
+    "USER (spoken): Ha, it does look complicated.",
+    "INTERVIEWER: Alright, let's get started."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "```python\ndef factorial(n):\n    if n < 0:\n        raise ValueError(\"factorial is not defined for negative numbers\")\n    result = 1\n    for i in range(2, n + 1):\n        result *= i\n    return result\n```\n\nIterative version, so no recursion depth limit and no stack overflow on large inputs. It handles 0 and 1 naturally since the loop just doesn't run.\n\nTime O(n), space O(1)."
+  },
+  {
+   "jid": "2b4222688aaf",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What about duplicate URLs?",
+   "conversation": [
+    "INTERVIEWER (heard): Let's do the shortlink service in the brief you have. Cover the API, how you store the links, how you generate the codes, and how it scales.",
+    "NATIVELY: I'll start with the API, then storage, code generation, and scaling.\n\n**API.** Two main endpoints. `POST /links` takes the long URL, an optional custom alias up to 30 characters, and an optional expiry date, and returns the short code. `GET /{code}` does the redirect. I'd also add a `GET /links/{code}/stats` for the dashboard. On create, I check the alias isn't taken and that the target domain isn't on the abuse list before writing.\n\n**Storage.** A key-value store keyed by short code, with the long URL, expiry, and owner. At 30 million new links a month and 500 bytes per record, that's roughly 15 GB a month, so about 900 GB over five years. Reads are 100 to 1 over writes, so this is read-heavy and I'd keep it in a store that can serve lookups from memory, with the code as the primary key.\n\n**Code generation.** I'd generate a random base62 code, 7 characters, which gives about 3.5 trillion combinations, so collisions are rare. On insert I check for a collision and retry if needed. Custom aliases go through the same uniqueness check.\n\n**Scaling.** Redirects are the hot path, so I'd put a cache in front of the store, since the same links get clicked repeatedly. For a link that suddenly goes viral, the cache absorbs the load and the store stays protected. Click events go to a queue and get aggregated into daily counts, which is fine since the brief says counts can be a little late. For the 100 to 1 read ratio and five times peak, I'd scale the redirect tier horizontally and keep the write path separate so link creation doesn't compete with redirects.",
+    "INTERVIEWER (heard): How exactly do you generate the short codes?",
+    "NATIVELY: I generate a random 7-character base62 code, so each character is one of 62 options and the space is 62 to the 7th, about 3.5 trillion combinations. Random rather than sequential, because sequential codes are guessable and let someone enumerate other people's links. On insert I write with the code as the key and check for a collision, retrying with a fresh code if one comes back. At that space size collisions are rare, so it's usually one attempt. Custom aliases skip generation and go through the same uniqueness check."
+   ],
+   "evidence_ids": [
+    "TECH-CTX-G4"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two customers shortening the same long URL should get separate codes, since each one needs its own click counts and its own expiry. So I don't dedupe on the URL. If someone wants the same link back, I'd let them reuse their existing code rather than mint a new one, but that's a lookup by owner, not a global constraint."
+  },
+  {
+   "jid": "831c42aa9200",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "coin change, fewest coins for an amount. explain the dp idea, write it in python, and give me the complexity",
+   "conversation": [
+    "INTERVIEWER: Next problem. You are given a set of coin denominations and a target amount.",
+    "USER (spoken): Is it okay if I ask whether the coins are unlimited in supply?",
+    "INTERVIEWER: Yes, unlimited.",
+    "USER (spoken): And if the amount can't be made, I return minus one?",
+    "INTERVIEWER: Correct."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The idea is to build up from smaller amounts. Let dp[a] be the fewest coins that make amount a, with dp[0] = 0. For each amount from 1 to the target, try every coin: if the coin fits, dp[a] = min(dp[a], dp[a - coin] + 1). If dp[amount] is still infinity at the end, the amount can't be made, so return -1.\n\n```python\ndef coin_change(coins, amount):\n    INF = float('inf')\n    dp = [0] + [INF] * amount\n    for a in range(1, amount + 1):\n        for c in coins:\n            if c <= a and dp[a - c] + 1 < dp[a]:\n                dp[a] = dp[a - c] + 1\n    return dp[amount] if dp[amount] != INF else -1\n```\n\nTime is O(amount × number of coins) and space is O(amount)."
+  },
+  {
+   "jid": "5329ce973ab8",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So why did you switch from the mutex to the channel, and would you make the same call again?",
+   "conversation": [
+    "INTERVIEWER: Tell me about the ingestion service you built in your last role.",
+    "USER (spoken): It was a Go service. A fan-out of workers read jobs from a channel and wrote results into a shared map.",
+    "INTERVIEWER: And how did you protect that shared map?",
+    "USER (spoken): First with a mutex around every write. Later I changed it so workers sent results over a results channel to one writer goroutine.",
+    "INTERVIEWER: Okay, interesting."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The mutex worked, but every worker was contending on the same lock, so writes serialized and the map was the bottleneck. Moving to a results channel meant one writer owned the map, so no lock at all. I'd make the same call again, though for a small map with light writes I'd probably just keep the mutex."
+  },
+  {
+   "jid": "31a5f1044815",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "walk me through designing dropbox at a high level, focus on syncing big files",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Here's how I'd approach it. The core is a **chunked, content-addressed store**: split each file into fixed or content-defined chunks, hash each one, and store chunks by hash so identical data is deduplicated and only changed chunks move. A metadata service tracks the file tree, chunk lists, and versions, while the actual bytes live in blob storage.\n\nFor syncing big files, the key is **delta sync**: when a file changes, the client re-chunks it, compares hashes against what the server already has, and uploads only the new chunks. That way editing one region of a multi-gigabyte file doesn't re-upload the whole thing. Content-defined chunking helps here because it keeps chunk boundaries stable when bytes are inserted or removed, so fewer chunks shift.\n\nOn the client side I'd run a watcher that detects changes and a sync engine that queues uploads, with resumable transfers so a dropped connection picks up mid-file rather than restarting. The server needs to handle concurrent edits, so I'd version files and detect conflicts, keeping both copies when two clients diverge. For scale, chunks go to a distributed blob store, metadata to a replicated database, and clients get notified of changes via a long-poll or push channel so they pull only what changed."
+  },
+  {
+   "jid": "571572865144",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What is a binary search tree, and what happens if I insert the numbers one through a thousand in order?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A binary search tree is a binary tree where every node's left subtree holds smaller keys and its right subtree holds larger ones, so search, insert, and delete run in time proportional to the tree's height. Inserting one through a thousand in sorted order is the worst case: each new value is larger than everything before it, so it always goes to the rightmost position and the tree degenerates into a linked list of a thousand nodes. That makes height n instead of log n, so lookups and inserts drop from about ten comparisons to a thousand. A self-balancing tree like a red-black or AVL tree avoids this by rotating to keep height logarithmic."
+  },
+  {
+   "jid": "6140b87a8a32",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What changes if the edges have weights?",
+   "conversation": [
+    "INTERVIEWER: I saw on your resume that you run marathons.",
+    "USER (spoken): Yes, my third one was in April.",
+    "INTERVIEWER: That takes real discipline. How do you fit the training in around work?",
+    "USER (spoken): Early mornings, mostly before standup.",
+    "INTERVIEWER: I could never do that.",
+    "INTERVIEWER (heard): What's the difference between BFS and DFS?",
+    "NATIVELY: BFS explores level by level using a queue, so it finds the shortest path in an unweighted graph. DFS goes deep down one branch before backtracking, using a stack or recursion. So BFS is better for shortest paths, DFS for things like cycle detection, topological sort, and exploring whole components.",
+    "INTERVIEWER (heard): So when do you pick one over the other?",
+    "NATIVELY: It comes down to what the problem needs. If I need the shortest path in an unweighted graph, or the shallowest solution, BFS wins because it hits nodes in order of distance. If I'm checking for cycles, ordering dependencies, or just need to touch every node without caring about distance, DFS is simpler and uses less memory on wide graphs."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "With weights, BFS no longer gives shortest paths, because it counts edges, not cost. You need something like Dijkstra's algorithm with a priority queue, or Bellman-Ford if there are negative weights. DFS stays the same for traversal, cycle detection, and topological sort, since those don't depend on edge cost."
+  },
+  {
+   "jid": "f6bb92ad8bae",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Walk me through how you got to the root cause on the take-home, and why you didn't stop once you'd fixed the clock skew.",
+   "conversation": [],
+   "evidence_ids": [
+    "FTECH-CTX-G1",
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I started by treating the fsync latency as a symptom, not the problem. The p99 on fr-cp-1 was the loudest signal, so I traced it back through the etcd member health and the disk on that node, and that's where the clock skew showed up. Fixing the skew brought fsync p99 down to 7 ms and gave me 60 minutes with zero leader elections, which would have been a fine place to stop.\n\nBut I kept going because a fix that only addresses the trigger leaves the underlying condition in place. While I was checking member health I noticed the peer TLS certificate on fr-cp-2 expires on 2026-10-03. That wasn't causing the outage, but it would have caused one, so I renewed it with kubeadm certs renew etcd-peer and restarted that member. The habit is to keep reading the health signals after the symptom clears, because the next failure is usually already visible somewhere in the output."
+  },
+  {
+   "jid": "b7ed5c341c6c",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "how do I decide whether this needs dp or whether greedy is enough? give me a way to justify it out loud",
+   "conversation": [
+    "INTERVIEWER: Here's a scheduling problem. You have a list of meetings, each with a start time and an end time.",
+    "INTERVIEWER: You want to attend as many meetings as possible, and you can't be in two at once.",
+    "USER (spoken): So I'd probably sort by end time and greedily take whatever fits.",
+    "INTERVIEWER: Okay, hold that thought."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The way I'd justify it out loud: first ask whether a locally optimal choice can ever block a better global one. If I can construct a counterexample where taking the best-looking option now forces a worse total later, greedy is out and I need DP.\n\nThen check the two DP signals: overlapping subproblems and an optimal substructure where the answer at step i depends on earlier states. If the state is just \"how much have I consumed so far\" and a single number captures it, greedy usually works.\n\nSo: try to break greedy with a counterexample, and if I can't, prove the exchange argument."
+  },
+  {
+   "jid": "ded2459d1632",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So the CAP theorem says you pick two out of three, consistency, availability and partition tolerance. Which two would you pick for a payments system?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "For payments, I'd pick consistency and partition tolerance. A partition is a fact of life in a distributed system, so you can't really opt out of it. Given that, the choice is between consistency and availability, and for money movement I'd rather reject or delay a transaction than risk a double spend or a wrong balance. So CP, with availability handled through retries and idempotency keys."
+  },
+  {
+   "jid": "f8774ba5550c",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why did that happen?",
+   "conversation": [
+    "INTERVIEWER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "INTERVIEWER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The vendor changed their API without telling us, so the integration had to be reworked against the new version. That's what pushed it out by about two weeks. The date was already tight, so there wasn't much slack to absorb it."
+  },
+  {
+   "jid": "f761696e9e5e",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "how do hash maps deal with collisions? I keep blanking on open addressing vs chaining",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Collisions happen when two keys hash to the same bucket, and there are two main ways to handle them.\n\n**Chaining** keeps a list at each bucket. Every key that lands there gets appended, so lookups scan that short list. It's simple, handles high load factors gracefully, and deletion is easy.\n\n**Open addressing** stores everything in the table itself. On a collision you probe for the next free slot, either linearly, quadratically, or with double hashing. It's more cache-friendly and uses less memory, but deletions need tombstones and performance degrades fast as the table fills."
+  }
+ ]
+}

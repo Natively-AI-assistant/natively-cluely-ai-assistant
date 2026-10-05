@@ -1,0 +1,175 @@
+{
+ "blind_id": "S-771ffe0e",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 35036,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 10060,
+  "candidatesTokenCount": 879,
+  "totalTokenCount": 14713,
+  "cachedContentTokenCount": 4058,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 10060
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 4058
+   }
+  ],
+  "thoughtsTokenCount": 3774,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 8,
+  "important_information_retention": 9,
+  "hallucination_control": 9,
+  "action_item_retention": 7,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 10,
+  "entity_retention": 8,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 8,
+  "structure": 4,
+  "conciseness": 3,
+  "readability": 6,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "Reported load-testing the workout history endpoint as an action item for Theo, when it was only a preference and not assigned."
+  ],
+  "missing_important_information": [
+   "The specific two real bugs found in the build 318 regression (MOB-1431 and Android offline mode not syncing)."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Load testing the workout history endpoint before prod (Theo's wish, not assigned)"
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "partial"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all important information and numbers accurately. However, they suffer from severe structural and conciseness issues, with entire sentences copy-pasted across the Overview, Summary, and other sections. Additionally, the notes incorrectly list load-testing the workout history endpoint as an action item for Theo, which was only stated as a preference and not assigned. The action items section also contains duplicates and non-action items (like the branch cut deadline)."
+ }
+}

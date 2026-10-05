@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <style>html,body{height:auto!important;min-height:100%;overflow:visible!important;}#harness-root{height:auto!important;overflow:visible!important;}</style>
+  <meta charset="UTF-8" />
+  <title>Setup &amp; Help Harness (dev-only, not shipped)</title>
+  <!-- A classic script, so the platform is in place before any module runs:
+       module imports hoist, and platformUtils reads it at import time. -->
+  <script>
+    window.electronAPI = { platform: new URLSearchParams(location.search).get('platform') === 'win32' ? 'win32' : 'darwin' };
+  </script>
+</head>
+
+<body style="margin:0;">
+  <div id="harness-root"></div>
+  <script type="module" src="/src/dev/helpSettingsHarness.tsx"></script>
+</body>
+
+</html>

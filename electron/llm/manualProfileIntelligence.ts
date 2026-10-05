@@ -196,7 +196,15 @@ const NAME_PATTERNS = [
   // single deterministic fact (the loaded name) and MUST be answered by the
   // fast path in every mode so they can never reach the LLM and leak "I'm
   // Natively, an AI assistant" / a false refusal.
-  /\bwhat\s+(is|s)\s+your\s+(full\s+)?name\b/,
+  // Campaign-3 fix (2026-07-19, fix/answer-policy-engine): the previous
+  // alternation `what (is|s) your name` did NOT match the post-normalize form
+  // `"what s your name"` that the harness's question "What's your name?"
+  // produces (apostrophe → space). Live-trace C3M-001 returned "I'm Natively,
+  // an AI assistant." because the identity fast path never fired. The added
+  // pattern below matches `what s your name` (post-normalize) AND `what's your
+  // name` (pre-normalize); redundant with the existing alternation when both
+  // spaces are explicit, but guarantees coverage of the apostrophe form.
+  /\bwhat\s*(?:'s|s|is)\s+your\s+(full\s+)?name\b/,
   /\bwhats\s+your\s+name\b/,
   /\bwhat\s+should\s+(i|we)\s+call\s+you\b/,
   /\bwho\s+are\s+you\b/,
@@ -1091,7 +1099,23 @@ const makeEvidenceSelection = ({
 // null) instead of dumping every item verbatim and ignoring the filter.
 const QUALIFIER_PATTERNS = [
   /\b(that|which|where|whose|who)\b.*\b(use[ds]?|using|used|built|made|involve[ds]?|with|related|based|for|require[ds]?|need[s]?)\b/,
-  /\b(use[ds]?|using|used|involv\w+|relat\w+|based\s+on|about|regarding|with)\b\s+\w/,
+  // NOTE: deliberately excludes bare "about" (but keeps "regarding") —
+  // "about" is the ordinary opener for completely unfiltered questions ("tell
+  // me about your experience [at Stripe]", "tell me about your experience")
+  // and matching on it caused `qualified` to wrongly become true for those,
+  // which disables the deterministic company/experience lookup branches below
+  // (they're all gated on `!qualified`) and falls through to zero evidence →
+  // a false "insufficient evidence" refusal even though the profile has the
+  // answer. "regarding" is kept: unlike "about", it almost always introduces
+  // a genuine narrowing topic ("projects regarding payments") rather than a
+  // bare unfiltered opener, and a code-review pass confirmed live that
+  // removing it alongside "about" let genuine narrowing questions
+  // ("what projects do you have regarding cloud infrastructure") wrongly
+  // skip the qualifier gate. Genuine technology/project-narrowing phrasing
+  // ("about your experience WITH Kafka") still qualifies via the `with`
+  // alternative below — so no real filter case is lost by dropping "about"
+  // alone. Live-confirmed regression, 2026-07-27.
+  /\b(use[ds]?|using|used|involv\w+|relat\w+|based\s+on|regarding|with)\b\s+\w/,
   /\bwhich\s+(one|project|skill|role|job|experience)\b/,
   /\bany\s+(project|experience|skill)s?\b.*\b(with|using|in|for|that)\b/,
   /\b(only|just|specifically|particular|specific)\b/,
@@ -1618,16 +1642,24 @@ export const logManualProfileRoute = ({
 //     input → same output for testability),
 //   - never echoes a question longer than a few words (no transcript dumping).
 
+// ALWAYS ANSWER (2026-09-07, owner's direction, measured in a 1,000-turn live
+// campaign): these lines fire when the model returned NOTHING — an empty or
+// aborted stream — and the old wording ("Could you repeat that?", "I didn't
+// fully catch that — could you rephrase?") told the user the APP had not heard
+// them, which is untrue and is exactly the message they asked never to see. The
+// engine now regenerates once before reaching here; this is the last resort,
+// and it says what happened (no answer came back) and what to do (press again).
+// It never asks the user to repeat or rephrase anything.
 const RETRY_TEMPLATES: ReadonlyArray<(topic: string) => string> = [
   (t) => t
-    ? `Could you say a bit more about ${t}? I want to make sure I answer the right thing.`
-    : 'Could you repeat that? I want to make sure I address your question properly.',
+    ? `I couldn't generate an answer about ${t} just now. Press again and I'll retry.`
+    : "I couldn't generate an answer just now. Press again and I'll retry.",
   (t) => t
-    ? `I didn't fully catch the question about ${t} — could you rephrase it?`
-    : "I didn't fully catch that — could you rephrase the question?",
+    ? `The answer about ${t} didn't come through from the AI provider. Press again to retry.`
+    : "The answer didn't come through from the AI provider. Press again to retry.",
   (t) => t
-    ? `Just to make sure I get this right — what specifically about ${t} would you like me to cover?`
-    : 'Just to make sure I get this right — could you ask that once more?',
+    ? `No answer came back for ${t} this time. Press again and I'll take another run at it.`
+    : 'No answer came back this time. Press again and I\'ll take another run at it.',
 ];
 
 // Topic = a short noun-ish tail of the question. Conservative: strip leading

@@ -1,12 +1,13 @@
 // electron/llm/codeVerification/__tests__/VerificationFlag.test.mjs
 //
-// Kill-switch for verified code execution: default ON, disableable at runtime
-// (no redeploy) via env NATIVELY_CODE_VERIFY=off. When off, the hidden
-// <verification_spec> instruction is also omitted from the coding prompt so the
-// model wastes no tokens on a spec nothing will run.
+// Kill-switch for verified code execution: currently TEMPORARILY DISABLED by
+// default (default OFF), but re-enableable at runtime (no redeploy) via env
+// NATIVELY_CODE_VERIFY=on. When off, the hidden <verification_spec> instruction
+// is also omitted from the coding prompt so the model wastes no tokens on a
+// spec nothing will run.
 //
 // NOTE: env is read once and cached per-process, so we test the env branch in a
-// child process to get a clean cache. The settings branch defaults ON here.
+// child process to get a clean cache. The settings branch defaults OFF here.
 
 import assert from 'node:assert/strict';
 import { test, describe } from 'node:test';
@@ -15,26 +16,26 @@ import { isCodeVerificationEnabled } from '../../../../dist-electron/electron/ll
 import { planAnswer, formatAnswerPlanForPrompt } from '../../../../dist-electron/electron/llm/index.js';
 
 describe('isCodeVerificationEnabled', () => {
-  test('defaults ON when no env / settings override', () => {
-    assert.equal(isCodeVerificationEnabled(), true);
+  test('defaults OFF when no env / settings override (temporarily disabled)', () => {
+    assert.equal(isCodeVerificationEnabled(), false);
   });
 
-  for (const off of ['off', 'false', '0', 'disabled']) {
-    test(`env NATIVELY_CODE_VERIFY=${off} disables it (child process for clean cache)`, () => {
+  for (const on of ['on', 'true', '1', 'enabled']) {
+    test(`env NATIVELY_CODE_VERIFY=${on} re-enables it (child process for clean cache)`, () => {
       const out = execFileSync(process.execPath, [
         '--input-type=module', '-e',
         `import { isCodeVerificationEnabled } from './dist-electron/electron/llm/codeVerification/verificationEnabled.js'; process.stdout.write(String(isCodeVerificationEnabled()));`,
-      ], { cwd: process.cwd(), env: { ...process.env, NATIVELY_CODE_VERIFY: off } }).toString();
-      assert.equal(out, 'false');
+      ], { cwd: process.cwd(), env: { ...process.env, NATIVELY_CODE_VERIFY: on } }).toString();
+      assert.equal(out, 'true');
     });
   }
 
-  test('env=on (or unset) keeps it enabled', () => {
+  test('env=off (or unset) keeps it disabled', () => {
     const out = execFileSync(process.execPath, [
       '--input-type=module', '-e',
       `import { isCodeVerificationEnabled } from './dist-electron/electron/llm/codeVerification/verificationEnabled.js'; process.stdout.write(String(isCodeVerificationEnabled()));`,
-    ], { cwd: process.cwd(), env: { ...process.env, NATIVELY_CODE_VERIFY: 'on' } }).toString();
-    assert.equal(out, 'true');
+    ], { cwd: process.cwd(), env: { ...process.env, NATIVELY_CODE_VERIFY: 'off' } }).toString();
+    assert.equal(out, 'false');
   });
 });
 

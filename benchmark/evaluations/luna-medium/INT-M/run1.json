@@ -1,0 +1,324 @@
+{
+ "blind_id": "S-5ff60b13",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 69029,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 20730,
+  "candidatesTokenCount": 2323,
+  "totalTokenCount": 30408,
+  "cachedContentTokenCount": 16310,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 20730
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 16310
+   }
+  ],
+  "thoughtsTokenCount": 7355,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 3,
+  "important_information_retention": 7,
+  "hallucination_control": 2,
+  "action_item_retention": 9,
+  "decision_retention": 8,
+  "speaker_attribution": 4,
+  "numeric_accuracy": 3,
+  "entity_retention": 8,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 2,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "The notes claim that the salary band and Maya's target base remain unresolved open questions, directly contradicting the transcript where Theo confirms her $165k target is within the corrected $148k-$172k band.",
+   "The notes hallucinate that the benefits package was not discussed and that the call ended while Maya was asking about benefits.",
+   "The notes hallucinate that the next interview steps were not specified, despite detailing the 4-stage process elsewhere in the notes.",
+   "The notes fail to resolve speaker labels, listing 'Maya' and 'Me' as separate owners for the exact same action items, and doing the same for 'Theo' and 'Speaker 1'."
+  ],
+  "missing_important_information": [
+   "The Series B funding is mostly going into product and engineering hiring.",
+   "Corvella uses an outside immigration firm for H-1B transfers.",
+   "The specific sequencing plan for Dana's interview next week and the portfolio review the week of October 5."
+  ],
+  "hallucinated_information": [
+   "The benefits package was not discussed because the call ended while Maya was asking about benefits.",
+   "The next interview or hiring-process step was not specified in the available portion of the call."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Whether Corvella can accommodate Maya's target base salary of approximately $155,000 above the stated $128,000-$146,000 band remains unresolved."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Maya's target base salary of approximately $155,000 is $9,000 above the top of Corvella's stated salary band."
+   },
+   {
+    "correction_id": "C07",
+    "reported": "The proposed November 2 start would place Maya's second week during the team's November 9 offsite, making that start timing less attractive."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Extreme repetition of facts and action items across multiple sections (e.g., listing the same action items 3-4 times)."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "contradicted"
+   },
+   {
+    "id": "F37",
+    "status": "contradicted"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "contradicted"
+   },
+   {
+    "id": "F43",
+    "status": "contradicted"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "contradicted"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "missing"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe structural and factual issues. While they capture a large amount of information, they are extremely repetitive, often listing the same facts and action items three or four times across different sections. Furthermore, the notes fail to resolve speaker labels, assigning duplicate action items to 'Maya' and 'Me', and 'Theo' and 'Speaker 1'. Most critically, the 'Open questions' section contains massive hallucinations and contradictions, falsely claiming that the salary band issue was unresolved, that the benefits package was not discussed, and that the next interview steps were not specified, despite all of these being explicitly resolved in the transcript and detailed elsewhere in the notes. These contradictions severely compromise the reliability of the notes."
+ }
+}

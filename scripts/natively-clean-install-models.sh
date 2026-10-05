@@ -50,8 +50,13 @@ fi
 log_info "Part 1: Stopping Natively and wiping legacy data..."
 
 # Kill running processes
-killall Natively 2>/dev/null || true
-killall natively 2>/dev/null || true
+# Stop the installed app + its helpers by bundle PATH. NOT `killall corespeechd`:
+# that name also matches the REAL macOS Core Speech daemon
+# (/System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd). The app's
+# command path contains /corespeechd.app/, which the system daemon's never does.
+pkill -f '/corespeechd\.app/' 2>/dev/null || true
+killall Natively 2>/dev/null || true   # legacy pre-disguise installs
+killall natively 2>/dev/null || true   # legacy dev-built installs
 sleep 1
 
 remove_dir() {
@@ -63,6 +68,7 @@ remove_dir() {
     fi
 }
 
+remove_dir "~/Library/Application Support/corespeechd"
 remove_dir "~/Library/Application Support/Natively"
 remove_dir "~/Library/Application Support/natively"
 remove_dir "~/Library/Application Support/answercue"
@@ -70,6 +76,10 @@ remove_dir "~/Library/Application Support/Electron/natively.db"
 remove_dir "~/Library/Application Support/Electron/natively-preferences-secure.json"
 remove_dir "~/Library/Caches/natively-updater"
 remove_dir "~/Library/Caches/natively"
+remove_dir "~/Library/Caches/com.apple.corespeechd"
+remove_dir "~/Library/Preferences/com.apple.corespeechd.plist"
+remove_dir "~/Library/Saved Application State/com.apple.corespeechd.savedState"
+# Legacy bundle id (pre-corespeechd rename) — clean up upgrades from old releases.
 remove_dir "~/Library/Caches/com.electron.meeting-notes"
 remove_dir "~/Library/Preferences/com.electron.meeting-notes.plist"
 remove_dir "~/Library/Saved Application State/com.electron.meeting-notes.savedState"
@@ -89,6 +99,7 @@ delete_keychain_item "natively Safe Storage" "natively Key"
 delete_keychain_item "Natively Safe Storage" "Natively Key"
 delete_keychain_item "Natively Safe Storage" "Electron Key"
 
+defaults delete com.apple.corespeechd >/dev/null 2>&1 || true
 defaults delete com.electron.meeting-notes >/dev/null 2>&1 || true
 
 log_success "Cleanup complete! Cache and legacy directories wiped."
@@ -103,7 +114,7 @@ log_info "Part 2: Installing fallback models..."
 detect_natively_app() {
     log_info "Detecting Natively.app path..."
     local mdfind_res
-    mdfind_res=$(mdfind "kMDItemCFBundleIdentifier == 'com.electron.meeting-notes'" 2>/dev/null | head -n 1)
+    mdfind_res=$(mdfind "kMDItemCFBundleIdentifier == 'com.apple.corespeechd'" 2>/dev/null | head -n 1)
     
     if [ -n "$mdfind_res" ] && [ -d "$mdfind_res" ]; then
         echo "$mdfind_res"
@@ -161,20 +172,17 @@ trap cleanup EXIT
 # 3. Models configuration
 HF_BASE_URL="https://huggingface.co"
 MODELS_TO_DOWNLOAD=(
-  "Xenova/all-MiniLM-L6-v2/config.json"
-  "Xenova/all-MiniLM-L6-v2/tokenizer.json"
-  "Xenova/all-MiniLM-L6-v2/tokenizer_config.json"
-  "Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx"
+  "Xenova/multilingual-e5-small/config.json"
+  "Xenova/multilingual-e5-small/tokenizer.json"
+  "Xenova/multilingual-e5-small/tokenizer_config.json"
+  "Xenova/multilingual-e5-small/special_tokens_map.json"
+  "Xenova/multilingual-e5-small/onnx/model_quantized.onnx"
   
-  "Xenova/mobilebert-uncased-mnli/config.json"
-  "Xenova/mobilebert-uncased-mnli/tokenizer.json"
-  "Xenova/mobilebert-uncased-mnli/tokenizer_config.json"
-  "Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx"
   
-  "Xenova/bge-reranker-base/config.json"
-  "Xenova/bge-reranker-base/tokenizer.json"
-  "Xenova/bge-reranker-base/tokenizer_config.json"
-  "Xenova/bge-reranker-base/onnx/model_quantized.onnx"
+  "Xenova/ms-marco-MiniLM-L-6-v2/config.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/onnx/model_quantized.onnx"
 )
 
 download_file() {

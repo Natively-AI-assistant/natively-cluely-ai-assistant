@@ -1,0 +1,291 @@
+{
+ "batch": "b009-sales",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "SALES-CTX-I1": {
+   "title": "Fourth-floor relocation memo",
+   "text": "MEMO - FOURTH-FLOOR RELOCATION\nFrom: Facilities. Date: 14 September 2026.\n\nThe fourth-floor finance and people teams will move to the new east wing over the weekend of 24 October. Packing kits will be delivered on Monday 19 October. Please label every box with your name and the desk number from the new floor plan, which is pinned in the kitchen and attached to this memo.\n\nParking: garage level B2 will be closed from 23 to 25 October for restriping. Visitor parking moves to lot C for that week.\n\nKitchen: the fourth-floor kitchen closes on Wednesday 21 October. The east wing kitchen has two coffee machines and a water station. The old coffee machine will not be moved because it has been broken since August.\n\nDesk phones: extension numbers will not change. Headsets should be packed in your own box, not the shared bins.\n\nPlants: if you would like your plant moved, put a sticky note with your name on the pot by Friday 16 October. Unlabelled plants will be donated to the lobby.\n\nFurniture: standing desks will be moved by the vendor. Please clear the surface and remove monitors before you leave on Friday 23 October.\n\nQuestions go to the facilities desk on extension 4410. Thank you for your patience.\n"
+  },
+  "SALES-CTX-G1": {
+   "title": "Trellis Flow one-pager and pricing and packaging sheet (rev 4.1)",
+   "text": "CORVANE SYSTEMS - TRELLIS FLOW\nProduct one-pager and pricing and packaging sheet, revision 4.1, effective 1 September 2026.\n\nWHAT IT IS\nTrellis Flow automates accounts payable for mid-market finance teams. It captures vendor invoices from email, PDF upload or EDI, extracts the fields, matches them against purchase orders and receipts, routes exceptions for approval, and posts approved bills to the ERP. Target customer: 100 to 2,000 employees, 1,500 to 40,000 invoices a month, finance team of 3 to 25 people.\n\nHEADLINE RESULTS\nCustomer-reported medians across 41 customers live for at least six months. Corvane has not independently audited these figures.\n- Cost per processed invoice down 63 percent (from $11.40 to about $4.20)\n- Approval cycle time down from 4.1 days to 1.6 days\n- Touchless rate (invoices posted with no human touch) 71 percent at month six\nCustomer references are available only after a mutual NDA is signed. Corvane does not publish customer names.\n\nPLANS (monthly list price, billed annually in advance)\nStarter: $1,900 a month. Up to 2,000 invoices a month, 1 entity, 10 users, QuickBooks Online and Xero connectors, email support, 99.5 percent uptime target. No SSO.\nGrowth: $4,800 a month. Up to 10,000 invoices a month, up to 3 entities, 40 users, NetSuite and QuickBooks Online connectors, Dynamics 365 Business Central connector (beta), SAML SSO, two-way and three-way matching, 99.9 percent uptime SLA, business-hours support with 4-hour first response.\nEnterprise: from $14,500 a month, quoted per deal. More than 10,000 invoices a month, unlimited entities, SAP S/4HANA connector (generally available), SCIM provisioning, EU data residency (Frankfurt), 99.95 percent uptime SLA, named customer success manager, 24x7 support with 1-hour first response for severity 1 issues.\nOverage: $0.85 per invoice above the plan limit on Starter and Growth. Enterprise overage is set in the order form.\n\nIMPLEMENTATION (one-time fee)\nStarter: self-serve, $0. Growth: $12,000 fixed fee, typically 6 weeks from kickoff to go-live. Enterprise: from $38,000, typically 10 to 14 weeks. Data migration (vendor master, open purchase orders, historical bills by CSV or API) takes 5 to 7 business days and is included in the fee. A Workday Financials connector is on the roadmap for Q2 2027 and is not a commitment.\n\nDISCOUNTS AND COMMERCIAL TERMS\n- Annual prepay is the list price basis. Monthly billing costs 10 percent more.\n- Multi-year: 2-year term 10 percent off, 3-year term 15 percent off, applied to subscription only, never to implementation fees.\n- Sales reps may approve up to 10 percent total discount. Anything above 10 percent needs Deal Desk approval. Discounts above 20 percent are not offered.\n- Standard payment terms are net 30. Net 45 needs Deal Desk approval. Net 60 is not offered. Quarterly billing is available on Growth and Enterprise with a 3 percent surcharge.\n- Default term is 12 months, auto-renews for 12 months, 60 days' written notice to cancel. Renewal increases are capped at 5 percent.\n- No termination for convenience. Termination for cause with a 30-day cure period.\n- Corvane liability is capped at 12 months of fees. Uncapped liability is not offered. On Enterprise only, a data breach super-cap of 2x annual fees is negotiable.\n\nPROOF OF VALUE\nThere is no self-serve free trial. Qualified Growth and Enterprise prospects can run a 30-day proof of value in a sandbox using up to 500 of their own historical invoices at no charge. It requires a signed evaluation agreement and one named technical contact.\n\nSECURITY AND COMPLIANCE\nSOC 2 Type II (most recent report period ended 31 March 2026). ISO 27001 certification is in progress with a target of Q1 2027; Corvane is not yet certified. AES-256 encryption at rest, TLS 1.2 or higher in transit. Data is hosted in the US by default; EU residency (Frankfurt) is Enterprise only. Annual third-party penetration test, summary available under NDA. No security incident requiring customer notification since launch in 2021.\n"
+  }
+ },
+ "items": [
+  {
+   "jid": "3077c23dd179",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Sorry, type one or type two?",
+   "conversation": [
+    "USER (spoken): Thanks for bringing security into this call.",
+    "PROSPECT: Sure. I'm the security reviewer, so I'll keep this brief.",
+    "USER (spoken): Happy to answer anything. We hold SOC 2 Type II, and our current report period ended at the end of March this year.",
+    "PROSPECT: Okay.",
+    "PROSPECT (heard): Is that report something I can actually read?",
+    "NATIVELY: Yes, I can share it under NDA. I'll send the report along with our bridge letter covering the period since March, so you're looking at current coverage. What's the best way to get that to you, and is there a specific control area you want to dig into first?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Type two. The report is a SOC 2 Type II, so it covers controls over a period of time rather than a single point. I'll send it under NDA with the bridge letter for the period since March. Which control area do you want to start with?"
+  },
+  {
+   "jid": "45264f884830",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "Ten minutes into a first call and they haven't mentioned budget. How do I bring it up without spooking them?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Totally normal that it hasn't come up yet. I'd frame it around their process, not your price: \"So I can point you to the right option, how are you thinking about budget for this?\" Then stay quiet and let them answer. If they deflect, ask what range they've set aside."
+  },
+  {
+   "jid": "da3cde02ff36",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "Write a follow-up email after a demo where the CFO went quiet halfway through. Reference the approval-delay problem they described, keep it short, and end with one clear ask.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Subject: Quick follow-up from today's demo\n\nHi [Name],\n\nThanks for the time today. You mentioned that approvals getting stuck is costing you time, and that's exactly the kind of delay we built this to remove.\n\nI'd like to show you the approval workflow piece on its own, without the rest of the demo, so you can see whether it fits how your team actually signs off.\n\nWould 20 minutes next week work to walk through just that?\n\nBest,\n[Your name]"
+  },
+  {
+   "jid": "e47b612a33bb",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "What do you think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, I think the direction is right, and I'd rather hear where you land before I push a view. What matters most to me is whether it solves the problem you actually have, not whether it sounds good in the room. So tell me what's working and what isn't, and I'll tell you straight where I think the gaps are."
+  },
+  {
+   "jid": "34c8f6d4cf4d",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Honestly, I'm not convinced this will work in an environment as messy as ours.",
+   "conversation": [
+    "USER (spoken): Tell me a bit about how your invoices flow today.",
+    "PROSPECT: We've got three ERPs from acquisitions, a different approval chain in each, and half the vendors still send paper.",
+    "USER (spoken): That is a lot of variety."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's fair, and honestly the mess is usually the reason this is worth doing rather than a reason it won't work. The three ERPs and the paper vendors are exactly what we'd map first, before anything changes. What does a clean month look like for you today, and where does it break down most?"
+  },
+  {
+   "jid": "8f9cd8f1291e",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "We've been burned before by integrations that were sold as plug and play. Our NetSuite has custom fields and two subsidiaries, so what happens if the connector breaks, and who fixes it?",
+   "conversation": [],
+   "evidence_ids": [
+    "SALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I hear you, and that's exactly the right question to ask. I won't tell you it's plug and play, because with custom fields and two subsidiaries it isn't. Let me confirm how the connector handles custom fields and subsidiary-level records, and what our support commitment looks like if something breaks, so I'm giving you the real answer and not a promise I can't back up. Which custom fields matter most to you, and who on your side would be the one calling us if it went down?"
+  },
+  {
+   "jid": "b4a2980c68ec",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "Prospect says anything over fifty grand has to go to their management committee. How do I handle that?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a normal threshold, so let's make the committee's job easy. What does the committee need to see to approve something at this level, and who else weighs in before it gets there? If we can shape the business case around their criteria, the review becomes a formality."
+  },
+  {
+   "jid": "5a08e57acb4e",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Who are those customers?",
+   "conversation": [
+    "PROSPECT: So what kind of results do your customers actually see?",
+    "USER (spoken): Typically they cut invoice processing costs by more than half and get approvals done in a day or two.",
+    "PROSPECT (heard): Can you prove that?",
+    "NATIVELY: Fair question. These are customer-reported medians across 41 customers live at least six months, and we haven't independently audited them. I can walk you through the methodology, and references come after a mutual NDA. What would make this credible for you?"
+   ],
+   "evidence_ids": [
+    "SALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "We don't publish customer names, so I can't share those here. What I can do is walk you through the methodology behind the numbers, and once we have a mutual NDA in place, I can line up references. What would be most useful to see first?"
+  },
+  {
+   "jid": "295d3e689b3b",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "And where does our data physically live?",
+   "conversation": [
+    "USER (spoken): Thanks for bringing security into this call.",
+    "PROSPECT: Sure. I'm the security reviewer, so I'll keep this brief.",
+    "USER (spoken): Happy to answer anything. We hold SOC 2 Type II, and our current report period ended at the end of March this year.",
+    "PROSPECT: Okay.",
+    "PROSPECT (heard): Is that report something I can actually read?",
+    "NATIVELY: Yes, I can share it under NDA. I'll send the report along with our bridge letter covering the period since March, so you're looking at current coverage. What's the best way to get that to you, and is there a specific control area you want to dig into first?",
+    "PROSPECT (heard): Sorry, type one or type two?",
+    "NATIVELY: Type two. The report is a SOC 2 Type II, so it covers controls over a period of time rather than a single point. I'll send it under NDA with the bridge letter for the period since March. Which control area do you want to start with?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'll confirm the exact regions and hosting setup for you rather than guess at it. What I can tell you now is that the SOC 2 report covers our controls around data handling, and I'll send it under NDA with the bridge letter. Which regions matter most for your review?"
+  },
+  {
+   "jid": "9243c7b68e68",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "I'd need to get my boss on board, though.",
+   "conversation": [
+    "PROSPECT (heard): This all looks pretty good to us.",
+    "NATIVELY: That's great to hear. Before we move forward, what would you want to see next to feel confident making a decision? If it helps, I can walk through the pricing and what onboarding would look like on your side.",
+    "PROSPECT (heard): What happens next?",
+    "NATIVELY: Here's how it usually goes: once you're ready, we agree on the plan and pricing, then I get your team set up with onboarding. I'll walk you through both now so nothing's a surprise. Which would you like to start with, the pricing or the onboarding timeline?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That makes sense, and it's usually the same story on our side. What does your boss care about most when they sign off on something like this? If you tell me that, I can put together a short summary you can forward, so they get the value without sitting through the whole demo."
+  },
+  {
+   "jid": "2179a76c3d6b",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "What's the biggest risk?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The biggest risk is adoption. If the team doesn't actually use it day to day, the value never shows up. That's why I'd want to start with one team and prove it before rolling it out wider."
+  },
+  {
+   "jid": "7d8d6a7f09e8",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Can you explain that?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Can you point me to which part you'd like me to walk through? If it's the pricing, I can break down what's included at each tier and how it maps to what you're trying to do."
+  },
+  {
+   "jid": "7a73eadd2c34",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "There's one thing still bugging me, and I don't want to say it in front of Dana.",
+   "conversation": [],
+   "evidence_ids": [
+    "SALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Of course, this stays between us. What's on your mind?"
+  },
+  {
+   "jid": "2584428ba5b8",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Who on our side needs to be involved?",
+   "conversation": [
+    "PROSPECT (heard): How does implementation usually go with a company our size?",
+    "NATIVELY: I'll walk you through how we typically run it. For a team your size, it's usually a phased rollout rather than a big-bang switch, so your people keep working while we bring things over. I'll confirm the exact timeline and steps for your setup and send that over. What does your current setup look like, and who on your side would own the rollout?"
+   ],
+   "evidence_ids": [
+    "SALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The people who'll actually use it day to day, whoever owns your data and integrations, and someone who can sign off on the rollout. Most teams keep it to a small core group so decisions don't stall. Who would you see as the natural owner on your side?"
+  },
+  {
+   "jid": "d0caccdfe6d2",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Why did that happen?",
+   "conversation": [
+    "PROSPECT: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROSPECT: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The vendor changed their API without telling us, so the integration slipped by about two weeks. That's the short version, and I know it lands on a date that was already tight.\n\nWhat I'd like to do is walk through what it takes to get back on track. Can we get twenty minutes this week to look at the options together?"
+  },
+  {
+   "jid": "87175a8a03ab",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Can you give me an example?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Happy to. The clearest one is a customer who came to us after trying to solve this in-house. They'd built something that worked for a small group, but it broke down as they scaled, and the maintenance was eating their team's time. We mapped what they actually needed, showed them where our approach handled it out of the box, and they moved over in stages so nothing got disrupted. What does your current setup look like today?"
+  },
+  {
+   "jid": "50bffaa6f9da",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Can you clarify what you mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair question. What I meant is that the value shows up in the first few weeks, not months. Which part would you like me to unpack first?"
+  },
+  {
+   "jid": "7d3f1f4dd782",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "What if we go over ten thousand invoices some months?",
+   "conversation": [
+    "PROSPECT (heard): What does the Growth plan include, exactly?",
+    "NATIVELY: The Growth plan is **$4,800 a month**, billed annually in advance, and it covers up to **10,000 invoices** a month, up to 3 entities, and 40 users. You get NetSuite and QuickBooks Online connectors, the Dynamics 365 Business Central connector in beta, SAML SSO, two-way and three-way matching, a 99.9 percent uptime SLA, and business-hours support with a 4-hour first response. There's also a one-time implementation fee of $12,000, typically about six weeks to go live. Which of those matters most for how your team works today?",
+    "PROSPECT (heard): And what would we pay in year one, all in?",
+    "NATIVELY: Year one all in on Growth comes to **$69,600**: $4,800 a month billed annually, so $57,600 for the subscription, plus the one-time **$12,000** implementation. That's the list basis with no discount applied. If it helps, I can put together a couple of options, say a two-year term or a proof of value first, so you can see what year one looks like either way. Which would be more useful to bring to your team?"
+   ],
+   "evidence_ids": [
+    "SALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Overage on Growth is **$0.85 per invoice** above the 10,000, so a busy month just bills at that rate rather than forcing an upgrade. If you're consistently running well past 10,000, Enterprise is quoted per deal and includes the SAP connector, EU data residency, and 24x7 support. How many invoices are you actually processing in a peak month?"
+  },
+  {
+   "jid": "bb6c629dd1d4",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "I'm an analyst, so I don't make the call on this, but my director asked me to sit in.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That makes sense, and it's helpful to know who's weighing in. Since your director will be part of the decision, what matters most to them when they look at something like this? I'd rather make sure whatever I put in front of you answers their questions too, so nothing gets lost in translation."
+  },
+  {
+   "jid": "132e2bdb0044",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "So it never happened?",
+   "conversation": [
+    "PROSPECT (heard): Your competitor told me you had a data breach last year. Is that true?",
+    "NATIVELY: I can't confirm or deny something a competitor told you, and honestly that's not a source I'd rely on. What I can do is get you a straight answer from our team on our security posture and any incidents, in writing. What would you need to see to feel comfortable?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm not going to say it never happened, because I don't have that answer in front of me. What I can tell you is that a competitor isn't a source I'd trust on this, and I'll get you a straight written answer from our security team. What would you need to see to feel comfortable?"
+  }
+ ]
+}
