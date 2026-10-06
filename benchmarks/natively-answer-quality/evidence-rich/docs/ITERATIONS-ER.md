@@ -1695,3 +1695,15 @@ run-to-run variation (a set of 180: about ±0.16; one mode of 20: about ±0.7). 
 | 5 | First word, profile modes, median (judge-free) | ≤ control + 150 ms |
 **E16b is a keep candidate only if E16c holds on every line AND this holds on every line.** Then Evin is told; nothing
 is landed without his word. If E16c fails, the candidate's holdout is not judged (the control's still is).
+
+### E16c — amended 2026-10-06 11:02 UTC, before any E16c measurement exists: the recorded runs are gone
+At about 10:40 UTC the whole `.claude/worktrees/` folder of the repository was deleted by something other than this
+session (with `release/` and the home backup folder; no local snapshot). Lost: every run folder (rows, recorded
+prompts), every judgment file, the judge caches, the E16c replays, and the two holdout runs that were in progress.
+What git held survives: the harness, datasets, oracles, the evidence files, this log and the id lists.
+E16c is therefore measured on FRESH runs, same 80 ids (`results/replay/e16c-ids.json`), same rule, same two replays
+per row and build: **control = today's main (`73cf34e6`), runs er3-dev-ctl + er3-dev2-ctl; candidate = today's main +
+the two E16b commits (branch `cand/e16b-main`), runs er3-dev-new + er3-dev2-new**; the app is run on the 80 rows to
+record each build's prompt, then `replay-generator.mjs` (arms `e16c3-ctl`, `e16c3-new`, k 2), Astra on the 320 drafts.
+The control is today's main, not the 2026-10-05 build; both arms share it. The blind-holdout safety pair is run after
+this if the window allows; its rule is unchanged.
