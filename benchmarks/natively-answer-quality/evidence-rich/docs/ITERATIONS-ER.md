@@ -1594,3 +1594,21 @@ on about a third of them; nine was fine; the retries at six were clean.
 the rest of E10. Read with `ER_JUDGE=astra node evidence-rich/report/rule-e17.mjs --e18 [--sample-b]` (pool the two
 by hand: the rule is on the pooled samples) and `ER_JUDGE=astra node evidence-rich/replay-repair-judge.mjs verdict`.
 No app run is possible until the disk has about 6 GB free (3.2 GB now; other sessions' installs).
+
+### E18 — result and verdict under Astra (2026-10-06 02:29 UTC; batch opened 02:00 UTC, calibration passed; arms e18 / e18b against e17-ctl / e17b-ctl; 102 + 111 rows differ, all judged; 939 rows whose turn ran the pass)
+| # | Line (pooled over the two samples) | Sample 1 | Sample 2 | Pooled | Holds |
+|---|---|---|---|---|---|
+| 1 | Edits that add "two ways" fall by at least 60 % | 8 → 0 | 16 → 1 | 24 → 1 | yes |
+| 2 | conflict_stale rows that differ: mean change ≥ +0.5; hard fails ≤ control | 21 rows +0.01; 3 → 5 | 25 rows +1.29; 5 → 5 | 46 rows +0.71; **8 → 10** | **no** |
+| 3 | All rows: effect ≥ control; hard fails ≤ control | −0.046; 14 → 18 | +0.051; 13 → 16 | +0.002; **27 → 34** | **no** |
+| 4 | Rows flagged source_conflict_ignored / stale_source_preferred ≤ control + 1 | 1 → 5 | 2 → 8 | **3 → 13** | **no** |
+| 5 | missing_evidence rows: effect ≥ control − 0.10 | −0.05 | −0.03 | −0.04 | yes |
+| 6 | Pass time p90 ≤ control + 400 ms | +171 ms | +183 ms | | yes |
+**Verdict: not kept.** Told to decide whether a conflict is settled, the pass states one value as current and drops
+the other; the judge of record flags that as a conflict ignored or a stale source preferred four times as often, and
+hard fails rise by seven.
+**Conclusion for the conflict line of the claim pass (E6 v1, E6 v2, E17, E18 — four wordings, three of them under
+Astra or re-read by it):** every wording that lets the pass treat a conflict as settled raises the conflict-ignored
+errors; the wording in the app ("given two ways … needs confirming") is the one Astra penalises least. The Claude Code
+judge had scored that hedge at −2.3 on twelve rows; Astra does not see it that way (the 17–25 conflict rows that
+differ gain 0.0 to 1.3, with new hard fails). **This line is closed: do not re-propose a conflict rewording.**
