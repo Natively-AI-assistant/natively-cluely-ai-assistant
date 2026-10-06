@@ -76,11 +76,25 @@ test('no focused window falls back to current display, then primary', () => {
 function helperFixture(mode = 'launcher') {
   let bounds = { ...original };
   const calls = [];
+  let minimum = [0, 0];
+  const listeners = {};
   const window = {
     isDestroyed: () => false,
     getBounds: () => bounds,
-    setMinimumSize: (...size) => calls.push(['minimum', ...size]),
-    setBounds: value => { bounds = value; calls.push(['bounds', value]); },
+    getMinimumSize: () => minimum,
+    setMinimumSize: (...size) => {
+      minimum = size;
+      bounds = { ...bounds, width: Math.max(bounds.width, size[0]), height: Math.max(bounds.height, size[1]) };
+      calls.push(['minimum', ...size]);
+    },
+    setBounds: value => {
+      bounds = { ...value, width: Math.max(value.width, minimum[0]), height: Math.max(value.height, minimum[1]) };
+      calls.push(['bounds', bounds]);
+    },
+    on: (event, handler) => { listeners[event] = handler; },
+    webContents: { id: 1, send() {} },
+    setOpacity() {}, setContentProtection() {}, hide() {},
+    showInactive: () => calls.push(['native-show']),
   };
   const fakeElectron = {
     app: { isPackaged: false },
@@ -97,6 +111,7 @@ function helperFixture(mode = 'launcher') {
     module, exports: module.exports, process, __dirname: '/tmp', console: { log() {} },
     require: name => {
       if (name === 'electron') return fakeElectron;
+      if (name === './services/KeybindManager') return { KeybindManager: { getInstance: () => ({ setMode() {} }) } };
       if (name.startsWith('node:')) return require(name);
       if (name === './utils/shortcutRestore') return { shortcutRestoreBounds, shortcutRestoreDisplay };
       if (name === './utils/launcherAspect') return require('../../../dist-electron/electron/utils/launcherAspect.js');
@@ -112,8 +127,12 @@ function helperFixture(mode = 'launcher') {
     repositionOverlayPopovers: () => {},
     showMainWindow: inactive => calls.push(['show', inactive]),
     hideMainWindow: () => calls.push(['hide']),
+    appState: { settingsWindowHelper: { reposition() {} }, recordNativeOomOutboundIpc() {} },
+    rememberLauncherNormalBounds() {},
+    setOverlayUiState() {}, applyOverlayAuxVisibility() {},
+    getDisplayWorkArea: rect => fakeElectron.screen.getDisplayMatching(rect).workArea,
   });
-  return { helper, calls, window, fakeElectron };
+  return { helper, calls, window, fakeElectron, listeners };
 }
 
 test('shortcut restore applies bounds before showing without stealing focus', () => {
@@ -175,6 +194,55 @@ test('overlay restore saves its relocated bounds and synchronizes auxiliary wind
   assert.equal(helper.overlayBounds.x, -1560);
   helper.lastOverlayUiState = { expanded: false };
   assert.equal(helper.isOverlayExpanded(), false);
+});
+
+test('small-to-large launcher restore centers the final native minimum size', () => {
+  const { helper, window } = helperFixture();
+  window.setBounds({ x: 50, y: 25, width: 900, height: 600 });
+  window.setMinimumSize(900, 600);
+  helper.toggleMainWindow(true);
+  const actual = window.getBounds();
+  assert.deepEqual(actual, { x: -1560, y: -925, width: 1200, height: 800 });
+  assert.deepEqual(window.getMinimumSize(), [1200, 800]);
+});
+
+test('ordinary drags refresh launcher minimum on both small and large displays', () => {
+  const { helper, window, fakeElectron, listeners, calls } = helperFixture();
+  helper.overlayWindow = null;
+  helper.setupWindowListeners();
+  const small = { id: 3, workArea: { x: 0, y: 25, width: 1000, height: 600 } };
+  fakeElectron.screen.getDisplayMatching = rect => rect.x < 0 ? secondary : small;
+  listeners.move();
+  assert.deepEqual(window.getMinimumSize(), [900, 600]);
+  window.setBounds({ x: -1800, y: -900, width: 900, height: 600 });
+  listeners.move();
+  assert.deepEqual(window.getMinimumSize(), [1200, 800]);
+  const updates = calls.filter(call => call[0] === 'minimum').length;
+  listeners.move();
+  assert.equal(calls.filter(call => call[0] === 'minimum').length, updates);
+});
+
+test('overlay stays centered through the real show path after width and height limits', () => {
+  const { helper, window, fakeElectron, calls } = helperFixture('overlay');
+  const small = { id: 3, workArea: { x: -1000, y: 25, width: 1000, height: 800 } };
+  fakeElectron.screen.getDisplayNearestPoint = () => small;
+  fakeElectron.screen.getDisplayMatching = rect => rect.x < 0 ? small : primary;
+  helper.showMainWindow = Object.getPrototypeOf(helper).showMainWindow;
+  helper.toggleMainWindow(true);
+  assert.deepEqual(window.getBounds(), { x: -950, y: 85, width: 900, height: 720 });
+  const applied = calls.filter(call => call[0] === 'bounds');
+  assert.deepEqual(applied[0][1], applied[1][1]);
+  assert.equal(calls.at(-1)[0], 'native-show');
+});
+
+test('overlay birth-height floor is included before centering and showing', () => {
+  const { helper, window, calls } = helperFixture('overlay');
+  window.setBounds({ ...original, height: 1 });
+  helper.showMainWindow = Object.getPrototypeOf(helper).showMainWindow;
+  helper.toggleMainWindow(true);
+  const applied = calls.filter(call => call[0] === 'bounds');
+  assert.equal(window.getBounds().height, 216);
+  assert.deepEqual(applied.at(-2)[1], applied.at(-1)[1]);
 });
 
 // Exercise the actual AppState toggle method without booting its app singleton.
