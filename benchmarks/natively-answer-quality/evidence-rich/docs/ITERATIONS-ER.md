@@ -1653,3 +1653,26 @@ when the pool closed with HTTP 402 at 03:16 UTC; the drafts of the pass-edited r
 reached. Nothing new is kept from this batch; nothing was landed.
 Standing by the judge of record: main with the 2026-10-05 fixes 8.990 on the blind holdout (was 8.674); E10 confirmed;
 E16b, E17, E18 not kept; the conflict line of the claim pass is closed.
+
+## E16c — E16b measured again, on the rows it changes, with repetitions (rule written 2026-10-06 04:00 UTC, before any replay)
+**Why:** E16b missed one line of its rule (rows that gain the résumé: +0.36 under Astra against +0.5) on ONE app run
+per build. Five rows rose by 3 to 6 points and three fell by 4 to 6; an arithmetic slip and a deferral are among the
+falls, and one run cannot say whether they come from the résumé being in view or from the generator's own variation
+(same build, same prompt: a row can move by several points between runs). Astra's dev scores of the build on main put
+four of the eight weak Technical Interview rows down to the same cause E16b removes (no résumé in the prompt).
+E16b's verdict stands as recorded. E16c is a new measurement of the same build (`cand/e16b`, on GitHub), with its own rule.
+**What is measured:** the 80 development rows whose answer prompt differs by more than 200 characters between the
+control runs (er-dev-e13c, er-dev2-e13c) and the E16b runs (er-dev-e16b, er-dev2-e16b): 60 grew, 20 shrank; 76 are in
+the two profile modes. On the other 550 rows the two builds send the same prompt bar timestamps. For each of the 80
+rows the generator is replayed twice on each build's RECORDED prompt (`replay-generator.mjs`, the app's own request;
+arms `e16c-ctl`, `e16c-new`), and Astra judges the drafts, like with like (no post-answer pass in either arm).
+| # | Line | Bar |
+|---|---|---|
+| 1 | Mean over the 80 rows of (new − control), each row the mean of its two replays | ≥ +0.25 |
+| 2 | Hard fails (sum over rows of the share of a row's replays that hard-fail) | ≤ control |
+| 3 | Rows whose two-replay mean falls by more than 1.5 | at most half the number that rise by more than 1.5 |
+| 4 | Replays flagged unsupported_personal_claim or wrong_profile_used | ≤ control + 2 |
+Judge-free lines already measured in the app and unchanged: résumé loaded but not in the prompt 24 → 1 of 103; rows
+with every needed fact 490 → 497 of 499; first word in the profile modes +68 ms.
+**If every line holds:** E16b is a keep candidate; Evin is told before anything is landed, and the claim pass's part
+(LFW-013's deferral) is checked on the first app run. **If line 1 or 3 fails:** the falls are real and E16b is closed.
