@@ -1722,3 +1722,26 @@ the candidate's prompt differs from the control's by more than 200 characters on
 the personal-claim flags go down, not up — the three falls of the single-run measurement do not repeat as a pattern
 (TI-007, an arithmetic slip last time, rises here). The mean gain's interval still includes zero: 12 rows gain 2 to 6
 points, 4 lose 3 to 6, 64 barely move. The blind-holdout safety rule decides the rest.
+
+### E16b on today's main — the blind-holdout safety rule under Astra (2026-10-06 12:07 UTC; aggregates only)
+Control er-holdout-m3 = main `73cf34e6`; candidate er-holdout-e16b3 = `cand/e16b-main`. One run each, direct DeepSeek.
+Astra judged all 180 candidate rows and 150 of the 180 control rows before the pool closed (HTTP 402, 12:07 UTC); the
+30 missing control rows are call-center 20, recruiting 8, seminar 2. Both profile modes are fully judged on both sides.
+| # | Line | Measured | Holds |
+|---|---|---|---|
+| 1 | Résumé loaded, none in the prompt: at most a quarter of the control (judge-free, 180 rows) | 10 → 0 of 34 | yes |
+| 2 | Rows with every needed fact ≥ control (judge-free, 180 rows) | 141 → 143 of 143 | yes |
+| 3 | All rows: mean ≥ control − 0.15; hard fails ≤ control + 3 | on the 150 judged pairs 8.846 → 8.983; hard 20 → 16 | yes on 150 of 180 |
+| 4 | Profile modes (40 rows): mean ≥ control − 0.30; flagged rows ≤ control + 2 | 8.32 → 8.63; flagged 6 → 5 | yes |
+| 5 | First word, profile modes, median ≤ control + 150 ms | 1,237 → 1,286 ms | yes |
+Line 3 is complete on 150 pairs. The candidate's 30 unpaired rows score 8.09 with 7 hard fails (candidate, all 180:
+8.835, 23 hard). The hard-fail half of the line cannot fail whatever the control scores there (23 ≤ 20 + 3). The mean
+half fails only if the control scores above 9.68 on those 30 rows, which are in modes whose prompt E16b does not
+change. The 30 judgments are the first thing in the next Astra window; until then line 3 is stated as "holds on 150
+of 180".
+By mode, 150 pairs: looking-for-work 8.68 → 9.07, technical-interview 7.97 → 8.19, sales 7.67 → 9.02, lecture
+9.55 → 9.53, recruiting 8.87 → 8.88, general 9.41 → 9.13, team-meet 9.32 → 9.03, seminar 9.37 → 8.97 (20 rows a mode,
+one run each: a mode moves by about ±0.7 between runs of the same build).
+**Standing: E16c holds on every line; the holdout safety rule holds on every line, line 3 on 150 of 180 pairs. E16b is
+a keep candidate. Evin is told; nothing is landed without his word.** Main's own blind-holdout score by Astra, today's
+main: 8.846 on the 150 rows judged so far.
