@@ -17,8 +17,10 @@ One table, `funnel_events` (natively-api migrations 025 and 026).
 | `app_first_run` | app | first launch of a new install |
 | `app_active_day` | app | once per local day the app is open, with yes/no state (own AI, API key, Pro) |
 | `onboarding_stage` | app | welcome, tour and permissions: shown, completed |
-| `meeting_started`, `meeting_ended` | app | every meeting; whose AI answers, whole minutes, how many answers (a count) |
-| `feature_used` | app | which features were used that day, once per feature per day |
+| `meeting_started`, `meeting_ended` | app | every meeting; whose AI answers, whole minutes, how many answers (a count). Quitting the app with a meeting running reports the end too |
+| `meeting_cut_off` | app | a meeting the app never saw end (a crash, a kill, a shutdown), reported at the next launch; minutes up to when the app was last up |
+| `answer_failed` | app | an answer did not come: the kind of cause (one word from a fixed list), whose AI, whether a meeting was running; once per cause per day |
+| `feature_used` | app | which features were used that day, once per feature per day. `chat` is a typed question; `answer` is the button pressed, not an answer received |
 | `card` | app | every card the app raises, from the card ledger: shown, acted, later, never |
 | `trial_start_result` | app | every trial start, including the ones that fail and why |
 | `trial_expired` | app | the trial ran out |
@@ -122,6 +124,11 @@ how many were already paying) and people who never ran a reporting app. Trial â†
 who started a trial; buyers get cancellations, failed renewals, refunds, chargebacks, "paid and
 kept", renewals and revenue per currency. `lib/funnelReport.js` says what each number means and what
 it cannot see (telemetry off, older app versions, purchases made outside the app).
+
+"Got an answer" means a meeting ended with a count above zero, and nothing else. It is a floor: a
+meeting with no end event has no count. App 2.9.2 sent `feature_used: chat` at every meeting start
+and reported no end when the app was closed mid-meeting (a quarter of its meetings), so for that
+version read the Answers section's "with no end at all" line beside the answer rate.
 
 One person's history, by email, device, install, trial or account:
 
