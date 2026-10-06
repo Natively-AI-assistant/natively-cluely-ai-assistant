@@ -1676,3 +1676,22 @@ Judge-free lines already measured in the app and unchanged: résumé loaded but 
 with every needed fact 490 → 497 of 499; first word in the profile modes +68 ms.
 **If every line holds:** E16b is a keep candidate; Evin is told before anything is landed, and the claim pass's part
 (LFW-013's deferral) is checked on the first app run. **If line 1 or 3 fails:** the falls are real and E16b is closed.
+
+### E16b on today's main — the blind-holdout safety rule (written 2026-10-06 09:30 UTC, before either holdout run exists)
+The disk has room again (43 GB), so the hour before Astra's next window is used for two app runs of the blind holdout:
+**control `er-holdout-m3`** = main as it stands today (`73cf34e6`, which also carries other sessions' work since the
+2026-10-05 fixes) and **candidate `er-holdout-e16b3`** = the same commit plus the two E16b commits (taken as patches
+from GitHub: e3cb8ba7 and b5684a62 of the old history). One run each, direct DeepSeek, fresh profile, one app at a time.
+The control also gives main's own number by the judge of record (the 8.990 run was the build just before the last two
+corrections).
+E16c decides whether E16b helps (rule above). The holdout is the SAFETY check, with margins from the measured
+run-to-run variation (a set of 180: about ±0.16; one mode of 20: about ±0.7). Aggregates only.
+| # | Line | Bar |
+|---|---|---|
+| 1 | Profile modes, turns with a résumé loaded and none in the prompt (judge-free) | at most a quarter of the control's count |
+| 2 | Rows with every needed fact in the prompt (judge-free) | ≥ control |
+| 3 | All 180 rows: mean; hard fails | ≥ control − 0.15; ≤ control + 3 |
+| 4 | The two profile modes (40 rows): mean; rows flagged unsupported_personal_claim / wrong_profile_used | ≥ control − 0.30; ≤ control + 2 |
+| 5 | First word, profile modes, median (judge-free) | ≤ control + 150 ms |
+**E16b is a keep candidate only if E16c holds on every line AND this holds on every line.** Then Evin is told; nothing
+is landed without his word. If E16c fails, the candidate's holdout is not judged (the control's still is).
