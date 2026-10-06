@@ -1753,3 +1753,12 @@ claim-authority gate). The tree is identical to the measured candidate (`cand/e1
 type-check clean; context-intelligence 1,882, intelligence 983, llm 5,828 tests pass; services 5,507 pass with the two
 failures main already had (RetrievalScaleLexical:173, a todo; TrialCampaignIpc:97). Not run on Windows.
 Still owed: the 30 control judgments of the holdout pair (next Astra window), which complete line 3 of the safety rule.
+
+## Window of 2026-10-07 (~02:00 UTC) — plan written 2026-10-06 19:20 UTC
+Evin: "start iterating again at 7:30 am till astra goes out again". Main is `f4cd986d` (E16b plus another session's
+funnel fix). Every earlier development run is gone (2026-10-06), so the night is used for a fresh development
+baseline of main: er4-dev-main (270) and er4-dev2-main (360), direct DeepSeek, fresh profile. Run data is copied to
+`~/natively-er-backup/` (outside the repository) and rows and judgments are committed.
+Astra, in this order (`results/astra-next4.sh`): a candidate's steps if one is ready → the 30 control rows left of the
+holdout pair (line 3 of E16b's safety rule) → the 630 baseline rows → the drafts of the rows the pass edited.
+The baseline under Astra is what the next candidates are chosen from and read against.
