@@ -1,0 +1,59 @@
+{
+  "run_id": "er3-dev2-ctl",
+  "runner_version": "er-1.0.0",
+  "benchmark": "evidence-rich-v1",
+  "partition": "dev2",
+  "dataset_sha256": "0886c10b084eeef1ac4171be93a63b079af14bb7d9d8841f275f4d835e8275c9",
+  "manifest_sha256": "8aa245098a930f64fc181bb8e30d6c851ef2fa93d89c3404f530b9277cf0cbf3",
+  "git_commit": "73cf34e62ad2f9b4e0bd0ce8ad9720ebc7a58f8f",
+  "git_branch": "HEAD",
+  "git_dirty": false,
+  "git_dirty_paths": 0,
+  "app_version": "2.9.2",
+  "app_root": "/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/er-main",
+  "started_at": "2026-10-06T11:06:45.570Z",
+  "finished_at": "2026-10-06T11:10:29.322Z",
+  "provider_model_config": {
+    "provider": "gemini",
+    "model": "deepseek-flash",
+    "modelId": "deepseek-flash",
+    "displayName": "deepseek-flash",
+    "isOllama": false
+  },
+  "default_config_before_keys": {
+    "provider": "gemini",
+    "model": "deepseek-flash",
+    "modelId": "deepseek-flash",
+    "displayName": "deepseek-flash",
+    "isOllama": false
+  },
+  "pro_enabled_via_e2e_hook": {
+    "success": true,
+    "pro": true
+  },
+  "generator": {
+    "requested_first": "agentrouter/deepseek",
+    "used": "deepseek-direct",
+    "generator_fallback": true,
+    "fallback_reason": "direct DeepSeek for comparability: the baselines this run is compared with (er-dev-m1, er-dev-m1r) used direct DeepSeek; AgentRouter is available in this build and was not used"
+  },
+  "local_models": {
+    "embedder": true,
+    "reranker": true
+  },
+  "reference_root": null,
+  "app_log": "/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix/benchmarks/natively-answer-quality/evidence-rich/results/app-er-main-1791284457897.log",
+  "os": "Darwin 27.0.0 arm64",
+  "node": "v25.9.0",
+  "warmup_requests": 3,
+  "request_timeout_ms": 90000,
+  "concurrency": 1,
+  "sessions": [
+    {
+      "started_at": "2026-10-06T11:06:45.571Z",
+      "resumed": false,
+      "app_log": "/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix/benchmarks/natively-answer-quality/evidence-rich/results/app-er-main-1791284457897.log",
+      "finished_at": "2026-10-06T11:10:29.322Z"
+    }
+  ]
+}
