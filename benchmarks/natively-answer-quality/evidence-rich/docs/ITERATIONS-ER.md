@@ -1612,3 +1612,25 @@ Astra or re-read by it):** every wording that lets the pass treat a conflict as 
 errors; the wording in the app ("given two ways … needs confirming") is the one Astra penalises least. The Claude Code
 judge had scored that hedge at −2.3 on twelve rows; Astra does not see it that way (the 17–25 conflict rows that
 differ gain 0.0 to 1.3, with new hard fails). **This line is closed: do not re-propose a conflict rewording.**
+
+### The build on main, on the blind holdout, by the judge of record (2026-10-06 02:44 UTC; aggregates only)
+er-holdout-e13 is the holdout run of `cand/e13` (main `efc126a9` plus the fixes pushed on 2026-10-05 as far as E13;
+the two later corrections, which restored the awaited rerank, are not in this run). 180 rows, gpt-6-astra, charter
+er1-ebec3e9a021e, calibration passed in the same batch.
+| Blind holdout, Astra | Mean | Hard fails | Rows at 9.5 or more |
+|---|---|---|---|
+| Kept build before this work (er-holdout-base) | 7.725 | 42 (23.3 %) | 78 |
+| E1 (er-holdout-e1) | 8.585 | 18 (10.0 %) | 100 |
+| main on 2026-10-04 (er-holdout-m1) | 8.674 | 28 (15.6 %) | 109 |
+| **main with the 2026-10-05 fixes (er-holdout-e13)** | **8.990** | **19 (10.6 %)** | **118** |
+By mode, m1 → e13: call-center 7.68 → 8.30, general 8.91 → 9.31, lecture 8.90 → 9.20, looking-for-work 8.50 → 9.50,
+recruiting 9.08 → 9.01, sales 7.98 → 8.93, seminar 9.54 → 9.42, team-meet 8.92 → 9.26, **technical-interview
+8.54 → 7.98** (20 rows; one run each, and a mode moves ±0.7 between runs of the same build, but it is the one mode
+that fell and the next thing to look at). The Claude Code judge gave the same run 8.759 with 14 hard fails: the two
+series are not pooled.
+Targets from the report's section 2 (9.2 mean, under 1 % hard fails): not met.
+
+### E10 under Astra — partial (2026-10-06 02:40 UTC)
+58 of 131 turns have all four judgments (every turn of er-dev-m1 and er-holdout-m1): cut 8.289 → whole 8.902
+(+0.613 ±0.597), hard fails 10.5 → 7.0, needed-fact strings 134 → 169, first useful median 1,160 → 1,231 ms. All four
+lines hold on these turns. The rest (er-dev-m1r, er-dev-m2) is being judged; the verdict is stated when it is whole.
