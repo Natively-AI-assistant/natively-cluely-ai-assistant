@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { answerFailureCause } from '../answerFailure.mjs';
+import { answerFailureCause, looksLikeUserStop } from '../answerFailure.mjs';
 import { ANSWER_FAILURE_CAUSES, FUNNEL_CATALOG, checkFunnelProps } from '../funnelCatalog.mjs';
 import { DIRECT_ASSIST_CAUSES, directAssistFailureCause } from '../../directAssistFailure.mjs';
 import { chatFailureFromError } from '../../chatFailure.mjs';
@@ -92,6 +92,22 @@ test('a stopped or cut-short answer is not a failed one', () => {
   for (const nothing of [null, undefined, {}, { code: '' }, { code: 42 }]) assert.equal(answerFailureCause(nothing), null);
 });
 
+test('a raw error that is the user stopping the request is not reported', () => {
+  const abort = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+  for (const raw of [abort, 'AbortError: The operation was aborted', 'Request cancelled', 'Error: aborted', 'The user aborted a request.',
+    'canceled', 'Request was cancelled by a newer request', 'superseded']) {
+    assert.equal(looksLikeUserStop(raw), true, String(raw?.message ?? raw));
+  }
+  // Real failures that must still be counted, including ones that only resemble a stop.
+  for (const raw of ['401 Incorrect API key provided', '429 Too Many Requests', 'fetch failed: connect ECONNREFUSED 127.0.0.1:11434',
+    'Your subscription was not found', 'The model produced no answer in time', new Error('socket hang up'), null, undefined, {}, 42]) {
+    assert.equal(looksLikeUserStop(raw), false, String(raw?.message ?? raw));
+  }
+  const src = read('../../analytics/analytics.service.ts');
+  const fn = src.slice(src.indexOf('export function reportAnswerFailed'), src.indexOf('function reportFeatureUsed'));
+  assert.ok(fn.indexOf('looksLikeUserStop(raw)) return;') !== -1 && fn.indexOf('looksLikeUserStop(raw)) return;') < fn.indexOf('funnelTrack'), 'checked before anything is sent');
+});
+
 test('the analytics helper reports the cause and nothing else', () => {
   const src = read('../../analytics/analytics.service.ts');
   const fn = src.slice(src.indexOf('export function reportAnswerFailed'), src.indexOf('function reportFeatureUsed'));
@@ -104,7 +120,7 @@ test('the analytics helper reports the cause and nothing else', () => {
   assert.match(src, /public trackChatQuestionSent\(\): void \{\s*reportFeatureUsed\('chat'\);/);
   const ui = read('../../../components/NativelyInterface.tsx');
   assert.match(ui, /lastManualSubmitRef\.current = \{ text: userText, atMs: nowMs \};\s*analytics\.trackChatQuestionSent\(\);/);
-  assert.match(ui, /const failure = chatFailureFromError\(raw, \{ provider: chatProviderLabelRef\.current \}\);\s*reportAnswerFailed\(failure\);/);
+  assert.match(ui, /const failure = chatFailureFromError\(raw, \{ provider: chatProviderLabelRef\.current \}\);\s*reportAnswerFailed\(failure, raw\);/);
   assert.match(ui, /failure: DirectAssistAnswerFailure,\s*\) => \{\s*reportAnswerFailed\(failure\);/);
 });
 

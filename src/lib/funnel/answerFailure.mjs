@@ -42,6 +42,21 @@ const NOT_A_FAILURE = new Set(['CANCELLED', 'OUTPUT_LIMIT', 'OUTPUT_REPETITION']
 const RENAMED = Object.freeze({ brokeOff: 'broke_off', tooLarge: 'too_large', waited: 'timeout' });
 
 /**
+ * Is this raw error the user's own doing: a request they stopped, or one
+ * replaced by their next question? The overlay's other answer paths hand over
+ * whatever was thrown as a string, and an abort arrives looking like any other
+ * unknown error. It is not a failed answer and must not be counted as one.
+ *
+ * @param {unknown} raw
+ * @returns {boolean}
+ */
+export function looksLikeUserStop(raw) {
+  const text = typeof raw === 'string' ? raw : (raw && typeof raw.message === 'string' ? raw.message : '');
+  const name = raw && typeof raw === 'object' && typeof raw.name === 'string' ? raw.name : '';
+  return name === 'AbortError' || /\babort(?:ed|error)?\b|\bcancel+ed\b|\bsuperseded\b/i.test(text);
+}
+
+/**
  * @param {{ code?: string, status?: number, waitedMs?: number, partial?: boolean, unreachable?: boolean } | null | undefined} failure
  * @returns {string | null} one of ANSWER_FAILURE_CAUSES, or null when this is not a failure to report
  */

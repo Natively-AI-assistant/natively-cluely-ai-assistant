@@ -2,7 +2,7 @@
 // Works in Electron by dynamically loading the gtag script into the renderer DOM
 // Only requires the public Measurement ID — no API secrets needed
 
-import { answerFailureCause } from '../funnel/answerFailure.mjs';
+import { answerFailureCause, looksLikeUserStop } from '../funnel/answerFailure.mjs';
 
 // --- Types ---
 
@@ -110,8 +110,11 @@ export function funnelFeatureForCommand(commandType: string): FunnelFeature | nu
  * so calling this twice for one failure (a state updater that runs again)
  * changes nothing.
  */
-export function reportAnswerFailed(failure: Parameters<typeof answerFailureCause>[0]): void {
+export function reportAnswerFailed(failure: Parameters<typeof answerFailureCause>[0], raw?: unknown): void {
     try {
+        // A request the user stopped, or replaced with the next question, is
+        // thrown at the overlay like any other error. It is not a failure.
+        if (raw !== undefined && looksLikeUserStop(raw)) return;
         const cause = answerFailureCause(failure);
         if (!cause) return;
         (window as any).electronAPI?.funnelTrack?.('answer_failed', { cause })?.catch?.(() => { });

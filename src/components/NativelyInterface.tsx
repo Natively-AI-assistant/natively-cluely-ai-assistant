@@ -2276,7 +2276,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
   const failedLine = useCallback((raw: unknown): { text: string; failure: DirectAssistAnswerFailure } => {
     const failure = chatFailureFromError(raw, { provider: chatProviderLabelRef.current });
-    reportAnswerFailed(failure);
+    reportAnswerFailed(failure, raw);
     return { text: directAssistFailureText(failure, chatFailureT.current), failure };
   }, []);
 
