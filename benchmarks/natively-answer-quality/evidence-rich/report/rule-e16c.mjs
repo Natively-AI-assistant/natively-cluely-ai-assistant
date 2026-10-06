@@ -3,12 +3,15 @@ import fs from 'node:fs';
 import { readJsonl } from '../objective.mjs';
 const JUDGE = process.env.ER_JUDGE || 'astra';
 const ids = JSON.parse(fs.readFileSync('evidence-rich/results/replay/e16c-ids.json', 'utf8'));
-const PAIR = { 'er-dev-e13c': 'er-dev-e16b', 'er-dev2-e13c': 'er-dev2-e16b' };
+// E16C_SET=3: the fresh runs on today's main (the first runs were deleted with .claude/worktrees on 2026-10-06).
+const S3 = process.env.E16C_SET === '3';
+const PAIR = S3 ? { 'er3-dev-ctl': 'er3-dev-new', 'er3-dev2-ctl': 'er3-dev2-new' } : { 'er-dev-e13c': 'er-dev-e16b', 'er-dev2-e13c': 'er-dev2-e16b' };
+const IDKEY = { 'er3-dev-ctl': 'er-dev-e13c', 'er3-dev2-ctl': 'er-dev2-e13c' }; const ARM = S3 ? 'e16c3' : 'e16c';
 const J = (name) => { const m = new Map(); for (const j of readJsonl(`evidence-rich/judge/out/base/${name}.${JUDGE}.jsonl`)) if (j.ok) m.set(j.benchmark_id, j); return m; };
 const FL = new Set(['unsupported_personal_claim', 'wrong_profile_used']);
 const rows = []; let missing = 0;
-for (const [ctl, nw] of Object.entries(PAIR)) { const C = [0, 1].map((k) => J(`rg-e16c-ctl-k${k}--${ctl}`)), N = [0, 1].map((k) => J(`rg-e16c-new-k${k}--${nw}`));
-  for (const id of ids[ctl]) { const c = C.map((m) => m.get(id)).filter(Boolean), n = N.map((m) => m.get(id)).filter(Boolean); if (c.length < 2 || n.length < 2) { missing++; continue; }
+for (const [ctl, nw] of Object.entries(PAIR)) { const C = [0, 1].map((k) => J(`rg-${ARM}-ctl-k${k}--${ctl}`)), N = [0, 1].map((k) => J(`rg-${ARM}-new-k${k}--${nw}`));
+  for (const id of ids[IDKEY[ctl] ?? ctl]) { const c = C.map((m) => m.get(id)).filter(Boolean), n = N.map((m) => m.get(id)).filter(Boolean); if (c.length < 2 || n.length < 2) { missing++; continue; }
     const mean = (a) => a.reduce((s, j) => s + j.official.overall, 0) / a.length; const hard = (a) => a.filter((j) => j.official.hard_fail).length / a.length; const fl = (a) => a.filter((j) => (j.judgment.hard_flags ?? []).some((x) => FL.has(x))).length;
     rows.push({ id, c: mean(c), n: mean(n), hc: hard(c), hn: hard(n), fc: fl(c), fn: fl(n) }); } }
 const f = (x, d = 2) => x.toFixed(d); const sum = (a) => a.reduce((x, y) => x + y, 0);
