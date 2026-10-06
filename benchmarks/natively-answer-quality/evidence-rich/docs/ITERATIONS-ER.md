@@ -1707,3 +1707,18 @@ the two E16b commits (branch `cand/e16b-main`), runs er3-dev-new + er3-dev2-new*
 record each build's prompt, then `replay-generator.mjs` (arms `e16c3-ctl`, `e16c3-new`, k 2), Astra on the 320 drafts.
 The control is today's main, not the 2026-10-05 build; both arms share it. The blind-holdout safety pair is run after
 this if the window allows; its rule is unchanged.
+
+### E16c — result and verdict under Astra (2026-10-06 11:48 UTC; fresh runs on today's main `73cf34e6` against `cand/e16b-main`; the 80 rows, two generator replays per row and build, 320 drafts; calibration 38/38 in the same batch)
+Judge-free, from the app runs of the 80 rows: résumé loaded and none in the prompt 23 → 0 of 67; every needed fact in
+the prompt 56 → 63 of 63; first word median 1,113 → 1,106 ms; no turn over 5 s and no fallback answer in either run;
+the candidate's prompt differs from the control's by more than 200 characters on 79 of the 80 rows.
+| # | Line | Measured | Holds |
+|---|---|---|---|
+| 1 | Mean of (new − control) ≥ +0.25 | 8.35 → 8.70, **+0.34** (95 % interval ±0.42) | yes |
+| 2 | Hard fails ≤ control | 17.0 → 14.0 | yes |
+| 3 | Rows falling by more than 1.5 ≤ half the rows rising by more than 1.5 | rise 12, fall 4 | yes |
+| 4 | Replays flagged unsupported_personal_claim / wrong_profile_used ≤ control + 2 | 23 → 18 | yes |
+**Every line holds.** What it says and does not say: with two replays per row the falls are a third of the rises and
+the personal-claim flags go down, not up — the three falls of the single-run measurement do not repeat as a pattern
+(TI-007, an arithmetic slip last time, rises here). The mean gain's interval still includes zero: 12 rows gain 2 to 6
+points, 4 lose 3 to 6, 64 barely move. The blind-holdout safety rule decides the rest.
