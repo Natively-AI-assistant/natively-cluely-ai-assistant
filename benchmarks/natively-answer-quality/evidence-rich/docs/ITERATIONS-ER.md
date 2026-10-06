@@ -1634,3 +1634,13 @@ Targets from the report's section 2 (9.2 mean, under 1 % hard fails): not met.
 58 of 131 turns have all four judgments (every turn of er-dev-m1 and er-holdout-m1): cut 8.289 → whole 8.902
 (+0.613 ±0.597), hard fails 10.5 → 7.0, needed-fact strings 134 → 169, first useful median 1,160 → 1,231 ms. All four
 lines hold on these turns. The rest (er-dev-m1r, er-dev-m2) is being judged; the verdict is stated when it is whole.
+
+### E10 — verdict under Astra, the judge of record (2026-10-06 03:10 UTC; all 131 turns, both repetitions, both arms)
+| | cut (24,000) | whole (96,000) |
+|---|---|---|
+| Mean | 8.079 | 8.872 |
+| Hard fails (mean of two repetitions) | 29.0 | 17.0 |
+| Needed-fact strings in the reply | 314 | 378 |
+| First useful text, median | 1,193 ms | 1,267 ms |
+whole − cut = **+0.793 (±0.391)**. Lines 1–4 all hold. **Verdict: KEEP — confirmed.** The provisional verdict of
+2026-10-04 (Opus: 7.896 → 8.773, hard 26 → 12) stands; E10 is commit `bc878adc`, on main since 2026-10-05.
