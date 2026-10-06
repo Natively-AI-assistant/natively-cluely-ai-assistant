@@ -1644,3 +1644,12 @@ lines hold on these turns. The rest (er-dev-m1r, er-dev-m2) is being judged; the
 | First useful text, median | 1,193 ms | 1,267 ms |
 whole − cut = **+0.793 (±0.391)**. Lines 1–4 all hold. **Verdict: KEEP — confirmed.** The provisional verdict of
 2026-10-04 (Opus: 7.896 → 8.773, hard 26 → 12) stands; E10 is commit `bc878adc`, on main since 2026-10-05.
+
+### Astra batch of 2026-10-06, 02:00 – 03:16 UTC (76 minutes, about 900 judgments, three streams of three calls, no failed call until the pool closed)
+Calibration passed. Judged, in this order: E18 on both samples (verdict: not kept), the blind holdout of the build on
+main (8.990, 19 hard fails), E10 on all 131 turns (verdict: KEEP, confirmed), then as filler the dev runs of the build
+on main (er-dev-e13c, er-dev2-e13c: the control every later candidate is read against under Astra) — partly judged
+when the pool closed with HTTP 402 at 03:16 UTC; the drafts of the pass-edited rows were queued behind them and not
+reached. Nothing new is kept from this batch; nothing was landed.
+Standing by the judge of record: main with the 2026-10-05 fixes 8.990 on the blind holdout (was 8.674); E10 confirmed;
+E16b, E17, E18 not kept; the conflict line of the claim pass is closed.
