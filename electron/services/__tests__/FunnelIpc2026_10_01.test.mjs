@@ -403,7 +403,10 @@ describe('funnel telemetry hooks in main.ts', () => {
     assert.match(body('startMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingStarted\(this\.intelligenceManager\.getAnswerCount\(\)\); \} catch/m);
     assert.match(body('endMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingEnded\(this\.intelligenceManager\.getAnswerCount\(\)\); \} catch/m);
     assert.equal((main.match(/funnelTelemetry\.meetingStarted\(/g) || []).length, 1);
-    assert.equal((main.match(/funnelTelemetry\.meetingEnded\(/g) || []).length, 1);
+    // Twice: where a meeting ends, and where the app quits with one still
+    // running (FunnelRepairs2026_10_06.test.mjs). The second call for one
+    // meeting does nothing.
+    assert.equal((main.match(/funnelTelemetry\.meetingEnded\(/g) || []).length, 2);
     // A count only: the manager hands over a number, never the answers.
     const im = fs.readFileSync(path.join(ROOT, 'electron/IntelligenceManager.ts'), 'utf8');
     assert.match(im, /getAnswerCount\(\): number \{\n\s+try \{ return this\.session\.getFullUsage\(\)\.length; \} catch \{ return 0; \}/);
