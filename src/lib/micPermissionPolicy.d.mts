@@ -9,7 +9,7 @@ export function micSettingsUri(platform: string | undefined | null): string | nu
 
 export function windowsMicPage(
   platformVersion: string | number | undefined | null,
-): { release: '10' | '11'; path: string[]; switches: string[] };
+): { release: '10' | '11'; path: string[]; switches: string[]; label: string };
 
 export function windowsMicBlocker(
   status: MicStatus | string | undefined | null,

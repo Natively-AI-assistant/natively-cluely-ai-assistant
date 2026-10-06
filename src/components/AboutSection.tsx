@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Linkedin, Instagram, Send, Star, Bug, Mail, Heart,
-    CalendarCheck, Palette, Smartphone, ListOrdered,
+    CalendarCheck, Workflow, Smartphone, ListOrdered,
     LayoutGrid, Search, FileText, UserRound, PlayCircle,
     HardDrive, Sliders, Lock, ArrowRight,
 } from 'lucide-react';
@@ -63,16 +63,17 @@ interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIc
 // Auto Answer (off by default and "Beta" in General; the judge skips asks
 // named to someone else, 2cf229bd), embeddings + rerankers, Phone Mirror 2.0
 // (nav label "Sync"), Calendar sync (calendarSessionMatch + follow-up draft),
-// and the month's UI pass (Liquid Glass controls, the motion passes across
-// Settings, overlay, meeting notes and cards). Undetectable is
+// and Visual Answers (live diagrams and charts in answers; named and put in
+// place of "Better UI and animations" on 2026-10-06, at the owner's word; it
+// has no Settings tab to point at). Undetectable is
 // deliberately not claimed here: the owner won't promise it. Nothing here
 // needs the Companion extension.
 const WHATS_NEW: AboutItem[] = [
     { title: 'Auto Answer', body: 'Answers when a question ends, and skips ones meant for others. In General.', badge: 'Beta', Icon: AutoAnswerIcon },
-    { title: 'Embeddings and rerankers', body: 'Gemini, OpenAI, Voyage AI, Jina AI or local models. In Retrieval.', Icon: ListOrdered },
+    { title: 'Visual Answers', body: 'System designs, flows and charts, drawn live inside the answer.', Icon: Workflow },
     { title: 'Phone Mirror 2.0', body: 'Live transcript, streaming answers and photos from your phone. In Sync.', Icon: Smartphone },
     { title: 'Calendar sync', body: 'Meetings link to their event, with names and a follow-up email. In Calendar.', Icon: CalendarCheck },
-    { title: 'Better UI and animations', body: 'Liquid Glass controls, and smoother motion in every window.', Icon: Palette },
+    { title: 'Embeddings and rerankers', body: 'Gemini, OpenAI, Voyage AI, Jina AI or local models. In Retrieval.', Icon: ListOrdered },
 ];
 
 // Compressed 2026-09-25 at the owner's request. Not numbered: they are not a

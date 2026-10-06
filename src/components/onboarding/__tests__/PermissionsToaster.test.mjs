@@ -104,33 +104,43 @@ test('macOS and Windows share the split card; anything else keeps the compact on
 
 test('each platform is shown its own settings, never the other one\'s', () => {
   // Which picture: macOS the alert, Windows the microphone page.
-  assert.ok(/: isMac\s*\? <GuideSteps isLight=\{isLight\}[^\n]*\/>\s*: <GuideStepsWindows isLight=\{isLight\}/.test(rendered));
+  assert.ok(/: isMac\s*\? <GuideSteps isLight=\{isLight\}[^\n]*\/>\s*: <GuideStepsWindows colors=\{colors\}/.test(rendered));
   const mac = rendered.slice(rendered.indexOf('function GuideSteps('), rendered.indexOf('function GuideStepsWindows('));
   const win = rendered.slice(rendered.indexOf('function GuideStepsWindows('), rendered.indexOf('function MockGlassButton('));
   assert.ok(mac.length > 500 && win.length > 500);
   assert.ok(mac.includes('System Settings → Privacy &amp; Security'));
-  assert.doesNotMatch(mac, /desktop app|windowsMicPage|page\.switches/);
+  assert.doesNotMatch(mac, /desktop app|windowsMicPage|page\.switches|page\.label/);
   // The names and the path are Windows's own, per release, from the policy:
   // nothing about the page is spelled out a second time in the component.
   assert.ok(rendered.includes("import { windowsMicPage } from '../../lib/micPermissionPolicy.mjs';"));
-  // Every switch the policy lists, in its order, laid out as the page lays
-  // them out: the device switch a card of its own, the desktop switch inside
-  // the apps card, under it, with no glyph of its own.
-  assert.ok(win.includes('const [device, apps, desktopApps] = page.switches;'));
-  assert.match(win, /<div style=\{card\}>\{setting\(device, Mic\)\}<\/div>/);
-  assert.match(win, /\{setting\(apps, LayoutList\)\}\s*<div aria-hidden style=\{\{ height: '1px', background: w\.rule \}\} \/>\s*\{setting\(desktopApps, null\)\}/);
-  // No "Natively" row: Windows lists a desktop app there only once it has used the microphone.
-  assert.doesNotMatch(win, /nativelyIcon|>Natively</);
-  // Drawn as the Settings window itself: its name in the title bar, the rest of
-  // the path as the page's breadcrumb.
-  assert.ok(win.includes('const [app, ...crumbs] = page.path;') && win.includes('{crumbs.map((crumb, i) => ('));
-  assert.ok(win.includes('<ArrowLeft') && win.includes('{[Minus, Square, X].map((Glyph, i) => ('), 'back, and the three caption buttons');
-  assert.doesNotMatch(win, /Let desktop apps|Privacy &amp; security|Allow apps/, 'no second copy of the names');
-  assert.doesNotMatch(win, /System Settings|Privacy &amp; Security|macOS|MockGlassButton|Deny|record the screen/,
+  // One switch, as macOS has one row: the page's "Microphone access".
+  assert.ok(win.includes('{page.label}') && !win.includes('.map((label'), 'one row, not a list');
+  assert.ok(win.includes('title={page.switches[0]}'), "the row's tooltip is the switch's full Windows name");
+  assert.equal(win.split("width: '26px', height: '15px'").length - 1, 1, 'one switch');
+  assert.ok(win.includes('const crumbs = page.path.slice(1);') && win.includes('{crumbs.map((crumb, i) => ('), 'the page it opens on');
+  assert.doesNotMatch(win, /Let desktop apps|Privacy &amp; security|Allow apps|'Microphone access'/, 'no second copy of the names');
+
+  // The macOS guide's sibling: the same two pieces in the same materials, so
+  // the two platforms' cards are one design.
+  for (const piece of [
+    "width: '188px'", 'backgroundColor: colors.mockBg', "borderRadius: '12px'", 'boxShadow: colors.mockShadow',
+    '<img src={nativelyIcon} alt="" aria-hidden', 'colors.connector',
+    'backgroundColor: colors.panelBg', "borderRadius: '10px'", 'boxShadow: colors.panelShadow',
+    'background: colors.panelIconBg, border: colors.panelIconBorder',
+    "width: '26px', height: '15px', borderRadius: '7.5px'",
+  ]) {
+    assert.ok(mac.includes(piece), `macOS guide: ${piece}`);
+    assert.ok(win.includes(piece), `Windows guide: ${piece}`);
+  }
+  // Not an imitation of the Windows page: no window frame, no Fluent greys.
+  assert.doesNotMatch(win, /#202020|#2B2B2B|#F3F3F3|Segoe UI|ArrowLeft|Minus, Square/);
+  // But never the macOS alert either: no buttons, none of its wording.
+  assert.doesNotMatch(win, /System Settings|Privacy &amp; Security|macOS alert|MockGlassButton|Deny|record the screen/,
     'no macOS alert or wording in the Windows guide');
-  // One page, so one card: no connector between steps, as the macOS guide has.
-  assert.ok(mac.includes('colors.connector') && !win.includes('colors.connector'));
-  assert.ok(win.includes('All three switches on'));
+  assert.ok(win.includes('Natively needs your microphone.'));
+  // No "Natively" switch: Windows allows desktop apps as a group.
+  assert.doesNotMatch(win, />\s*Natively\s*</);
+  assert.ok(win.includes('Windows {page.path[0]}'), 'the caption names the app it opens');
   // No outline round a row: on this card that reads as a focus ring.
   assert.doesNotMatch(win, /inset 0 0 0 1px|outline/);
   // It is the microphone page; the monitor glyph means Screen Recording on this card.
@@ -194,6 +204,10 @@ test('the Windows guide names the switches as that Windows does, 10 or 11', asyn
     assert.equal(p.switches.length, 3);
     assert.match(p.switches[2], /desktop apps/);
     assert.equal(p.path.at(-1), 'Microphone');
+    // The short label the picture uses is the start of the first switch's
+    // own name on either release.
+    assert.equal(p.label, 'Microphone access');
+    assert.ok(p.switches[0].startsWith(p.label), `${p.label} / ${p.switches[0]}`);
   }
 
   // The row says what is off, from one rule; the picture is the same page in
@@ -204,10 +218,7 @@ test('the Windows guide names the switches as that Windows does, 10 or 11', asyn
   for (const st of ['not-determined', 'granted', 'unknown', 'loading', undefined, null]) {
     assert.equal(windowsMicBlocker(st), null, String(st));
   }
-  const at = rendered.indexOf("width: '26px', height: '13px'");
-  assert.ok(at > 0);
-  assert.doesNotMatch(rendered.slice(at - 600, at + 400), /opacity: back|turnOn/);
-  assert.ok(!rendered.includes('turnOn'));
+  assert.ok(!rendered.includes('turnOn') && !rendered.includes('opacity: back'));
 
   // The release is read from the UA client hint, on Windows only, and a card
   // that gets no answer keeps the Windows 11 page rather than an empty one.

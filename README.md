@@ -11,6 +11,8 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 <br/>
 **Same UI as Cluely. More features. $0 for personal/non-commercial use. Source available. No data breaches.**
 <br/>
+**Now with the most advanced stealth of any tool we compare, Visual Answers that draw the system design for you, and an interface built to feel native on your Mac.**
+<br/>
 
 <a href="#" style="pointer-events: none; cursor: default; color: inherit; text-decoration: none;" title="#1 Cluely clone · Free Cluely alternative · Source-available interview copilot · Free Interview Coder alternative · AI coding interview assistant · LeetCode AI solver · HackerRank AI cheat · Final Round AI free alternative · LockedIn AI alternative · Parakeet AI source-available · Undetectable interview AI · Stealth mode interview copilot.Cluely clone · Cluely alternative · Free Cluely · Cluely free version · source-available Cluely ·
     Final Round AI clone · Final Round AI alternative · Free Final Round AI · Final Round AI free version ·
@@ -111,27 +113,31 @@ Natively started as a pixel-perfect recreation of Cluely's interface — then ke
 While other tools act as simple API wrappers, Natively is a complete, native intelligence system designed specifically for high-stakes meetings and interviews.
 
 - **Native Audio Capture (<500ms):** Built with Rust and Zero-Copy ABI transfers, bypassing generic web-audio limitations for ultra-low latency.
-- **Local Whisper STT (On-Device):** 100% on-device speech-to-text using optimized ONNX models (Moonshine-tiny, Moonshine-base, Whisper-large-v3-turbo, distil-large-v3, Parakeet CTC 0.6B). Uses hardware acceleration (CoreML/Metal GPU on Apple Silicon, DirectML on Windows, quantized int8 on CPU) with zero cloud fees or data exposure.
+- **Local Whisper STT (On-Device):** 100% on-device speech-to-text using optimized ONNX models (Moonshine-tiny, Moonshine-base, Whisper-large-v3-turbo, distil-large-v3, Parakeet CTC 0.6B, and Parakeet TDT 0.6B v3 for 25 languages). Uses hardware acceleration (CoreML/Metal GPU on Apple Silicon, DirectML on Windows, quantized int8 on CPU) with zero cloud fees or data exposure.
 - **Apple Speech STT (On-Device):** On macOS 26, Natively can transcribe through Apple's `SpeechAnalyzer` and `SpeechTranscriber` without an API key or sending audio to a speech provider.
 - **Dual-Channel Intelligence:** Distinct pipelines for system audio (what they say) and your microphone (what you dictate) ensuring perfect transcription without room noise.
-- **Battle-Tested Stealth Mode:** Completely undetectable. Hides from the dock, disables popups, and disguises the process during screen sharing.
+- **The Most Advanced Stealth We Compare:** Hidden from screen shares, the Dock, the taskbar and the process list, with tooltips, dialogs and notifications kept out of the share too. Hardened release after release, and best-effort like any stealth.
 - **Auto Answer (Beta):** Answers appear on their own the moment the other person finishes a question — Natively decides whether an answer is actually wanted and stays silent when it isn't. Off by default.
+- **Visual Answers:** System designs, flows and charts, drawn live inside the answer, in any mode.
+- **Phone Mirror 2.0:** Follow the meeting from your phone, with the live transcript, answers as they stream in, and photos sent back to the desktop.
 - **Modes Manager (9 Built-in Personas):** Toggle between General, Technical Interview, Looking for Work, Sales, Recruiting, Team Meet, Lecture, **Seminar** (strict file-grounded Q&A), and **Call Center** — each with its own system prompt and meeting-note template. Build your own on top.
 - **Browser Companion (Chrome):** Press ⌘/Ctrl+Y to pull the page you're looking at — a job description, a coding problem, documentation — straight into your next answer.
 - **Custom Context & Notes:** A dedicated free-form notes area to paste instructions, crib sheets, or credentials (up to 8,000 characters), automatically injected into real-time LLM prompts.
 - **Rolling Context:** We don't just transcribe; we maintain a "memory window" of the conversation for smarter answers.
 - **Local RAG Memory:** We embed your meetings locally using SQLite vector search so you can ask, "What did John say about the API last week?"
+- **Embeddings and Rerankers, Your Choice:** Gemini, OpenAI, Voyage AI, Jina AI or local models decide what your search finds.
 - **Reference Files:** Deeply integrate PDFs, DOCX, and TXT files as real-time context.
 - **Rich Dashboard:** A full UI to manage, search, and export your history—not just a floating window.
 - **Fully Offline Capable:** Don't trust the cloud? Run Natively 100% offline using local Ollama models and local Whisper STT.
 
 ---
 
-## 3 things you should know before choosing an interview AI
+## 4 things you should know before choosing an interview AI
 
-1. **Cluely** had a data breach in mid-2025 that exposed 83,000 users' personal info, transcripts, and screenshots — Natively stores everything locally by default with limited anonymous telemetry and has never had a breach.
-2. **Final Round AI** costs $149/month and its taskbar icon is visible to proctoring software — Natively is free for personal/non-commercial use, source-available, and has a battle-tested undetectable stealth mode.
-3. **LockedIn AI** charges $55–70/month and locks you into their cloud LLM with no local option — Natively lets you use any model (GPT, Claude, Gemini, Llama) or go fully offline with Ollama.
+1. **Cluely** had a data breach in mid-2025 that exposed 83,000 users' personal info, transcripts, and screenshots. Natively keeps your transcripts, screenshots and keys on your machine and has never had a breach.
+2. **Final Round AI** costs $149/month and its taskbar icon is visible to proctoring software. Natively is free for personal/non-commercial use, source-available, and includes its full stealth feature set at no cost.
+3. **LockedIn AI** charges $55 to $70 a month and locks you into their cloud LLM with no local option. Natively lets you use any model (GPT, Claude, Gemini, Llama) or go fully offline with Ollama.
+4. **Interview Coder** is a paid tool for the coding round only. Natively matches its process-level disguise on macOS and Windows, keeps tooltips, dialogs and notifications out of screen shares, covers behavioral and system design rounds too, and is free for personal use.
 
 ---
 
@@ -162,6 +168,54 @@ This demo shows **a complete live meeting scenario**:
 
 ---
 
+## The Stealthiest Free Interview Copilot: Why Natively Leads in 2.9
+
+With 2.9, Natively stopped being "the free Cluely clone" and became the tool to beat. Four things set it apart from Interview Coder, Cluely, Final Round AI and LockedIn AI.
+
+### 1. The most advanced stealth of any tool we compare
+
+Other tools hide a window. Natively hides the whole app, at every layer a screen share, a task switcher or a process list can see:
+
+- **Invisible in screen shares and recordings.** Every Natively window is marked private, so Google Meet, Teams, QuickTime and Zoom (with window filtering) leave it out.
+- **Nothing it opens leaks.** Tooltips, dialogs, dropdowns, file pickers and notifications are separate windows, and an overlay that forgets them shows up in the share. In Undetectable mode Natively keeps every one of them out.
+- **No Dock icon, no taskbar button, no tray icon** while Undetectable mode is on.
+- **A system-level process disguise on macOS and Windows.** The app and every one of its helper processes run under a system process name, so a process list shows a system service, not an interview tool.
+- **Process Disguise on top.** Have the app present itself as Terminal, System Settings or Activity Monitor.
+- **Type without losing focus (Windows).** Stealth typing sends your keys to the overlay while your call keeps focus, and Protect Natively shortcuts stops a shortcut from also typing into the app underneath.
+- **Quiet on the network.** Third-party analytics and crash reporting switch off for as long as Undetectable mode is on.
+
+Interview Coder built its name on process-level hiding. Natively 2.9 matches that layer on both macOS and Windows, adds everything above, covers the whole interview instead of only the coding round, and is free for personal use.
+
+> Stealth is best-effort, not a guarantee. Dedicated proctoring software (Pearson VUE, ProctorU, Respondus Lockdown Browser) is a different category, and a phone camera sees everything. See [Is stealth mode actually undetectable?](#is-stealth-mode-actually-undetectable)
+
+### 2. Visual Answers: the system design round, drawn for you
+
+Ask for a system design, a flow or a chart and Natively draws it live inside the answer, while the explanation is still being written.
+
+- Flowcharts, sequence diagrams, ER diagrams, state machines, swimlanes, trees and timelines
+- Charts built from the numbers in the conversation, and back to a table when you ask
+- "Draw what we discussed" turns the last ten minutes of the meeting into a diagram
+- Works in all nine modes, and understands requests in English, Spanish, Russian, Chinese and Japanese
+
+A wall of text explains an architecture. A diagram shows that you understand it.
+
+### 3. An interface built to feel native
+
+Natively is designed to feel like it belongs on your Mac, and the same design runs on Windows:
+
+- **Liquid Glass controls** across Settings, the overlay and meeting notes
+- **Motion with a purpose:** cards and popups open with a genie motion, panels fold instead of jumping, and answers stream in word by word
+- **A first run that teaches itself:** a welcome screen and a three-step tour where you try the real shortcuts
+- **Light and dark themes**, a new startup splash, and a model picker that lists models by provider
+
+In our opinion it is the best-looking and smoothest app in the category. Try it for five minutes and judge for yourself.
+
+### 4. Free where the others charge
+
+Final Round AI is $149 a month. LockedIn AI is $55 to $70 a month. Cluely starts at $20 a month and sells screen-share invisibility as a separate, higher-priced tier. Interview Coder is paid. Natively is free for personal use with your own keys, and every stealth feature above is included.
+
+---
+
 ## Full Comparison: Natively vs Cluely vs Final Round AI vs LockedIn AI vs Interview Coder
 
 | Feature                   | Natively                   | Cluely               | Pluely     | LockedIn AI      | Final Round AI         |
@@ -177,7 +231,7 @@ This demo shows **a complete live meeting scenario**:
 | **Local RAG memory**      | ✅ SQLite + sqlite-vec     | ❌                   | ❌         | ❌               | ❌                     |
 | **Meeting history**       | ✅ Full dashboard          | ⚠️ Limited           | ❌         | ❌               | ⚠️ Limited             |
 | **Screenshot OCR**        | ✅ Yes                     | ⚠️ Limited           | ❌         | ✅ Yes           | ⚠️ Limited             |
-| **Stealth mode**          | ✅ Undetectable            | ❌                   | ❌         | ❌               | ❌ Visible to proctors |
+| **Stealth mode**          | ✅ Undetectable mode, free | ⚠️ Paid tier         | ❌         | ❌               | ❌ Visible to proctors |
 | **Process Disguise**      | ✅ Terminal, Settings, etc | ❌                   | ❌         | ❌               | ❌                     |
 | **Resume & context**      | ✅ Pro                     | ❌                   | ❌         | ✅ Yes           | ✅ Yes                 |
 | **Custom Personas/Modes** | ✅ Pro                     | ✅ Yes               | ❌         | ❌               | ⚠️ Limited             |
@@ -187,7 +241,7 @@ This demo shows **a complete live meeting scenario**:
 | **Eager Code Expansion**  | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Live Follow-Up Resolver**| ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Real-Time Latency Trace**| ✅ Yes                    | ❌                   | ❌         | ❌               | ❌                     |
-| **Phone Link Companion**  | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
+| **Phone Mirror 2.0**      | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Auto-Calendar Sync**    | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Smart Task Sync**       | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Speaker Diarization**   | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
@@ -214,9 +268,11 @@ The UI is intentionally familiar — if you've used Cluely, there's zero learnin
 
 Cluely's mid-2025 data breach exposed personal information, full interview transcripts, and screenshots of 83,000 users. Every word spoken during an interview was stored on their servers — and then leaked. They charge $20/month for this privilege.
 
-By default, Natively stores everything on your local machine, with only limited anonymous telemetry (basic GA4 install tracking, zero personal data). Your transcripts, API keys, and screenshots never leave your machine when using your own keys. The codebase is source-available under the Natively Personal Use Source License v1.0 and auditable. Zero breaches — that is the only acceptable standard for a tool that listens to your interviews.
+By default, Natively stores your transcripts, API keys and screenshots on your local machine, and they never leave it when you use your own keys. The app reports feature-usage statistics that never contain what you say, see or type, and you can switch them off. The codebase is source-available under the Natively Personal Use Source License v1.0 and auditable. Zero breaches. That is the only acceptable standard for a tool that listens to your interviews.
 
 Unlike Cluely's rigid interface, Natively also gives you complete control over the AI: **Custom Persona Modes** (Tech, Sales, Recruiting) to strictly format behavior, and **Reference Files** capabilities to upload PDFs so the AI knows exactly the context of the job or meeting before it starts.
+
+Cluely also sells its screen-share invisibility as a separate, higher-priced tier. In Natively, Undetectable mode is part of the free app.
 
 ### vs LockedIn AI — $70/month for cloud lock-in
 
@@ -228,7 +284,7 @@ Natively supports every major model (Gemini, GPT, Claude, Groq) via bring-your-o
 
 Final Round AI is the most expensive option at $149/month, optimized for pre-interview prep and mock interviews but with the slowest live latency in the category. Critically, its taskbar icon is visible to proctoring software, making it detectable during monitored interviews.
 
-Natively delivers <500ms end-to-end latency using Rust-based native audio capture with Zero-Copy ABI Transfers. Its undetectable stealth mode hides from the dock, disguises process names, and syncs state across all windows — battle-tested and hardened across five major releases.
+Natively delivers <500ms end-to-end latency using Rust-based native audio capture with Zero-Copy ABI Transfers. Its Undetectable mode hides the app from screen shares, the Dock and the taskbar, disguises its processes, and has been hardened release after release.
 
 ### vs Pluely — lightweight but limited
 
@@ -236,9 +292,9 @@ Pluely is a solid lightweight alternative (~10MB, Tauri-based) and it has Linux 
 
 But Pluely is a basic overlay. It has no local RAG, no meeting history, no dual audio channels, and no dashboard. Natively is a complete intelligence system: it remembers your past meetings via local vector search, separates system audio from your microphone, and gives you a full management dashboard with export to Markdown, JSON, and Text.
 
-### vs Interview Coder — More Powerful, Completely Free
+### vs Interview Coder: Matching Stealth, More Features, Completely Free
 
-Interview Coder is a paid tool focused specifically on coding interview assistance. Natively does everything Interview Coder does — and more — for free:
+Interview Coder is a paid tool focused on the coding round, and process-level hiding is its selling point. Natively 2.9 matches that layer on macOS and Windows, then adds what a whole interview needs, for free:
 
 |                                    |    Natively    | Interview Coder |
 | :--------------------------------- | :------------: | :-------------: |
@@ -247,6 +303,7 @@ Interview Coder is a paid tool focused specifically on coding interview assistan
 | **Works on LeetCode / HackerRank** |       ✅       |       ✅        |
 | **Screenshot + OCR analysis**      |       ✅       |       ✅        |
 | **Real-time overlay**              |       ✅       |       ✅        |
+| **Process-level disguise**         | ✅ macOS + Windows |       ✅        |
 | **Local AI / offline mode**        |   ✅ Ollama    |       ❌        |
 | **Behavioral interview support**   |       ✅       |       ❌        |
 | **System design support**          |       ✅       |       ❌        |
@@ -254,7 +311,7 @@ Interview Coder is a paid tool focused specifically on coding interview assistan
 | **Any LLM (BYOK)**                 |       ✅       |    ❌ Locked    |
 | **Data stored locally**            |       ✅       |    ❌ Cloud     |
 
-Natively covers the full interview loop — not just the coding round.
+Natively covers the full interview loop, not just the coding round: behavioral answers drawn from your résumé, system designs drawn live with Visual Answers, and notes when the call ends.
 
 ### vs Parakeet AI — Memory and History vs Stateless Overlay
 
@@ -290,7 +347,7 @@ Natively works as a **free, undetectable AI coding interview assistant** for sta
 2. Natively OCRs the question and sends it to your chosen AI (GPT, Claude, Gemini, or local Ollama)
 3. Response appears in the invisible overlay — never on screen share
 
-> ⚠️ **Important:** Natively is not designed to bypass dedicated proctoring software like **Pearson VUE**, **ProctorU**, or **Respondus Lockdown Browser** — these run at the OS level and are a different category entirely. For standard online coding assessments without dedicated proctoring software, Natively's stealth mode is not detectable.
+> ⚠️ **Important:** Natively is not designed to bypass dedicated proctoring software like **Pearson VUE**, **ProctorU**, or **Respondus Lockdown Browser**. These run at the OS level and are a different category entirely. For standard online coding assessments without dedicated proctoring software, Natively's stealth mode is built to stay out of sight, on a best-effort basis.
 
 ---
 
@@ -392,6 +449,9 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 | **9 Built-in Modes (incl. Seminar, Call Center)**   |      ✅       |      ✅      |
 | **Skills — Upload & Manage Custom Personas**        |      ✅       |      ✅      |
 | **Meeting Notes with Follow-Up Email Draft**        |      ✅       |      ✅      |
+| **Phone Mirror 2.0**                                |      ✅       |      ✅      |
+| **Calendar Sync (Google Calendar)**                 |      ✅       |      ✅      |
+| **Visual Answers (Live Diagrams & Charts)**         |      ✅       |      ✅      |
 | **Eager Code UI Expansion**                         |      ✅       |      ✅      |
 | **Live Follow-Up Resolver**                         |      ✅       |      ✅      |
 | **Real-Time Latency Tracing**                       |      ✅       |      ✅      |
@@ -409,8 +469,6 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 | **Custom Persona Modes (Sales, Tech, etc.)**        |      ❌       |      ✅      |
 | **Custom Context & Notes**                          |      ❌       |      ✅      |
 | **Reference Files (PDF/DOCX/TXT upload)**           |      ❌       |      ✅      |
-| **Phone Link Companion App**                        |      ❌       |      ✅      |
-| **Auto-Calendar & Task Sync**                       |      ❌       |      ✅      |
 | **Speaker Diarization**                             |      ❌       |      ✅      |
 | **Priority Feature Access & Support**               |      ❌       |      ✅      |
 
@@ -423,60 +481,66 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
   </a>
 </p>
 
-### What's New in v2.8.7 (Latest Release)
+### What's New in v2.9.2 (Latest Release)
 
-**Everything since v2.7.0 in one release.** The 2.8.0–2.8.6 builds were never published here, so their work ships in this update too.
+**Everything since v2.8.8 in one release.** The 2.9.0 and 2.9.1 builds were never published here, so their work ships in this update too.
 
-#### ✨ New
+#### New
 
 | Feature | What it does |
 | :------ | :----------- |
-| **Auto Answer** `Beta` | Answers appear on their own the moment the other person finishes a question. Natively judges whether an answer is actually wanted and stays silent when it isn't — no card to dismiss, no button to press. Off by default; enable in **Settings → General**. |
-| **Browser Companion** `Chrome` | Press **⌘/Ctrl+Y** to pull the page you're looking at into your next answer — a job description, a coding problem, documentation. One click enables it everywhere. |
-| **Hindsight Long-Term Memory** `Pro` | A local vector database that indexes your past meetings, profiles and documents, so Natively recalls what was said weeks ago — not just this session. Opt-in from Settings. |
-| **Role Insight** `Pro` | Paste a job description and see every requirement pulled out, checked against your profile, and scored for coverage. |
-| **Seminar & Call Center Modes** | Seminar for strict file-grounded Q&A (thesis defenses, paper walkthroughs); Call Center for support calls framed as issue → resolution → escalation. Brings the built-in count to 9. |
-| **NVIDIA NIM & NVIDIA Speech** | A new provider for both text and real-time transcription, with nine streaming models to choose from. |
-| **Skills Upload & Delete** | Add a skill as a file or folder with a preview before it installs, and remove ones you no longer want — no more editing folders by hand. |
+| **Auto Answer** `Beta` | Answers now arrive sooner, and questions meant for someone else on the call are left alone. Off by default; enable in **Settings → General**. |
+| **Visual Answers** | System designs, flows and charts, drawn live inside the answer. Ask in any mode, in English, Spanish, Russian, Chinese or Japanese. |
+| **Phone Mirror 2.0** | Your phone follows the meeting with the live transcript and answers as they stream in, and can send photos back to the desktop. Set it up in **Settings → Sync**. |
+| **Calendar sync** | Connect Google Calendar and each meeting is linked to its event, notes name the people who spoke, and a follow-up email is drafted when you ask. |
+| **Embeddings and rerankers** | Choose what powers search over your files and past meetings, from Gemini, OpenAI, Voyage AI and Jina AI to local models that run on your device. In **Settings → Retrieval**. |
+| **Reads images** | Every model gets an Auto, On or Off setting for screenshots. On Auto, Natively works out whether a model can read images and stops sending screenshots to one that cannot. |
+| **Direct Assist** `Beta` | Sends what you typed, said or captured straight to the model, unprocessed, together with the meeting transcript and your reference files. |
+| **Background Model** | A second, faster model for Auto Answer, quick decisions and Fast Response Mode, separate from the Active Model that writes your answers. |
+| **New AI providers** | Google Antigravity, Fluxion, OpenRouter, 9Router and AgentRouter join the list, and Codex gains GPT-6 Astra and GPT-5.6 Sol. |
+| **On-device speech** | Apple Speech needs no API key on macOS 26 and later, and the Parakeet TDT local model covers 25 languages. |
+| **Welcome and shortcut tour** | A fresh install opens on a welcome screen, then a three-step tour where you try the main shortcuts for real. |
 
-#### ⚡ Improved
+#### Improved
 
-- **A smarter answer engine.** Answers now pick their source properly — your résumé, an uploaded document, the live conversation, or general knowledge — instead of blending them. Follow-ups keep the thread even after the topic changes.
-- **Meeting notes, rebuilt.** Summaries adapt to the kind of meeting you're in, get a real title instead of the first line of the transcript, and scale in length with the meeting. Plus editable speaker labels and a ready-to-send follow-up email draft.
-- **Redesigned meeting overlay.** Panel, pill and resize control move as one, answers stream in word by word, and scrolling back no longer fights you.
-- **Faster everywhere.** Answers are prepared ahead of time, local speech no longer stalls when a meeting starts, and live transcription moved to low-latency regional hosts.
-- **Refreshed interface.** Apple-style toggles, smoother section transitions, a new Soft Orchid accent, clearer code blocks, and calmer onboarding.
-- **New default models** — Gemini 3.1 Flash Lite and Gemini 3.7 Flash — plus the full Claude catalogue and real provider logos in the model picker.
-- **Windows stealth typing.** Type into the meeting overlay without your call ever losing focus. Handles Alt+Tab, clicking away, and steps aside for CJK/IME input.
+- **Answers stick closer to your material.** A checking pass removes claims your documents do not support, and a résumé, job description or reference file that fits is read whole.
+- **Coding answers match the size of the question.** A quick ask gets a short answer.
+- **Provider failures are explained.** The overlay says why in plain words, then tries your next provider and tells you which one answered.
+- **Faster speech-to-text** on Deepgram, Soniox and OpenAI, and model pickers for speech providers.
+- **A refreshed look.** Liquid Glass controls, a new startup splash, a blue accent and smoother motion in every window.
+- **Rebuilt Settings.** Calendar, Sync, About and Setup & Help are new, and Setup & Help shows real recordings.
+- **Smaller updates.** From this version on, updates download only what changed, and the update card shows a short summary with a link to the full notes.
 
-#### 🛠 Fixed
+#### Fixed
 
-- **Startup.** Fixed the app getting stuck on the logo, several memory leaks that could crash the launcher, and a crash that could stop the app opening ever again.
-- **Meetings were being lost.** A database bug meant some meetings never saved. Fixed — and a meeting is never left unnamed.
-- **Microphone and audio.** Fixed the mic being held after a failed start, capture breaking when you switch devices mid-meeting, and system audio missed on some Windows setups.
-- **Answers.** Your profile no longer leaks into unrelated technical questions, internal markers no longer show up on screen, and a slow provider can't overwrite an answer you already have.
-- **Windows.** Screenshots capture the right monitor, the cropper works across multiple displays, shortcuts no longer stop working in stealth mode, and the overlay stays above fullscreen calls and screen shares.
-- **Language.** Choosing English now actually keeps answers in English.
+- **Speech-to-text.** Google no longer goes silent when Chinese is selected, Soniox recovers after an idle stretch, and ElevenLabs returns text at every pause.
+- **Overlay.** Clicks on the pill, the expand button and the model picker no longer get lost, and the resize handles no longer cover Send.
+- **Auto Answer.** A prepared answer that was never shown now appears, and your own speech no longer silences the answers that follow.
+- **Shortcuts.** A shortcut the system refuses no longer crashes the app, and Natively no longer takes Cmd/Ctrl+R and Shift+Arrow from other apps.
+- **Search.** Reference files are searched by meaning, not only by keyword, on installs with no API key, and a damaged meeting index repairs itself.
+- **Windows.** The screenshot cropper no longer steals focus, and the extra taskbar buttons are gone.
+- **macOS.** The Dock no longer shows two or three Natively icons.
 
-#### 🖥 Platform
+#### Platform
 
-- Electron 43 and TypeScript 7; requires Node 22.13+ to build from source.
-- Signed macOS builds for **both** Apple Silicon and Intel, plus a macOS 12 (Monterey) compatibility guard for local speech.
+- Electron 43.7.7, Vite 7 and React 19.3; requires Node 22.13+ to build from source.
+- Usage statistics is new and on by default. It reports which features are used and how often, never what you say, see or type. Turn it off under Advanced in **Settings → General**.
 
-> 📄 **[Read the full v2.8.7 release notes →](docs/releases/v2.8.7.md)**
+> 📄 **[Read the full v2.9.2 release notes →](docs/releases/v2.9.2.md)**
 
 ## Table of Contents
 
 - [The free personal-use Cluely clone](#the-free-for-personal-use-source-available-cluely-clone)
 - [What Users Are Saying](#what-users-are-saying)
 - [Why Natively?](#why-natively)
-- [3 things to know](#3-things-you-should-know-before-choosing-an-interview-ai)
+- [4 things to know](#4-things-you-should-know-before-choosing-an-interview-ai)
+- [Why Natively leads in 2.9](#the-stealthiest-free-interview-copilot-why-natively-leads-in-29)
 - [Demo](#demo)
 - [Full comparison](#full-comparison-natively-vs-cluely-vs-final-round-ai-vs-lockedin-ai-vs-interview-coder)
 - [Why Natively wins](#why-natively-wins)
 - [AI Coding Assistant](#free-ai-coding-interview-assistant-undetectable-on-leetcode-hackerrank--coderpad)
 - [Natively Pro](#natively-pro)
-- [What's New in v2.8.7](#whats-new-in-v287-latest-release)
+- [What's New in v2.9.2](#whats-new-in-v292-latest-release)
 - [Privacy & Security](#privacy--security-core-design-principle)
 - [Installation](#installation-developers--contributors)
 - [AI Providers](#ai-providers)
@@ -523,8 +587,7 @@ All while remaining **invisible, fast, and privacy-first**.
 - Bring Your Own Keys (BYOK)
 - Local AI option (Ollama)
 - All data stored locally
-- Limited anonymous telemetry (basic GA4 counts)
-- No user data tracking
+- Feature-usage statistics that never contain what you say, see or type, with a switch to turn them off (see [PRIVACY.md](PRIVACY.md))
 - No hidden uploads
 
 You explicitly control:
@@ -572,6 +635,7 @@ Connect **any** speech provider and **any** LLM. No subscriptions, no markups, n
 ### Speech-to-Text Providers
 
 - **Apple Speech** (No API Key) - _On-device transcription on macOS 26+_
+- **Local models** (No API Key) - _Whisper, Moonshine and Parakeet on your device, including Parakeet TDT for 25 languages_
 - **Soniox** (API Key) - _Ultra-fast, highly accurate streaming STT (recommended)_
 - **NVIDIA Riva / NIM** (API Key) - _Nine streaming models, including multilingual Nemotron and Parakeet_
 - **Google Cloud Speech-to-Text** (Service Account)
@@ -590,12 +654,15 @@ Connect Natively to **any** leading model or local inference engine.
 
 | Provider                     | Best For                                                    |
 | :--------------------------- | :---------------------------------------------------------- |
-| **Gemini 3.1 / 3.7 Series**  | Recommended (and the default): 2M-token context & low cost. |
+| **Gemini 3.1 / 3.8 Series**  | Recommended (and the default): 2M-token context & low cost. |
 | **OpenAI (GPT-5.4 & o3)**    | High reasoning capabilities.                                |
 | **Anthropic (Claude 4.6)**   | Coding & complex nuanced tasks.                             |
-| **Groq (Llama 3.3/Scout 4)** | Insane speed (near-instant answers) & screenshot analysis.  |
+| **Groq (Qwen 3.8/Scout 4)**  | Insane speed (near-instant answers) & screenshot analysis.  |
 | **NVIDIA NIM**               | NVIDIA-hosted open models, plus Riva streaming speech.      |
 | **LiteLLM Gateway**          | Route through your own proxy with a built-in model picker.  |
+| **Google Antigravity**       | Sign in with your Google account instead of pasting a key.  |
+| **OpenRouter / Fluxion**     | Hosted gateways to many models.                             |
+| **9Router / AgentRouter**    | More gateways, alongside LiteLLM.                           |
 | **Ollama / LocalAI**         | 100% Offline & Private (No API keys needed).                |
 | **OpenAI-Compatible**        | Connect to _any_ custom endpoint (vLLM, LM Studio, etc.)    |
 
@@ -712,10 +779,16 @@ This runs: Vite build → TypeScript compile → native module build → electro
 - **Dynamic Model Selection:** Preferred models (OpenAI, Anthropic, Google) now automatically appear across the app.
 - **NVIDIA NIM:** NVIDIA-hosted models for both text and streaming speech-to-text.
 - **LiteLLM:** Point Natively at your own gateway, with a model picker and configurable default.
-- **Google Gemini:** First-class support for the Gemini 3.1 and 3.7 series — the default models.
+- **Google Gemini:** First-class support for the Gemini 3.1 and 3.8 series, the default models.
 - **OpenAI:** GPT-5.4 and o3 series support with optimized system prompts.
 - **Anthropic:** Claude 4.6 series support with corrected max_tokens.
-- **Groq:** Ultra-fast text inference with Llama 3.3, and screenshot analysis using Llama 4 Scout.
+- **Groq:** Ultra-fast text inference with Qwen 3.8, and screenshot analysis using Llama 4 Scout.
+- **Google Antigravity:** Sign in with your Google account to use Gemini models without an API key.
+- **Gateways:** OpenRouter, Fluxion, 9Router and AgentRouter are supported as providers.
+- **Codex:** Uses your `codex login` session, with GPT-6 Astra and GPT-5.6 Sol as built-in models.
+- **Background Model:** A second, faster model for Auto Answer, quick decisions and Fast Response Mode.
+- **Provider fallback:** When your model fails or stalls, Natively retries it, moves to your next provider, and tells you which one answered.
+- **Reads images:** An Auto, On or Off setting per model decides which ones receive screenshots.
 
 ---
 
@@ -730,7 +803,7 @@ This runs: Vite build → TypeScript compile → native module build → electro
 ### Real-time Interview Copilot & Coding Help
 
 - Real-time speech-to-text (**<500ms latency**)
-- **Fast Response Mode**: Ultra-fast text responses using Groq Llama 3.3.
+- **Fast Response Mode**: Quicker text responses from your Background Model, or from the fastest available provider.
 - **Multilingual Support**: Choose from various response languages, and set speech recognition matching specific accents and dialects.
 - **Anti-Chatbot / Human Persona System**: Refined system prompts and negative constraints ensure responses are concise, conversational, and indistinguishable from a real candidate (no robotic preambles or lectures).
 - Context-aware Memory (RAG) for Past Meetings
@@ -748,6 +821,16 @@ Natively can answer without being asked. When the other person finishes a questi
 - **Knows when to stay quiet.** Rhetorical asides, questions aimed at someone else, and restatements of something already answered are ignored.
 - **Speaker-aware.** It reads speaker labels and splits the conversation by voice, so your own thinking-out-loud doesn't trigger an answer.
 - **Off by default.** Turn it on in **Settings → General**.
+
+### Visual Answers: Diagrams and Charts in the Answer
+
+Ask for a picture and the answer draws one, live.
+
+- **System designs, flows and timelines**, drawn while the answer is written
+- **Charts from numbers**, and "show the chart as a table" turns one back into a table
+- **Drawings for every mode:** flowcharts, sequence diagrams, ER diagrams, state machines, swimlanes and trees
+- **"Draw what we discussed"** reads the last ten minutes of the meeting transcript
+- **Five languages:** requests are understood in English, Spanish, Russian, Chinese and Japanese
 
 ### Browser Companion — Capture What You're Reading
 
@@ -767,7 +850,8 @@ A Chrome extension that hands the page you're on to Natively.
 - **Hardware-Accelerated Transitions**: Polished, custom cubic-bezier tweens handle UI growth smoothly, preserving candidate stealth and presentation quality.
 - Invisible overlay never appears on screen share or recordings
 - Multiple screenshot support for multi-part problems
-- Smart fallback to Groq Llama 4 Scout if primary vision model fails
+- **Reads images:** each model has an Auto, On or Off setting for screenshots, and your selected model reads your screenshot first when it can
+- Smart fallback to another vision model if the first one fails
 
 ### Premium Profile Intelligence
 
@@ -803,8 +887,8 @@ Create local `SKILL.md` files to give the AI specialized instructions for any ta
 
 ### Seamless Integrations & Sync
 
-- **Phone Link:** Use your iOS/Android device as a wireless remote microphone or companion screen.
-- **Calendar Prep:** Auto-syncs with Google Calendar and Outlook to prepare context before meetings.
+- **Phone Mirror 2.0:** Follow the meeting from your phone, with the live transcript, answers as they stream in, and photos sent back to the desktop. Set it up in **Settings → Sync**.
+- **Calendar Sync:** Connect Google Calendar and each meeting is linked to its event, notes name the people who spoke, and a follow-up email is drafted when you ask.
 - **Smart Task Export:** Send extracted action items directly to Jira, Linear, or Asana.
 - **Speaker Diarization:** Real-time speaker identification tags individual speakers by name automatically.
 - **Codex CLI:** Execute terminal tasks, manage workspace files, and run sandboxed code via native Codex integration.
@@ -828,7 +912,8 @@ Natively understands that _listening_ to a meeting and _talking_ to an AI are di
 
 ### Local RAG & Long-Term Memory
 
-- **Full Offline RAG:** All vector embeddings and retrieval happen locally (SQLite + `sqlite-vec`).
+- **Full Offline RAG:** With a local embedding model, all vector embeddings and retrieval happen on your device (SQLite + `sqlite-vec`).
+- **Embeddings and Rerankers:** Pick Gemini, OpenAI, Voyage AI or Jina AI, or stay on local models. In **Settings → Retrieval**.
 - **Semantic Search:** innovative "Smart Scope" detects if you are asking about the current meeting or a past one.
 - **Sliding-Window RAG**: 50-token semantic overlap to prevent context loss across chunk boundaries.
 - **Epoch Summarization**: Smarter transcript memory management instead of hard truncation — no more losing early meeting context.
@@ -874,8 +959,10 @@ timeline
         Browser : ✅ Chrome Companion Extension
         Notes : ✅ Rebuilt Meeting Notes
         Trial : ✅ 10-Minute Free Trial
+        Visual Answers : ✅ Live Diagrams & Charts
+        Phone : ✅ Phone Mirror 2.0
+        Calendar : ✅ Calendar Sync
     section Short-term (1-3 mos)
-        System Design : Visualization MVP
         Tokens : Integration POC
     section Medium-term (3-6 mos)
         Personas : Persona library expansion
@@ -928,7 +1015,7 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 
 ### Tech Stack
 
-- **React, Vite, TypeScript 7, TailwindCSS**
+- **React 19, Vite 7, TypeScript 7, TailwindCSS**
 - **Electron 43**
 - **Rust** (native audio with **Zero-Copy ABI Transfers** via `napi::Buffer` — enabling continuous audio capture without V8 garbage collection pressure, achieving significantly lower latency and CPU usage than typical Electron-based competitors)
 - **Swift** (Apple's on-device speech framework on macOS 26+)
@@ -936,13 +1023,16 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 
 ### Supported Models
 
-- **Gemini 3.1 / 3.7 Series** (default: Gemini 3.1 Flash Lite and Gemini 3.7 Flash)
+- **Gemini 3.1 / 3.8 Series** (default: Gemini 3.1 Flash Lite and Gemini 3.8 Flash)
 - **OpenAI** (GPT-5.4, o3 series)
 - **Claude** (4.6 series — full catalogue)
 - **NVIDIA NIM** (text and streaming speech)
 - **Ollama** (Llama, Mistral, CodeLlama)
-- **Groq** (Llama 3.3 for text, Llama 4 Scout for OCR)
+- **Groq** (Qwen 3.8 for text, Llama 4 Scout for OCR)
 - **LiteLLM** (any model behind your own gateway)
+- **Google Antigravity** (sign in with Google)
+- **OpenRouter, Fluxion, 9Router, AgentRouter** (gateways)
+- **Codex** (GPT-6 Astra, GPT-5.6 Sol)
 
 ### System Requirements
 
@@ -1037,7 +1127,7 @@ Yes. Natively uses a Rust-based system audio capture that works universally acro
 
 #### Is my data safe?
 
-Natively is built on **Privacy-by-Design**. By default, all transcripts, vector embeddings (Local RAG), and keys are stored locally on your machine. We collect only limited anonymous telemetry (no personal user data).
+Natively is built on **Privacy-by-Design**. By default, all transcripts, vector embeddings (Local RAG), and keys are stored locally on your machine. The app reports which features are used and how often, linked to your install and to your trial or account if you have one, and never what you say, see or type. You can turn this off under Advanced in **Settings → General**; see [PRIVACY.md](PRIVACY.md).
 
 #### Can I use it for technical interviews?
 
@@ -1061,7 +1151,7 @@ Cluely is a $20/month cloud-based tool that stores all data on their servers. In
 
 #### Is stealth mode actually undetectable?
 
-Yes. Natively hides from the dock, disguises process names as harmless system utilities (Terminal, Activity Monitor, System Settings), and syncs state across all windows. It has been hardened across five major releases and tested against screen share detection in Zoom, Teams, and Google Meet. This is best-effort, not guaranteed — on macOS 15.4+ Apple can let modern capture tools see it anyway, and a phone camera always can.
+In the meeting apps we test, yes. Natively hides from the dock, disguises process names as harmless system utilities (Terminal, Activity Monitor, System Settings), and syncs state across all windows. It has been hardened across five major releases and tested against screen share detection in Zoom, Teams, and Google Meet. This is best-effort, not guaranteed: on macOS 15.4+ Apple can let modern capture tools see it anyway, and a phone camera always can.
 
 #### Zoom shows my overlay in screen share — how do I fix it?
 
@@ -1081,11 +1171,23 @@ Yes. Natively's screenshot + OCR captures any visible coding problem and returns
 
 #### Is Natively detectable during coding interviews?
 
-For standard online assessments (LeetCode, HackerRank, CoderPad, etc.), Natively is not detectable — it runs as a disguised system process and the overlay never appears in screen recordings or screen shares. It is **not** designed to bypass dedicated proctoring software like Pearson VUE, ProctorU, or Respondus Lockdown Browser, which operate at the OS level.
+For standard online assessments (LeetCode, HackerRank, CoderPad, etc.), Natively is built not to be seen: it runs as a disguised system process and the overlay stays out of screen recordings and screen shares. Stealth is best-effort, not guaranteed, and it is **not** designed to bypass dedicated proctoring software like Pearson VUE, ProctorU, or Respondus Lockdown Browser, which operate at the OS level.
 
 #### Is Natively a free alternative to Interview Coder?
 
-Yes. Natively does everything Interview Coder does — screenshot OCR, real-time coding assistance, invisible overlay — and adds behavioral interview support, system design help, local RAG memory, and any-LLM BYOK. All for free.
+Yes. Natively covers what Interview Coder is known for (screenshot OCR, real-time coding help, an invisible overlay and a process-level disguise) and adds behavioral interview support, Visual Answers for system design, local RAG memory, and any-LLM BYOK. Free for personal use.
+
+#### Is Natively stealthier than Interview Coder?
+
+Natively 2.9 matches Interview Coder's process-level disguise on macOS and Windows and puts more layers around it: tooltips, dialogs, dropdowns and notifications are kept out of screen shares, there is no Dock, taskbar or tray icon in Undetectable mode, and third-party analytics switch off while it is on. Interview Coder is paid; Natively includes all of this free for personal use. No tool can honestly promise to be undetectable, and we don't.
+
+#### Can Natively draw system design diagrams during an interview?
+
+Yes. Visual Answers draws system designs, flowcharts, sequence diagrams, ER diagrams and charts live inside the answer. Ask in any of the nine modes, by voice or by typing, in English, Spanish, Russian, Chinese or Japanese.
+
+#### What is the best free alternative to Cluely, Interview Coder and Final Round AI?
+
+Natively is free for personal use with your own API keys, stores your data on your machine, works with any LLM or fully offline with Ollama, and includes its full stealth feature set, Visual Answers and meeting notes at no cost.
 
 ---
 
@@ -1098,7 +1200,7 @@ Natively is a free-for-personal-use, source-available alternative to:
 | **Cluely**          | Real-time AI meeting copilot — without the $20/mo fee or data breach risk           |
 | **Final Round AI**  | Live AI interview copilot — without the $149/mo fee or proctor-visible taskbar icon |
 | **LockedIn AI**     | Real-time interview assistant — without cloud lock-in or $70/mo                     |
-| **Interview Coder** | AI coding interview helper — with full meeting context, not just coding rounds      |
+| **Interview Coder** | AI coding interview helper, with matching process-level stealth, Visual Answers and the full interview loop, for free |
 | **Parakeet AI**     | Live meeting assistant — with local RAG memory and full history dashboard           |
 | **Metaview**        | Automated meeting notes — source-available and locally stored                       |
 | **Otter.ai**        | Transcription and meeting summaries — without cloud storage                         |

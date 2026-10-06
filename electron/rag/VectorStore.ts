@@ -23,6 +23,8 @@
 // call (not a hand-split protocol) via Electron's utilityProcess or a
 // promise-wrapped `setImmediate` batch, not a bespoke message protocol.
 import { isVecTableRebuildPending } from '../db/vecRebuildPending';
+import { prepareVecRowWriter } from '../db/vecRowWrite';
+import { describeUnusableVector, describeUnusableVectorBlob, UnusableEmbeddingError } from './embeddingVectorHealth';
 import Database from 'better-sqlite3';
 import { Chunk } from './SemanticChunker';
 import { DatabaseManager } from '../db/DatabaseManager';
@@ -142,21 +144,46 @@ export class VectorStore {
     }
 
     /**
+     * Make sure the vec0 tables for a width exist. Its own method so a test can
+     * hand in the DatabaseManager it opened: each compiled file is its own
+     * bundle with its own DatabaseManager singleton, and that hidden second
+     * instance would open the same file and repair the tables under test.
+     */
+    private ensureVecTable(dim: number): void {
+        DatabaseManager.getInstance().ensureVecTableForDim(dim);
+    }
+
+    /**
      * Store embedding for a chunk (dual-write: BLOB column + per-dimension vec0 table)
      */
     storeEmbedding(chunkId: number, embedding: number[]): void {
+        // Never into the index: see embeddingVectorHealth.ts. Thrown before
+        // anything is written, so the chunk stays honestly unembedded.
+        // Checked again as the float32 bytes that are actually written: a
+        // value too small for float32 becomes 0 and one too large becomes
+        // infinity on the way in.
         const blob = this.embeddingToBlob(embedding);
-        this.db.prepare('UPDATE chunks SET embedding = ? WHERE id = ?').run(blob, chunkId);
+        const unusable = describeUnusableVector(embedding) ?? describeUnusableVectorBlob(blob);
+        if (unusable) throw new UnusableEmbeddingError(`chunk ${chunkId}`, unusable);
+        // The table for this width is made sure of BEFORE the BLOB is written.
+        // Done after, a brand-new width looked like "a table created beside
+        // vectors that are already stored" — the one just written — and was
+        // sent off for a background refill it did not need (seen in the app,
+        // 2026-10-05, the first time the 384-wide local model stored anything).
+        if (this.useNativeVec) {
+            try { this.ensureVecTable(embedding.length); } catch { /* the write below reports it */ }
+        }
+        const stored = this.db.prepare('UPDATE chunks SET embedding = ? WHERE id = ?').run(blob, chunkId);
+        // The chunk is gone (its meeting was deleted or re-indexed while this
+        // embed was in flight): a vector for it would be a row nothing owns.
+        if (stored.changes === 0) return;
 
-        // Also insert into the dimension-specific vec0 virtual table for native search
+        // Also write the dimension-specific vec0 virtual table for native search
         if (this.useNativeVec) {
             const dim = embedding.length;
-            // Lazily provision the table if it's a novel dimension (e.g., a new provider)
-            DatabaseManager.getInstance().ensureVecTableForDim(dim);
             try {
-                this.db.prepare(
-                    `INSERT OR REPLACE INTO vec_chunks_${dim}(chunk_id, embedding) VALUES (?, ?)`
-                ).run(BigInt(chunkId), blob);
+                // Not INSERT OR REPLACE: vec0 rejects it for a key that exists.
+                prepareVecRowWriter(this.db, `vec_chunks_${dim}`, 'chunk_id')(chunkId, blob);
             } catch (e) {
                 console.warn(`[VectorStore] Failed to insert into vec_chunks_${dim}:`, e);
             }
@@ -174,6 +201,60 @@ export class VectorStore {
         `).all(meetingId) as any[];
 
         return rows.map(r => this.rowToChunk(r));
+    }
+
+    /**
+     * Find stored vectors that cannot be searched (all zeros, or a NaN or
+     * infinity — see embeddingVectorHealth.ts) among the rows after `afterId`,
+     * and clear them — the BLOB and the vec0 row — and queue each one to be
+     * embedded again, in the same transaction. Reads at most `maxRows` rows;
+     * returns the last id read (null when there were none) and the meetings
+     * that now have something waiting in the queue.
+     *
+     * A build before 2026-10-05 stored whatever the provider returned.
+     */
+    clearUnusableStoredEmbeddings(
+        source: 'chunks' | 'chunk_summaries',
+        afterId: number,
+        maxRows: number,
+    ): { lastId: number | null; meetingIds: string[]; cleared: number } {
+        const rows = this.db.prepare(
+            `SELECT id, meeting_id, embedding FROM ${source} WHERE id > ? AND embedding IS NOT NULL ORDER BY id LIMIT ?`
+        ).all(afterId, maxRows) as { id: number; meeting_id: string; embedding: Buffer }[];
+        if (rows.length === 0) return { lastId: null, meetingIds: [], cleared: 0 };
+        const bad = rows.filter(row => describeUnusableVectorBlob(row.embedding) !== null);
+        if (bad.length > 0) {
+            const vecPrefix = source === 'chunks' ? 'vec_chunks_' : 'vec_summaries_';
+            const idColumn = source === 'chunks' ? 'chunk_id' : 'summary_id';
+            const clear = this.db.prepare(`UPDATE ${source} SET embedding = NULL WHERE id = ?`);
+            const dropChunkRow = this.db.prepare('DELETE FROM embedding_queue WHERE meeting_id = ? AND chunk_id = ?');
+            const queueChunk = this.db.prepare(`INSERT INTO embedding_queue (meeting_id, chunk_id, status) VALUES (?, ?, 'pending')`);
+            const summaryWaiting = this.db.prepare(
+                `SELECT 1 FROM embedding_queue WHERE meeting_id = ? AND chunk_id IS NULL AND status IN ('pending', 'processing') LIMIT 1`
+            );
+            const queueSummary = this.db.prepare(`INSERT INTO embedding_queue (meeting_id, chunk_id, status) VALUES (?, NULL, 'pending')`);
+            // Cleared AND queued in one transaction. Done as two steps, a crash
+            // between them left a chunk with no vector and no queue row inside a
+            // meeting that otherwise looks embedded — which nothing looks at again.
+            this.db.transaction(() => {
+                for (const row of bad) {
+                    clear.run(row.id);
+                    if (source === 'chunks') {
+                        // A 'completed' row is keyed (meeting, chunk); it has to go first.
+                        dropChunkRow.run(row.meeting_id, row.id);
+                        queueChunk.run(row.meeting_id, row.id);
+                    } else if (!summaryWaiting.get(row.meeting_id)) {
+                        queueSummary.run(row.meeting_id);
+                    }
+                    if (this.useNativeVec && row.embedding.byteLength % 4 === 0) {
+                        try {
+                            this.db.prepare(`DELETE FROM ${vecPrefix}${row.embedding.byteLength / 4} WHERE ${idColumn} = ?`).run(BigInt(row.id));
+                        } catch { /* no table of that width: nothing to remove */ }
+                    }
+                }
+            })();
+        }
+        return { lastId: rows[rows.length - 1].id, meetingIds: [...new Set(bad.map(row => row.meeting_id))], cleared: bad.length };
     }
 
     /**
@@ -237,6 +318,14 @@ export class VectorStore {
             return [];
         }
 
+        // A query vector that points nowhere matches nothing; say so once
+        // instead of scanning the index for it.
+        const unusableQuery = describeUnusableVector(queryEmbedding);
+        if (unusableQuery) {
+            console.warn(`[VectorStore] searchSimilar: the query embedding cannot be searched (${unusableQuery}) — returning empty.`);
+            return [];
+        }
+
         // A table that is waiting to be rebuilt (wrong metric, missing vectors,
         // or only part refilled) answers a native query with a confident wrong
         // top-k, so it is read from the stored vectors until it is complete.
@@ -287,6 +376,17 @@ export class VectorStore {
         const chunkRows = this.db.prepare(q).all(...params) as any[];
         const chunkMap = new Map<number, any>();
         for (const row of chunkRows) chunkMap.set(row.id, row);
+
+        // A stored vector that is all zeros or holds a NaN has no cosine
+        // distance: vec0 returns NULL for it, and `1 - null` is 1 — a perfect
+        // match that passed every threshold. Dropping such rows is not enough:
+        // vec0 sorts them FIRST, so a few dozen fill the whole top-k and the
+        // query comes back empty (reproduced: 200 of them among 300 good
+        // vectors, 0 hits where the exact search finds 8). When any row has no
+        // distance, this query is answered from the stored vectors instead.
+        if (vecRows.some((r: any) => typeof r.distance !== 'number' || !Number.isFinite(r.distance))) {
+            return this.searchSimilarJS(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
+        }
 
         const scored: ScoredChunk[] = [];
         for (const vecRow of vecRows) {
@@ -464,6 +564,18 @@ export class VectorStore {
      * notes (regenerate with no change, the launch backfill) costs no call.
      */
     saveSummary(meetingId: string, summaryText: string): boolean {
+        // The vector of the text being replaced. Its BLOB is cleared by the
+        // upsert below; its vec0 row has to go with it, or a native search
+        // keeps returning the NEW text ranked by the OLD vector until the
+        // re-embed lands — which may be never (provider down, vector refused).
+        const before = this.db.prepare(
+            'SELECT id, summary_text, embedding FROM chunk_summaries WHERE meeting_id = ?'
+        ).get(meetingId) as { id: number; summary_text: string; embedding: Buffer | null } | undefined;
+        if (this.useNativeVec && before?.embedding && before.summary_text !== summaryText && before.embedding.byteLength % 4 === 0) {
+            try {
+                this.db.prepare(`DELETE FROM vec_summaries_${before.embedding.byteLength / 4} WHERE summary_id = ?`).run(BigInt(before.id));
+            } catch { /* no table of that width: nothing to remove */ }
+        }
         this.db.prepare(`
             INSERT INTO chunk_summaries (meeting_id, summary_text)
             VALUES (?, ?)
@@ -482,6 +594,12 @@ export class VectorStore {
      */
     storeSummaryEmbedding(meetingId: string, embedding: number[]): void {
         const blob = this.embeddingToBlob(embedding);
+        const unusable = describeUnusableVector(embedding) ?? describeUnusableVectorBlob(blob);
+        if (unusable) throw new UnusableEmbeddingError(`the summary of meeting ${meetingId}`, unusable);
+        // Table first, BLOB second — see storeEmbedding.
+        if (this.useNativeVec) {
+            try { this.ensureVecTable(embedding.length); } catch { /* the write below reports it */ }
+        }
         this.db.prepare('UPDATE chunk_summaries SET embedding = ? WHERE meeting_id = ?').run(blob, meetingId);
 
         if (this.useNativeVec) {
@@ -492,10 +610,11 @@ export class VectorStore {
 
                 if (row) {
                     const dim = embedding.length;
-                    DatabaseManager.getInstance().ensureVecTableForDim(dim);
-                    this.db.prepare(
-                        `INSERT OR REPLACE INTO vec_summaries_${dim}(summary_id, embedding) VALUES (?, ?)`
-                    ).run(BigInt(row.id), blob);
+                    // A summary keeps its row id when its text changes (see
+                    // saveSummary), so this is routinely a SECOND write to the
+                    // same key — which INSERT OR REPLACE cannot do on vec0. The
+                    // old vector stayed under the new text.
+                    prepareVecRowWriter(this.db, `vec_summaries_${dim}`, 'summary_id')(row.id, blob);
                 }
             } catch (e) {
                 console.warn('[VectorStore] Failed to insert into vec_summaries dim table:', e);
@@ -584,6 +703,11 @@ export class VectorStore {
             console.warn('[VectorStore] searchSummaries called without an active spaceKey — returning empty.');
             return [];
         }
+        const unusableQuery = describeUnusableVector(queryEmbedding);
+        if (unusableQuery) {
+            console.warn(`[VectorStore] searchSummaries: the query embedding cannot be searched (${unusableQuery}) — returning empty.`);
+            return [];
+        }
         // Same rule as searchSimilar: not while the table is waiting to be rebuilt.
         if (this.useNativeVec && !isVecTableRebuildPending(this.db, `vec_summaries_${queryEmbedding.length}`)) {
             try {
@@ -626,6 +750,11 @@ export class VectorStore {
         const summaryRows = this.db.prepare(sq).all(...params) as any[];
         const summaryMap = new Map<number, any>();
         for (const row of summaryRows) summaryMap.set(row.id, row);
+
+        // A row with no distance means the top-k cannot be trusted — see searchSimilarNative.
+        if (vecRows.some((r: any) => typeof r.distance !== 'number' || !Number.isFinite(r.distance))) {
+            return this.searchSummariesJS(queryEmbedding, limit, spaceKey);
+        }
 
         const results: { meetingId: string; summaryText: string; similarity: number }[] = [];
         for (const vecRow of vecRows) {
@@ -670,6 +799,9 @@ export class VectorStore {
             const buffer: Buffer = row.embedding;
             if (buffer.byteLength !== expectedByteLength) continue;
             const similarity = this.cosineSimilarity(queryEmbedding, buffer, dim);
+            // A stored vector with no direction has no score; it would also
+            // make the sort below inconsistent.
+            if (!Number.isFinite(similarity)) continue;
             results.push({ meetingId: row.meeting_id, summaryText: row.summary_text, similarity });
         }
 
@@ -885,7 +1017,11 @@ export class VectorStore {
             normB += b * b;
         }
         const magnitude = Math.sqrt(normQ) * Math.sqrt(normB);
-        return magnitude === 0 ? 0 : dot / magnitude;
+        // NaN, not 0, for a vector with no direction (all zeros, or holding a
+        // NaN): 0 is a real score — "unrelated" — and a caller with no
+        // threshold would rank such a row among real results. Both JS searches
+        // drop a score that is not a finite number.
+        return magnitude > 0 && Number.isFinite(magnitude) ? dot / magnitude : NaN;
     }
 
 }

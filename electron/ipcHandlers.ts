@@ -19,6 +19,7 @@ import { mapTrialStartResult, resolveEntitlement, resolveMeetingAi, trialCardAct
 import { nativePromptsBlocked, UNDETECTABLE_REFUSAL_ERROR, UNDETECTABLE_REFUSAL_MESSAGES } from './services/stealthPromptGate';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import { routeOverlayUiAction } from './utils/overlayUiActionRouter';
+import { overlayUiStateFor } from './utils/overlayUiStateQuery';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -1317,6 +1318,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.getWindowHelper().setOverlayUiState(state ?? {});
   });
 
+  // Aux window → main: the last broadcast, asked for once the aux renderer is
+  // subscribed (a reloaded pill/toggle would otherwise keep its defaults).
+  // Only the pill/toggle windows are answered.
+  safeHandle('overlay-ui-state:get', async (event) => {
+    const helper = appState.getWindowHelper();
+    const idOf = (w: BrowserWindow | null) => (w && !w.isDestroyed() ? w.webContents.id : null);
+    return overlayUiStateFor(
+      event.sender.id,
+      [idOf(helper.getPillWindow()), idOf(helper.getToggleWindow())],
+      helper.getOverlayUiState(),
+    );
+  });
+
   // Overlay renderer → main: the panel's LIVE right edge (px from the overlay
   // window's left edge), streamed during the width spring so the toggle aux
   // window rides the panel's top-right corner. Only the overlay may send.
@@ -1368,11 +1382,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Overlay renderer → main: hover hit-test result — false while the pointer
   // is over the fixed window's transparent side margins (collapsed state), so
   // those margins become click-through. Only the overlay may send.
-  safeHandle('overlay-hover-interactive', async (event, interactive: boolean) => {
+  safeHandle('overlay-hover-interactive', async (event, interactive: boolean, source?: string, idleMs?: number) => {
     const overlayWin = appState.getWindowHelper().getOverlayWindow();
     if (!overlayWin || overlayWin.isDestroyed()) return;
     if (overlayWin.webContents.id !== event.sender.id) return;
-    appState.getWindowHelper().setOverlayHoverInteractive(!!interactive);
+    appState.getWindowHelper().setOverlayHoverInteractive(!!interactive, source === 'probe' ? 'probe' : undefined, idleMs);
   });
 
 

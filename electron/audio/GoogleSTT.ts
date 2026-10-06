@@ -20,6 +20,46 @@ export class GoogleSTT extends EventEmitter {
     private isStreaming = false;
     private isActive = false;
     private isFatalError = false;
+    // Sticky across start(), unlike isFatalError: a credential/auth-resolution
+    // failure cannot self-heal when the next meeting re-start()s with the SAME
+    // (missing/invalid) credentials — it would just fail again and re-emit a
+    // rejection every meeting, drifting toward main.ts's 5-in-60s crash-loop
+    // guard. So once auth is known-broken we skip opening the stream entirely
+    // until setCredentials() supplies a new key (which clears this).
+    private isAuthFatal = false;
+    // Credential preflight. @google-cloud/speech opens every stream with
+    //     this.initialize().catch(err => { throw err; });
+    // which re-throws into a promise nobody holds, so EACH streamingRecognize()
+    // on a client whose credentials cannot be resolved leaves one unhandled
+    // rejection that nothing outside the library can catch. A meeting start
+    // makes four such calls (two channels, each restarted once by the language
+    // debounce) and main.ts exits the app at five inside a minute. So we
+    // resolve the client ourselves, with the failure handled, and only ever
+    // open a stream on a client that has resolved. The verdict belongs to one
+    // client object: setCredentials() installs a new one and gets a new check.
+    private credentialsCheckedFor: unknown = null;
+    private credentialCheckPendingFor: unknown = null;
+    private credentialsReportScheduled = false;
+    // write() says once per start() that it is dropping audio, not once per chunk.
+    private droppedWriteLogged = false;
+
+    /**
+     * `code` on the error emitted when the credentials cannot be resolved.
+     * main.ts uses it to mark the channel failed (message shown) instead of
+     * leaving it on "reconnecting" — same contract as LOCAL_STT_UNAVAILABLE_CODE.
+     */
+    public static readonly CREDENTIALS_UNAVAILABLE_CODE = 'google_stt_credentials_unavailable';
+
+    /** The error main.ts shows in the overlay: worded for the user, raw cause attached. */
+    private static credentialsUnavailableError(cause: unknown): Error {
+        const e = new Error(
+            'Google speech-to-text has no working Service Account JSON. ' +
+            'Add one in Audio Settings, or choose another speech provider.'
+        );
+        (e as any).code = GoogleSTT.CREDENTIALS_UNAVAILABLE_CODE;
+        (e as any).cause = cause;
+        return e;
+    }
     // Set once a code-3 rejection has been answered by dropping to the `default`
     // model. Bounds the downgrade to a SINGLE retry: a second INVALID_ARGUMENT,
     // or one that arrives while we are already on `default`, is genuinely
@@ -42,6 +82,23 @@ export class GoogleSTT extends EventEmitter {
     //   7  = PERMISSION_DENIED (API not enabled / wrong project / no IAM)
     //   16 = UNAUTHENTICATED (bad/expired credentials)
     private static readonly PERMANENT_GRPC_CODES = new Set([3, 7, 16]);
+
+    // Credential/auth-resolution failures that google-auth-library throws
+    // BEFORE any RPC, so they carry no gRPC status code and PERMANENT_GRPC_CODES
+    // never matches them. Every one means the client cannot authenticate at all
+    // (no key file, unreadable/invalid key, unresolvable project) — retrying the
+    // stream with the same unchanged credentials can only fail identically, so
+    // these are permanent for the session. Scoped to codeless errors: a real
+    // gRPC status is always classified by its numeric code, never by message.
+    private static readonly AUTH_RESOLUTION_FAILURE_RE =
+        /could not load the default credentials|GOOGLE_APPLICATION_CREDENTIALS|could not refresh access token|invalid_grant|unable to (?:detect|determine) a project|error:0|DECODER routines|no key or keyFile/i;
+
+    /** True for a credential/auth-resolution failure (no gRPC code). Pure; unit-tested. */
+    private static isAuthResolutionFailure(err: unknown, grpcCode: unknown): boolean {
+        if (typeof grpcCode === 'number') return false; // real gRPC status → classified by code
+        const msg = (err as { message?: unknown } | null)?.message;
+        return typeof msg === 'string' && GoogleSTT.AUTH_RESOLUTION_FAILURE_RE.test(msg);
+    }
 
     // Google STT v1 does not accept the common `zh-*` BCP-47 tags — its
     // supported-languages table lists Mandarin only as `cmn-Hans-CN` (and
@@ -95,6 +152,21 @@ export class GoogleSTT extends EventEmitter {
         this.client = new SpeechClient({
             keyFilename: keyFilePath
         });
+        // New credentials — the prior auth-fatal verdict no longer holds; let the
+        // next start() attempt a stream again.
+        if (this.isAuthFatal) {
+            // ...and a meeting that is still running: the fatal flag was only
+            // about the old key, so let write()'s lazy connect try the new one
+            // instead of staying dead until the meeting is restarted.
+            this.isAuthFatal = false;
+            this.isFatalError = false;
+        }
+        // A check still in flight is for the client just replaced; its answer is
+        // ignored when it lands, so release the connecting state it was holding.
+        if (this.credentialCheckPendingFor) {
+            this.credentialCheckPendingFor = null;
+            this.isConnecting = false;
+        }
     }
 
     public setSampleRate(rate: number): void {
@@ -184,14 +256,45 @@ export class GoogleSTT extends EventEmitter {
     public start(): void {
         if (this.isActive) return;
         this.isActive = true;
-        this.isFatalError = false;
+        // isAuthFatal is sticky: a known-broken credential stays broken across a
+        // re-start() (only setCredentials() clears it), so don't reopen a stream
+        // that can only fail auth again and emit another unhandled rejection.
+        this.isFatalError = this.isAuthFatal;
         this.modelDowngraded = false;
         this.writeCount = 0;
+        this.droppedWriteLogged = false;
+
+        if (this.isAuthFatal) {
+            console.warn(
+                `[GoogleSTT/${this.label}] Credentials previously failed to resolve — STT stays ` +
+                `disabled until setCredentials() provides a new key. Not opening a stream.`
+            );
+            this.reportCredentialsStillUnavailable();
+            return;
+        }
 
         this.openDumpStream();
 
         console.log(`[GoogleSTT/${this.label}] Starting recognition stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount})...`);
         this.startStream();
+    }
+
+    /**
+     * main.ts can keep one instance across meetings, and the overlay resets
+     * every channel to "Listening for audio…" when a meeting starts. A start()
+     * that opens nothing must therefore say why again, or the second meeting
+     * looks healthy and simply never transcribes. Deferred so it lands after
+     * the caller's own start-of-meeting status, and coalesced so the
+     * stop()+start() restarts of one tick report once.
+     */
+    private reportCredentialsStillUnavailable(): void {
+        if (this.credentialsReportScheduled) return;
+        this.credentialsReportScheduled = true;
+        setImmediate(() => {
+            this.credentialsReportScheduled = false;
+            if (!this.isActive || !this.isAuthFatal || this.listenerCount('error') === 0) return;
+            this.emit('error', GoogleSTT.credentialsUnavailableError(null));
+        });
     }
 
     /** Opt-in diagnostic: open a raw-PCM dump of the exact bytes sent to Google. */
@@ -287,8 +390,16 @@ export class GoogleSTT extends EventEmitter {
 
     public write(audioData: Buffer): void {
         if (!this.isActive || this.isFatalError) {
-            // Only log occasionally to avoid spam
-            if (this.writeCount === 0) console.warn(`[GoogleSTT/${this.label}] write() called but isActive=false — data dropped`);
+            // Once per start(): a channel disabled before its first accepted
+            // chunk (writeCount still 0) used to print this for every chunk of
+            // the meeting.
+            if (!this.droppedWriteLogged) {
+                this.droppedWriteLogged = true;
+                console.warn(
+                    `[GoogleSTT/${this.label}] write() dropping audio ` +
+                    `(${this.isActive ? 'STT disabled after a permanent error' : 'not started'})`
+                );
+            }
             return;
         }
 
@@ -401,7 +512,80 @@ export class GoogleSTT extends EventEmitter {
             : 'latest_long';
     }
 
+    /**
+     * True when a stream may be opened on the current client right now.
+     * Otherwise a check is (now) in flight; it opens the stream itself when it
+     * resolves, or disables the channel when it does not. See
+     * `credentialsCheckedFor` for why no stream is opened before that.
+     */
+    private credentialsResolved(): boolean {
+        const client: any = this.client;
+        if (this.credentialsCheckedFor === client) return true;
+        // Nothing to check against (a client without the library's initialize(),
+        // i.e. a test double): open directly, as before.
+        if (typeof client?.initialize !== 'function') return true;
+
+        // Hold the connecting state so write() buffers audio instead of
+        // lazy-connecting while the check runs.
+        this.lastConnectAttempt = Date.now();
+        this.isStreaming = false;
+        this.isConnecting = true;
+        if (this.credentialCheckPendingFor === client) return false;
+
+        this.credentialCheckPendingFor = client;
+        console.log(`[GoogleSTT/${this.label}] Resolving credentials before opening a stream...`);
+        let check: Promise<unknown>;
+        try {
+            check = Promise.resolve(client.initialize());
+        } catch (err) {
+            check = Promise.reject(err);
+        }
+        check.then(
+            () => this.onCredentialCheckSettled(client, null),
+            (err: unknown) => this.onCredentialCheckSettled(client, { cause: err }),
+        ).catch((err: unknown) => {
+            // Nothing holds this chain, so a throw from opening the stream or
+            // from an 'error' listener would itself be an unhandled rejection.
+            console.error(`[GoogleSTT/${this.label}] Opening the stream after the credential check failed:`, err);
+        });
+        return false;
+    }
+
+    private onCredentialCheckSettled(client: unknown, failure: { cause: unknown } | null): void {
+        // setCredentials() replaced the client while this was in flight: the
+        // answer is about a key no longer in use.
+        if (client !== this.client) return;
+        this.credentialCheckPendingFor = null;
+        this.isConnecting = false;
+
+        if (failure) {
+            const reason = (failure.cause as { message?: unknown } | null)?.message ?? failure.cause;
+            console.error(
+                `[GoogleSTT/${this.label}] Credentials could not be resolved (${reason}) — ` +
+                `STT disabled until new credentials are set. No stream opened.`
+            );
+            this.isFatalError = true;
+            this.isAuthFatal = true;
+            this.buffer = [];
+            // A meeting ended while the check ran has nobody to tell (main.ts
+            // removes the listeners on teardown, and an 'error' with no
+            // listener throws — here, into a promise nobody holds). The verdict
+            // is kept; the next start() reports it.
+            if (this.isActive && this.listenerCount('error') > 0) {
+                this.emit('error', GoogleSTT.credentialsUnavailableError(failure.cause));
+            }
+            return;
+        }
+
+        this.credentialsCheckedFor = client;
+        // Only for a session that is still running: a stop() while the check
+        // was in flight leaves the verdict for the next start() to use.
+        if (this.isActive && !this.isFatalError && !this.stream) this.startStream();
+    }
+
     private startStream(): void {
+        if (!this.credentialsResolved()) return;
+
         this.lastConnectAttempt = Date.now();
         this.isStreaming = true;
         this.isConnecting = true;
@@ -479,23 +663,50 @@ export class GoogleSTT extends EventEmitter {
 
                 console.error(`[GoogleSTT/${this.label}] Stream error:`, err);
 
-                if (typeof grpcCode === 'number' && GoogleSTT.PERMANENT_GRPC_CODES.has(grpcCode)) {
+                // An auth/credential-resolution failure carries NO gRPC status
+                // code (it is thrown by google-auth-library before any RPC is
+                // issued — e.g. "Could not load the default credentials" when
+                // GOOGLE_APPLICATION_CREDENTIALS is unset and ADC is absent).
+                // PERMANENT_GRPC_CODES only matches numeric codes, so these
+                // slipped through as "retryable": write() reopened the stream on
+                // every audio chunk, each reopen failed auth the same way, and
+                // the repeated rejections tripped main.ts's 5-in-60s
+                // unhandled-rejection crash-loop guard — taking the whole app
+                // down. Retrying with the same missing credentials can never
+                // succeed, so treat it as permanent exactly like codes 7/16.
+                const isPermanent =
+                    (typeof grpcCode === 'number' && GoogleSTT.PERMANENT_GRPC_CODES.has(grpcCode)) ||
+                    GoogleSTT.isAuthResolutionFailure(err, grpcCode);
+
+                if (isPermanent) {
                     // Permanent failure — stop the write()-driven reconnect loop. Without this
                     // guard, a misconfigured Google project (e.g. Speech API not enabled →
                     // PERMISSION_DENIED) loops forever at ~1 reconnect/sec for the whole
                     // session. See issue #171.
+                    const isAuth = GoogleSTT.isAuthResolutionFailure(err, grpcCode);
                     console.error(
-                        `[GoogleSTT/${this.label}] Permanent gRPC error (code ${grpcCode}) — ` +
-                        `disabling STT for this session. No further retries.`
+                        `[GoogleSTT/${this.label}] Permanent error (${typeof grpcCode === 'number' ? `gRPC code ${grpcCode}` : 'credentials/auth could not resolve'}) — ` +
+                        `disabling STT ${isAuth ? 'until new credentials are set' : 'for this session'}. No further retries.`
                     );
                     this.isFatalError = true;
+                    // An auth failure also survives the next start() (see isAuthFatal):
+                    // re-running with the same credentials can only fail identically.
+                    if (isAuth) this.isAuthFatal = true;
                     if (this.proactiveRestartTimer) {
                         clearTimeout(this.proactiveRestartTimer);
                         this.proactiveRestartTimer = null;
                     }
                 }
 
-                this.emit('error', err);
+                // A credential failure reaches main.ts as the worded, coded error
+                // (so the channel shows as failed with something the user can act
+                // on); everything else is passed through untouched.
+                this.emit(
+                    'error',
+                    GoogleSTT.isAuthResolutionFailure(err, grpcCode)
+                        ? GoogleSTT.credentialsUnavailableError(err)
+                        : err,
+                );
             })
             .on('end', () => {
                 if (stream !== this.stream) return; // F-203 stale-stream guard

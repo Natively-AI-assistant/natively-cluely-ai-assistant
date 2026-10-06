@@ -79,6 +79,16 @@ export const OVERLAY_PANEL_INSET = 6;
  * already swallowed clicks. The band is now 2px, on all four sides.
  */
 export const OVERLAY_HOVER_GATE_PAD = 2;
+
+/**
+ * How long the overlay's page waits, after main reports the pointer over the
+ * panel while the window is click-through, before reopening the gate itself.
+ *
+ * A real mouse move for that pointer position normally arrives within a frame
+ * and reopens the gate first; this only has to outlast that, so the probe acts
+ * (and is logged) only when no mouse move is coming. Three frames at 60 Hz.
+ */
+export const OVERLAY_HOVER_PROBE_GRACE_MS = 50;
 /**
  * The panel's collapsed width at the DEFAULT window width, in the window-era
  * units collapsedWidthFor scales by (see defaultCollapsedPanelWidth for the

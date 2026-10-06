@@ -1345,6 +1345,7 @@ import { createForeignWindowCaptureGuard, wrapAsyncDialogs, type ForeignWindowCa
 import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
+import { hasLiveRenderer } from './utils/rendererLiveness'
 import {
   shouldPromoteToRegularAtStartup,
   planDisguiseTitleWrites,
@@ -2663,6 +2664,14 @@ export class AppState {
           });
         } catch (e) { console.warn('[AppState] notes-saved wiring skipped:', e); }
 
+        // Background indexing jobs (past-meeting re-index, clean-ups, the
+        // provider-switch re-index) stand down while a meeting is running. They
+        // ask here rather than keep their own flag: one meeting's teardown can
+        // finish after the next meeting has started.
+        try {
+          this.ragManager.setMeetingActiveProbe?.(() => this.isMeetingActive);
+        } catch (e) { console.warn('[AppState] meeting-active wiring skipped:', e); }
+
         console.log('[AppState] RAGManager initialized');
       }
     } catch (error) {
@@ -3859,7 +3868,12 @@ export class AppState {
         || err.message.toLowerCase().includes('auth_timeout')
         || err.message.toLowerCase().includes('invalid_key')
         || err.message.toLowerCase().includes('invalid api')
-        || err.message.toLowerCase().includes('authentication');
+        || err.message.toLowerCase().includes('authentication')
+        // Google STT with no usable Service Account JSON. GoogleSTT has already
+        // disabled the channel and opens no stream until a new key is set
+        // (GoogleSTT.CREDENTIALS_UNAVAILABLE_CODE), so it is terminal by code,
+        // not by whatever words the message happens to contain.
+        || (err as any)?.code === 'google_stt_credentials_unavailable';
 
       const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
         || err.message.toLowerCase().includes('quota');
@@ -9654,7 +9668,7 @@ if (process.env.THINKING_MATRIX === '1') {
   // main starts it.
   const requestMeetingStart = (req: MeetingStartRequest) => {
     const launcher = appState.getWindowHelper().getLauncherWindow();
-    if (launcher && !launcher.isDestroyed() && !launcher.webContents.isCrashed()) {
+    if (launcher && hasLiveRenderer(launcher)) {
       launcher.webContents.send('meeting:start-request', req);
       return;
     }
@@ -10037,8 +10051,12 @@ if (process.env.THINKING_MATRIX === '1') {
 
     // Only auto-reload real user-facing windows. Transient/hidden helpers
     // (cropper = screenshot overlay; model-selector = hidden preload with a
-    // known forceRestartOllama side-effect) should NOT be blindly reloaded —
-    // they get recreated on next open. Reload launcher / settings / overlay / aux floating chrome.
+    // known forceRestartOllama side-effect) should NOT be blindly reloaded.
+    // Both replace their own dead window with a new hidden one instead
+    // (discardDeadWindow in each helper): at most three times a minute, and
+    // never while quitting. A rebuilt picker loads its list as the startup one
+    // does, so it restarts Ollama only if Ollama is not answering. Reload
+    // launcher / settings / overlay / aux floating chrome.
     const isRecoverableWindow =
       urlNow === '' /* URL unavailable — assume the main launcher */ ||
       /[?&]window=(launcher|settings|overlay|overlay-pill|overlay-toggle)\b/.test(urlNow) ||

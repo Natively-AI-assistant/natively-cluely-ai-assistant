@@ -894,7 +894,24 @@ export class EmbeddingPipeline {
                         error.message
                     );
 
-                    if (!useFallback && (newRetryCount >= MAX_RETRIES || error?.permanentAuthFailure) && this.fallbackProvider) {
+                    if (error?.unusableEmbedding) {
+                        // The provider answered, with a vector that cannot be
+                        // searched (all zeros, or a NaN). It is retried like any
+                        // other failure, in case it was a one-off — but it never
+                        // moves the whole meeting to the fallback provider: one
+                        // chunk the provider cannot embed is not an outage. Out
+                        // of retries it is left as every exhausted item is:
+                        // pending with retry_count at the limit, which the queue
+                        // no longer selects and getQueueStatus counts as failed.
+                        this.db.prepare(`
+                            UPDATE embedding_queue
+                            SET status = 'pending', retry_count = ?, error_message = ?
+                            WHERE id = ?
+                        `).run(Math.min(newRetryCount, MAX_RETRIES), error.message, pending.id);
+                        if (newRetryCount < MAX_RETRIES && !useFallback) {
+                            await this.delay(RETRY_DELAY_BASE_MS * Math.pow(2, Math.max(0, pending.retry_count)));
+                        }
+                    } else if (!useFallback && (newRetryCount >= MAX_RETRIES || error?.permanentAuthFailure) && this.fallbackProvider) {
                         // Primary provider exhausted, or failed with an auth/account error
                         // that cannot self-heal on retry. Downgrade the meeting to local fallback.
                         await this.activateMeetingFallback(pending.meeting_id);

@@ -6,8 +6,9 @@
 // 1. RollingTranscript: isNormal indicator must be active/true when interviewerChannel
 //    is 'connected', even if microphoneChannel is still 'awaiting-audio' (e.g. user wearing headphones).
 // 2. handleAnswerNow: a healthy but silent mic hands off to What to Answer (main's
-//    speaker-labelled transcript) instead of "No speech detected". A failed or
-//    reconnecting mic keeps its diagnostic.
+//    speaker-labelled transcript) instead of "No speech detected". A failed mic
+//    says why (as the failure notice); a reconnecting one posts nothing (its
+//    banner says it). Neither is handed off.
 // 3. Only USER chunks may wake the Answer/Stop tail waiter (AnswerNowTranscriptTail2026_09_11):
 //    an interviewer final landing first closed the gate and truncated or replaced the
 //    dictated question.
@@ -90,6 +91,22 @@ describe('Issue #540: a silent mic on Answer/Stop hands off to What to Answer', 
     assert.ok(failedAt >= 0 && reconnectingAt > failedAt, 'mic diagnostics are kept');
     assert.ok(handoffAt > reconnectingAt, 'the handoff runs only when the mic is healthy');
     assert.doesNotMatch(emptyBranch, /No speech detected/);
+  });
+
+  test('a reconnecting mic posts no line of its own: the banner already says it', () => {
+    assert.doesNotMatch(interfaceSource, /STT is reconnecting/);
+    const reconnecting = between(emptyBranch, "} else if (sttUserStatus === 'reconnecting') {", '} else {');
+    assert.doesNotMatch(reconnecting, /setMessages|handleWhatToSay/, 'no message, and no handoff either');
+    assert.match(interfaceSource, /title: t\('Transcription Reconnecting'\)/);
+    assert.match(interfaceSource, /const sttReconnecting = sttUserStatus === 'reconnecting' \|\| sttInterviewerStatus === 'reconnecting';/);
+  });
+
+  test('a failed mic says why, as the failure notice, with no emoji mark', () => {
+    const failed = between(emptyBranch, "if (sttUserStatus === 'failed' && sttUserError) {", "} else if (sttUserStatus === 'reconnecting') {");
+    // The banner says that transcription stopped; only this says why.
+    assert.ok(failed.includes("failure: { code: 'STT_FAILED', message: errCat.title, detail: errCat.body }"));
+    assert.ok(failed.includes('text: `${errCat.title}: ${errCat.body}`'));
+    assert.doesNotMatch(failed, /❌|handleWhatToSay/);
   });
 
   test('the handoff reads the latest handler and does not hold the Answer lock', () => {

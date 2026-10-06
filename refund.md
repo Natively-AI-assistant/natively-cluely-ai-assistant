@@ -1,6 +1,6 @@
 # Refund Policy
 
-_Last updated: 25 September 2026_
+_Last updated: 4 September 2026_
 
 This is the full refund policy for **Natively Pro** and the **Natively API** service. We've tried to write it like a person, not a lawyer — please give it a read before purchasing.
 
