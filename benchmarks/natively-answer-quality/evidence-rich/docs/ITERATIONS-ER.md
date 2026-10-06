@@ -1745,3 +1745,11 @@ one run each: a mode moves by about ±0.7 between runs of the same build).
 **Standing: E16c holds on every line; the holdout safety rule holds on every line, line 3 on 150 of 180 pairs. E16b is
 a keep candidate. Evin is told; nothing is landed without his word.** Main's own blind-holdout score by Astra, today's
 main: 8.846 on the 150 rows judged so far.
+
+### E16b landed on main (Evin, 2026-10-06: "Land and push")
+Main `73cf34e6` → `e9f5ceef`, local and GitHub, as its two commits (`83d3962f` a retrieving turn plans the whole
+profile and pack when they fit; `e9f5ceef` a résumé or job description handed over whole is not removed by the
+claim-authority gate). The tree is identical to the measured candidate (`cand/e16b-main`). On a fresh build:
+type-check clean; context-intelligence 1,882, intelligence 983, llm 5,828 tests pass; services 5,507 pass with the two
+failures main already had (RetrievalScaleLexical:173, a todo; TrialCampaignIpc:97). Not run on Windows.
+Still owed: the 30 control judgments of the holdout pair (next Astra window), which complete line 3 of the safety rule.
