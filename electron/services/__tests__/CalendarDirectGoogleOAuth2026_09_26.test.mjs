@@ -318,17 +318,44 @@ test('identity: the id_token names the connected account, and it survives a rest
     }
 });
 
+/** Runs the connect flow to completion and returns both the outcome and the callback page response. */
+async function connectWithPage(env) {
+    const flow = env.cm.startAuthFlow();
+    const settled = flow.then(() => 'resolved', (e) => e);
+    await waitFor(() => env.opened.length === 1);
+    const auth = new URL(env.opened[0]);
+    const page = await hitRedirect(auth.searchParams.get('redirect_uri'), { code: 'c', state: auth.searchParams.get('state') });
+    const outcome = await settled;
+    return { outcome, page };
+}
+
 test('granular consent: unticking event access fails the connect with a readable reason', async () => {
     const env = setup({ tokenResponse: { status: 200, body: {
         access_token: 'at', refresh_token: 'rt', expires_in: 3600,
         scope: ALL_SCOPES.filter((s) => s !== EVENTS_SCOPE).join(' '),
     } } });
     try {
-        const outcome = await connect(env);
+        const { outcome, page } = await connectWithPage(env);
         assert.ok(outcome instanceof Error, 'connected without the one permission sync needs');
         assert.match(outcome.message, /calendar events/i);
+        assert.match(page.body, /Natively needs access to your calendar events/);
+        assert.doesNotMatch(page.body, /Google didn’t accept the sign-in code\. It may have expired\./);
         assert.equal(env.cm.getConnectionStatus().connected, false);
         assert.equal(fs.existsSync(path.join(env.userData, 'calendar_tokens.enc')), false, 'the useless grant is not stored');
+    } finally {
+        await env.restore();
+    }
+});
+
+test('granular consent: broader calendar scopes (e.g. calendar.readonly) satisfy event access requirement', async () => {
+    const env = setup({ tokenResponse: { status: 200, body: {
+        access_token: 'at-broad', refresh_token: 'rt-broad', expires_in: 3600,
+        scope: ['openid', 'https://www.googleapis.com/auth/calendar.readonly'].join(' '),
+    } } });
+    try {
+        const outcome = await connect(env);
+        assert.equal(outcome, 'resolved');
+        assert.equal(env.cm.getConnectionStatus().connected, true);
     } finally {
         await env.restore();
     }

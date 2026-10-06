@@ -41,6 +41,12 @@ const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly';
+const ACCEPTED_EVENT_SCOPES = new Set([
+    EVENTS_SCOPE,
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar',
+]);
 /*
   Each scope has a use, which is what Google's verification checks:
     openid + userinfo.email + userinfo.profile  the id_token that names the
@@ -145,9 +151,23 @@ function meetingKeysField(item: any): { meetingKeys?: string[] } {
 }
 
 class TokenEndpointError extends Error {
-    constructor(public readonly status: number, public readonly code: string, description?: string) {
+    constructor(public readonly status: number, public readonly code: string, public readonly description?: string) {
         super(`${code}${description ? `: ${description}` : ''} (HTTP ${status})`);
     }
+}
+
+/** Formats an error into a human-readable reason for the loopback callback page. */
+function oauthCallbackErrorReason(err: unknown): string {
+    if (err instanceof TokenEndpointError) {
+        if (err.code === 'invalid_grant') {
+            return 'Google didn’t accept the sign-in code. It may have expired.';
+        }
+        return describeOAuthError(err.code, err.description);
+    }
+    if (err instanceof Error && err.message) {
+        return err.message;
+    }
+    return 'Google didn’t accept the sign-in code. It may have expired.';
 }
 
 /** POSTs a form to Google's token endpoint and returns the JSON body, or throws TokenEndpointError. */
@@ -286,7 +306,7 @@ export class CalendarManager extends EventEmitter {
                     respond({ kind: 'connected' });
                     finish(() => resolve());
                 } catch (err) {
-                    respond({ kind: 'error', reason: 'Google didn’t accept the sign-in code. It may have expired.' });
+                    respond({ kind: 'error', reason: oauthCallbackErrorReason(err) });
                     finish(() => reject(err));
                 }
             });
@@ -377,7 +397,7 @@ export class CalendarManager extends EventEmitter {
             // scopes are optional: no calendar list means the primary calendar
             // only, no identity means "Connected as User".
             const granted = typeof data.scope === 'string' ? data.scope.split(' ') : null;
-            if (granted && !granted.includes(EVENTS_SCOPE)) {
+            if (granted && !granted.some((scope: string) => ACCEPTED_EVENT_SCOPES.has(scope))) {
                 throw new Error('Natively needs access to your calendar events. Connect again and allow it.');
             }
             this.handleTokenResponse(data);
