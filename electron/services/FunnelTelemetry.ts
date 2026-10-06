@@ -33,8 +33,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createFunnelClient, type FunnelClient, type FunnelTrackResult } from '../../src/lib/funnel/funnelClient.mjs';
 import {
     normalizeFunnelState, isFirstRun, localDay, daysSince, minutesSince, type FunnelState,
+    normalizeOpenMeeting, cutOffMeeting, type OpenMeeting,
 } from '../../src/lib/funnel/funnelState.mjs';
-import type { FunnelProps, FunnelEntitlement } from '../../src/lib/funnel/funnelCatalog.mjs';
+import { ANSWER_FAILURE_CAUSES, type FunnelProps, type FunnelEntitlement } from '../../src/lib/funnel/funnelCatalog.mjs';
 import { tagCheckoutUrl } from '../../src/lib/funnel/checkoutLinks.mjs';
 import { createInstallRegistrar, type InstallRegistrar } from '../../src/lib/funnel/funnelInstall.mjs';
 import { getAppSessionId, usageFlagEnabled } from './UsageOutbox';
@@ -75,6 +76,11 @@ interface StoredState extends FunnelState {
     featuresUsed: string[];
     /** Registration tokens the server issued, by install id (funnelInstall.mjs). */
     tokens: Record<string, string>;
+    /** A meeting that is running, or one a past launch never saw end (funnelState.mjs). */
+    openMeeting: OpenMeeting | null;
+    /** The local day `failuresReported` belongs to, and the failure causes already reported for it. */
+    failuresDay: string;
+    failuresReported: string[];
 }
 
 export class FunnelTelemetry {
@@ -88,6 +94,8 @@ export class FunnelTelemetry {
     private state: StoredState | null = null;
     private meetingStartedAt: number | null = null;
     private meetingWasFirst = false;
+    /** This launch. A meeting note on disk written by any other launch was never ended. */
+    private readonly bootId: string = getAppSessionId() || randomUUID();
 
     public static getInstance(): FunnelTelemetry {
         if (!FunnelTelemetry.instance) FunnelTelemetry.instance = new FunnelTelemetry();
@@ -149,6 +157,9 @@ export class FunnelTelemetry {
                 tokens: raw?.tokens && typeof raw.tokens === 'object' && !Array.isArray(raw.tokens)
                     ? Object.fromEntries(Object.entries(raw.tokens).filter(([, v]) => typeof v === 'string').slice(-MAX_STORED_TOKENS)) as Record<string, string>
                     : {},
+                openMeeting: normalizeOpenMeeting(raw?.openMeeting),
+                failuresDay: typeof raw?.failuresDay === 'string' ? raw.failuresDay : '',
+                failuresReported: Array.isArray(raw?.failuresReported) ? raw.failuresReported.filter((f: unknown) => typeof f === 'string').slice(0, 50) : [],
             };
         }
         return this.state;
@@ -327,6 +338,17 @@ export class FunnelTelemetry {
             st.firstRunSent = true;
             changed = true;
         }
+        // A meeting a past launch never saw end: the app was closed or crashed
+        // while it ran. Reported once, then forgotten.
+        const cutOff = cutOffMeeting(st.openMeeting, this.bootId);
+        if (cutOff) {
+            if (this.track('meeting_cut_off', cutOff) !== 'error') { st.openMeeting = null; changed = true; }
+        } else if (st.openMeeting && this.meetingStartedAt !== null) {
+            // Still running: note that the app was up now, so a meeting cut off
+            // later is measured to here and not to whenever the app next opens.
+            st.openMeeting.seenAt = now;
+            changed = true;
+        }
         const day = localDay(now);
         if (st.lastActiveDay !== day && this.snapshot) {
             const s = this.snapshot();
@@ -351,10 +373,17 @@ export class FunnelTelemetry {
             if (!this.isEnabled()) return;
             const st = this.loadState();
             st.meetings += 1;
-            this.saveState();
             this.meetingStartedAt = Date.now();
+            const first = st.newInstall && st.meetings === 1;
+            // Written down so a meeting the app never sees end is still counted
+            // (reportLifecycle, at the next launch). A note left by an earlier
+            // launch is reported before it is replaced.
+            const cutOff = cutOffMeeting(st.openMeeting, this.bootId);
+            if (cutOff) this.track('meeting_cut_off', cutOff);
+            st.openMeeting = { startedAt: this.meetingStartedAt, seenAt: this.meetingStartedAt, first, boot: this.bootId };
+            this.saveState();
             this.answersAtMeetingStart = Number.isInteger(answersSoFar) && answersSoFar > 0 ? answersSoFar : 0;
-            this.meetingWasFirst = st.newInstall && st.meetings === 1;
+            this.meetingWasFirst = first;
             this.track('meeting_started', { first: this.meetingWasFirst, ai: this.snapshot?.().meetingAi ?? 'none' });
         } catch { /* never into a meeting */ }
     }
@@ -365,6 +394,8 @@ export class FunnelTelemetry {
             if (this.meetingStartedAt === null) return;
             const minutes = minutesSince(this.meetingStartedAt, Date.now()) ?? 0;
             this.meetingStartedAt = null;
+            // The meeting ended where the app could see it: nothing to recover.
+            try { const st = this.loadState(); if (st.openMeeting) { st.openMeeting = null; this.saveState(); } } catch { /* best effort */ }
             const props: FunnelProps = { minutes, first: this.meetingWasFirst };
             if (Number.isInteger(answersNow)) {
                 // The log is cleared when a meeting starts on some paths and not
@@ -391,6 +422,32 @@ export class FunnelTelemetry {
             if (st.featuresUsed.includes(feature)) return 'duplicate';
             const result = this.track('feature_used', { feature });
             if (result === 'queued') { st.featuresUsed.push(feature); this.saveState(); }
+            return result;
+        } catch {
+            return 'error';
+        }
+    }
+
+    /**
+     * An answer was asked for and did not come. Reported at most once per cause
+     * per local day: which kinds of failure someone met that day, not how often.
+     * Whose AI it was and whether a meeting was running are filled in here; the
+     * caller supplies only the cause, one of ANSWER_FAILURE_CAUSES.
+     */
+    public answerFailed(cause: string): FunnelTrackResult {
+        try {
+            if (!this.isEnabled()) return 'disabled';
+            if (!ANSWER_FAILURE_CAUSES.includes(cause)) return 'invalid';
+            const st = this.loadState();
+            const day = localDay(Date.now());
+            if (st.failuresDay !== day) { st.failuresDay = day; st.failuresReported = []; }
+            if (st.failuresReported.includes(cause)) return 'duplicate';
+            const result = this.track('answer_failed', {
+                cause,
+                ai: this.snapshot?.().meetingAi ?? 'none',
+                in_meeting: this.meetingStartedAt !== null,
+            });
+            if (result === 'queued') { st.failuresReported.push(cause); this.saveState(); }
             return result;
         } catch {
             return 'error';

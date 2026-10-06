@@ -117,6 +117,45 @@ export function normalizeFunnelState(raw) {
 }
 
 /**
+ * The note a running meeting leaves on disk, made safe to read.
+ *
+ * A meeting's end is reported when it ends. When the app is closed or crashes
+ * with a meeting running, nothing runs to report it, and until this existed a
+ * quarter of all meetings had a start and no end. So the start is written down
+ * (with which launch wrote it), touched while the meeting runs, and removed at
+ * the end; a note still there at the next launch is a meeting that was cut off.
+ *
+ * @returns {{ startedAt: number, seenAt: number, first: boolean, boot: string } | null}
+ */
+export function normalizeOpenMeeting(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const { startedAt, seenAt, first, boot } = raw;
+  if (!Number.isFinite(startedAt) || startedAt <= 0) return null;
+  if (typeof boot !== 'string' || !boot) return null;
+  return {
+    startedAt,
+    seenAt: Number.isFinite(seenAt) && seenAt >= startedAt ? seenAt : startedAt,
+    first: first === true,
+    boot,
+  };
+}
+
+/**
+ * What to report for a meeting note found on disk, or null when there is
+ * nothing to report: no note, or the note is this launch's own running meeting.
+ * `minutes` runs to when the app was last known to be up, not to now: the
+ * hours the app spent closed are not part of the meeting.
+ *
+ * @param {ReturnType<typeof normalizeOpenMeeting>} open
+ * @param {string} bootId  this launch
+ * @returns {{ minutes: number, first: boolean } | null}
+ */
+export function cutOffMeeting(open, bootId) {
+  if (!open || open.boot === bootId) return null;
+  return { minutes: Math.max(0, Math.floor((open.seenAt - open.startedAt) / 60_000)), first: open.first };
+}
+
+/**
  * Is this launch the install's first?
  *
  * There is no "first run" flag to read: the install id file is created on the

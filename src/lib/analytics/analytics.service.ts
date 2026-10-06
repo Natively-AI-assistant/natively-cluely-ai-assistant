@@ -2,6 +2,8 @@
 // Works in Electron by dynamically loading the gtag script into the renderer DOM
 // Only requires the public Measurement ID — no API secrets needed
 
+import { answerFailureCause } from '../funnel/answerFailure.mjs';
+
 // --- Types ---
 
 export type ModelProviderType = 'cloud' | 'local';
@@ -99,6 +101,21 @@ export function funnelFeatureForCommand(commandType: string): FunnelFeature | nu
     if (commandType === 'recap' || commandType === 'suggest_questions' || commandType === 'clarify' || commandType === 'brainstorm') return commandType;
     if (commandType === 'ai_query_search' || commandType === 'literal_search') return 'search';
     return null;
+}
+
+/**
+ * An answer was asked for and did not come: report the kind of cause, and only
+ * that (src/lib/funnel/answerFailure.mjs). A stopped or cut-short answer is not
+ * a failure and reports nothing. The main process allows one per cause per day,
+ * so calling this twice for one failure (a state updater that runs again)
+ * changes nothing.
+ */
+export function reportAnswerFailed(failure: Parameters<typeof answerFailureCause>[0]): void {
+    try {
+        const cause = answerFailureCause(failure);
+        if (!cause) return;
+        (window as any).electronAPI?.funnelTrack?.('answer_failed', { cause })?.catch?.(() => { });
+    } catch { /* never into the answer path */ }
 }
 
 function reportFeatureUsed(feature: FunnelFeature | null): void {
@@ -223,6 +240,11 @@ class AnalyticsService {
         this.trackEvent('copy_answer_clicked');
     }
 
+    /** A typed question was sent. This, not a session starting, is "chat was used". */
+    public trackChatQuestionSent(): void {
+        reportFeatureUsed('chat');
+    }
+
     public trackCommandExecuted(commandType: string): void {
         reportFeatureUsed(funnelFeatureForCommand(commandType));
         if (!this.initialized || this.undetectable) return;
@@ -230,7 +252,8 @@ class AnalyticsService {
     }
 
     public trackConversationStarted(): void {
-        reportFeatureUsed('chat');
+        // Not "chat was used": this runs whenever a session starts, so until
+        // 2026-10-06 every meeting reported a chat it never had.
         if (!this.initialized || this.undetectable) return;
         this.trackEvent('conversation_started');
     }

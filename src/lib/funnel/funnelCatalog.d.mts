@@ -14,6 +14,8 @@ export type FunnelSurface =
   | 'quota_banner' | 'profile_intelligence' | 'modes_settings'
   | 'max_ultra_toaster' | 'jd_toaster' | 'profile_toaster' | 'other';
 
+export const ANSWER_FAILURE_CAUSES: readonly string[];
+
 export const CARD_IDS: readonly string[];
 export const CARD_OUTCOMES: readonly string[];
 

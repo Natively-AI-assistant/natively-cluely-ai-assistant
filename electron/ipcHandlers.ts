@@ -12541,7 +12541,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Events only the renderer can see: a card on screen, a locked feature opened.
   // The event name is checked against this list and its properties against the
   // catalogue, so the renderer cannot send anything the catalogue does not hold.
-  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used']);
+  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used', 'answer_failed']);
   safeHandle('funnel:track', async (_, eventType: unknown, props: unknown) => {
     if (typeof eventType !== 'string' || !RENDERER_FUNNEL_EVENTS.has(eventType)) return { ok: false, error: 'unknown_event' };
     const checked = checkFunnelProps(eventType, props);
@@ -12553,6 +12553,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
     // Once per feature per day, however often the renderer says it.
     if (eventType === 'feature_used') return { ok: true, result: funnelTelemetry.featureUsed(String(checked.props.feature)) };
+    // The renderer names the cause and nothing else. Whose AI it was and
+    // whether a meeting was running are the main process's to say; once per
+    // cause per day.
+    if (eventType === 'answer_failed') {
+      if (typeof checked.props.cause !== 'string') return { ok: false, error: 'bad_prop:cause' };
+      return { ok: true, result: funnelTelemetry.answerFailed(checked.props.cause) };
+    }
     return { ok: true, result: funnelTelemetry.track(eventType, checked.props) };
   });
 

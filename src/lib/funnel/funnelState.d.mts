@@ -40,6 +40,17 @@ export interface FunnelState {
 
 export function normalizeFunnelState(raw: unknown): FunnelState;
 
+export interface OpenMeeting {
+  startedAt: number;
+  seenAt: number;
+  first: boolean;
+  /** The launch that wrote it. */
+  boot: string;
+}
+
+export function normalizeOpenMeeting(raw: unknown): OpenMeeting | null;
+export function cutOffMeeting(open: OpenMeeting | null, bootId: string): { minutes: number; first: boolean } | null;
+
 export function isFirstRun(s: {
   firstRunSent: boolean;
   installCreatedAtMs: number;

@@ -58,6 +58,35 @@ export const CARD_IDS = Object.freeze([
   'natively_api_existing', 'profile_ad', 'jd_ad', 'review_prompt', 'support',
 ])
 
+/**
+ * Why an answer that was asked for did not come, as one word. The same causes
+ * the overlay words its notice from (src/lib/funnel/answerFailure.mjs maps
+ * them; a test there fails when the overlay learns a cause this list lacks).
+ * Never the provider's message, a status number or a model name.
+ */
+export const ANSWER_FAILURE_CAUSES = Object.freeze([
+  'setup',         // no AI provider is set up
+  'auth',          // the provider refused the key or sign-in
+  'credits',       // the provider is out of credits
+  'rate',          // the provider is rate limiting
+  'model',         // the provider does not have the model
+  'timeout',       // no reply in time
+  'idle',          // the reply stopped arriving
+  'empty',         // an empty reply
+  'broke_off',     // the reply stopped part-way
+  'unreachable',   // offline, or a local server that is not running
+  'too_large',     // the request was refused as too large
+  'rejected',      // the provider refused the request
+  'overloaded',
+  'server',        // the provider had a server error
+  'failed',        // the provider failed and said nothing more
+  'trial_ended',
+  'plan_limit',    // the Natively plan's limit
+  'plan_expired',
+  'not_sent',      // the app did not send it (privacy setting, attachment, images the model cannot read)
+  'app',           // a fault of the app's own
+])
+
 /** What the user did with a card. Mirrors OUTCOMES in the same file. */
 export const CARD_OUTCOMES = Object.freeze(['shown', 'acted', 'later', 'never', 'interrupted'])
 
@@ -87,6 +116,22 @@ export const FUNNEL_CATALOG = Object.freeze({
     // How many answers the assistant gave in it. A count, never the answers: a
     // meeting with none is someone who started the app and got nothing from it.
     answers: INT,
+  },
+
+  // A meeting the app never saw end: it was closed or it crashed while one was
+  // running, and the next launch found the note the meeting left on disk.
+  // `minutes` runs to the last time the app was known to be up. A meeting ended
+  // by quitting the app normally is a meeting_ended like any other.
+  meeting_cut_off: {
+    minutes: INT,
+    first: BOOL,
+  },
+  // An answer was asked for and did not come. At most once per cause per local
+  // day per install: which kinds of failure someone met that day, not how often.
+  answer_failed: {
+    cause: ANSWER_FAILURE_CAUSES,
+    ai: ['natively', 'own', 'none'],
+    in_meeting: BOOL,
   },
 
   // ── Getting started ──────────────────────────────────────────────────────

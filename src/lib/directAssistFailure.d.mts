@@ -59,6 +59,13 @@ export function directAssistFailureReason(
   t?: (text: string) => string,
 ): string;
 
+/** Every cause a failure can be sorted into. */
+export const DIRECT_ASSIST_CAUSES: readonly string[];
+/** The cause of a failure as one of DIRECT_ASSIST_CAUSES. */
+export function directAssistFailureCause(failure: {
+  code: string; status?: number; waitedMs?: number; partial?: boolean; unreachable?: boolean;
+}): string;
+
 export function directAssistNoticeView(
   state: {
     failure?: DirectAssistAnswerFailure;

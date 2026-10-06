@@ -172,6 +172,20 @@ function causeOf({ code, status, waitedMs, partial, unreachable }) {
   return CAUSE_BY_CODE[code] ?? (unreachable ? 'unreachable' : causeForStatus(status));
 }
 
+/** Every cause a failure can be sorted into: the keys of CAUSE. */
+export const DIRECT_ASSIST_CAUSES = Object.freeze(Object.keys(CAUSE));
+
+/**
+ * The cause of a failure as one of DIRECT_ASSIST_CAUSES, for counting
+ * (src/lib/funnel/answerFailure.mjs). The same sorting the wording uses.
+ *
+ * @param {{ code: string, status?: number, waitedMs?: number, partial?: boolean, unreachable?: boolean }} failure
+ * @returns {string}
+ */
+export function directAssistFailureCause(failure) {
+  return causeOf(failure ?? {});
+}
+
 function fill(template, values, t) {
   return t(template).replace(/\{(\w+)\}/g, (slot, key) => (key in values ? String(values[key]) : slot));
 }

@@ -274,6 +274,32 @@ describe('funnel telemetry through the real IPC handlers', { skip: HAVE_BUILD ? 
     assert.deepEqual(state.featuresUsed, ['answer', 'recap']);
   });
 
+  test('a failed answer is reported by its cause, once per day; main says whose AI it was', async () => {
+    const first = await during(() => call('funnel:track', 'answer_failed', { cause: 'auth' }));
+    assert.deepEqual(first.result, { ok: true, result: 'queued' });
+    assert.equal(first.events.length, 1);
+    assert.equal(first.events[0].event_type, 'answer_failed');
+    assert.deepEqual(Object.keys(first.events[0].props).sort(), ['ai', 'cause', 'in_meeting']);
+    assert.equal(first.events[0].props.cause, 'auth');
+    assert.equal(first.events[0].props.in_meeting, false);
+    await settle();
+    const again = await during(() => call('funnel:track', 'answer_failed', { cause: 'auth' }));
+    assert.deepEqual(again.result, { ok: true, result: 'duplicate' });
+    assert.equal(again.events.length, 0);
+    // The renderer cannot say whose AI it was: what it sends for `ai` is replaced.
+    const other = await during(() => call('funnel:track', 'answer_failed', { cause: 'credits', ai: first.events[0].props.ai === 'natively' ? 'own' : 'natively', in_meeting: true }));
+    assert.equal(other.events.length, 1);
+    assert.equal(other.events[0].props.ai, first.events[0].props.ai);
+    assert.equal(other.events[0].props.in_meeting, false);
+    // Never the provider's words.
+    const bad = await during(() => call('funnel:track', 'answer_failed', { cause: 'Incorrect API key provided: sk-…' }));
+    assert.deepEqual(bad.result, { ok: false, error: 'bad_prop:cause' });
+    const extra = await during(() => call('funnel:track', 'answer_failed', { cause: 'auth', detail: 'the provider said this' }));
+    assert.deepEqual(extra.result, { ok: false, error: 'unknown_prop:detail' });
+    const none = await during(() => call('funnel:track', 'answer_failed', {}));
+    assert.deepEqual(none.result, { ok: false, error: 'bad_prop:cause' });
+  });
+
   test('the getting-started steps are reported by name', async () => {
     const r = await during(() => call('funnel:track', 'onboarding_stage', { stage: 'permissions', action: 'completed' }));
     assert.deepEqual(r.events.map((e) => [e.event_type, e.props]), [['onboarding_stage', { stage: 'permissions', action: 'completed' }]]);

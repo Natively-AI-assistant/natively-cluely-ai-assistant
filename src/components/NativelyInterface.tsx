@@ -399,7 +399,7 @@ import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import { useShortcuts } from '../hooks/useShortcuts';
-import { analytics, detectProviderType } from '../lib/analytics/analytics.service';
+import { analytics, detectProviderType, reportAnswerFailed } from '../lib/analytics/analytics.service';
 import type { MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
   getGlassOverlayAppearance,
@@ -2276,6 +2276,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
   const failedLine = useCallback((raw: unknown): { text: string; failure: DirectAssistAnswerFailure } => {
     const failure = chatFailureFromError(raw, { provider: chatProviderLabelRef.current });
+    reportAnswerFailed(failure);
     return { text: directAssistFailureText(failure, chatFailureT.current), failure };
   }, []);
 
@@ -6951,6 +6952,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     active: ActiveDirectAssistRequest,
     failure: DirectAssistAnswerFailure,
   ) => {
+    reportAnswerFailed(failure);
     settleDirectAssistIncomplete(active, directAssistFailureText(failure, t), failure);
   }, [settleDirectAssistIncomplete, t]);
 
@@ -9338,6 +9340,7 @@ Provide only the answer, nothing else.`;
     }
     manualSubmitInFlightRef.current = true;
     lastManualSubmitRef.current = { text: userText, atMs: nowMs };
+    analytics.trackChatQuestionSent();
 
     const currentAttachments = attachedContext;
 
