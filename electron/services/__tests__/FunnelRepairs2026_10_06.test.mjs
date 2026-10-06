@@ -122,17 +122,17 @@ describe('funnel repairs (2026-10-06)', { skip: HAVE_BUILD ? false : 'run `npm r
     assert.equal(of(h, 'meeting_ended').length, 1);
   });
 
-  test('the quit handler reports the end first thing, and only on a quit that is really happening', () => {
+  test('the quit handler reports the end before the database is closed down, and only on a quit that is really happening', () => {
     const src = fs.readFileSync(path.join(ROOT, 'electron/main.ts'), 'utf8');
     const at = src.indexOf('app.on("before-quit"');
     assert.notEqual(at, -1);
     const handler = src.slice(at, at + 2600);
     const deferred = handler.indexOf('if (deferQuitForLocalEmbeddingDrain(event)) return;');
     const report = handler.indexOf("funnelTelemetry.meetingEnded(appState.getIntelligenceManager().getAnswerCount())");
-    const teardown = handler.indexOf('disposeAutoAnswerForShutdown');
+    const teardown = handler.indexOf("checkpointDatabase('before-quit')");
     assert.ok(deferred !== -1 && report !== -1 && teardown !== -1);
     assert.ok(deferred < report, 'a quit that is put off must not end the meeting in the numbers');
-    assert.ok(report < teardown, 'before anything is torn down');
+    assert.ok(report < teardown, 'the answer count is read while the session is still whole');
     const line = handler.slice(handler.lastIndexOf('\n', report) + 1, handler.indexOf('\n', report));
     assert.match(line, /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingEnded\(.*\); \} catch \{/, 'analytics never blocks a quit');
   });

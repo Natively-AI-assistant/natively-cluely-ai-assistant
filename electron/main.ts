@@ -10203,11 +10203,6 @@ if (process.env.THINKING_MATRIX === '1') {
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
 
-    // A meeting still running when the app quits never reaches endMeeting, so
-    // its funnel end is recorded here: written to the queue file synchronously
-    // and sent at the next launch. Does nothing when no meeting is running.
-    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingEnded(appState.getIntelligenceManager().getAnswerCount()); } catch { /* analytics never blocks a quit */ }
-
     // Flush any queued context-debug JSONL writes. Best-effort and async —
     // completed lines are already durable (append-per-record), so a hard kill
     // loses at most the in-flight tail.
@@ -10225,6 +10220,11 @@ if (process.env.THINKING_MATRIX === '1') {
     } catch (e) {
       console.error('[main] Failed to stop DefaultOutputWatcher during shutdown:', e);
     }
+
+    // A meeting still running when the app quits never reaches endMeeting, so
+    // its funnel end is recorded here: written to the queue file synchronously
+    // and sent at the next launch. Does nothing when no meeting is running.
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingEnded(appState.getIntelligenceManager().getAnswerCount()); } catch { /* analytics never blocks a quit */ }
 
     // 2026-07-08: TRUNCATE the SQLite WAL file early in shutdown.
     // On a force-quit (e.g. user ⌘Q during a meeting, macOS sending
