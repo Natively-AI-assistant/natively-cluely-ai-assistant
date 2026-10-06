@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: October 1st 2026_
+_Last updated: October 7th 2026_
 
 This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
