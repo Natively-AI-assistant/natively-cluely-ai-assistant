@@ -1762,3 +1762,36 @@ baseline of main: er4-dev-main (270) and er4-dev2-main (360), direct DeepSeek, f
 Astra, in this order (`results/astra-next4.sh`): a candidate's steps if one is ready → the 30 control rows left of the
 holdout pair (line 3 of E16b's safety rule) → the 630 baseline rows → the drafts of the rows the pass edited.
 The baseline under Astra is what the next candidates are chosen from and read against.
+
+### E16b — the blind-holdout safety rule, complete (2026-10-07 02:20 UTC; all 180 pairs judged by Astra)
+Line 3 on all 180 rows: 8.853 → 8.835, hard fails 22 → 23 (bars: ≥ control − 0.15; ≤ control + 3): holds. Lines 1, 2,
+4, 5 as recorded. **Every line of the safety rule holds; E16b (on main since 2026-10-06) stands.** On the blind holdout
+its effect is +0.31 in the two profile modes and nil overall; call-center moved 8.68 → 7.71 on 20 rows, one run each.
+
+### Baseline of main `f4cd986d` on dev, first 184 rows under Astra (2026-10-07 02:22 UTC)
+9.03, 20 hard fails. missing_evidence items are the weakest condition (18 rows, 7.28, 7 hard fails). Rows the claim
+pass edited: 8.26 against 9.18 for the rest. On the worst of them the pass's own scratch line shows what happened:
+* SEM-028 ("do we say anywhere what hardware it runs on or what it costs per building?"): the draft said neither is in
+  the paper; the pass listed "there's no cost per building anywhere in the material" as UNSUPPORTED and removed it.
+* TEAM-027 ("has legal signed off on the privacy wording?"): the pass listed "Nothing in the status notes or the risk
+  register says legal has signed off" as UNSUPPORTED, removed it, and the reply reads as a status report (4.0).
+* SALES-028: "I don't want to give you a number I haven't verified" and "let me confirm … and come back" listed as
+  [self] and [promise] and removed; what is left opens with "The evidence doesn't state …" (4.0).
+A statement that something is ABSENT from the material is being treated as a claim that needs a record.
+
+## E19 — the claim pass does not list a statement of absence (rule written 2026-10-07 02:28 UTC, before any replay of it)
+**Change:** the "Never list these" sentence of `LIST_THEN_REWRITE` also names a statement that the material does not
+contain, state or settle something, and declining to give a figure they cannot verify. Wording fixed in
+`replay-variants/e19-absence.mjs`.
+**Measured by** `replay-claim-pass.mjs` on the 470 turns of er4-dev-main + er4-dev2-main whose turn ran the pass, arm
+`e19` against the control arm `e19-ctl` (replayed before this rule, same bundle, requests identical to the app's on
+470 of 470). Astra, the rows where the two arms show different text, both sides.
+| # | Line | Bar |
+|---|---|---|
+| 1 | missing_evidence rows that differ: mean change; hard fails | ≥ +0.30; ≤ control arm |
+| 2 | All rows that differ: mean change; hard fails | ≥ 0; ≤ control arm |
+| 3 | Rows flagged with any unsupported_* or fabricated_* flag | ≤ control arm + 1 |
+| 4 | Rows flagged important_question_unanswered or missed_available_evidence | ≤ control arm |
+| 5 | Pass time, p90 (judge-free) | ≤ control arm + 300 ms |
+Every line must hold. Then the wording is built into the app on a candidate branch, Evin is told, and it is confirmed
+on an app run. The risk the rule guards: an invention slipping through dressed as a statement of absence (line 3).
