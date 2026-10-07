@@ -278,11 +278,15 @@ describe('a study\'s scope is closed (2026-10-01)', () => {
       }
     }
   });
-  test('the general honest-limit exemption is NOT in the prompt (judged neutral, taken back)', () => {
+  // 2026-10-01: a general exemption for "an honest limit" ("I can't confirm a credit on this call") was judged
+  // neutral on 44 drafts and taken back; that wording stays out. 2026-10-07: a narrower clause went in on new
+  // evidence (ClaimVerifierAbsenceIsNotAClaim2026_10_07) — a statement that the MATERIAL does not contain something,
+  // and declining an unverifiable figure. A denial about the speaker ("I haven't", "we don't") is still a statement.
+  test('the 2026-10-01 "honest limit" wording stays out; the never-list ends with the 2026-10-07 absence clause', () => {
     for (const mode of ['call-center', 'team-meet', 'seminar']) {
       const p = claimVerifierSystemPrompt(mode);
       assert.doesNotMatch(p, /an honest limit/, mode);
-      assert.match(p, /general knowledge; what the other person said; what the material states\./, mode);
+      assert.match(p, /general knowledge; what the other person said; what the material states; a statement that the material does NOT contain, state or settle something/, mode);
     }
   });
   test('an edit that ADDS "I don\'t have that" is still refused', () => {

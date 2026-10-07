@@ -170,6 +170,20 @@ export function materialHasNoDocuments(material: string): boolean {
  * turned into a question 37 -> 4, decisions lost 28 -> 10, edits to
  * document-grounded replies 33 -> 13 of 72.
  *
+ * ABSENCE IS NOT A CLAIM (2026-10-07). On questions whose answer is not in
+ * the material, the list step named the honest part of the draft as
+ * unsupported and the rewrite removed it: "there's no cost per building
+ * anywhere in the material", "Nothing in the status notes or the risk register
+ * says legal has signed off", "I don't want to give you a number I haven't
+ * verified". What was left read as a status report or opened with "The
+ * evidence doesn't state". The never-list now names a statement that the
+ * material does not contain, state or settle something, and declining to give
+ * a figure they cannot verify. Replayed on the 470 passes of 630 development
+ * turns (requests identical to the app's), judged externally on the 88 turns
+ * where the reply differs: 8.29 -> 8.68, hard fails 12 -> 7; turns flagged for
+ * an unsupported or fabricated claim 11 -> 6; where the asked fact is absent
+ * (35 turns) 8.19 -> 8.63. Pass time p90 +224 ms.
+ *
  * NOT enforced in code, on purpose: about a fifth of the listed phrases
  * survive in the model's own reply, and most of those are listing mistakes it
  * then corrects (a résumé's "about 2.3 million a day" listed, then kept).
@@ -181,7 +195,7 @@ Step 1, one line starting "UNSUPPORTED:" — only the phrases of the draft that 
 [past] something that already happened or is already true and that only a record can establish: what they did, led, built, measured or agreed, a number, a price, a policy, a procedure, a capability, a customer, a result;
 [self] a fact about who they already are: an existing preference, habit, motive, feeling, strength or weakness, or when they are available;
 [promise] a promise with consequences: money, a refund or credit, a price or discount, a contract term, a delivery date or deadline, a guarantee, what the product or the company will do.
-Never list these, they are not claims that need a record: a decision or choice they make now ("let's do the pads today", "I can take this", "I'd go with REST here"); taking a task or offering to; a recommendation or professional judgment ("I'd shift the plan rather than re-plan it"); an ordinary small commitment ("I'll send that today", "I'll check and come back to you", "I'll stay on this with you"); general knowledge; what the other person said; what the material states.
+Never list these, they are not claims that need a record: a decision or choice they make now ("let's do the pads today", "I can take this", "I'd go with REST here"); taking a task or offering to; a recommendation or professional judgment ("I'd shift the plan rather than re-plan it"); an ordinary small commitment ("I'll send that today", "I'll check and come back to you", "I'll stay on this with you"); general knowledge; what the other person said; what the material states; a statement that the material does NOT contain, state or settle something ("nothing in the notes says legal has signed off", "there's no cost figure anywhere in the paper", "that isn't in what I have"), which is the honest answer when the asked thing is absent; declining to give a figure or a detail they cannot verify ("I don't want to give you a number I haven't checked").
 Write "UNSUPPORTED: none" when there is nothing to list.
 Then one line starting "CONFLICT:" — if the material itself gives two different values or rules for the very thing that was asked, both in a few words; otherwise "CONFLICT: none".
 Step 2, after a line containing only "---" — the revised reply, built by these rules in order:
@@ -234,6 +248,10 @@ const NO_TERMS_MATERIAL = ' The same holds for what the price depends on, which 
  * unexempted pass: it prefers the reply without the hedge ("Can we check the
  * notes before we treat export as out of scope?") and, with the exemption, the
  * pass also stopped removing the invented process next to the limit.
+ * (2026-10-07: a narrower clause is in LIST_THEN_REWRITE's never-list — a
+ * statement that the MATERIAL does not contain something, and declining an
+ * unverifiable figure — on new evidence; see ABSENCE IS NOT A CLAIM above. On
+ * those 88 turns the unsupported and fabricated flags fell, 11 -> 6.)
  */
 const STUDY_SCOPE = ' The one exception is the scope of a study the material describes: that it did not measure, test or include something the material never mentions is supported, keep it.';
 
