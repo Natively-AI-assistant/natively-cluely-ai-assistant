@@ -1802,3 +1802,27 @@ between the arms (missing_evidence 35, conflict_stale 18, multi_source 17, groun
 followup 2): 176 judgments. **Line 5:** the control arm had been replayed six hours earlier (p90 1,339 ms); replayed
 again in the same quarter-hour as `e19` it gives p90 1,474 ms against 1,698 ms: +224 ms, holds. Pass time is read on
 arms replayed together; that is the only reading that compares the wordings and not the provider's hour.
+
+### E19 — result and verdict under Astra (2026-10-07 02:37 UTC; arm `e19` against `e19-ctl`, the 88 rows where they differ, both sides judged; calibration 38/38 in the same batch)
+| # | Line | Measured | Holds |
+|---|---|---|---|
+| 1 | missing_evidence rows that differ: mean change ≥ +0.30; hard fails ≤ control | n 35: 8.19 → 8.63, +0.44; hard 8 → 5 | yes |
+| 2 | All rows that differ: mean change ≥ 0; hard fails ≤ control | n 88: 8.29 → 8.68, +0.39; hard 12 → 7 | yes |
+| 3 | Rows flagged unsupported_* or fabricated_* ≤ control + 1 | 11 → 6 | yes |
+| 4 | Rows flagged important_question_unanswered / missed_available_evidence ≤ control | 21 → 18 | yes |
+| 5 | Pass time p90 ≤ control + 300 ms (same-hour arms) | +224 ms | yes |
+**Every line holds. E19 is kept by its rule.** By condition, rows that differ: missing_evidence +0.44, conflict_stale
++0.50, irrelevant_source +1.00, multi_source +0.10, grounded_single −0.27 (10 rows), followup +2.43 (2 rows). 14 rows
+rise by more than 1.5, 5 fall.
+**Prior art, found when the app's own test failed on the change:** on 2026-10-01 a general exemption for "an honest
+limit" ("I can't confirm a credit on this call") was tried in every mode and taken back — the judge of that day scored
+44 limit-stating drafts −0.02 (±0.24), and the pass stopped removing an invented process next to the limit. E19 is
+narrower (what the MATERIAL does not contain; declining an unverifiable figure), is measured on 88 rows by Astra, and
+the invention flags fall (11 → 6), which is the harm the earlier note recorded. The old test now pins both facts.
+Built into the app: branch `cand/e19` (`73b18d97`, on main `bce8e47a`); type-check clean, llm suite 5,849 pass.
+
+**App confirmation — rule written before the run (2026-10-07 02:43 UTC):** the candidate build is run in the app on
+the 88 ids (runs er5-dev-e19, er5-dev2-e19); Astra judges the shown answers against the baseline's shown answers on the
+same ids (er4 runs; one app run each, so the generator's own variation is inside it). Lines: (a) judge-free — every
+pass request of the run carries the new clause; (b) mean ≥ baseline − 0.15; (c) hard fails ≤ baseline + 2.
+If it holds, Evin is told and asked before anything is landed.
