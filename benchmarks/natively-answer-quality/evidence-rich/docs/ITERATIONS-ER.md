@@ -1795,3 +1795,10 @@ contain, state or settle something, and declining to give a figure they cannot v
 | 5 | Pass time, p90 (judge-free) | ≤ control arm + 300 ms |
 Every line must hold. Then the wording is built into the app on a candidate branch, Evin is told, and it is confirmed
 on an app run. The risk the rule guards: an invention slipping through dressed as a statement of absence (line 3).
+
+### E19 — replay done, timing line read before any judgment (2026-10-07 02:26 UTC)
+Arm `e19`: 470 of 470 requests identical to the app's bar the one sentence; edited 87 (control 90). 88 rows differ
+between the arms (missing_evidence 35, conflict_stale 18, multi_source 17, grounded_single 10, irrelevant_source 6,
+followup 2): 176 judgments. **Line 5:** the control arm had been replayed six hours earlier (p90 1,339 ms); replayed
+again in the same quarter-hour as `e19` it gives p90 1,474 ms against 1,698 ms: +224 ms, holds. Pass time is read on
+arms replayed together; that is the only reading that compares the wordings and not the provider's hour.
