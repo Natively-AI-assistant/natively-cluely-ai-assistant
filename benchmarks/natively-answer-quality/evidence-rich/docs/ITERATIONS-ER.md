@@ -1826,3 +1826,14 @@ the 88 ids (runs er5-dev-e19, er5-dev2-e19); Astra judges the shown answers agai
 same ids (er4 runs; one app run each, so the generator's own variation is inside it). Lines: (a) judge-free — every
 pass request of the run carries the new clause; (b) mean ≥ baseline − 0.15; (c) hard fails ≤ baseline + 2.
 If it holds, Evin is told and asked before anything is landed.
+
+### E19 — app confirmation (2026-10-07 03:02 UTC; `cand/e19` 73b18d97 run in the app on the 88 ids, runs er5-dev-e19 + er5-dev2-e19; shown answers judged by Astra against the baseline's shown answers on the same ids)
+| Line | Measured | Holds |
+|---|---|---|
+| (a) every pass request of the run carries the new clause | 90 of 90 (the recorded system-prompt hash equals the new wording's; 0 equal the old) | yes |
+| (b) mean ≥ baseline − 0.15 | 8.499 → 8.616 | yes |
+| (c) hard fails ≤ baseline + 2 | 12 → 7 | yes |
+missing_evidence rows (35): 7.84 → 8.45. One app run each, so the generator's own variation is in these numbers; the
+replay (same drafts, both wordings) is the cleaner measure and says +0.39 on these rows.
+**E19 is a keep candidate: rule held on every line, app confirmation held on every line.** Evin is asked before it
+is landed. Not measured: the blind holdout (the pass runs on about three quarters of turns there too); Windows.

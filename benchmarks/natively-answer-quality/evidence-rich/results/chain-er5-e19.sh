@@ -1,0 +1,10 @@
+#!/bin/zsh
+cd /Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix/benchmarks/natively-answer-quality
+export NATIVELY_ENV_FILE=/Users/evin/natively-cluely-ai-assistant/.env
+W=/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/er-main
+stopapp() { P=$(ps -axo pid,command | grep "[s]cripts/dev-agent.mjs" | awk '{print $1}'); [ -n "$P" ] && kill -TERM $P; sleep 10; }
+stopapp
+node evidence-rich/supervise-er.mjs --root $W --runs dev:er5-dev-e19,dev2:er5-dev2-e19 --fresh-userdata --run-args "--id ER-D-GEN-025,ER-D-GEN-026,ER-D-SALES-028,ER-D-SALES-026,ER-D-SALES-029,ER-D-REC-015,ER-D-REC-016,ER-D-REC-018,ER-D-REC-019,ER-D-REC-020,ER-D-REC-026,ER-D-REC-028,ER-D-TEAM-005,ER-D-TEAM-015,ER-D-TEAM-026,ER-D-TEAM-027,ER-D-TEAM-028,ER-D-LFW-001,ER-D-LFW-005,ER-D-LFW-009,ER-D-LFW-010,ER-D-LFW-024,ER-D-LFW-018,ER-D-LFW-013,ER-D-LFW-014,ER-D-LFW-015,ER-D-LFW-028,ER-D-TI-022,ER-D-TI-026,ER-D-TI-008,ER-D-SEM-026,ER-D-SEM-028,ER-D-CC-001,ER-D-CC-021,ER-D-CC-027,ER-D2-GEN-025,ER-D2-GEN-037,ER-D2-GEN-036,ER-D2-SALES-036,ER-D2-SALES-029,ER-D2-SALES-034,ER-D2-SALES-035,ER-D2-SALES-037,ER-D2-REC-015,ER-D2-REC-024,ER-D2-REC-027,ER-D2-REC-028,ER-D2-REC-035,ER-D2-REC-036,ER-D2-REC-038,ER-D2-TEAM-023,ER-D2-TEAM-030,ER-D2-TEAM-031,ER-D2-TEAM-034,ER-D2-TEAM-035,ER-D2-TEAM-037,ER-D2-LFW-011,ER-D2-LFW-013,ER-D2-LFW-001,ER-D2-LFW-003,ER-D2-LFW-004,ER-D2-LFW-005,ER-D2-LFW-007,ER-D2-LFW-008,ER-D2-LFW-034,ER-D2-LFW-035,ER-D2-LFW-030,ER-D2-LFW-031,ER-D2-LFW-023,ER-D2-LFW-024,ER-D2-LFW-037,ER-D2-LFW-040,ER-D2-TI-009,ER-D2-TI-029,ER-D2-SEM-004,ER-D2-SEM-007,ER-D2-SEM-018,ER-D2-SEM-019,ER-D2-SEM-036,ER-D2-SEM-039,ER-D2-SEM-035,ER-D2-CC-038,ER-D2-CC-017,ER-D2-CC-019,ER-D2-CC-028,ER-D2-CC-032,ER-D2-CC-036,ER-D2-CC-037" > evidence-rich/results/supervise-er5-e19.log 2>&1 || echo "RUN FAILED"
+stopapp
+mkdir -p /Users/evin/natively-er-backup/results; cp -R -p evidence-rich/results/er5-dev-e19 evidence-rich/results/er5-dev2-e19 /Users/evin/natively-er-backup/results/ 2>/dev/null
+echo CHAIN-ER5-DONE
