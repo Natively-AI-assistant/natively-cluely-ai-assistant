@@ -1842,3 +1842,18 @@ is landed. Not measured: the blind holdout (the pass runs on about three quarter
 Both wordings are replayed on the recorded drafts of er-holdout-e16b3 (main's code on the blind holdout; arms
 `e19h-ctl`, `e19h`), Astra judges the rows where they differ, aggregates only. Lines: mean change ≥ 0; hard fails ≤
 control arm; rows flagged unsupported_* or fabricated_* ≤ control arm + 1. If any line fails, E19 is not landed.
+
+### Astra window of 2026-10-07, 02:01 – 03:14 UTC (73 minutes; three streams of three calls; no failed call until the pool closed)
+Judged: the 30 control rows of the holdout pair; the whole development baseline of main `f4cd986d` (630 shown answers
+and the 81 drafts of the rows the pass edited); E19's 176 replay judgments; E19's app confirmation (88 + baseline).
+**Baseline of main under Astra, 630 development rows: 8.923, 71 hard fails (11.3 %), 414 rows at 9.5 or above.** By
+condition: grounded_single 9.16, irrelevant_source 9.12, conflict_stale 9.02, multi_source 8.84, followup 8.63,
+missing_evidence 8.04. By mode: general 9.18, lecture 9.10, looking-for-work 9.02, technical-interview 8.90,
+recruiting 8.90, team-meet 8.88, call-center 8.85, seminar 8.84, sales 8.63. Heard 8.92, typed 8.93.
+**The claim pass on main, by Astra** (99 rows it edited, draft and shown both judged): 8.23 → 8.47, hard fails 22 → 11;
+multi_source 8.23 → 9.04, missing_evidence 7.69 → 8.10, conflict_stale 8.82 → 8.44, followup 8.11 → 6.41 (4 rows).
+Of the 71 hard fails, E19 changes the reply on 12; 57 of the other 59 are answers the pass did not edit: the
+generator's own errors with the facts in the prompt (major_factual_error 21, missed_available_evidence 20,
+major_reasoning_error 10, arithmetic_error 8, unsupported claims 26).
+**E19's blind-holdout replay** was run (132 passes, requests identical to the app's on 132 of 132; 25 rows differ) but
+the pool closed (HTTP 402, 03:14 UTC) before any of its 50 judgments: it is first in the next window.
