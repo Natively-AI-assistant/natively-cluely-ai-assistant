@@ -1837,3 +1837,8 @@ missing_evidence rows (35): 7.84 → 8.45. One app run each, so the generator's 
 replay (same drafts, both wordings) is the cleaner measure and says +0.39 on these rows.
 **E19 is a keep candidate: rule held on every line, app confirmation held on every line.** Evin is asked before it
 is landed. Not measured: the blind holdout (the pass runs on about three quarters of turns there too); Windows.
+
+### E19 — blind-holdout replay, rule written before the replay (2026-10-07 03:14 UTC)
+Both wordings are replayed on the recorded drafts of er-holdout-e16b3 (main's code on the blind holdout; arms
+`e19h-ctl`, `e19h`), Astra judges the rows where they differ, aggregates only. Lines: mean change ≥ 0; hard fails ≤
+control arm; rows flagged unsupported_* or fabricated_* ≤ control arm + 1. If any line fails, E19 is not landed.
