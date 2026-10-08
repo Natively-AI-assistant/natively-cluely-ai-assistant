@@ -9,6 +9,14 @@ The full experiment record, with each rule as written before measuring, is `benc
 
 ## 1. State in one screen
 
+**2026-10-08 checkpoint:** calibration passed 38/38 with exact gpt-6-astra. E19 blind-holdout replay is incomplete:
+20/25 differing-text pairs judged, mean 8.3354 → 8.27615, hard fails 3 → 3, invention-flagged rows 2 → 2.
+Five judgments were denied with a temporary provider resource block (HTTP 403), not ordinary quota exhaustion.
+No final keep/revert verdict; E19 remains off main. Resume only after provider access is restored, without
+bypassing the block; use the saved plan with cached `judge-er.mjs --blind`, aggregates only.
+`results/replay/e19h-checkpoint-2026-10-08.json` and the final section of `ITERATIONS-ER.md` hold the checkpoint.
+Do not run `astra-next5.sh` blindly: its auto-commit lacks current attribution and its quota filter misses 403.
+
 | Thing | State |
 |---|---|
 | App `main` (local = GitHub) | `bce8e47a` when this was written. Holds every kept change of this work, including E16b. |

@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-08T02:23:29.348Z",
+  "experiment": "E19 blind holdout fixed-draft replay",
+  "judge": "gpt-6-astra",
+  "scope": "25 differing-text pairs; identical texts contribute zero change",
+  "missing_pairs": 5,
+  "model_unverified": 0,
+  "control": {
+    "rows": 20,
+    "mean": 8.3354,
+    "hard_fails": 3,
+    "invention_rows": 2
+  },
+  "candidate": {
+    "rows": 20,
+    "mean": 8.27615,
+    "hard_fails": 3,
+    "invention_rows": 2
+  },
+  "mean_delta": -0.05925000000000047,
+  "delta_ci95_half_width": 0.5956925045542416,
+  "rules": {
+    "complete": false,
+    "exact_model": true,
+    "mean_not_lower": false,
+    "hard_fails_not_higher": true,
+    "invention_rows_at_most_control_plus_one": true
+  },
+  "verdict": "INCOMPLETE: five pairs pending; no final keep/revert verdict; not eligible to land"
+}

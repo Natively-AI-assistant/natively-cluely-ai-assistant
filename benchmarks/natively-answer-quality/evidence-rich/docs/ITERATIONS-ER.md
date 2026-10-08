@@ -1857,3 +1857,32 @@ generator's own errors with the facts in the prompt (major_factual_error 21, mis
 major_reasoning_error 10, arithmetic_error 8, unsupported claims 26).
 **E19's blind-holdout replay** was run (132 passes, requests identical to the app's on 132 of 132; 25 rows differ) but
 the pool closed (HTTP 402, 03:14 UTC) before any of its 50 judgments: it is first in the next window.
+
+### Window of 2026-10-08 — E19 blind-holdout checkpoint (02:07–02:21 UTC; aggregates only)
+Exact gpt-6-astra probe passed at 02:07 UTC. Calibration completed at 02:16 UTC: **38/38**, every returned model
+exact gpt-6-astra. Used three streams, at most three calls per stream. Successful prior judgments were retained:
+the requested shown-control stream needed no new calls; new draft judgments 3/3, replay candidate 17/20 and replay
+control 12/14 succeeded, with zero returned-model mismatches. Five calls returned HTTP 403: the provider says its
+resource is temporarily blocked for a possible content-policy violation. This is an access-block error, not the
+usual quota exhaustion. No substitute judge, repeat submission of the denied calls, generator replay or app run
+was started afterwards.
+
+**Incomplete, not a keep/revert verdict.** 20 of 25 differing-text pairs are complete. Their aggregate mean is
+8.3354 control → 8.27615 candidate (−0.05925, 95% interval half-width 0.59569); hard fails 3 → 3; rows carrying any
+unsupported_* or fabricated_* flag 2 → 2. On this partial subset the mean line does not hold; the remaining five
+pairs may change it. Do not extrapolate or declare the full rule failed/passed. All three prewritten lines still
+must hold on the complete pair set. E19 stays off main, and landing still requires Evin's explicit approval.
+
+Successful and failed-call receipts are committed in the three existing `.astra.jsonl` judgment files. Safe
+aggregate checkpoint: `results/replay/e19h-checkpoint-2026-10-08.json`; no holdout questions, answers or judge
+explanations were read to design a change. Outputs also copied to `~/natively-er-backup/judge-out/` before committing.
+Next resume: inspect the provider's current access state through the existing exact-model probe after availability
+is restored; do not bypass an access block. Resume only missing successful judgments via the existing saved plan
+and `judge-er.mjs --blind`, and read aggregates only. `astra-next5.sh` is not safe to execute blindly: its blanket
+staging/automatic commit lacks current attribution, and its failure detection covers quota but not this 403.
+
+A read-only development exploration suggested inline component arithmetic as a possible E20. **Not declared,
+implemented or measured.** The proposed commands, latency assertions and applicability must be verified against
+the existing harness before a rule is written; no claim of zero first-word delay has been established. Existing
+conflict-wording experiments remain rejected. No application code or platform-specific behavior changed in this
+window; neither macOS nor Windows was physically tested.
