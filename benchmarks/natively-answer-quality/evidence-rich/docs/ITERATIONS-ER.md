@@ -2667,3 +2667,33 @@ What the notice is for (an invented history) no fixed string can see on most row
 needles. So its gain is read by Astra only, on the own-history rows (3 development, 12 unseen), both arms, and only
 if lines 1 and 2 hold on the unseen rows. The three development rows' replays are read by eye before that and
 reported as that, not as a verdict.
+
+### E23 and E24 — stage 1 on development rows (2026-10-09 18:29 UTC; replayed 18:24–18:28 UTC, `er6-dev-main` + `er6-dev2-main` prompts, k = 4, 0 failed calls; `report/rule-e23.mjs`)
+The pairing rule on the recorded prompts (123 rows carry résumé evidence; 68 change, about 2,260 characters
+removed): profile A keeps "Senior Software Engineer and Tech Lead, Dispatch Core at Quillhaven Freight Systems" and
+rejects five entries (a company of "ships.", "[Page 2]", three bullet lines read as jobs); profile B keeps the
+Lumenquay lead role and the Plumewright role and rejects "Senior Frontend Engineer at Ondaverde Health" (pairing not
+in the text) and the company that is a description line. So on both résumés the derived experience blocks go.
+**E23, 52 development rows whose prompt changes, 208 samples per arm:**
+| | base | arm |
+|---|---|---|
+| samples with every required string (41 rows) | 90.9 % | 95.7 % (paired +4.9, 95 % 0.6 to 11.6) |
+| samples with a forbidden string | 0 | 1 |
+| right samples (required, no forbidden, calculation) | 90.4 % | 96.6 % (paired +6.3, 95 % 2.4 to 12.0) |
+| rows that rose / fell | | 3 / 0 |
+| first visible character, median | 873 ms | 842 ms |
+Lines 1 to 3 hold. Design rows, reported only: D-LFW-020 0 of 4 → 4 of 4 ("joined in March 2023 … three years and
+seven months"; the base says "joined in April 2024 … two years and six months" in 4 of 4); D2-TI-009 3 → 4 of 4;
+D2-TI-026 has every required string in both arms and its base sample names the right employer (the recorded answer
+of 7 October did not). Stage 2 runs.
+**E24, the 11 development rows in its state, 44 samples per arm:** every required string 90.6 % → 100 % (8 rows),
+forbidden 0 → 0, no row falls: lines 1 and 2 hold. **Read by eye, the notice does not do what it is for:** on the
+three own-history rows the arm still tells the posting as the candidate's work in 12 of 12 samples ("I'm a backend
+engineer … money-movement … I also carry the pager"; "the ledger write path I owned end to end"; "I've worked with
+CRDTs … Yjs over WebSockets"), as the base does (5 of 6 read). No Astra call is spent on this wording.
+**E24b, one further wording, declared here before it is replayed:** the same gate; the notice is the app's existing
+no-source personal guard (the sentence that already works where no evidence is found: "This question asks for a
+fact about the USER themselves … No source establishes it, so do NOT state one …") with one sentence before it that
+the document above is the posting and describes the employer's job, not the user. Read by eye on the same three
+rows, k = 4: if more than 3 of the 12 samples still tell the posting as the candidate's history, E24 is closed as a
+prompt notice and nothing further is tried on it today. Lines 1 and 2 apply as before.

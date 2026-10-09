@@ -28,7 +28,7 @@ import * as app from '../lib/app.mjs';
 
 export const RUNNER_VERSION = 'er-1.0.0';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const EVID = path.join(HERE, 'evidence');
+const EVID = process.env.ER_EVID_DIR ? path.resolve(process.env.ER_EVID_DIR) : path.join(HERE, 'evidence');   // a separate corpus (pack24) has its own
 // ER_BENCH_DIR: datasets, oracles and results of a rig smoke test on a partial corpus live elsewhere; default is here.
 const BENCH = process.env.ER_BENCH_DIR ? path.resolve(process.env.ER_BENCH_DIR) : HERE;
 const args = process.argv.slice(2);

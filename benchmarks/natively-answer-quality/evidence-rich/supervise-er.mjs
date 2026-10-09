@@ -40,7 +40,7 @@ async function ensureApp() {
   fs.writeFileSync(POINTER, logPath);
   const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'dev:agent'], {
     cwd: ROOT, detached: true, stdio: ['ignore', out, out],
-    env: { ...process.env, NATIVELY_E2E: '1', NATIVELY_PROMPT_DEBUG: '1', MEASURE_LATENCY: 'true', NATIVELY_E2E_REFERENCE_ROOT: path.join(HERE, 'evidence') },
+    env: { ...process.env, NATIVELY_E2E: '1', NATIVELY_PROMPT_DEBUG: '1', MEASURE_LATENCY: 'true', NATIVELY_E2E_REFERENCE_ROOT: process.env.ER_EVID_DIR ? path.resolve(process.env.ER_EVID_DIR) : path.join(HERE, 'evidence') },
   });
   child.unref();
   for (let i = 0; i < 150; i++) { await sleep(2000); if (await appUp()) { await sleep(8000); console.log(`${stamp()} app up`); return; } }
