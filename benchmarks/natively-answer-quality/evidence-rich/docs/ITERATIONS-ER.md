@@ -1985,3 +1985,24 @@ holdout the new wording did no measurable harm (the change is +0.03 inside ±0.5
 It does not show the development gain (+0.39 on 88 rows) repeating there. The five late pairs moved the partial
 reading of 2026-10-08 (20 pairs, −0.059, hard 3 → 3) to this one: both arms gained two hard fails among them.
 Landing on main is Evin's decision; nothing is landed.
+
+### E19 — second repetition judged, pooled rule read (2026-10-09 02:16 UTC)
+Same window, same calibration. 39 judgments sent (20 new wording, 15 control, 4 drafts), none failed, no wrong-model
+return, no access block. Aggregates only (`report/pair-aggregate.mjs`; copies in `results/replay/`).
+| Reading | Pairs | Control | New wording | Change (95 % half-width) | Hard fails | Invention rows | Up ≥ 1 / down ≥ 0.5 |
+|---|---|---|---|---|---|---|---|
+| Repetition 0 | 25 | 8.105 | 8.135 | +0.031 (±0.499) | 5 → 5 | 4 → 4 | 2 / 3 |
+| Repetition 1 | 27 | 8.208 | 8.615 | +0.407 (±0.558) | 4 → 3 | 3 → 2 | 5 / 3 |
+| Pooled | 52 | 8.158 | 8.384 | +0.226 (±0.376) | 9 → 8 | 7 → 6 | 7 / 6 |
+| # | Line (rule of 2026-10-09, pooled) | Measured | Holds |
+|---|---|---|---|
+| 1 | Mean change ≥ 0 | +0.226 | yes |
+| 2 | Hard fails ≤ control | 8 vs 9 | yes |
+| 3 | Invention rows ≤ control + 2 | 6 vs 7 | yes |
+| 4 | Pass p90 of repetition 1 ≤ control + 300 ms | +88 ms | yes |
+**Both rules hold; they do not disagree.** The first rule's verdict (above) is the one of record; this one sits
+beside it. Limits, said plainly: the pooled interval still includes zero, so the holdout shows "no harm, probably a
+small gain", not a confirmed gain; the two repetitions share the same 132 drafts, so the 52 pairs are not 52
+independent questions; rows where the arms give the same text (about 105 of 132 per repetition) contribute no change,
+so the effect on all 180 holdout questions is roughly +0.226 × 52 / (2 × 180) ≈ +0.03. No row with an unresolved
+oracle conflict is among the 52. E19 remains a keep candidate on branch `cand/e19` (`73b18d97`); nothing is landed.

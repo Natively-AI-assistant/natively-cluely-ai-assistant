@@ -9,18 +9,26 @@ The full experiment record, with each rule as written before measuring, is `benc
 
 ## 1. State in one screen
 
-**2026-10-08 checkpoint:** calibration passed 38/38 with exact gpt-6-astra. E19 blind-holdout replay is incomplete:
-20/25 differing-text pairs judged, mean 8.3354 → 8.27615, hard fails 3 → 3, invention-flagged rows 2 → 2.
-Five judgments were denied with a temporary provider resource block (HTTP 403), not ordinary quota exhaustion.
-No final keep/revert verdict; E19 remains off main. Resume only after provider access is restored, without
-bypassing the block; use the saved plan with cached `judge-er.mjs --blind`, aggregates only.
-`results/replay/e19h-checkpoint-2026-10-08.json` and the final section of `ITERATIONS-ER.md` hold the checkpoint.
+**2026-10-09, 02:16 UTC: the E19 blind-holdout check is done and both readings hold.** Calibration 38/38 with exact
+gpt-6-astra, no access block, no failed call.
+- Rule of 2026-10-07, on the 25 rows where the arms differ (repetition 0): 8.105 → 8.135 (+0.031, ±0.499), hard
+  fails 5 → 5, invention-flagged rows 4 → 4. Holds.
+- Rule of 2026-10-09, two repetitions pooled, 52 pairs: 8.158 → 8.384 (+0.226, ±0.376), hard fails 9 → 8, invention
+  rows 7 → 6, pass p90 +88 ms. Holds. Repetition 1 alone, 27 pairs: 8.208 → 8.615 (+0.407, ±0.558), hard 4 → 3.
+- Read plainly: no harm on the blind holdout, a gain that points the same way as development but is not outside its
+  interval. E19 is a keep candidate on every rule written for it. **It is not on main; landing is Evin's decision.**
+- The 2026-10-08 partial (20 of 25 pairs, 403 block on five calls) is superseded; the block did not recur.
+- Tried without the judge and dropped on 2026-10-09 (do not re-propose): a per-statement check line in the claim
+  pass, a "decide, then say it" generator notice, E20 (a rail on the pass's conflict line). Details in the log.
+- Local commits on `bench/evidence-rich` after `99001d3b` are NOT pushed; publication needs Evin's explicit yes.
+- A window is now run as one background script (`~/natively-er-backup/scripts/er-window-chain-20261009.mjs` and
+  `er-e19h-k1-20261009.mjs`): probe, calibrate once, judge only what a saved plan still misses, aggregates.
 Do not run `astra-next5.sh` blindly: its auto-commit lacks current attribution and its quota filter misses 403.
 
 | Thing | State |
 |---|---|
 | App `main` (local = GitHub) | `bce8e47a` when this was written. Holds every kept change of this work, including E16b. |
-| Keep candidate not yet landed | **E19**, branch `cand/e19` (`73b18d97`, local only, in worktree `.claude/worktrees/er-main`). Waits for Evin's word and for one check (section 9). |
+| Keep candidate not yet landed | **E19**, branch `cand/e19` (`73b18d97`, local only, in worktree `.claude/worktrees/er-main`). The blind-holdout check is done and holds (above). Waits for Evin's word. |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
 | Judge | gpt-6-astra only (through AgentRouter). Evin, 2026-10-05: do not judge with Claude Code (quota). |
 | Score of main today, development set, Astra | 630 questions: **8.92**, 71 hard fails (11.3 %), 414 at 9.5 or above. |

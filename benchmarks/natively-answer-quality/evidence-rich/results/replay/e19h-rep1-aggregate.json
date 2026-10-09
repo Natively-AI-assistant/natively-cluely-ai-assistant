@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-09T02:16:02.138Z",
+  "arms": [
+    "e19h-ctl-k1 → e19h-k1"
+  ],
+  "judge": "gpt-6-astra",
+  "rows_that_differ": 27,
+  "both_judged": 27,
+  "missing": 0,
+  "model_unverified": 0,
+  "control": {
+    "mean": 8.208185185185188,
+    "hard_fails": 4,
+    "conflict_flag_rows": 0,
+    "invention_rows": 3
+  },
+  "candidate": {
+    "mean": 8.61474074074074,
+    "hard_fails": 3,
+    "conflict_flag_rows": 0,
+    "invention_rows": 2
+  },
+  "mean_change": 0.4065555555555556,
+  "mean_change_ci95_half_width": 0.5583015199624685,
+  "rows_up_by_1": 5,
+  "rows_down_by_half": 3,
+  "rows_with_an_unresolved_oracle_conflict": 0
+}
