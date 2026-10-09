@@ -2369,3 +2369,21 @@ keeps the gain where one is.
 What it still owes before anyone is asked to land it, each with lines written first: the build with tests; an app
 run to confirm the wiring and the first-word cost; a check on questions that were not used to design it (the
 challenge sets, below); Astra's reading, which cannot happen before the provider's block lifts.
+
+## E21 stage four — does it hold on questions that were not used to design it? (rule written 2026-10-09 12:23 UTC, before the challenge sets have been run or replayed)
+Stages one to three all read the same 59 + 387 development rows, and the n3 wording was written after reading six of
+their failures. The challenge sets were authored blind, frozen at 11:07 UTC, and no answer to them exists yet.
+**Measurement.** After `er7-chal-main` and `er7-chalval-main` (main `73b18d97`) exist: generator replay on their
+recorded prompts, every row whose prompt carries the evidence block, has no calculation notice and is not a code
+question (`rule-e21.mjs select4`, ids to a file), arms `e21e-base` (as recorded) and `e21e-n3`, 4 samples, back to
+back, nothing else on the DeepSeek key. Read with `rule-e21.mjs read4`; the validation part with `--blind`
+(aggregates only, no id, no text).
+**Lines.**
+1. `challenge`, rows with a calculation oracle: right samples rise by at least 5 points (paired mean), and at most 2
+   rows fall from at least 3 of 4 right to at most 1.
+2. `challenge-val`, rows with a calculation oracle: right samples not lower than the base (paired mean at least 0).
+3. Both sets, the other rows that have required strings: samples with every required string not lower by more than
+   2 points in either set.
+4. Forbidden-string samples, both sets pooled: at most base + 2.
+**Reading.** All hold → the gain is not an artefact of the rows it was designed on; E21 stays a keep candidate and
+waits for Astra and for Evin. Line 1 or 2 fails → the candidate is not proposed; the branch stays as a record.

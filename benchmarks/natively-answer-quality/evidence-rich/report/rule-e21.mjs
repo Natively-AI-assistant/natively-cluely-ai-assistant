@@ -11,10 +11,35 @@ import { loadRun, objective } from '../objective.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url)); const ER = path.join(HERE, '..');
 const args = process.argv.slice(2); const cmd = args[0]; const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
 const lines = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
-const items = new Map(); for (const p of ['dev', 'dev2']) for (const it of JSON.parse(fs.readFileSync(path.join(ER, 'datasets', `${p}.json`), 'utf8')).items) items.set(it.id, it);
+const items = new Map(); for (const p of ['dev', 'dev2', 'challenge', 'challenge-val']) { const f = path.join(ER, 'datasets', `${p}.json`); if (fs.existsSync(f)) for (const it of JSON.parse(fs.readFileSync(f, 'utf8')).items) items.set(it.id, it); }
 const QUANT_CODE_RE = /\b(?:complexity|big[- ]?o|O\(|algorithm|code|function|implement|array|linked list|recursion|runtime|sql|query|regex|leetcode)\b/i;
 const userOf = (w) => (w.messages ?? []).map((m) => m.text ?? '').join('\n');
-if (cmd === 'select2a' || cmd === 'select2b') {
+if (cmd === 'select4') {
+  // Stage four: every row of the given runs whose recorded prompt carries the evidence block, has no calculation
+  // notice and is not a code question (what the candidate build newly reaches). Ids go to a file, never to the screen.
+  const ids = [];
+  for (const r of String(args[1]).split(',')) { const run = loadRun(path.join(ER, 'results', r)); for (const row of run.rows) { const w = run.wire[row.benchmark_id]; if (!w) continue; const user = userOf(w); if (/# Calculation\n/.test(user) || !/# Evidence \(untrusted data/.test(user) || QUANT_CODE_RE.test(String(row.question ?? ''))) continue; ids.push(row.benchmark_id); } }
+  fs.writeFileSync(opt('out'), ids.join(',')); console.log(`${ids.length} rows selected -> ${opt('out')}`);
+} else if (cmd === 'read4') {
+  // --prefix ER-C1- | ER-CV1-   --blind prints no id
+  const pre = opt('prefix'); const blind = args.includes('--blind');
+  const load = (arm) => lines(path.join(ER, 'results', 'replay', `gen-${arm}.jsonl`)).filter((j) => !j.err && j.id.startsWith(pre));
+  const isCalc = (id) => { const it = items.get(id); return !!(it?.oracle?.requires_calculation && it.oracle.calculation_oracle); };
+  const right = (j) => { const it = items.get(j.id); const o = objective(it, { raw_answer: j.text, rendered_answer: null, pi_state: 'none' }); return o.checks.some((c) => c.label === 'calculation result stated' && c.ok); };
+  const A = load(opt('base')), Bc = load(opt('arm'));
+  const by = (L, f) => { const m = new Map(); for (const j of L) { const v = f(j); if (v === null) continue; const a = m.get(j.id) ?? []; a.push(v ? 1 : 0); m.set(j.id, a); } return m; };
+  const share = (m) => { let r = 0, n = 0; for (const a of m.values()) { n += a.length; r += a.reduce((x, y) => x + y, 0); } return { r, n, pct: n ? +(100 * r / n).toFixed(1) : null }; };
+  const paired = (a, b) => { const d = [...a.keys()].filter((id) => b.has(id)).map((id) => b.get(id).reduce((x, y) => x + y, 0) / b.get(id).length - a.get(id).reduce((x, y) => x + y, 0) / a.get(id).length); if (!d.length) return { mean: null, lo: null, hi: null, rows: 0 }; let seed = 777; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; }; const boots = Array.from({ length: 4000 }, () => { let t = 0; for (let i = 0; i < d.length; i++) t += d[Math.floor(rnd() * d.length)]; return 100 * t / d.length; }).sort((x, y) => x - y); return { mean: +(100 * d.reduce((x, y) => x + y, 0) / d.length).toFixed(1), lo: +boots[Math.floor(0.025 * boots.length)].toFixed(1), hi: +boots[Math.floor(0.975 * boots.length)].toFixed(1), rows: d.length }; };
+  const ca = by(A.filter((j) => isCalc(j.id)), right), cb = by(Bc.filter((j) => isCalc(j.id)), right); const pc = paired(ca, cb);
+  const fell = [...ca.keys()].filter((id) => cb.has(id) && ca.get(id).reduce((x, y) => x + y, 0) >= 3 && cb.get(id).reduce((x, y) => x + y, 0) <= 1), rose = [...ca.keys()].filter((id) => cb.has(id) && ca.get(id).reduce((x, y) => x + y, 0) <= 1 && cb.get(id).reduce((x, y) => x + y, 0) >= 3);
+  const allReq = (j) => (j.required > 0 ? j.all_required : null);
+  const na = by(A.filter((j) => !isCalc(j.id)), allReq), nb = by(Bc.filter((j) => !isCalc(j.id)), allReq); const pn = paired(na, nb);
+  const forb = (L) => L.filter((j) => (j.forbidden ?? []).length).length; const q = (a, p) => { const s2 = a.filter((x) => x != null).sort((x, y) => x - y); return s2.length ? s2[Math.min(s2.length - 1, Math.floor(p * s2.length))] : null; };
+  console.log(`\n${pre}* : ${opt('base')} (${A.length} samples, ${new Set(A.map((j) => j.id)).size} rows) -> ${opt('arm')} (${Bc.length} samples)`);
+  console.log(`  calculation rows (${pc.rows}): right samples ${share(ca).r}/${share(ca).n} (${share(ca).pct} %) -> ${share(cb).r}/${share(cb).n} (${share(cb).pct} %); paired change ${pc.mean} points (95 % ${pc.lo} to ${pc.hi}); rose ${rose.length}${blind || !rose.length ? '' : ' ' + rose.join(' ')}, fell ${fell.length}${blind || !fell.length ? '' : ' ' + fell.join(' ')}`);
+  console.log(`  other rows with required strings (${pn.rows}): every required string ${share(na).pct} % of ${share(na).n} -> ${share(nb).pct} % of ${share(nb).n}; paired change ${pn.mean} points (95 % ${pn.lo} to ${pn.hi})`);
+  console.log(`  forbidden-string samples ${forb(A)} -> ${forb(Bc)}; first visible character median ${q(A.map((j) => j.ms_visible), 0.5)} -> ${q(Bc.map((j) => j.ms_visible), 0.5)} ms, p90 ${q(A.map((j) => j.ms_visible), 0.9)} -> ${q(Bc.map((j) => j.ms_visible), 0.9)} ms; samples that wrote a block ${Bc.filter((j) => j.calc_block).length}/${Bc.length}`);
+} else if (cmd === 'select2a' || cmd === 'select2b') {
   // 2a: no notice in the recorded prompt, no calculation oracle, an evidence section present, not a code question
   //     (the rows an evidence-based trigger would newly reach although they need no calculation).
   // 2b: rows whose recorded prompt carries main's notice.
