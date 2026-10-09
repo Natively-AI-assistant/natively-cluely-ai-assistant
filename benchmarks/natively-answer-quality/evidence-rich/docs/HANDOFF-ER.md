@@ -43,7 +43,7 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 
 | Thing | State |
 |---|---|
-| App `main` (local = GitHub) | `73b18d97` since 2026-10-09. Holds every kept change of this work, including E16b and E19. |
+| App `main` (local = GitHub) | `4eb4b851` since 2026-10-09 about 19:40 UTC: three commits by another session (packaging of local models, a trial test, a model check) on top of `73b18d97`, none in the answer path (the diff over `electron/llm`, `electron/context-intelligence`, the engine, the modes and `premium` is empty). `73b18d97` holds every kept change of this work, including E16b and E19, and is the build every run of 2026-10-09 measured. |
 | Last change landed | **E19** (`73b18d97`): landed on local main 2026-10-09 05:08 UTC on Evin's "do 1", pushed 09:05 UTC on his "push main to github". |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
 | Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on, including everything of the second and third sessions of 2026-10-09. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
@@ -4859,6 +4859,7 @@ Entry headings with their line numbers in `docs/ITERATIONS-ER.md`, and every lin
 - L2787: E25 — the fix-up pass is shown where each sentence of the draft is closest to the material (rule written 2026-10-09 18:50 UTC, before any replay of it)
 - L2818: E25 — result: stage 1 holds, stage 2 fails; not proposed (2026-10-09 18:58 UTC; replayed 18:50–18:58 UTC; main's pass, cap 96,000, k = 2; every rebuilt request equals the recorded one; `report/rule-e25.mjs`)
 - L2843: X2 — result: on packs of about 20,700 tokens main is right on 54 % of the questions; read whole, 87 % (2026-10-09 20:17 UTC; arm A 19:00–19:37 UTC, arm B 19:37–20:14 UTC; experiment build `237bba1a`, direct DeepSeek; 361 turns per
+- L2902: Main moved during this session, by another session (noted 2026-10-09 20:19 UTC)
 
 ### B.1 The log
 
@@ -7762,6 +7763,15 @@ committed before either arm was read) goes to Astra after the 587 baseline judgm
 Nothing lands from X2. The candidate that the data points to is "24,000, with the pass's cap and budget looked at
 together, and the pack placed where the provider can cache it" (5,248 of 29,759 prompt tokens are cache hits: the
 question comes before the documents in the request, so the pack is never a cached prefix).
+
+##### Main moved during this session, by another session (noted 2026-10-09 20:19 UTC)
+At 18:05 UTC main = origin/main = `73b18d97`. It is now `4eb4b851` on both: three commits made elsewhere at about
+19:40 UTC (`25520180` GGUF models load in a packaged build, `07cce63b` a trial test's date, `4eb4b851`
+downloaded models are checked for damage). `git diff --stat 73b18d97..4eb4b851` over `electron/llm`,
+`electron/context-intelligence`, `electron/IntelligenceEngine.ts`, `electron/LLMHelper.ts`,
+`electron/services/modes` and `premium` is empty: the answer path is unchanged, so the runs of `73b18d97`
+(`er6-*`, `er7-*`, `er8-*`) and the experiment build on top of it still describe main. Nothing of this work
+touched main. A candidate would be rebased onto the new main before any landing.
 
 ---
 

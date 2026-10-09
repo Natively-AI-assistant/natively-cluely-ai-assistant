@@ -2898,3 +2898,12 @@ committed before either arm was read) goes to Astra after the 587 baseline judgm
 Nothing lands from X2. The candidate that the data points to is "24,000, with the pass's cap and budget looked at
 together, and the pack placed where the provider can cache it" (5,248 of 29,759 prompt tokens are cache hits: the
 question comes before the documents in the request, so the pack is never a cached prefix).
+
+### Main moved during this session, by another session (noted 2026-10-09 20:19 UTC)
+At 18:05 UTC main = origin/main = `73b18d97`. It is now `4eb4b851` on both: three commits made elsewhere at about
+19:40 UTC (`25520180` GGUF models load in a packaged build, `07cce63b` a trial test's date, `4eb4b851`
+downloaded models are checked for damage). `git diff --stat 73b18d97..4eb4b851` over `electron/llm`,
+`electron/context-intelligence`, `electron/IntelligenceEngine.ts`, `electron/LLMHelper.ts`,
+`electron/services/modes` and `premium` is empty: the answer path is unchanged, so the runs of `73b18d97`
+(`er6-*`, `er7-*`, `er8-*`) and the experiment build on top of it still describe main. Nothing of this work
+touched main. A candidate would be rebased onto the new main before any landing.

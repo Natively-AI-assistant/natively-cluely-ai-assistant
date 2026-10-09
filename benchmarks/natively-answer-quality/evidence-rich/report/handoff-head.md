@@ -43,7 +43,7 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 
 | Thing | State |
 |---|---|
-| App `main` (local = GitHub) | `73b18d97` since 2026-10-09. Holds every kept change of this work, including E16b and E19. |
+| App `main` (local = GitHub) | `4eb4b851` since 2026-10-09 about 19:40 UTC: three commits by another session (packaging of local models, a trial test, a model check) on top of `73b18d97`, none in the answer path (the diff over `electron/llm`, `electron/context-intelligence`, the engine, the modes and `premium` is empty). `73b18d97` holds every kept change of this work, including E16b and E19, and is the build every run of 2026-10-09 measured. |
 | Last change landed | **E19** (`73b18d97`): landed on local main 2026-10-09 05:08 UTC on Evin's "do 1", pushed 09:05 UTC on his "push main to github". |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
 | Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on, including everything of the second and third sessions of 2026-10-09. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
