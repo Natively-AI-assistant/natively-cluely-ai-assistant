@@ -167,6 +167,12 @@ jobs:
           # with "DOMMatrix is not defined". postinstall also covers this; the
           # explicit call keeps it true if scripts are ever skipped.
           node scripts/ensure-napi-canvas-mac-deps.js
+          # Both darwin llama.cpp runtimes, for the same reason: `npm ci` on this
+          # arm64 runner installs @node-llama-cpp/mac-arm64-metal only, and the
+          # Intel app would ship unable to load any GGUF model. The packed
+          # arch-family guard (afterPack) and verify-packaged-local-assets.mjs
+          # both fail the release if it is missing.
+          node scripts/ensure-node-llama-cpp-mac-deps.js
           ./node_modules/.bin/electron-builder --mac --config electron-builder.signed.cjs --publish never
 
       - name: Verify signature + notarization (both arches + DMGs)

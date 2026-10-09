@@ -8,8 +8,9 @@
 // by the test.
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { reciprocalRank, recallAtK, ndcgAtK, aggregateMetrics } from './lib/metrics.mjs';
+import { isEntryScript } from '../../scripts/lib/is-entry-script.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -322,14 +323,11 @@ async function main() {
 }
 
 // Only run main() when executed directly (`node score.mjs`), not when
-// imported by the test file above. Compared as file:// URLs (via
-// pathToFileURL) rather than raw string interpolation so this matches
-// correctly on Windows, where process.argv[1] is a backslash path
-// (C:\...\score.mjs) that a naive `file://${process.argv[1]}` template
-// would never equal import.meta.url's percent-encoded, forward-slash form
-// (file:///C:/.../score.mjs) — that mismatch would silently skip main()
-// and make `npm run benchmark:reranker:score` a silent no-op on Windows.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// imported by the test file above. The shared guard compares file:// URLs
+// (a raw `file://${process.argv[1]}` template never matches a Windows
+// backslash path) and also holds through a symlinked checkout; either
+// mismatch would make `npm run benchmark:reranker:score` a silent no-op.
+if (isEntryScript(import.meta.url)) {
   main().catch((e) => {
     console.error('[score] FATAL:', e);
     process.exit(1);

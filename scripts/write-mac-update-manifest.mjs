@@ -39,6 +39,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import url from 'node:url';
 
+import { isEntryScript } from './lib/is-entry-script.mjs';
+
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
@@ -188,7 +190,9 @@ async function main() {
 }
 
 // Only run when invoked directly, so the helpers above stay importable from tests.
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(url.fileURLToPath(import.meta.url))) {
+// Not a comparison of argv[1] with this file's own path: through a symlinked
+// checkout the two differ and the manifest would silently not be written.
+if (isEntryScript(import.meta.url)) {
   main().catch((err) => {
     console.error('[update-manifest]', err && err.message ? err.message : err);
     process.exit(1);

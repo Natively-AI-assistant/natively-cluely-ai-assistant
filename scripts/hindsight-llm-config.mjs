@@ -24,6 +24,8 @@
 //   node scripts/hindsight-llm-config.mjs            # prints the router JSON for current env
 //   import { buildHindsightRouterConfig } from './hindsight-llm-config.mjs'
 
+import { isEntryScript } from './lib/is-entry-script.mjs';
+
 const MODEL_NAME = 'hindsight-llm'; // the single logical model the chain resolves; litellm rotates entries
 
 /**
@@ -112,10 +114,9 @@ export function buildHindsightRouterConfig(env = process.env) {
 }
 
 // CLI: print the JSON for the current environment (used by the dev-server launcher).
-const isMain = (() => {
-  try { return import.meta.url === `file://${process.argv[1]}`; } catch { return false; }
-})();
-if (isMain) {
+// A hand-built `file://${argv[1]}` never equals import.meta.url on Windows
+// (file:///C:/... against file://C:\...), nor through a symlinked checkout.
+if (isEntryScript(import.meta.url)) {
   const cfg = buildHindsightRouterConfig(process.env);
   if (!cfg) {
     process.stderr.write('[hindsight-llm-config] no provider keys present — emitting empty (single-model default applies)\n');

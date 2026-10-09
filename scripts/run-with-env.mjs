@@ -36,7 +36,9 @@ import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+
+import { isEntryScript } from './lib/is-entry-script.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -174,8 +176,10 @@ function main(argv) {
   return exitCodeFor(result);
 }
 
-// Only run when invoked directly, so tests can import the helpers above.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Only run when invoked directly, so tests can import the helpers above. Not a
+// bare import.meta.url/argv[1] comparison: through a symlinked checkout that is
+// false, and `npm test` then ran nothing and exited 0 (lib/is-entry-script.mjs).
+if (isEntryScript(import.meta.url)) {
   try {
     process.exit(main(process.argv.slice(2)));
   } catch (error) {

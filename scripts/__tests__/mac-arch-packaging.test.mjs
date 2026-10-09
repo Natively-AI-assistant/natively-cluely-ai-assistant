@@ -153,6 +153,26 @@ test('the mirror-image bug is caught too: arm64 pack with only the x64 canvas', 
   assert.throws(() => guard(app, 'arm64'), /@napi-rs\/canvas-darwin-arm64 MISSING/);
 });
 
+test('an Intel pack with only the Apple-Silicon llama.cpp runtime fails the build', () => {
+  // What an arm64 build host produces on its own: @node-llama-cpp/mac-x64 declares
+  // cpu x64, so npm never installs it there. No GGUF model could load on Intel.
+  const app = fakePack(['@node-llama-cpp/mac-arm64-metal']);
+  assert.throws(() => guard(app, 'x64'), (err) => {
+    assert.match(err.message, /@node-llama-cpp\/mac-x64 MISSING/);
+    assert.match(err.message, /@node-llama-cpp\/mac-arm64-metal IS packed/);
+    return true;
+  });
+});
+
+test('the llama.cpp runtime is matched per arch in both directions', () => {
+  guard(fakePack(['@node-llama-cpp/mac-arm64-metal', '@node-llama-cpp/mac-x64']), 'x64'); // must not throw
+  guard(fakePack(['@node-llama-cpp/mac-arm64-metal']), 'arm64'); // must not throw
+  assert.throws(
+    () => guard(fakePack(['@node-llama-cpp/mac-x64']), 'arm64'),
+    /@node-llama-cpp\/mac-arm64-metal MISSING/
+  );
+});
+
 test('a family absent for BOTH arches is tolerated, not fatal', () => {
   // The dependency may legitimately not ship; only a half-present family is proof
   // of the packaging bug.

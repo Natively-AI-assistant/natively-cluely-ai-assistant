@@ -32,6 +32,11 @@ const ARCH_FAMILY_TARGETS = [
     { family: 'sharp', pkg: (a) => `@img/sharp-darwin-${a}` },
     { family: 'sharp-libvips', pkg: (a) => `@img/sharp-libvips-darwin-${a}` },
     { family: 'sqlite-vec', pkg: (a) => `sqlite-vec-darwin-${a}` },
+    // llama.cpp runtime for GGUF models. Named by backend, not by `darwin-<arch>`.
+    // npm installs only mac-arm64-metal on an Apple-Silicon host, so without
+    // scripts/ensure-node-llama-cpp-mac-deps.js the Intel pack has no runtime
+    // and no GGUF model can load there (getLlama({ build: 'never' })).
+    { family: 'node-llama-cpp', pkg: (a) => (a === 'arm64' ? '@node-llama-cpp/mac-arm64-metal' : '@node-llama-cpp/mac-x64') },
 ];
 
 /**

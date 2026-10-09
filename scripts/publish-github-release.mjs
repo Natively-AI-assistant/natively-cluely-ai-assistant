@@ -58,6 +58,8 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+import { isEntryScript } from './lib/is-entry-script.mjs';
+
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
@@ -465,7 +467,9 @@ async function main() {
   else await publish(o, ctx);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(url.fileURLToPath(import.meta.url))) {
+// Not a comparison of argv[1] with this file's own path: through a symlinked
+// checkout the two differ and a release run would print nothing and exit 0.
+if (isEntryScript(import.meta.url)) {
   main().catch((err) => {
     console.error('[release]', err && err.message ? err.message : err);
     process.exit(1);

@@ -4,6 +4,8 @@
 //   - launch the app
 //   - run local diagnostics
 //   - use the packaged local fallback stack (intent + embedding)
+//   - run a GGUF model the user downloads (worker + llama.cpp runtime + the
+//     runtime's own imports, all resolvable from app.asar.unpacked)
 //
 // Runs in two modes:
 //
@@ -26,6 +28,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { isEntryScript } from './lib/is-entry-script.mjs';
 import disguiseNames from './disguise-name.cjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +68,8 @@ const REQUIRED_PACKAGE_DIRS = [
   'node_modules/@huggingface/transformers',
   'node_modules/onnxruntime-common',
   'node_modules/onnxruntime-node',
+  // GGUF rerankers and embedders (ggufRerankerWorker, localEmbeddingWorker).
+  'node_modules/node-llama-cpp',
 ];
 
 // Required asarUnpack globs (kept as a single source of truth for the
@@ -80,6 +86,13 @@ const REQUIRED_ASARUNPACK_GLOBS = [
   // glob that rewrite points at a file that was never unpacked. It fails only
   // in a packaged build, and only when the flag is on.
   '**/routerWorker.js',
+  // 2026-10-09: the GGUF path. All three were already in package.json; none
+  // was required HERE, so deleting one passed this gate. node-llama-cpp's own
+  // dependencies are not listed one by one: the packaged-mode closure walk
+  // below and NodeLlamaCppDepsAreUnpacked2026_10_07.test.mjs derive them.
+  '**/ggufRerankerWorker.js',
+  '**/node_modules/node-llama-cpp/**',
+  '**/node_modules/@node-llama-cpp/**',
   '**/node_modules/better-sqlite3/**',
   '**/node_modules/keytar/**',
   '**/node_modules/sqlite-vec/**',
@@ -105,6 +118,9 @@ const REQUIRED_WORKER_FILES = [
   'dist-electron/electron/rag/localRerankerWorker.js',
   'dist-electron/electron/audio/whisper/whisperWorker.js',
   'dist-electron/electron/llm/routing/routerWorker.js',
+  // GGUF embedders run inside localEmbeddingWorker.js above; rerankers have
+  // their own worker.
+  'dist-electron/electron/rag/ggufRerankerWorker.js',
 ];
 
 // Required native binaries for the packaged app (the asarUnpack globs must place
@@ -159,6 +175,31 @@ const REQUIRED_UNPACKED_NATIVE_WIN32_ANY = [
   ['native-module/index.win32-x64-msvc.node', 'native-module/index.win32-x64-gnu.node'],
 ];
 
+// llama.cpp runtimes that must be in the package, by @node-llama-cpp/<name>.
+//
+// The workers call getLlama({ build: 'never' }): nothing is compiled on a
+// customer's machine, so a package without a prebuilt runtime for its target
+// cannot run any GGUF model. node-llama-cpp picks the package by OS and CPU
+// (getPrebuiltBinariesPackageDirectoryForBuildOptions) and loads
+// bins/<name>/llama-addon.node from it.
+//
+// darwin: BOTH, because both .app bundles are built on one host and each packs
+// whatever is in node_modules, exactly like sharp and sqlite-vec above. npm
+// installs only mac-arm64-metal on an Apple-Silicon host (mac-x64 declares
+// cpu: x64), so scripts/ensure-node-llama-cpp-mac-deps.js fetches the other.
+//
+// win32: the CPU build. A Windows install also carries win-x64-vulkan and
+// win-x64-cuda, but those need a matching GPU and driver; win-x64 is what a
+// fresh PC falls back to, so it is the one that may not be missing.
+//
+// Layout taken from the published 3.20.0 packages and, for mac-arm64-metal,
+// the installed one. Windows: UNVERIFIED against a real packaged artifact from
+// this machine; build-smoke.yml runs this gate on windows-latest.
+const REQUIRED_LLAMA_RUNTIMES = {
+  darwin: ['mac-arm64-metal', 'mac-x64'],
+  win32: ['win-x64'],
+};
+
 const errors = [];
 const notes = [];
 
@@ -183,6 +224,117 @@ function checkAny(root, relCandidates, label) {
     if (exists(path.join(root, rel))) { found = true; break; }
   }
   if (!found) errors.push(`Missing ${label}: tried ${relCandidates.map((r) => path.join(root, r)).join(', ')}`);
+}
+
+/**
+ * Every package `rootName` needs, resolved the way Node's ESM loader does it:
+ * on the real filesystem, nearest node_modules first, never into app.asar.
+ *
+ * node-llama-cpp is unpacked (it ships native binaries) and ESM, so its imports
+ * resolve from app.asar.unpacked/. A dependency that electron-builder hoisted
+ * into app.asar is invisible there and the GGUF reranker dies with
+ * "Cannot find package 'chalk'" (see build.asarUnpack in package.json and
+ * electron/rag/__tests__/NodeLlamaCppDepsAreUnpacked2026_10_07.test.mjs).
+ * Optional dependencies are per-OS/arch and may legitimately be absent.
+ *
+ * A package.json that cannot be read as a JSON object is reported, never
+ * skipped: Node refuses to import from such a package, and skipping it also
+ * hid everything that package depends on.
+ *
+ * @returns {{ unresolved: string[], unreadable: string[] }}
+ */
+function unpackedImportClosureMisses(unpackedRoot, rootName) {
+  const lookup = (fromDir, name) => {
+    let dir = fromDir;
+    for (;;) {
+      const candidate = path.join(dir, 'node_modules', name);
+      if (exists(path.join(candidate, 'package.json'))) return candidate;
+      if (path.resolve(dir) === path.resolve(unpackedRoot)) return null;
+      const parent = path.dirname(dir);
+      if (parent === dir) return null;
+      dir = parent;
+    }
+  };
+  const rootDir = lookup(unpackedRoot, rootName);
+  if (!rootDir) return { unresolved: [rootName], unreadable: [] };
+
+  const missing = new Set();
+  const unreadable = new Set();
+  const seen = new Set();
+  const walk = (dir) => {
+    if (seen.has(dir)) return;
+    seen.add(dir);
+    const manifest = readJsonObject(path.join(dir, 'package.json'));
+    if (!manifest) {
+      unreadable.add(path.relative(unpackedRoot, path.join(dir, 'package.json')).split(path.sep).join('/'));
+      return;
+    }
+    for (const name of Object.keys(manifest.dependencies || {})) {
+      const found = lookup(dir, name);
+      if (found) walk(found); else missing.add(`${name} (needed by ${manifest.name})`);
+    }
+    for (const name of Object.keys(manifest.optionalDependencies || {})) {
+      const found = lookup(dir, name);
+      if (found) walk(found);
+    }
+  };
+  walk(rootDir);
+  return { unresolved: [...missing].sort(), unreadable: [...unreadable].sort() };
+}
+
+/** A file's contents as a JSON object, or null if it is missing or anything else. */
+function readJsonObject(file) {
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What stops node-llama-cpp loading a prebuilt runtime for `platform` from this
+ * unpacked tree. Empty when every required runtime is loadable as far as files
+ * can show: a real manifest of node-llama-cpp's own version, the entry
+ * node-llama-cpp imports to find the folder, a non-empty binary, and the build
+ * metadata it refuses to load without.
+ *
+ * It does not open the binary. A wrong-architecture or damaged addon still
+ * needs the app to be launched on that machine.
+ */
+function llamaRuntimeProblems(unpackedRoot, platform) {
+  const names = REQUIRED_LLAMA_RUNTIMES[platform];
+  if (!names) throw new Error(`Unsupported platform: ${platform}`);
+
+  // node-llama-cpp refuses a runtime package whose version is not its own
+  // (compileLLamaCpp.js: getPrebuiltBinaryPath returns null on a mismatch), so
+  // a complete runtime of another version is the same as none.
+  const coreVersion = readJsonObject(path.join(unpackedRoot, 'node_modules', 'node-llama-cpp', 'package.json'))?.version;
+
+  const problems = [];
+  for (const name of names) {
+    const pkg = `node_modules/@node-llama-cpp/${name}`;
+    const at = (rel) => path.join(unpackedRoot, ...pkg.split('/'), ...rel.split('/'));
+    const nonEmpty = (rel) => {
+      try { return fs.statSync(at(rel)).size > 0; } catch { return false; }
+    };
+    if (!exists(at('package.json'))) {
+      problems.push(`${pkg} is not in the package`);
+      continue;
+    }
+    const manifest = readJsonObject(at('package.json'));
+    if (!manifest) {
+      problems.push(`${pkg}/package.json is not a readable manifest`);
+    } else if (typeof coreVersion === 'string' && manifest.version !== coreVersion) {
+      problems.push(`${pkg} is version ${manifest.version}, but node-llama-cpp is ${coreVersion} and only loads a runtime of its own version`);
+    }
+    for (const rel of ['dist/index.js', `bins/${name}/llama-addon.node`]) {
+      if (!nonEmpty(rel)) problems.push(`${pkg}/${rel} is missing or empty`);
+    }
+    const metadata = `bins/${name}/_nlcBuildMetadata.json`;
+    if (!readJsonObject(at(metadata))) problems.push(`${pkg}/${metadata} is missing or unreadable`);
+  }
+  return problems;
 }
 
 function verifySource() {
@@ -249,6 +401,31 @@ function verifyPackaged(appArg, platformArg) {
     if (!exists(path.join(unpacked, dir))) errors.push(`Missing unpacked dependency: app.asar.unpacked/${dir}`);
   }
 
+  // The unpacked package being present is not enough: its own imports must
+  // resolve from there too. Checked by name against the real unpacked tree.
+  const closure = unpackedImportClosureMisses(unpacked, 'node-llama-cpp');
+  for (const miss of closure.unresolved) {
+    errors.push(
+      `node-llama-cpp cannot resolve ${miss} from app.asar.unpacked ` +
+      '(add "**/node_modules/<name>/**" to build.asarUnpack in package.json).',
+    );
+  }
+  for (const manifest of closure.unreadable) {
+    errors.push(
+      `node-llama-cpp imports through app.asar.unpacked/${manifest}, which is not a readable manifest ` +
+      '(the package was packed incompletely; its own dependencies could not be checked).',
+    );
+  }
+
+  // The runtime itself. Without one for this target every GGUF model fails to
+  // load, and nothing above notices: the packages are optional dependencies.
+  for (const problem of llamaRuntimeProblems(unpacked, platform)) {
+    errors.push(
+      `GGUF runtime for ${platform}: app.asar.unpacked/${problem}` +
+      (platform === 'darwin' ? ' (run scripts/ensure-node-llama-cpp-mac-deps.js before packaging).' : '.'),
+    );
+  }
+
   // Native binaries & modules that must be present in the packaged app.
   const platformNative = platform === 'darwin' ? REQUIRED_UNPACKED_NATIVE_DARWIN : REQUIRED_UNPACKED_NATIVE_WIN32;
   for (const rel of [...REQUIRED_UNPACKED_NATIVE_COMMON, ...platformNative]) {
@@ -288,21 +465,43 @@ function verifyPackaged(appArg, platformArg) {
   }
 }
 
-const appIdx = process.argv.indexOf('--app');
-const platformIdx = process.argv.indexOf('--platform');
-const platformArg = platformIdx !== -1 ? process.argv[platformIdx + 1] : undefined;
-if (appIdx !== -1 && process.argv[appIdx + 1]) {
-  verifyPackaged(process.argv[appIdx + 1], platformArg);
-} else {
-  verifySource();
+// Exported for scripts/__tests__/verify-packaged-local-assets.test.mjs, which
+// builds a complete fake package from these lists and then removes one thing at
+// a time. The CLI below is the only caller at build time.
+export {
+  REQUIRED_MODEL_FILES,
+  REQUIRED_PACKAGE_DIRS,
+  REQUIRED_ASARUNPACK_GLOBS,
+  REQUIRED_WORKER_FILES,
+  REQUIRED_LLAMA_RUNTIMES,
+  REQUIRED_UNPACKED_NATIVE_COMMON,
+  REQUIRED_UNPACKED_NATIVE_DARWIN,
+  REQUIRED_UNPACKED_NATIVE_WIN32,
+  REQUIRED_UNPACKED_NATIVE_WIN32_ANY,
+  APPLE_SPEECH_HELPER,
+  unpackedImportClosureMisses,
+  llamaRuntimeProblems,
+};
+
+// A build gate that wrongly decides it was imported prints nothing and exits 0,
+// which is the one failure it may not have (lib/is-entry-script.mjs).
+if (isEntryScript(import.meta.url)) {
+  const appIdx = process.argv.indexOf('--app');
+  const platformIdx = process.argv.indexOf('--platform');
+  const platformArg = platformIdx !== -1 ? process.argv[platformIdx + 1] : undefined;
+  if (appIdx !== -1 && process.argv[appIdx + 1]) {
+    verifyPackaged(process.argv[appIdx + 1], platformArg);
+  } else {
+    verifySource();
+  }
+
+  for (const note of notes) console.warn('[verify-packaged-local-assets] NOTE:', note);
+
+  if (errors.length > 0) {
+    console.error('\n[verify-packaged-local-assets] FAILED — required packaged assets missing:');
+    for (const e of errors) console.error('  ✗', e);
+    process.exit(1);
+  }
+
+  console.log('[verify-packaged-local-assets] OK — all required packaged assets present.');
 }
-
-for (const note of notes) console.warn('[verify-packaged-local-assets] NOTE:', note);
-
-if (errors.length > 0) {
-  console.error('\n[verify-packaged-local-assets] FAILED — required packaged assets missing:');
-  for (const e of errors) console.error('  ✗', e);
-  process.exit(1);
-}
-
-console.log('[verify-packaged-local-assets] OK — all required packaged assets present.');

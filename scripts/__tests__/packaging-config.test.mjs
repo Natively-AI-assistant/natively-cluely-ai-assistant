@@ -66,6 +66,46 @@ test('every build path that packs a mac app also ensures BOTH canvas arches', ()
   );
 });
 
+test('every build path that packs a mac app also ensures BOTH llama.cpp runtimes', () => {
+  // Same shape as the canvas guard above, for @node-llama-cpp/mac-x64: an
+  // Apple-Silicon host never installs it, so a build path that skips this step
+  // ships an Intel app in which no GGUF model can load.
+  const STEP = 'ensure-node-llama-cpp-mac-deps';
+
+  for (const script of ['app:build', 'app:build:signed']) {
+    assert.ok(
+      pkg.scripts[script]?.includes(STEP),
+      `package.json script "${script}" must run ${STEP}`
+    );
+    // The gate that checks for the runtimes must come after the step that fetches them.
+    assert.ok(
+      pkg.scripts[script].indexOf(STEP) < pkg.scripts[script].indexOf('package-app.js'),
+      `"${script}" must run ${STEP} before packaging`
+    );
+  }
+  // Not postinstall: about 29 MB that only a packaged build needs.
+  assert.ok(!pkg.scripts.postinstall.includes(STEP), 'postinstall should not fetch the Intel llama.cpp runtime');
+
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, '.github', 'workflows', 'release-macos.yml'),
+    'utf8'
+  );
+  assert.ok(
+    workflow.indexOf(STEP) !== -1 && workflow.indexOf(STEP) < workflow.indexOf('electron-builder --mac'),
+    `release-macos.yml hand-rolls its build stages, so it must call ${STEP} before electron-builder`
+  );
+
+  // The step asks for the two packages node-llama-cpp actually imports on a Mac,
+  // at the versions the lockfile pins.
+  const step = fs.readFileSync(path.join(repoRoot, 'scripts', `${STEP}.js`), 'utf8');
+  const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package-lock.json'), 'utf8'));
+  const pinned = lock.packages['node_modules/node-llama-cpp'].optionalDependencies;
+  for (const name of ['@node-llama-cpp/mac-arm64-metal', '@node-llama-cpp/mac-x64']) {
+    assert.ok(step.includes(`'${name}'`), `${STEP}.js must require ${name}`);
+    assert.match(pinned[name] ?? '', /^\d+\.\d+\.\d+$/, `${name} must be pinned to an exact version in package-lock.json`);
+  }
+});
+
 test('the release workflow allows enough time for the notary retry budget', () => {
   // A DMG submit retries up to 3x (~25 min each) and stapleWithRetry adds ~8 min of
   // backoff per DMG, on top of a ~55 min signed build with two app notarizations.
