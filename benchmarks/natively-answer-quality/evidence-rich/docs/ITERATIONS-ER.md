@@ -2006,3 +2006,23 @@ small gain", not a confirmed gain; the two repetitions share the same 132 drafts
 independent questions; rows where the arms give the same text (about 105 of 132 per repetition) contribute no change,
 so the effect on all 180 holdout questions is roughly +0.226 × 52 / (2 × 180) ≈ +0.03. No row with an unresolved
 oracle conflict is among the 52. E19 remains a keep candidate on branch `cand/e19` (`73b18d97`); nothing is landed.
+
+### Judge-free look for the next candidate, inside the window of 2026-10-09 (02:20–02:40 UTC; development rows only; no Astra call, no generator call)
+Baseline of main `f4cd986d`, 630 rows. By condition: grounded_single 9.16 (21 hard of 232), multi_source 8.84 (16 of
+126), conflict_stale 9.02 (9 of 108), irrelevant_source 9.12 (5 of 63), missing_evidence 8.04 (15 of 65), followup
+8.63 (5 of 36). Three leads checked, none worth a rule:
+- **"Says it is not in the material when it is."** Idea: give the claim pass one more sentence only on drafts that
+  contain a denial. Of the 21 hard fails flagged missed_available_evidence, the draft contains a denial on 1 to 4.
+  They are not denials; they are answers that use one source and leave out another. Dropped before any call.
+- **Multi-source omissions.** 126 rows, 20 with a required fact missing from the answer (mean 7.53), but the oracle's
+  fixed strings see only 5 of the 16 hard fails, so a generator notice could not be measured without the judge, and
+  the 20 rows lose about 50 points between them (at most +0.08 on the mean if every one were fixed). The misses are
+  different mistakes row by row (a wrong total, a wrong count of days, one panel slot left out). Not pursued.
+- **Edits that remove a fact the draft had.** 5 of 99 edited rows (2 of them deferrals that score under 6); 1 edit
+  adds one. Too few for a rail, and E19 already changes which of these the pass edits.
+Also read: of 792 required facts with fixed strings, 73 have no string in the prompt, on 70 rows (mean 8.65); in 53
+of those rows the answer has the value anyway, because it is a computed figure, not a retrieval miss. The 17 rows
+where it is also missing from the answer (mean 6.04, 6 hard) are mostly Sales pricing sums and deferrals.
+**Where this leaves the work:** missing_evidence is the weakest condition and is what E19 addresses. After E19 no
+single cause covers more than about 1 % of rows; the rest is the generator's own mistakes with the facts in front of
+it, at a setting (no thinking, fast model) Evin has chosen to keep. No further experiment is declared.
