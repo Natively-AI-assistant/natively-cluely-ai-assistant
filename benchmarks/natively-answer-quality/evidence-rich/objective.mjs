@@ -25,8 +25,9 @@ export const answerOf = (row) => row?.rendered_answer ?? row?.raw_answer ?? '';
 export function splitGist(text) { const t = String(text ?? ''); const m = t.match(GIST_RE); return { body: (m ? t.slice(0, m.index) : t).trim(), gist: m ? m[1].trim() : null }; }
 
 /** Version of the deterministic checks. obj-1: as first written. obj-2 (2026-10-09): an identity string the mode's own
- *  loaded reference files state is not a profile leak. Judgments made before obj-2 carry no version (= obj-1). */
-export const OBJECTIVE_VERSION = 'obj-2';
+ *  loaded reference files state is not a profile leak. obj-3 (2026-10-09): a needle that starts or ends with a digit
+ *  matches only as a whole number. Judgments made before obj-2 carry no version (= obj-1). */
+export const OBJECTIVE_VERSION = 'obj-3';
 let BENCH = null;
 export function bench() {
   if (BENCH) return BENCH;
@@ -167,7 +168,23 @@ export function funnel(item, row, run) {
 // ------------------------------------------------------------------------------------------------ objective checks
 // Emphasis marks are dropped before matching: "**$7,750** on acceptance" states "$7,750 on acceptance".
 const plain = (s) => lc(String(s ?? '').replace(/[*`]/g, ''));
-const has = (text, needle) => plain(text).includes(plain(needle));
+// obj-3 (2026-10-09): a needle that starts or ends with a digit must stand as a whole number. Plain substring matching
+// read "October 20" inside "October 2026", "600" inside "1,600" and "15" inside "2015". A match is skipped when a digit
+// touches it on either side, or when a thousands or decimal separator joins it to more digits on the left. A separator
+// on the RIGHT is left alone: authors write "198" for "$198,000" and "199.1" for "199.1k" on purpose.
+const has = (text, needle) => {
+  const t = plain(text), n = plain(needle);
+  if (!n) return false;
+  const dS = /^\d/.test(n), dE = /\d$/.test(n);
+  if (!dS && !dE) return t.includes(n);
+  for (let i = t.indexOf(n); i !== -1; i = t.indexOf(n, i + 1)) {
+    const before = t.slice(Math.max(0, i - 2), i), after = t.slice(i + n.length, i + n.length + 1);
+    if (dS && (/\d$/.test(before) || /\d[.,]$/.test(before))) continue;
+    if (dE && /^\d/.test(after)) continue;
+    return true;
+  }
+  return false;
+};
 function numbersOf(text) { try { return numbersIn(normaliseNumbers(String(text))); } catch { return []; } }
 
 /** Every python / javascript / typescript code block of the answer, in order. */

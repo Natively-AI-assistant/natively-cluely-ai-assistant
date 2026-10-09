@@ -2164,3 +2164,14 @@ checkable by fixed strings or executed tests, so a class can be measured with re
 Authors are three agents that have not seen any product answer or analysis, three modes each. `build.mjs` lints and
 freezes the two new datasets beside the existing ones; the existing datasets' hashes must not change (to be checked
 at the freeze). dev, dev2 and holdout are untouched.
+
+### Deterministic checks, version obj-3 (2026-10-09 10:57 UTC, before any E21a replay output is read): a number matches as a whole number
+Needles were matched as plain substrings, so "October 20" was found inside "October 2026", "4 days" inside "24 days"
+and "600" inside "1,600". An author of the challenge set reported the trap. Now a needle that starts or ends with a
+digit is skipped where a digit touches it, or where a separator joins it to more digits on its left. A separator on
+its right is left alone on purpose: authors write "198" for "$198,000" and "199.1" for "199.1k". (A first, stricter
+form that also refused "198" before ",000" was tried on stored rows, found to reject intended matches on two items,
+and narrowed before use.) Re-applied to 1,336 stored rows of six runs: one check result changes (`ER-D-REC-019` on
+the old baseline: "calculation result stated" was a false pass through "4 days" inside "24 days"), and **no official
+score or hard-fail flag changes** in any judged run, development or holdout. The baseline of `f4cd986d` stays
+8.935 / 70 hard under obj-3. E21a's "a sample is right" is read with obj-3.
