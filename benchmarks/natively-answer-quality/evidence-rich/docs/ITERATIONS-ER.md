@@ -2050,3 +2050,59 @@ replay, the app confirmation of 2026-10-07 and the two blind-holdout readings ab
 so the push was a plain fast-forward of the one commit: `bce8e47a..73b18d97`. Read back from GitHub: `73b18d97`.
 Only `main` was pushed. `bench/evidence-rich` was not (GitHub `df815379`, local ahead from `99001d3b` on); that
 push is still Evin's separate yes.
+
+## Session of 2026-10-09, 10:00 UTC onward (new session, started from HANDOFF-ER.md)
+
+### Baseline of main `73b18d97` (E19 included) — declared 2026-10-09 10:06 UTC, a measurement, no keep rule
+No full run of main with E19 had been made or judged. Runs `er6-dev-main` (270) and `er6-dev2-main` (360): worktree
+`er-main` clean at `73b18d97`, fresh profile, direct DeepSeek, started 10:06 UTC after another session's app had
+exited (one app at a time). To be judged by gpt-6-astra in the next window (calibration first), shown answers then the
+drafts of edited rows. It is compared with `er4-dev-main` + `er4-dev2-main` (main `f4cd986d`, 8.923, 71 hard fails) as
+two single runs of two builds: run-to-run variation is about ±0.16 on 180 rows, so a difference of that order between
+them says nothing about E19; E19's evidence stays the paired replay and holdout readings above.
+
+### Failure-cause look at the last judged baseline (`er4-*`, main before E19; judge-free, before 10:11 UTC)
+- The 71 hard fails hold 64 % of all lost points (435 of 679). The mean moves mostly by removing hard fails.
+- Questions with a calculation oracle (131): 8.78, 16 hard (12 %); without (499): 8.96, 55 hard (11 %). Arithmetic is
+  not a disproportionate class on these sets. The calculation notice reached 72 of the 131 (8.83, 9 hard) and not the
+  other 59 (8.72, 7 hard): its trigger is a regular expression on the question's wording ("how much", "total", …) and
+  misses dates ("when would I hear", "last day"), scores ("does that clear the bar") and follow-ups.
+- Date and calendar arithmetic (21 rows whose oracle expression has a date): 7.84, 4 hard, 8 under 7. Read row by row,
+  the first cause is the calendar on four (REC-005 business days, D2-SALES-011 thirty September plus 45 days given as
+  15 November, D2-CC-014 a weekday "snag" that does not exist, D2-TEAM-040 not computed), a wrong start date taken
+  from the résumé on two (LFW-020, D2-TI-009), and a document conflict on two. Four rows of 630.
+- Both answers capped for wrong code (TI-015, D2-TI-033) are the same task, top-k words with a heap and a tie rule.
+  The app's own code verification (`electron/llm/codeVerification`, extract → run → one correction) is switched off
+  app-wide since 2026-07-18 (`verificationEnabled.ts`, "temporarily disabled"); it was not designed or measured here.
+- `ER-D2-LFW-036` is capped at 2 by the deterministic profile-leak check while the judge reads the answer as right:
+  to be checked as a possible defect of the check, not of the answer.
+
+## X1 — whole-pack threshold, 12,000 against 24,000 and 48,000 (plan and lines written 2026-10-09 10:11 UTC, before any run)
+Evin's pick #6 of 2026-10-04 ("Test 24k and 48k first"), never started. The frozen sets cannot show it: every pack is
+under 12,000 estimated tokens. This is a separate controlled condition on synthetic probe files outside the frozen
+corpus (`limits/probe.mjs ref-threshold`, added today; `ref-count` for several files).
+
+**Build.** An experiment branch from main `73b18d97` whose only change is that `WHOLE_PACK_MAX_TOKENS` is read from an
+environment variable (default 12,000). It exists to run three arms on one build; it is not a landing candidate.
+**Arms.** 12,000 (main), 24,000, 48,000. General mode, spoken (hotkey) and typed, direct DeepSeek, one app at a time.
+**Files.** One file whose size, as the app estimates it, is 11,900 / 12,100 / 16,000 / 23,900 / 24,100 / 32,000 /
+47,900 / 48,100. Seven uniquely named facts at 0, 10, 25, 50, 75, 90 and 99.5 %; two figures to add at 20 % and 85 %;
+a value stated in March at 30 % and replaced in September at 80 %. Ten turns per size: seven named facts, one list of
+all seven, the sum, the current value. Several files: 6 files of 2,100, 4,000 and 7,900 (one named fact each).
+**Recorded per turn, judge-free:** fact sentence in the request; answer correct by exact string; draft correct;
+whether the fix-up pass changed the text; request size and provider prompt tokens with cache hits; time to the first
+word and to the end; resident memory of the app's processes (macOS `ps`).
+
+**Lines for calling a higher threshold T worth proposing**, read on the sizes above 12,000 and at most T, against the
+12,000 arm on the same sizes:
+1. The list question gives at least 6 of the 7 facts on every such size.
+2. The sum is right and the current value is given (never the March value alone) on every such size.
+3. Named facts: on no size fewer right answers than the 12,000 arm.
+4. Spoken turns: median time to the first word over those sizes at most 400 ms above the 12,000 arm, and no turn over
+   5 s to the first word.
+5. The fix-up pass (its material is capped at 96,000 characters): no more final answers that lost a correct fact their
+   draft had than in the 12,000 arm.
+6. No error, timeout or provider refusal in the arm.
+If 1 to 3 hold and 4 or 5 does not, it is reported as an accuracy gain with its cost, not as a proposal. Whatever the
+outcome nothing lands from X1: a change of the default would need a quality run on realistic packs above 12,000,
+which do not exist yet, and Evin's word.

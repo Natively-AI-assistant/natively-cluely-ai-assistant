@@ -11,11 +11,12 @@
 //   node evidence-rich/limits/probe.mjs transcript --lines 20,60,…               (heard path, injected transcript)
 //   node evidence-rich/limits/probe.mjs history    --turns 5,10,20,40            (typed path, a conversation)
 //   node evidence-rich/limits/probe.mjs resume     --sizes 1500,3000,6000,12000  (profile résumé of that many tokens)
+//   node evidence-rich/limits/probe.mjs ref-threshold --mode general --surface hotkey --threshold 12000 [--sizes …]  (whole-pack threshold experiment)
 // Global: --route agentrouter|deepseek (default agentrouter; falls back to deepseek with the reason recorded)
 // Output: evidence-rich/results/limits/<experiment>.jsonl, one line per question.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { connectApp } from '../../lib/cdp.mjs';
 import * as app from '../../lib/app.mjs';
@@ -270,11 +271,72 @@ async function pressure() {
   }
 }
 
+// ── whole-pack threshold experiment (2026-10-09) ─────────────────────────────
+// One file of each size, either side of the whole-pack switch. Beside the seven uniquely named facts it carries two
+// figures that must be added (at 20 % and 85 %) and one value stated twice, an older one (30 %) and its dated
+// replacement (80 %). Ten turns per size: seven named facts, the seven-fact list, the sum, the current value.
+// Checks are exact strings, judge-free. `--threshold` only labels the rows: the app is started with the value under
+// test (an experiment build reads it from NATIVELY_X_WHOLE_PACK_MAX_TOKENS; main has the constant 12,000).
+function thresholdDoc(tokens, tag, seed) {
+  const base = docWithFacts(tokens, tag, seed);
+  const extras = [
+    { key: 'sumA', p: 0.20, s: `The Wexcombe store room holds 1,340 spare pallets, count ${tag}.` },
+    { key: 'old', p: 0.30, s: `As of March 2026 the night-shift allowance at the Dunmarrow site is 41 crowns per shift, notice ${tag}.` },
+    { key: 'new', p: 0.80, s: `Update of September 2026: the night-shift allowance at the Dunmarrow site was raised to 57 crowns per shift, replacing the March figure, notice ${tag}.` },
+    { key: 'sumB', p: 0.85, s: `The Yarlow annex holds 2,275 spare pallets, count ${tag}.` },
+  ];
+  let text = base.text;
+  for (const x of [...extras].reverse()) {
+    const from = Math.floor(x.p * text.length); const m = text.slice(from).search(/\)\. /);
+    const at = m === -1 ? from : from + m + 3;
+    text = `${text.slice(0, at)}\n\n${x.s}\n\n${text.slice(at)}`;
+  }
+  return { text, facts: base.facts, extras: Object.fromEntries(extras.map((x) => [x.key, x.s])) };
+}
+function appRssMb(root) {
+  try { const out = spawnSync('ps', ['-axo', 'rss=,command='], { encoding: 'utf8' }).stdout.split('\n').filter((l) => l.includes(root) && /Electron/.test(l)); return Math.round(out.reduce((n, l) => n + Number(l.trim().split(/\s+/)[0] || 0), 0) / 1024); } catch { return null; }
+}
+async function refThreshold() {
+  const c = await connect(); const mode = opt('mode', 'general'); const surface = opt('surface', 'typed'); const modeId = await modeIdOf(c, mode);
+  const threshold = Number(opt('threshold', 12000)); const name = `threshold-${mode}-${surface}`;
+  for (const tokens of nums('sizes', '11900,12100,16000,23900,24100,32000,47900,48100')) {
+    await clearMode(c, modeId); await app.resetSession(c);
+    const tag = `T${tokens}`; let doc = thresholdDoc(tokens, tag, tokens + 11);
+    // --sizes are the file's size as the app estimates it (chars / 4): shrink the filler by what the planted sentences add.
+    const excess = Math.ceil(doc.text.length / 4) - tokens; if (excess !== 0) doc = thresholdDoc(tokens - excess, tag, tokens + 11);
+    const up = await upload(c, modeId, `thr-${mode}-${tokens}.txt`, doc.text);
+    const baseRec = { experiment: 'ref-threshold', threshold, mode, surface, file_tokens_est: Math.ceil(doc.text.length / 4), file_tokens_nominal: tokens, file_chars: doc.text.length, extracted_chars: up.content.length, B_index_status: up.status, chunks: up.chunks };
+    const timing = (t) => ({ ttft_ms: t.a.firstTokenMs, total_ms: t.a.totalMs, cache_hit_tokens: t.usage?.prompt_cache_hit_tokens ?? null, draft_differs: String(t.a.raw ?? '').trim() !== String(t.a.final ?? t.a.raw ?? '').trim(), app_rss_mb: appRssMb(root), err: t.a.err ?? null, timed_out: !!t.a.timedOut });
+    let named = 0;
+    for (let i = 0; i < doc.facts.length; i++) {
+      const f = doc.facts[i]; const t = await turn(c, surface, f.question); const ans = String(t.a.final ?? t.a.raw ?? '');
+      const ok = has(ans, f.marker.split('-').slice(1).join('-')) || has(ans, f.marker); if (ok) named++;
+      write(name, { ...baseRec, kind: 'named', position: POSITIONS[i], E_in_request: has(t.user, f.sentence), in_answer: ok, in_draft: has(String(t.a.raw ?? ''), f.marker.split('-').slice(1).join('-')), V_in_verifier: t.verifier ? has(t.verifier, f.sentence) : null, ...timing(t), ...summarise(t) });
+    }
+    {
+      const t = await turn(c, surface, 'List the gate release code for every depot mentioned in the operations reference.'); const ans = String(t.a.final ?? t.a.raw ?? '');
+      const code = (f) => f.marker.split('-').slice(1).join('-');
+      write(name, { ...baseRec, kind: 'list', facts_in_request: doc.facts.filter((f) => has(t.user, f.sentence)).length, facts_in_answer: doc.facts.filter((f) => has(ans, code(f))).length, facts_in_draft: doc.facts.filter((f) => has(String(t.a.raw ?? ''), code(f))).length, ...timing(t), ...summarise(t) });
+    }
+    {
+      const t = await turn(c, surface, 'How many spare pallets do the Wexcombe store room and the Yarlow annex hold between them?'); const ans = String(t.a.final ?? t.a.raw ?? '');
+      write(name, { ...baseRec, kind: 'sum', inputs_in_request: [doc.extras.sumA, doc.extras.sumB].filter((x) => has(t.user, x)).length, correct: /3[,.  ]?615/.test(ans), correct_in_draft: /3[,.  ]?615/.test(String(t.a.raw ?? '')), ...timing(t), ...summarise(t) });
+    }
+    {
+      const t = await turn(c, surface, 'What is the night-shift allowance at the Dunmarrow site now?'); const ans = String(t.a.final ?? t.a.raw ?? '');
+      const cur = /\b57\b|fifty[- ]seven/i.test(ans); const old = /\b41\b|forty[- ]one/i.test(ans);
+      write(name, { ...baseRec, kind: 'current', new_in_request: has(t.user, doc.extras.new), old_in_request: has(t.user, doc.extras.old), gives_current: cur, gives_old: old, stale_only: old && !cur, ...timing(t), ...summarise(t) });
+    }
+    console.log(`threshold ${threshold}, ${tokens} tokens (${up.chunks} chunks, ${up.status}): named ${named}/7`);
+  }
+}
+
 const root = opt('root', '/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/er-main');
 if (cmd === 'start-app') await startApp(root);
 else if (cmd === 'ref-size') await refSize(); else if (cmd === 'ref-count') await refCount(); else if (cmd === 'typed') await typed();
 else if (cmd === 'aggregate') await aggregate(); else if (cmd === 'output-cap') await outputCap();
 else if (cmd === 'pi-combined') await piCombined(); else if (cmd === 'pressure') await pressure();
+else if (cmd === 'ref-threshold') await refThreshold();
 else if (cmd === 'transcript') await transcript(); else if (cmd === 'history') await history(); else if (cmd === 'resume') await resume();
 else { console.error('start-app | ref-size | ref-count | typed | transcript | history | resume'); process.exit(2); }
 process.exit(0);
