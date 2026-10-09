@@ -2513,3 +2513,18 @@ the validation part with `--blind`.
 **Reading.** All hold → main is confirmed as it is and nothing changes. A line fails → it is reported to Evin with the
 numbers; nothing is built from this measurement. Any change to the notice or its trigger would be a new candidate with
 its own lines, an unseen-question check and Astra.
+
+### E22 — result (2026-10-09 13:13 UTC; replayed 13:02–13:12 UTC, 222 rows × 3 samples per arm, 0 failed calls)
+| Set | Calculation rows: right samples without → with the notice | Paired change (95 %) | Rose / fell | Other rows: every required string | Forbidden-string samples | First visible character, median |
+|---|---|---|---|---|---|---|
+| development (160 rows, 72 with a calculation) | 175 / 216 (81.0 %) → 199 / 216 (92.1 %) | +11.1 (4.2 to 19.0) | 6 / 1 | 93.2 % → 91.7 % of 192 | 13 → 12 | 939 → 998 ms |
+| `challenge` (39 rows, 31 with a calculation) | 73 / 93 (78.5 %) → 81 / 93 (87.1 %) | +8.6 (0.0 to 19.4) | 3 / 0 | 80.0 % → 93.3 % of 15 | 7 → 4 | 938 → 1,062 ms |
+| `challenge-val` (23 rows, 14 with a calculation; aggregates only) | 30 / 42 (71.4 %) → 33 / 42 (78.6 %) | +7.1 (−4.8 to 21.4) | 2 / 0 | 85.7 % → 85.7 % of 21 | 6 → 6 | 932 → 1,031 ms |
+Pooled calculation rows: 278 / 351 (79.2 %) → 313 / 351 (89.2 %), +10.0 points: line 1 holds. The two challenge sets
+alone: 103 / 135 (76.3 %) → 114 / 135 (84.4 %): line 2 holds. Other rows pooled: 209 / 228 (91.7 %) → 208 / 228
+(91.2 %): line 3 holds.
+**Main is confirmed as it is.** Where the question's own wording asks for a quantity, the hidden working step is worth
+about ten points of right answers, on questions written after it as well, for about 60 to 120 ms at the median to
+the first visible word and no measurable loss on the other rows it fires on. Set beside E21 this draws the line:
+the step helps when the question says it wants a figure, and did not carry to unseen questions when it was added
+because documents were present. Nothing changes.
