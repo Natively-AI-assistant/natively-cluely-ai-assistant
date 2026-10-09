@@ -6478,6 +6478,31 @@ let isMultimodal = !!(imagePaths?.length);
       });
     }
 
+    // Priority 9: DeepSeek (the user's own key), LAST (2026-10-09).
+    //
+    // The ladder had no DeepSeek rung, so a user whose only key is DeepSeek got
+    // "No reasoning model available" on every structured call and Profile
+    // Intelligence fell back to its rule-based résumé parser. Measured on the
+    // evidence-rich benchmark, which runs exactly that configuration: the parser
+    // paired a job title with the NEXT employer on the page and read wrapped
+    // lines as jobs ("Senior Frontend Engineer at Ondaverde Health", "Software
+    // Engineer II at ships."), and answers repeated it. The same two résumés
+    // through this ladder's own extraction prompt on deepseek-flash, four runs
+    // each: every employer, title and date right, 5 to 6 s per résumé, 3 s per
+    // job posting; the same result with and without a temperature.
+    //
+    // Last on purpose: nobody who has a working rung today is moved to another
+    // model (flash-lite stays the measured first choice, and a Natively key
+    // still runs the server's extraction loop). This rung only catches what
+    // used to fall through to the error below, or a ladder whose other rungs
+    // all failed. 0.4 is the temperature the Gemini rungs extract at.
+    if (this.deepseekClient && !this.deepseekPermanentlyDead) {
+      providers.push({
+        name: `DeepSeek (${DEEPSEEK_MODEL})`,
+        execute: () => this.generateWithDeepseek(message, undefined, DEEPSEEK_MODEL, { temperature: 0.4 }),
+      });
+    }
+
     if (providers.length === 0) {
       throw new Error('No reasoning model available. Please configure an API key (OpenAI, Claude, Gemini, Groq, Natively) or a custom provider.');
     }
@@ -6930,7 +6955,7 @@ let isMultimodal = !!(imagePaths?.length);
    * Text-only — image payloads are intentionally not sent. Image-bearing
    * requests are routed away from DeepSeek by the fallback chain.
    */
-  private async generateWithDeepseek(userMessage: string, systemPrompt?: string, modelId?: string): Promise<string> {
+  private async generateWithDeepseek(userMessage: string, systemPrompt?: string, modelId?: string, opts?: { temperature?: number }): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.deepseekClient) throw new Error("DeepSeek client not initialized");
     // No imagePaths argument — DeepSeek is text-only here; let the scope guard see text payload only.
@@ -6950,6 +6975,8 @@ let isMultimodal = !!(imagePaths?.length);
         messages,
         max_tokens: this.getDeepseekMaxOutput(model),
         ...DEEPSEEK_NO_THINKING,
+        // Only the structured ladder sets one (document extraction); every chat caller keeps the provider default.
+        ...(typeof opts?.temperature === 'number' ? { temperature: opts.temperature } : {}),
       })),
       60000,
       `DeepSeek (${model})`
