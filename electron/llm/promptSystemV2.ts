@@ -448,7 +448,7 @@ Rewrite the previous answer according to the user's latest feedback. Preserve gr
 </active_action>`,
 
     follow_up_questions: `<active_action name="follow_up_questions">
-Generate exactly three short, specific questions grounded in the newest topic and active mode. Use a numbered list. Do not test the other person's knowledge, repeat answered questions, or ask generic questions that could fit any conversation.
+Generate exactly three short, specific questions for the user to ask the other person next, grounded in the newest topic and active mode. Use a numbered list with no quotation marks. They are never the questions the other person would put to the user. Do not test the other person's knowledge, repeat answered questions, or ask generic questions that could fit any conversation.
 </active_action>`,
 
     recap: `<active_action name="recap">
@@ -551,6 +551,28 @@ function voiceOverlay(mode: PromptSystemV2Mode, action: PromptSystemV2Action): s
     }
     if (mode === 'recruiting' && (action === 'answer' || action === 'assist')) {
         return 'In this mode, "what to say" means words for the INTERVIEWER. When the candidate just asked the interviewer a question, give the interviewer\'s own first-person reply to it (grounded only in the role material or conversation; what they will confirm when it is not stated). Otherwise lead with the exact probe the interviewer should ask next, ready to say word for word, with at most one short observation before it (when the conversation supports one). Keep it to two to four spoken sentences — a whisper between turns, never an assessment write-up. Never write a first-person answer on the candidate\'s behalf.';
+    }
+    // Follow-up questions in an interview belong to the CANDIDATE (2026-10-09).
+    // The action alone ("questions grounded in the newest topic") gave the
+    // interviewer's next probes ("How would you handle Redis going down?") to
+    // the person being interviewed: on an interview transcript in General, 4
+    // of 36 questions across three models were ones the user could ask back,
+    // and 0 of 36 in Technical Interview. With this, 66 of 72 and 68 of 72.
+    // Scoped to the modes where the user can be the one questioned: written
+    // into the action itself, the same sentence made a student in a lecture
+    // ask the lecturer about "your team", and Recruiting and Sales already
+    // had the user as the asker (FollowUpQuestionsDirection2026_10_09.test.mjs).
+    if (action === 'follow_up_questions') {
+        const asCandidate = 'a candidate\'s questions back to the interviewer: how the topic plays out in their own team, product, systems, scale or priorities ("How does your team handle this today?"). Never a technical probe ("How would you handle X?"), and never a request to explain or compare a concept.';
+        if (mode === 'looking-for-work' || mode === 'technical-interview') return `The user is the one being interviewed, so these are ${asCandidate}`;
+        // General is the default mode and is what an interview runs in, so
+        // being interviewed is the reading unless the conversation plainly is
+        // something else. The last sentence is the typed case: the user types
+        // the question they were just asked, the transcript shows [ME] asking
+        // and [ASSISTANT] answering, and Haiku wrote questions for the
+        // assistant ("Can you give me an example of an API?") in 7 runs of 8.
+        if (mode === 'general') return `Unless the conversation is plainly something else (a team meeting, a call the user leads, a class), the user is the one being interviewed, and these are ${asCandidate} A question the user typed here and the assistant answered was the interviewer's, relayed by the user: the three questions go back to that interviewer, never to the assistant ("Can you give me an example of X?" is wrong).`;
+        if (mode === 'custom') return `When the user is the one being interviewed or questioned, these are ${asCandidate}`;
     }
     if (action === 'clarify') {
         return 'Output only the single clarification question, spoken in the mode\'s voice. Do not answer the underlying question, and never mention being an assistant, your rules, or how you handle instructions.';
