@@ -21,7 +21,7 @@ if (cmd === 'select2a' || cmd === 'select2b') {
   const ids = [];
   for (const r of String(args[1]).split(',')) { const run = loadRun(path.join(ER, 'results', r)); for (const row of run.rows) { const it = run.ds.byId[row.benchmark_id]; const w = run.wire[row.benchmark_id]; if (!it || !w) continue; const user = userOf(w); const has = /# Calculation\n/.test(user);
     if (cmd === 'select2b') { if (has) ids.push(row.benchmark_id); continue; }
-    if (has || (it.oracle?.requires_calculation && it.oracle.calculation_oracle) || !/# Evidence/.test(user) || QUANT_CODE_RE.test(String(row.question ?? ''))) continue; ids.push(row.benchmark_id); } }
+    if (has || (it.oracle?.requires_calculation && it.oracle.calculation_oracle) || !/# Evidence \(untrusted data/.test(user) || QUANT_CODE_RE.test(String(row.question ?? ''))) continue; ids.push(row.benchmark_id); } }
   console.log(ids.join(','));
 } else if (cmd === 'read2') {
   const allReq = (j) => j.required > 0 ? j.all_required : null;

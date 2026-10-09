@@ -2255,3 +2255,6 @@ the calculation rows, blind holdout in aggregates, each with lines written first
 trigger is rejected and only a word-list widening remains, under its own rule. Part b holds → one wording (n2) for
 every turn; fails → today's wording stays where today's trigger fires and n2 is used only on newly reached turns.
 Nothing lands from this stage.
+*Clarified 11:11 UTC, before the replay starts:* "an evidence section present" in part a means the evidence block itself
+("# Evidence (untrusted data …"), which is what a build can test; a prompt whose "# Evidence" section is only a note
+that nothing was retrieved is not selected. The selection is the count `select2a` prints.
