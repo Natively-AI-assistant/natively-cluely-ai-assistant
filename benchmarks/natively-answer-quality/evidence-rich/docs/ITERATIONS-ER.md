@@ -2733,3 +2733,27 @@ more samples per row and arm on the same 23 rows (k 4 to 11), the lines read on 
 more than 1.5 points below base, paired interval above −4. Forbidden strings: at most base + 6 (the same rate as
 +2 on 92 samples). Rows that fall: at most 2. Both readings are reported whatever the second says; if the pooled
 reading fails, E23 is not proposed and no Astra call is spent on it.
+
+### E23 — the unseen challenge rows, twelve samples (2026-10-09 18:39 UTC; the eight further samples per row replayed 18:36–18:38 UTC, 0 failed calls)
+| 23 rows, 276 samples per arm | base | arm |
+|---|---|---|
+| samples with every required string (17 rows) | 82.8 % | 82.8 % (paired 0.0, 95 % −1.5 to 1.5) |
+| samples with a forbidden string | 31 | 35 |
+| right samples | 76.1 % | 74.6 % (paired −1.4, 95 % −6.2 to 2.5) |
+| rows that rose / fell | | 1 / 1 |
+By part: challenge 75.7 % → 75.7 % required, forbidden 12 → 13; challenge-val 100 % → 100 %, forbidden 19 → 22.
+The declared lines of the second reading hold (required not lower; forbidden base + 4, allowed + 6; one row falls,
+allowed two). Both readings stand in this log: at four samples the forbidden line was missed by one sample, at
+twelve it holds. What these rows say is that E23 does nothing for questions that are not about employers or dates
+of employment, and costs them nothing measurable. Its case rests on line 4, the unseen which-employer and
+length-of-time rows.
+
+### Sets `prov1` and `prov1-val` frozen (2026-10-09 18:39 UTC; nothing had been run on them)
+Two authors blind to the product and to E23, one per mode. `prov1` 24 items (`007fffa2d439`), `prov1-val` 24
+items (`46f83196dd68`, never read; aggregates only). Per file and mode: 4 which-employer-or-title, 3 length of
+time, 3 own history with only the posting, 2 posting facts; profiles A and B half each. Lint 0 errors. Every
+earlier dataset hash and the manifest hash are byte-identical after the freeze (dev `aca272a802a3`, holdout
+`6f56606b3ce9`, dev2 `0886c10b084e`, challenge `bb2bad267b68`, challenge-val `c62fc30c2094`, code1
+`da9562e2ed45`). `build.mjs verify` lists the X1 probe files under `evidence/limits-probe` as stray, as it has
+since X1; no frozen file fails its hash. Main `73b18d97` is being run on both sets in the app
+(`er8-prov1-main`, `er8-prov1val-main`) to record the prompts.

@@ -29,7 +29,7 @@ if (cmd === 'select') {
   for (const [k, m] of seen) { console.log(`\npi_state ${k}`); for (const [e, pr] of m) console.log(`  ${pr.padEnd(26)} ${e.slice(0, 150)}`); }
 } else if (cmd === 'read') {
   const load = (n) => fs.readFileSync(path.join(HERE, 'results', 'replay', `gen-${n}.jsonl`), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-  const prefix = opt('prefix', 'ER-'); const blind = args.includes('--blind'); const kinds = opt('kinds') ? new Set(opt('kinds').split(',')) : null;
+  const prefix = opt('prefix', 'ER-'); /* --kinds: category prefixes */ const blind = args.includes('--blind'); const kinds = opt('kinds') ? new Set(opt('kinds').split(',')) : null;
   const ds = {}; for (const f of fs.readdirSync(path.join(HERE, 'datasets'))) for (const it of JSON.parse(fs.readFileSync(path.join(HERE, 'datasets', f), 'utf8')).items) ds[it.id] = it;
   const squash = (t) => String(t ?? '').replace(/[\s,*_`]/g, '').toLowerCase();
   // a sample is RIGHT when it has every required string, no forbidden string, and the calculation result where there is one
@@ -37,7 +37,7 @@ if (cmd === 'select') {
     const c = it.oracle?.calculation_oracle; const calcOk = !it.oracle?.requires_calculation || !c ? true : (c.accepted_forms ?? []).some((f) => squash(s.text).includes(squash(f)));
     return (s.required === 0 || s.all_required) && s.forbidden.length === 0 && calcOk;
   };
-  const pick = (rows) => rows.filter((s) => s.id.startsWith(prefix) && !s.err && (!kinds || kinds.has(ds[s.id]?.category)));
+  const pick = (rows) => rows.filter((s) => s.id.startsWith(prefix) && !s.err && (!kinds || [...kinds].some((k) => String(ds[s.id]?.category ?? '').startsWith(k))));
   const A = pick(load(opt('base'))), B = pick(load(opt('arm')));
   const by = (rows) => { const m = new Map(); for (const s of rows) { if (!m.has(s.id)) m.set(s.id, []); m.get(s.id).push(s); } return m; };
   const a = by(A), b = by(B); const ids = [...a.keys()].filter((id) => b.has(id));
