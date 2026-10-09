@@ -9928,6 +9928,80 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   const localModelDownloads = new Map<string, AbortController>();
 
+  /** Progress for one model's row, at most five times a second. */
+  const modelProgressEmitter = (sender: any, channel: string, id: string) => {
+    let lastSent = 0;
+    return (p: { fraction: number; currentFile: string; phase?: string }) => {
+      const now = Date.now();
+      if (now - lastSent < 200 && p.fraction < 1) return;
+      lastSent = now;
+      try { sender?.send(channel, { id, fraction: p.fraction, currentFile: p.currentFile, phase: p.phase }); } catch { /* window gone */ }
+    };
+  };
+
+  /**
+   * Hash an installed reranker's files and fetch again whatever is damaged.
+   * Shared by activation and the row's "Check files" button: the list is
+   * length-only, so same-size damage is invisible until one of them runs.
+   */
+  type FileCheckOutcome = { ok: boolean; busy?: boolean; repaired: string[]; error?: string; threw?: boolean };
+  const checkLocalRerankerFiles = async (sender: any, id: string): Promise<FileCheckOutcome> => {
+    if (localModelDownloads.has(id)) return { ok: false, busy: true, repaired: [] };
+    const controller = new AbortController();
+    localModelDownloads.set(id, controller);
+    // Only the loaded model holds its files open. Both runtimes load again on
+    // the next rerank.
+    const dropIfLoaded = (why: string) => {
+      const { SettingsManager } = require('./services/SettingsManager');
+      const stored = (SettingsManager.getInstance().get('reranker') as any) || {};
+      if (stored.localModelId !== id) return;
+      require('./rag/LocalReranker').reloadLocalReranker(why);
+      try { require('./services/reranking/rerankerConfig').resetLocalGgufPort(); } catch { /* no cached port to drop */ }
+    };
+    try {
+      const { checkAndRepairCatalogModel } = require('./services/reranking/localModelInstaller');
+      const result = await checkAndRepairCatalogModel(id, modelProgressEmitter(sender, 'reranker:model-progress', id), controller.signal, {
+        beforeRepair: () => dropIfLoaded('model files are being repaired'),
+      });
+      if (!result.ok) console.warn(`[IPC reranker] file check for ${id} did not pass:`, result.error ?? '(no reason reported)');
+      // A rerank that arrived while the files were being fetched loaded the
+      // damaged copy again. Drop it, or "Repaired" would describe the disk and
+      // not what is running.
+      if (result.ok && (result.repaired?.length ?? 0) > 0) {
+        try { dropIfLoaded('model files were repaired'); } catch { /* it loads the repaired files at the next restart */ }
+      }
+      return { ok: result.ok, repaired: result.repaired ?? [], error: result.error };
+    } catch (e: any) {
+      console.warn(`[IPC reranker] file check for ${id} threw:`, e?.message || e);
+      return { ok: false, repaired: [], error: String(e?.message || e), threw: true };
+    } finally {
+      localModelDownloads.delete(id);
+    }
+  };
+
+  const modelBusyMessage = (modelName: string) => `${modelName} is still being downloaded or checked. Try again when it finishes.`;
+
+  /**
+   * What the row says when a check could not leave the model intact. The
+   * reason is worded here and logged above; a cancelled check is not a failure
+   * and carries no message.
+   */
+  const fileCheckFailure = (modelName: string, files: FileCheckOutcome) => {
+    if (files.busy) return { success: false, error: 'already_downloading', message: modelBusyMessage(modelName) };
+    const { describeModelTransferFailure } = require('./services/extensions/modelTransferFailure');
+    const { kind, message } = describeModelTransferFailure(modelName, files.error, files.threw ? 'check' : 'repair');
+    if (message === null) return { success: false, error: 'cancelled' };
+    return { success: false, error: kind === 'not-installed' ? 'not_installed' : 'files_damaged', message };
+  };
+
+  /** The same for the row's Download button. */
+  const modelDownloadFailure = (channel: string, modelName: string, raw: unknown) => {
+    console.warn(`[IPC ${channel}] ${modelName} did not download:`, raw ?? '(no reason reported)');
+    const { describeModelTransferFailure } = require('./services/extensions/modelTransferFailure');
+    const { message } = describeModelTransferFailure(modelName, raw, 'download');
+    return message === null ? { success: false, error: 'cancelled' } : { success: false, error: 'download_failed', message };
+  };
+
   safeHandle('reranker:list-local-models', async () => {
     const { listCatalogStatus } = require('./services/reranking/localModelInstaller');
     const { SettingsManager } = require('./services/SettingsManager');
@@ -9972,29 +10046,31 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { findCatalogModel } = require('./rag/rerankerModelCatalog');
     const model = findCatalogModel(id);
     if (!model) return { success: false, error: 'unknown_model' };
-    if (localModelDownloads.has(id)) return { success: false, error: 'already_downloading' };
+    if (localModelDownloads.has(id)) return { success: false, error: 'already_downloading', message: modelBusyMessage(model.name) };
 
-    const sender = event?.sender;
-    let lastSent = 0;
-    const emit = (fraction: number, currentFile: string) => {
-      const now = Date.now();
-      if (now - lastSent < 200 && fraction < 1) return;
-      lastSent = now;
-      try { sender?.send('reranker:model-progress', { id, fraction, currentFile }); } catch { /* window gone */ }
-    };
+    const emit = modelProgressEmitter(event?.sender, 'reranker:model-progress', id);
 
     const controller = new AbortController();
     localModelDownloads.set(id, controller);
     try {
       const { installCatalogModel } = require('./services/reranking/localModelInstaller');
-      const result = await installCatalogModel(id, (p: any) => emit(p.fraction, p.currentFile), controller.signal);
-      if (!result.ok) return { success: false, error: 'download_failed', message: result.error };
+      const result = await installCatalogModel(id, emit, controller.signal);
+      if (!result.ok) return modelDownloadFailure('reranker:install-local-model', model.name, result.error);
       return { success: true, digests: result.digests };
     } catch (e: any) {
-      return { success: false, error: 'download_failed', message: String(e?.message || e) };
+      return modelDownloadFailure('reranker:install-local-model', model.name, e?.message || e);
     } finally {
       localModelDownloads.delete(id);
     }
+  });
+
+  safeHandle('reranker:verify-local-model', async (event: any, id: string) => {
+    const { findCatalogModel } = require('./rag/rerankerModelCatalog');
+    const model = findCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    const files = await checkLocalRerankerFiles(event?.sender, id);
+    if (!files.ok) return fileCheckFailure(model.name, files);
+    return { success: true, repaired: files.repaired };
   });
 
   safeHandle('reranker:cancel-local-model', async (_evt, id: string) => {
@@ -10013,12 +10089,20 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (stored.localModelId === id) {
       return { success: false, error: 'in_use', message: 'This reranker is in use. Choose another one before removing it.' };
     }
+    // Not while its files are being downloaded, hashed or repaired: the check
+    // would read the vanished files as damaged and fetch the model back. The
+    // row disables Remove meanwhile, but only for as long as the panel that
+    // started it stays open.
+    if (localModelDownloads.has(id)) {
+      const { findCatalogModel } = require('./rag/rerankerModelCatalog');
+      return { success: false, error: 'already_downloading', message: modelBusyMessage(findCatalogModel(id)?.name ?? 'This model') };
+    }
     const { removeCatalogModel } = require('./services/reranking/localModelInstaller');
     const res = removeCatalogModel(id);
     return { success: res.ok, message: res.error };
   });
 
-  safeHandle('reranker:use-local-model', async (_evt, id: string | null) => {
+  safeHandle('reranker:use-local-model', async (event: any, id: string | null) => {
     // Activation VALIDATES before it commits. The previous reranker stays in
     // place unless the new one has actually loaded and produced a sane ranking,
     // so a bad model can never leave the app without a working reranker.
@@ -10028,8 +10112,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { reloadLocalReranker, getLocalReranker } = require('./rag/LocalReranker');
 
     const settings = SettingsManager.getInstance();
-    const stored = (settings.get('reranker') as any) || {};
-    const previous = stored.localModelId ?? null;
 
     if (id !== null) {
       const model = findCatalogModel(id);
@@ -10041,7 +10123,18 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (status.state !== 'installed') {
         return { success: false, error: 'not_installed', message: `${model.name} is not fully downloaded (missing ${status.missing.join(', ')}).` };
       }
+      // "Installed" above is by length. Hash the files before trusting them
+      // with the user's retrieval: a damaged model can still load and return
+      // numbers, which is all the self-test below can see.
+      const files = await checkLocalRerankerFiles(event?.sender, id);
+      if (!files.ok) return fileCheckFailure(model.name, files);
     }
+
+    // Read AFTER the check, never before it: the check hashes for seconds and
+    // can download for minutes, and writing back a snapshot taken before that
+    // would undo whatever else was saved under this key in the meantime.
+    const stored = (settings.get('reranker') as any) || {};
+    const previous = stored.localModelId ?? null;
 
     if (!settings.set('reranker', { ...stored, localModelId: id })) {
       return { success: false, error: 'settings_store_degraded' };
@@ -10074,7 +10167,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       );
       const ok = Array.isArray(ranked) && ranked.length === 2
         && ranked.every((r: any) => Number.isFinite(r.score));
-      if (!ok) throw new Error('the model loaded but did not return a usable ranking');
+      if (!ok) {
+        // rerank() fails closed, so "no ranking" can mean the runtime never
+        // started. Ask the port why instead of blaming the model.
+        const { describeRerankActivationFailure } = require('./services/reranking/rerankActivationFailure');
+        const rawFailure = (reranker as { lastFailure?: string | null }).lastFailure;
+        console.warn('[IPC reranker:use-local-model] self-test returned no ranking:', rawFailure ?? '(no reason reported)');
+        throw new Error(describeRerankActivationFailure(rawFailure));
+      }
 
       return { success: true, activeId: id, topIndex: ranked[0].index };
     } catch (e: any) {
@@ -10100,6 +10200,24 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // ── Local Embedding Models (Bundled & Downloadable) ──────────────────────
   const localEmbeddingDownloads = new Map<string, AbortController>();
+
+  /** The embedding twin of checkLocalRerankerFiles. The bundled model is left alone (see the installer). */
+  const checkLocalEmbeddingFiles = async (sender: any, id: string): Promise<FileCheckOutcome> => {
+    if (localEmbeddingDownloads.has(id)) return { ok: false, busy: true, repaired: [] };
+    const controller = new AbortController();
+    localEmbeddingDownloads.set(id, controller);
+    try {
+      const { checkAndRepairEmbeddingCatalogModel } = require('./services/embeddings/localEmbeddingModelInstaller');
+      const result = await checkAndRepairEmbeddingCatalogModel(id, modelProgressEmitter(sender, 'embedding:model-progress', id), controller.signal);
+      if (!result.ok) console.warn(`[IPC embedding] file check for ${id} did not pass:`, result.error ?? '(no reason reported)');
+      return { ok: result.ok, repaired: result.repaired ?? [], error: result.error };
+    } catch (e: any) {
+      console.warn(`[IPC embedding] file check for ${id} threw:`, e?.message || e);
+      return { ok: false, repaired: [], error: String(e?.message || e), threw: true };
+    } finally {
+      localEmbeddingDownloads.delete(id);
+    }
+  };
   /** How long a probe/test model waits for an ONNX session slot before failing fast. */
   const LOCAL_EMBEDDING_PROBE_SLOT_WAIT_MS = 5_000;
 
@@ -10155,7 +10273,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
     const model = findEmbeddingCatalogModel(id);
     if (!model) return { success: false, error: 'unknown_model' };
-    if (localEmbeddingDownloads.has(id)) return { success: false, error: 'already_downloading' };
+    if (localEmbeddingDownloads.has(id)) return { success: false, error: 'already_downloading', message: modelBusyMessage(model.name) };
 
     // License gate: models that require explicit acknowledgement must not be
     // installed until the user has confirmed in the UI.
@@ -10174,24 +10292,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     }
 
-    const sender = event?.sender;
-    let lastSent = 0;
-    const emit = (fraction: number, currentFile: string) => {
-      const now = Date.now();
-      if (now - lastSent < 200 && fraction < 1) return;
-      lastSent = now;
-      try { sender?.send('embedding:model-progress', { id, fraction, currentFile }); } catch { /* window gone */ }
-    };
+    const emit = modelProgressEmitter(event?.sender, 'embedding:model-progress', id);
 
     const controller = new AbortController();
     localEmbeddingDownloads.set(id, controller);
     try {
       const { installEmbeddingCatalogModel } = require('./services/embeddings/localEmbeddingModelInstaller');
-      const result = await installEmbeddingCatalogModel(id, (p: any) => emit(p.fraction, p.currentFile), controller.signal);
-      if (!result.ok) return { success: false, error: 'download_failed', message: result.error };
+      const result = await installEmbeddingCatalogModel(id, emit, controller.signal);
+      if (!result.ok) return modelDownloadFailure('embedding:install-local-model', model.name, result.error);
       return { success: true, digests: result.digests };
     } catch (e: any) {
-      return { success: false, error: 'download_failed', message: String(e?.message || e) };
+      return modelDownloadFailure('embedding:install-local-model', model.name, e?.message || e);
     } finally {
       localEmbeddingDownloads.delete(id);
     }
@@ -10211,12 +10322,31 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (currentId === id) {
       return { success: false, error: 'in_use', message: 'This embedding model is in use. Choose another one before removing it.' };
     }
+    // Not while its files are being downloaded, hashed or repaired (see the reranker's twin).
+    if (localEmbeddingDownloads.has(id)) {
+      const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+      return { success: false, error: 'already_downloading', message: modelBusyMessage(findEmbeddingCatalogModel(id)?.name ?? 'This model') };
+    }
     const { removeEmbeddingCatalogModel } = require('./services/embeddings/localEmbeddingModelInstaller');
     const res = removeEmbeddingCatalogModel(id);
     return { success: res.ok, message: res.error };
   });
 
-  safeHandle('embedding:use-local-model', async (_evt, id: string | null) => {
+  safeHandle('embedding:verify-local-model', async (event: any, id: string) => {
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const model = findEmbeddingCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    const files = await checkLocalEmbeddingFiles(event?.sender, id);
+    if (!files.ok) return fileCheckFailure(model.name, files);
+    // The running index keeps the copy it loaded. Unlike the reranker there is
+    // no cheap way to make it load the repaired files, so say so instead.
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const activeId = settings.get('localEmbeddingModelId') ?? (settings.get('embedding') as any)?.localModelId ?? null;
+    return { success: true, repaired: files.repaired, restartToApply: files.repaired.length > 0 && activeId === id };
+  });
+
+  safeHandle('embedding:use-local-model', async (event: any, id: string | null) => {
     const { SettingsManager } = require('./services/SettingsManager');
     const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
     const { statusOf } = require('./services/embeddings/localEmbeddingModelInstaller');
@@ -10252,6 +10382,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         };
       }
     }
+
+    // "Installed" above is by length. Hash the files before the probe: a
+    // damaged model can still load and produce a vector of the right width,
+    // which is all the probe can see. Repairs what it can; the bundled model
+    // is served from the app's own resources and is not checked here.
+    const files = await checkLocalEmbeddingFiles(event?.sender, targetId);
+    if (!files.ok) return fileCheckFailure(model.name, files);
 
     // Pre-activation validation probe.
     //

@@ -678,10 +678,13 @@ export interface ElectronAPI {
   }>
   cancelLocalRerankerModel: (id: string) => Promise<{ success: boolean; error?: string }>
   removeLocalRerankerModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  /** Hash an installed model's files and fetch again whatever is damaged. `repaired` is empty when it was intact. */
+  verifyLocalRerankerModel: (id: string) => Promise<{ success: boolean; repaired?: string[]; error?: string; message?: string }>
   useLocalRerankerModel: (id: string | null) => Promise<{
     success: boolean; activeId?: string | null; topIndex?: number; error?: string; message?: string
   }>
-  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
+  /** `phase` is 'checking' while a file already on disk is hashed, 'downloading' while one is fetched. */
+  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string; phase?: 'checking' | 'downloading' }) => void) => () => void
 
   listLocalEmbeddingModels: () => Promise<{
     models: Array<{
@@ -710,6 +713,8 @@ export interface ElectronAPI {
   }>
   cancelLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string }>
   removeLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  /** Hash an installed model's files and fetch again whatever is damaged. `restartToApply` when the repaired model is the one in use. */
+  verifyLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; repaired?: string[]; restartToApply?: boolean; error?: string; message?: string }>
   useLocalEmbeddingModel: (id: string | null) => Promise<{
     success: boolean; activeId?: string | null; dimensions?: number; reindexRequired?: boolean; incompatibleCount?: number; error?: string; message?: string
     /** Present when error === 'license_not_acknowledged'. */
@@ -721,7 +726,8 @@ export interface ElectronAPI {
   revealLocalEmbeddingModelsFolder: () => Promise<{ success: boolean }>
   /** Persist the user's acceptance of a catalog model's licence terms. Must be called before install/use on models where requiresAcknowledgement is true. */
   acknowledgeLocalEmbeddingCatalogModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
-  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
+  /** `phase` is 'checking' while a file already on disk is hashed, 'downloading' while one is fetched. */
+  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string; phase?: 'checking' | 'downloading' }) => void) => () => void
 
   listExtensions: () => Promise<{
     available: boolean

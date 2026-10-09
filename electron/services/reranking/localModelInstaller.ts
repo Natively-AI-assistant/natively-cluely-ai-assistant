@@ -24,9 +24,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { isDeepStrictEqual } from 'util';
 import { app } from 'electron';
 import { HuggingFaceModelDownloader } from '../extensions/HuggingFaceModelDownloader';
-import { sha256File } from '../extensions/ModelStore';
+import {
+  existingFileMatches, findDamagedFiles, flaggedDamaged, readInstallRecord, recordDamage, recordInstall,
+  regularFileSize, verifyStagedFile, withRecordedHash,
+} from '../extensions/catalogFileIntegrity';
 import {
   RERANKER_MODEL_CATALOG, findCatalogModel,
   type CatalogFile, type LocalRerankerModel,
@@ -50,6 +54,12 @@ export interface InstallProgress {
   /** 0..1 across the WHOLE model, not the current file. */
   fraction: number;
   currentFile: string;
+  /**
+   * 'checking' while a file already on disk is being hashed, 'downloading'
+   * while one is being fetched. A check of an intact model is all 'checking',
+   * and the row must not present that as a download.
+   */
+  phase: 'checking' | 'downloading';
 }
 
 /** Root that `LocalReranker.resolveModelPath()` looks in first. */
@@ -110,26 +120,52 @@ export function statusOf(model: LocalRerankerModel, rootOverride?: string): Loca
 
   for (const file of model.files) {
     const dest = fileDestination(model, file, rootOverride);
-    try {
-      const stat = fs.statSync(dest);
-      if (stat.isFile() && stat.size > 0) { bytesOnDisk += stat.size; continue; }
-    } catch { /* missing */ }
-    missing.push(file.repoPath);
+    const size = regularFileSize(dest);
+    if (size > 0) bytesOnDisk += size;
+    // A download is the catalogue's exact length or it is not that file: a
+    // truncated one used to read as installed here and then fail at load.
+    // Length only, never a hash, and never the install record: this runs on
+    // every retrieval as well as every time the list is drawn. The one
+    // rewritten file is judged by what it must contain instead, since its
+    // length changed when it was patched.
+    const present = isPatchedConfig(model, file)
+      ? patchedConfigState(dest, file, model.configPatch!) === 'patched'
+      : size === file.bytes;
+    if (!present) missing.push(file.repoPath);
   }
 
   return {
     id: model.id,
     // "partial" is a real state and must not read as installed: transformers.js
     // given a tokenizer but no weights fails at load, long after the UI said Ready.
-    state: missing.length === 0 ? 'installed' : missing.length === model.files.length ? 'not-installed' : 'partial',
+    // Bytes on disk mean "partial" even when no file is right yet, so the row
+    // offers to resume rather than to start over.
+    state: missing.length === 0 ? 'installed' : bytesOnDisk === 0 ? 'not-installed' : 'partial',
     bytesOnDisk,
     directory,
     missing,
   };
 }
 
+/**
+ * `statusOf`, plus what a check has proven damaged and nothing has repaired
+ * yet: such a model is listed as `partial`, so its row offers Download.
+ *
+ * For the model list only. What the app RUNS goes by `statusOf`: a model whose
+ * repair failed (offline) is the same model that was serving a minute earlier,
+ * and withdrawing it there would leave the user with no reranker at all over
+ * damage they have already been told about.
+ */
+export function listedStatusOf(model: LocalRerankerModel, rootOverride?: string): LocalModelStatus {
+  const status = statusOf(model, rootOverride);
+  if (status.state !== 'installed') return status;
+  const flagged = flaggedDamaged(status.directory, model.revision);
+  const damaged = model.files.map((file) => file.repoPath).filter((repoPath) => flagged.has(repoPath));
+  return damaged.length === 0 ? status : { ...status, state: 'partial', missing: damaged };
+}
+
 export function listCatalogStatus(rootOverride?: string): Array<LocalRerankerModel & { status: LocalModelStatus }> {
-  return RERANKER_MODEL_CATALOG.map((m) => ({ ...m, status: statusOf(m, rootOverride) }));
+  return RERANKER_MODEL_CATALOG.map((m) => ({ ...m, status: listedStatusOf(m, rootOverride) }));
 }
 
 export interface InstallResult {
@@ -172,25 +208,36 @@ export async function installCatalogModel(
   const downloader = opts.downloader ?? new HuggingFaceModelDownloader({ logger: console });
   const total = model.files.reduce((n, f) => n + f.bytes, 0) || 1;
   const digests: Record<string, string> = {};
+  const directory = modelDirectory(model, opts.rootOverride);
+  // Hashes from the last install, for the files nobody publishes one for.
+  const previous = readInstallRecord(directory, model.revision);
   let completedBytes = 0;
 
   for (const file of model.files) {
     if (signal.aborted) return { ok: false, modelId: id, error: 'cancelled' };
 
     const destination = fileDestination(model, file, opts.rootOverride);
-    // Already present and the right size — skip rather than re-fetch 597MB.
+    // Skip rather than re-fetch 597MB, but only what is provably the
+    // catalogue's file: right length AND, where one is published or was
+    // recorded at install, right hash.
+    // A mismatch is fetched again; the downloader keeps the old file in place
+    // until the replacement has been verified.
+    //
     // A patched config.json no longer matches its declared size (it was
-    // rewritten), so it is matched on presence instead; otherwise every
-    // reinstall re-downloads and re-patches it forever.
-    const isPatchedConfig = Boolean(model.configPatch) && file.repoPath === 'config.json';
-    try {
-      const stat = fs.statSync(destination);
-      if (stat.isFile() && (isPatchedConfig ? stat.size > 0 : stat.size === file.bytes)) {
-        completedBytes += file.bytes;
-        onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
-        continue;
-      }
-    } catch { /* not present */ }
+    // rewritten), so it is matched on being usable instead: already patched,
+    // or still the untouched upstream file that applyConfigPatch() below will
+    // finish. Otherwise every reinstall re-downloads and re-patches it forever.
+    // Name the file before checking it: hashing a multi-gigabyte file that is
+    // already here takes seconds, and the row would otherwise sit silent.
+    onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath, phase: 'checking' });
+    const reusable = isPatchedConfig(model, file)
+      ? patchedConfigState(destination, file, model.configPatch!) !== 'unusable'
+      : await existingFileMatches(destination, withRecordedHash(file, previous));
+    if (reusable) {
+      completedBytes += file.bytes;
+      onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath, phase: 'checking' });
+      continue;
+    }
 
     const before = completedBytes;
     try {
@@ -214,7 +261,7 @@ export async function installCatalogModel(
         destination,
         (fraction) => {
           completedBytes = before + fraction * file.bytes;
-          onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
+          onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath, phase: 'downloading' });
         },
         signal,
         // Verified BEFORE the rename. Checking afterwards leaves the finished
@@ -222,13 +269,13 @@ export async function installCatalogModel(
         // hash 600MB — during which statusOf() reports "installed" and a
         // concurrent load would happily open it. A crash in that window leaves
         // a corrupt model that looks fine forever.
+        //
+        // Length as well as hash (catalogFileIntegrity.ts): most small files
+        // carry no hash, and a truncated one was installed as-is.
         async (partPath) => {
-          const digest = await sha256File(partPath);
-          digests[file.repoPath] = digest;
-          if (file.sha256 && digest.toLowerCase() !== file.sha256.toLowerCase()) {
-            return { ok: false, reason: `${file.repoPath} failed verification: expected ${file.sha256}, got ${digest}` };
-          }
-          return { ok: true };
+          const verdict = await verifyStagedFile(partPath, file);
+          if (verdict.ok) digests[file.repoPath] = verdict.digest;
+          return verdict;
         },
       );
     } catch (e) {
@@ -236,15 +283,156 @@ export async function installCatalogModel(
     }
 
     completedBytes = before + file.bytes;
-    onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
+    onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath, phase: 'downloading' });
   }
 
   // Records that the file was rewritten, WITHOUT destroying its digest: the one
   // file whose bytes are deliberately mutated is the one whose hash a later
   // integrity check most needs.
-  const patched = applyConfigPatch(model, opts.rootOverride);
+  //
+  // A patch that could not be written is a FAILED install, not a note on a
+  // successful one: the entry declares the patch because transformers.js cannot
+  // load the model without it, so "ok" here used to mean "downloaded, unusable".
+  const patch = applyConfigPatch(model, opts.rootOverride);
+  if (patch.error) return { ok: false, modelId: id, error: patch.error };
 
-  return { ok: true, modelId: id, digests, configPatched: patched };
+
+  // Every file's hash, so a later check can tell a damaged config or tokenizer
+  // from the one installed here. Not the rewritten config: its bytes are this
+  // installer's own, and it is judged by what it must contain instead.
+  await recordInstall({
+    modelDir: directory,
+    revision: model.revision,
+    files: model.files.filter((file) => !isPatchedConfig(model, file)),
+    destinationOf: (file) => fileDestination(model, file, opts.rootOverride),
+    digests,
+    previous,
+  });
+
+  return { ok: true, modelId: id, digests, configPatched: patch.rewritten };
+}
+
+export interface CheckResult {
+  ok: boolean;
+  modelId: string;
+  /** Files that were damaged and have been fetched again. Empty when intact. */
+  repaired: string[];
+  error?: string;
+}
+
+/**
+ * Hash an installed model's files and fetch again whatever is not what was
+ * installed. Run when a model is activated and from the row's own button.
+ *
+ * The list cannot do this: it is drawn constantly and may only stat. So a file
+ * that kept its length and lost its contents read as installed until now, and
+ * could pass activation as long as the runtime still produced numbers.
+ *
+ * It repairs what was installed and never starts a download of its own: a
+ * model that is not installed is refused, since the row offers Download for it.
+ * Damage that cannot be repaired (offline) is recorded, so the model stops
+ * reading as installed until a later check or download succeeds. Nothing is
+ * deleted: the downloader replaces a file only once its replacement verifies.
+ */
+export async function checkAndRepairCatalogModel(
+  id: string,
+  onProgress: (p: InstallProgress) => void,
+  signal: AbortSignal,
+  opts: {
+    rootOverride?: string;
+    downloader?: HuggingFaceModelDownloader;
+    /**
+     * Runs once damage is found, before anything is fetched. The caller uses it
+     * to let go of the model if it is the one loaded: Windows will not replace
+     * a file a running session still has open.
+     */
+    beforeRepair?: () => void | Promise<void>;
+  } = {},
+): Promise<CheckResult> {
+  const model = findCatalogModel(id);
+  if (!model) return { ok: false, modelId: id, repaired: [], error: `unknown model "${id}"` };
+
+  const directory = modelDirectory(model, opts.rootOverride);
+  const record = readInstallRecord(directory, model.revision);
+  const flagged = (record?.damaged?.length ?? 0) > 0;
+  if (statusOf(model, opts.rootOverride).state !== 'installed' && !flagged) {
+    return { ok: false, modelId: id, repaired: [], error: `${model.name} is not fully downloaded` };
+  }
+
+  const total = model.files.reduce((n, f) => n + f.bytes, 0) || 1;
+  const damaged = await findDamagedFiles({
+    files: model.files,
+    destinationOf: (file) => fileDestination(model, file, opts.rootOverride),
+    record,
+    signal,
+    onFile: (file, bytesChecked) => onProgress({
+      modelId: id, fraction: Math.min(1, bytesChecked / total), currentFile: file.repoPath, phase: 'checking',
+    }),
+    judge: (file, destination) => (isPatchedConfig(model, file)
+      ? patchedConfigState(destination, file, model.configPatch!) === 'patched'
+      : undefined),
+  });
+  if (damaged === 'cancelled') return { ok: false, modelId: id, repaired: [], error: 'cancelled' };
+
+  if (damaged.length === 0) {
+    // First check of a model installed before records existed, or one whose
+    // files have since been put right some other way: record what is here.
+    if (!record || flagged) {
+      await recordInstall({
+        modelDir: directory,
+        revision: model.revision,
+        files: model.files.filter((file) => !isPatchedConfig(model, file)),
+        destinationOf: (file) => fileDestination(model, file, opts.rootOverride),
+        digests: {},
+        previous: record,
+      });
+    }
+    return { ok: true, modelId: id, repaired: [] };
+  }
+
+  console.warn(`[localModelInstaller] ${model.id}: ${damaged.length} file(s) are not what was installed; fetching again: ${damaged.join(', ')}`);
+  recordDamage(directory, model.revision, record, damaged);
+  try { await opts.beforeRepair?.(); } catch { /* releasing the model is best effort */ }
+  const repair = await installCatalogModel(id, onProgress, signal, opts);
+  if (!repair.ok) return { ok: false, modelId: id, repaired: [], error: repair.error };
+  // What was actually fetched or rewritten, not what the first pass flagged: a
+  // file that could not be read for a moment passes the install's own check
+  // untouched, and that is not a repair.
+  const replaced = new Set(Object.keys(repair.digests ?? {}));
+  if (repair.configPatched) replaced.add('config.json');
+  return { ok: true, modelId: id, repaired: damaged.filter((repoPath) => replaced.has(repoPath)) };
+}
+
+/** The one file an entry rewrites after download, so it is not checked by length. */
+function isPatchedConfig(model: LocalRerankerModel, file: CatalogFile): boolean {
+  return Boolean(model.configPatch) && file.repoPath === 'config.json';
+}
+
+/**
+ * What a `config.json` on disk is, for an entry that patches it:
+ *
+ *  - 'patched'   a JSON object that already carries every patched field;
+ *  - 'pristine'  the untouched upstream file (still its declared length), which
+ *                is what a crash between download and rewrite leaves behind;
+ *  - 'unusable'  missing, not a JSON object, or neither of the above.
+ *
+ * A small synchronous read, and only for the entries that declare a patch.
+ */
+function patchedConfigState(
+  configPath: string,
+  file: CatalogFile,
+  patch: Record<string, unknown>,
+): 'patched' | 'pristine' | 'unusable' {
+  let config: unknown;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch {
+    return 'unusable';
+  }
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) return 'unusable';
+  const fields = config as Record<string, unknown>;
+  if (Object.entries(patch).every(([key, value]) => isDeepStrictEqual(fields[key], value))) return 'patched';
+  return regularFileSize(configPath) === file.bytes ? 'pristine' : 'unusable';
 }
 
 /**
@@ -253,26 +441,41 @@ export async function installCatalogModel(
  * Refuses if that file carries a declared sha256 — patching a verified file
  * would leave bytes on disk that no longer match what was checked, and the next
  * install would look corrupt. In practice config.json is never an LFS object,
- * so it never has one.
+ * so it never has one; if an entry ever declares both, the install fails with
+ * that reason instead of passing with the patch quietly missing.
+ *
+ * `error` is set whenever the entry needs a patch that is not on disk when
+ * this returns.
  */
-function applyConfigPatch(model: LocalRerankerModel, rootOverride?: string): boolean {
-  if (!model.configPatch) return false;
+function applyConfigPatch(
+  model: LocalRerankerModel,
+  rootOverride?: string,
+): { rewritten: boolean; error?: string } {
+  if (!model.configPatch) return { rewritten: false };
 
   const declared = model.files.find((f) => f.repoPath === 'config.json');
-  if (!declared) return false;
+  if (!declared) {
+    return { rewritten: false, error: `${model.name} needs its config.json adjusted, but the catalogue does not list that file` };
+  }
   if (declared.sha256) {
     console.warn(`[localModelInstaller] refusing to patch a verified config.json for ${model.id}`);
-    return false;
+    return { rewritten: false, error: `${model.name} needs its config.json adjusted, but that file is verified by hash and must not be changed` };
   }
 
   const file = path.join(modelDirectory(model, rootOverride), 'config.json');
+  const state = patchedConfigState(file, declared, model.configPatch);
+  if (state === 'patched') return { rewritten: false };
+  if (state === 'unusable') {
+    console.warn(`[localModelInstaller] config.json for ${model.id} is not a JSON object; cannot patch it`);
+    return { rewritten: false, error: `config.json for ${model.name} could not be read, so the settings this model needs were not written. Download it again.` };
+  }
   try {
     const config = JSON.parse(fs.readFileSync(file, 'utf8'));
     fs.writeFileSync(file, JSON.stringify({ ...config, ...model.configPatch }, null, 2));
-    return true;
+    return { rewritten: true };
   } catch (e) {
     console.warn(`[localModelInstaller] could not patch config.json for ${model.id}:`, e);
-    return false;
+    return { rewritten: false, error: `config.json for ${model.name} could not be updated with the settings this model needs. Download it again.` };
   }
 }
 

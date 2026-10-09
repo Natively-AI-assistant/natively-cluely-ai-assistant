@@ -41,6 +41,18 @@ const METADATA_TIMEOUT_MS = 20_000;
 /** Time allowed for the response HEADERS. The body itself is not on a clock. */
 const CONNECT_TIMEOUT_MS = 30_000;
 const MAX_RESUME_ATTEMPTS = 3;
+/** Waits between tries at moving a finished download into place while the old file is held open. */
+const COMMIT_RETRY_DELAYS_MS = [150, 400, 1000];
+
+/** A finished, verified download that could not be moved into place. Fetching it again cannot help. */
+class CommitFailedError extends Error {
+  readonly code?: string;
+  constructor(message: string, cause: unknown) {
+    super(message);
+    this.name = 'CommitFailedError';
+    this.code = (cause as { code?: string } | null)?.code;
+  }
+}
 
 export interface HuggingFaceDownloaderOptions {
   fetchImpl?: typeof fetch;
@@ -225,30 +237,41 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
         // the user never ends up with no model at all.
         const backupPath = `${destination}.old`;
         let backedUp = false;
-        try {
-          if (process.platform === 'win32' && fs.existsSync(destination)) {
-            try { fs.rmSync(backupPath, { force: true }); } catch { /* best effort */ }
-            fs.renameSync(destination, backupPath);
-            backedUp = true;
-          }
-          fs.renameSync(partPath, destination);
-        } catch (e: any) {
-          // Restore the previous model, and KEEP the stamp: the .part file is
-          // complete and correctly stamped, so the next attempt resumes at 100%
-          // instead of re-fetching several hundred megabytes. Deleting the
-          // stamp before the rename (as this used to) meant every failed
-          // Windows replace also threw away a finished download.
-          if (backedUp && !fs.existsSync(destination)) {
-            try { fs.renameSync(backupPath, destination); } catch { /* best effort */ }
-          }
-          if (e?.code === 'EPERM' || e?.code === 'EBUSY' || e?.code === 'EACCES') {
-            throw new Error(
-              `could not replace ${path.basename(destination)}: the existing file is in use. ` +
-              'Turn the extension off before re-downloading its model. ' +
-              `(${e.code})`,
+        for (let commitAttempt = 0; ; commitAttempt++) {
+          backedUp = false;
+          try {
+            if (process.platform === 'win32' && fs.existsSync(destination)) {
+              try { fs.rmSync(backupPath, { force: true }); } catch { /* best effort */ }
+              fs.renameSync(destination, backupPath);
+              backedUp = true;
+            }
+            fs.renameSync(partPath, destination);
+            break;
+          } catch (e: any) {
+            // Restore the previous model, and KEEP the stamp and the .part.
+            // Deleting the stamp before the rename (as this used to) meant
+            // every failed Windows replace also threw away a finished download.
+            if (backedUp && !fs.existsSync(destination)) {
+              try { fs.renameSync(backupPath, destination); } catch { /* best effort */ }
+            }
+            const inUse = e?.code === 'EPERM' || e?.code === 'EBUSY' || e?.code === 'EACCES';
+            // A file can be held for a moment by something that is about to
+            // let go (a scanner reading what was just written, a session being
+            // torn down). Wait for that; it is far cheaper than what used to
+            // happen next.
+            if (inUse && commitAttempt < COMMIT_RETRY_DELAYS_MS.length && !signal.aborted) {
+              await new Promise((resolve) => setTimeout(resolve, COMMIT_RETRY_DELAYS_MS[commitAttempt]));
+              continue;
+            }
+            throw new CommitFailedError(
+              inUse
+                ? `could not replace ${path.basename(destination)}: the existing file is in use. ` +
+                  'Turn the extension off before re-downloading its model. ' +
+                  `(${e.code})`
+                : errText(e),
+              e,
             );
           }
-          throw e;
         }
         // Committed. Only now are the stamp and the displaced old file dead.
         try { fs.rmSync(stampPath, { force: true }); } catch { /* best effort */ }
@@ -263,6 +286,11 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
           // rather than re-fetching several hundred megabytes.
           throw new Error('download cancelled');
         }
+        // The bytes are here and verified; only the move into place failed.
+        // Looping would fetch the whole file again (the server answers a
+        // finished .part with 416 or with the full body) and then fail at the
+        // same rename: two more downloads of a multi-gigabyte model for nothing.
+        if (e instanceof CommitFailedError) throw e;
         const last = attempt === MAX_RESUME_ATTEMPTS - 1;
         this.options.logger?.warn(
           `[extensions] download attempt ${attempt + 1} for ${model.key} failed: ${errText(e)}${last ? '' : '; resuming'}`,

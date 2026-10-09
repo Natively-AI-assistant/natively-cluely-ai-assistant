@@ -2207,8 +2207,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:install-local-model', id),
   cancelLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:cancel-local-model', id),
   removeLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:remove-local-model', id),
+  verifyLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:verify-local-model', id),
   useLocalRerankerModel: (id: string | null) => ipcRenderer.invoke('reranker:use-local-model', id),
-  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => {
+  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string; phase?: 'checking' | 'downloading' }) => void) => {
     const subscription = (_e: any, payload: any) => callback(payload);
     ipcRenderer.on('reranker:model-progress', subscription);
     return () => { ipcRenderer.removeListener('reranker:model-progress', subscription); };
@@ -2219,11 +2220,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:install-local-model', id),
   cancelLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:cancel-local-model', id),
   removeLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:remove-local-model', id),
+  verifyLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:verify-local-model', id),
   useLocalEmbeddingModel: (id: string | null) => ipcRenderer.invoke('embedding:use-local-model', id),
   testLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:test-local-model', id),
   revealLocalEmbeddingModelsFolder: () => ipcRenderer.invoke('embedding:reveal-folder'),
   acknowledgeLocalEmbeddingCatalogModel: (id: string) => ipcRenderer.invoke('embedding:acknowledge-catalog-license', id),
-  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => {
+  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string; phase?: 'checking' | 'downloading' }) => void) => {
     const subscription = (_e: any, payload: any) => callback(payload);
     ipcRenderer.on('embedding:model-progress', subscription);
     return () => { ipcRenderer.removeListener('embedding:model-progress', subscription); };

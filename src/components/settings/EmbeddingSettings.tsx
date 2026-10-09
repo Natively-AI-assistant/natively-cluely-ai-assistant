@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FileCheck, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipTestLabel, type AipTone } from './AIProvidersSettings';
@@ -362,7 +362,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
     // Local Embedding Models (Bundled & Downloadable)
     const [localModels, setLocalModels] = useState<LocalCatalogEmbeddingModel[]>([]);
-    const [localModelProgress, setLocalModelProgress] = useState<Record<string, { fraction: number; file: string }>>({});
+    const [localModelProgress, setLocalModelProgress] = useState<Record<string, { fraction: number; file: string; phase?: 'checking' | 'downloading' }>>({});
+    /** The model whose files are being checked: its row is busy, but it is not being activated. */
+    const [checkingFilesId, setCheckingFilesId] = useState<string | null>(null);
+    /** What the last "Check files" found, per model. Shown on the row until the next check. */
+    const [fileCheckNotes, setFileCheckNotes] = useState<Record<string, string>>({});
     const [busyLocalModelId, setBusyLocalModelId] = useState<string | null>(null);
     const [testingLocalModelId, setTestingLocalModelId] = useState<string | null>(null);
     const [localModelTestResults, setLocalModelTestResults] = useState<Record<string, { latencyMs?: number; accelerator?: string; error?: string }>>({});
@@ -391,8 +395,8 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     }, []);
 
     useEffect(() => {
-        const off = window.electronAPI.onLocalEmbeddingModelProgress?.(({ id, fraction, currentFile }) => {
-            setLocalModelProgress(prev => ({ ...prev, [id]: { fraction, file: currentFile } }));
+        const off = window.electronAPI.onLocalEmbeddingModelProgress?.(({ id, fraction, currentFile, phase }) => {
+            setLocalModelProgress(prev => ({ ...prev, [id]: { fraction, file: currentFile, phase } }));
         });
         return () => { off?.(); };
     }, []);
@@ -450,6 +454,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         }
         setBusyLocalModelId(id);
         setLocalModelError(null);
+        setFileCheckNotes(prev => { const next = { ...prev }; delete next[id]; return next; });
         try {
             const res = await window.electronAPI.installLocalEmbeddingModel?.(id);
             if (res && !res.success) {
@@ -457,8 +462,8 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     // Backend also guards — sync frontend state and open dialog.
                     const candidate = localModels.find(x => x.id === id);
                     if (candidate) setLicenseDialogModel({ model: candidate, pendingAction: 'install' });
-                } else {
-                    setLocalModelError(res.message || res.error || t('Download failed.'));
+                } else if (res.error !== 'cancelled') {
+                    setLocalModelError(res.message || t('Download failed.'));
                 }
             }
             await loadLocalEmbeddingModels();
@@ -490,8 +495,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 if (res.error === 'license_not_acknowledged') {
                     const candidate = localModels.find(x => x.id === id);
                     if (candidate) setLicenseDialogModel({ model: candidate, pendingAction: 'use' });
-                } else {
-                    setLocalModelError(res.message || res.error || t('Could not activate this embedding model.'));
+                } else if (res.error !== 'cancelled') {
+                    // A cancelled file repair is the user's own doing, not a failure.
+                    setLocalModelError(res.message || t('Could not activate this embedding model.'));
                 }
             }
             setReindexing(!!res?.success && !!res.reindexRequired);
@@ -500,16 +506,44 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             setLocalModelError(e?.message || t('Could not activate this embedding model.'));
         } finally {
             setBusyLocalModelId(null);
+            // Activation checks the files first and reports that as progress.
+            if (id) setLocalModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
         }
     }, [localModels, loadLocalEmbeddingModels, refresh, t]);
+
+    /* The list only knows each file's length. This hashes them, and fetches
+       again whatever turns out to be damaged. */
+    const checkLocalModelFiles = useCallback(async (id: string) => {
+        setBusyLocalModelId(id);
+        setCheckingFilesId(id);
+        setLocalModelError(null);
+        setFileCheckNotes(prev => { const next = { ...prev }; delete next[id]; return next; });
+        try {
+            const res = await window.electronAPI.verifyLocalEmbeddingModel?.(id);
+            if (res && !res.success) {
+                if (res.error !== 'cancelled') setLocalModelError(res.message || t('Could not check this model\'s files.'));
+            } else if (res) {
+                const repaired = res.repaired?.length ?? 0;
+                const found = repaired === 0 ? t('Files are intact') : repaired === 1 ? t('Repaired 1 damaged file') : `${t('Repaired damaged files')}: ${repaired}`;
+                // The running index keeps the copy it already loaded.
+                setFileCheckNotes(prev => ({ ...prev, [id]: res.restartToApply ? `${found}. ${t('Restart Natively to use the repaired files.')}` : found }));
+            }
+            await loadLocalEmbeddingModels();
+        } finally {
+            setBusyLocalModelId(null);
+            setCheckingFilesId(null);
+            setLocalModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
+        }
+    }, [loadLocalEmbeddingModels, t]);
 
     const removeLocalModel = useCallback(async (id: string) => {
         setBusyLocalModelId(id);
         setLocalModelError(null);
+        setFileCheckNotes(prev => { const next = { ...prev }; delete next[id]; return next; });
         try {
             const res = await window.electronAPI.removeLocalEmbeddingModel?.(id);
             if (res && !res.success) {
-                setLocalModelError(res.message || res.error || t('Could not remove this model.'));
+                setLocalModelError(res.message || t('Could not remove this model.'));
             }
             await loadLocalEmbeddingModels();
         } finally {
@@ -1248,6 +1282,19 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                             </button>
                         ) : (
                             <>
+                                {/* A repair fetching a damaged file again can be gigabytes. The
+                                    row still reads as installed, so offer the way out here. */}
+                                {installed && busy && prog?.phase === 'downloading' && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        onClick={() => void window.electronAPI.cancelLocalEmbeddingModel?.(m.id)}
+                                    >
+                                        <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                        <span>{t('Cancel')}</span>
+                                    </button>
+                                )}
                                 {!installed && (busy ? (
                                     <button
                                         type="button"
@@ -1278,7 +1325,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         disabled={locked}
                                         onClick={() => void useLocalModel(m.id)}
                                     >
-                                        {busy ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
+                                        {busy && checkingFilesId !== m.id ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
                                         <span>{t('Use')}</span>
                                     </button>
                                 )}
@@ -1294,6 +1341,22 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         <SwapLabel id={testingLocalModelId === m.id ? 'testing' : 'test'} sizers={[t('Test'), t('Testing…')]}>
                                             {testingLocalModelId === m.id ? t('Testing…') : t('Test')}
                                         </SwapLabel>
+                                    </button>
+                                )}
+                                {/* Not the bundled model: its files are the app's own, not a download to repair. */}
+                                {installed && !m.bundled && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        disabled={locked}
+                                        onClick={() => void checkLocalModelFiles(m.id)}
+                                        title={t('Check files for damage and repair them')}
+                                        aria-label={t('Check files for damage and repair them')}
+                                    >
+                                        {checkingFilesId === m.id
+                                            ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" />
+                                            : <FileCheck size={12} strokeWidth={1.75} aria-hidden="true" />}
                                     </button>
                                 )}
                                 {installed && !isSelected && !m.bundled && (
@@ -1323,6 +1386,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         <span className="aip-panel-fade text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
                     )}
                     {test?.error && <span className="aip-danger-fg">{test.error}</span>}
+                    {fileCheckNotes[m.id] && installed && !busy && (
+                        <span className="aip-panel-fade text-[var(--aip-secondary)]" role="status">{fileCheckNotes[m.id]}</span>
+                    )}
                 </div>
 
                 {m.note && (
@@ -1357,9 +1423,14 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
                             <div className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${Math.min(1, Math.max(0, prog.fraction))})` }} />
                         </div>
+                        {/* Hashing a file that is already here is not a download: no byte counter. */}
                         <div className="text-[10px] aip-muted flex justify-between">
-                            <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
-                            <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
+                            <span>{prog.phase === 'checking'
+                                ? `${t('Checking files')} · ${prog.file}`
+                                : `${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
+                            {prog.phase !== 'checking' && (
+                                <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
+                            )}
                         </div>
                     </div>
                 )}

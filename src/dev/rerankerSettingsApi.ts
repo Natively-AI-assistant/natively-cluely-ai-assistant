@@ -115,6 +115,19 @@ const delay = <T,>(v: T): Promise<T> =>
         : SLOW ? new Promise(r => setTimeout(() => r(v), 4000))
             : Promise.resolve(v);
 
+type RerankerProgressListener = (p: { id: string; fraction: number; currentFile: string; phase?: 'checking' | 'downloading' }) => void;
+let rerankerProgressListener: RerankerProgressListener | null = null;
+const checkedRerankers = new Set<string>();
+// `?checkFails=1`: the check finds damage and the repair cannot download, as it
+// would offline. The model then stops reading as installed, which is what the
+// real list reports once a check has flagged it.
+const CHECK_FAILS = new URLSearchParams(location.search).get('checkFails') === '1';
+const damagedRerankers = new Set<string>();
+// `?repairSlow=1`: the check finds a damaged weights file and fetches it again
+// slowly, so the row's Cancel can be looked at and pressed.
+const REPAIR_SLOW = new URLSearchParams(location.search).get('repairSlow') === '1';
+const cancelledRerankers = new Set<string>();
+
 export const RERANKER_SETTINGS_API = {
     getRerankerStatus: async () => delay({
         provider: 'local',
@@ -137,13 +150,42 @@ export const RERANKER_SETTINGS_API = {
             { id: 'nvidia/llama-nemotron-rerank-vl-1b-v2:free', label: 'NVIDIA: Nemotron Rerank VL', vendor: 'nvidia', contextLength: 10240, free: true, multimodal: true, group: 'multimodal', note: '10K context · multimodal · free tier' },
         ],
     }),
-    listLocalRerankerModels: async () => ({ models: CATALOG_MODELS, selectedId: 'ettin-reranker-68m', builtInSelected: false }),
+    listLocalRerankerModels: async () => ({
+        models: CATALOG_MODELS.map(m => (damagedRerankers.has(m.id) ? { ...m, state: 'partial' } : m)),
+        selectedId: 'ettin-reranker-68m', builtInSelected: false,
+    }),
     listExtensions: async () => ({ available: true, extensions: NO_EXTENSIONS ? [] : EXTENSIONS }),
     setRerankerConfig: async () => ({ success: true }),
     useLocalRerankerModel: async () => ({ success: true }),
     installLocalRerankerModel: async () => ({ success: true }),
     removeLocalRerankerModel: async () => ({ success: true }),
-    cancelLocalRerankerModel: async () => ({ success: true }),
+    // "Check files": a second of hashing reported as progress, then a result.
+    // The first check of a model finds one damaged file, later ones find none,
+    // so both wordings of the row's note can be looked at.
+    verifyLocalRerankerModel: async (id: string) => {
+        for (const [fraction, currentFile] of [[0, 'tokenizer.json'], [0.02, 'onnx/model.onnx'], [0.6, 'onnx/model.onnx']] as const) {
+            rerankerProgressListener?.({ id, fraction, currentFile, phase: 'checking' });
+            await new Promise(resolve => setTimeout(resolve, 450));
+        }
+        if (REPAIR_SLOW) {
+            cancelledRerankers.delete(id);
+            for (let step = 0; step <= 40; step++) {
+                if (cancelledRerankers.has(id)) return { success: false, error: 'cancelled' };
+                rerankerProgressListener?.({ id, fraction: step / 40, currentFile: 'onnx/model.onnx', phase: 'downloading' });
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
+            return { success: true, repaired: ['onnx/model.onnx'] };
+        }
+        if (CHECK_FAILS) {
+            damagedRerankers.add(id);
+            const name = CATALOG_MODELS.find(m => m.id === id)?.name ?? id;
+            return { success: false, error: 'files_damaged', message: `Some of ${name}'s files are damaged, and downloading them again did not work. Check your connection and try again.` };
+        }
+        const first = !checkedRerankers.has(id);
+        checkedRerankers.add(id);
+        return { success: true, repaired: first ? ['tokenizer.json'] : [] };
+    },
+    cancelLocalRerankerModel: async (id: string) => { cancelledRerankers.add(id); return { success: true }; },
     setRerankerOpenRouterKey: async () => ({ success: true }),
     testReranker: async () => ({ success: true, latencyMs: 412, costUsd: 0.000031 }),
     installExtensionFromFolder: async () => ({ success: false, error: 'cancelled' }),
@@ -183,7 +225,10 @@ export const RERANKER_SETTINGS_API = {
         ],
     }),
     installExtensionFromRegistry: async (id: string) => ({ success: false, error: 'harness_' + id }),
-    onLocalRerankerModelProgress: () => () => {},
+    onLocalRerankerModelProgress: (callback: RerankerProgressListener) => {
+        rerankerProgressListener = callback;
+        return () => { rerankerProgressListener = null; };
+    },
     onExtensionModelProgress: () => () => {},
     platform: 'darwin',
     openExternal: () => {},

@@ -16,7 +16,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { app, shell } from 'electron';
 import { HuggingFaceModelDownloader } from '../extensions/HuggingFaceModelDownloader';
-import { sha256File } from '../extensions/ModelStore';
+import {
+  existingFileMatches, findDamagedFiles, flaggedDamaged, readInstallRecord, recordDamage, recordInstall,
+  regularFileSize, verifyStagedFile, withRecordedHash,
+} from '../extensions/catalogFileIntegrity';
 import {
   EMBEDDING_MODEL_CATALOG,
   findEmbeddingCatalogModel,
@@ -42,6 +45,12 @@ export interface InstallProgress {
   /** 0..1 across the WHOLE model. */
   fraction: number;
   currentFile: string;
+  /**
+   * 'checking' while a file already on disk is being hashed, 'downloading'
+   * while one is being fetched. A check of an intact model is all 'checking',
+   * and the row must not present that as a download.
+   */
+  phase: 'checking' | 'downloading';
 }
 
 /** Root where downloaded local models live. */
@@ -110,20 +119,18 @@ export function statusOf(model: LocalEmbeddingModel, rootOverride?: string): Loc
   const directory = modelDirectory(model, rootOverride);
   const bundledDir = model.bundled ? bundledModelDirectory(model) : null;
 
-  // First check downloaded directory
+  // First check downloaded directory. A download is the catalogue's exact
+  // length or it is not that file: a truncated one used to read as installed
+  // here and then fail at load. Length only, never a hash, and never the
+  // install record: this decides what the embedding provider loads as well as
+  // what the list draws.
   let bytesOnDisk = 0;
   const missing: string[] = [];
 
   for (const file of model.files) {
-    const dest = fileDestination(model, file, rootOverride);
-    try {
-      const stat = fs.statSync(dest);
-      if (stat.isFile() && stat.size > 0) {
-        bytesOnDisk += stat.size;
-        continue;
-      }
-    } catch { /* missing */ }
-    missing.push(file.repoPath);
+    const size = regularFileSize(fileDestination(model, file, rootOverride));
+    if (size > 0) bytesOnDisk += size;
+    if (size !== file.bytes) missing.push(file.repoPath);
   }
 
   if (missing.length === 0) {
@@ -164,17 +171,40 @@ export function statusOf(model: LocalEmbeddingModel, rootOverride?: string): Loc
 
   return {
     id: model.id,
-    state: missing.length === model.files.length ? 'not-installed' : 'partial',
+    // Bytes on disk mean "partial" even when no file is the right length yet,
+    // so the row offers to resume rather than to start over.
+    state: bytesOnDisk === 0 ? 'not-installed' : 'partial',
     bytesOnDisk,
     directory,
     missing,
   };
 }
 
+/**
+ * `statusOf`, plus what a check has proven damaged and nothing has repaired
+ * yet: such a model is listed as `partial`, so its row offers Download.
+ *
+ * For the model list only. What the app LOADS goes by `statusOf`
+ * (resolveEmbeddingModelPath): a model whose repair failed (offline) is the
+ * same model that was embedding a minute earlier, and withdrawing it there
+ * leaves the index with no embedder at all at the next launch.
+ *
+ * Only a downloaded copy can be flagged. The bundled model served from the
+ * app's own resources is never checked, so it is never listed as damaged.
+ */
+export function listedStatusOf(model: LocalEmbeddingModel, rootOverride?: string): LocalEmbeddingModelStatus {
+  const status = statusOf(model, rootOverride);
+  const directory = modelDirectory(model, rootOverride);
+  if (status.state !== 'installed' || status.directory !== directory) return status;
+  const flagged = flaggedDamaged(directory, model.revision);
+  const damaged = model.files.map((file) => file.repoPath).filter((repoPath) => flagged.has(repoPath));
+  return damaged.length === 0 ? status : { ...status, state: 'partial', missing: damaged };
+}
+
 export function listEmbeddingCatalogStatus(rootOverride?: string): Array<LocalEmbeddingModel & { status: LocalEmbeddingModelStatus }> {
   return EMBEDDING_MODEL_CATALOG.map((m) => ({
     ...m,
-    status: statusOf(m, rootOverride),
+    status: listedStatusOf(m, rootOverride),
   }));
 }
 
@@ -197,6 +227,9 @@ export async function installEmbeddingCatalogModel(
   const downloader = opts.downloader ?? new HuggingFaceModelDownloader({ logger: console });
   const total = model.files.reduce((n, f) => n + f.bytes, 0) || 1;
   const digests: Record<string, string> = {};
+  const directory = modelDirectory(model, opts.rootOverride);
+  // Hashes from the last install, for the files nobody publishes one for.
+  const previous = readInstallRecord(directory, model.revision);
   let completedBytes = 0;
 
   for (const file of model.files) {
@@ -204,14 +237,17 @@ export async function installEmbeddingCatalogModel(
 
     const destination = fileDestination(model, file, opts.rootOverride);
 
-    try {
-      const stat = fs.statSync(destination);
-      if (stat.isFile() && stat.size === file.bytes) {
-        completedBytes += file.bytes;
-        onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
-        continue;
-      }
-    } catch { /* not present */ }
+    // Skip only what is provably the catalogue's file: right length AND, where
+    // one is published or was recorded at install, right hash. A mismatch is fetched again; the downloader
+    // keeps the old file in place until the replacement has been verified.
+    // Name the file before checking it: hashing a multi-gigabyte file that is
+    // already here takes seconds, and the row would otherwise sit silent.
+    onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath, phase: 'checking' });
+    if (await existingFileMatches(destination, withRecordedHash(file, previous))) {
+      completedBytes += file.bytes;
+      onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath, phase: 'checking' });
+      continue;
+    }
 
     const before = completedBytes;
     try {
@@ -231,16 +267,14 @@ export async function installEmbeddingCatalogModel(
         destination,
         (fraction) => {
           completedBytes = before + fraction * file.bytes;
-          onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
+          onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath, phase: 'downloading' });
         },
         signal,
+        // Length and hash, BEFORE the rename (catalogFileIntegrity.ts).
         async (partPath) => {
-          const digest = await sha256File(partPath);
-          digests[file.repoPath] = digest;
-          if (file.sha256 && digest.toLowerCase() !== file.sha256.toLowerCase()) {
-            return { ok: false, reason: `${file.repoPath} failed verification: expected ${file.sha256}, got ${digest}` };
-          }
-          return { ok: true };
+          const verdict = await verifyStagedFile(partPath, file);
+          if (verdict.ok) digests[file.repoPath] = verdict.digest;
+          return verdict;
         },
       );
     } catch (e) {
@@ -248,10 +282,98 @@ export async function installEmbeddingCatalogModel(
     }
 
     completedBytes = before + file.bytes;
-    onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
+    onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath, phase: 'downloading' });
   }
 
+  // Every file's hash, so a later check can tell a damaged config or tokenizer
+  // from the one installed here (catalogFileIntegrity.ts).
+  await recordInstall({
+    modelDir: directory,
+    revision: model.revision,
+    files: model.files,
+    destinationOf: (file) => fileDestination(model, file, opts.rootOverride),
+    digests,
+    previous,
+  });
+
   return { ok: true, modelId: id, digests };
+}
+
+export interface CheckResult {
+  ok: boolean;
+  modelId: string;
+  /** Files that were damaged and have been fetched again. Empty when intact. */
+  repaired: string[];
+  error?: string;
+}
+
+/**
+ * Hash an installed model's files and fetch again whatever is not what was
+ * installed. Run when a model is activated and from the row's own button; the
+ * list itself may only stat (see statusOf).
+ *
+ * It repairs what was downloaded and never starts a download of its own. That
+ * rules out two things: a model that is not installed (the row offers Download
+ * for it), and the bundled model while it is being served from the app's own
+ * resources. Those files are pruned for shipping and are not the catalogue's
+ * byte for byte; the package vouches for them, and "repairing" them would
+ * download a second copy nobody asked for.
+ *
+ * Damage that cannot be repaired (offline) is recorded, so the model stops
+ * reading as installed until a later check or download succeeds. Nothing is
+ * deleted: the downloader replaces a file only once its replacement verifies.
+ */
+export async function checkAndRepairEmbeddingCatalogModel(
+  id: string,
+  onProgress: (p: InstallProgress) => void,
+  signal: AbortSignal,
+  opts: { rootOverride?: string; downloader?: HuggingFaceModelDownloader } = {},
+): Promise<CheckResult> {
+  const model = findEmbeddingCatalogModel(id);
+  if (!model) return { ok: false, modelId: id, repaired: [], error: `unknown model "${id}"` };
+
+  const directory = modelDirectory(model, opts.rootOverride);
+  const record = readInstallRecord(directory, model.revision);
+  const flagged = (record?.damaged?.length ?? 0) > 0;
+  const status = statusOf(model, opts.rootOverride);
+  if (status.state === 'installed' && status.directory !== directory) {
+    return { ok: true, modelId: id, repaired: [] };
+  }
+  if (status.state !== 'installed' && !flagged) {
+    return { ok: false, modelId: id, repaired: [], error: `${model.name} is not fully downloaded` };
+  }
+
+  const total = model.files.reduce((n, f) => n + f.bytes, 0) || 1;
+  const destinationOf = (file: CatalogFile) => fileDestination(model, file, opts.rootOverride);
+  const damaged = await findDamagedFiles({
+    files: model.files,
+    destinationOf,
+    record,
+    signal,
+    onFile: (file, bytesChecked) => onProgress({
+      modelId: id, fraction: Math.min(1, bytesChecked / total), currentFile: file.repoPath, phase: 'checking',
+    }),
+  });
+  if (damaged === 'cancelled') return { ok: false, modelId: id, repaired: [], error: 'cancelled' };
+
+  if (damaged.length === 0) {
+    // First check of a model installed before records existed, or one whose
+    // files have since been put right some other way: record what is here.
+    if (!record || flagged) {
+      await recordInstall({ modelDir: directory, revision: model.revision, files: model.files, destinationOf, digests: {}, previous: record });
+    }
+    return { ok: true, modelId: id, repaired: [] };
+  }
+
+  console.warn(`[LocalEmbedding] ${model.id}: ${damaged.length} file(s) are not what was installed; fetching again: ${damaged.join(', ')}`);
+  recordDamage(directory, model.revision, record, damaged);
+  const repair = await installEmbeddingCatalogModel(id, onProgress, signal, opts);
+  if (!repair.ok) return { ok: false, modelId: id, repaired: [], error: repair.error };
+  // What was actually fetched, not what the first pass flagged: a file that
+  // could not be read for a moment passes the install's own check untouched,
+  // and that is not a repair.
+  const fetched = repair.digests ?? {};
+  return { ok: true, modelId: id, repaired: damaged.filter((repoPath) => repoPath in fetched) };
 }
 
 export function removeEmbeddingCatalogModel(id: string, rootOverride?: string): { ok: boolean; error?: string } {

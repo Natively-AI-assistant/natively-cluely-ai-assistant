@@ -489,8 +489,10 @@ test('a failed replace keeps BOTH the old model and the resumable partial', asyn
   const dest = path.join(dir, MODEL.file);
   fs.writeFileSync(dest, 'the previously working model');
 
-  // Thrown on EVERY attempt: the downloader retries, so a one-shot failure
-  // would simply be recovered and prove nothing about the failure path.
+  // Thrown on EVERY attempt: the downloader tries the move again a few times,
+  // so a one-shot failure would simply be recovered and prove nothing about
+  // the failure path.
+  let bodyFetches = 0;
   const realRename = fs.renameSync;
   fs.renameSync = (from, to) => {
     if (String(from).endsWith('.part')) {
@@ -506,7 +508,7 @@ test('a failed replace keeps BOTH the old model and the resumable partial', asyn
       logger: { info: () => {}, warn: () => {} },
       fetchImpl: async (url) => (String(url).includes('/api/models/')
         ? metadataResponse('cafe1234')
-        : bodyResponse(Buffer.from('replacement'), { headers: { 'content-length': '11' } })),
+        : (bodyFetches++, bodyResponse(Buffer.from('replacement'), { headers: { 'content-length': '11' } }))),
     });
     await assert.rejects(
       () => dl.download(MODEL, dest, () => {}, new AbortController().signal),
@@ -515,6 +517,11 @@ test('a failed replace keeps BOTH the old model and the resumable partial', asyn
   } finally {
     fs.renameSync = realRename;
   }
+
+  // The bytes arrived and only the move failed. Fetching them again cannot
+  // help: it used to download the whole model twice more and fail the same way.
+  assert.equal(bodyFetches, 1, 'a failed move into place must not fetch the file again');
+  assert.equal(fs.readFileSync(`${dest}.part`, 'utf8'), 'replacement', 'the finished download is kept');
 
   assert.equal(
     fs.readFileSync(dest, 'utf8'),
@@ -571,4 +578,36 @@ test('a pin that is not a full commit sha is ignored, not trusted', async () => 
 
   assert.ok(urls.some((u) => u.includes('/api/models/')), 'falls back to live resolution');
   assert.ok(urls.some((u) => u.includes('/resolve/beef0000/')));
+});
+
+test('a file that is only held for a moment is moved into place without fetching it again', async () => {
+  // A scanner reading what was just written, or a session still being torn
+  // down: the first move fails, a later one succeeds.
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  let bodyFetches = 0;
+  let refusals = 2;
+  const realRename = fs.renameSync;
+  fs.renameSync = (from, to) => {
+    if (String(from).endsWith('.part') && refusals-- > 0) {
+      const e = new Error('held open');
+      e.code = 'EPERM';
+      throw e;
+    }
+    return realRename(from, to);
+  };
+  try {
+    const dl = new HuggingFaceModelDownloader({
+      logger: { info: () => {}, warn: () => {} },
+      fetchImpl: async (url) => (String(url).includes('/api/models/')
+        ? metadataResponse('cafe1234')
+        : (bodyFetches++, bodyResponse(Buffer.from('replacement'), { headers: { 'content-length': '11' } }))),
+    });
+    await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  } finally {
+    fs.renameSync = realRename;
+  }
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'replacement');
+  assert.equal(bodyFetches, 1);
+  assert.equal(fs.existsSync(`${dest}.part`), false, 'no debris');
 });

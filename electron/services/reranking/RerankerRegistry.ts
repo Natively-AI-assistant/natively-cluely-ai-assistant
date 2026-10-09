@@ -62,6 +62,12 @@ export interface RerankSeamPort {
    * port declares a larger size and gets the pool in one call.
    */
   readonly batchSize?: number;
+  /**
+   * Why the last `rerank()` returned null, for ports that know. `rerank()` fails
+   * closed, so null alone cannot tell "model would not load" from "nothing to
+   * rank"; Settings activation reads this to say which.
+   */
+  readonly lastFailure?: string | null;
 }
 
 export interface RerankOutcome {

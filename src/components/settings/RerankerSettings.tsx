@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FileCheck, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipSelect, AipSwitch, AipTestLabel, type AipSelectOption, type AipTone } from './AIProvidersSettings';
@@ -593,9 +593,18 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
     const [loadError, setLoadError] = useState<string | null>(null);
     const [catalogModels, setCatalogModels] = useState<LocalCatalogModel[]>([]);
     const [builtInSelected, setBuiltInSelected] = useState(true);
-    const [modelProgress, setModelProgress] = useState<Record<string, { fraction: number; file: string }>>({});
+    const [modelProgress, setModelProgress] = useState<Record<string, { fraction: number; file: string; phase?: 'checking' | 'downloading' }>>({});
+    /** The model whose files are being checked: its row is busy, but it is not being activated. */
+    const [checkingFilesId, setCheckingFilesId] = useState<string | null>(null);
+    /** What the last "Check files" found, per model. Shown on the row until the next check. */
+    const [fileCheckNotes, setFileCheckNotes] = useState<Record<string, string>>({});
     const [busyCatalogId, setBusyCatalogId] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
+    /* A failure from a row's own button (Download, Use, Check files, Remove). Shown
+       above the list, where the Embedding panel shows its own: `catalogError` sits
+       in the Active Reranker card at the top of the page, which is off-screen from
+       the row that was clicked. */
+    const [catalogListError, setCatalogListError] = useState<string | null>(null);
     const [hostedProviders, setHostedProviders] = useState<Array<{
         id: 'natively' | 'openrouter' | 'jina' | 'voyage'; name: string; keyUrl: string; keyPlaceholder: string;
         staticCatalogue: boolean; hasApiKey: boolean;
@@ -710,8 +719,8 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
     }, []);
 
     useEffect(() => {
-        const off = window.electronAPI.onLocalRerankerModelProgress?.(({ id, fraction, currentFile }) => {
-            setModelProgress(prev => ({ ...prev, [id]: { fraction, file: currentFile } }));
+        const off = window.electronAPI.onLocalRerankerModelProgress?.(({ id, fraction, currentFile, phase }) => {
+            setModelProgress(prev => ({ ...prev, [id]: { fraction, file: currentFile, phase } }));
         });
         return () => { off?.(); };
     }, []);
@@ -865,6 +874,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         const id = rest.join('::');
         setBusyCatalogId(optionId);
         setCatalogError(null);
+        setCatalogListError(null);
         try {
             if (kind === 'natively') {
                 // Its own arm, not the trailing `else`. Without one, picking the
@@ -892,13 +902,16 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     await window.electronAPI.setExtensionEnabled?.(ext.id, false);
                 }
                 const res = await window.electronAPI.useLocalRerankerModel?.(id === 'built-in' ? null : id);
-                if (res && !res.success) {
-                    setCatalogError(res.message || res.error || t('Could not activate this reranker.'));
+                // A cancelled file repair is the user's own doing, not a failure.
+                if (res && !res.success && res.error !== 'cancelled') {
+                    setCatalogError(res.message || t('Could not activate this reranker.'));
                 }
             }
             await Promise.all([refreshStatus(), loadCatalogModels(), loadExtensions(), loadHostedProviders(), loadCustomModels()]);
         } finally {
             setBusyCatalogId(null);
+            // Activating a local model checks its files and reports that as progress on its row.
+            if (kind === 'local') setModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
         }
     }, [extensions, refreshStatus, loadCatalogModels, loadExtensions, loadHostedProviders, loadCustomModels, t]);
 
@@ -1003,11 +1016,13 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
     const installCatalogModel = useCallback(async (id: string) => {
         setBusyCatalogId(id);
+        setCatalogListError(null);
         setCatalogError(null);
+        setFileCheckNotes(prev => { const next = { ...prev }; delete next[id]; return next; });
         try {
             const res = await window.electronAPI.installLocalRerankerModel?.(id);
-            if (res && !res.success) {
-                setCatalogError(res.message || res.error || t('Download failed.'));
+            if (res && !res.success && res.error !== 'cancelled') {
+                setCatalogListError(res.message || t('Download failed.'));
             }
             await loadCatalogModels();
         } finally {
@@ -1018,22 +1033,54 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
     const useCatalogModel = useCallback(async (id: string | null) => {
         setBusyCatalogId(id ?? 'built-in');
+        setCatalogListError(null);
         setCatalogError(null);
         try {
             const res = await window.electronAPI.useLocalRerankerModel?.(id);
-            if (res && !res.success) setCatalogError(res.message || res.error || t('Could not activate this reranker.'));
+            if (res && !res.success && res.error !== 'cancelled') setCatalogListError(res.message || t('Could not activate this reranker.'));
             await Promise.all([loadCatalogModels(), refreshStatus()]);
         } finally {
             setBusyCatalogId(null);
+            // Activation checks the files first and reports that as progress.
+            if (id) setModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
         }
     }, [loadCatalogModels, refreshStatus, t]);
 
+    /* The list only knows each file's length. This hashes them, and fetches
+       again whatever turns out to be damaged. */
+    const checkCatalogModelFiles = useCallback(async (id: string) => {
+        setBusyCatalogId(id);
+        setCheckingFilesId(id);
+        setCatalogListError(null);
+        setCatalogError(null);
+        setFileCheckNotes(prev => { const next = { ...prev }; delete next[id]; return next; });
+        try {
+            const res = await window.electronAPI.verifyLocalRerankerModel?.(id);
+            if (res && !res.success) {
+                if (res.error !== 'cancelled') setCatalogListError(res.message || t('Could not check this model\'s files.'));
+            } else if (res) {
+                const repaired = res.repaired?.length ?? 0;
+                setFileCheckNotes(prev => ({
+                    ...prev,
+                    [id]: repaired === 0 ? t('Files are intact') : repaired === 1 ? t('Repaired 1 damaged file') : `${t('Repaired damaged files')}: ${repaired}`,
+                }));
+            }
+            await loadCatalogModels();
+        } finally {
+            setBusyCatalogId(null);
+            setCheckingFilesId(null);
+            setModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
+        }
+    }, [loadCatalogModels, t]);
+
     const removeCatalogModel = useCallback(async (id: string) => {
         setBusyCatalogId(id);
+        setCatalogListError(null);
         setCatalogError(null);
+        setFileCheckNotes(prev => { const next = { ...prev }; delete next[id]; return next; });
         try {
             const res = await window.electronAPI.removeLocalRerankerModel?.(id);
-            if (res && !res.success) setCatalogError(res.message || res.error || t('Could not remove this model.'));
+            if (res && !res.success) setCatalogListError(res.message || t('Could not remove this model.'));
             await loadCatalogModels();
         } finally {
             setBusyCatalogId(null);
@@ -1176,7 +1223,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
     const renderCatalogModelRow = (m: LocalCatalogModel) => {
         const prog = modelProgress[m.id];
-        const busy = busyCatalogId === m.id;
+        // Busy wherever the action on this model was started: its own buttons, or
+        // the Active Reranker picker (which activates it as `local::<id>`).
+        const busy = busyCatalogId === m.id || busyCatalogId === `local::${m.id}`;
         const installed = m.state === 'installed';
         // Only an entry that actually names an extension needs one. GGUF runs
         // in Core now; this used to fire on every GGUF model and disable its
@@ -1232,6 +1281,19 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 </button>
                             )
                         )}
+                        {/* A repair fetching a damaged file again can be gigabytes. The
+                            row still reads as installed, so offer the way out here. */}
+                        {installed && busy && prog?.phase === 'downloading' && (
+                            <button
+                                type="button"
+                                className="aip-btn"
+                                data-size="sm"
+                                onClick={() => void window.electronAPI.cancelLocalRerankerModel?.(m.id)}
+                            >
+                                <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                <span>{t('Cancel')}</span>
+                            </button>
+                        )}
                         {installed && m.activatable && !m.selected && (
                             <button
                                 type="button"
@@ -1240,8 +1302,23 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 disabled={busyCatalogId !== null}
                                 onClick={() => void useCatalogModel(m.id)}
                             >
-                                {busy ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
+                                {busy && checkingFilesId !== m.id ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
                                 <span>{t('Use')}</span>
+                            </button>
+                        )}
+                        {installed && (
+                            <button
+                                type="button"
+                                className="aip-btn"
+                                data-size="sm"
+                                disabled={busyCatalogId !== null}
+                                onClick={() => void checkCatalogModelFiles(m.id)}
+                                title={t('Check files for damage and repair them')}
+                                aria-label={t('Check files for damage and repair them')}
+                            >
+                                {checkingFilesId === m.id
+                                    ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" />
+                                    : <FileCheck size={12} strokeWidth={1.75} aria-hidden="true" />}
                             </button>
                         )}
                         {installed && !m.selected && (
@@ -1265,6 +1342,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         {[m.params, humanBytes(m.bytes), m.license.spdx, m.license.commercialUseRestricted ? t('non-commercial') : null]
                             .filter(Boolean).join(' · ')}
                     </span>
+                    {fileCheckNotes[m.id] && installed && !busy && (
+                        <span className="aip-panel-fade text-[var(--aip-secondary)]" role="status">{fileCheckNotes[m.id]}</span>
+                    )}
                 </div>
 
                 {m.note && (
@@ -1292,9 +1372,14 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
                             <div className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${Math.min(1, Math.max(0, prog.fraction))})` }} />
                         </div>
+                        {/* Hashing a file that is already here is not a download: no byte counter. */}
                         <div className="text-[10px] aip-muted flex justify-between">
-                            <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
-                            <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
+                            <span>{prog.phase === 'checking'
+                                ? `${t('Checking files')} · ${prog.file}`
+                                : `${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
+                            {prog.phase !== 'checking' && (
+                                <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1719,6 +1804,13 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </button>
                     )}
                 </div>
+
+                {catalogListError && (
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">{catalogListError}</span>
+                    </div>
+                )}
 
                 {/* Scrollable Model Library Container */}
                 <div className="aip-well aip-scroll-y p-2.5 space-y-3.5" style={{ maxHeight: 380 }}>

@@ -79,6 +79,7 @@ export class GgufReranker implements RerankSeamPort {
   private loadingPromise: Promise<void> | null = null;
   private loadFailed = false;
   private loadFailureReason: string | null = null;
+  private lastRerankFailure: string | null = null;
 
   /**
    * @param scoring 'rank' for a model with a ranking head (llama.cpp scores it
@@ -106,6 +107,19 @@ export class GgufReranker implements RerankSeamPort {
   /** Why the last load failed, for the UI. Null while healthy. */
   get failureReason(): string | null {
     return this.loadFailureReason;
+  }
+
+  /**
+   * Why the most recent rerank returned nothing; null once one succeeds.
+   *
+   * rerank() fails CLOSED, so a caller sees only `null`, the same as "no
+   * passages". Settings activation needs the reason: a load that throws
+   * ("Cannot find package ...") would otherwise be reported as a model that
+   * "did not return a usable ranking". Covers load failures too, since the
+   * load happens inside rerank().
+   */
+  get lastFailure(): string | null {
+    return this.lastRerankFailure;
   }
 
   private workerPath(): string {
@@ -219,14 +233,22 @@ export class GgufReranker implements RerankSeamPort {
       // Every passage scored exactly once, or nothing. A partial ranking sinks
       // the unscored chunks to -Infinity in the caller's ordering, below chunks
       // the reranker never even saw.
-      if (!Array.isArray(scores) || scores.length !== passages.length) return null;
-      if (!scores.every((s) => typeof s === 'number' && Number.isFinite(s))) return null;
+      if (!Array.isArray(scores) || scores.length !== passages.length) {
+        this.lastRerankFailure = 'the model returned a different number of scores than passages';
+        return null;
+      }
+      if (!scores.every((s) => typeof s === 'number' && Number.isFinite(s))) {
+        this.lastRerankFailure = 'the model returned a score that was not a number';
+        return null;
+      }
 
+      this.lastRerankFailure = null;
       return scores
         .map((score, index) => ({ index, score }))
         .sort((a, b) => b.score - a.score);
     } catch (e: any) {
       console.warn('[GgufReranker] rerank failed (keeping existing order):', e?.message || e);
+      this.lastRerankFailure = String(e?.message || e);
       return null;
     }
   }

@@ -42,6 +42,12 @@
  * are not LFS objects, so Hugging Face publishes no digest for them; those
  * carry `sha256: null`, which the downloader records rather than checks. The
  * pinned revision is what protects them.
+ *
+ * Every weights file IS an LFS object, however small, and so has a published
+ * digest: the nine Ettin head files (`*_Dense`, `*_LayerNorm` safetensors, a
+ * few KB to 2 MB) were added with null and pinned on 2026-10-09, each digest
+ * read from the tree API at the pinned revision and matched against the bytes
+ * served there. A weights file with a null hash now fails the catalogue test.
  */
 
 export type RerankerRuntime = 'onnx' | 'gguf';
@@ -222,9 +228,9 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
       { repoPath: '4_Dense/config.json', bytes: 213, sha256: null },
       { repoPath: 'modules.json', bytes: 678, sha256: null },
       { repoPath: 'tokenizer_config.json', bytes: 488, sha256: null },
-      { repoPath: '2_Dense/model.safetensors', bytes: 589912, sha256: null },
-      { repoPath: '3_LayerNorm/model.safetensors', bytes: 3224, sha256: null },
-      { repoPath: '4_Dense/model.safetensors', bytes: 1684, sha256: null },
+      { repoPath: '2_Dense/model.safetensors', bytes: 589912, sha256: 'ae4d8431b8ed8afeda16dd51608c4cb7e0f810724a91423dbbb867c047285000' },
+      { repoPath: '3_LayerNorm/model.safetensors', bytes: 3224, sha256: '3e8b5ae0d2716b538d0cdd8664bef438f20a09a1b79654fc09f19560197d3274' },
+      { repoPath: '4_Dense/model.safetensors', bytes: 1684, sha256: '03aa39279659756a52fb02cd569b97f2d1fb0d8036ab74d45c4736f358389e01' },
     ],
     bytes: 131918633,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/cross-encoder/ettin-reranker-32m-v1', commercialUseRestricted: false, requiresAcknowledgement: false },
@@ -259,9 +265,9 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
       { repoPath: '4_Dense/config.json', bytes: 213, sha256: null },
       { repoPath: 'modules.json', bytes: 678, sha256: null },
       { repoPath: 'tokenizer_config.json', bytes: 488, sha256: null },
-      { repoPath: '2_Dense/model.safetensors', bytes: 1048664, sha256: null },
-      { repoPath: '3_LayerNorm/model.safetensors', bytes: 4248, sha256: null },
-      { repoPath: '4_Dense/model.safetensors', bytes: 2196, sha256: null },
+      { repoPath: '2_Dense/model.safetensors', bytes: 1048664, sha256: 'ee9b8a9186fffb05cea0cd73e2ccfc8a4bf641c075d8f304e5c4e4f5fe0716d0' },
+      { repoPath: '3_LayerNorm/model.safetensors', bytes: 4248, sha256: '3906f4be69408f4f370c7bfdc2de6ef825d4d1f4da4f01221d831336c0e3a91a' },
+      { repoPath: '4_Dense/model.safetensors', bytes: 2196, sha256: '1a391820f020c8fc3efb1da894e1719cfdfb8a6c73d214f34f5b1802bac8b9dd' },
     ],
     bytes: 277620876,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/cross-encoder/ettin-reranker-68m-v1', commercialUseRestricted: false, requiresAcknowledgement: false },
@@ -290,9 +296,9 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
       { repoPath: '4_Dense/config.json', bytes: 213, sha256: null },
       { repoPath: 'modules.json', bytes: 678, sha256: null },
       { repoPath: 'tokenizer_config.json', bytes: 488, sha256: null },
-      { repoPath: '2_Dense/model.safetensors', bytes: 2359384, sha256: null },
-      { repoPath: '3_LayerNorm/model.safetensors', bytes: 6296, sha256: null },
-      { repoPath: '4_Dense/model.safetensors', bytes: 3220, sha256: null },
+      { repoPath: '2_Dense/model.safetensors', bytes: 2359384, sha256: 'bc39a6bdfd371a47a08fbf84781bc7224b846ec0e15213b560d2abbbfb323b75' },
+      { repoPath: '3_LayerNorm/model.safetensors', bytes: 6296, sha256: 'a119c63bd3b89934c89f2394e2278014e663e01625dc322c603ddbf24b10325c' },
+      { repoPath: '4_Dense/model.safetensors', bytes: 3220, sha256: 'cececab2925f12c9c7541d5d438202a6eec4b503658e0e64790f2d0414ede6a8' },
     ],
     bytes: 602521081,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/cross-encoder/ettin-reranker-150m-v1', commercialUseRestricted: false, requiresAcknowledgement: false },

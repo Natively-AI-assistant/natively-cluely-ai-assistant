@@ -127,6 +127,12 @@ const LOCAL_MODELS = [
 // reports a strong cloud model, so that strip is otherwise unreachable here.
 const LIGHTWEIGHT = new URLSearchParams(location.search).get('lightweight') === '1';
 
+type EmbeddingProgressListener = (p: { id: string; fraction: number; currentFile: string; phase?: 'checking' | 'downloading' }) => void;
+let embeddingProgressListener: EmbeddingProgressListener | null = null;
+// `?checkFails=1`: see rerankerSettingsApi.ts.
+const CHECK_FAILS = new URLSearchParams(location.search).get('checkFails') === '1';
+const damagedEmbedders = new Set<string>();
+
 export const EMBEDDING_SETTINGS_API = {
     getEmbeddingStatus: async () => (LIGHTWEIGHT ? {
         active: {
@@ -157,7 +163,26 @@ export const EMBEDDING_SETTINGS_API = {
     setEmbeddingVoyageKey: async () => ({ success: true }),
     setEmbeddingOpenRouterKey: async () => ({ success: true, models: [], count: 0 }),
     setEmbeddingCustomEndpoint: async () => ({ success: true, endpoint: 'http://localhost:1234/v1', models: [], reachable: true }),
-    listLocalEmbeddingModels: async () => ({ models: LOCAL_MODELS }),
+    listLocalEmbeddingModels: async () => ({
+        models: LOCAL_MODELS.map(m => (damagedEmbedders.has(m.id) ? { ...m, state: 'partial' as const } : m)),
+    }),
+    onLocalEmbeddingModelProgress: (callback: EmbeddingProgressListener) => {
+        embeddingProgressListener = callback;
+        return () => { embeddingProgressListener = null; };
+    },
+    // "Check files": a second of hashing reported as progress, then intact.
+    verifyLocalEmbeddingModel: async (id: string) => {
+        for (const [fraction, currentFile] of [[0, 'config.json'], [0.02, 'onnx/model_quantized.onnx'], [0.6, 'onnx/model_quantized.onnx']] as const) {
+            embeddingProgressListener?.({ id, fraction, currentFile, phase: 'checking' });
+            await new Promise(resolve => setTimeout(resolve, 450));
+        }
+        if (CHECK_FAILS) {
+            damagedEmbedders.add(id);
+            const name = LOCAL_MODELS.find(m => m.id === id)?.name ?? id;
+            return { success: false, error: 'files_damaged', message: `Some of ${name}'s files are damaged, and downloading them again did not work. Check your connection and try again.` };
+        }
+        return { success: true, repaired: [] };
+    },
     platform: 'darwin',
     openExternal: () => {},
 };
