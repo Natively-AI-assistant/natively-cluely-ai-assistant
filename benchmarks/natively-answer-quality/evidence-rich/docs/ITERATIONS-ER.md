@@ -2907,3 +2907,21 @@ downloaded models are checked for damage). `git diff --stat 73b18d97..4eb4b851` 
 `electron/services/modes` and `premium` is empty: the answer path is unchanged, so the runs of `73b18d97`
 (`er6-*`, `er7-*`, `er8-*`) and the experiment build on top of it still describe main. Nothing of this work
 touched main. A candidate would be rebased onto the new main before any landing.
+
+## Evin, 2026-10-09 about 21:05 UTC: "yes do all 4 one by one"
+His answer to the four decisions put to him at 20:20 UTC: (1) land the résumé-statement fix as a correctness fix,
+(2) let DeepSeek do profile extraction, (3) pursue the 24,000 threshold, (4) push `bench/evidence-rich`.
+
+### 1. E23 landed on local main as a correctness fix (2026-10-09 21:24 UTC)
+`cand/e23` rebased onto main `4eb4b851` (three commits by another session since `73b18d97`, none in the answer
+path), message rewritten with the evidence and the fact that it missed its gain bar: `4675ff0e`. Four suites on a
+fresh build of the candidate and of main, run back to back:
+| suite | main `4eb4b851` | candidate `4675ff0e` |
+|---|---|---|
+| intelligence + context-intelligence | 2,917 tests, 0 fail | 2,935 tests (18 new), 1 fail |
+| llm | 6,064 tests, 0 fail | 6,064 tests, 1 fail |
+| services | 5,791 tests, 121 fail, 12 cancelled | 5,791 tests, 121 fail, 12 cancelled (the same names) |
+The candidate's two failures are timing tests that ran while another job of mine loaded the machine (a queue that
+must drain within its window in `HindsightMemory.test.mjs`; a C++ compile in `CppRunner.test.mjs`): both files
+re-run alone three times, 41 of 41 each time. Neither touches the changed code. Fast-forwarded:
+**local main = `4675ff0e`**, one commit ahead of `origin/main` `4eb4b851`. Not pushed (the word was to land).
