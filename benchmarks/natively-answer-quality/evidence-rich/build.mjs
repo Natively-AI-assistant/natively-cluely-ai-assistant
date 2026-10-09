@@ -76,7 +76,7 @@ function loadMode(key) {
   if (!exists(path.join(dir, 'manifest.json'))) return null;
   const manifest = readJson(path.join(dir, 'manifest.json'));
   const opt = (f, d) => (exists(path.join(dir, f)) ? readJson(path.join(dir, f)) : d);
-  return { key, dir, manifest, variants: opt('variants.json', []), configs: opt('configs.json', []), dev: opt('dev.json', null), dev2: opt('dev2.json', null), challenge: opt('challenge.json', null), code1: opt('code1.json', null), cf: opt('cf.json', null),
+  return { key, dir, manifest, variants: opt('variants.json', []), configs: opt('configs.json', []), dev: opt('dev.json', null), dev2: opt('dev2.json', null), challenge: opt('challenge.json', null), code1: opt('code1.json', null), prov1: opt('prov1.json', null), cf: opt('cf.json', null),
     // p24 (2026-10-09): p24.json holds items derived by script from frozen dev / dev2 / challenge items (same question and
     // oracle, new id, the enlarged config); p24-new.json holds the items authored on the added documents.
     p24: (exists(path.join(dir, 'p24.json')) || exists(path.join(dir, 'p24-new.json'))) ? { items: [...(opt('p24.json', { items: [] }).items ?? []), ...(opt('p24-new.json', { items: [] }).items ?? [])] } : null };
@@ -146,7 +146,7 @@ function lintItems({ items: rawItems, mode, set, docs, configs, corpusText, ques
   const items = rawItems.map((it) => bindToLoaded(it, configs, docs));
   const E = [], W = [];
   const m = MODES.find((x) => x.key === mode);
-  const idRe = set === 'iso' ? /^ER-ISO-\d{3}$/ : new RegExp(`^ER-${set === 'dev' ? 'D' : set === 'dev2' ? 'D2' : set === 'challenge' ? 'C1' : set === 'code1' ? 'K1' : set === 'challenge-val' ? 'CV1' : set === 'p24' ? 'P24' : set === 'holdout' ? 'H' : 'CF'}-${m.pfx}-`);
+  const idRe = set === 'iso' ? /^ER-ISO-\d{3}$/ : new RegExp(`^ER-${set === 'dev' ? 'D' : set === 'dev2' ? 'D2' : set === 'challenge' ? 'C1' : set === 'code1' ? 'K1' : set === 'challenge-val' ? 'CV1' : set === 'p24' ? 'P24' : set === 'prov1' ? 'PV1' : set === 'prov1-val' ? 'PVV1' : set === 'holdout' ? 'H' : 'CF'}-${m.pfx}-`);
   const counts = Object.fromEntries(CONDITIONS.map((c) => [c, 0]));
   const ids = new Set();
   for (const it of items) {
@@ -299,6 +299,22 @@ function lint({ quiet = false } = {}) {
     if (p.p24) {
       const r = lintItems({ items: p.p24.items ?? [], mode: p.key, set: 'p24', docs, configs, corpusText, questionsSeen: new Set() });
       out.errors.push(...r.E); out.warnings.push(...r.W.filter((x) => !/^ER-P24-[A-Z]+-(?:D|D2|C1)-/.test(x))); s.p24 = (p.p24.items ?? []).length; s.p24_conditions = r.counts;
+    }
+    // prov1 (2026-10-09): questions on which employer, role or date a résumé fact belongs to, lengths of time from résumé
+    // dates, and the candidate's own history asked with only the posting loaded; on the SAME frozen profile documents.
+    // authoring/<mode>/prov1.json (ids ER-PV1-<PFX>-NNN) may be read; authoring-holdout/<mode>/prov1-val.json
+    // (ids ER-PVV1-<PFX>-NNN) is its untouched validation part: counts only here, detail in a file for the author.
+    if (p.prov1) {
+      const r = lintItems({ items: p.prov1.items ?? [], mode: p.key, set: 'prov1', docs, configs, corpusText, questionsSeen: seen });
+      out.errors.push(...r.E); out.warnings.push(...r.W); s.prov1 = (p.prov1.items ?? []).length; s.prov1_conditions = r.counts;
+    }
+    const pvf = path.join(AUTH_H, p.key, 'prov1-val.json');
+    if (exists(pvf)) {
+      const h = readJson(pvf);
+      const r = lintItems({ items: h.items ?? [], mode: p.key, set: 'prov1-val', docs, configs, corpusText, questionsSeen: seen });
+      fs.writeFileSync(path.join(AUTH_H, p.key, 'lint-prov1-val.txt'), [`errors (${r.E.length})`, ...r.E, '', `warnings (${r.W.length})`, ...r.W, ''].join('\n'));
+      s.prov1_val = (h.items ?? []).length; s.prov1_val_errors = r.E.length; s.prov1_val_warnings = r.W.length; s.prov1_val_conditions = r.counts;
+      out.holdoutErrors = (out.holdoutErrors ?? 0) + r.E.length;
     }
     const cvf = path.join(AUTH_H, p.key, 'challenge-val.json');
     if (exists(cvf)) {
@@ -486,7 +502,7 @@ function freeze(partial = false) {
   const cfgList = [...configs.values()].map((c) => ({ id: c.id, mode: c.mode, base: !!c.base, files: c.files ?? [] }));
   if (partial) for (const m of MODES) if (!cfgList.some((c) => c.mode === m.key && c.base)) cfgList.push({ id: `${m.key}-none`, mode: m.key, base: true, files: [] });
   const modes = MODES.map(({ key, name }) => ({ key, name }));
-  const sets = { dev: [], holdout: [], 'supp-counterfactual': [], 'supp-isolation': [], dev2: [], challenge: [], 'challenge-val': [], code1: [], p24: [] };
+  const sets = { dev: [], holdout: [], 'supp-counterfactual': [], 'supp-isolation': [], dev2: [], challenge: [], 'challenge-val': [], code1: [], p24: [], prov1: [], 'prov1-val': [] };
   for (const m of MODES) {
     const p = packs[m.key];
     if (!p) continue;
@@ -495,6 +511,8 @@ function freeze(partial = false) {
     sets.challenge.push(...(p.challenge?.items ?? []));
     sets.code1.push(...(p.code1?.items ?? []));
     sets.p24.push(...(p.p24?.items ?? []));
+    sets.prov1.push(...(p.prov1?.items ?? []));
+    if (exists(path.join(AUTH_H, m.key, 'prov1-val.json'))) sets['prov1-val'].push(...readJson(path.join(AUTH_H, m.key, 'prov1-val.json')).items);
     if (exists(path.join(AUTH_H, m.key, 'challenge-val.json'))) sets['challenge-val'].push(...readJson(path.join(AUTH_H, m.key, 'challenge-val.json')).items);
     sets['supp-counterfactual'].push(...expandCf(p.cf ?? {}, m.key));
     if (exists(path.join(AUTH_H, m.key, 'holdout.json'))) sets.holdout.push(...readJson(path.join(AUTH_H, m.key, 'holdout.json')).items);
@@ -503,7 +521,7 @@ function freeze(partial = false) {
   if (exists(iso)) sets['supp-isolation'].push(...resolveIso(readJson(iso).items, configs));
   const frozen = { name: 'evidence-rich-v1', frozen_at: new Date().toISOString(), manifest_sha256: manifestSha, datasets: {} };
   for (const [name, items] of Object.entries(sets)) {
-    if (['dev2', 'challenge', 'challenge-val', 'code1', 'p24'].includes(name) && !items.length) continue;   // not authored yet: nothing to freeze
+    if (['dev2', 'challenge', 'challenge-val', 'code1', 'p24', 'prov1', 'prov1-val'].includes(name) && !items.length) continue;   // not authored yet: nothing to freeze
     const body = { schema_version: 1, partition: name, manifest_sha256: manifestSha, modes, configs: cfgList, items: items.map((it) => ({ partition: name, ...bindToLoaded(it, configs, docs) })) };
     const h = sha256(JSON.stringify(body));
     fs.writeFileSync(path.join(DATASETS, `${name}.json`), JSON.stringify({ dataset_name: `evidence-rich-v1-${name}`, dataset_sha256: h, ...body }, null, 1));

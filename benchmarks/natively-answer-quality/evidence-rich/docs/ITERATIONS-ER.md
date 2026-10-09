@@ -2583,3 +2583,87 @@ Also reported, no line: both arms against the same questions on the small pack (
 Astra: only if the lines are read, the 587 baseline judgments are done and calls remain; then both arms on the 48
 new rows and a seeded sample of 120 derived rows. Whatever the outcome nothing lands from X2 without Evin's word,
 and X1's note stands: a 24,000 threshold would raise the pass's cap with it.
+
+### Source provenance of invented and misattributed facts: what the recorded prompts show (2026-10-09 18:22 UTC; judge-free, no model call; development rows only)
+Read on the prompts of `er4-*` (the last judged baseline) and `er6-*`, for the three target classes of the failure map
+(invented company, policy, research or meeting fact 15 rows; invented personal fact 7; right value, wrong thing 6).
+1. **The app's own derived résumé sections state wrong employers and dates.** Besides the whole résumé, the prompt
+   carries sections rendered from the structured extraction ("Experience: <title> at <company> — (dates) — …",
+   "Complete employment history", one card per role). On profile B they pair the second job title held at one
+   employer with the NEXT employer on the page ("Senior Frontend Engineer at Ondaverde Health (2022-06 to 2023-12)";
+   the résumé has that title at Lumenquay) and take a company's description line as its name ("Frontend Engineer at
+   Patient portal and appointment tools for private clinics."). On profile A (a PDF, lines wrapped) the list reads
+   "Software Engineer II at ships. (2023-03 to 2024-03); Software Engineer at [Page 2] (2020-07 to 2023-02); Tech lead
+   for Dispatch Core, a team of five: … at weekly design review …". Three of the 71 hard fails repeat exactly these
+   sections: D2-TI-026 (the TypeScript migration placed at Ondaverde), D-LFW-020 and D2-TI-009 (time at the employer
+   and at senior level counted from April 2024). They were filed as generator mistakes; the wrong statement was in
+   the prompt, marked `direct_fact`.
+2. **Why the benchmark sees this path.** Every profile row of every run has `pi_extraction_mode: heuristic`. The app
+   log says why: "LLM structured extraction failed (No reasoning model available. Please configure an API key
+   (OpenAI, Claude, Gemini, Groq, Natively) or a custom provider.); falling back to deterministic heuristic
+   extractor." A user whose only key is DeepSeek gets the rule-based parser for the profile, as the benchmark does.
+   Not changed here (it is a provider-routing decision, Evin's).
+3. **An existing rule covers written fields, not pairings.** `profile-derived-support.ts` (2026-09-30) already drops a
+   derived résumé field the résumé text does not support (numbers, 75 % of content words). Every word of "Senior
+   Frontend Engineer at Ondaverde Health" is in the résumé; the pairing is what is wrong, and nothing checks it.
+4. **The story notice treats any evidence as the user's record.** `evidenceStoryGuard` fires on a question about the
+   user's own past whenever the prompt has evidence: "Tell it only with what the evidence states … mention a real
+   project only for what the evidence says about it." When the only document is the job posting (11 development
+   turns with a personal intent, mean 8.36, 3 hard fails: D-LFW-023, D-TI-022, D2-TI-032) the evidence is the
+   employer's description of the role, and the answers tell it as the candidate's history. The evidence tag already
+   says what each source may establish (`authority="JOB_RESPONSIBILITY,…"`, no `USER_*`); the notice does not read it.
+5. **Invented company, policy and research facts (15 rows) have no such handle.** All their sources are reference
+   files with the same type and authority, the invented sentence reuses the documents' own words ("native connectors
+   are priced as add-ons", "they'll restore it to you"), and the app's answerability signal does not separate them
+   (rows flagged for an unsupported claim: 18 of 306 "FULL", 17 of 303 "PARTIAL", 4 of 21 "NONE"). Nothing is
+   declared for that class today.
+
+## E23 — a derived experience statement is evidence only when the résumé's own text supports the pairing it states (rule written 2026-10-09 18:22 UTC, before any replay of it)
+**Mechanism (deterministic, no model call, nothing before the first word).** An extension of
+`stripUnsupportedDerivedResumeFields`. A structured experience entry (title, company) is rejected on evidence only:
+* shape: the company is a page marker, has more than 10 words, or ends in a sentence period that is not a corporate
+  abbreviation; or the title has more than 12 words;
+* position: title and company both occur verbatim in the résumé text, and on every line that starts with the title
+  the company first appears more than 2 text lines below it, or another entry's company stands alone on a line
+  between the company and the title.
+An entry whose title or company cannot be found verbatim is kept (nothing shows it is wrong). **If any entry of a
+résumé is rejected, none of that résumé's derived experience statements is rendered** (the per-entry sections, the
+"complete employment history" line, the per-role cards): a partial list reads as the whole history. The résumé's own
+text (whole, and in heading-aware pieces) stays, and is then the only statement of who worked where and when.
+**Replay arm `e23`:** the recorded answer prompt with those blocks removed when the rule, applied to the résumé text
+in the same prompt, rejects an entry; base arm = the recorded prompt. Direct DeepSeek, the app's parameters, k = 4.
+**Stage 1, development rows** (`er6-dev-main` + `er6-dev2-main`, every row whose prompt changes):
+1. samples with every required string: not more than 1.5 points below base, paired 95 % interval above −4;
+2. samples with a forbidden string: at most base + 2;
+3. rows that fall (right in at least 3 of 4 base samples, at most 1 of 4 with the arm): at most 1.
+D-LFW-020, D2-TI-026 and D2-TI-009 are reported; they were read to design this, so they decide nothing.
+**Stage 2, unseen rows.** Two new sets, written by authors blind to the product and to this finding
+(`AUTHORING-ER-PROV1.md`): `prov1` (24 items, readable) and `prov1-val` (24 items, never read; aggregates only), for
+Looking for work and Technical Interview: which employer or title a résumé fact belongs to (8 + 8), a length of time
+from résumé dates (6 + 6), the candidate's own history with only the posting loaded (6 + 6), a fact of the posting
+with only the posting loaded (4 + 4). Main `73b18d97` is run on both in the app to record the prompts; both arms are
+then replayed on them, k = 4. Also replayed: the Looking-for-work and Technical-Interview rows of `challenge` and
+`challenge-val` whose prompt changes.
+4. "which employer or title" and "length of time" rows of `prov1` + `prov1-val` (28 rows): right samples (every
+   required string, no forbidden string, the calculation result where there is one) at least 8 points above base,
+   paired interval above 0;
+5. every other unseen row whose prompt changes: lines 1 and 2;
+6. rows that fall: at most 2.
+Only if 4 to 6 hold is a candidate built from main, run in the app on the changed rows, and judged by Astra (the
+rows whose shown answer differs, both sides). If stage 1 fails, stage 2 is not run for E23.
+
+## E24 — with the job posting as the only document, the story notice says whose record it is (rule written 2026-10-09 18:22 UTC, before any replay of it)
+**Mechanism (deterministic).** `evidenceStoryGuard` reads the packed evidence's own `authority`: when the question is
+about the user's own past, a job posting is in the evidence and NO evidence item may establish a fact about the user
+(no `USER_*` authority), the notice "# A story from the evidence" is replaced by one that says the posting describes
+the role, records nothing the user has done, is not to be told as their work, and that the answer is an opening they
+complete with their real history. Every other turn keeps today's notice.
+**Replay arm `e24`:** the recorded prompt with that notice swapped on exactly those turns; base = the recorded prompt.
+**Judge-free lines** (development rows first; then `prov1`, `prov1-val` and the challenge rows in that state):
+1. rows in that state that have required strings (the answer IS in the posting): samples with every required
+   string not more than 2 points below base, and no row falls;
+2. samples with a forbidden string: at most base + 1.
+What the notice is for (an invented history) no fixed string can see on most rows; the oracle entries have no
+needles. So its gain is read by Astra only, on the own-history rows (3 development, 12 unseen), both arms, and only
+if lines 1 and 2 hold on the unseen rows. The three development rows' replays are read by eye before that and
+reported as that, not as a verdict.
