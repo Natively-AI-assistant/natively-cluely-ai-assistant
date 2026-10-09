@@ -2783,3 +2783,34 @@ candidate is not run in the app and no Astra call is spent on it.** `cand/e23` `
 record. Whether to land it anyway, as the removal of a known-wrong statement from the prompt rather than as a
 score change, is Evin's decision; so is letting a DeepSeek-only user's profile be extracted by a model at all
 (finding 2 above), which would remove the cause on this benchmark.
+
+## E25 — the fix-up pass is shown where each sentence of the draft is closest to the material (rule written 2026-10-09 18:50 UTC, before any replay of it)
+For the class with no deterministic handle (finding 5: invented company, policy, research and meeting facts, 15 of
+the 71 hard fails). The pass reads about 45,000 characters and wrote "UNSUPPORTED: none" on 21 of 34 answers capped
+for an invented detail. A check that made it quote the material for every statement was tried and dropped on
+9 October (it removed correct inference). This is a different mechanism and is declared as one experiment:
+**Mechanism.** No extra call and nothing before the first word. A program splits the draft into sentences and the
+material into passages (each with its document name and the heading above it), matches them by the words they share
+weighted by how rare each word is in this material, and puts the two nearest passages of every sentence between the
+material and the draft ("# Closest passages"; "no passage shares its terms" when none reaches the bar). The pass's
+prompt gains one paragraph saying what that section is and when a statement is listed because of it (the passages
+say it of a different product, plan, person, study or date; a narrower rule or a smaller set; or nothing states
+it), and that a worked-out figure and everything in the never-list are still not listed. The existing list, the
+never-list and the conflict line are unchanged, byte for byte. Only Sales, Call Center, Seminar, Team Meet and
+Recruiting turns get it (the modes whose capped answers are of this class).
+**Replay** (`replay-claim-pass.mjs`, main's pass `cv-e19-73b18d97`, cap 96,000, k = 2): arm `e25-ctl` against
+`e25-sheet` on the same drafts.
+**Stage 1, development drafts** (`er6-dev-main` + `er6-dev2-main`, every turn of those modes that ran the pass):
+1. drafts that are right by the fixed checks (every required string, no forbidden string, the calculation result)
+   and are no longer right as shown: arm at most ctl + 1 point of the right drafts;
+2. right drafts whose text the pass changes: arm at most ctl + 3 points;
+3. shown answers with a forbidden string: arm at most ctl; drafts with a forbidden string that the pass repairs:
+   arm at least ctl;
+4. pass time: median at most 150 ms above ctl, p90 at most 300 ms above; passes not finished inside the budget at
+   most ctl + 1 point.
+Reported, deciding nothing: on the drafts of the last judged run (`er4-*`) that Astra capped for an unsupported
+company, policy or research claim or an invented meeting fact, whether each arm's UNSUPPORTED line names the flagged
+detail, read by eye.
+**Stage 2, unseen** (the same modes' rows of `challenge` and `challenge-val`, drafts of `er7-*`): lines 1 to 4.
+Only if both stages hold are Astra calls spent (the rows whose shown answer differs between the arms, both sides).
+If stage 1 fails nothing further is run for E25.

@@ -13,7 +13,8 @@
 //            (cd <app worktree> && printf "export * from './electron/llm/claimVerifier';\nexport { cleanAnswerArtifacts } from './electron/llm/answerPolish';\n" > .e.ts \
 //              && node_modules/.bin/esbuild .e.ts --bundle --platform=node --format=esm --outfile=<bundle.mjs>; rm .e.ts)
 // --cap      how many characters of the answer's prompt the pass may see (the app: 24,000 on both surfaces)
-// --variant  optional module: systemPrompt(recorded, ctx) → string, and/or accept(verdict, ctx) → verdict
+// --variant  optional module: systemPrompt(recorded, ctx) → string, message(request, ctx) → string, and/or accept(verdict, ctx) → verdict
+// --modes    only rows of these modes (comma-separated mode keys)
 // Output: results/replay/<name>.jsonl, one line per row and repetition:
 //   { run, id, k, surface, cap, outcome, changed, text, scratch, ms, in_chars, saw_whole, rebuilt_matches_recorded }
 import fs from 'node:fs';
@@ -73,6 +74,7 @@ for (const r of String(opt('runs')).split(',')) {
     const pass = (w?.other_requests ?? []).find((o) => /DRAFT REPLY:/.test((o.messages ?? []).map((m) => m.text ?? '').join('\n')));
     if (!pass) continue;
     if (ids && !ids.has(row.benchmark_id)) continue;
+    if (opt('modes') && !String(opt('modes')).split(',').includes(row.mode)) continue;
     const recorded = (pass.messages ?? []).map((m) => m.text ?? '').join('\n');
     const draftBody = recorded.slice(recorded.lastIndexOf('DRAFT REPLY:') + 'DRAFT REPLY:'.length).trim();
     const full = (w.messages ?? []).filter((m) => m.role !== 'system').map((m) => m.text ?? '').join('\n');
@@ -96,7 +98,7 @@ await Promise.all(todo.flatMap((j) => Array.from({ length: K }, (_, k) => L(asyn
   let scratch = '';
   const run = await cv.runClaimVerifier({
     answer: j.row.raw_answer, material: j.full, budgetMs: cv.CLAIM_VERIFIER_BUDGET_MS,
-    startStream: (body, signal) => (async function* () { let out = ''; for await (const t of deepseekStream(j.model, system, buildMessage(j.surface, j.full, body, cap), signal)) { out += t; yield t; } scratch = cv.splitVerifierScratch(out).scratch; })(),
+    startStream: (body, signal) => (async function* () { let out = ''; for await (const t of deepseekStream(j.model, system, variant.message ? variant.message(buildMessage(j.surface, j.full, body, cap), { ...ctx, draftBody: body }) : buildMessage(j.surface, j.full, body, cap), signal)) { out += t; yield t; } scratch = cv.splitVerifierScratch(out).scratch; })(),
     clean: cv.cleanAnswerArtifacts,
   });
   let verdict = { text: run.text, changed: run.changed, outcome: run.outcome };
