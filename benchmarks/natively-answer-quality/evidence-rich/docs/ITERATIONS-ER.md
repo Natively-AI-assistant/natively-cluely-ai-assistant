@@ -1961,3 +1961,12 @@ Both wordings are replayed once more on the same holdout drafts (`--k 2`: repeti
 | 4 | Pass time p90 of repetition 1, same-hour arms (judge-free) | ≤ control arm + 300 ms |
 Reported beside the first rule's verdict, never instead of it. If the two disagree, Evin is told both. Nothing is
 landed without him either way.
+
+### E19 — second repetition replayed, judge-free lines read (2026-10-09 00:23 UTC; no judgment of it exists yet)
+Repetition 1 of both arms on the holdout drafts: 132 passes each, requests identical to the app's on 264 of 264 (bar
+the one sentence in arm `e19h`). Edited: control 24, new wording 27 (repetition 0: 23, 27). Rows where the arms
+differ: 27 (repetition 0: 25); 54 judgments needed, 39 still to do. **Line 4:** pass p90 1,495 ms → 1,583 ms, +88 ms,
+same quarter-hour: holds. Pooled, 52 pairs; 20 judged so far (all from repetition 0).
+Tools added for this: `plan-pair.mjs` (which judgments a paired comparison still needs; counts only) and
+`report/pair-aggregate.mjs` (aggregates over one plan or several pooled; no ids or text). Run on repetition 0 they
+give the checkpoint of 2026-10-08 to the last digit (20 of 25, 8.3354 → 8.27615, ±0.5957).
