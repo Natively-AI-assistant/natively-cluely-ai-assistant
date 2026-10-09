@@ -3007,3 +3007,30 @@ thresholds, requests under the old cap), which the unit tests hold.
 **Landing.** His word was to pursue it. The request on such a turn is 3.6 times the size, which is a cost on the
 Natively API and on users' own keys, so the candidate is taken to a measured, tested state and landed only on a
 further explicit word, with arm C's result beside it.
+
+## Evin, 2026-10-09 about 21:45 UTC: start the judging by itself at 7:30 IST and use the whole window
+"auto start the remaining iterations at 7:30 am ist … gpt astra would be available for roughly over an hour,
+maximise the time availability, judge and benchmark as much as possible and as many iterations." He is asleep
+until then. Done: the in-session one-shot is moved to 07:30 IST (02:00 UTC) and starts ONE script,
+`window-oct10.mjs` (probe, calibration, then in priority order until the pool closes: the 587 baseline judgments;
+the 48 new pack24 rows of both X2 arms; the E26 candidate's profile rows with main's side of them; the 120 derived
+pack24 rows of both arms; arm C and the 24,000 candidate build; baseline drafts). A 403 stops everything, as
+before. Every app run that produces something to judge is made before the window.
+
+## E28 — the documents before the question, so that a whole pack is a prefix the provider can cache (rule written 2026-10-09 21:58 UTC, before any replay of it; replay only, nothing is built)
+X2's cost side: a whole 20,700-token pack makes a request of about 29,800 prompt tokens of which 5,248 are cache
+hits (the system prompt). The user message starts with the question, so everything after it, the pack included, is
+new to the provider on every turn. Inside one meeting the pack's evidence section is byte-identical from turn to
+turn (52 of 60 recorded sales turns once the per-row session id is made constant; the benchmark opens a new
+session per question, a meeting does not).
+**Arms** (`replay-generator.mjs`, the 361 recorded prompts of X2 arm B, k = 1, three at a time, in recorded order):
+`e28-base` = the recorded request with the session id constant; `e28-first` = the same with the "# Evidence"
+section moved to the top of the user message, before the question and the conversation. Nothing else differs.
+**Lines.**
+1. rows right by the fixed checks: arm not more than 2 points below base; rows with a forbidden string at most
+   base + 3;
+2. cached share of the prompt tokens, median over the rows: at least 80 % in the arm;
+3. first token: the arm's median at least 300 ms below base.
+If all three hold it is a lead for a composer change (which would need its own app runs and a judged reading on
+every mode, since it moves the question on every turn that carries documents); nothing is built from the replay
+alone. It is run after the app runs of E26 and E27, never beside one.
