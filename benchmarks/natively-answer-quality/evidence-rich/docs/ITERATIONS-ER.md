@@ -1886,3 +1886,44 @@ implemented or measured.** The proposed commands, latency assertions and applica
 the existing harness before a rule is written; no claim of zero first-word delay has been established. Existing
 conflict-wording experiments remain rejected. No application code or platform-specific behavior changed in this
 window; neither macOS nor Windows was physically tested.
+
+### Judge-free exploration before the window of 2026-10-09 (development rows only; nothing here is a verdict)
+Read from main's Astra judgments of er4-dev-main + er4-dev2-main (630 rows, 8.923, 71 hard fails):
+- The pass ran on 470 rows and wrote "UNSUPPORTED: none" on 21 of the 34 answers capped for an invented detail
+  (median 1.0 s on a 45,000-character prompt). **Tried, not declared, dropped:** a "CHECK:" line that makes the pass
+  quote the material for each statement before it lists anything (two wordings, 52 drafts, arms `x20-check1`,
+  `x20-check2`). It finds the flagged detail on about two thirds of the 24 capped drafts, and it edits 12 of 28
+  drafts scored 9.5 or above: worked-out figures, conclusions drawn from stated numbers, statements of absence and
+  questions are listed as "NOT STATED" and removed, and one careful two-values answer was rewritten into a flat
+  assertion. Pass time p50 1.27 → 1.67–1.86 s, p90 1.56 → 2.11–2.41 s. Do not re-propose a per-statement check on this
+  model without a way to protect inference.
+- 13 answers contradict themselves (a verdict in the first sentence, the working ends elsewhere): 12 hard fails.
+  **Tried, not declared, dropped:** a notice beside "# Today" asking for the deciding fact before the verdict
+  (arms `gen-x20-base`, `gen-x20-v1`, 13 rows, k 4). It fixed two rows in 4 of 4 samples and turned a third, right in
+  4 of 4 base samples, wrong in 4 of 4. About 1 % of rows are of this kind; an effect that size cannot be read on a
+  replay of all 630 rows, so it is not worth a window.
+- The gist chip repeats the body's error; it is the lone error on 3 rows. Not a lever.
+
+## E20 — two dated versions of one document are not put to the other person as a conflict (rule written 2026-10-09 00:18 UTC, before the rail is applied to any holdout row)
+**What was seen (development, in-sample):** of the 10 edits the control arm `e19-ctl` made under a CONFLICT line, the
+6 whose line labels its values with a version or a date score 6.65 against 9.75 for their drafts; the 4 without such
+labels 7.97 against 8.03, and two of those (CC-021, D2-CC-028) are the true two-document conflicts E17 broke.
+**Change:** no wording changes (the conflict line stays closed to rewording, see E18). A rail on the pass's own output:
+when its CONFLICT line labels EVERY value it names with a version number or an effective date, those labels differ,
+and it listed nothing unsupported, the edit is dropped and the draft stands. Trigger fixed in
+`replay-variants/e20-version-conflict.mjs` (`conflictIsBetweenVersions`), self-tested 9/9 before this was written.
+**Why this is not E6/E17/E18 again:** those told the model to decide whether a conflict is settled, and it then
+dropped or picked values on other rows. Here the model is asked nothing new; the pass runs as on main, and code keeps
+the generator's draft on the rows where the pass itself labelled the two values as versions of one thing.
+**Measured by** `derive-arm.mjs` (the rail applied to recorded pass outputs; no model call) and
+`replay-judge.mjs effect`; Astra; a text equal to the draft or to what the app showed reuses that judgment.
+| # | Line | Bar |
+|---|---|---|
+| 1 | Blind holdout (`e19h-ctl` → `e20h`), rows where the arms differ: mean change; hard fails | ≥ 0; ≤ control arm |
+| 2 | Blind holdout: rows flagged source_conflict_ignored or stale_source_preferred | ≤ control arm |
+| 3 | Judge-free, both sets: rows whose oracle holds an UNRESOLVED conflict and whose text the rail changes | 0 |
+| 4 | Second development sample: the control pass replayed on the drafts of er5-dev-e19 + er5-dev2-e19 (another app run, 88 questions), arm `e20s-ctl` → `e20s`; rows that differ: mean change; hard fails; the two conflict flags | ≥ 0; ≤ control; ≤ control |
+| 5 | Development, in-sample (`e19-ctl` → `e20`), reported for size, not a test | — |
+Lines 1 to 4 must hold for E20 to be a keep candidate. A set with no row that differs makes its line vacuous, and
+the report says so; with fewer than 5 rows that differ across lines 1 and 4 together, E20 is reported as "not harmful
+on what could be measured", not as confirmed. Holdout: aggregates only. Nothing is landed without Evin.

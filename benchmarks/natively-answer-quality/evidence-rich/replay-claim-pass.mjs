@@ -25,7 +25,7 @@ import { loadRun } from './objective.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
-const name = opt('name'); const cap = Number(opt('cap', 24000)); const recordedCap = Number(opt('recorded-cap', 24000)); /* the cap the RECORDING app used, for the fidelity check */ const K = Number(opt('k', 1)); const limit = opt('limit') ? Number(opt('limit')) : null;
+const ids = opt('ids') ? new Set(String(opt('ids')).split(',')) : null; /* --ids a,b: only these rows (exploration) */ const name = opt('name'); const cap = Number(opt('cap', 24000)); const recordedCap = Number(opt('recorded-cap', 24000)); /* the cap the RECORDING app used, for the fidelity check */ const K = Number(opt('k', 1)); const limit = opt('limit') ? Number(opt('limit')) : null;
 if (!name || !opt('cv') || !opt('runs')) { console.error('need --name, --cv and --runs'); process.exit(2); }
 const cv = await import(pathToFileURL(path.resolve(opt('cv'))).href);
 const variant = opt('variant') ? await import(pathToFileURL(path.resolve(opt('variant'))).href) : {};
@@ -72,6 +72,7 @@ for (const r of String(opt('runs')).split(',')) {
     const w = run.wire[row.benchmark_id];
     const pass = (w?.other_requests ?? []).find((o) => /DRAFT REPLY:/.test((o.messages ?? []).map((m) => m.text ?? '').join('\n')));
     if (!pass) continue;
+    if (ids && !ids.has(row.benchmark_id)) continue;
     const recorded = (pass.messages ?? []).map((m) => m.text ?? '').join('\n');
     const draftBody = recorded.slice(recorded.lastIndexOf('DRAFT REPLY:') + 'DRAFT REPLY:'.length).trim();
     const full = (w.messages ?? []).filter((m) => m.role !== 'system').map((m) => m.text ?? '').join('\n');
