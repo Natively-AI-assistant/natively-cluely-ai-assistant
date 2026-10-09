@@ -2757,3 +2757,29 @@ earlier dataset hash and the manifest hash are byte-identical after the freeze (
 `da9562e2ed45`). `build.mjs verify` lists the X1 probe files under `evidence/limits-probe` as stray, as it has
 since X1; no frozen file fails its hash. Main `73b18d97` is being run on both sets in the app
 (`er8-prov1-main`, `er8-prov1val-main`) to record the prompts.
+
+### E23 — stage 2, line 4: not met; E23 is not proposed under its rule (2026-10-09 18:47 UTC; main run on the new sets 18:39–18:45 UTC, 48 of 48 answered on direct DeepSeek; replayed 18:45–18:47 UTC, k = 4, 0 failed calls; `prov1-val` as aggregates only)
+Of the 28 which-employer and length-of-time rows, the prompt changes on 22 (11 + 11); on the other 6 no derived
+experience block was in the prompt, so the arms are the same request.
+| 22 rows, 88 samples per arm | base | arm |
+|---|---|---|
+| right samples (required, no forbidden, calculation) | 86.4 % | 93.2 % (paired +6.8, 95 % −4.5 to 19.3) |
+| samples with every required string | 87.5 % | 97.7 % (paired +10.2, 95 % 0.0 to 21.6) |
+| samples with a forbidden string | 7 | 6 |
+| rows that rose / fell | | 2 / 0 |
+By set: `prov1` 100 % → 95.5 % right, `prov1-val` 72.7 % → 90.9 % (paired +18.2, 95 % 0.0 to 38.6; both rows that
+rose are there). **Line 4 asked for at least 8 points with the interval above 0: not met.** Lines 5 and 6 hold.
+Read on the readable set: all 44 base samples and all 44 arm samples name the right employer and title or give the
+right length of time. The two arm samples counted against it are the check, not the answer: "That was at Lumenquay,
+and my title then was Lead Frontend Engineer … not the Senior Frontend Engineer period" trips the forbidden string
+"Senior Frontend Engineer" (ER-PV1-TI-004; its author had flagged that risk). The item is left as frozen. Counting
+those two as right would give +9.1 points; the interval would still reach 0.
+**Verdict.** The pairing rule removes statements that are wrong on their face (both benchmark résumés), costs
+nothing measurable on rows it is not about (twelve samples, 23 unseen rows), and where base answers were wrong
+because of those statements the arm is right (D-LFW-020 0 → 4 of 4; two unseen rows). But main already answers
+most such questions correctly from the résumé text in the same prompt, so on 22 unseen rows the gain is +6.8
+points with an interval through 0. Under the rule written before the replays, **E23 is not proposed, the
+candidate is not run in the app and no Astra call is spent on it.** `cand/e23` `9bfff943` stays as a local
+record. Whether to land it anyway, as the removal of a known-wrong statement from the prompt rather than as a
+score change, is Evin's decision; so is letting a DeepSeek-only user's profile be extracted by a model at all
+(finding 2 above), which would remove the cause on this benchmark.

@@ -1,0 +1,53 @@
+run er8-prov1val-main: 24/24 units to do (24 rows)
+llm config: {"provider":"gemini","model":"deepseek-flash","modelId":"deepseek-flash","displayName":"deepseek-flash","isOllama":false}
+warm-up hotkey: ttft 803 ms total 2058 ms (excluded)
+warm-up typed: ttft 1318 ms total 1618 ms (excluded)
+warm-up hotkey: ttft 1045 ms total 2735 ms (excluded)
+  files general → general-full: uploaded 8 [ready,ready,ready,ready,ready,ready,ready,ready]
+  files sales → sales-full: uploaded 8 [ready,ready,ready,ready,ready,ready,ready,ready]
+  files recruiting → rec-full: uploaded 8 [ready,ready,ready,ready,ready,ready,ready,ready]
+  files team-meet → team-meet-full: uploaded 8 [ready,ready,ready,ready,ready,ready,ready,ready]
+  files lecture → lecture-full: uploaded 9 [ready,ready,ready,ready,ready,ready,ready,ready,ready]
+  files technical-interview → ti-a-full: uploaded 6 [ready,ready,ready,ready,ready,ready]
+  files seminar → seminar-full: uploaded 7 [ready,ready,ready,ready,ready,ready,ready]
+  files call-center → call-center-full: uploaded 9 [ready,ready,ready,ready,ready,ready,ready,ready,ready]
+  pi → A-JD (clear_then_upload) r:null j:true mode:null 1283 ms
+ER-PVV1-LFW-008    hotkey ok  ttft  1016.9 total   3204.5 GROUNDED ev  1 refs 0 "I won't claim a zero-downtime migration on a live ledger. Th"
+ER-PVV1-LFW-009    hotkey ok  ttft   706.1 total   2386.1 GROUNDED ev  1 refs 0 "I'll confirm the exact years and come back to you on that. W"
+ER-PVV1-LFW-011    typed  ok  ttft     640 total   1941.8 GROUNDED ev  7 refs 0 "It's a senior individual-contributor role at level L5, and t"
+  pi → A-RESUME (clear_then_upload) r:true j:null mode:heuristic 1350 ms
+ER-PVV1-LFW-001    typed  ok  ttft   905.3 total   2482.8 GROUNDED ev  7 refs 0 "That was as **Senior Software Engineer and Tech Lead** on Di"
+ER-PVV1-LFW-006    typed  ok  ttft  1147.2 total   2502.4 GROUNDED ev  7 refs 0 "I took over as tech lead of Dispatch Core in April 2024, and"
+  pi → A (clear_then_upload) r:true j:true mode:heuristic 2609 ms
+ER-PVV1-LFW-002    hotkey ok  ttft  1213.2 total   2504.2 GROUNDED ev  8 refs 0 "At Tessarine I built and ran Farecrest, the fare-quote servi"
+  pi → B-JD (clear_then_upload) r:null j:true mode:null 1216 ms
+ER-PVV1-LFW-010    hotkey ok  ttft   970.7 total   2263.7 GROUNDED ev  7 refs 0 "I'll confirm where I'm based and come back to you on it. Wha"
+ER-PVV1-LFW-012    typed  ok  ttft   771.5 total   1875.1 GROUNDED ev  6 refs 0 "The posting says the real-time editing runs on a CRDT layer,"
+  pi → B-RESUME (clear_then_upload) r:true j:null mode:heuristic 2154 ms
+ER-PVV1-LFW-004    typed  ok  ttft   932.3 total   2117.4 GROUNDED ev  7 refs 0 "That was **Plumewright Studio** in Braga, where I was a **Ju"
+ER-PVV1-LFW-005    hotkey ok  ttft   910.5 total   2020.7 GROUNDED ev  7 refs 0 "I joined Lumenquay as a Senior Frontend Engineer in June 202"
+  pi → B (clear_then_upload) r:true j:true mode:heuristic 3393 ms
+ER-PVV1-LFW-003    hotkey ok  ttft   953.3 total   2328.2 GROUNDED ev  8 refs 0 "I was Lead Frontend Engineer at Lumenquay when I wrote Dialb"
+ER-PVV1-LFW-007    hotkey ok  ttft  1164.1 total   2236.9 GROUNDED ev  8 refs 0 "Before Lumenquay I'd been a developer for about four years a"
+  files looking-for-work → lfw-a-full: uploaded 2 [ready,ready]
+  pi → A-JD (clear_then_upload) r:null j:true mode:null 1258 ms
+ER-PVV1-TI-008     hotkey ok  ttft   939.9 total   2730.9 GROUNDED ev  1 refs 0 "I'll confirm where I am now, my title there, and how long I'"
+ER-PVV1-TI-011     hotkey ok  ttft   865.2 total   1310.7 GROUNDED ev  1 refs 0 "Ledger Core owns the double-entry ledger itself, the idempot"
+  files technical-interview → ti-a-noproject: uploaded 5 [ready,ready,ready,ready,ready]
+ER-PVV1-TI-009     hotkey ok  ttft  1143.8 total   2849.6 GROUNDED ev  6 refs 5 "I can't give you a number of years I've verified, so I'll co"
+  pi → A-RESUME (clear_then_upload) r:true j:null mode:heuristic 1346 ms
+ER-PVV1-TI-003     hotkey ok  ttft   802.2 total   2775.4 GROUNDED ev  7 refs 0 "No, pgslotwatch was separate. It's a small open-source Go co"
+ER-PVV1-TI-004     hotkey ok  ttft   853.9 total   2464.6 GROUNDED ev  7 refs 0 "That was the load-search API at Quillhaven, in my current ro"
+  pi → A (clear_then_upload) r:true j:true mode:heuristic 2614 ms
+ER-PVV1-TI-006     typed  ok  ttft   938.2 total   2152.7 GROUNDED ev  8 refs 0 "From July 2020, when I started as a Software Engineer at Tes"
+  pi → B-JD (clear_then_upload) r:null j:true mode:null 1239 ms
+ER-PVV1-TI-010     typed  ok  ttft   667.8 total   2029.4 GROUNDED ev  1 refs 0 "I don't have the specifics of that audit in front of me, so "
+ER-PVV1-TI-012     typed  ok  ttft   794.5 total   1082.3 GROUNDED ev  6 refs 0 "Their collab layer is a CRDT, specifically **Yjs over WebSoc"
+  pi → B-RESUME (clear_then_upload) r:true j:null mode:heuristic 2139 ms
+ER-PVV1-TI-001     hotkey ok  ttft   842.7 total     2488 GROUNDED ev  7 refs 0 "Before Lumenquay I was at Ondaverde Health in Lisbon, as a S"
+ER-PVV1-TI-005     hotkey ok  ttft  1050.2 total   2171.5 GROUNDED ev  7 refs 0 "I joined Lumenquay in June 2022 as a Senior Frontend Enginee"
+  pi → B (clear_then_upload) r:true j:true mode:heuristic 3361 ms
+ER-PVV1-TI-002     typed  ok  ttft   816.1 total   1218.3 GROUNDED ev  8 refs 0 "At Lumenquay as a senior, before the lead title, I was tech "
+ER-PVV1-TI-007     typed  ok  ttft  1265.5 total   1679.3 GROUNDED ev  8 refs 0 "From January 2024 to October 2026 is **2 years 9 months**, s"
+
+done in 2.6 min → /Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix/benchmarks/natively-answer-quality/evidence-rich/results/er8-prov1val-main
