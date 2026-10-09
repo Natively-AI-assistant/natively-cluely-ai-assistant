@@ -2708,3 +2708,28 @@ The guard that works when no evidence is found does not hold once the posting is
 left for this class is not a notice: either the posting is not handed over as evidence on a turn that asks only for
 the user's own record (a retrieval-plan change, not tried), or the fix-up pass is told the posting is not the
 candidate's record (it would then empty these answers rather than repair them). Neither is declared.
+
+### E23 — the candidate, and the unseen challenge rows at k = 4 (2026-10-09 18:35 UTC; replayed 18:33–18:35 UTC on the prompts of `er7-chal-main` and `er7-chalval-main`; challenge-val as aggregates only)
+**Candidate (written while the unseen sets were being authored; NOT proposed).** Branch `cand/e23` `9bfff943` from
+main `73b18d97`, local only: `unsupportedExperienceEntries` in `profile-derived-support.ts` (the rule of the
+replay arm, same constants) and three lines in `profile-retrieval-port.ts` (no experience sections, no
+complete-history line and no per-role card for a résumé with a rejected entry). The other five callers of the
+shared strip function are unchanged on purpose: they have no résumé text to fall back on. Type check clean; new
+test file 18 of 18; intelligence + context-intelligence suites 2,935 tests, 0 failures.
+**Stage 2, line 5, first part: the Looking-for-work and Technical-Interview rows of the challenge sets whose prompt
+changes** (16 readable + 7 unread rows; none of them asks which employer or how long):
+| | challenge (16 rows, 64 samples) | challenge-val (7 rows, 28 samples) | pooled |
+|---|---|---|---|
+| samples with every required string | 77.1 % → 75.0 % (paired −2.1, 95 % −8.3 to 4.2; 12 rows) | 100 % → 100 % (5 rows) | 83.8 % → 82.4 % (−1.5) |
+| samples with a forbidden string | 4 → 5 | 6 → 8 | 10 → 13 |
+| rows that rose / fell | 0 / 0 | 0 / 0 | 0 / 0 |
+Read as written: the forbidden-string line (at most base + 2) is missed by one sample on the pooled rows, and the
+interval of the required-string line reaches below −4 (17 rows of 4 samples cannot give a narrower one). On the
+readable rows the differences are in date and number wording on questions that never touch the removed blocks
+("around the start of November" for "around the 3rd"; "about 26 hours" for "26 and a half"; a salary answer that
+says ninety instead of eighty-eight in 3 of 4 instead of 2 of 4). **At k = 4 line 5 does not hold.**
+**A second, larger sample of the same rows, declared here before it is generated** (as for E19 on 9 October): eight
+more samples per row and arm on the same 23 rows (k 4 to 11), the lines read on all twelve. Required strings: not
+more than 1.5 points below base, paired interval above −4. Forbidden strings: at most base + 6 (the same rate as
++2 on 92 samples). Rows that fall: at most 2. Both readings are reported whatever the second says; if the pooled
+reading fails, E23 is not proposed and no Astra call is spent on it.
