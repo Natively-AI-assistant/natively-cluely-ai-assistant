@@ -1927,3 +1927,37 @@ the generator's draft on the rows where the pass itself labelled the two values 
 Lines 1 to 4 must hold for E20 to be a keep candidate. A set with no row that differs makes its line vacuous, and
 the report says so; with fewer than 5 rows that differ across lines 1 and 4 together, E20 is reported as "not harmful
 on what could be measured", not as confirmed. Holdout: aggregates only. Nothing is landed without Evin.
+
+### E20 — judge-free lines and verdict (2026-10-09 00:21 UTC; no Astra call spent)
+The rail applied to recorded pass outputs (`derive-arm.mjs`): it changes 4 of 470 rows on the development arm
+(`e19-ctl` → `e20`), 3 of 90 on the second development sample (`e20s-ctl` → `e20s`) and 2 of 132 on the blind
+holdout (`e19h-ctl` → `e20h`; counts only).
+| # | Line | Measured | Holds |
+|---|---|---|---|
+| 3 | Rows whose oracle holds an UNRESOLVED conflict and whose text the rail changes: 0 | development 0 of 4; second sample **1 of 3**; holdout 0 of 2 | **no** |
+| 5 | Development, in-sample, for size | 4 rows, 6.35 → 9.71 (+3.36), hard 0 → 0, conflict flags 0 → 0; +0.02 on all rows | — |
+**Verdict by the rule: not kept** (line 3). Lines 1, 2 and 4 were not judged: the rule cannot hold whatever they say.
+The row that fails it (CC-021, second sample): the pass wrote "up to 5 business days [Account Verification Standard
+v4.2] vs up to 3 business days [Password and Account Recovery Procedure v2.3]". Two different documents, each with its
+own version number, both current: a true conflict the oracle wants surfaced, and the trigger reads it as two versions
+of one thing. Version labels in the pass's line do not say whether the two values come from one document or two, so no
+text rule on that line can separate the cases. What would: the identity of the source each value came from
+(`source_id` / `version_id` of the evidence items), which the pass's line does not carry. Not pursued; the size of
+the prize is about +0.02 on the development mean. **The conflict line stays closed, to rails on its text as well.**
+
+### E19 — blind holdout, a second repetition of both arms (rule written 2026-10-09 00:21 UTC, before that replay exists)
+Written knowing the first repetition's partial reading (20 of 25 pairs: 8.335 → 8.276, hard 3 → 3, invention 2 → 2),
+and said so: this is not a second chance for the first rule. **The first rule's verdict stands as written, on its 25
+pairs, and is reported first.**
+Why a second repetition: the pass is not deterministic. The same draft gets a different edit on a second call, so one
+replay of 132 passes shows one draw of which rows differ (25), and five more judgments cannot narrow a ±0.6 interval.
+Both wordings are replayed once more on the same holdout drafts (`--k 2`: repetition 1 of arms `e19h-ctl` and
+`e19h`, same bundle, same cap), Astra judges the rows where they differ, aggregates only.
+| # | Line, on the two repetitions pooled (a pair = one row in one repetition) | Bar |
+|---|---|---|
+| 1 | Mean change | ≥ 0 |
+| 2 | Hard fails | ≤ control arm |
+| 3 | Rows flagged unsupported_* or fabricated_* | ≤ control arm + 2 |
+| 4 | Pass time p90 of repetition 1, same-hour arms (judge-free) | ≤ control arm + 300 ms |
+Reported beside the first rule's verdict, never instead of it. If the two disagree, Evin is told both. Nothing is
+landed without him either way.
