@@ -2119,3 +2119,35 @@ Re-applied to stored judgments without a judge call (`report/rescore-objective.m
 630 rows: 8.923 / 71 hard as stored, **8.935 / 70 hard under obj-2** (one row changes, 2 → 10). The E19 app rows
 (88) and the blind holdout of main (180, aggregates only): no row changes. From here on a comparison with that
 baseline quotes the obj-2 figure, and says so.
+
+## E21a — the calculation step on calculation questions that do not get it (rule written 2026-10-09 10:16 UTC, before any replay of it)
+**Seen.** On the last judged baseline 59 of the 131 questions whose oracle needs a calculation carried no calculation
+notice: its trigger is a list of quantity words in the question ("how much", "total", "per month" …), so a date
+counted from another date, a length of service, a weighted score and most follow-ups never get the hidden working
+step. Three of the hard fails on those rows are a miscount with the right figures in the prompt (REC-005 business
+days, REC-008 weighted score 2.95 for 3.15, D2-SALES-011 fifteenth for fourteenth of November).
+**Hypothesis.** Giving those turns the existing step makes more of them right, because the same step took quantity
+questions from 23 to 43 right samples of 54 when it was introduced (2026-09-30). It is not a new model call and not
+reasoning: the working is written first in the same stream and removed before display.
+**How it could make things worse.** The first visible word waits for the working (on main, turns with the notice
+show their first word about 200 ms later at the median); the model may write a block for a plain lookup; a block may
+set the sum up wrongly and the answer follow it.
+**This stage is an upper bound, not a build.** The notice is placed by hand on the recorded prompts of exactly the
+rows that need it. If it does not help there, no trigger is worth writing. If it does, the trigger is a second stage
+with its own rule (which questions it fires on, what it costs on those that need no calculation).
+**Measurement.** Generator replay (`replay-generator.mjs`, direct DeepSeek, deepseek-flash, temperature 0.2, seed 7,
+thinking off, the app's request) on the recorded prompts of the fresh baseline of main `73b18d97`
+(`er6-dev-main`, `er6-dev2-main`): every row with a calculation oracle whose recorded prompt has no
+"# Calculation" section (`report/rule-e21.mjs select`). Arms, 4 samples each: `e21-base` (prompt as recorded),
+`e21-n1` (main's notice text, unchanged, placed after "# Today" where the composer puts it), `e21-n2` (the same
+with dates, lengths of time and weighted scores named and one sentence on counting them; examples use figures that
+are in no benchmark document). All three arms in the same hour; nothing else on the DeepSeek key.
+**A sample is right** when the deterministic calculation check finds the oracle's result in the shown text. No judge.
+**Lines, each arm against the base** (`report/rule-e21.mjs read`):
+1. Right samples rise by at least 8 percentage points, and the 95 % interval of the paired change (bootstrap over
+   rows) is above zero.
+2. At most 2 rows fall from at least 3 of 4 right to at most 1 of 4.
+3. First visible character: median at most 500 ms later, slow end (p90) at most 900 ms later.
+4. Samples containing a forbidden string (an outdated or other entity's value): at most base + 2.
+If both arms hold, n1 is preferred (no new wording). If neither holds, the trigger is not widened and this is closed.
+Nothing lands from this stage.
