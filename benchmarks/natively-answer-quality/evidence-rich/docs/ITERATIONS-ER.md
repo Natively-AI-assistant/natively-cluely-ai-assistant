@@ -2175,3 +2175,33 @@ and narrowed before use.) Re-applied to 1,336 stored rows of six runs: one check
 the old baseline: "calculation result stated" was a false pass through "4 days" inside "24 days"), and **no official
 score or hard-fail flag changes** in any judged run, development or holdout. The baseline of `f4cd986d` stays
 8.935 / 70 hard under obj-3. E21a's "a sample is right" is read with obj-3.
+
+### E21a — replay done, judge-free lines read (2026-10-09 11:06 UTC; no judgment of it exists)
+Three arms on the recorded prompts of `er6-dev-main` + `er6-dev2-main`, 59 rows × 4 samples, replayed 10:59–11:05
+UTC with nothing else on the DeepSeek key, 0 failed calls. Checks obj-3.
+
+| Arm | Right samples | Paired change (95 % interval) | Rose / fell | First visible character, median / p90 | Wrote a block | Forbidden-string samples | Lines |
+|---|---|---|---|---|---|---|---|
+| `e21-base` (as recorded) | 173 / 236 (73.3 %) | | | 794 / 1,017 ms | 0 | 2 | |
+| `e21-n1` (main's notice) | 196 / 236 (83.1 %) | +9.7 points (4.2 to 16.1) | 4 / 0 | 989 / 1,292 ms (+195 / +275) | 127 / 236 | 5 | line 4 fails (5 > 2 + 2) |
+| `e21-n2` (dates, time, scores named) | 200 / 236 (84.7 %) | +11.4 points (5.1 to 18.6) | 5 / 0 | 1,071 / 1,381 ms (+277 / +364) | 151 / 236 | 4 | **all four hold** |
+
+Rows that rose under n2: REC-008 (weighted score), SEM-014, CC-013, D2-SALES-011 (the 45-day claim date), D2-TEAM-019.
+No row fell in either arm. The forbidden-string samples are D2-LEC-025 in every arm (3 of the 4 under n2, 2 in the
+base) and one sample of SALES-013; n1 adds one of D2-SALES-026.
+**Reading.** The hidden working step makes calculation questions that do not get it today right more often, at
+about a quarter of a second to the first visible word on those turns. n2 is the arm that holds every line. This was
+an upper bound with the notice placed by hand: nothing is built and nothing lands. Two things follow, each with its
+own lines written before it is measured: Astra's reading of the same drafts (below), and stage two, a trigger that a
+build could use, with its cost on turns that need no calculation.
+
+### E21a — Astra's reading of the same replay (lines written 2026-10-09 11:06 UTC, before any judgment of it)
+The replayed texts are drafts in both arms (no later pass), so they are compared like with like. Samples k0 and k1 of
+`e21-base` and `e21-n2` on the 59 rows are judged one answer at a time, arm unknown to the judge
+(`replay-generator-judge.mjs prep`, derived runs `rg-e21-…`), after the baseline's 630 shown answers and in the same
+window if the ration lasts. Pairs = row × sample (118).
+1. Mean change n2 − base at least +0.15.
+2. Hard fails in n2 at most those in base.
+3. Samples flagged `arithmetic_error` or `pricing_error` in n2 at most those in base.
+If the ration closes early, a complete k0 (59 pairs) is read as a partial reading and said to be one. A line that
+fails closes E21 whatever the string counts show.
